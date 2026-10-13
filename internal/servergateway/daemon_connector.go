@@ -23,7 +23,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -45,7 +45,7 @@ const (
 // driven by ManagedDaemonReconciler — the reconciler calls startConnection /
 // stopConnection based on the authoritative DAEMON_STATE snapshot stream.
 type DaemonConnector struct {
-	daemonService *services.ToolsDaemonService
+	daemonService *tools_daemon.Service
 	// failPublisher emits NATS events for outbound connect failures so the
 	// control plane can persist a reason on the daemon row. Nil is allowed
 	// (no-op) — keeps tests simple.
@@ -57,7 +57,7 @@ type DaemonConnector struct {
 
 // NewDaemonConnector creates a new DaemonConnector. The failPublisher is
 // optional; pass nil to disable connect-failure event emission.
-func NewDaemonConnector(daemonService *services.ToolsDaemonService, failPublisher *daemonevents.Publisher) *DaemonConnector {
+func NewDaemonConnector(daemonService *tools_daemon.Service, failPublisher *daemonevents.Publisher) *DaemonConnector {
 	dc := &DaemonConnector{
 		daemonService: daemonService,
 		activeConns:   make(map[string]context.CancelFunc),

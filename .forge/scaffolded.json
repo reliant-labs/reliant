@@ -233,6 +233,18 @@
     },
     "internal/handlers/tool_call/handlers_scaffold_convert_to_background_test.go": {
       "scaffolded_at": "2026-10-13T13:05:38Z"
+    },
+    "internal/handlers/tools_daemon/handlers_scaffold_connect_daemon_test.go": {
+      "scaffolded_at": "2026-10-13T16:47:15Z"
+    },
+    "internal/handlers/tools_daemon/handlers_scaffold_connect_gateway_test.go": {
+      "scaffolded_at": "2026-10-13T16:47:15Z"
+    },
+    "internal/handlers/tools_daemon/handlers_scaffold_report_tool_result_test.go": {
+      "scaffolded_at": "2026-10-13T16:47:15Z"
+    },
+    "internal/handlers/tools_daemon/handlers_scaffold_who_am_i_test.go": {
+      "scaffolded_at": "2026-10-13T16:47:15Z"
     }
   },
   "absent_reported": [
@@ -270,6 +282,8 @@
     "internal/handlers/token/handlers_scaffold_get_git_token_test.go",
     "internal/handlers/token/handlers_scaffold_list_tokens_test.go",
     "internal/handlers/token/handlers_scaffold_revoke_token_test.go",
-    "internal/handlers/token/handlers_scaffold_update_token_test.go"
+    "internal/handlers/token/handlers_scaffold_update_token_test.go",
+    "internal/handlers/tools_daemon/handlers_scaffold_connect_daemon_test.go",
+    "internal/handlers/tools_daemon/handlers_scaffold_who_am_i_test.go"
   ]
 }

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -19,11 +19,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonactivity"
-	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/drain"
@@ -67,36 +65,6 @@ const (
 	// project-config snapshot persists in about a second.
 	inboundStateApplyTimeout = 30 * time.Second
 )
-
-// ToolsDaemonService implements bidirectional streaming for tool execution.
-// It manages daemon connections and routes tool requests/responses.
-type ToolsDaemonService struct {
-	reliantv1connect.UnimplementedToolsDaemonServiceHandler
-	database db.Repository
-
-	// Active daemon connections, keyed by daemonID.
-	connections map[string]*daemonConnection
-	// Secondary index: userID → list of connected daemonIDs.
-	userDaemons map[string][]string
-	mu          sync.RWMutex
-
-	// listeners are notified (outside the mutex) when daemons connect/disconnect.
-	listeners   []toolexec.DaemonConnectionListener
-	listenersMu sync.RWMutex
-
-	// userUpdateHub is used to publish ephemeral daemon heartbeat events
-	// to the frontend via the streaming connection. Set via SetUserUpdateHub.
-	userUpdateHub streaming.UpdateHub[db.UserUpdate]
-
-	// statePublisher emits daemon.v1.state.* lifecycle events. Set via
-	// SetStatePublisher; nil-safe (calls on a nil publisher are no-ops).
-	statePublisher *daemonstate.Publisher
-
-	// now returns the current time. Overridable for tests; defaults to
-	// time.Now (UTC). Used by the stale-connection sweeper so tests can
-	// jump the clock without sleeping.
-	now func() time.Time
-}
 
 // daemonStream abstracts the send/receive operations for a daemon connection.
 // This allows both inbound (ConnectDaemon) and outbound (ConnectGateway) streams
@@ -143,7 +111,7 @@ type daemonConnection struct {
 	// whether or not the daemon's side of the stream is moving, so a
 	// liveness clock our own sends could bump never runs out on a stream
 	// that has gone quiet inbound — exactly the stream the sweeper exists to
-	// reap. Guarded by ToolsDaemonService.mu, like lastActivity.
+	// reap. Guarded by Service.mu, like lastActivity.
 	lastReceived time.Time
 	stream       daemonStream
 
@@ -227,39 +195,6 @@ type daemonConnection struct {
 	lastInventoryJSON string
 }
 
-// NewToolsDaemonService creates a new ToolsDaemonService.
-// Daemon connection routability is now derived from the daemon_attachment table,
-// so no background sweeper goroutine is required.
-func NewToolsDaemonService(database db.Repository) *ToolsDaemonService {
-	return &ToolsDaemonService{
-		database:    database,
-		connections: make(map[string]*daemonConnection),
-		userDaemons: make(map[string][]string),
-		now:         func() time.Time { return time.Now().UTC() },
-	}
-}
-
-// NewToolsDaemonServiceWithoutMonitor is retained as an alias for callers
-// that previously opted out of the stale-daemon monitor. The monitor has been
-// removed entirely; this now behaves identically to NewToolsDaemonService.
-func NewToolsDaemonServiceWithoutMonitor(database db.Repository) *ToolsDaemonService {
-	return NewToolsDaemonService(database)
-}
-
-// SetUserUpdateHub configures the hub used to publish ephemeral daemon
-// heartbeat events to the frontend streaming connection.
-func (s *ToolsDaemonService) SetUserUpdateHub(hub streaming.UpdateHub[db.UserUpdate]) {
-	s.userUpdateHub = hub
-}
-
-// SetStatePublisher wires the daemon lifecycle state publisher. Optional;
-// if unset, lifecycle events are simply not emitted (the existing hand-rolled
-// daemonevents publisher still covers the connect/disconnect path until
-// Step 4 of the simplification proposal lands).
-func (s *ToolsDaemonService) SetStatePublisher(p *daemonstate.Publisher) {
-	s.statePublisher = p
-}
-
 // errGatewayDraining ends a daemon stream because THIS gateway is shutting
 // down. It is not a daemon-side fault and it is not permanent, so the daemon
 // must redial — at which point the Service routes it to a surge pod that is
@@ -301,7 +236,7 @@ var errGatewayDraining = connect.NewError(connect.CodeUnavailable, drain.Drainin
 //
 // The stale-connection sweeper goroutine started by Start() is bound to the
 // context passed to Start, not to Close — cancel that context to stop it.
-func (s *ToolsDaemonService) Close() {
+func (s *Service) Close() {
 	s.mu.RLock()
 	conns := make([]*daemonConnection, 0, len(s.connections))
 	for _, conn := range s.connections {
@@ -329,7 +264,7 @@ func (s *ToolsDaemonService) Close() {
 //
 // Returns when ctx is cancelled. Safe to call once; the caller is
 // responsible for running this in its own goroutine.
-func (s *ToolsDaemonService) Start(ctx context.Context) {
+func (s *Service) Start(ctx context.Context) {
 	ticker := time.NewTicker(staleConnectionSweepInterval)
 	defer ticker.Stop()
 
@@ -360,7 +295,7 @@ func (s *ToolsDaemonService) Start(ctx context.Context) {
 // normal disconnect, just driven by the sweeper rather than the stream's
 // receive-loop returning. Closing done ends the stream handler, so the daemon
 // redials and gets a fresh stream.
-func (s *ToolsDaemonService) sweepStaleConnections() {
+func (s *Service) sweepStaleConnections() {
 	now := s.now()
 	threshold := staleConnectionThreshold
 
@@ -411,7 +346,7 @@ var errDaemonStreamSilent = connect.NewError(connect.CodeUnavailable, fmt.Errorf
 
 // AddConnectionListener registers a listener that will be notified when
 // daemon connections are established or torn down. Safe to call before Start.
-func (s *ToolsDaemonService) AddConnectionListener(l toolexec.DaemonConnectionListener) {
+func (s *Service) AddConnectionListener(l toolexec.DaemonConnectionListener) {
 	s.listenersMu.Lock()
 	s.listeners = append(s.listeners, l)
 	s.listenersMu.Unlock()
@@ -423,7 +358,7 @@ func (s *ToolsDaemonService) AddConnectionListener(l toolexec.DaemonConnectionLi
 // listeners that only care about identity (NATSToolBridge,
 // daemonquery.Responder/UserResponder). Each listener gets exactly one call.
 // Must be called OUTSIDE s.mu to avoid deadlocks.
-func (s *ToolsDaemonService) notifyConnected(userID, daemonID, name, hostname, platform string) {
+func (s *Service) notifyConnected(userID, daemonID, name, hostname, platform string) {
 	s.listenersMu.RLock()
 	defer s.listenersMu.RUnlock()
 	for _, l := range s.listeners {
@@ -437,7 +372,7 @@ func (s *ToolsDaemonService) notifyConnected(userID, daemonID, name, hostname, p
 
 // notifyDisconnected calls OnDaemonDisconnected on all registered listeners.
 // Must be called OUTSIDE s.mu to avoid deadlocks.
-func (s *ToolsDaemonService) notifyDisconnected(userID, daemonID string) {
+func (s *Service) notifyDisconnected(userID, daemonID string) {
 	s.listenersMu.RLock()
 	defer s.listenersMu.RUnlock()
 	for _, l := range s.listeners {
@@ -454,7 +389,7 @@ func (s *ToolsDaemonService) notifyDisconnected(userID, daemonID string) {
 //
 // Passing expected == nil unconditionally removes whatever is at the key —
 // only the sweeper should do this.
-func (s *ToolsDaemonService) removeConnection(daemonID, userID string, expected *daemonConnection) bool {
+func (s *Service) removeConnection(daemonID, userID string, expected *daemonConnection) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cur, ok := s.connections[daemonID]
@@ -489,7 +424,7 @@ func (s *ToolsDaemonService) removeConnection(daemonID, userID string, expected 
 // the stream handler AND from the stale-connection sweeper) — only the
 // first call that finds the connection still registered actually does the
 // work.
-func (s *ToolsDaemonService) teardownConnection(conn *daemonConnection, reason string) {
+func (s *Service) teardownConnection(conn *daemonConnection, reason string) {
 	if conn == nil {
 		return
 	}
@@ -506,7 +441,9 @@ func (s *ToolsDaemonService) teardownConnection(conn *daemonConnection, reason s
 
 	if removed {
 		s.notifyDisconnected(userID, daemonID)
-		s.statePublisher.Disconnected(daemonID, userID, daemonType)
+		if s.deps.StatePublisher != nil {
+			s.deps.StatePublisher.Disconnected(daemonID, userID, daemonType)
+		}
 		// Only when this connection still held the slot: one superseded in
 		// this process leaves the lease to its successor, which wrote its
 		// own.
@@ -540,13 +477,13 @@ func leaseTime(t time.Time) time.Time {
 // Under leaseMu, and after teardown closed done: a renewal already in flight
 // finishes first and this release wins; any later one sees done closed and
 // does nothing (renewLease).
-func (s *ToolsDaemonService) releaseLease(ctx context.Context, conn *daemonConnection) error {
-	if s.database == nil || conn.attachedAt.IsZero() {
+func (s *Service) releaseLease(ctx context.Context, conn *daemonConnection) error {
+	if s.deps.Repo == nil || conn.attachedAt.IsZero() {
 		return nil // no lease was written for this connection
 	}
 	conn.leaseMu.Lock()
 	defer conn.leaseMu.Unlock()
-	return s.database.ReleaseDaemonAttachment(ctx, conn.daemonID, conn.attachedAt)
+	return s.deps.Repo.ReleaseDaemonAttachment(ctx, conn.daemonID, conn.attachedAt)
 }
 
 // DaemonStatus implements daemonquery.StatusSource. Returns the connection's
@@ -557,7 +494,7 @@ func (s *ToolsDaemonService) releaseLease(ctx context.Context, conn *daemonConne
 //
 // Reads from the connections map under the read lock; safe for high QPS as
 // long as listeners don't fan out into it under the write lock (they don't).
-func (s *ToolsDaemonService) DaemonStatus(daemonID string) (lastActive time.Time, daemonType string, ok bool) {
+func (s *Service) DaemonStatus(daemonID string) (lastActive time.Time, daemonType string, ok bool) {
 	s.mu.RLock()
 	conn, found := s.connections[daemonID]
 	s.mu.RUnlock()
@@ -571,7 +508,7 @@ func (s *ToolsDaemonService) DaemonStatus(daemonID string) (lastActive time.Time
 // held for the given user. Used by the cross-process activity ping (the
 // control-plane LLM proxy publishes a NATS message when it forwards a call so
 // the daemon's status query reflects real usage, not just heartbeat cadence).
-func (s *ToolsDaemonService) TouchDaemonsForUser(userID string) {
+func (s *Service) TouchDaemonsForUser(userID string) {
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -587,8 +524,8 @@ func (s *ToolsDaemonService) TouchDaemonsForUser(userID string) {
 // This is NOT persisted to the database — it's a fire-and-forget notification.
 // When the heartbeat carries workspace memory telemetry (cloud daemons in a
 // cgroup-limited pod), it is included so the UI can react in real time.
-func (s *ToolsDaemonService) publishDaemonHeartbeat(_ context.Context, userID, daemonID string, ts time.Time, hb *reliantv1.DaemonHeartbeat) {
-	if s.userUpdateHub == nil {
+func (s *Service) publishDaemonHeartbeat(_ context.Context, userID, daemonID string, ts time.Time, hb *reliantv1.DaemonHeartbeat) {
+	if s.deps.UserUpdateHub == nil {
 		return
 	}
 	payload := map[string]interface{}{
@@ -610,7 +547,7 @@ func (s *ToolsDaemonService) publishDaemonHeartbeat(_ context.Context, userID, d
 		payload["detected_ports"] = ports
 	}
 	data, _ := json.Marshal(payload)
-	s.userUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
+	s.deps.UserUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
 		Key: userID,
 		Payload: db.UserUpdate{
 			UserID:     userID,
@@ -644,14 +581,14 @@ const diskReportRefresh = 5 * time.Minute
 // before it (diskwatch.Stamp). That episode is what the storage inbox item is
 // keyed by, so it must come from the row, not this connection: a cloud
 // machine that suspends and resumes with the same full disk is one episode.
-func (s *ToolsDaemonService) recordDiskReport(ctx context.Context, conn *daemonConnection, rep *reliantv1.DiskReport) {
+func (s *Service) recordDiskReport(ctx context.Context, conn *daemonConnection, rep *reliantv1.DiskReport) {
 	now := time.Now().UTC()
 	sig := diskwatch.Signature(rep)
 	if sig == conn.lastDiskSig && now.Sub(conn.lastDiskWrite) < diskReportRefresh {
 		return
 	}
 	if !conn.lastDiskLoaded {
-		raw, err := s.database.GetDaemonStorageState(ctx, conn.daemonID)
+		raw, err := s.deps.Repo.GetDaemonStorageState(ctx, conn.daemonID)
 		if err != nil {
 			// Not fatal: the worst case is a running episode restarting,
 			// which re-raises the storage item once.
@@ -665,7 +602,7 @@ func (s *ToolsDaemonService) recordDiskReport(ctx context.Context, conn *daemonC
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to encode disk report", "error", err, "daemonID", conn.daemonID)
 		return
 	}
-	if err := s.database.SetDaemonStorageState(ctx, conn.daemonID, stored); err != nil {
+	if err := s.deps.Repo.SetDaemonStorageState(ctx, conn.daemonID, stored); err != nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record disk report", "error", err, "daemonID", conn.daemonID)
 		return
 	}
@@ -687,12 +624,12 @@ const daemonListRefetchType = "daemons"
 // list. Ephemeral like the heartbeat (never persisted, never replayed): a
 // client that was disconnected when it fired refetches on reconnect instead,
 // and keeps a slow fallback poll for anything that slips past both.
-func (s *ToolsDaemonService) publishDaemonListChanged(userID, daemonID string) {
-	if s.userUpdateHub == nil || userID == "" {
+func (s *Service) publishDaemonListChanged(userID, daemonID string) {
+	if s.deps.UserUpdateHub == nil || userID == "" {
 		return
 	}
 	data, _ := json.Marshal(map[string]string{"type": daemonListRefetchType, "daemon_id": daemonID})
-	s.userUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
+	s.deps.UserUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
 		Key: userID,
 		Payload: db.UserUpdate{
 			UserID:     userID,
@@ -710,12 +647,12 @@ func (s *ToolsDaemonService) publishDaemonListChanged(userID, daemonID string) {
 // control-plane lifecycle event. Those events may omit the owner, so an empty
 // userID is resolved from the registry row; a daemon with no row has nothing
 // a client could list, and is skipped.
-func (s *ToolsDaemonService) PublishDaemonListChanged(ctx context.Context, userID, daemonID string) {
+func (s *Service) PublishDaemonListChanged(ctx context.Context, userID, daemonID string) {
 	if userID == "" {
-		if s.database == nil || daemonID == "" {
+		if s.deps.Repo == nil || daemonID == "" {
 			return
 		}
-		d, err := s.database.GetDaemon(ctx, daemonID)
+		d, err := s.deps.Repo.GetDaemon(ctx, daemonID)
 		if err != nil || d == nil {
 			logging.Debug(LOG_PREFIX_TOOLS_DAEMON+" No registry row to announce a daemon change for", "daemonID", daemonID, "error", err)
 			return
@@ -770,7 +707,7 @@ func (c *daemonConnection) closeWith(reason error) {
 // strictly one at a time, so a connection still being served when a fresh
 // registration arrives belongs to a different process. Ending it with
 // errDaemonSuperseded is what stops the two from evicting each other forever.
-func (s *ToolsDaemonService) supersedeIncumbent(old *daemonConnection) {
+func (s *Service) supersedeIncumbent(old *daemonConnection) {
 	if old == nil {
 		return
 	}
@@ -899,9 +836,9 @@ func truncateForLog(s string) string {
 // sets the file aside and registers again with no id (see daemonruntime). The
 // owner is logged here and never returned — the caller learns that the id is
 // someone else's, not whose.
-func (s *ToolsDaemonService) rejectForeignDaemon(ctx context.Context, userID, daemonID string) error {
+func (s *Service) rejectForeignDaemon(ctx context.Context, userID, daemonID string) error {
 	ownerID := "unknown"
-	if d, err := s.database.GetDaemon(ctx, daemonID); err == nil && d != nil {
+	if d, err := s.deps.Repo.GetDaemon(ctx, daemonID); err == nil && d != nil {
 		ownerID = d.UserID
 	} else {
 		s.mu.RLock()
@@ -921,7 +858,7 @@ func (s *ToolsDaemonService) rejectForeignDaemon(ctx context.Context, userID, da
 //
 // `reliant daemon start --token` asks before deriving the daemon's instance
 // directory, so each account on a machine keeps its own saved daemon id.
-func (s *ToolsDaemonService) WhoAmI(
+func (s *Service) WhoAmI(
 	ctx context.Context,
 	_ *connect.Request[reliantv1.WhoAmIRequest],
 ) (*connect.Response[reliantv1.WhoAmIResponse], error) {
@@ -933,7 +870,7 @@ func (s *ToolsDaemonService) WhoAmI(
 }
 
 // ConnectDaemon implements the bidirectional streaming RPC for daemon connections
-func (s *ToolsDaemonService) ConnectDaemon(
+func (s *Service) ConnectDaemon(
 	ctx context.Context,
 	stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage],
 ) error {
@@ -968,7 +905,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		auth.GetDaemonIDFromContext(ctx),
 		reg.GetDaemonId(),
 		func() string {
-			return resolveUnboundDaemonID(ctx, s.database, userID, reg.GetHostname())
+			return resolveUnboundDaemonID(ctx, s.deps.Repo, userID, reg.GetHostname())
 		},
 	)
 
@@ -988,7 +925,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to encode project paths: %w", err))
 	}
 
-	if err := s.database.UpsertDaemon(ctx, &db.Daemon{
+	if err := s.deps.Repo.UpsertDaemon(ctx, &db.Daemon{
 		ID:           daemonID,
 		UserID:       userID,
 		Hostname:     daemonStringPtrOrNil(reg.Hostname),
@@ -1004,7 +941,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to persist daemon registration: %w", err))
 	}
 
-	if err := s.database.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
+	if err := s.deps.Repo.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
 		DaemonID:           daemonID,
 		UserID:             userID,
 		Source:             db.DaemonAttachmentSourceInbound,
@@ -1068,7 +1005,9 @@ func (s *ToolsDaemonService) ConnectDaemon(
 
 	// Notify listeners outside the mutex.
 	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
-	s.statePublisher.Connected(daemonID, userID, conn.daemonType)
+	if s.deps.StatePublisher != nil {
+		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType)
+	}
 
 	// Publish an immediate heartbeat so the frontend knows the daemon is
 	// online without waiting for the first periodic heartbeat (up to 15s).
@@ -1128,8 +1067,8 @@ func (s *ToolsDaemonService) ConnectDaemon(
 }
 
 // Repo returns the underlying repository. Used by the daemon connector for resync queries.
-func (s *ToolsDaemonService) Repo() db.Repository {
-	return s.database
+func (s *Service) Repo() db.Repository {
+	return s.deps.Repo
 }
 
 // RegisterOutboundConnection registers an outbound gateway→daemon connection.
@@ -1137,7 +1076,7 @@ func (s *ToolsDaemonService) Repo() db.Repository {
 // receiving the DaemonRegister message. Identity (userID, daemonID) is provided
 // by the caller (from the NATS command), not from the daemon's register message.
 // The caller is responsible for running the receive loop via HandleIncomingLoop.
-func (s *ToolsDaemonService) RegisterOutboundConnection(
+func (s *Service) RegisterOutboundConnection(
 	ctx context.Context,
 	userID, daemonID, podIP string,
 	podPort int,
@@ -1154,7 +1093,7 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 		return nil, fmt.Errorf("failed to encode capabilities: %w", err)
 	}
 
-	if err := s.database.UpsertDaemon(ctx, &db.Daemon{
+	if err := s.deps.Repo.UpsertDaemon(ctx, &db.Daemon{
 		ID:           daemonID,
 		UserID:       userID,
 		Hostname:     daemonStringPtrOrNil(reg.Hostname),
@@ -1168,7 +1107,7 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 		return nil, fmt.Errorf("failed to persist daemon registration: %w", err)
 	}
 
-	if err := s.database.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
+	if err := s.deps.Repo.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
 		DaemonID:           daemonID,
 		UserID:             userID,
 		Source:             db.DaemonAttachmentSourceOutbound,
@@ -1226,7 +1165,9 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 	}
 
 	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
-	s.statePublisher.Connected(daemonID, userID, conn.daemonType)
+	if s.deps.StatePublisher != nil {
+		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType)
+	}
 	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC(), nil)
 	s.publishDaemonListChanged(userID, daemonID)
 
@@ -1240,7 +1181,7 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 // OutboundConn wraps a daemonConnection created via RegisterOutboundConnection.
 // It exposes HandleIncoming (blocking receive loop) and Disconnect (cleanup).
 type OutboundConn struct {
-	service *ToolsDaemonService
+	service *Service
 	conn    *daemonConnection
 }
 
@@ -1292,7 +1233,7 @@ const inboundStateQueueSize = 128
 // reaches 10MB for a multi-repo project (on reconnect the gateway persisted 16
 // of them back to back, ~1s). A millisecond daemon command could take as long
 // as the slowest unrelated write queued in front of its reply.
-func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonConnection) error {
+func (s *Service) handleIncoming(ctx context.Context, conn *daemonConnection) error {
 	stateQueue := make(chan *reliantv1.DaemonMessage, inboundStateQueueSize)
 	streamEnded := make(chan struct{})
 	// Detached from the stream's context so state the gateway already
@@ -1413,7 +1354,7 @@ func (c *daemonConnection) recordDaemonHeartbeat(timestamp int64) {
 // runLeaseRenewer renews this connection's daemon_attachment lease each time
 // the receive loop signals that it read a heartbeat. It exits when the
 // receive loop closes renew.
-func (s *ToolsDaemonService) runLeaseRenewer(ctx context.Context, conn *daemonConnection, renew <-chan struct{}, streamEnded <-chan struct{}) {
+func (s *Service) runLeaseRenewer(ctx context.Context, conn *daemonConnection, renew <-chan struct{}, streamEnded <-chan struct{}) {
 	for range renew {
 		s.renewLease(ctx, conn, streamEnded)
 	}
@@ -1428,8 +1369,8 @@ func (s *ToolsDaemonService) runLeaseRenewer(ctx context.Context, conn *daemonCo
 // daemon is up after it has gone. The check and the write happen under
 // leaseMu, which teardownConnection also takes around its release, so a
 // renewal can never land after the row was deliberately removed.
-func (s *ToolsDaemonService) renewLease(ctx context.Context, conn *daemonConnection, streamEnded <-chan struct{}) {
-	if s.database == nil {
+func (s *Service) renewLease(ctx context.Context, conn *daemonConnection, streamEnded <-chan struct{}) {
+	if s.deps.Repo == nil {
 		return
 	}
 	// Its own goroutine, like the state worker: an unrecovered panic here
@@ -1452,7 +1393,7 @@ func (s *ToolsDaemonService) renewLease(ctx context.Context, conn *daemonConnect
 		}
 		renewCtx, cancel := context.WithTimeout(ctx, leaseRenewTimeout)
 		defer cancel()
-		return s.database.RenewDaemonAttachment(renewCtx, &db.DaemonAttachment{
+		return s.deps.Repo.RenewDaemonAttachment(renewCtx, &db.DaemonAttachment{
 			DaemonID:           conn.daemonID,
 			UserID:             conn.userID,
 			Source:             conn.attachSource,
@@ -1483,7 +1424,7 @@ func (s *ToolsDaemonService) renewLease(ctx context.Context, conn *daemonConnect
 // runInboundStateWorker applies one connection's state messages in the order
 // the daemon sent them. It drains whatever the receive loop queued, including
 // after the stream ends, and exits when the queue is closed.
-func (s *ToolsDaemonService) runInboundStateWorker(ctx context.Context, conn *daemonConnection, queue <-chan *reliantv1.DaemonMessage, streamEnded <-chan struct{}) {
+func (s *Service) runInboundStateWorker(ctx context.Context, conn *daemonConnection, queue <-chan *reliantv1.DaemonMessage, streamEnded <-chan struct{}) {
 	for msg := range queue {
 		s.applyInboundState(ctx, conn, msg, streamEnded)
 	}
@@ -1492,7 +1433,7 @@ func (s *ToolsDaemonService) runInboundStateWorker(ctx context.Context, conn *da
 // applyInboundState handles one state message. A panic is contained to the
 // message: this runs on its own goroutine, where an unrecovered panic would
 // take down the whole gateway rather than one stream.
-func (s *ToolsDaemonService) applyInboundState(ctx context.Context, conn *daemonConnection, msg *reliantv1.DaemonMessage, streamEnded <-chan struct{}) {
+func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection, msg *reliantv1.DaemonMessage, streamEnded <-chan struct{}) {
 	defer func() {
 		if r := recover(); r != nil {
 			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Panic applying daemon state message",
@@ -1536,7 +1477,7 @@ func (s *ToolsDaemonService) applyInboundState(ctx context.Context, conn *daemon
 		// can surface memory pressure. limit==0 means the daemon has no
 		// cgroup accounting (local/mac) — nothing to record.
 		if hb := m.Heartbeat; hb != nil && hb.MemoryLimitBytes > 0 {
-			if err := s.database.UpdateDaemonAttachmentMemory(ctx, conn.daemonID,
+			if err := s.deps.Repo.UpdateDaemonAttachmentMemory(ctx, conn.daemonID,
 				int64(hb.MemoryUsedBytes), int64(hb.MemoryLimitBytes), hb.MemoryPressure); err != nil {
 				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon memory telemetry", "error", err, "daemonID", conn.daemonID)
 			}
@@ -1560,7 +1501,7 @@ func (s *ToolsDaemonService) applyInboundState(ctx context.Context, conn *daemon
 			}
 			portsKey := fmt.Sprint(hb.DetectedPorts)
 			if portsKey != conn.lastDetectedPortsKey {
-				if err := s.database.UpdateDaemonAttachmentPorts(ctx, conn.daemonID, hb.DetectedPorts); err != nil {
+				if err := s.deps.Repo.UpdateDaemonAttachmentPorts(ctx, conn.daemonID, hb.DetectedPorts); err != nil {
 					logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon detected ports", "error", err, "daemonID", conn.daemonID)
 				} else {
 					conn.lastDetectedPortsKey = portsKey
@@ -1704,11 +1645,11 @@ func (c *daemonConnection) routeInboundReply(msg *reliantv1.DaemonMessage) bool 
 // ReportToolResult is a unary RPC handler that was previously used by daemons
 // to report tool execution results when the bidirectional stream was unavailable.
 // This path has been removed in favour of the bidi stream.
-func (s *ToolsDaemonService) ReportToolResult(ctx context.Context, req *connect.Request[reliantv1.ReportToolResultRequest]) (*connect.Response[reliantv1.ReportToolResultResponse], error) {
+func (s *Service) ReportToolResult(ctx context.Context, req *connect.Request[reliantv1.ReportToolResultRequest]) (*connect.Response[reliantv1.ReportToolResultResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("ReportToolResult is no longer supported; use the bidi stream"))
 }
 
-func (s *ToolsDaemonService) handleProjectDiscovery(ctx context.Context, conn *daemonConnection, discovery *reliantv1.ProjectDiscovery) error {
+func (s *Service) handleProjectDiscovery(ctx context.Context, conn *daemonConnection, discovery *reliantv1.ProjectDiscovery) error {
 	if discovery == nil {
 		return nil
 	}
@@ -1733,7 +1674,7 @@ func (s *ToolsDaemonService) handleProjectDiscovery(ctx context.Context, conn *d
 	}
 	sort.Strings(paths)
 
-	daemon, err := s.database.GetDaemon(ctx, conn.daemonID)
+	daemon, err := s.deps.Repo.GetDaemon(ctx, conn.daemonID)
 	if err != nil {
 		logging.Debug(LOG_PREFIX_TOOLS_DAEMON+" Project discovery ignored for unknown daemon", "daemonID", conn.daemonID)
 		return nil
@@ -1744,7 +1685,7 @@ func (s *ToolsDaemonService) handleProjectDiscovery(ctx context.Context, conn *d
 		return fmt.Errorf("failed to encode discovered project paths: %w", err)
 	}
 	daemon.ProjectPaths = projectPathsJSON
-	if err := s.database.UpsertDaemon(ctx, daemon); err != nil {
+	if err := s.deps.Repo.UpsertDaemon(ctx, daemon); err != nil {
 		return err
 	}
 
@@ -1770,7 +1711,7 @@ func (s *ToolsDaemonService) handleProjectDiscovery(ctx context.Context, conn *d
 	return nil
 }
 
-func (s *ToolsDaemonService) handleLoadProjectConfigsResponse(ctx context.Context, conn *daemonConnection, resp *reliantv1.LoadProjectConfigsResponse) error {
+func (s *Service) handleLoadProjectConfigsResponse(ctx context.Context, conn *daemonConnection, resp *reliantv1.LoadProjectConfigsResponse) error {
 	if resp == nil {
 		return nil
 	}
@@ -1789,7 +1730,7 @@ func (s *ToolsDaemonService) handleLoadProjectConfigsResponse(ctx context.Contex
 	return s.persistProjectConfigSnapshot(ctx, conn, resp.Snapshot, true)
 }
 
-func (s *ToolsDaemonService) handleFileSystemChanged(ctx context.Context, conn *daemonConnection, msg *reliantv1.FileSystemChanged) error {
+func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConnection, msg *reliantv1.FileSystemChanged) error {
 	if msg == nil {
 		return nil
 	}
@@ -1802,7 +1743,7 @@ func (s *ToolsDaemonService) handleFileSystemChanged(ctx context.Context, conn *
 	// Scoped by user: `projects` is UNIQUE on (user_id, path), so a path-only
 	// lookup can return another user's row for the same directory and this
 	// would emit a refetch naming a project the connected user cannot see.
-	project, err := s.database.GetProjectByPathAndUser(ctx, projectPath, conn.userID)
+	project, err := s.deps.Repo.GetProjectByPathAndUser(ctx, projectPath, conn.userID)
 	if err != nil {
 		return nil // project might not exist yet, that's fine
 	}
@@ -1817,7 +1758,7 @@ func (s *ToolsDaemonService) handleFileSystemChanged(ctx context.Context, conn *
 	// Matched by (project, daemon) rather than by request id: unlike the
 	// failure path, FileSystemChanged carries no request id — only the path
 	// — and the path is exactly what the queued row recorded.
-	if err := s.database.MarkProjectDaemonInstalled(ctx, project.ID, conn.daemonID); err != nil {
+	if err := s.deps.Repo.MarkProjectDaemonInstalled(ctx, project.ID, conn.daemonID); err != nil {
 		logging.Warn("could not settle queued clone after filesystem change",
 			"error", err, "project_id", project.ID, "daemon_id", conn.daemonID)
 	} else {
@@ -1828,7 +1769,7 @@ func (s *ToolsDaemonService) handleFileSystemChanged(ctx context.Context, conn *
 		s.learnForgeNameForProject(ctx, conn, project)
 	}
 
-	return s.database.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
+	return s.deps.Repo.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
 		ProjectID: &project.ID,
 	})
 }
@@ -1844,7 +1785,7 @@ func (s *ToolsDaemonService) handleFileSystemChanged(ctx context.Context, conn *
 //
 // conn.done bounds the goroutine: a daemon that disconnects mid-read releases
 // it rather than leaving it parked on a response that can no longer arrive.
-func (s *ToolsDaemonService) learnForgeNameForProject(ctx context.Context, conn *daemonConnection, project *db.Project) {
+func (s *Service) learnForgeNameForProject(ctx context.Context, conn *daemonConnection, project *db.Project) {
 	if conn == nil || project == nil {
 		return
 	}
@@ -1862,7 +1803,7 @@ func (s *ToolsDaemonService) learnForgeNameForProject(ctx context.Context, conn 
 			}
 		}()
 		projectfacts.LearnForgeName(readCtx, connCommandSender{svc: s, conn: conn},
-			s.database, conn.userID, conn.daemonID, project.ID, project.Path)
+			s.deps.Repo, conn.userID, conn.daemonID, project.ID, project.Path)
 	}()
 }
 
@@ -1873,7 +1814,7 @@ func (s *ToolsDaemonService) learnForgeNameForProject(ctx context.Context, conn 
 // daemon: the checkout exists on the machine that just cloned it, and a user
 // with two daemons would otherwise have forge.yaml read off the wrong disk.
 type connCommandSender struct {
-	svc  *ToolsDaemonService
+	svc  *Service
 	conn *daemonConnection
 }
 
@@ -1923,7 +1864,7 @@ func cloneFailureReason(message string) string {
 // registered for a request id the API server never issued synchronously.
 // Writing it to user_updates makes it replay to the client on reconnect,
 // same as the success path in handleFileSystemChanged.
-func (s *ToolsDaemonService) handleDaemonCommandFailed(ctx context.Context, conn *daemonConnection, msg *reliantv1.DaemonCommandFailed) error {
+func (s *Service) handleDaemonCommandFailed(ctx context.Context, conn *daemonConnection, msg *reliantv1.DaemonCommandFailed) error {
 	if msg == nil {
 		return nil
 	}
@@ -1934,7 +1875,7 @@ func (s *ToolsDaemonService) handleDaemonCommandFailed(ctx context.Context, conn
 	// already failed. Best-effort: the notification below is what the client
 	// actually reacts to, and must be written either way.
 	if msg.CommandType == "git.clone" && msg.RequestId != "" {
-		if err := s.database.ResolveQueuedProjectDaemon(ctx, msg.RequestId, cloneFailureReason(msg.ErrorMessage)); err != nil {
+		if err := s.deps.Repo.ResolveQueuedProjectDaemon(ctx, msg.RequestId, cloneFailureReason(msg.ErrorMessage)); err != nil {
 			logging.Warn("could not mark queued clone failed",
 				"error", err, "request_id", msg.RequestId)
 		}
@@ -1950,7 +1891,7 @@ func (s *ToolsDaemonService) handleDaemonCommandFailed(ctx context.Context, conn
 		return fmt.Errorf("marshaling daemon command failure notification: %w", err)
 	}
 
-	return s.database.CreateUserUpdate(ctx, &db.UserUpdate{
+	return s.deps.Repo.CreateUserUpdate(ctx, &db.UserUpdate{
 		UserID:     conn.userID,
 		UpdateType: db.UserUpdateNotification,
 		EntityType: db.EntityTypeSystem,
@@ -1959,7 +1900,7 @@ func (s *ToolsDaemonService) handleDaemonCommandFailed(ctx context.Context, conn
 	})
 }
 
-func (s *ToolsDaemonService) handleProjectConfigDelta(ctx context.Context, conn *daemonConnection, delta *reliantv1.ProjectConfigDelta) error {
+func (s *Service) handleProjectConfigDelta(ctx context.Context, conn *daemonConnection, delta *reliantv1.ProjectConfigDelta) error {
 	if delta == nil {
 		return nil
 	}
@@ -2003,7 +1944,7 @@ func daemonRuntimeTypeFromLabels(labels map[string]string) *string {
 	return &rt
 }
 
-func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, conn *daemonConnection, snapshot *reliantv1.ProjectConfigSnapshot, force bool) error {
+func (s *Service) persistProjectConfigSnapshot(ctx context.Context, conn *daemonConnection, snapshot *reliantv1.ProjectConfigSnapshot, force bool) error {
 	if snapshot == nil {
 		return nil
 	}
@@ -2058,7 +1999,7 @@ func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, c
 		PushedAt:             daemonTimestampToTime(snapshot.DaemonTimestampUnixMs),
 	}
 
-	if err := s.database.UpsertProjectConfigRecord(ctx, record); err != nil {
+	if err := s.deps.Repo.UpsertProjectConfigRecord(ctx, record); err != nil {
 		return err
 	}
 
@@ -2091,7 +2032,7 @@ func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, c
 // accident. Neither branch is reachable in normal operation — all three
 // callers pass a path through normalizeProjectPath first — so making them
 // loud costs nothing and turns a protocol violation into a visible failure.
-func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn *daemonConnection, path string, discovered *reliantv1.DiscoveredProject) (*db.Project, error) {
+func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonConnection, path string, discovered *reliantv1.DiscoveredProject) (*db.Project, error) {
 	// ospath, not filepath: this path names a directory on the DAEMON, which
 	// may be Windows while this server is Linux. Under filepath.IsAbs every
 	// `C:\...` path was judged relative, so a Windows daemon hit exactly the
@@ -2103,7 +2044,7 @@ func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn
 		return nil, fmt.Errorf("cannot resolve project %q: the daemon connection carries no user", path)
 	}
 
-	project, err := s.database.GetProjectByPathAndUser(ctx, path, conn.userID)
+	project, err := s.deps.Repo.GetProjectByPathAndUser(ctx, path, conn.userID)
 	if err != nil {
 		if !isNotFoundErr(err) {
 			return nil, err
@@ -2122,7 +2063,7 @@ func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn
 		}
 
 		now := time.Now().UTC()
-		createErr := s.database.CreateProject(ctx, &db.Project{
+		createErr := s.deps.Repo.CreateProject(ctx, &db.Project{
 			ID:         uuid.New().String(),
 			UserID:     conn.userID,
 			Name:       name,
@@ -2137,7 +2078,7 @@ func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn
 		// user's row for this path. The createErr branch is the lost race with
 		// a concurrent create (UNIQUE (user_id, path)) — re-reading our own row
 		// is what makes it idempotent rather than fatal.
-		project, err = s.database.GetProjectByPathAndUser(ctx, path, conn.userID)
+		project, err = s.deps.Repo.GetProjectByPathAndUser(ctx, path, conn.userID)
 		if err != nil {
 			if createErr != nil {
 				return nil, fmt.Errorf("failed to create discovered project %s: %w", path, createErr)
@@ -2149,7 +2090,7 @@ func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn
 	// Reconcile the cached git flag against what daemon discovery actually
 	// observed on disk (bidirectional; see projectfacts.ReconcileGitRepo).
 	if discovered != nil {
-		if updateErr := projectfacts.ReconcileGitRepo(ctx, s.database, project, discovered.IsGitRepo); updateErr != nil {
+		if updateErr := projectfacts.ReconcileGitRepo(ctx, s.deps.Repo, project, discovered.IsGitRepo); updateErr != nil {
 			logging.Warn("ensureOwnedProjectForPath: failed to update git status", "error", updateErr, "projectID", project.ID)
 		}
 	}
@@ -2172,7 +2113,7 @@ var _ projectConfigPushedAtReader = (*db.Repo)(nil)
 // stored pushed_at: the whole record it used to read for that one timestamp
 // carries every skill body and repo memory the daemon indexed — 18 MB in
 // prod — so it reads the one column instead.
-func (s *ToolsDaemonService) shouldApplyProjectConfigUpdate(ctx context.Context, projectID string, daemonTSUnixMs int64) (bool, error) {
+func (s *Service) shouldApplyProjectConfigUpdate(ctx context.Context, projectID string, daemonTSUnixMs int64) (bool, error) {
 	if daemonTSUnixMs <= 0 {
 		return true, nil
 	}
@@ -2181,9 +2122,9 @@ func (s *ToolsDaemonService) shouldApplyProjectConfigUpdate(ctx context.Context,
 	// wiring passes a *db.Repo. A repository that cannot answer is a wiring
 	// fault, and it fails loudly here rather than quietly falling back to the
 	// full-record read.
-	reader, ok := s.database.(projectConfigPushedAtReader)
+	reader, ok := s.deps.Repo.(projectConfigPushedAtReader)
 	if !ok {
-		return false, fmt.Errorf("project config staleness check: %T cannot read pushed_at (GetProjectConfigPushedAt)", s.database)
+		return false, fmt.Errorf("project config staleness check: %T cannot read pushed_at (GetProjectConfigPushedAt)", s.deps.Repo)
 	}
 	pushedAt, err := reader.GetProjectConfigPushedAt(ctx, projectID)
 	if err != nil {
@@ -2384,7 +2325,7 @@ func flattenRepoMemories(memories map[string][]byte) *string {
 	return &s
 }
 
-func (s *ToolsDaemonService) sendLoadAndWatchProjectConfig(ctx context.Context, conn *daemonConnection, projectPath string, includeInitial bool) error {
+func (s *Service) sendLoadAndWatchProjectConfig(ctx context.Context, conn *daemonConnection, projectPath string, includeInitial bool) error {
 	if conn == nil {
 		return nil
 	}
@@ -2397,7 +2338,7 @@ func (s *ToolsDaemonService) sendLoadAndWatchProjectConfig(ctx context.Context, 
 // defaultDaemonForUser returns the "best" connected daemon for a user.
 // It prefers local daemons over cloud daemons, then most recently connected.
 // Returns nil if no daemon is connected.
-func (s *ToolsDaemonService) defaultDaemonForUser(userID string) *daemonConnection {
+func (s *Service) defaultDaemonForUser(userID string) *daemonConnection {
 	// Must be called with s.mu held (at least RLock).
 	daemonIDs := s.userDaemons[userID]
 	if len(daemonIDs) == 0 {
@@ -2436,7 +2377,7 @@ func (s *ToolsDaemonService) defaultDaemonForUser(userID string) *daemonConnecti
 // sendToDaemon enqueues a message on ONE named daemon's connection. It never
 // falls back to another of the user's daemons: the subject that carried the
 // request named this daemon, and a different machine must not act on it.
-func (s *ToolsDaemonService) sendToDaemon(userID, daemonID string, msg *reliantv1.ServerMessage) error {
+func (s *Service) sendToDaemon(userID, daemonID string, msg *reliantv1.ServerMessage) error {
 	if msg == nil {
 		return nil
 	}
@@ -2450,7 +2391,7 @@ func (s *ToolsDaemonService) sendToDaemon(userID, daemonID string, msg *reliantv
 // sendToConn enqueues a message on a specific connection's send channel. Used
 // when the caller already holds the exact connection (e.g. reconcile) rather
 // than resolving the user's default daemon.
-func (s *ToolsDaemonService) sendToConn(conn *daemonConnection, msg *reliantv1.ServerMessage) error {
+func (s *Service) sendToConn(conn *daemonConnection, msg *reliantv1.ServerMessage) error {
 	if msg == nil {
 		return nil
 	}
@@ -2470,7 +2411,7 @@ func (s *ToolsDaemonService) sendToConn(conn *daemonConnection, msg *reliantv1.S
 }
 
 // runSender handles sending messages to the daemon
-func (s *ToolsDaemonService) runSender(conn *daemonConnection) {
+func (s *Service) runSender(conn *daemonConnection) {
 	for {
 		select {
 		case <-conn.done:
@@ -2489,8 +2430,8 @@ func (s *ToolsDaemonService) runSender(conn *daemonConnection) {
 			// The one place a cloud machine's idle clock is restarted: work a
 			// person or an agent asked this daemon to do, judged by
 			// daemonactivity's policy, at the moment it is handed over.
-			if reason, ok := daemonactivity.ReasonForServerMessage(msg); ok {
-				s.statePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType, reason)
+			if reason, ok := daemonactivity.ReasonForServerMessage(msg); ok && s.deps.StatePublisher != nil {
+				s.deps.StatePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType, reason)
 			}
 		}
 	}
@@ -2501,17 +2442,17 @@ func (s *ToolsDaemonService) runSender(conn *daemonConnection) {
 // sent; a test suite or build that outlasts the idle timeout would otherwise
 // be suspended mid-run. Called on every gateway heartbeat, so the re-assertion
 // costs no timer of its own and stops the moment the call returns.
-func (s *ToolsDaemonService) reassertInFlightActivity(conn *daemonConnection) {
+func (s *Service) reassertInFlightActivity(conn *daemonConnection) {
 	conn.pendingToolRequestsMu.Lock()
 	inFlight := len(conn.pendingToolRequests)
 	conn.pendingToolRequestsMu.Unlock()
-	if inFlight > 0 {
-		s.statePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType, daemonactivity.ReasonToolCallInFlight)
+	if inFlight > 0 && s.deps.StatePublisher != nil {
+		s.deps.StatePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType, daemonactivity.ReasonToolCallInFlight)
 	}
 }
 
 // runHeartbeat sends periodic heartbeats to keep the connection alive
-func (s *ToolsDaemonService) runHeartbeat(conn *daemonConnection) {
+func (s *Service) runHeartbeat(conn *daemonConnection) {
 	ticker := time.NewTicker(daemonHeartbeatInterval)
 	defer ticker.Stop()
 
@@ -2551,7 +2492,7 @@ func newServerHeartbeat(conn *daemonConnection, now time.Time) *reliantv1.Server
 
 // ListConnectedDaemons returns info about all daemons connected for a user.
 // Implements toolexec.ConnectedDaemonLister.
-func (s *ToolsDaemonService) ListConnectedDaemons(userID string) []toolexec.DaemonInfo {
+func (s *Service) ListConnectedDaemons(userID string) []toolexec.DaemonInfo {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -2575,7 +2516,7 @@ func (s *ToolsDaemonService) ListConnectedDaemons(userID string) []toolexec.Daem
 }
 
 // IsDaemonOnline checks if a daemon is currently connected for the user
-func (s *ToolsDaemonService) IsDaemonOnline(_ context.Context, userID string) bool {
+func (s *Service) IsDaemonOnline(_ context.Context, userID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.userDaemons[userID]) > 0
@@ -2584,7 +2525,7 @@ func (s *ToolsDaemonService) IsDaemonOnline(_ context.Context, userID string) bo
 // HasConnectedDaemonsForUser reports whether this gateway currently holds any
 // daemon stream for the user. Implements toolexec.LocalConnectionChecker so the
 // NATS router can skip the DB freshness check on the hot path.
-func (s *ToolsDaemonService) HasConnectedDaemonsForUser(userID string) bool {
+func (s *Service) HasConnectedDaemonsForUser(userID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.userDaemons[userID]) > 0
@@ -2594,7 +2535,7 @@ func (s *ToolsDaemonService) HasConnectedDaemonsForUser(userID string) bool {
 // currently holds for the user. Implements daemonquery.UserLivenessSource so
 // the per-user any-live NATS responder answers from the in-memory connection
 // map — authoritative for the streams this gateway owns.
-func (s *ToolsDaemonService) ConnectedDaemonCountForUser(userID string) int {
+func (s *Service) ConnectedDaemonCountForUser(userID string) int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.userDaemons[userID])
@@ -2602,7 +2543,7 @@ func (s *ToolsDaemonService) ConnectedDaemonCountForUser(userID string) int {
 
 // SendToolRequest pushes a tool request to the daemon
 // Context is accepted for interface compliance but not used - daemon connections have their own lifecycle
-func (s *ToolsDaemonService) SendToolRequest(ctx context.Context, userID, daemonID string, request *toolexec.ToolExecutionRequest) error {
+func (s *Service) SendToolRequest(ctx context.Context, userID, daemonID string, request *toolexec.ToolExecutionRequest) error {
 	conn, err := s.connForUser(userID, daemonID)
 	if err != nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Cannot send request - named daemon not connected",
@@ -2651,7 +2592,7 @@ func (s *ToolsDaemonService) SendToolRequest(ctx context.Context, userID, daemon
 }
 
 // GetActiveConnections returns count of active connections (for monitoring)
-func (s *ToolsDaemonService) GetActiveConnections() int {
+func (s *Service) GetActiveConnections() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.connections)
@@ -2684,7 +2625,7 @@ type HeldDaemonStream struct {
 //
 // Read under s.mu — the same lock that guards conn.lastActivity, which the
 // receive loop and runSender both write.
-func (s *ToolsDaemonService) HeldDaemonStreams() []HeldDaemonStream {
+func (s *Service) HeldDaemonStreams() []HeldDaemonStream {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]HeldDaemonStream, 0, len(s.connections))
@@ -2699,7 +2640,7 @@ func (s *ToolsDaemonService) HeldDaemonStreams() []HeldDaemonStream {
 }
 
 // GetConnectedUsers returns list of connected user IDs (for monitoring)
-func (s *ToolsDaemonService) GetConnectedUsers() []string {
+func (s *Service) GetConnectedUsers() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -2712,7 +2653,7 @@ func (s *ToolsDaemonService) GetConnectedUsers() []string {
 
 // SendLoadProjectConfigs requests a full snapshot load for a project path on
 // one named daemon.
-func (s *ToolsDaemonService) SendLoadProjectConfigs(_ context.Context, userID, daemonID string, projectPath string, requestID string) error {
+func (s *Service) SendLoadProjectConfigs(_ context.Context, userID, daemonID string, projectPath string, requestID string) error {
 	projectPath = normalizeProjectPath(projectPath)
 	if projectPath == "" {
 		return nil
@@ -2734,7 +2675,7 @@ func (s *ToolsDaemonService) SendLoadProjectConfigs(_ context.Context, userID, d
 }
 
 // SendWatchProjectConfigs subscribes daemon-side watchers for project config changes.
-func (s *ToolsDaemonService) SendWatchProjectConfigs(_ context.Context, userID, daemonID string, projectPath string, includeInitial bool) error {
+func (s *Service) SendWatchProjectConfigs(_ context.Context, userID, daemonID string, projectPath string, includeInitial bool) error {
 	projectPath = normalizeProjectPath(projectPath)
 	if projectPath == "" {
 		return nil
@@ -2752,7 +2693,7 @@ func (s *ToolsDaemonService) SendWatchProjectConfigs(_ context.Context, userID, 
 }
 
 // SendUnwatchProjectConfigs unsubscribes daemon-side watchers for project config changes.
-func (s *ToolsDaemonService) SendUnwatchProjectConfigs(userID, daemonID string, projectPath string) error {
+func (s *Service) SendUnwatchProjectConfigs(userID, daemonID string, projectPath string) error {
 	projectPath = normalizeProjectPath(projectPath)
 	if projectPath == "" {
 		return nil
@@ -2767,7 +2708,7 @@ func (s *ToolsDaemonService) SendUnwatchProjectConfigs(userID, daemonID string, 
 }
 
 // SendKillProcess sends a kill request to the daemon for a specific background process.
-func (s *ToolsDaemonService) SendKillProcess(userID, daemonID, processID string) error {
+func (s *Service) SendKillProcess(userID, daemonID, processID string) error {
 	msg := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_KillProcess{
 			KillProcess: &reliantv1.DaemonKillProcessRequest{
@@ -2782,7 +2723,7 @@ func (s *ToolsDaemonService) SendKillProcess(userID, daemonID, processID string)
 // waits for a correlated response. For commands that must target a specific
 // connection (e.g. reconcile asking THIS daemon what's on its disk) use
 // sendCommandToConn directly.
-func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+func (s *Service) SendDaemonCommand(ctx context.Context, userID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
 	s.mu.RLock()
 	conn := s.defaultDaemonForUser(userID)
 	s.mu.RUnlock()
@@ -2803,7 +2744,7 @@ func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID strin
 //
 // The daemon must also belong to userID, so a caller cannot reach another
 // user's machine by naming its id.
-func (s *ToolsDaemonService) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+func (s *Service) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
 	s.mu.RLock()
 	conn := s.connections[daemonID]
 	s.mu.RUnlock()
@@ -2818,7 +2759,7 @@ func (s *ToolsDaemonService) SendDaemonCommandToDaemon(ctx context.Context, user
 // correlation logic but targets the passed conn directly rather than resolving
 // the user's default daemon — required when a user has multiple daemons and the
 // caller needs to ask one particular connection about its own disk.
-func (s *ToolsDaemonService) sendCommandToConn(ctx context.Context, conn *daemonConnection, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+func (s *Service) sendCommandToConn(ctx context.Context, conn *daemonConnection, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
 	if conn == nil {
 		return nil, fmt.Errorf("nil daemon connection")
 	}
@@ -2877,7 +2818,7 @@ func (s *ToolsDaemonService) sendCommandToConn(ctx context.Context, conn *daemon
 // SendToolRequestSync sends a tool execution request to the user's default
 // daemon and waits for the correlated response. Resolution happens exactly
 // once, here; everything downstream operates on that one connection.
-func (s *ToolsDaemonService) SendToolRequestSync(ctx context.Context, userID, daemonID string, request *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
+func (s *Service) SendToolRequestSync(ctx context.Context, userID, daemonID string, request *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
 	conn, err := s.connForUser(userID, daemonID)
 	if err != nil {
 		return nil, err
@@ -2890,7 +2831,7 @@ func (s *ToolsDaemonService) SendToolRequestSync(ctx context.Context, userID, da
 // liveness the wait is bound to must all name the same connection — mixing
 // them is how an answer gets delivered to a connection nobody is listening on.
 // Mirrors sendCommandToConn.
-func (s *ToolsDaemonService) sendToolRequestToConn(ctx context.Context, conn *daemonConnection, request *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
+func (s *Service) sendToolRequestToConn(ctx context.Context, conn *daemonConnection, request *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
 	if conn == nil {
 		return nil, fmt.Errorf("nil daemon connection")
 	}
@@ -2964,7 +2905,7 @@ func (s *ToolsDaemonService) sendToolRequestToConn(ctx context.Context, conn *da
 	}
 }
 
-func (s *ToolsDaemonService) cancelDaemonCommand(userID, daemonID, requestID, reason string) {
+func (s *Service) cancelDaemonCommand(userID, daemonID, requestID, reason string) {
 	if err := s.SendToolExecutionCancel(context.Background(), userID, daemonID, requestID, reason); err != nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to send daemon command cancel", "userID", userID, "requestID", requestID, "error", err)
 	}
@@ -2977,7 +2918,7 @@ func (s *ToolsDaemonService) cancelDaemonCommand(userID, daemonID, requestID, re
 // best-effort nudge to a RUNNING execution. If the daemon is offline, the
 // connection closed, or its buffer is full, the command simply keeps running in
 // the foreground — the caller surfaces that rather than claiming success.
-func (s *ToolsDaemonService) SendToolExecutionBackground(_ context.Context, userID, daemonID, requestID, toolCallID string) error {
+func (s *Service) SendToolExecutionBackground(_ context.Context, userID, daemonID, requestID, toolCallID string) error {
 	if strings.TrimSpace(requestID) == "" {
 		return fmt.Errorf("cannot background without a request id for tool call %s", toolCallID)
 	}
@@ -3010,7 +2951,7 @@ func (s *ToolsDaemonService) SendToolExecutionBackground(_ context.Context, user
 // SendToolExecutionCancel sends a cancellation request to connected daemon.
 // This currently reuses the tool_cancel transport and request_id correlation for
 // both tool executions and generic daemon commands.
-func (s *ToolsDaemonService) SendToolExecutionCancel(_ context.Context, userID, daemonID, requestID, reason string) error {
+func (s *Service) SendToolExecutionCancel(_ context.Context, userID, daemonID, requestID, reason string) error {
 	if strings.TrimSpace(requestID) == "" {
 		return nil
 	}
@@ -3096,7 +3037,7 @@ func (c *daemonConnection) closeAllSubscribers() {
 }
 
 // SendTerminalInput sends raw PTY input bytes to the daemon for a terminal session.
-func (s *ToolsDaemonService) SendTerminalInput(userID, daemonID string, sessionID string, data []byte) error {
+func (s *Service) SendTerminalInput(userID, daemonID string, sessionID string, data []byte) error {
 	msg := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_TerminalInput{
 			TerminalInput: &reliantv1.TerminalInputMessage{
@@ -3109,7 +3050,7 @@ func (s *ToolsDaemonService) SendTerminalInput(userID, daemonID string, sessionI
 }
 
 // SendTerminalResize sends a terminal resize request to the daemon.
-func (s *ToolsDaemonService) SendTerminalResize(userID, daemonID string, sessionID string, cols, rows uint32) error {
+func (s *Service) SendTerminalResize(userID, daemonID string, sessionID string, cols, rows uint32) error {
 	msg := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_TerminalResize{
 			TerminalResize: &reliantv1.TerminalResizeMessage{
@@ -3124,7 +3065,7 @@ func (s *ToolsDaemonService) SendTerminalResize(userID, daemonID string, session
 
 // SubscribeTerminalOutput registers a subscriber for terminal output for a session.
 // Returns a channel that receives events, an unsubscribe function, and an error.
-func (s *ToolsDaemonService) SubscribeTerminalOutput(userID, daemonID string, sessionID string) (<-chan *toolexec.TerminalOutputEvent, func(), error) {
+func (s *Service) SubscribeTerminalOutput(userID, daemonID string, sessionID string) (<-chan *toolexec.TerminalOutputEvent, func(), error) {
 	conn, err := s.connForUser(userID, daemonID)
 	if err != nil {
 		return nil, nil, err
@@ -3189,7 +3130,7 @@ func (s *ToolsDaemonService) SubscribeTerminalOutput(userID, daemonID string, se
 // It sends a ProcessOutputSubscribe message to the daemon and returns a channel
 // that receives output events. The unsubscribe function sends an unsubscribe message
 // and removes the subscriber.
-func (s *ToolsDaemonService) SubscribeProcessOutput(userID, daemonID string, processID string, newOnly bool) (<-chan *toolexec.ProcessOutputEvent, func(), error) {
+func (s *Service) SubscribeProcessOutput(userID, daemonID string, processID string, newOnly bool) (<-chan *toolexec.ProcessOutputEvent, func(), error) {
 	conn, err := s.connForUser(userID, daemonID)
 	if err != nil {
 		return nil, nil, err
@@ -3292,8 +3233,8 @@ func jsonStringSlicePtr(values []string) (*string, error) {
 	return &v, nil
 }
 
-func (s *ToolsDaemonService) listAllProjectPaths(ctx context.Context, userID string) ([]string, error) {
-	projects, err := s.database.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1000, Offset: 0})
+func (s *Service) listAllProjectPaths(ctx context.Context, userID string) ([]string, error) {
+	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1000, Offset: 0})
 	if err != nil {
 		return nil, err
 	}

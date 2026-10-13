@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -89,12 +89,12 @@ func (r *activityRecorder) waitFor(t *testing.T) daemonwire.Event {
 	return daemonwire.Event{}
 }
 
-func newActivityFixture(t *testing.T) (*ToolsDaemonService, *daemonConnection, *parkedStream, *activityRecorder) {
+func newActivityFixture(t *testing.T) (*Service, *daemonConnection, *parkedStream, *activityRecorder) {
 	t.Helper()
 	daemonID := uuid.NewString()
 	rec := newActivityRecorder(t, daemonID)
-	svc := NewToolsDaemonService(nil)
-	svc.SetStatePublisher(daemonstate.NewPublisher(rec.nc))
+	svc := newTestService(nil)
+	svc.deps.StatePublisher = daemonstate.NewPublisher(rec.nc)
 	stream := newParkedStream()
 	conn := newTestConn("user-1", daemonID, stream)
 	conn.daemonType = "managed"

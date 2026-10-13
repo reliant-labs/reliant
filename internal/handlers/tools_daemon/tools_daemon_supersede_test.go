@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -19,9 +19,9 @@ import (
 // newDaemonlessService builds the service without a database. Every path
 // exercised here is pure connection bookkeeping — no message is dispatched, so
 // nothing reaches the repository.
-func newDaemonlessService(t *testing.T) *ToolsDaemonService {
+func newDaemonlessService(t *testing.T) *Service {
 	t.Helper()
-	svc := NewToolsDaemonService(nil)
+	svc := newTestService(nil)
 	t.Cleanup(svc.Close)
 	return svc
 }

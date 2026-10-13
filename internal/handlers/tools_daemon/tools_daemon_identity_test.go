@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -85,7 +85,7 @@ func (l *recordingListener) OnDaemonDisconnected(string, string) {}
 
 // registerAs dials ConnectDaemon authenticated (by test header) as userID,
 // asserting assertedID, and returns the first thing the gateway answers.
-func registerAs(t *testing.T, svc *ToolsDaemonService, userID, assertedID string) error {
+func registerAs(t *testing.T, svc *Service, userID, assertedID string) error {
 	t.Helper()
 	path, h := reliantv1connect.NewToolsDaemonServiceHandler(svc)
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +121,7 @@ func registerAs(t *testing.T, svc *ToolsDaemonService, userID, assertedID string
 func TestConnectDaemonRefusesDaemonIDOwnedByAnotherUser(t *testing.T) {
 	daemonID := uuid.NewString()
 	repo := newOwnershipRepo(map[string]string{daemonID: "user-A"})
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	t.Cleanup(svc.Close)
 	listener := &recordingListener{}
 	svc.AddConnectionListener(listener)
@@ -154,7 +154,7 @@ func TestConnectDaemonRefusesDaemonIDOwnedByAnotherUser(t *testing.T) {
 func TestConnectDaemonForeignRefusalCarriesStableReasonAndNoOwner(t *testing.T) {
 	daemonID := uuid.NewString()
 	repo := newOwnershipRepo(map[string]string{daemonID: "user-A"})
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	t.Cleanup(svc.Close)
 
 	err := registerAs(t, svc, "user-B", daemonID)
@@ -173,7 +173,7 @@ func TestConnectDaemonForeignRefusalCarriesStableReasonAndNoOwner(t *testing.T) 
 // authenticated principal only and touches no daemon state.
 func TestWhoAmINamesOnlyTheCallersAccount(t *testing.T) {
 	repo := newOwnershipRepo(map[string]string{})
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	t.Cleanup(svc.Close)
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-B")
@@ -192,7 +192,7 @@ func TestConnectDaemonRefusesSupersedingAnotherUsersLiveConnection(t *testing.T)
 	// live incumbent owned by someone else must not be superseded.
 	daemonID := uuid.NewString()
 	repo := newOwnershipRepo(map[string]string{})
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	t.Cleanup(svc.Close)
 	victim := newTestConn("user-A", daemonID, newParkedStream())
 	svc.mu.Lock()
@@ -221,7 +221,7 @@ func TestValidateAssertedDaemonID(t *testing.T) {
 }
 
 func TestConnectDaemonRejectsMalformedAssertedID(t *testing.T) {
-	svc := NewToolsDaemonService(newOwnershipRepo(map[string]string{}))
+	svc := newTestService(newOwnershipRepo(map[string]string{}))
 	t.Cleanup(svc.Close)
 	err := registerAs(t, svc, "user-B", "evil.>")
 	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -49,10 +49,10 @@ func (r *diskStateRepo) writes() []string {
 // told to refetch only when what it must show at once changed.
 func TestRecordDiskReport_StoresMaterialChangesAndAnnouncesUrgentOnes(t *testing.T) {
 	repo := &diskStateRepo{}
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	t.Cleanup(svc.Close)
 	hub := &recordingUserHub{}
-	svc.SetUserUpdateHub(hub)
+	svc.deps.UserUpdateHub = hub
 	conn := newTestConn("user-1", "daemon-1", newParkedStream())
 
 	vol := &reliantv1.DiskVolume{Label: "build caches & docker", TotalBytes: 40 << 30, FreeBytes: 5 << 30}
@@ -95,7 +95,7 @@ func TestRecordDiskReport_StoresMaterialChangesAndAnnouncesUrgentOnes(t *testing
 // episode, so a dismissed storage item stays dismissed.
 func TestRecordDiskReport_PressureEpisodeOutlivesTheConnection(t *testing.T) {
 	repo := &diskStateRepo{}
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	t.Cleanup(svc.Close)
 	ctx := context.Background()
 	vol := &reliantv1.DiskVolume{Label: "build caches & docker", TotalBytes: 40 << 30, FreeBytes: 1 << 30, Pressure: true}

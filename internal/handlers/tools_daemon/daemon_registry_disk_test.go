@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -35,7 +35,7 @@ func TestDiskReport_HeartbeatToRegistryAndKeptWhileOffline(t *testing.T) {
 	defer cleanup()
 	seedDaemon(t, repo, "user-1", "daemon-1", true)
 
-	gw := NewToolsDaemonService(repo)
+	gw := newTestService(repo)
 	t.Cleanup(gw.Close)
 	conn := newTestConn("user-1", "daemon-1", newParkedStream())
 	gw.recordDiskReport(context.Background(), conn, &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{

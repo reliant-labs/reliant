@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -58,10 +58,10 @@ func daemonListRefetches(t *testing.T, hub *recordingUserHub) map[string][]strin
 // owner's web clients are told to refetch — that signal is what lets them stop
 // polling ListDaemons every few seconds to notice.
 func TestTeardownConnection_AnnouncesDaemonListChange(t *testing.T) {
-	svc := NewToolsDaemonService(listChangedRepo{})
+	svc := newTestService(listChangedRepo{})
 	t.Cleanup(svc.Close)
 	hub := &recordingUserHub{}
-	svc.SetUserUpdateHub(hub)
+	svc.deps.UserUpdateHub = hub
 
 	conn := newTestConn("user-1", "daemon-1", newParkedStream())
 	svc.mu.Lock()
@@ -82,12 +82,12 @@ func TestTeardownConnection_AnnouncesDaemonListChange(t *testing.T) {
 // is addressed by user, so the owner is resolved from the registry row; a
 // daemon with no row has nothing for a client to list and is skipped.
 func TestPublishDaemonListChanged_ResolvesOwner(t *testing.T) {
-	svc := NewToolsDaemonService(listChangedRepo{daemons: map[string]*db.Daemon{
+	svc := newTestService(listChangedRepo{daemons: map[string]*db.Daemon{
 		"daemon-1": {ID: "daemon-1", UserID: "user-1"},
 	}})
 	t.Cleanup(svc.Close)
 	hub := &recordingUserHub{}
-	svc.SetUserUpdateHub(hub)
+	svc.deps.UserUpdateHub = hub
 	ctx := context.Background()
 
 	svc.PublishDaemonListChanged(ctx, "", "daemon-1")

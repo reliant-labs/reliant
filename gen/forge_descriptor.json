@@ -9186,8 +9186,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "TerminalSessionEvent_EventType"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "DaemonRegistryService",
@@ -33655,5 +33654,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "8f265cb55a3c5ee0e07041f65e81c062ccdb8382f4229eea5ea586c420afa32a"
+  "source_hash": "fc48890f3c232a7ac17e81c9385232923b536b24dff045836f29747674db5f85"
 }

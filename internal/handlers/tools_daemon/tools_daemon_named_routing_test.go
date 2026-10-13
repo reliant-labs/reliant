@@ -1,4 +1,4 @@
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 // request that was addressed to the cloud daemon.
 type namedRoutingFixture struct {
 	nc            *nats.Conn
-	svc           *ToolsDaemonService
+	svc           *Service
 	laptop, cloud *daemonConnection
 }
 
@@ -38,7 +38,7 @@ func newNamedRoutingFixture(t *testing.T) *namedRoutingFixture {
 	require.NoError(t, err)
 	t.Cleanup(nc.Close)
 
-	svc := NewToolsDaemonService(nil)
+	svc := newTestService(nil)
 	newConn := func(daemonType string) *daemonConnection {
 		return &daemonConnection{
 			userID:              namedRoutingUser,

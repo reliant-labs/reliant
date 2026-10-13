@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -46,7 +46,7 @@ type daemonPathChecker func(ctx context.Context, path string) (projectPathState,
 // hot connect path. The existence signal is repo.discover: repo.Discover fails
 // (Success=false) only when the requested path is not a directory, so a
 // successful response means the clone really exists on this daemon's disk.
-func (s *ToolsDaemonService) reconcileProjectDaemonsOnConnect(conn *daemonConnection) {
+func (s *Service) reconcileProjectDaemonsOnConnect(conn *daemonConnection) {
 	if conn == nil {
 		return
 	}
@@ -88,7 +88,7 @@ func (s *ToolsDaemonService) reconcileProjectDaemonsOnConnect(conn *daemonConnec
 		}, nil
 	}
 
-	reconcileProjectDaemons(ctx, s.database, conn.daemonID, conn.userID, check)
+	reconcileProjectDaemons(ctx, s.deps.Repo, conn.daemonID, conn.userID, check)
 }
 
 // reconcileProjectDaemons is the testable core of the reconcile pass. For each

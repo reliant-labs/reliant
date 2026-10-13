@@ -42,6 +42,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
+	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -161,7 +162,8 @@ func TestLocalModelE2E(t *testing.T) {
 
 	// ── gateway: real ToolsDaemonService + NATS bridge + daemon server ──
 	authority := tokenauthority.NewMemory()
-	toolsSvc := services.NewToolsDaemonService(repo)
+	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo})
+	require.NoError(t, err)
 	bridge := toolexec.NewNATSToolBridge(nc, nil, toolsSvc)
 	toolsSvc.AddConnectionListener(bridge)
 	require.NoError(t, bridge.Start())

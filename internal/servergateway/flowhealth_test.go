@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 )
 
 // att builds a registry row (daemon_attachment) whose reachability lease was
@@ -32,8 +32,8 @@ func att(daemonID string, lastActivity time.Time) *db.DaemonAttachment {
 // deliberately separate from lastActivity: a stream can be hours old and
 // silent, or seconds old and chatty, and the assertion treats those
 // differently.
-func held(daemonID string, connectedAt, lastActivity time.Time) services.HeldDaemonStream {
-	return services.HeldDaemonStream{
+func held(daemonID string, connectedAt, lastActivity time.Time) tools_daemon.HeldDaemonStream {
+	return tools_daemon.HeldDaemonStream{
 		DaemonID:     daemonID,
 		ConnectedAt:  connectedAt,
 		LastActivity: lastActivity,
@@ -49,7 +49,7 @@ func TestDaemonFlowHealth_Pure(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		held       []services.HeldDaemonStream
+		held       []tools_daemon.HeldDaemonStream
 		registry   []*db.DaemonAttachment
 		wantStatus string
 		wantStale  int
@@ -62,7 +62,7 @@ func TestDaemonFlowHealth_Pure(t *testing.T) {
 		},
 		{
 			name:       "held stream with a fresh lease is healthy",
-			held:       []services.HeldDaemonStream{held("a", long, fresh)},
+			held:       []tools_daemon.HeldDaemonStream{held("a", long, fresh)},
 			registry:   []*db.DaemonAttachment{att("a", fresh)},
 			wantStatus: "healthy",
 		},
@@ -72,7 +72,7 @@ func TestDaemonFlowHealth_Pure(t *testing.T) {
 			// while nothing has arrived from it to renew the lease. Readers
 			// see "no daemon connected" for a daemon we claim to serve.
 			name:       "held stream whose lease went stale is unhealthy",
-			held:       []services.HeldDaemonStream{held("a", long, fresh)},
+			held:       []tools_daemon.HeldDaemonStream{held("a", long, fresh)},
 			registry:   []*db.DaemonAttachment{att("a", staleLease)},
 			wantStatus: "unhealthy", wantStale: 1,
 		},
@@ -80,7 +80,7 @@ func TestDaemonFlowHealth_Pure(t *testing.T) {
 			// Same fault, harsher shape: the row is gone entirely (dropped
 			// connect event, or reaped by the TTL after a long stall).
 			name:       "held stream with no registry row at all is unhealthy",
-			held:       []services.HeldDaemonStream{held("a", long, fresh)},
+			held:       []tools_daemon.HeldDaemonStream{held("a", long, fresh)},
 			wantStatus: "unhealthy", wantStale: 1,
 		},
 		{
@@ -89,7 +89,7 @@ func TestDaemonFlowHealth_Pure(t *testing.T) {
 			// deleted long ago). Rows nobody cleaned up are garbage, not
 			// evidence — this used to pin the endpoint at 503 forever.
 			name: "long-abandoned orphan rows never make it unhealthy",
-			held: []services.HeldDaemonStream{held("live", long, fresh)},
+			held: []tools_daemon.HeldDaemonStream{held("live", long, fresh)},
 			registry: []*db.DaemonAttachment{
 				att("live", fresh),
 				att("0c9cff04", now.Add(-29*24*time.Hour)),
@@ -111,7 +111,7 @@ func TestDaemonFlowHealth_Pure(t *testing.T) {
 			// sweeper's own worst-case reap latency (~150s). It will be torn
 			// down shortly; flapping red on the way there is noise.
 			name:       "silence inside the sweeper grace band is not a fault",
-			held:       []services.HeldDaemonStream{held("a", long, now.Add(-3*time.Minute))},
+			held:       []tools_daemon.HeldDaemonStream{held("a", long, now.Add(-3*time.Minute))},
 			registry:   []*db.DaemonAttachment{att("a", now.Add(-3*time.Minute))},
 			wantStatus: "healthy",
 		},
@@ -119,7 +119,7 @@ func TestDaemonFlowHealth_Pure(t *testing.T) {
 			// Silent past every window the sweeper has: the sweeper itself
 			// is not doing its job.
 			name:       "held stream silent past the sweeper ceiling is unhealthy",
-			held:       []services.HeldDaemonStream{held("a", long, now.Add(-10*time.Minute))},
+			held:       []tools_daemon.HeldDaemonStream{held("a", long, now.Add(-10*time.Minute))},
 			registry:   []*db.DaemonAttachment{att("a", now.Add(-10*time.Minute))},
 			wantStatus: "unhealthy", wantUnreap: 1,
 		},
@@ -127,12 +127,12 @@ func TestDaemonFlowHealth_Pure(t *testing.T) {
 			// Mid-attach: the row write precedes registration, but a probe
 			// landing in the gap must not manufacture a fault.
 			name:       "a stream younger than the attach grace is not evidence",
-			held:       []services.HeldDaemonStream{held("a", now.Add(-2*time.Second), now)},
+			held:       []tools_daemon.HeldDaemonStream{held("a", now.Add(-2*time.Second), now)},
 			wantStatus: "undetermined",
 		},
 		{
 			name: "one healthy stream and one stalled stream is unhealthy",
-			held: []services.HeldDaemonStream{held("a", long, fresh), held("b", long, fresh)},
+			held: []tools_daemon.HeldDaemonStream{held("a", long, fresh), held("b", long, fresh)},
 			registry: []*db.DaemonAttachment{
 				att("a", fresh),
 				att("b", staleLease),
@@ -170,10 +170,10 @@ func (f fakeLister) ListAllDaemonAttachments(context.Context) ([]*db.DaemonAttac
 }
 
 type fakeStreams struct {
-	streams []services.HeldDaemonStream
+	streams []tools_daemon.HeldDaemonStream
 }
 
-func (f fakeStreams) HeldDaemonStreams() []services.HeldDaemonStream { return f.streams }
+func (f fakeStreams) HeldDaemonStreams() []tools_daemon.HeldDaemonStream { return f.streams }
 
 func decodeFlowHealth(t *testing.T, rr *httptest.ResponseRecorder) flowHealthResponse {
 	t.Helper()
@@ -197,7 +197,7 @@ func TestFlowHealthHandler_Healthy200(t *testing.T) {
 	long := now.Add(-time.Hour)
 	rr := serveFlowHealth(t,
 		fakeLister{attachments: []*db.DaemonAttachment{att("a", now), att("b", now)}},
-		fakeStreams{streams: []services.HeldDaemonStream{held("a", long, now), held("b", long, now)}},
+		fakeStreams{streams: []tools_daemon.HeldDaemonStream{held("a", long, now), held("b", long, now)}},
 		"")
 
 	if rr.Code != http.StatusOK {
@@ -228,7 +228,7 @@ func TestFlowHealthHandler_OrphanRowsStayGreen(t *testing.T) {
 			att("0c9cff04", now.Add(-29*24*time.Hour)), // laptop daemon, gateway gone
 			att("81dc53c1", now.Add(-51*24*time.Hour)), // deleted workspace pod
 		}},
-		fakeStreams{streams: []services.HeldDaemonStream{held("42906ac5", long, now.Add(-5*time.Second))}},
+		fakeStreams{streams: []tools_daemon.HeldDaemonStream{held("42906ac5", long, now.Add(-5*time.Second))}},
 		"")
 
 	if rr.Code != http.StatusOK {
@@ -251,7 +251,7 @@ func TestFlowHealthHandler_StaleLiveAttachment503(t *testing.T) {
 	now := time.Now()
 	rr := serveFlowHealth(t,
 		fakeLister{attachments: []*db.DaemonAttachment{att("a", now.Add(-10*time.Minute))}},
-		fakeStreams{streams: []services.HeldDaemonStream{held("a", now.Add(-time.Hour), now)}},
+		fakeStreams{streams: []tools_daemon.HeldDaemonStream{held("a", now.Add(-time.Hour), now)}},
 		"")
 
 	if rr.Code != http.StatusServiceUnavailable {
@@ -291,7 +291,7 @@ func TestFlowHealthHandler_StaleAfterKnob(t *testing.T) {
 	now := time.Now()
 	rr := serveFlowHealth(t,
 		fakeLister{attachments: []*db.DaemonAttachment{att("a", now.Add(-1*time.Second))}},
-		fakeStreams{streams: []services.HeldDaemonStream{held("a", now.Add(-time.Hour), now)}},
+		fakeStreams{streams: []tools_daemon.HeldDaemonStream{held("a", now.Add(-time.Hour), now)}},
 		"?stale-after=1ns")
 
 	if rr.Code != http.StatusServiceUnavailable {
@@ -335,10 +335,10 @@ func TestFlowHealthBodyFitsSmokeDetail(t *testing.T) {
 	cases := map[string]*httptest.ResponseRecorder{
 		"healthy": serveFlowHealth(t,
 			fakeLister{attachments: []*db.DaemonAttachment{att("a", now), att("b", now.Add(-29*24*time.Hour)), att("c", now.Add(-51*24*time.Hour))}},
-			fakeStreams{streams: []services.HeldDaemonStream{held("a", long, now)}}, ""),
+			fakeStreams{streams: []tools_daemon.HeldDaemonStream{held("a", long, now)}}, ""),
 		"unhealthy": serveFlowHealth(t,
 			fakeLister{attachments: []*db.DaemonAttachment{att("a", now.Add(-10*time.Minute))}},
-			fakeStreams{streams: []services.HeldDaemonStream{held("a", long, now)}}, ""),
+			fakeStreams{streams: []tools_daemon.HeldDaemonStream{held("a", long, now)}}, ""),
 		"undetermined": serveFlowHealth(t, fakeLister{}, fakeStreams{}, ""),
 	}
 	for name, rr := range cases {

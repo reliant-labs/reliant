@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -48,7 +48,7 @@ func heartbeatMsg(ts int64) *reliantv1.DaemonMessage {
 }
 
 // runIncoming serves conn's receive loop until the test ends.
-func runIncoming(t *testing.T, svc *ToolsDaemonService, conn *daemonConnection, stream *parkedStream) {
+func runIncoming(t *testing.T, svc *Service, conn *daemonConnection, stream *parkedStream) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	handlerDone := make(chan struct{})
@@ -74,9 +74,9 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 	userID, daemonID := "lease-user", uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	hub := &recordingUserHub{}
-	svc.SetUserUpdateHub(hub)
+	svc.deps.UserUpdateHub = hub
 	stream := newParkedStream()
 	conn := newTestConn(userID, daemonID, stream)
 	require.NoError(t, repo.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
@@ -167,7 +167,7 @@ func (r *leaseRecordingRepo) renewalCount() int {
 // it rode that FIFO, a backlog of slow writes aged a live stream's lease out.
 func TestLeaseRenewalIsNotQueuedBehindStatePersistence(t *testing.T) {
 	repo := &leaseRecordingRepo{stateEntered: make(chan struct{}, 1), release: make(chan struct{})}
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	stream := newParkedStream()
 	conn := newTestConn("user-1", "daemon-1", stream)
 	runIncoming(t, svc, conn, stream)
@@ -217,7 +217,7 @@ func (r *releaseRecordingRepo) ReleaseDaemonAttachment(_ context.Context, daemon
 // moving, so liveness keyed on it never runs out.
 func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.T) {
 	repo := &releaseRecordingRepo{}
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	t.Cleanup(svc.Close)
 
 	base := time.Date(2026, 10, 11, 12, 10, 0, 0, time.UTC)
@@ -264,7 +264,7 @@ func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.
 // so the daemon can tell a gateway that is consuming its stream from one that
 // has stopped. Before the first daemon heartbeat it acknowledges nothing (0).
 func TestServerHeartbeatAcknowledgesTheNewestDaemonHeartbeatRead(t *testing.T) {
-	svc := NewToolsDaemonService(&leaseRecordingRepo{stateEntered: make(chan struct{}, 1), release: make(chan struct{})})
+	svc := newTestService(&leaseRecordingRepo{stateEntered: make(chan struct{}, 1), release: make(chan struct{})})
 	stream := newParkedStream()
 	conn := newTestConn("user-1", "daemon-1", stream)
 
@@ -289,7 +289,7 @@ func TestServerHeartbeatAcknowledgesTheNewestDaemonHeartbeatRead(t *testing.T) {
 // dialDaemon registers daemonID as userID on svc over a real ConnectDaemon
 // stream and returns it once the gateway has acknowledged the registration.
 // The stream stays open until the test closes it or ends.
-func dialDaemon(t *testing.T, svc *ToolsDaemonService, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+func dialDaemon(t *testing.T, svc *Service, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
 	path, h := reliantv1connect.NewToolsDaemonServiceHandler(svc)
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -339,7 +339,7 @@ func registryStatus(t *testing.T, registry *daemon_registry.Service, userID, dae
 	return reliantv1.DaemonStatus_DAEMON_STATUS_UNSPECIFIED
 }
 
-func heldConn(svc *ToolsDaemonService, daemonID string) *daemonConnection {
+func heldConn(svc *Service, daemonID string) *daemonConnection {
 	svc.mu.RLock()
 	defer svc.mu.RUnlock()
 	return svc.connections[daemonID]
@@ -361,9 +361,9 @@ func leaseFixture(t *testing.T) (repo *db.Repo, rawDB *sql.DB, registry *daemon_
 func TestDaemonStaysActiveWhenTheOldReplicaTearsDownAfterAReconnect(t *testing.T) {
 	repo, _, registry, userID, daemonID := leaseFixture(t)
 
-	replicaA := NewToolsDaemonService(repo)
+	replicaA := newTestService(repo)
 	t.Cleanup(replicaA.Close)
-	replicaB := NewToolsDaemonService(repo)
+	replicaB := newTestService(repo)
 	t.Cleanup(replicaB.Close)
 
 	dialDaemon(t, replicaA, userID, daemonID)
@@ -390,7 +390,7 @@ func TestDaemonStaysActiveWhenTheOldReplicaTearsDownAfterAReconnect(t *testing.T
 func TestHeartbeatRestoresAMissingLeaseAndDisconnectIsStillPrompt(t *testing.T) {
 	repo, rawDB, registry, userID, daemonID := leaseFixture(t)
 
-	gateway := NewToolsDaemonService(repo)
+	gateway := newTestService(repo)
 	t.Cleanup(gateway.Close)
 	stream := dialDaemon(t, gateway, userID, daemonID)
 	require.Equal(t, reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE, registryStatus(t, registry, userID, daemonID))

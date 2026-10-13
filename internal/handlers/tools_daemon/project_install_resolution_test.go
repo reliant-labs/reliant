@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -44,7 +44,7 @@ func TestQueuedClone_FailureMarksTheProjectFailedWithAReason(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	defer svc.Close()
 
 	userID := "user-install-" + uuid.NewString()
@@ -72,7 +72,7 @@ func TestQueuedClone_FailureWithNoMessageStillReadsAsFailed(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	defer svc.Close()
 
 	userID := "user-install-" + uuid.NewString()
@@ -100,7 +100,7 @@ func TestQueuedClone_FilesystemAnnouncementSettlesTheInstall(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	defer svc.Close()
 
 	userID := "user-install-" + uuid.NewString()
@@ -125,7 +125,7 @@ func TestQueuedClone_UnrelatedCommandFailureLeavesTheInstallAlone(t *testing.T) 
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	defer svc.Close()
 
 	userID := "user-install-" + uuid.NewString()

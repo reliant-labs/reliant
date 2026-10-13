@@ -3,7 +3,12 @@ package services
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -11,11 +16,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
 // CreateProjectFromRepo replaces a four-call client chain (ListGitRepos ->
@@ -272,20 +282,63 @@ func TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed(t *testing.T) {
 
 	// The daemon runs the queued command and it fails. Its announcement
 	// carries the command's request id — the one the control plane stamped.
-	tools := NewToolsDaemonService(repo)
-	defer tools.Close()
-	conn := &daemonConnection{userID: userID, daemonID: "daemon-abc", done: make(chan struct{})}
-	require.NoError(t, tools.handleDaemonCommandFailed(context.Background(), conn, &reliantv1.DaemonCommandFailed{
-		RequestId:    cp.lastReq.RequestID,
-		CommandType:  "git.clone",
-		ErrorMessage: "remote: Repository not found.",
-	}))
+	daemon := dialToolsDaemon(t, repo, userID, "daemon-abc")
+	require.NoError(t, daemon.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_DaemonCommandFailed{
+		DaemonCommandFailed: &reliantv1.DaemonCommandFailed{
+			RequestId:    cp.lastReq.RequestID,
+			CommandType:  "git.clone",
+			ErrorMessage: "remote: Repository not found.",
+		},
+	}}))
 
-	rows, err = repo.ListProjectDaemonsForProject(ctx, projectID)
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	assert.Equal(t, "failed", string(rows[0].InstallState))
+	require.Eventually(t, func() bool {
+		rows, err = repo.ListProjectDaemonsForProject(ctx, projectID)
+		return err == nil && len(rows) == 1 && string(rows[0].InstallState) == "failed"
+	}, 5*time.Second, 20*time.Millisecond, "the gateway must mark the failed clone's install row failed")
 	assert.Contains(t, rows[0].InstallError, "Repository not found")
+}
+
+// dialToolsDaemon plays a daemon: it registers daemonID as userID on a real
+// daemon gateway (tools_daemon) over ConnectDaemon and returns the stream
+// once the gateway has acknowledged the registration, for the test to send
+// what a daemon sends.
+func dialToolsDaemon(t *testing.T, repo db.Repository, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+	t.Helper()
+	gateway, err := tools_daemon.New(tools_daemon.Deps{
+		Logger: slog.New(slog.DiscardHandler),
+		Config: &typedconfig.Config{},
+		Repo:   repo,
+	})
+	require.NoError(t, err)
+	t.Cleanup(gateway.Close)
+
+	path, h := reliantv1connect.NewToolsDaemonServiceHandler(gateway)
+	mux := http.NewServeMux()
+	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), auth.UserIDContextKey, userID)))
+	}))
+	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	cl := &http.Client{Transport: &http2.Transport{
+		AllowHTTP: true,
+		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, network, addr)
+		},
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	stream := reliantv1connect.NewToolsDaemonServiceClient(cl, srv.URL, connect.WithGRPC()).ConnectDaemon(ctx)
+	t.Cleanup(func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() })
+	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
+		Register: &reliantv1.DaemonRegister{DaemonId: daemonID, Hostname: "ws-" + daemonID, Platform: "linux", DaemonType: "local"},
+	}}))
+	msg, err := stream.Receive()
+	require.NoError(t, err)
+	require.NotNil(t, msg.GetRegistrationAck(), "first server message must be the registration ack")
+	return stream
 }
 
 // TestCreateProjectFromRepo_StampsCreationTime pins the timestamps. The

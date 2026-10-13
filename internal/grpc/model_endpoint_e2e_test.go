@@ -17,6 +17,7 @@ package grpc
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -31,6 +32,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/netguard"
@@ -39,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
 func epCtx(userID string) context.Context {
@@ -66,7 +69,8 @@ func TestModelEndpointE2E(t *testing.T) {
 	nc := e2eStartNATS(t)
 
 	authority := tokenauthority.NewMemory()
-	toolsSvc := services.NewToolsDaemonService(repo)
+	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo})
+	require.NoError(t, err)
 	bridge := toolexec.NewNATSToolBridge(nc, nil, toolsSvc)
 	toolsSvc.AddConnectionListener(bridge)
 	require.NoError(t, bridge.Start())

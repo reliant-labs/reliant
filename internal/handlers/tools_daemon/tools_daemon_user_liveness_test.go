@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
-package services
+package tools_daemon
 
 import (
 	"testing"
@@ -17,7 +17,7 @@ import (
 // Deliberately hermetic: nothing in this path touches the database, so the
 // service is built with a nil repo and the test runs without DATABASE_URL.
 func TestConnectedDaemonCountForUser(t *testing.T) {
-	svc := NewToolsDaemonService(nil)
+	svc := newTestService(nil)
 	defer svc.Close()
 
 	const userA = "user-a"

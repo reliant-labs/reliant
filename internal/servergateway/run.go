@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -31,13 +32,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/drain"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
@@ -209,18 +211,11 @@ func Run(ctx context.Context, opts Options) error {
 	// 3. Daemon services
 	// -------------------------------------------------------------------------
 
-	// ToolsDaemonService holds bidi gRPC streams to daemon processes
-	toolsDaemonService := services.NewToolsDaemonService(repo)
-	defer toolsDaemonService.Close()
-
 	// State publisher: emits daemon.v1.state.* lifecycle events on the
 	// core-NATS bus. The control-plane derivation consumer fans these out
 	// to the derived stores (daemon_attachment, daemons.status, workspace
 	// CR). See .dev/simplification-proposal.md, Step 3.
-	toolsDaemonService.SetStatePublisher(daemonstate.NewPublisher(nc))
-	logging.Info("Daemon state publisher wired",
-		"subjectPrefix", daemonwire.SubjectPrefix,
-	)
+	statePublisher := daemonstate.NewPublisher(nc)
 
 	// User-update hub, publish-only: the gateway is the one process that
 	// receives daemon heartbeats and local-model inventories, and it forwards
@@ -230,8 +225,24 @@ func Run(ctx context.Context, opts Options) error {
 	// the api-server's copy of this wiring was removed with the monolith
 	// split, and the gateway never picked it up.
 	userUpdateHub := streaming.NewNATSUpdateHub[db.UserUpdate](nc, "user.updates", "UserUpdate")
+
+	// ToolsDaemonService holds bidi gRPC streams to daemon processes
+	toolsDaemonService, err := tools_daemon.New(tools_daemon.Deps{
+		Logger:         slog.Default(),
+		Config:         &config.Config{},
+		Repo:           repo,
+		UserUpdateHub:  userUpdateHub,
+		StatePublisher: statePublisher,
+	})
+	if err != nil {
+		_ = userUpdateHub.Close()
+		return fmt.Errorf("tools_daemon service: %w", err)
+	}
+	defer toolsDaemonService.Close()
 	defer func() { _ = userUpdateHub.Close() }()
-	toolsDaemonService.SetUserUpdateHub(userUpdateHub)
+	logging.Info("Daemon state publisher wired",
+		"subjectPrefix", daemonwire.SubjectPrefix,
+	)
 
 	// Reliant-side derivation consumer: subscribes to the same subject and
 	// mirrors the control plane's lifecycle, removal and registry-snapshot

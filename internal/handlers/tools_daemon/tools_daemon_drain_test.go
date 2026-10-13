@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -25,7 +25,7 @@ import (
 // the daemon redials immediately (see isFatalError in
 // internal/toolexec/daemonruntime/runtime.go: Unavailable is recoverable).
 func TestCloseEndsOpenDaemonStreamsWithUnavailable(t *testing.T) {
-	svc := NewToolsDaemonService(nil)
+	svc := newTestService(nil)
 
 	stream := newParkedStream()
 	conn := newTestConn("user-1", "daemon-1", stream)
@@ -86,7 +86,7 @@ func TestDrainingErrorIsTheServerDrainingSentinel(t *testing.T) {
 // Close with no connections must not panic or block; the gateway shuts down
 // this way whenever no daemon happens to be attached.
 func TestCloseWithNoConnectionsIsANoOp(t *testing.T) {
-	svc := NewToolsDaemonService(nil)
+	svc := newTestService(nil)
 	done := make(chan struct{})
 	go func() { svc.Close(); close(done) }()
 	select {
@@ -99,7 +99,7 @@ func TestCloseWithNoConnectionsIsANoOp(t *testing.T) {
 // Close is idempotent: it runs from gateway shutdown while individual streams
 // may already be ending on their own.
 func TestCloseIsIdempotent(t *testing.T) {
-	svc := NewToolsDaemonService(nil)
+	svc := newTestService(nil)
 	conn := newTestConn("user-1", "daemon-1", newParkedStream())
 
 	svc.mu.Lock()

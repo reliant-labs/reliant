@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -23,9 +23,9 @@ const localModelsRefetchType = "daemon_local_models"
 
 // Compile-time check: the gateway's connection holder is what the NATS bridge
 // relays local-model HTTP through.
-var _ toolexec.LocalModelRelayManager = (*ToolsDaemonService)(nil)
+var _ toolexec.LocalModelRelayManager = (*Service)(nil)
 
-func (s *ToolsDaemonService) connForUser(userID, daemonID string) (*daemonConnection, error) {
+func (s *Service) connForUser(userID, daemonID string) (*daemonConnection, error) {
 	s.mu.RLock()
 	conn := s.connections[daemonID]
 	s.mu.RUnlock()
@@ -36,7 +36,7 @@ func (s *ToolsDaemonService) connForUser(userID, daemonID string) (*daemonConnec
 }
 
 // OpenLocalModelRelay implements toolexec.LocalModelRelayManager.
-func (s *ToolsDaemonService) OpenLocalModelRelay(userID, daemonID string, req *reliantv1.LocalModelHTTPRequest, deliver func(*reliantv1.LocalModelHTTPChunk)) (func(), error) {
+func (s *Service) OpenLocalModelRelay(userID, daemonID string, req *reliantv1.LocalModelHTTPRequest, deliver func(*reliantv1.LocalModelHTTPChunk)) (func(), error) {
 	conn, err := s.connForUser(userID, daemonID)
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func (s *ToolsDaemonService) OpenLocalModelRelay(userID, daemonID string, req *r
 }
 
 // CancelLocalModelRelay implements toolexec.LocalModelRelayManager.
-func (s *ToolsDaemonService) CancelLocalModelRelay(userID, daemonID, requestID string) {
+func (s *Service) CancelLocalModelRelay(userID, daemonID, requestID string) {
 	conn, err := s.connForUser(userID, daemonID)
 	if err != nil {
 		return
@@ -78,7 +78,7 @@ func (s *ToolsDaemonService) CancelLocalModelRelay(userID, daemonID, requestID s
 
 // RefreshLocalModels implements toolexec.LocalModelRelayManager: it asks the
 // daemon to re-probe and waits for the next inventory it publishes.
-func (s *ToolsDaemonService) RefreshLocalModels(ctx context.Context, userID, daemonID string) (*reliantv1.LocalModelInventory, error) {
+func (s *Service) RefreshLocalModels(ctx context.Context, userID, daemonID string) (*reliantv1.LocalModelInventory, error) {
 	conn, err := s.connForUser(userID, daemonID)
 	if err != nil {
 		return nil, err
@@ -146,7 +146,7 @@ func (c *daemonConnection) failLocalModelRelays(reason string) {
 
 // handleLocalModelInventory wakes refresh waiters, stores the inventory
 // (skipping byte-identical republishes) and tells web clients to refetch.
-func (s *ToolsDaemonService) handleLocalModelInventory(ctx context.Context, conn *daemonConnection, inv *reliantv1.LocalModelInventory) {
+func (s *Service) handleLocalModelInventory(ctx context.Context, conn *daemonConnection, inv *reliantv1.LocalModelInventory) {
 	if inv == nil {
 		return
 	}
@@ -171,7 +171,7 @@ func (s *ToolsDaemonService) handleLocalModelInventory(ctx context.Context, conn
 	if encodedJSON == conn.lastInventoryJSON {
 		return
 	}
-	if err := s.database.SetDaemonLocalModels(ctx, conn.daemonID, encodedJSON); err != nil {
+	if err := s.deps.Repo.SetDaemonLocalModels(ctx, conn.daemonID, encodedJSON); err != nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to store local model inventory", "error", err, "daemonID", conn.daemonID)
 		return
 	}
@@ -182,12 +182,12 @@ func (s *ToolsDaemonService) handleLocalModelInventory(ctx context.Context, conn
 // publishLocalModelsChanged emits an ephemeral REFETCH user update, the same
 // kind of live signal heartbeat-carried facts (detected_ports) ride on, so the
 // UI refetches the daemon list.
-func (s *ToolsDaemonService) publishLocalModelsChanged(userID, daemonID string) {
-	if s.userUpdateHub == nil {
+func (s *Service) publishLocalModelsChanged(userID, daemonID string) {
+	if s.deps.UserUpdateHub == nil {
 		return
 	}
 	data, _ := json.Marshal(map[string]string{"type": localModelsRefetchType, "daemon_id": daemonID})
-	s.userUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
+	s.deps.UserUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
 		Key: userID,
 		Payload: db.UserUpdate{
 			UserID:     userID,

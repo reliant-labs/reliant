@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -41,7 +41,7 @@ const (
 // halves: it drains sendCh and replies on the registered channel, which lets
 // the real handler run end to end with no daemon stream.
 func newStubbedForgeNameConn(
-	t *testing.T, svc *ToolsDaemonService, userID, daemonID string, nameByPath map[string]string,
+	t *testing.T, svc *Service, userID, daemonID string, nameByPath map[string]string,
 ) *daemonConnection {
 	t.Helper()
 	conn := &daemonConnection{
@@ -104,7 +104,7 @@ func TestSettledClone_LearnsTheForgeNameWithoutTheForgeTab(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	defer svc.Close()
 
 	userID := "user-forgename-" + uuid.NewString()

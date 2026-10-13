@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 )
 
 // flowhealth.go — the daemon-gateway's APP-FLOW health endpoint.
@@ -69,11 +69,11 @@ type flowHealthAttachmentLister interface {
 }
 
 // flowHealthStreamSource is the gateway's own answer to "which daemons do I
-// believe I am serving right now". Satisfied by *services.ToolsDaemonService.
+// believe I am serving right now". Satisfied by *tools_daemon.Service.
 // Without it the endpoint cannot tell a daemon that SHOULD be connected from
 // a row nobody cleaned up — the distinction the whole check rests on.
 type flowHealthStreamSource interface {
-	HeldDaemonStreams() []services.HeldDaemonStream
+	HeldDaemonStreams() []tools_daemon.HeldDaemonStream
 }
 
 const (
@@ -156,7 +156,7 @@ func (r flowHealthResult) status() string {
 // a fault (that is what it is for), and a knob that tightened both sides at
 // once would cancel itself out — every stream would look dead in memory too,
 // landing in the sweeper's grace band instead of reporting a fault.
-func daemonFlowHealth(held []services.HeldDaemonStream, registry []*db.DaemonAttachment, staleAfter time.Duration, now time.Time) flowHealthResult {
+func daemonFlowHealth(held []tools_daemon.HeldDaemonStream, registry []*db.DaemonAttachment, staleAfter time.Duration, now time.Time) flowHealthResult {
 	res := flowHealthResult{Registry: len(registry), Held: len(held)}
 
 	leases := make(map[string]time.Time, len(registry))
@@ -276,7 +276,7 @@ func flowHealthHandler(lister flowHealthAttachmentLister, streams flowHealthStre
 			return
 		}
 
-		var held []services.HeldDaemonStream
+		var held []tools_daemon.HeldDaemonStream
 		if streams != nil {
 			held = streams.HeldDaemonStreams()
 		}

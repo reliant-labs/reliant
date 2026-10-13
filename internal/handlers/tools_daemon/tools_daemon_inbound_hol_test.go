@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -85,7 +85,7 @@ func TestInboundReplyIsNotQueuedBehindStatePersistence(t *testing.T) {
 	for name, staller := range stallers {
 		t.Run(name, func(t *testing.T) {
 			repo := newStallingRepo()
-			svc := NewToolsDaemonService(repo)
+			svc := newTestService(repo)
 			stream := newParkedStream()
 			conn := newTestConn("user-1", "daemon-1", stream)
 
@@ -136,7 +136,7 @@ func TestInboundReplyIsNotQueuedBehindStatePersistence(t *testing.T) {
 // produces, so dropping it would leave the user with no trace of the failure.
 func TestInboundStateReceivedBeforeStreamEndIsStillApplied(t *testing.T) {
 	repo := newStallingRepo()
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	stream := newParkedStream()
 	conn := newTestConn("user-1", "daemon-1", stream)
 

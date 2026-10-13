@@ -29,8 +29,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/token"
+	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/middleware"
@@ -311,8 +311,10 @@ func serveGateway(t *testing.T, authority tokenauthority.Authority) string {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
+	gateway, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo})
+	require.NoError(t, err)
 	ds := NewDaemonServer(&DaemonConfig{
-		ToolsDaemonService: services.NewToolsDaemonService(repo),
+		ToolsDaemonService: gateway,
 		DaemonTokens:       authority,
 	})
 	return serveCleartext(t, ds.server.Handler)

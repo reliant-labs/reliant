@@ -58,6 +58,10 @@
       {
         "name": "tool_call",
         "rpc_service": "reliant.v1.ToolCallService"
+      },
+      {
+        "name": "tools_daemon",
+        "rpc_service": "reliant.v1.ToolsDaemonService"
       }
     ]
   },

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tools_daemon
 
 import (
 	"context"
@@ -129,10 +129,10 @@ func TestInventory_StoredSkippedWhenIdenticalAndPublished(t *testing.T) {
 	defer cleanup()
 	seedDaemon(t, repo, "user-1", "daemon-1", true)
 
-	svc := NewToolsDaemonService(repo)
+	svc := newTestService(repo)
 	t.Cleanup(svc.Close)
 	hub := &recordingUserHub{}
-	svc.SetUserUpdateHub(hub)
+	svc.deps.UserUpdateHub = hub
 	conn := newTestConn("user-1", "daemon-1", newParkedStream())
 	ctx := context.Background()
 
@@ -172,14 +172,14 @@ func TestInventory_StoredSkippedWhenIdenticalAndPublished(t *testing.T) {
 }
 
 func TestInventory_WakesRefreshWaiter(t *testing.T) {
-	svc := NewToolsDaemonService(nil)
+	svc := newTestService(nil)
 	t.Cleanup(svc.Close)
 	stream := newParkedStream()
 	conn := newTestConn("user-1", "daemon-1", stream)
 	svc.mu.Lock()
 	svc.connections["daemon-1"] = conn
 	svc.mu.Unlock()
-	svc.database = nopLocalModelsRepo{}
+	svc.deps.Repo = nopLocalModelsRepo{}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -216,7 +216,7 @@ func (nopLocalModelsRepo) SetDaemonLocalModels(context.Context, string, string) 
 // Chunks are handed to the request's consumer in order, a done chunk retires
 // the registration, and teardown fails in-flight relays with an error chunk.
 func TestRelay_DispatchOrderingAndTeardown(t *testing.T) {
-	svc := NewToolsDaemonService(nil)
+	svc := newTestService(nil)
 	t.Cleanup(svc.Close)
 	conn := newTestConn("user-1", "daemon-1", newParkedStream())
 	svc.mu.Lock()
@@ -255,7 +255,7 @@ func TestRelay_DispatchOrderingAndTeardown(t *testing.T) {
 }
 
 func TestRelay_OnlyOwnersDaemonIsReachable(t *testing.T) {
-	svc := NewToolsDaemonService(nil)
+	svc := newTestService(nil)
 	t.Cleanup(svc.Close)
 	conn := newTestConn("user-1", "daemon-1", newParkedStream())
 	svc.mu.Lock()

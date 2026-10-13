@@ -20,7 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 )
@@ -31,7 +31,7 @@ type DaemonServer struct {
 	tlsCertFile string
 	tlsKeyFile  string
 
-	toolsDaemonService *services.ToolsDaemonService
+	toolsDaemonService *tools_daemon.Service
 }
 
 // DaemonConfig holds dedicated daemon listener configuration.
@@ -39,7 +39,7 @@ type DaemonConfig struct {
 	Port        int
 	BindAddress string // Bind address (default: "127.0.0.1", use "0.0.0.0" for containers)
 
-	ToolsDaemonService *services.ToolsDaemonService
+	ToolsDaemonService *tools_daemon.Service
 
 	// DaemonTokens resolves daemons' `rlat_` credentials (uncached).
 	DaemonTokens auth.AccessTokenIntrospector

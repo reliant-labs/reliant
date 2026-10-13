@@ -27,8 +27,8 @@ import (
 // in prod — and none of the paths below needs more than one small column.
 //
 // It embeds the concrete *db.Repo, not db.Repository, so the narrow column
-// reads the services use (GetProjectConfigPushedAt, GetProjectScenariosJSON)
-// are still there to be used.
+// read the scenario RPCs use (GetProjectScenariosJSON) is still there to be
+// used.
 type wholeConfigRowReads struct {
 	*db.Repo
 
@@ -55,81 +55,6 @@ func (r *wholeConfigRowReads) reads() []string {
 func bigSkillsJSON() *string {
 	s := `[{"name":"big","body":"` + strings.Repeat("x", 64<<10) + `"}]`
 	return &s
-}
-
-// The daemon config sync drops a snapshot or delta older than the stored one.
-// It runs on every push, and needs only the stored pushed_at — it used to read
-// the whole record to get it.
-func TestDaemonConfigSync_StalenessCheckReadsOnlyPushedAt(t *testing.T) {
-	repo := db.NewTestRepo(t)
-	spy := &wholeConfigRowReads{Repo: repo}
-	svc := NewToolsDaemonService(spy)
-	defer svc.Close()
-	ctx := context.Background()
-
-	now := time.Now().UTC()
-	daemonID := uuid.NewString()
-	projectID := uuid.NewString()
-	projectPath := "/tmp/config-row-tail-" + uuid.NewString()
-	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: "test-user"}))
-	require.NoError(t, repo.CreateProject(ctx, &db.Project{
-		ID: projectID, UserID: "test-user", Name: "tail", Path: projectPath, IsGitRepo: true,
-		CreatedAt: now, UpdatedAt: now, LastActive: now,
-	}))
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
-		ProjectID: projectID, DaemonID: daemonID,
-		UserConfigYAML:    testStringPtr("user: existing"),
-		ProjectSkillsJSON: bigSkillsJSON(),
-		PushedAt:          time.UnixMilli(2000).UTC(),
-	}))
-
-	conn := &daemonConnection{
-		userID: "test-user", daemonID: daemonID,
-		sendCh: make(chan *reliantv1.ServerMessage, 8), done: make(chan struct{}),
-	}
-	svc.mu.Lock()
-	registerTestConn(svc, conn)
-	svc.mu.Unlock()
-
-	// A delta older than the stored push is dropped; a newer one asks the
-	// daemon for its snapshot.
-	require.NoError(t, svc.handleProjectConfigDelta(ctx, conn, &reliantv1.ProjectConfigDelta{
-		ProjectPath: projectPath, ConfigVersion: "v1", DaemonTimestampUnixMs: 1000,
-	}))
-	select {
-	case <-conn.sendCh:
-		t.Fatal("a delta older than the stored push must be dropped")
-	default:
-	}
-	require.NoError(t, svc.handleProjectConfigDelta(ctx, conn, &reliantv1.ProjectConfigDelta{
-		ProjectPath: projectPath, ConfigVersion: "v3", DaemonTimestampUnixMs: 3000,
-	}))
-	select {
-	case msg := <-conn.sendCh:
-		require.NotNil(t, msg.GetLoadProjectConfigs(), "a newer delta must request the snapshot")
-	default:
-		t.Fatal("a newer delta must request the snapshot")
-	}
-
-	// The same check gates snapshots: an older one is not written, a newer one is.
-	snapshot := func(ts int64, userYAML string) *reliantv1.ProjectConfigSnapshot {
-		return &reliantv1.ProjectConfigSnapshot{
-			ProjectPath: projectPath, ConfigVersion: "v", DaemonTimestampUnixMs: ts,
-			UserConfigYaml: []byte(userYAML),
-		}
-	}
-	require.NoError(t, svc.persistProjectConfigSnapshot(ctx, conn, snapshot(1500, "user: stale"), false))
-	record, err := repo.GetProjectConfigRecord(ctx, projectID)
-	require.NoError(t, err)
-	require.Equal(t, "user: existing", *record.UserConfigYAML, "a snapshot older than the stored push must not be written")
-
-	require.NoError(t, svc.persistProjectConfigSnapshot(ctx, conn, snapshot(4000, "user: fresh"), false))
-	record, err = repo.GetProjectConfigRecord(ctx, projectID)
-	require.NoError(t, err)
-	require.Equal(t, "user: fresh", *record.UserConfigYAML, "a newer snapshot must be written")
-	require.Equal(t, int64(4000), record.PushedAt.UnixMilli())
-
-	require.Empty(t, spy.reads(), "the staleness check read the whole project config row")
 }
 
 // The scenario RPCs read project scenarios, which live in one column of the
