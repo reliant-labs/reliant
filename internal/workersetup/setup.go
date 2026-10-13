@@ -88,6 +88,11 @@ type Config struct {
 	// a credential identically. nil refuses every authenticated call.
 	IntegrationCredentials httpaction.CredentialSource
 
+	// ControlPlaneURL is the control plane hosting this deployment, "" when it
+	// is self-hosted (the role config's ControlPlaneConfig). It decides which
+	// addresses a user-supplied model endpoint may resolve to.
+	ControlPlaneURL string
+
 	// Optional overrides (for testing)
 	RunExecutorOverride handlers.RunExecutor
 	DriverResolver      drivers.DriverResolver // Custom LLM driver resolver (nil = production default)
@@ -148,6 +153,7 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 	}
 
 	activityDeps.Connections = cfg.IntegrationCredentials
+	activityDeps.ControlPlaneURL = cfg.ControlPlaneURL
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)

@@ -6,11 +6,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/reliant-labs/reliant/internal/netguard"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/netguard"
 
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -30,6 +31,8 @@ type SourcegraphResponseMetadata struct {
 
 type sourcegraphTool struct {
 	client *http.Client
+	// policy is the deployment's dial policy, for a per-call client.
+	policy netguard.Policy
 }
 
 const (
@@ -130,9 +133,11 @@ TIPS:
 - Use type:file to find relevant files`
 )
 
-func NewSourcegraphTool() Tool {
+// NewSourcegraphTool builds the tool under the deployment's dial policy (netguard.ForDeployment).
+func NewSourcegraphTool(policy netguard.Policy) Tool {
 	tool := &sourcegraphTool{
-		client: newGuardedHTTPClient(30 * time.Second),
+		client: newGuardedHTTPClient(policy, 30*time.Second),
+		policy: policy,
 	}
 	return NewToolWrapper[SourcegraphParams, ToolResponse](tool)
 }
@@ -171,7 +176,7 @@ func (t *sourcegraphTool) Execute(rctx *rctx.ToolContext, params SourcegraphPara
 		if params.Timeout > maxTimeout {
 			params.Timeout = maxTimeout
 		}
-		client = newGuardedHTTPClient(time.Duration(params.Timeout) * time.Second)
+		client = newGuardedHTTPClient(t.policy, time.Duration(params.Timeout)*time.Second)
 	}
 
 	type graphqlRequest struct {

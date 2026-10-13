@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
+
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/stretchr/testify/require"
@@ -46,11 +48,7 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	cpSrv := httptest.NewServer(cp)
 	t.Cleanup(cpSrv.Close)
 
-	t.Setenv("RELIANT_CONTROL_PLANE_URL", cpSrv.URL)
-	t.Setenv("CONTROL_PLANE_API_URL", "")
-	t.Setenv("CONTROL_PLANE_BASE_URL", "")
-	t.Setenv("INTERNAL_SERVICE_SECRET", secret)
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFromEnv(nil))
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{URL: cpSrv.URL, InternalServiceSecret: secret}, nil))
 	require.NoError(t, err)
 	require.Equal(t, tokenauthority.ModeControlPlane, mode)
 

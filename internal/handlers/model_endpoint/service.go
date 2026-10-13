@@ -10,7 +10,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/modelendpoints"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -36,6 +35,11 @@ type Deps struct {
 	// unavailable.
 	// forge:optional-dep
 	Credentials modelendpoints.EndpointCredentials
+	// Policy is which addresses a user-supplied endpoint URL may resolve to:
+	// netguard.ForDeployment of the control plane hosting this deployment
+	// (hosted: no private targets; self-hosted: the user's own network). The
+	// zero Policy refuses private targets, so an unset one fails closed.
+	Policy netguard.Policy
 }
 
 // Router is the slice of toolexec.DaemonRouter a VIA_DAEMON endpoint
@@ -69,8 +73,7 @@ type Service struct {
 
 // New creates a new model_endpoint service instance with the supplied Deps.
 // Returns an error when validateDeps rejects a nil required field. The
-// network policy for endpoint targets is fixed here, from whether a control
-// plane is configured (hosted: no private targets).
+// network policy for endpoint targets is Deps.Policy, fixed at construction.
 func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
@@ -78,7 +81,7 @@ func New(deps Deps) (*Service, error) {
 	cfg := modelendpoints.Config{
 		Store:       deps.Repo,
 		Credentials: deps.Credentials,
-		Policy:      netguard.ForDeployment(controlplane.BaseURLFromEnv()),
+		Policy:      deps.Policy,
 	}
 	if deps.Router != nil {
 		cfg.Daemons = routerDaemonControl{router: deps.Router}

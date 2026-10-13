@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/netguard"
+
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,7 +38,7 @@ func TestWebSearchDemo(t *testing.T) {
 		t.Skip("Skipping live-network test; set RELIANT_TEST_NETWORK=1 to run")
 	}
 
-	tool := NewWebSearchTool()
+	tool := NewWebSearchTool(netguard.ForDeployment(""))
 	typedTool := tool.(*ToolWrapper[WebSearchParams, ToolResponse])
 
 	toolCtx := &rctx.ToolContext{
@@ -122,7 +124,7 @@ func TestWebSearchDemo(t *testing.T) {
 // TestWebSearchToolSchema verifies the tool schema is properly generated
 func TestWebSearchToolSchema(t *testing.T) {
 	t.Parallel()
-	tool := NewWebSearchTool()
+	tool := NewWebSearchTool(netguard.ForDeployment(""))
 
 	// Verify the tool has a schema
 	schema := tool.ParamSchema()

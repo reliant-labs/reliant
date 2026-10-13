@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
+
 	"connectrpc.com/connect"
 	"github.com/golang-jwt/jwt/v5"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
@@ -350,13 +352,9 @@ func TestDaemonCredential_HostedEndToEnd(t *testing.T) {
 	cpSrv := httptest.NewServer(cp)
 	t.Cleanup(cpSrv.Close)
 
-	// Select the authority from the environment, exactly as the api-server
-	// and the gateway do. A configured control-plane MUST win.
-	t.Setenv("RELIANT_CONTROL_PLANE_URL", cpSrv.URL)
-	t.Setenv("CONTROL_PLANE_API_URL", "")
-	t.Setenv("CONTROL_PLANE_BASE_URL", "")
-	t.Setenv("INTERNAL_SERVICE_SECRET", secret)
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFromEnv(nil))
+	// Select the authority from the configured control plane, exactly as the
+	// api-server and the gateway do. A configured control-plane MUST win.
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{URL: cpSrv.URL, InternalServiceSecret: secret}, nil))
 	require.NoError(t, err)
 	require.Equal(t, tokenauthority.ModeControlPlane, mode)
 
@@ -435,13 +433,10 @@ func TestDaemonCredential_HostedRefusesWhenControlPlaneIsDown(t *testing.T) {
 // validates, and revocation takes effect.
 func TestDaemonCredential_SelfHostedEndToEnd(t *testing.T) {
 	const userID = "user-e2e-selfhosted"
-	t.Setenv("RELIANT_CONTROL_PLANE_URL", "")
-	t.Setenv("CONTROL_PLANE_API_URL", "")
-	t.Setenv("CONTROL_PLANE_BASE_URL", "")
 
 	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFromEnv(rawDB))
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{}, rawDB))
 	require.NoError(t, err)
 	require.Equal(t, tokenauthority.ModeLocal, mode)
 

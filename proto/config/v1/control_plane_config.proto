@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package config.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
+
+// ControlPlaneConfig is how a server process reaches the control plane that
+// hosts this deployment. Every server role composes it (ApiServerConfig,
+// WorkerConfig, GatewayConfig); the daemon and the CLI do not read it.
+//
+// Its presence is what makes a deployment HOSTED: with no url, reliant is
+// self-hosted, and every consumer takes its self-hosted path (the local token
+// store, saved GitHub connections, private model endpoints allowed). A url
+// without the secret is a boot error at each consumer, never a silent fall
+// back to self-hosted.
+message ControlPlaneConfig {
+  // The control plane's base URL. control-plane sets RELIANT_CONTROL_PLANE_URL;
+  // the two older names are still read, after it, until nothing sets them.
+  string url = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_CONTROL_PLANE_URL"
+    env_var_aliases: [
+      {name: "CONTROL_PLANE_API_URL", deprecated: true},
+      {name: "CONTROL_PLANE_BASE_URL", deprecated: true}
+    ]
+    description: "Control-plane base URL; unset means self-hosted"
+  }];
+
+  // The HMAC secret reliant signs internal-service tokens to the control plane
+  // with. Optional: a self-hosted deployment has none.
+  string internal_service_secret = 2 [(forge.v1.config) = {
+    env_var: "INTERNAL_SERVICE_SECRET"
+    sensitive: true
+    optional: true
+    description: "Secret for internal-service calls to the control plane (required when url is set)"
+  }];
+}

@@ -20,7 +20,7 @@ import (
 func useTransport(t *testing.T, mk func() http.RoundTripper) {
 	t.Helper()
 	prev := webToolTransport
-	webToolTransport = mk
+	webToolTransport = func(netguard.Policy) http.RoundTripper { return mk() }
 	t.Cleanup(func() { webToolTransport = prev })
 }
 
@@ -46,7 +46,7 @@ func (p publicRedirector) RoundTrip(r *http.Request) (*http.Response, error) {
 
 func runFetch(t *testing.T, url string) ToolResponse {
 	t.Helper()
-	tool := NewFetchTool().(*ToolWrapper[FetchParams, ToolResponse])
+	tool := NewFetchTool(netguard.ForDeployment("")).(*ToolWrapper[FetchParams, ToolResponse])
 	resp, err := tool.tool.Execute(&rctx.ToolContext{Context: context.Background()}, FetchParams{URL: url, Format: "text"})
 	require.NoError(t, err)
 	return resp
@@ -90,14 +90,45 @@ func TestFetch_SelfHostedPolicyAllowsLoopback(t *testing.T) {
 }
 
 func TestWebTools_ClientsAreGuarded(t *testing.T) {
-	var guarded bool
-	useTransport(t, func() http.RoundTripper { guarded = true; return http.DefaultTransport })
-	for name, ctor := range map[string]func() Tool{
+	var got []netguard.Policy
+	prev := webToolTransport
+	webToolTransport = func(p netguard.Policy) http.RoundTripper { got = append(got, p); return http.DefaultTransport }
+	t.Cleanup(func() { webToolTransport = prev })
+	hosted := netguard.ForDeployment("https://control-plane.example")
+	for name, ctor := range map[string]func(netguard.Policy) Tool{
 		ToolFetch: NewFetchTool, ToolWebSearch: NewWebSearchTool, ToolSourcegraph: NewSourcegraphTool,
 	} {
-		guarded = false
-		ctor()
-		assert.True(t, guarded, "%s must build its client through newGuardedHTTPClient", name)
+		got = nil
+		ctor(hosted)
+		assert.Equal(t, []netguard.Policy{hosted}, got, "%s must build its client through newGuardedHTTPClient, under the policy it was given", name)
+	}
+}
+
+// The factory hands every web tool the policy of the deployment it was built
+// for: a control plane means hosted (no private addresses), none means the
+// user's own machine — the daemon's factory, which sets no URL, included.
+func TestToolsFactory_WebToolsTakeTheDeploymentPolicy(t *testing.T) {
+	var got []netguard.Policy
+	prev := webToolTransport
+	webToolTransport = func(p netguard.Policy) http.RoundTripper { got = append(got, p); return http.DefaultTransport }
+	t.Cleanup(func() { webToolTransport = prev })
+	for _, tc := range []struct {
+		name            string
+		controlPlaneURL string
+		wantPrivate     bool
+	}{
+		{name: "hosted", controlPlaneURL: "https://control-plane.example", wantPrivate: false},
+		{name: "self-hosted", controlPlaneURL: "", wantPrivate: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := NewToolsFactory(&ToolsOptions{ControlPlaneURL: tc.controlPlaneURL})
+			for _, build := range []func() Tool{f.Fetch, f.WebSearch, f.Sourcegraph} {
+				got = nil
+				build()
+				require.Len(t, got, 1)
+				assert.Equal(t, tc.wantPrivate, got[0].AllowPrivate)
+			}
+		})
 	}
 }
 

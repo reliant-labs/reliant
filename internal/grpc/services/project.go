@@ -61,20 +61,18 @@ func (s *ProjectService) buildProjectConfigResolver() func(ctx context.Context, 
 
 // NewProjectService creates a new ProjectService.
 //
-// The control-plane client is wired only when this deployment HAS a control
-// plane (RELIANT_CONTROL_PLANE_URL and friends). Self-hosted reliant cannot
-// clone from GitHub on the user's behalf — their token lives in the control
-// plane — and defaulting to localhost would make CreateProjectFromRepo fail
-// against a control plane that is not there, instead of saying so.
+// It has no control-plane client until WithControlPlaneClient gives it one,
+// which the server does only when this deployment HAS a control plane.
+// Self-hosted reliant cannot clone from GitHub on the user's behalf — their
+// token lives in the control plane — and defaulting to localhost would make
+// CreateProjectFromRepo fail against a control plane that is not there,
+// instead of saying so.
 func NewProjectService(database db.Repository, daemonRouter toolexec.DaemonRouter) *ProjectService {
-	svc := &ProjectService{database: database, daemonRouter: daemonRouter}
-	if baseURL := controlplane.BaseURLFromEnv(); baseURL != "" {
-		svc.controlPlane = controlplane.NewClient(baseURL)
-	}
-	return svc
+	return &ProjectService{database: database, daemonRouter: daemonRouter}
 }
 
-// WithControlPlaneClient overrides the control-plane client, for tests.
+// WithControlPlaneClient sets the client for the control plane hosting this
+// deployment.
 func (s *ProjectService) WithControlPlaneClient(client controlplane.Client) *ProjectService {
 	s.controlPlane = client
 	return s

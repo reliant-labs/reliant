@@ -54,9 +54,7 @@ func startDrainTestServer(t *testing.T) (*Server, string) {
 	t.Helper()
 	t.Setenv("AUTH_MODE", "apikey")
 	t.Setenv("AUTH_API_KEY", drainTestAPIKey)
-	for _, env := range []string{"RELIANT_CONTROL_PLANE_URL", "CONTROL_PLANE_API_URL", "CONTROL_PLANE_BASE_URL", "RELIANT_AUTHORIZATION_SERVER"} {
-		t.Setenv(env, "")
-	}
+	t.Setenv("RELIANT_AUTHORIZATION_SERVER", "")
 
 	srv, err := NewServer(&Config{Database: drainTestRepo{}, TokenAuthority: drainTestAuthority{}})
 	require.NoError(t, err)

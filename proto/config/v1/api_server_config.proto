@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package config.v1;
 
+import "config/v1/control_plane_config.proto";
 import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
@@ -45,4 +46,6 @@ message ApiServerConfig {
     env_var: "ALLOWED_EMAIL_DOMAINS"
     description: "Comma-separated email domains allowed to sign in (none allows all)"
   }];
+
+  ControlPlaneConfig control_plane = 5;
 }

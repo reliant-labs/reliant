@@ -17,18 +17,20 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
+	"github.com/reliant-labs/reliant/internal/netguard"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
 // newModelEndpoint builds the endpoint handler with no daemon router and no
-// credential store. It reads the deployment's network policy now, so a test
-// sets RELIANT_CONTROL_PLANE_URL before calling it.
-func newModelEndpoint(t *testing.T, repo db.Repository) *model_endpoint.Service {
+// credential store, under the network policy of a deployment hosted by
+// controlPlaneURL ("" is self-hosted).
+func newModelEndpoint(t *testing.T, repo db.Repository, controlPlaneURL string) *model_endpoint.Service {
 	t.Helper()
 	svc, err := model_endpoint.New(model_endpoint.Deps{
 		Logger: slog.New(slog.DiscardHandler),
 		Config: &typedconfig.Config{},
 		Repo:   repo,
+		Policy: netguard.ForDeployment(controlPlaneURL),
 	})
 	require.NoError(t, err)
 	return svc
@@ -61,12 +63,9 @@ func openAIModels(t *testing.T, ids ...string) *httptest.Server {
 // No control plane configured == self-hosted: loopback httptest servers are
 // legitimate targets.
 func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
-	t.Setenv("RELIANT_CONTROL_PLANE_URL", "")
-	t.Setenv("CONTROL_PLANE_API_URL", "")
-	t.Setenv("CONTROL_PLANE_BASE_URL", "")
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := newModelEndpoint(t, repo)
+	svc := newModelEndpoint(t, repo, "")
 	srv := openAIModels(t, "llama", "mixtral")
 
 	create, err := svc.CreateModelEndpoint(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
@@ -159,10 +158,9 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 }
 
 func TestModelEndpointServiceRefusesPrivateTargetsWhenHosted(t *testing.T) {
-	t.Setenv("RELIANT_CONTROL_PLANE_URL", "http://admin-server.cluster.local:8090")
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := newModelEndpoint(t, repo)
+	svc := newModelEndpoint(t, repo, "http://admin-server.cluster.local:8090")
 	srv := openAIModels(t, "m") // 127.0.0.1
 
 	for _, url := range []string{srv.URL + "/v1", "http://169.254.169.254/v1", "http://10.0.0.1/v1", "http://localhost:11434/v1"} {

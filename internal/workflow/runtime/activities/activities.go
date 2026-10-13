@@ -40,6 +40,10 @@ type Activities struct {
 	// Optional: nil makes an action that names a connection fail rather than
 	// run unauthenticated.
 	Connections httpaction.CredentialSource
+	// ControlPlaneURL is the control plane hosting this deployment, "" when it
+	// is self-hosted. It picks the dial policy for user-supplied model
+	// endpoint URLs (netguard.ForDeployment).
+	ControlPlaneURL string
 }
 
 // NewActivities creates a new Activities container

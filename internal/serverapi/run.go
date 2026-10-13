@@ -98,6 +98,10 @@ type Options struct {
 	// Log is the configured log level and format (the root config's
 	// LogConfig).
 	Log logging.Settings
+
+	// ControlPlane is the control plane hosting this deployment; the zero
+	// value is self-hosted (the role config's ControlPlaneConfig).
+	ControlPlane controlplane.Endpoint
 }
 
 // Run boots the stateless API server with the given options. It blocks until
@@ -210,22 +214,22 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Credential vault: required when hosted, generated when self-hosted.
 	// Fails startup on a missing or malformed key.
-	vaultKeys, err := db.BootVault(ctx, repo, controlplane.BaseURLFromEnv() != "", opts.DataDir)
+	vaultKeys, err := db.BootVault(ctx, repo, opts.ControlPlane.Hosted(), opts.DataDir)
 	if err != nil {
 		return err
 	}
-	conns, err := wireConnections(repo, vaultKeys, strings.TrimSpace(os.Getenv("PUBLIC_URL")), opts.CORSAllowedOrigins)
+	conns, err := wireConnections(repo, vaultKeys, strings.TrimSpace(os.Getenv("PUBLIC_URL")), opts.CORSAllowedOrigins, opts.ControlPlane.Hosted())
 	if err != nil {
 		return err
 	}
-	catalogSearch, err := wireCatalogSearch(repo)
+	catalogSearch, err := wireCatalogSearch(repo, opts.ControlPlane.Hosted())
 	if err != nil {
 		return err
 	}
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
-	drivers.InstallReliantKeyHealer(ctx, repo, controlplane.BaseURLFromEnv(), strings.TrimSpace(os.Getenv("INTERNAL_SERVICE_SECRET")), time.Hour)
+	drivers.InstallReliantKeyHealer(ctx, repo, opts.ControlPlane.URL, opts.ControlPlane.InternalServiceSecret, time.Hour)
 
 	// Claim-check store for large Temporal payloads. The worker shares the
 	// same table; both processes must use it or neither can read the other's
@@ -247,7 +251,8 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Tools factory (catalog metadata only; the api-server executes no tools)
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo: repo,
+		Repo:            repo,
+		ControlPlaneURL: opts.ControlPlane.URL,
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
 		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
@@ -360,7 +365,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// Daemon routing: reuses the same NATS connection
-	daemonRouter := toolexec.NewNATSDaemonRouter(nc, daemonRouterOptions(repo, controlplane.BaseURLFromEnv())...)
+	daemonRouter := toolexec.NewNATSDaemonRouter(nc, daemonRouterOptions(repo, opts.ControlPlane.URL)...)
 	natsChecker := nc.IsConnected
 	logging.Info("Using NATS daemon router — daemon services run in separate daemon-gateway process")
 
@@ -387,7 +392,7 @@ func Run(ctx context.Context, opts Options) error {
 	// GitHub events are access-gated: each owner's repository access is
 	// refreshed when a trigger is activated and every few minutes while one
 	// exists. Every replica runs the loop; leases share the work.
-	ghAccess, err := wireGitHubAccess(repo, vaultKeys, os.Getenv)
+	ghAccess, err := wireGitHubAccess(repo, vaultKeys, opts.ControlPlane, os.Getenv)
 	if err != nil {
 		return err
 	}
@@ -397,7 +402,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	// "Only from" stores GitHub user ids and shows logins: this looks people
 	// up, as the caller, in both directions.
-	triggerSenders, err := wireGitHubSenders(repo, vaultKeys, os.Getenv)
+	triggerSenders, err := wireGitHubSenders(repo, vaultKeys, opts.ControlPlane, os.Getenv)
 	if err != nil {
 		return err
 	}
@@ -423,6 +428,7 @@ func Run(ctx context.Context, opts Options) error {
 		OAuthIssuers:        splitAndTrim(os.Getenv("MCP_OAUTH_ISSUERS")),
 		CORSAllowedOrigins:  opts.CORSAllowedOrigins,
 		AllowedEmailDomains: opts.AllowedEmailDomains,
+		ControlPlane:        opts.ControlPlane,
 		Database:            repo,
 		ToolsFactory:        toolsFactory,
 		TemporalClient:      temporalClient,

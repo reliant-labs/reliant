@@ -40,7 +40,8 @@ type ApiServerConfig struct {
 	// domain. The loader trims each element and drops blank ones, which the
 	// domain whitelist already did to every entry, so " B.com," still means
 	// b.com alone.
-	AllowedEmailDomains []string `protobuf:"bytes,4,rep,name=allowed_email_domains,json=allowedEmailDomains,proto3" json:"allowed_email_domains,omitempty"`
+	AllowedEmailDomains []string            `protobuf:"bytes,4,rep,name=allowed_email_domains,json=allowedEmailDomains,proto3" json:"allowed_email_domains,omitempty"`
+	ControlPlane        *ControlPlaneConfig `protobuf:"bytes,5,opt,name=control_plane,json=controlPlane,proto3" json:"control_plane,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -103,11 +104,18 @@ func (x *ApiServerConfig) GetAllowedEmailDomains() []string {
 	return nil
 }
 
+func (x *ApiServerConfig) GetControlPlane() *ControlPlaneConfig {
+	if x != nil {
+		return x.ControlPlane
+	}
+	return nil
+}
+
 var File_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	"!config/v1/api_server_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\"\xb4\x04\n" +
+	"!config/v1/api_server_config.proto\x12\tconfig.v1\x1a$config/v1/control_plane_config.proto\x1a\x14forge/v1/forge.proto\"\xf8\x04\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -116,7 +124,8 @@ const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\bjwks_url\x18\x03 \x01(\tB_\x82\xce\x18[\n" +
 	"\x10RELIANT_JWKS_URL\x12\bjwks-url*=JWKS endpoint URL for JWT validation (alternative to PEM key)R\ajwksUrl\x12\x93\x01\n" +
 	"\x15allowed_email_domains\x18\x04 \x03(\tB_\x82\xce\x18[\n" +
-	"\x15ALLOWED_EMAIL_DOMAINS*BComma-separated email domains allowed to sign in (none allows all)R\x13allowedEmailDomains:\x1a\xca\xc1\x18\x16\n" +
+	"\x15ALLOWED_EMAIL_DOMAINS*BComma-separated email domains allowed to sign in (none allows all)R\x13allowedEmailDomains\x12B\n" +
+	"\rcontrol_plane\x18\x05 \x01(\v2\x1d.config.v1.ControlPlaneConfigR\fcontrolPlane:\x1a\xca\xc1\x18\x16\n" +
 	"\areliant\x12\x06server\x12\x03apiB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 
 var (
@@ -133,14 +142,16 @@ func file_config_v1_api_server_config_proto_rawDescGZIP() []byte {
 
 var file_config_v1_api_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_config_v1_api_server_config_proto_goTypes = []any{
-	(*ApiServerConfig)(nil), // 0: config.v1.ApiServerConfig
+	(*ApiServerConfig)(nil),    // 0: config.v1.ApiServerConfig
+	(*ControlPlaneConfig)(nil), // 1: config.v1.ControlPlaneConfig
 }
 var file_config_v1_api_server_config_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	1, // 0: config.v1.ApiServerConfig.control_plane:type_name -> config.v1.ControlPlaneConfig
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_config_v1_api_server_config_proto_init() }
@@ -148,6 +159,7 @@ func file_config_v1_api_server_config_proto_init() {
 	if File_config_v1_api_server_config_proto != nil {
 		return
 	}
+	file_config_v1_control_plane_config_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

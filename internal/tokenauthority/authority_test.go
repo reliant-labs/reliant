@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
+
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/stretchr/testify/require"
 
@@ -46,12 +48,17 @@ func TestNewPicksExactlyOneStore(t *testing.T) {
 	})
 }
 
-func TestConfigFromEnv(t *testing.T) {
-	t.Setenv("RELIANT_CONTROL_PLANE_URL", " http://admin-server:8090 ")
-	t.Setenv("INTERNAL_SERVICE_SECRET", " s ")
-	cfg := DepsFromEnv(nil)
+// The control plane comes from the role config (ControlPlaneConfig), loaded
+// and trimmed by the entrypoint; cmd/reliant/commands
+// TestControlPlaneEnvContract pins the variables.
+func TestDepsFor(t *testing.T) {
+	cfg := DepsFor(controlplane.Endpoint{URL: "http://admin-server:8090", InternalServiceSecret: "s"}, nil)
 	require.Equal(t, "http://admin-server:8090", cfg.ControlPlaneURL)
 	require.Equal(t, "s", cfg.InternalServiceSecret)
+
+	selfHosted := DepsFor(controlplane.Endpoint{}, nil)
+	require.Empty(t, selfHosted.ControlPlaneURL)
+	require.Empty(t, selfHosted.InternalServiceSecret)
 }
 
 // Both stores' inactive error is recognized by internal/auth without it

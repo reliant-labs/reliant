@@ -136,10 +136,8 @@ func NewTriggerServiceFor(database db.Repository, temporalClient client.Client, 
 		)
 		svc = &TriggerService{database: database, syncer: backend, fires: backend}
 	}
-	// Delegated automation credentials exist only against a control plane.
-	if baseURL := controlplane.BaseURLFromEnv(); baseURL != "" {
-		svc.WithControlPlaneClient(controlplane.NewClient(baseURL))
-	}
+	// Delegated automation credentials exist only against a control plane:
+	// the server gives it one with WithControlPlaneClient when it has one.
 	return svc
 }
 

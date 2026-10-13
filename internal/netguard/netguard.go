@@ -52,7 +52,8 @@ type Policy struct {
 }
 
 // ForDeployment is the policy for user-supplied model endpoint URLs, chosen
-// from the deployment kind. controlPlaneURL is controlplane.BaseURLFromEnv():
+// from the deployment kind. controlPlaneURL is the configured control plane
+// (ControlPlaneConfig, "" when self-hosted):
 // the same signal that makes the token authority choose its store. A
 // configured control plane means a HOSTED, multi-tenant deployment, where the
 // shared worker must not be pointed at its own network. None means a

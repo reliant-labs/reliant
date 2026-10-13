@@ -5,13 +5,14 @@ import (
 	"errors"
 
 	"fmt"
-	"github.com/reliant-labs/reliant/internal/netguard"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/netguard"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -37,6 +38,8 @@ type WebSearchResponseMetadata struct {
 
 type webSearchTool struct {
 	client *http.Client
+	// policy is the deployment's dial policy, for a per-call client.
+	policy netguard.Policy
 }
 
 const (
@@ -105,9 +108,11 @@ TIPS:
 - Combine with the fetch tool to retrieve full page content from results`
 )
 
-func NewWebSearchTool() Tool {
+// NewWebSearchTool builds the tool under the deployment's dial policy (netguard.ForDeployment).
+func NewWebSearchTool(policy netguard.Policy) Tool {
 	tool := &webSearchTool{
-		client: newGuardedHTTPClient(30 * time.Second),
+		client: newGuardedHTTPClient(policy, 30*time.Second),
+		policy: policy,
 	}
 	return NewToolWrapper[WebSearchParams, ToolResponse](tool)
 }

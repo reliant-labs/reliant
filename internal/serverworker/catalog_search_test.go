@@ -6,6 +6,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,10 +21,7 @@ func TestCatalogSearch_DelegatedFollowsTheWorkersBrokers(t *testing.T) {
 	ctx := context.Background()
 	var noConnections catalogindex.ConnectionLister
 
-	hosted, err := newIntegrationCredentials(nil, envOf(map[string]string{
-		"RELIANT_CONTROL_PLANE_URL": "http://admin-server:8090",
-		"INTERNAL_SERVICE_SECRET":   "s",
-	}))
+	hosted, err := newIntegrationCredentials(nil, controlplane.Endpoint{URL: "http://admin-server:8090", InternalServiceSecret: "s"})
 	require.NoError(t, err)
 	svc, err := newCatalogSearch(noConnections, hosted)
 	require.NoError(t, err)
@@ -30,7 +29,7 @@ func TestCatalogSearch_DelegatedFollowsTheWorkersBrokers(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, usable["github"], "hosted: GitHub is served by the control-plane broker")
 
-	selfHosted, err := newIntegrationCredentials(nil, envOf(nil))
+	selfHosted, err := newIntegrationCredentials(nil, controlplane.Endpoint{})
 	require.NoError(t, err)
 	svc, err = newCatalogSearch(noConnections, selfHosted)
 	require.NoError(t, err)

@@ -59,7 +59,8 @@ func NewSettingsService(database db.Repository, daemonRouter toolexec.DaemonRout
 	}
 }
 
-// WithControlPlaneClient overrides the default control-plane client. Intended for tests.
+// WithControlPlaneClient replaces the default (local) control-plane client: the
+// server gives it the deployment's, and tests a fake.
 func (s *SettingsService) WithControlPlaneClient(client controlplane.Client) *SettingsService {
 	s.controlPlaneClient = client
 	return s

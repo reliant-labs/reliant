@@ -50,10 +50,11 @@ func TestAttachAuthorization_LeavesHeaderUnsetWhenBlank(t *testing.T) {
 	}
 }
 
-func TestGetBaseURL_UsesDefaultWhenEnvEmpty(t *testing.T) {
-	t.Setenv("RELIANT_CONTROL_PLANE_URL", "")
-	t.Setenv("CONTROL_PLANE_API_URL", "")
-	t.Setenv("CONTROL_PLANE_BASE_URL", "")
+// A client given no base URL dials the local default. The deployment's own
+// control plane is configured (ControlPlaneConfig) and passed in; it is never
+// read from the environment here.
+func TestGetBaseURL_IsTheLocalDefault(t *testing.T) {
+	t.Setenv("RELIANT_CONTROL_PLANE_URL", "http://not-read.example")
 	if got := getBaseURL(); got != defaultBaseURL {
 		t.Fatalf("base url = %q, want %q", got, defaultBaseURL)
 	}

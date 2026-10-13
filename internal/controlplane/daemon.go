@@ -28,7 +28,7 @@ type DaemonClient struct {
 }
 
 // NewDaemonClient builds a DaemonClient against baseURL, falling back to the
-// environment's control-plane URL exactly as NewClient does.
+// local default exactly as NewClient does.
 func NewDaemonClient(baseURL string) *DaemonClient {
 	trimmed := strings.TrimSpace(baseURL)
 	if trimmed == "" {

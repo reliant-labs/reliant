@@ -6,6 +6,9 @@ import (
 	"strconv"
 	"strings"
 
+	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	"github.com/reliant-labs/reliant/internal/controlplane"
+
 	"github.com/reliant-labs/reliant/internal/serverapi"
 	"github.com/reliant-labs/reliant/internal/servergateway"
 	"github.com/reliant-labs/reliant/internal/serverworker"
@@ -115,8 +118,9 @@ Designed to run as N replicas behind a load balancer.`,
 	cmd.Flags().StringVar(&opts.TLSKeyFile, "tls-key", serverEnvOrDefault("TLS_KEY_FILE", ""), "TLS key file path")
 	cmd.Flags().BoolVar(&opts.DisableTLS, "disable-tls", serverEnvOrDefaultBool("DISABLE_TLS", false), "Disable TLS (use plaintext HTTP)")
 
-	// JWT (--jwt-public-key, --jwt-public-key-file, --jwks-url) and the
-	// email-domain allowlist: proto/config/v1 ApiServerConfig.
+	// JWT (--jwt-public-key, --jwt-public-key-file, --jwks-url), the
+	// email-domain allowlist and the control plane (env only):
+	// proto/config/v1 ApiServerConfig.
 	config.RegisterApiServerConfigFlags(cmd)
 
 	return cmd
@@ -138,7 +142,50 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	opts.JWTPublicKeyFile = api.GetJwtPublicKeyFile()
 	opts.JWKSURL = api.GetJwksUrl()
 	opts.AllowedEmailDomains = api.GetAllowedEmailDomains()
+	opts.ControlPlane = controlPlaneEndpoint(api.GetControlPlane())
 	return nil
+}
+
+// loadServerWorkerConfig fills opts with what `server worker` reads through
+// typed config: the root config, and its own WorkerConfig.
+func loadServerWorkerConfig(cmd *cobra.Command, opts *serverworker.Options) error {
+	base, err := loadRootConfig(cmd)
+	if err != nil {
+		return err
+	}
+	worker, err := config.LoadWorkerConfig(cmd)
+	if err != nil {
+		return err
+	}
+	opts.Log = logSettings(base)
+	opts.ControlPlane = controlPlaneEndpoint(worker.GetControlPlane())
+	return nil
+}
+
+// loadServerGatewayConfig fills opts with what `server gateway` reads through
+// typed config: the root config, and its own GatewayConfig.
+func loadServerGatewayConfig(cmd *cobra.Command, opts *servergateway.Options) error {
+	base, err := loadRootConfig(cmd)
+	if err != nil {
+		return err
+	}
+	gateway, err := config.LoadGatewayConfig(cmd)
+	if err != nil {
+		return err
+	}
+	opts.Log = logSettings(base)
+	opts.ControlPlane = controlPlaneEndpoint(gateway.GetControlPlane())
+	return nil
+}
+
+// controlPlaneEndpoint is a role config's ControlPlaneConfig in the shape the
+// server packages take, trimmed as every reader of these variables trimmed
+// them.
+func controlPlaneEndpoint(cfg *configv1.ControlPlaneConfig) controlplane.Endpoint {
+	return controlplane.Endpoint{
+		URL:                   strings.TrimSpace(cfg.GetUrl()),
+		InternalServiceSecret: strings.TrimSpace(cfg.GetInternalServiceSecret()),
+	}
 }
 
 func newServerWorkerCmd() *cobra.Command {
@@ -153,14 +200,15 @@ tool execution routing, etc.).
 
 Designed to run as N replicas for horizontal scaling.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			base, err := loadRootConfig(cmd)
-			if err != nil {
+			if err := loadServerWorkerConfig(cmd, &opts); err != nil {
 				return err
 			}
-			opts.Log = logSettings(base)
 			return serverworker.Run(cmd.Context(), opts)
 		},
 	}
+
+	// The control plane (env only): proto/config/v1 WorkerConfig.
+	config.RegisterWorkerConfigFlags(cmd)
 
 	// Database
 	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (postgres)")
@@ -196,14 +244,15 @@ and Temporal workers to the correct daemon via NATS.
 
 Designed to run as few stateful replicas.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			base, err := loadRootConfig(cmd)
-			if err != nil {
+			if err := loadServerGatewayConfig(cmd, &opts); err != nil {
 				return err
 			}
-			opts.Log = logSettings(base)
 			return servergateway.Run(cmd.Context(), opts)
 		},
 	}
+
+	// The control plane (env only): proto/config/v1 GatewayConfig.
+	config.RegisterGatewayConfigFlags(cmd)
 
 	// Ports
 	cmd.Flags().IntVar(&opts.ToolsDaemonPort, "daemon-port", serverEnvOrDefaultInt("TOOLS_DAEMON_PORT", 9190), "Daemon bidi-streaming gRPC listen port")

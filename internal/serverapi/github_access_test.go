@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -18,41 +20,41 @@ func envOf(vars map[string]string) func(string) string {
 	return func(k string) string { return vars[k] }
 }
 
+var (
+	hosted     = controlplane.Endpoint{URL: "http://cp", InternalServiceSecret: "x"}
+	selfHosted = controlplane.Endpoint{}
+	webhooks   = envOf(map[string]string{"RELIANT_GITHUB_WEBHOOK_SECRET": "s"})
+)
+
 func TestWireGitHubAccess(t *testing.T) {
-	r, err := wireGitHubAccess(nil, nil, envOf(nil))
+	r, err := wireGitHubAccess(nil, nil, hosted, envOf(nil))
 	require.NoError(t, err)
 	assert.Nil(t, r, "no webhook secret: GitHub events never arrive, so nothing to keep fresh")
 
-	_, err = wireGitHubAccess(nil, nil, envOf(map[string]string{
-		"RELIANT_GITHUB_WEBHOOK_SECRET": "s", "RELIANT_CONTROL_PLANE_URL": "http://cp",
-	}))
+	_, err = wireGitHubAccess(nil, nil, controlplane.Endpoint{URL: "http://cp"}, webhooks)
 	require.Error(t, err, "hosted without the internal-service secret must not boot")
 	assert.Contains(t, err.Error(), "INTERNAL_SERVICE_SECRET")
 
-	r, err = wireGitHubAccess(nil, nil, envOf(map[string]string{
-		"RELIANT_GITHUB_WEBHOOK_SECRET": "s", "RELIANT_CONTROL_PLANE_URL": "http://cp", "INTERNAL_SERVICE_SECRET": "x",
-	}))
+	r, err = wireGitHubAccess(nil, nil, hosted, webhooks)
 	require.NoError(t, err)
 	require.NotNil(t, r, "hosted: tokens are delegated by control-plane")
 
-	tokens, err := gitHubTokenSource(nil, nil, envOf(map[string]string{"RELIANT_CONTROL_PLANE_URL": "http://cp", "INTERNAL_SERVICE_SECRET": "x"}))
+	tokens, err := gitHubTokenSource(nil, nil, hosted, envOf(nil))
 	require.NoError(t, err)
 	assert.IsType(t, &ghaccess.DelegatedTokens{}, tokens)
 
-	_, err = gitHubTokenSource(nil, nil, envOf(nil))
+	_, err = gitHubTokenSource(nil, nil, selfHosted, envOf(nil))
 	assert.Error(t, err, "self-hosted needs the database for saved connections")
 }
 
 // The "Only from" lookup is wired exactly when GitHub triggers are, over the
 // same token source, and classifies its errors for the handler.
 func TestWireGitHubSenders(t *testing.T) {
-	dirs, err := wireGitHubSenders(nil, nil, envOf(nil))
+	dirs, err := wireGitHubSenders(nil, nil, hosted, envOf(nil))
 	require.NoError(t, err)
 	assert.Nil(t, dirs, "no GitHub triggers on this server: nobody to look up")
 
-	dirs, err = wireGitHubSenders(nil, nil, envOf(map[string]string{
-		"RELIANT_GITHUB_WEBHOOK_SECRET": "s", "RELIANT_CONTROL_PLANE_URL": "http://cp", "INTERNAL_SERVICE_SECRET": "x",
-	}))
+	dirs, err = wireGitHubSenders(nil, nil, hosted, webhooks)
 	require.NoError(t, err)
 	require.Contains(t, dirs, "github")
 

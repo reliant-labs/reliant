@@ -25,6 +25,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/reliant-labs/reliant/internal/certs"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonquery"
@@ -75,6 +76,10 @@ type Options struct {
 	// Log is the configured log level and format (the root config's
 	// LogConfig).
 	Log logging.Settings
+
+	// ControlPlane is the control plane hosting this deployment; the zero
+	// value is self-hosted (the role config's ControlPlaneConfig).
+	ControlPlane controlplane.Endpoint
 }
 
 // Run bootstraps and runs the daemon-gateway server. It blocks until a
@@ -177,7 +182,7 @@ func Run(ctx context.Context, opts Options) error {
 	if repo.DB != nil {
 		sqlDB = repo.DB.SQLDB()
 	}
-	tokenAuthority, authorityMode, err := tokenauthority.New(tokenauthority.DepsFromEnv(sqlDB))
+	tokenAuthority, authorityMode, err := tokenauthority.New(tokenauthority.DepsFor(opts.ControlPlane, sqlDB))
 	if err != nil {
 		return fmt.Errorf("daemon credential authority: %w", err)
 	}

@@ -16,7 +16,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 
@@ -133,6 +132,18 @@ type CallLLMActivity struct {
 	// localRelay carries local-model HTTP to the daemon that serves it; nil
 	// where no daemon router exists, in which case local models are unavailable.
 	localRelay toolexec.LocalModelRelay
+	// controlPlaneURL is the control plane hosting this deployment, "" when it
+	// is self-hosted; see WithControlPlane.
+	controlPlaneURL string
+}
+
+// WithControlPlane records the control plane hosting this deployment, which
+// picks the dial policy for user-supplied model endpoint URLs: a hosted
+// deployment's shared worker must not be pointed at its own network. Unset is
+// self-hosted.
+func (a *CallLLMActivity) WithControlPlane(controlPlaneURL string) *CallLLMActivity {
+	a.controlPlaneURL = controlPlaneURL
+	return a
 }
 
 // WithLocalModels wires the daemon relay local models are reached through.
@@ -158,7 +169,7 @@ func (a *CallLLMActivity) localModelSpec(preferDaemonID string, noMachine bool) 
 		PreferDaemonID: preferDaemonID,
 		Custom: &local.CustomRoutes{
 			Relay:  relay,
-			Policy: netguard.ForDeployment(controlplane.BaseURLFromEnv()),
+			Policy: netguard.ForDeployment(a.controlPlaneURL),
 		},
 	}
 }

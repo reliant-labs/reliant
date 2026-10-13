@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/netguard"
+
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,7 +15,7 @@ import (
 
 func TestWebSearchTool(t *testing.T) {
 	t.Parallel()
-	tool := NewWebSearchTool()
+	tool := NewWebSearchTool(netguard.ForDeployment(""))
 
 	assert.Equal(t, WebSearchToolName, tool.Name())
 	assert.NotEmpty(t, tool.Description())
@@ -58,7 +60,7 @@ func TestWebSearchTool(t *testing.T) {
 
 func TestWebSearchToolValidation(t *testing.T) {
 	t.Parallel()
-	tool := NewWebSearchTool()
+	tool := NewWebSearchTool(netguard.ForDeployment(""))
 	typedTool := tool.(*ToolWrapper[WebSearchParams, ToolResponse])
 
 	toolCtx := &rctx.ToolContext{

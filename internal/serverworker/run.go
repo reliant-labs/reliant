@@ -77,6 +77,10 @@ type Options struct {
 	// PprofPort is the localhost-only diagnostics port (see debugserver).
 	PprofPort int
 
+	// ControlPlane is the control plane hosting this deployment; the zero
+	// value is self-hosted (the role config's ControlPlaneConfig).
+	ControlPlane controlplane.Endpoint
+
 	// Log is the configured log level and format (the root config's
 	// LogConfig).
 	Log logging.Settings
@@ -170,7 +174,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Credential vault: required when hosted, generated when self-hosted.
 	// Fails startup on a missing or malformed key.
-	vaultKeys, err := db.BootVault(ctx, repo, controlplane.BaseURLFromEnv() != "", opts.DataDir)
+	vaultKeys, err := db.BootVault(ctx, repo, opts.ControlPlane.Hosted(), opts.DataDir)
 	if err != nil {
 		return err
 	}
@@ -181,7 +185,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err := checkExecutors(); err != nil {
 		return err
 	}
-	integrationCredentials, err := newIntegrationCredentials(connResolver, os.Getenv)
+	integrationCredentials, err := newIntegrationCredentials(connResolver, opts.ControlPlane)
 	if err != nil {
 		return err
 	}
@@ -192,7 +196,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
-	drivers.InstallReliantKeyHealer(ctx, repo, controlplane.BaseURLFromEnv(), strings.TrimSpace(os.Getenv("INTERNAL_SERVICE_SECRET")), 0)
+	drivers.InstallReliantKeyHealer(ctx, repo, opts.ControlPlane.URL, opts.ControlPlane.InternalServiceSecret, 0)
 
 	// -----------------------------------------------------------------
 	// 5. Temporal client
@@ -288,7 +292,7 @@ func Run(ctx context.Context, opts Options) error {
 	// 10. Tool execution routing via NATS
 	// -----------------------------------------------------------------
 	daemonRouterOpts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
-	if cpURL := controlplane.BaseURLFromEnv(); cpURL != "" {
+	if cpURL := opts.ControlPlane.URL; cpURL != "" {
 		// Daemon records come from repo; the control plane is wired only to
 		// resume a suspended managed machine (see serverapi's
 		// daemonRouterOptions).
@@ -346,7 +350,8 @@ func Run(ctx context.Context, opts Options) error {
 
 	runMachine := toolexec.NewRunMachine(router)
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo: repo,
+		Repo:            repo,
+		ControlPlaneURL: opts.ControlPlane.URL,
 		// The worker is where spawn_send actually executes (inside the
 		// ExecuteTools activity), so this is the wiring that matters most for
 		// agent-to-agent delivery.
@@ -417,6 +422,7 @@ func Run(ctx context.Context, opts Options) error {
 		IntegrationCredentials: integrationCredentials,
 		TriggerPollers:         triggerPollers,
 		TriggerCredentials:     triggerCredentials(integrationCredentials),
+		ControlPlaneURL:        opts.ControlPlane.URL,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start worker: %w", err)

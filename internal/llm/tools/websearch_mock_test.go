@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/netguard"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,7 +107,7 @@ func TestFormatWebSearchResultsEmpty(t *testing.T) {
 
 func TestWebSearchToolMetadata(t *testing.T) {
 	t.Parallel()
-	tool := NewWebSearchTool()
+	tool := NewWebSearchTool(netguard.ForDeployment(""))
 	typedTool := tool.(*ToolWrapper[WebSearchParams, ToolResponse])
 
 	params := WebSearchParams{

@@ -5,6 +5,8 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import type { ControlPlaneConfig } from "./control_plane_config_pb";
+import { file_config_v1_control_plane_config } from "./control_plane_config_pb";
 import { file_forge_v1_forge } from "../../forge/v1/forge_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -12,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file config/v1/api_server_config.proto.
  */
 export const file_config_v1_api_server_config: GenFile = /*@__PURE__*/
-  fileDesc("CiFjb25maWcvdjEvYXBpX3NlcnZlcl9jb25maWcucHJvdG8SCWNvbmZpZy52MSL1AwoPQXBpU2VydmVyQ29uZmlnEmUKDmp3dF9wdWJsaWNfa2V5GAEgASgJQk2CzhhJCg5KV1RfUFVCTElDX0tFWRIOand0LXB1YmxpYy1rZXkqJ0pXVCBwdWJsaWMga2V5IFBFTSBmb3IgdG9rZW4gdmFsaWRhdGlvbhJsChNqd3RfcHVibGljX2tleV9maWxlGAIgASgJQk+CzhhLChNKV1RfUFVCTElDX0tFWV9GSUxFEhNqd3QtcHVibGljLWtleS1maWxlKh9QYXRoIHRvIEpXVCBwdWJsaWMga2V5IFBFTSBmaWxlEnEKCGp3a3NfdXJsGAMgASgJQl+CzhhbChBSRUxJQU5UX0pXS1NfVVJMEghqd2tzLXVybCo9SldLUyBlbmRwb2ludCBVUkwgZm9yIEpXVCB2YWxpZGF0aW9uIChhbHRlcm5hdGl2ZSB0byBQRU0ga2V5KRJ+ChVhbGxvd2VkX2VtYWlsX2RvbWFpbnMYBCADKAlCX4LOGFsKFUFMTE9XRURfRU1BSUxfRE9NQUlOUypCQ29tbWEtc2VwYXJhdGVkIGVtYWlsIGRvbWFpbnMgYWxsb3dlZCB0byBzaWduIGluIChub25lIGFsbG93cyBhbGwpOhrKwRgWCgdyZWxpYW50EgZzZXJ2ZXISA2FwaUI4WjZnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_forge_v1_forge]);
+  fileDesc("CiFjb25maWcvdjEvYXBpX3NlcnZlcl9jb25maWcucHJvdG8SCWNvbmZpZy52MSKrBAoPQXBpU2VydmVyQ29uZmlnEmUKDmp3dF9wdWJsaWNfa2V5GAEgASgJQk2CzhhJCg5KV1RfUFVCTElDX0tFWRIOand0LXB1YmxpYy1rZXkqJ0pXVCBwdWJsaWMga2V5IFBFTSBmb3IgdG9rZW4gdmFsaWRhdGlvbhJsChNqd3RfcHVibGljX2tleV9maWxlGAIgASgJQk+CzhhLChNKV1RfUFVCTElDX0tFWV9GSUxFEhNqd3QtcHVibGljLWtleS1maWxlKh9QYXRoIHRvIEpXVCBwdWJsaWMga2V5IFBFTSBmaWxlEnEKCGp3a3NfdXJsGAMgASgJQl+CzhhbChBSRUxJQU5UX0pXS1NfVVJMEghqd2tzLXVybCo9SldLUyBlbmRwb2ludCBVUkwgZm9yIEpXVCB2YWxpZGF0aW9uIChhbHRlcm5hdGl2ZSB0byBQRU0ga2V5KRJ+ChVhbGxvd2VkX2VtYWlsX2RvbWFpbnMYBCADKAlCX4LOGFsKFUFMTE9XRURfRU1BSUxfRE9NQUlOUypCQ29tbWEtc2VwYXJhdGVkIGVtYWlsIGRvbWFpbnMgYWxsb3dlZCB0byBzaWduIGluIChub25lIGFsbG93cyBhbGwpEjQKDWNvbnRyb2xfcGxhbmUYBSABKAsyHS5jb25maWcudjEuQ29udHJvbFBsYW5lQ29uZmlnOhrKwRgWCgdyZWxpYW50EgZzZXJ2ZXISA2FwaUI4WjZnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_config_v1_control_plane_config, file_forge_v1_forge]);
 
 /**
  * ApiServerConfig is the `reliant server api` process's own config: the knobs
@@ -53,6 +55,11 @@ export type ApiServerConfig = Message<"config.v1.ApiServerConfig"> & {
    * @generated from field: repeated string allowed_email_domains = 4;
    */
   allowedEmailDomains: string[];
+
+  /**
+   * @generated from field: config.v1.ControlPlaneConfig control_plane = 5;
+   */
+  controlPlane?: ControlPlaneConfig | undefined;
 };
 
 /**

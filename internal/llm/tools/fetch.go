@@ -5,12 +5,13 @@ import (
 	"errors"
 
 	"fmt"
-	"github.com/reliant-labs/reliant/internal/netguard"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/netguard"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/PuerkitoBio/goquery"
@@ -46,6 +47,8 @@ type FetchResponseMetadata struct {
 
 type fetchTool struct {
 	client *http.Client
+	// policy is the deployment's dial policy, for a per-call client.
+	policy netguard.Policy
 }
 
 const (
@@ -104,9 +107,11 @@ RESPONSE METADATA:
 - used_readability: True if Readability content extraction was applied`
 )
 
-func NewFetchTool() Tool {
+// NewFetchTool builds the tool under the deployment's dial policy (netguard.ForDeployment).
+func NewFetchTool(policy netguard.Policy) Tool {
 	tool := &fetchTool{
-		client: newGuardedHTTPClient(30 * time.Second),
+		client: newGuardedHTTPClient(policy, 30*time.Second),
+		policy: policy,
 	}
 	return NewToolWrapper[FetchParams, ToolResponse](tool)
 }
@@ -145,7 +150,7 @@ func (t *fetchTool) Execute(rctx *rctx.ToolContext, params FetchParams) (ToolRes
 		if params.Timeout > maxTimeout {
 			params.Timeout = maxTimeout
 		}
-		client = newGuardedHTTPClient(time.Duration(params.Timeout) * time.Second)
+		client = newGuardedHTTPClient(t.policy, time.Duration(params.Timeout)*time.Second)
 	}
 
 	req, err := http.NewRequestWithContext(rctx.Context, "GET", params.URL, nil)

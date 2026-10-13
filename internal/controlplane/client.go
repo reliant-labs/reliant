@@ -9,7 +9,6 @@ package controlplane
 import (
 	"context"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -175,35 +174,28 @@ func NewClient(baseURL string) Client {
 	}
 }
 
+// getBaseURL is the control plane a client given no base URL dials: the
+// local default, for development against a control plane on this machine.
 func getBaseURL() string {
-	if v := BaseURLFromEnv(); v != "" {
-		return v
-	}
 	return defaultBaseURL
 }
 
-// BaseURLFromEnv returns the configured control-plane origin, or "" when
-// this deployment has none configured. Unlike getBaseURL/NewClient there is
-// no localhost fallback — callers that need to distinguish "no control
-// plane at all" from "control plane at the default address" (e.g. deciding
-// whether to wire an optional daemon-registry client, or which token store
-// the deployment uses) use this instead.
-func BaseURLFromEnv() string {
-	return BaseURLFrom(os.Getenv)
+// Endpoint is how a server process reaches the control plane hosting its
+// deployment: the role config's ControlPlaneConfig
+// (proto/config/v1/control_plane_config.proto), loaded once by the entrypoint
+// and handed down. The zero Endpoint is a self-hosted deployment, with no
+// control plane — never a localhost default, which would turn "not hosted"
+// into a connection error.
+type Endpoint struct {
+	// URL is the control plane's base URL (RELIANT_CONTROL_PLANE_URL).
+	URL string
+	// InternalServiceSecret signs internal-service calls to it
+	// (INTERNAL_SERVICE_SECRET). Every consumer refuses a URL without one.
+	InternalServiceSecret string
 }
 
-// BaseURLFrom is BaseURLFromEnv over an injectable getenv, for callers whose
-// tests supply the environment. It is the ONE reader of the control-plane URL
-// variables: RELIANT_CONTROL_PLANE_URL, then the legacy CONTROL_PLANE_API_URL
-// and CONTROL_PLANE_BASE_URL; the first non-blank one wins.
-func BaseURLFrom(getenv func(string) string) string {
-	for _, key := range []string{"RELIANT_CONTROL_PLANE_URL", "CONTROL_PLANE_API_URL", "CONTROL_PLANE_BASE_URL"} {
-		if v := strings.TrimSpace(getenv(key)); v != "" {
-			return v
-		}
-	}
-	return ""
-}
+// Hosted reports whether a control plane is configured.
+func (e Endpoint) Hosted() bool { return e.URL != "" }
 
 func (c *connectClient) accessTokenClient() accesstokenv1connect.AccessTokenServiceClient {
 	return accesstokenv1connect.NewAccessTokenServiceClient(c.httpClient, c.baseURL)

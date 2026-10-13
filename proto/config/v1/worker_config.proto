@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package config.v1;
+
+import "config/v1/control_plane_config.proto";
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
+
+// WorkerConfig is the `reliant server worker` process's own config. It loads
+// alongside the root ReliantConfig (config.proto, whose header has the rules
+// every config here follows). The rest of the worker's flags are still
+// registered by hand in cmd/reliant/commands/server.go.
+message WorkerConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    command: ["server", "worker"]
+  };
+
+  ControlPlaneConfig control_plane = 1;
+}

@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/reliant-labs/reliant/internal/connections"
-	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
@@ -33,7 +32,7 @@ type wiredConnections struct {
 // appOrigins is the deployment's CORS allow-list: the origins the web app is
 // served from, which are the only ones (besides PUBLIC_URL's and loopback) a
 // browser OAuth flow is relayed back to.
-func wireConnections(repo *db.Repo, keys vault.Service, publicURL string, appOrigins []string) (*wiredConnections, error) {
+func wireConnections(repo *db.Repo, keys vault.Service, publicURL string, appOrigins []string, hosted bool) (*wiredConnections, error) {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), os.Getenv)
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)
@@ -42,7 +41,7 @@ func wireConnections(repo *db.Repo, keys vault.Service, publicURL string, appOri
 	tokens := connections.NewTokenSource(store, keys, providers, nil)
 	broker := connections.NewBroker(store, keys, providers, nil, publicURL).WithAppOrigins(appOrigins)
 	svc := connections.NewService(store, keys, providers, tokens, broker, nil).
-		WithDelegated(delegatedAvailable(controlplane.BaseURLFromEnv() != ""))
+		WithDelegated(delegatedAvailable(hosted))
 	for _, in := range svc.ListIntegrations() {
 		for _, m := range in.Methods {
 			if !m.Available {
@@ -56,12 +55,12 @@ func wireConnections(repo *db.Repo, keys vault.Service, publicURL string, appOri
 // wireCatalogSearch builds the integration catalog search: the embedded
 // catalog's index (built once, shared) plus each caller's connections, with
 // delegated brokers judged by the same rule ListIntegrations uses.
-func wireCatalogSearch(repo *db.Repo) (*catalogindex.Service, error) {
+func wireCatalogSearch(repo *db.Repo, hosted bool) (*catalogindex.Service, error) {
 	idx, err := catalogindex.Builtin()
 	if err != nil {
 		return nil, fmt.Errorf("integration catalog index: %w", err)
 	}
-	delegated := delegatedAvailable(controlplane.BaseURLFromEnv() != "")
+	delegated := delegatedAvailable(hosted)
 	return catalogindex.NewService(idx, repo.Connections(), catalogindex.DelegatedAvailable(delegated)), nil
 }
 

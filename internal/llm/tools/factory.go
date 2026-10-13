@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
+	"github.com/reliant-labs/reliant/internal/netguard"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -13,6 +14,11 @@ import (
 // ToolsOptions contains all potential dependency injection parameters for tools
 type ToolsOptions struct {
 	MCPProjectPath string // Optional MCP project scope path for MCP tool discovery/calls
+	// ControlPlaneURL is the control plane hosting this deployment, "" when it
+	// is self-hosted (the daemon, tests). It picks the dial policy of the web
+	// tools (netguard.ForDeployment): a hosted deployment's shared worker must
+	// not reach its own network; a self-hosted one is the user's machine.
+	ControlPlaneURL string
 	// Repository
 	Repo db.Repository
 	// Skills are injected from the config sync pipeline (daemon → DB → provider).
@@ -275,11 +281,17 @@ func (f *ToolsFactory) ProveTest() Tool {
 
 // Network tools
 func (f *ToolsFactory) Fetch() Tool {
-	return NewFetchTool()
+	return NewFetchTool(f.netPolicy())
 }
 
 func (f *ToolsFactory) WebSearch() Tool {
-	return NewWebSearchTool()
+	return NewWebSearchTool(f.netPolicy())
+}
+
+// netPolicy is the dial policy for tools that reach the network from this
+// process: hosted deployments may not dial their own network.
+func (f *ToolsFactory) netPolicy() netguard.Policy {
+	return netguard.ForDeployment(f.opts.ControlPlaneURL)
 }
 
 // Media tools
@@ -390,7 +402,7 @@ func (f *ToolsFactory) ProjectAnalyzer() Tool {
 }
 
 func (f *ToolsFactory) Sourcegraph() Tool {
-	return NewSourcegraphTool()
+	return NewSourcegraphTool(f.netPolicy())
 }
 
 func (f *ToolsFactory) CodeContext() Tool {

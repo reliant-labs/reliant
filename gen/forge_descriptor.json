@@ -33655,6 +33655,52 @@
   ],
   "configs": [
     {
+      "Name": "ControlPlaneConfig",
+      "Fields": [
+        {
+          "Name": "url",
+          "GoName": "Url",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_CONTROL_PLANE_URL",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Control-plane base URL; unset means self-hosted",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/control_plane_config.proto",
+          "EnvVarAliases": [
+            {
+              "Name": "CONTROL_PLANE_API_URL",
+              "Deprecated": true
+            },
+            {
+              "Name": "CONTROL_PLANE_BASE_URL",
+              "Deprecated": true
+            }
+          ]
+        },
+        {
+          "Name": "internal_service_secret",
+          "GoName": "InternalServiceSecret",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "INTERNAL_SERVICE_SECRET",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Secret for internal-service calls to the control plane (required when url is set)",
+          "Sensitive": true,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "config/v1/control_plane_config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/control_plane_config.proto",
+      "Line": 18
+    },
+    {
       "Name": "ApiServerConfig",
       "Fields": [
         {
@@ -33712,6 +33758,21 @@
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "config/v1/api_server_config.proto"
+        },
+        {
+          "Name": "control_plane",
+          "GoName": "ControlPlane",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "ControlPlaneConfig",
+          "ProtoFile": "config/v1/api_server_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -33720,7 +33781,7 @@
         "api"
       ],
       "ProtoFile": "config/v1/api_server_config.proto",
-      "Line": 16
+      "Line": 17
     },
     {
       "Name": "ReliantConfig",
@@ -33820,7 +33881,61 @@
       ],
       "ProtoFile": "config/v1/config.proto",
       "Line": 81
+    },
+    {
+      "Name": "GatewayConfig",
+      "Fields": [
+        {
+          "Name": "control_plane",
+          "GoName": "ControlPlane",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "ControlPlaneConfig",
+          "ProtoFile": "config/v1/gateway_config.proto"
+        }
+      ],
+      "Binary": "reliant",
+      "Command": [
+        "server",
+        "gateway"
+      ],
+      "ProtoFile": "config/v1/gateway_config.proto",
+      "Line": 15
+    },
+    {
+      "Name": "WorkerConfig",
+      "Fields": [
+        {
+          "Name": "control_plane",
+          "GoName": "ControlPlane",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "ControlPlaneConfig",
+          "ProtoFile": "config/v1/worker_config.proto"
+        }
+      ],
+      "Binary": "reliant",
+      "Command": [
+        "server",
+        "worker"
+      ],
+      "ProtoFile": "config/v1/worker_config.proto",
+      "Line": 15
     }
   ],
-  "source_hash": "801e0d7767c52f522ec56bb87c2e2c5d613a741ae8d7ab5dfda372620bb50d40"
+  "source_hash": "5cbf1d4aafbe6adab0a21ede20b22dec249bf362810e11429f48fa41170fa017"
 }

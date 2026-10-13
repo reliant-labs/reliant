@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/netguard"
+
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +17,7 @@ import (
 
 func TestFetchTool(t *testing.T) {
 	t.Parallel()
-	tool := NewFetchTool()
+	tool := NewFetchTool(netguard.ForDeployment(""))
 
 	assert.Equal(t, FetchToolName, tool.Name())
 	assert.NotEmpty(t, tool.Description())
@@ -25,7 +27,7 @@ func TestFetchTool(t *testing.T) {
 
 func TestFetchToolValidation(t *testing.T) {
 	t.Parallel()
-	tool := NewFetchTool()
+	tool := NewFetchTool(netguard.ForDeployment(""))
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 
 	toolCtx := &rctx.ToolContext{
@@ -116,7 +118,7 @@ func TestFetchReadabilityExtraction(t *testing.T) {
 	}))
 	defer server.Close()
 
-	tool := NewFetchTool()
+	tool := NewFetchTool(netguard.ForDeployment(""))
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 	toolCtx := &rctx.ToolContext{Context: context.Background()}
 
@@ -194,7 +196,7 @@ func TestFetchJSRenderedDetection(t *testing.T) {
 	}))
 	defer server.Close()
 
-	tool := NewFetchTool()
+	tool := NewFetchTool(netguard.ForDeployment(""))
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 	toolCtx := &rctx.ToolContext{Context: context.Background()}
 
@@ -219,7 +221,7 @@ func TestFetchNonHTMLContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	tool := NewFetchTool()
+	tool := NewFetchTool(netguard.ForDeployment(""))
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 	toolCtx := &rctx.ToolContext{Context: context.Background()}
 

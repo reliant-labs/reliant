@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package config.v1;
+
+import "config/v1/control_plane_config.proto";
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
+
+// GatewayConfig is the `reliant server gateway` process's own config. It loads
+// alongside the root ReliantConfig (config.proto, whose header has the rules
+// every config here follows). The rest of the gateway's flags are still
+// registered by hand in cmd/reliant/commands/server.go.
+message GatewayConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    command: ["server", "gateway"]
+  };
+
+  ControlPlaneConfig control_plane = 1;
+}

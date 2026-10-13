@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
@@ -58,25 +57,24 @@ func newConnectionResolver(repo *db.Repo, keys vault.Service) (*connections.Reso
 // silent fall-back to the self-hosted provider: hosted users' GitHub tokens
 // live at control-plane, so falling back would answer "not connected" for
 // every one of them.
-func newIntegrationCredentials(resolver *connections.Resolver, getenv func(string) string) (httpaction.CredentialSource, error) {
+func newIntegrationCredentials(resolver *connections.Resolver, cp controlplane.Endpoint) (httpaction.CredentialSource, error) {
 	var deps connauth.Deps
 	if resolver != nil {
 		deps.Resolver = resolver
 	}
-	// The same resolution BootVault and the token authority use, so the
+	// The same Endpoint BootVault and the token authority are given, so the
 	// worker's notion of "hosted" cannot disagree with theirs.
-	cpURL := controlplane.BaseURLFrom(getenv)
-	if cpURL == "" {
+	if !cp.Hosted() {
 		return connauth.New(deps), nil
 	}
 	brokers := connauth.NewBrokers()
-	secret := strings.TrimSpace(getenv("INTERNAL_SERVICE_SECRET"))
+	secret := cp.InternalServiceSecret
 	if secret == "" {
 		return nil, errors.New("integrations: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not; " +
 			"hosted GitHub tokens come from control-plane and cannot be fetched unauthenticated")
 	}
 	client := gitcredentialclient.New(gitcredentialclient.Deps{
-		BaseURL: cpURL,
+		BaseURL: cp.URL,
 		Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
 	broker := ghdelegated.New(ghdelegated.Deps{Tokens: client, Logger: slog.Default().With("component", "ghdelegated")})

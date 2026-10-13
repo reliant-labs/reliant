@@ -60,6 +60,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
+	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -101,19 +102,24 @@ type Server struct {
 // Config holds gRPC server configuration
 type Config struct {
 	Port                int
-	BindAddress         string                             // Bind address (default: "127.0.0.1", use "0.0.0.0" for containers)
-	JWTPublicKey        string                             // RSA public key for JWT validation
-	JWKSURL             string                             // JWKS endpoint URL for JWT validation (alternative to JWTPublicKey)
-	CORSAllowedOrigins  []string                           // Allowed CORS origins; defaults to ["*"] if empty
-	AllowedEmailDomains []string                           // If non-empty, only these email domains may access the system
-	Database            db.Repository                      // Database repository
-	ToolsFactory        *tools.ToolsFactory                // Tools factory for catalog service
-	TemporalClient      client.Client                      // Temporal client for workflow operations
-	StreamingHub        streaming.StreamingHub             // Streaming hub for ephemeral events
-	UserUpdateHub       streaming.UpdateHub[db.UserUpdate] // Update hub for user-level events
-	ChatUpdateHub       streaming.UpdateHub[db.ChatUpdate] // Update hub for chat-level events
-	PauseService        *workflow.PauseService             // Pause service for unified pause/resume operations
-	SharedTaskQueue     string                             // Shared workflow task queue name
+	BindAddress         string   // Bind address (default: "127.0.0.1", use "0.0.0.0" for containers)
+	JWTPublicKey        string   // RSA public key for JWT validation
+	JWKSURL             string   // JWKS endpoint URL for JWT validation (alternative to JWTPublicKey)
+	CORSAllowedOrigins  []string // Allowed CORS origins; defaults to ["*"] if empty
+	AllowedEmailDomains []string // If non-empty, only these email domains may access the system
+	// ControlPlane is the control plane hosting this deployment; the zero
+	// value is self-hosted. It picks the token store, where git tokens come
+	// from, whether suspended workspaces can be woken, and the dial policy
+	// for user-supplied model endpoints.
+	ControlPlane    controlplane.Endpoint
+	Database        db.Repository                      // Database repository
+	ToolsFactory    *tools.ToolsFactory                // Tools factory for catalog service
+	TemporalClient  client.Client                      // Temporal client for workflow operations
+	StreamingHub    streaming.StreamingHub             // Streaming hub for ephemeral events
+	UserUpdateHub   streaming.UpdateHub[db.UserUpdate] // Update hub for user-level events
+	ChatUpdateHub   streaming.UpdateHub[db.ChatUpdate] // Update hub for chat-level events
+	PauseService    *workflow.PauseService             // Pause service for unified pause/resume operations
+	SharedTaskQueue string                             // Shared workflow task queue name
 
 	DaemonRouter toolexec.DaemonRouter // Optional pre-created daemon router for transport-agnostic daemon access
 
@@ -235,6 +241,9 @@ func NewServer(cfg *Config) (*Server, error) {
 		catalogService.WithCatalogSearch(cfg.CatalogSearch, services.IntegrationMethodsFrom(cfg.Connections))
 	}
 	projectService := services.NewProjectService(database, router)
+	if cfg.ControlPlane.Hosted() {
+		projectService.WithControlPlaneClient(controlplane.NewClient(cfg.ControlPlane.URL))
+	}
 	worktreeService := services.NewWorktreeService(database, cfg.TemporalClient, router)
 	var worktreeSweeper *worktreesweep.Sweeper
 	if router != nil {
@@ -261,7 +270,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("message service: %w", err)
 	}
-	settingsService := services.NewSettingsService(database, router)
+	settingsService := services.NewSettingsService(database, router).
+		WithControlPlaneClient(controlplane.NewClient(cfg.ControlPlane.URL))
 	mcpService := services.NewMCPService(database, router)
 	workflowService := services.NewWorkflowService(database, router)
 	scenarioService := services.NewScenarioService(database, router)
@@ -330,6 +340,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		Config: handlerConfig,
 		Repo:   database,
 		Router: router,
+		Policy: netguard.ForDeployment(cfg.ControlPlane.URL),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("model_endpoint service: %w", err)
@@ -337,16 +348,16 @@ func NewServer(cfg *Config) (*Server, error) {
 	// TokenService: the ONE token surface (daemon credentials and API
 	// tokens), a facade over the token authority.
 	var gitTokens token.GitTokenSource
-	if cpURL := controlplane.BaseURLFromEnv(); cpURL != "" {
+	if cp := cfg.ControlPlane; cp.Hosted() {
 		// Hosted users' git tokens live at control-plane. tokenauthority.New
 		// already refused to boot without the secret; check again so this
 		// wiring never rests on that ordering.
-		secret := strings.TrimSpace(os.Getenv("INTERNAL_SERVICE_SECRET"))
+		secret := cp.InternalServiceSecret
 		if secret == "" {
 			return nil, errors.New("git tokens: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not")
 		}
 		gitTokens = gitcredentialclient.New(gitcredentialclient.Deps{
-			BaseURL: cpURL,
+			BaseURL: cp.URL,
 			Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
 		})
 	}
@@ -458,6 +469,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	// handler's own nil checks would pass and it would panic on the first
 	// write. NewTriggerServiceFor keeps that conversion in one place.
 	triggerService := services.NewTriggerServiceFor(database, cfg.TemporalClient, cfg.SharedTaskQueue)
+	if cfg.ControlPlane.Hosted() {
+		triggerService.WithControlPlaneClient(controlplane.NewClient(cfg.ControlPlane.URL))
+	}
 	if in := cfg.TriggerInbound; in != nil {
 		opts := services.InboundOptions{PublicURL: in.PublicURL, Catalog: in.Registry, Intake: in.Intake}
 		if in.Vault != nil {
@@ -560,13 +574,13 @@ func NewServer(cfg *Config) (*Server, error) {
 	var accountHandler http.Handler
 	if repo, ok := database.(*db.Repo); ok && repo != nil && repo.DB != nil {
 		// The control-plane client is wired only when this deployment HAS a
-		// control plane (RELIANT_CONTROL_PLANE_URL and friends). Self-hosted
-		// reliant has no platform account to delete, and defaulting to
-		// localhost would make every such deployment fail deletion against a
-		// control plane that isn't there.
+		// control plane (cfg.ControlPlane). Self-hosted reliant has no
+		// platform account to delete, and defaulting to localhost would make
+		// every such deployment fail deletion against a control plane that
+		// isn't there.
 		var accountControlPlane account.ControlPlane
-		if baseURL := controlplane.BaseURLFromEnv(); baseURL != "" {
-			accountControlPlane = controlplane.NewClient(baseURL)
+		if cfg.ControlPlane.Hosted() {
+			accountControlPlane = controlplane.NewClient(cfg.ControlPlane.URL)
 		}
 		accountService, err := account.New(account.Deps{
 			Logger:       handlerLogger,
@@ -687,7 +701,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// command dispatch (internal/daemonpolicy); this route resolves the grant
 	// and terminates the protocol.
 	mountConnectorMCP(mux, streams, database, router, cfg.PublicURL, cfg.OAuthIssuers, connectorTokenValidator(cfg),
-		accesstokenclient.NewCachedIntrospector(authority))
+		accesstokenclient.NewCachedIntrospector(authority), cfg.ControlPlane.URL)
 
 	// CLI login discovery (RFC 8414): names the control plane that issues this
 	// deployment's rlat_ tokens, so `reliant auth login --server <this>` finds
@@ -1041,6 +1055,7 @@ func mountConnectorMCP(
 	oauthIssuers []string,
 	tokenValidator mcpserver.OAuthTokenValidator,
 	credentials mcpserver.CredentialIntrospector,
+	controlPlaneURL string,
 ) {
 	if router == nil {
 		logging.Info("connector MCP endpoint not mounted: no daemon router (expected in monolith/desktop mode)")
@@ -1065,11 +1080,11 @@ func mountConnectorMCP(
 	// an interface is NOT nil, and would turn "no control plane" into a nil
 	// dereference on the first suspended workspace.
 	var resumer mcpserver.DaemonResumer
-	// The URL has no localhost default (controlplane.BaseURLFromEnv, not the
-	// client's fallback): silently pointing at a control plane that is not
-	// there would turn "cannot start workspaces" into a connection error on
-	// every suspended-workspace request.
-	if cp := mcpserver.NewControlPlaneResumer(controlplane.BaseURLFromEnv()); cp != nil {
+	// The URL has no localhost default (the configured one, not the client's
+	// fallback): silently pointing at a control plane that is not there would
+	// turn "cannot start workspaces" into a connection error on every
+	// suspended-workspace request.
+	if cp := mcpserver.NewControlPlaneResumer(controlPlaneURL); cp != nil {
 		resumer = cp
 	} else {
 		logging.Info("connector workspace wake unavailable: no control plane URL configured")
@@ -1238,7 +1253,7 @@ func resolveTokenAuthority(cfg *Config) (tokenauthority.Authority, tokenauthorit
 	if repo, ok := cfg.Database.(*db.Repo); ok && repo != nil && repo.DB != nil {
 		sqlDB = repo.DB.SQLDB()
 	}
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFromEnv(sqlDB))
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(cfg.ControlPlane, sqlDB))
 	if err != nil {
 		return nil, "", fmt.Errorf("token authority: %w", err)
 	}

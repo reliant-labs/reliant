@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
-	"strings"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 
@@ -18,11 +16,12 @@ import (
 // malformed, or not an `rlat_` at all).
 var ErrInactive = accesstokenclient.ErrInactive
 
-// DepsFromEnv reads Deps from the environment.
-func DepsFromEnv(db *sql.DB) Deps {
+// DepsFor is the Deps for a deployment hosted by cp (the zero Endpoint is
+// self-hosted), with db for the self-hosted store.
+func DepsFor(cp controlplane.Endpoint, db *sql.DB) Deps {
 	return Deps{
-		ControlPlaneURL:       controlplane.BaseURLFromEnv(),
-		InternalServiceSecret: strings.TrimSpace(os.Getenv("INTERNAL_SERVICE_SECRET")),
+		ControlPlaneURL:       cp.URL,
+		InternalServiceSecret: cp.InternalServiceSecret,
 		DB:                    db,
 	}
 }

@@ -5,6 +5,8 @@ package serverworker
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -14,17 +16,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 )
 
-func envOf(vars map[string]string) func(string) string {
-	return func(k string) string { return vars[k] }
-}
-
 // Hosted (a control plane is configured): GitHub tokens come from
 // control-plane, through the delegated source.
 func TestIntegrationCredentials_HostedUsesControlPlane(t *testing.T) {
-	src, err := newIntegrationCredentials(nil, envOf(map[string]string{
-		"RELIANT_CONTROL_PLANE_URL": "http://admin-server:8090",
-		"INTERNAL_SERVICE_SECRET":   "s",
-	}))
+	src, err := newIntegrationCredentials(nil, controlplane.Endpoint{URL: "http://admin-server:8090", InternalServiceSecret: "s"})
 	require.NoError(t, err)
 	cs, ok := src.(connauth.Service)
 	require.True(t, ok)
@@ -36,16 +31,14 @@ func TestIntegrationCredentials_HostedUsesControlPlane(t *testing.T) {
 // reliant's own GitHub provider — which would tell every hosted user their
 // GitHub is not connected.
 func TestIntegrationCredentials_HostedWithoutSecretFailsBoot(t *testing.T) {
-	_, err := newIntegrationCredentials(nil, envOf(map[string]string{
-		"RELIANT_CONTROL_PLANE_URL": "http://admin-server:8090",
-	}))
+	_, err := newIntegrationCredentials(nil, controlplane.Endpoint{URL: "http://admin-server:8090"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "INTERNAL_SERVICE_SECRET")
 }
 
 // Self-hosted: saved connections only; `github` is reliant's own provider.
 func TestIntegrationCredentials_SelfHostedIsSavedConnections(t *testing.T) {
-	src, err := newIntegrationCredentials(nil, envOf(nil))
+	src, err := newIntegrationCredentials(nil, controlplane.Endpoint{})
 	require.NoError(t, err)
 	cs, ok := src.(connauth.Service)
 	require.True(t, ok)
@@ -56,7 +49,7 @@ func TestIntegrationCredentials_SelfHostedIsSavedConnections(t *testing.T) {
 // The poll activity is handed the same source integration actions use, so a
 // poll resolves a credential exactly as an action node would.
 func TestTriggerCredentialsIsTheIntegrationSource(t *testing.T) {
-	src, err := newIntegrationCredentials(nil, envOf(nil))
+	src, err := newIntegrationCredentials(nil, controlplane.Endpoint{})
 	require.NoError(t, err)
 	got := triggerCredentials(src)
 	require.NotNil(t, got)

@@ -49,9 +49,6 @@ func epCtx(userID string) context.Context {
 }
 
 func TestModelEndpointE2E(t *testing.T) {
-	t.Setenv("RELIANT_CONTROL_PLANE_URL", "") // self-host: loopback is a legitimate DIRECT target
-	t.Setenv("CONTROL_PLANE_API_URL", "")
-	t.Setenv("CONTROL_PLANE_BASE_URL", "")
 
 	var tags struct {
 		Models []struct {
@@ -116,6 +113,8 @@ func TestModelEndpointE2E(t *testing.T) {
 		Config: &typedconfig.Config{},
 		Repo:   repo,
 		Router: router,
+		// No control plane: self-hosted, so loopback is a legitimate DIRECT target.
+		Policy: netguard.ForDeployment(""),
 	})
 	require.NoError(t, err)
 
@@ -243,12 +242,12 @@ func TestModelEndpointE2E(t *testing.T) {
 	})
 
 	t.Run("f_hosted_policy_refuses_the_same_direct_endpoint", func(t *testing.T) {
-		t.Setenv("RELIANT_CONTROL_PLANE_URL", "http://admin.cluster.local:8090")
 		hosted, err := model_endpoint.New(model_endpoint.Deps{
 			Logger: slog.Default(),
 			Config: &typedconfig.Config{},
 			Repo:   repo,
 			Router: router,
+			Policy: netguard.ForDeployment("http://admin.cluster.local:8090"),
 		})
 		require.NoError(t, err)
 		_, err = hosted.CreateModelEndpoint(epCtx(e2eUserA), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
