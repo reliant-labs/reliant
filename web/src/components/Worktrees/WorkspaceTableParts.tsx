@@ -137,7 +137,11 @@ export function GitStateCell({ worktree }: { worktree: Worktree }) {
   if (!checkedOut) {
     const lifecycle = lifecycleOf(worktree.status);
     return (
-      <Tooltip content={lifecycle.description} delay={300} wrapperClassName="inline-flex">
+      <Tooltip
+        content={worktree.failure_reason || lifecycle.description}
+        delay={300}
+        wrapperClassName="inline-flex"
+      >
         <GitStateLabel
           worktreeId={worktreeId}
           variant={lifecycle.variant}

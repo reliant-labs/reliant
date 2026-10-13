@@ -98,6 +98,11 @@ message Worktree {
   string last_active = 12;
   optional string deleted_at = 13;  // Archive timestamp
   optional CleanupMetadata cleanup_metadata = 14;
+  // Why creation failed, in words the user can act on ("base branch 'x'
+  // doesn't exist in reliant — check the name ..."). Set only when status is
+  // FAILED and the reason is the user's to fix; empty otherwise, including for
+  // a failure on our side.
+  string failure_reason = 15;
 }
 
 // CleanupMetadata tracks what was cleaned up during archive

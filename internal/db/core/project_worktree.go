@@ -207,6 +207,10 @@ type Worktree struct {
 	LastActive      time.Time
 	DeletedAt       *time.Time
 	CleanupMetadata *CleanupMetadata `json:"cleanup_metadata,omitempty"`
+	// FailureReason says, in words the user can act on, why creation failed
+	// — set only with a FAILED status, and only for a reason that is the
+	// user's to fix (internal/workspacecreate). Empty otherwise.
+	FailureReason string
 }
 
 // Repo is a git repository nested inside a project.

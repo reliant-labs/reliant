@@ -408,7 +408,8 @@ func (s *worktreeStore) UpdateWorktree(ctx context.Context, worktree *core.Workt
 		// Load-bearing for async creation: the CREATING row is inserted with
 		// an empty path and only learns its on-disk location once the daemon
 		// reports it. Omitting this would compile fine and silently write "".
-		Path: worktree.Path,
+		Path:          worktree.Path,
+		FailureReason: worktree.FailureReason,
 	})
 }
 
@@ -528,6 +529,7 @@ func worktreeFromPG(row pgdb.Worktree) *core.Worktree {
 		LastActive:      row.LastActive,
 		DeletedAt:       projectNullTimeToPtr(row.DeletedAt),
 		CleanupMetadata: cleanupMetadata,
+		FailureReason:   row.FailureReason,
 	}
 }
 

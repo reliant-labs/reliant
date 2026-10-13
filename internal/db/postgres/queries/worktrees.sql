@@ -30,7 +30,8 @@ LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 -- name: UpdateWorktree :exec
 -- `path` is settable because asynchronous creation only learns the on-disk
 -- location after the daemon reports it: the row is inserted as CREATING with
--- an empty path, then settled here.
+-- an empty path, then settled here — as is `failure_reason`, when it settles
+-- FAILED.
 UPDATE worktrees SET
     name = $1,
     branch = $2,
@@ -39,8 +40,9 @@ UPDATE worktrees SET
     base_branches = $5,
     last_active = $6,
     path = $7,
+    failure_reason = $8,
     updated_at = NOW()
-WHERE id = $8;
+WHERE id = $9;
 
 -- name: DeleteWorktree :exec
 DELETE FROM worktrees WHERE id = $1;

@@ -1344,7 +1344,8 @@ CREATE TABLE public.worktrees (
     cleanup_metadata text,
     base_branches text,
     daemon_id text,
-    idempotency_key text
+    idempotency_key text,
+    failure_reason text DEFAULT ''::text NOT NULL
 );
 
 --

@@ -25,6 +25,7 @@ package workspacecreate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -32,12 +33,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/gitref"
 	"github.com/reliant-labs/reliant/internal/logging"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
+	"github.com/reliant-labs/reliant/internal/worktreeerr"
 	"github.com/reliant-labs/reliant/internal/worktreepath"
 )
 
@@ -60,6 +64,9 @@ func (e *NameTakenError) Error() string {
 
 func (e *NameTakenError) Is(target error) bool { return target == core.ErrWorktreeNameTaken }
 
+// ErrorClass makes a taken name a user error: the caller picks another name.
+func (e *NameTakenError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
+
 // BranchHeldError says the branch belongs to another worktree of the project
 // whose branch (and possibly checkout) must survive, so it cannot be reused.
 // Forcing does not override it: creation resets or deletes the branch.
@@ -67,6 +74,10 @@ type BranchHeldError struct {
 	Branch string
 	Holder *db.Worktree
 }
+
+// ErrorClass makes a held branch a user error: the caller picks another
+// branch.
+func (e *BranchHeldError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 func (e *BranchHeldError) Error() string {
 	state := "worktree"
@@ -144,6 +155,11 @@ func Insert(ctx context.Context, store Store, req Request) (*db.Worktree, error)
 	if branch == "" {
 		branch = fmt.Sprintf("worktree/%s-%d", req.Name, time.Now().Unix())
 	}
+	// A name git would refuse fails here, before a row or a checkout exists,
+	// rather than as a FAILED worktree the caller has to clear away.
+	if err := gitref.ValidateBranchName(branch); err != nil {
+		return nil, svcerr.InvalidArgument(err.Error())
+	}
 	if err := claimName(ctx, store, req.Project.ID, req.Name, branch); err != nil {
 		return nil, err
 	}
@@ -164,6 +180,10 @@ func Insert(ctx context.Context, store Store, req Request) (*db.Worktree, error)
 		LastActive:     now,
 	}
 	if err := store.CreateWorktree(ctx, wt); err != nil {
+		// A concurrent create took the name between claimName and here.
+		if errors.Is(err, core.ErrWorktreeNameTaken) {
+			return nil, &NameTakenError{Name: req.Name}
+		}
 		return nil, err
 	}
 	return wt, nil
@@ -296,6 +316,14 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 
 		logging.Error("Worktree creation failed", "error", reason, "worktreeID", wt.ID)
 		wt.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+		// A create from the UI settles in the background, so the row is how
+		// the reason reaches the user. Only a reason that is theirs to fix
+		// is written: ours stays in the logs (and Sentry), and the UI says
+		// the create did not finish.
+		wt.FailureReason = ""
+		if svcerr.IsUserError(reason) {
+			wt.FailureReason = reason.Error()
+		}
 		// A FAILED row must carry NO path: filepreview.ResolveBasePath returns an
 		// existing row's path as-is, so a path to directories just deleted
 		// would fail every scoped filesystem RPC. Empty is the value it
@@ -343,12 +371,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			WorktreeID  string `json:"worktree_id"`
 			ReuseBranch bool   `json:"reuse_branch,omitempty"`
 		}
-		var createResp struct {
-			Success      bool   `json:"success"`
-			WorktreePath string `json:"worktree_path"`
-			BaseBranch   string `json:"base_branch,omitempty"`
-			Error        string `json:"error,omitempty"`
-		}
+		var createResp checkoutResponse
 
 		err := m.Send(ctx, "worktree.create", createReq{
 			WorktreeID:  wt.ID,
@@ -366,11 +389,13 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err)
 		}
 		if !createResp.Success {
-			logging.Error("Failed to create git worktree", "error", createResp.Error, "repo", repo.ID)
-			if adopting && (strings.Contains(createResp.Error, "already checked out") || strings.Contains(createResp.Error, "already used by worktree")) {
-				return repoCreateResult{}, fmt.Errorf("branch '%s' is already checked out in another worktree of repo %s; the adopt needs it free (it is never reset or forced)", wt.Branch, repo.Name)
-			}
-			return repoCreateResult{}, gitWorktreeError(createResp.Error, createResp.WorktreePath, wt.Branch, repoBase)
+			err := checkoutError(createResp, repo.Name, wt.Branch, adopting)
+			// The error VALUE, not the daemon's text: the log policy
+			// classifies it, so a user's mistake is an INFO line and never
+			// reaches Sentry.
+			logging.Error("Failed to create git worktree", "error", err,
+				"git_output", strings.TrimSpace(createResp.Error), "repo", repo.ID)
+			return repoCreateResult{}, err
 		}
 		return repoCreateResult{
 			repo:         repo,
@@ -511,26 +536,58 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 	return nil
 }
 
-// gitWorktreeError turns daemon git output into a user-facing reason.
-func gitWorktreeError(output, worktreePath, branch, baseBranch string) error {
-	switch {
-	case strings.Contains(output, "already exists") && strings.Contains(output, "not empty"):
-		return fmt.Errorf("worktree path '%s' already exists and is not empty; enable force to override", worktreePath)
-	case strings.Contains(output, "already checked out"):
-		return fmt.Errorf("branch '%s' is already checked out in another worktree; enable force to override or choose a different branch", branch)
-	case strings.Contains(output, "is not a valid"):
-		return fmt.Errorf("base branch '%s' does not exist; please choose a valid branch", baseBranch)
-	case strings.Contains(output, "fatal: invalid reference"):
-		return fmt.Errorf("invalid branch or reference '%s'; please check the branch name", baseBranch)
-	case strings.Contains(output, "Not a git repository"):
-		return fmt.Errorf("project directory is not a valid git repository; please initialize git first")
-	default:
-		msg := strings.TrimSpace(output)
-		if msg == "" {
-			msg = "unknown git error"
+// checkoutResponse is the daemon's answer to worktree.create.
+type checkoutResponse struct {
+	Success      bool   `json:"success"`
+	WorktreePath string `json:"worktree_path"`
+	BaseBranch   string `json:"base_branch,omitempty"`
+	// Error is git's own output; for the logs, never classified on.
+	Error string `json:"error,omitempty"`
+	// ErrorCode is why git refused, when the daemon found it to be the
+	// caller's to fix, and ErrorDetail the ref or path it is about.
+	ErrorCode   worktreeerr.Reason `json:"error_code,omitempty"`
+	ErrorDetail string             `json:"error_detail,omitempty"`
+}
+
+// checkoutError is the reason a repo's checkout was refused.
+//
+// A reason the daemon diagnosed (worktreeerr) is the caller's input — a base
+// branch that does not exist, a branch name git refuses — so it is a typed
+// client-fault kind: svcerr classifies it as a user error, it logs at INFO and
+// never reaches Sentry, the wire carries its code and this message, and the
+// message says what to change. Anything else is a server fault and keeps
+// git's output.
+func checkoutError(resp checkoutResponse, repoName, branch string, adopting bool) error {
+	switch resp.ErrorCode {
+	case worktreeerr.BaseNotFound:
+		base := resp.ErrorDetail
+		msg := fmt.Sprintf("base branch '%s' doesn't exist in %s — check the name, or start from an existing branch", base, repoName)
+		if !strings.HasPrefix(base, "origin/") {
+			msg += fmt.Sprintf(" (a branch that is only on the remote is 'origin/%s')", base)
 		}
-		return fmt.Errorf("git worktree creation failed: %s", msg)
+		return svcerr.WithMessage(svcerr.NotFound("base branch"), msg)
+	case worktreeerr.InvalidBranchName:
+		return svcerr.InvalidArgument(fmt.Sprintf(
+			"'%s' is not a valid git branch name — choose another", branch))
+	case worktreeerr.BranchNameConflict:
+		return svcerr.FailedPrecondition(fmt.Sprintf(
+			"branch '%s' can't be created in %s: branch '%s' already exists, and git can't have both a branch and another nested under its name — choose a different branch name",
+			branch, repoName, resp.ErrorDetail))
+	case worktreeerr.BranchCheckedOut:
+		if adopting {
+			return svcerr.FailedPrecondition(fmt.Sprintf(
+				"branch '%s' is already checked out in another worktree of %s (%s); the adopt needs it free (it is never reset or forced)",
+				branch, repoName, resp.ErrorDetail))
+		}
+		return svcerr.FailedPrecondition(fmt.Sprintf(
+			"branch '%s' is already checked out at %s, and git checks a branch out in one place only — choose a different branch, or switch that checkout to another branch first",
+			branch, resp.ErrorDetail))
 	}
+	msg := strings.TrimSpace(resp.Error)
+	if msg == "" {
+		msg = "unknown git error"
+	}
+	return fmt.Errorf("git worktree creation failed in %s: %s", repoName, msg)
 }
 
 func firstNonEmpty(values ...string) string {

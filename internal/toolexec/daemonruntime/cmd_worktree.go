@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/gitutil"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/worktreeerr"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
@@ -124,6 +125,12 @@ type worktreeCreateResponse struct {
 	BaseBranch   string `json:"base_branch,omitempty"` // actually resolved base branch (after auto-detect)
 	Output       string `json:"output,omitempty"`
 	Error        string `json:"error,omitempty"`
+	// ErrorCode says why git refused, when it is the caller's to fix (see
+	// diagnoseWorktreeAdd); empty for every other failure. The server
+	// classifies on it, never on Error's text.
+	ErrorCode worktreeerr.Reason `json:"error_code,omitempty"`
+	// ErrorDetail is the ref or path ErrorCode is about.
+	ErrorDetail string `json:"error_detail,omitempty"`
 }
 
 func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
@@ -140,6 +147,10 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	if req.Branch == "" {
 		req.Branch = fmt.Sprintf("worktree/%s-%d", req.Name, time.Now().Unix())
 	}
+
+	// Only a base the caller named is theirs to fix if it does not resolve;
+	// one detected below that fails is our bug (diagnoseWorktreeAdd).
+	baseSupplied := req.BaseBranch != ""
 
 	// Default base branch if not provided. Detect per-repo so projects with
 	// repos on master/develop/etc. don't fail with "invalid reference 'main'".
@@ -160,6 +171,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 		if current, err := gitutil.GetCurrentBranch(ctx, req.ProjectPath); err == nil && current != "" {
 			req.BaseBranch = current
+			baseSupplied = false
 		}
 	}
 
@@ -194,6 +206,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 
 	// Create the git worktree
 	var worktreeCmd *exec.Cmd
+	usesBase := true
 	if req.ReuseBranch {
 		localBranch := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", "refs/heads/"+req.Branch)
 		localBranch.Dir = req.ProjectPath
@@ -201,6 +214,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 			// No -B and no --force: git itself refuses when the branch is
 			// checked out in another worktree.
 			worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", worktreePath, req.Branch)
+			usesBase = false
 		} else {
 			worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "-b", req.Branch, worktreePath, req.BaseBranch)
 		}
@@ -256,8 +270,11 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		if parent := filepath.Dir(worktreePath); parent != worktreePath {
 			removeIfEmpty(parent)
 		}
+		code, detail := diagnoseWorktreeAdd(ctx, req.ProjectPath, req.Branch, req.BaseBranch, baseSupplied && usesBase)
 		return json.Marshal(worktreeCreateResponse{
-			Error: string(output),
+			Error:       string(output),
+			ErrorCode:   code,
+			ErrorDetail: detail,
 		})
 	}
 
@@ -280,6 +297,71 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		"elapsed", time.Since(checkoutStart).Round(time.Millisecond).String())
 
 	return json.Marshal(worktreeCreateResponse{Success: true, WorktreePath: worktreePath, BaseBranch: req.BaseBranch})
+}
+
+// diagnoseWorktreeAdd says why `git worktree add` just failed, when the
+// reason is the caller's to fix, by asking the repository about the inputs —
+// never by reading git's output, whose wording changes between git versions
+// and is translated under a non-English locale (see internal/worktreeerr). It
+// runs only after a failure, so a create that succeeds pays nothing.
+//
+// The first check that holds is the answer; the empty Reason is the answer
+// for everything else (git crashed, the disk is full, the destination is
+// taken), which the server reports as its own fault. checkBase is false when
+// the base was detected rather than named, or the command did not use one:
+// only a base the caller named is theirs to fix.
+func diagnoseWorktreeAdd(ctx context.Context, repoPath, branch, base string, checkBase bool) (worktreeerr.Reason, string) {
+	git := func(args ...string) ([]byte, int) {
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = repoPath
+		out, err := cmd.Output()
+		var exitErr *exec.ExitError
+		switch {
+		case err == nil:
+			return out, 0
+		case errors.As(err, &exitErr):
+			return out, exitErr.ExitCode()
+		default:
+			return out, -1
+		}
+	}
+
+	// Every answer below is meaningless for a repository git cannot read.
+	if _, code := git("rev-parse", "--git-dir"); code != 0 {
+		return "", ""
+	}
+	// With --quiet, "resolves to nothing" is exit 1; anything worse is 128.
+	if checkBase {
+		if _, code := git("rev-parse", "--verify", "--quiet", base+"^{commit}"); code == 1 {
+			return worktreeerr.BaseNotFound, base
+		}
+	}
+	// The repository is readable, so a refusal here is the verdict on the
+	// name itself.
+	if _, code := git("check-ref-format", "--branch", branch); code != 0 {
+		return worktreeerr.InvalidBranchName, branch
+	}
+	if out, code := git("worktree", "list", "--porcelain"); code == 0 {
+		for _, wt := range parseWorktreePorcelain(string(out)) {
+			if wt.Branch == branch {
+				return worktreeerr.BranchCheckedOut, wt.Path
+			}
+		}
+	}
+	// git stores refs as files, so `release` cannot be created beside
+	// `release/x` (it would be a file where a directory is), nor `rel/y`
+	// beside `rel`.
+	if out, code := git("for-each-ref", "--count=1", "--format=%(refname:short)", "refs/heads/"+branch+"/"); code == 0 {
+		if existing := strings.TrimSpace(string(out)); existing != "" {
+			return worktreeerr.BranchNameConflict, existing
+		}
+	}
+	for i := strings.LastIndex(branch, "/"); i > 0; i = strings.LastIndex(branch[:i], "/") {
+		if _, code := git("show-ref", "--verify", "--quiet", "refs/heads/"+branch[:i]); code == 0 {
+			return worktreeerr.BranchNameConflict, branch[:i]
+		}
+	}
+	return "", ""
 }
 
 // =============================================================================

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/copypath"
@@ -265,6 +267,9 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 			return fail("%s", nameTakenReason(nil, p.Name))
 		case errors.As(err, &branchHeld):
 			return fail("%v (set the branch parameter)", branchHeld)
+		case svcerr.IsUserError(err):
+			// e.g. a branch name git would refuse; the text says what to change.
+			return fail("%v", err)
 		}
 		return fail("record the worktree: %v", err)
 	}

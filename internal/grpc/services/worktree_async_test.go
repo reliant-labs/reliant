@@ -29,8 +29,12 @@ type blockingWorktreeDaemonRouter struct {
 
 	release chan struct{}
 	// failCreate makes the daemon report an unsuccessful create, which is the
-	// realistic failure (a git error), not a transport error.
+	// realistic failure (a git error), not a transport error: the base branch
+	// does not exist, diagnosed as such.
 	failCreate bool
+	// undiagnosed makes that failure one the daemon could not attribute to
+	// the caller (no error_code): a server fault.
+	undiagnosed bool
 
 	mu       sync.Mutex
 	commands []string
@@ -59,10 +63,18 @@ func (r *blockingWorktreeDaemonRouter) SendDaemonCommand(ctx context.Context, us
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if r.failCreate {
+		if r.failCreate && r.undiagnosed {
 			return json.Marshal(map[string]interface{}{
 				"success": false,
-				"error":   "fatal: invalid reference: nonexistent-base",
+				"error":   "fatal: write error: No space left on device",
+			})
+		}
+		if r.failCreate {
+			return json.Marshal(map[string]interface{}{
+				"success":      false,
+				"error":        "fatal: invalid reference: nonexistent-base",
+				"error_code":   "base_not_found",
+				"error_detail": "nonexistent-base",
 			})
 		}
 		return json.Marshal(map[string]interface{}{
@@ -194,6 +206,83 @@ func TestCreateWorktreeMarksFailedRatherThanVanishing(t *testing.T) {
 	require.NoError(t, err, "the failure happens after the response, so the RPC still succeeds")
 
 	awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+}
+
+// TestCreateWorktreeFailureReasonReachesTheClient: creation settles after the
+// response, so the row is the only way a reason reaches the user who asked.
+// Prod, 2026-10-13: a base branch that did not exist became a Sentry error and,
+// in the UI, a bare "Failed" badge.
+func TestCreateWorktreeFailureReasonReachesTheClient(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		undiagnosed bool
+		wantReason  string
+	}{
+		{name: "the user's to fix", wantReason: "base branch 'nonexistent-base' doesn't exist in root"},
+		{name: "ours", undiagnosed: true, wantReason: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := db.NewTestRepo(t)
+			router := &blockingWorktreeDaemonRouter{failCreate: true, undiagnosed: tc.undiagnosed}
+			svc := NewWorktreeService(repo, nil, router)
+
+			userID := uuid.New().String()
+			projectID := seedWorktreeProject(t, repo, userID)
+			ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+
+			resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+				ProjectId:  projectID,
+				Name:       "doomed-worktree",
+				Branch:     "doomed-worktree",
+				BaseBranch: stringPtr("nonexistent-base"),
+			}))
+			require.NoError(t, err)
+			awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+
+			list, err := svc.ListWorktrees(ctx, connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: projectID}))
+			require.NoError(t, err)
+			var got *reliantv1.Worktree
+			for _, w := range list.Msg.Worktrees {
+				if w.Id == resp.Msg.Worktree.Id {
+					got = w
+				}
+			}
+			require.NotNil(t, got, "the FAILED row must stay listed")
+			if tc.wantReason == "" {
+				assert.Empty(t, got.FailureReason, "our own fault is not presented as the user's to fix")
+				return
+			}
+			assert.Contains(t, got.FailureReason, tc.wantReason)
+		})
+	}
+}
+
+// A branch name git would refuse is refused by the RPC itself, with its code
+// and a sentence — before any row or checkout exists.
+func TestCreateWorktreeRefusesAnInvalidBranchNameUpFront(t *testing.T) {
+	repo := db.NewTestRepo(t)
+	router := &blockingWorktreeDaemonRouter{}
+	svc := NewWorktreeService(repo, nil, router)
+
+	userID := uuid.New().String()
+	projectID := seedWorktreeProject(t, repo, userID)
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+
+	_, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+		ProjectId: projectID,
+		Name:      "bad-branch",
+		Branch:    "feat..x",
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Contains(t, err.Error(), "feat..x")
+
+	rows, err := repo.ListWorktrees(ctx, db.WorktreeFilters{ProjectID: &projectID, Limit: 10})
+	require.NoError(t, err)
+	assert.Empty(t, rows, "nothing is recorded for a create that cannot work")
+	router.mu.Lock()
+	defer router.mu.Unlock()
+	assert.NotContains(t, router.commands, "worktree.create")
 }
 
 // TestCreateWorktreeIdempotencyKeyPreventsDuplicates covers the hazard async

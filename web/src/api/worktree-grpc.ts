@@ -70,6 +70,12 @@ export interface Worktree {
   last_active: string;
   deleted_at?: string;
   cleanup_metadata?: CleanupMetadata;
+  /**
+   * Why creation failed, in words the user can act on. Set only on a FAILED
+   * worktree whose failure is the user's to fix (a base branch that does not
+   * exist, a branch name git refuses); absent when the failure was ours.
+   */
+  failure_reason?: string;
 }
 
 export interface DiscoveredWorktree {
@@ -178,6 +184,7 @@ function protoToFrontend(proto: ProtoWorktree): Worktree {
     cleanup_metadata: proto.cleanupMetadata
       ? protoCleanupMetadataToFrontend(proto.cleanupMetadata)
       : undefined,
+    failure_reason: proto.failureReason || undefined,
   };
 }
 

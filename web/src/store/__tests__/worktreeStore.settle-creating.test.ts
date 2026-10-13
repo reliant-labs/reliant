@@ -30,6 +30,7 @@ vi.mock("../../lib/toast-manager", () => ({
 
 import { useWorktreeStore } from "../worktreeStore";
 import { triggerRefetch } from "../refetchStore";
+import { toast } from "../../lib/toast-manager";
 
 const projectId = "project-1";
 const now = "2026-01-01T00:00:00.000Z";
@@ -143,5 +144,49 @@ describe("worktreeStore: a CREATING worktree settles in place", () => {
     await flushRefetch();
 
     expect(useWorktreeStore.getState().currentWorktree?.status).toBe(WorktreeStatus.FAILED);
+  });
+
+  // Prod, 2026-10-13: a create named a base branch that did not exist. The
+  // server knew exactly what to tell the user; the UI showed only a "Failed"
+  // badge, after a "created successfully" toast.
+  it("says why a FAILED settle failed, once", async () => {
+    const reason =
+      "base branch 'feat/telemetry-delivery-c2' doesn't exist in reliant — check the name, or start from an existing branch";
+    listMock.mockResolvedValue({
+      worktrees: [mainRow, { ...creatingRow, status: WorktreeStatus.FAILED, failure_reason: reason }],
+    });
+
+    triggerRefetch("worktree_changes", "wt-new");
+    await flushRefetch();
+
+    expect(useWorktreeStore.getState().currentWorktree?.failure_reason).toBe(reason);
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(toast.error).mock.calls[0][0]).toBe(`Couldn't create workspace "triggers": ${reason}`);
+
+    // A later refetch for the same row is not a second failure.
+    triggerRefetch("worktree_changes", "wt-new");
+    await flushRefetch();
+    expect(toast.error).toHaveBeenCalledTimes(1);
+  });
+
+  it("still says a FAILED settle failed when the reason is ours", async () => {
+    listMock.mockResolvedValue({
+      worktrees: [mainRow, { ...creatingRow, status: WorktreeStatus.FAILED }],
+    });
+
+    triggerRefetch("worktree_changes", "wt-new");
+    await flushRefetch();
+
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(toast.error).mock.calls[0][0]).toContain("did not finish");
+  });
+
+  it("says nothing when the create succeeds", async () => {
+    listMock.mockResolvedValue({ worktrees: [mainRow, settledRow] });
+
+    triggerRefetch("worktree_changes", "wt-new");
+    await flushRefetch();
+
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });

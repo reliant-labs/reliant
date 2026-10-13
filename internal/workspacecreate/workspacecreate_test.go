@@ -16,6 +16,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/worktreeerr"
 )
 
 type sent struct {
@@ -29,6 +30,9 @@ type fakeMachine struct {
 	sent     []sent
 	root     string
 	failRepo string // project_path suffix whose create returns Success=false
+	// failWith is what the failing repo's create answers; the zero value is
+	// the prod event, a base branch that does not exist.
+	failWith *checkoutResponse
 	copyErr  error
 }
 
@@ -42,14 +46,18 @@ func (f *fakeMachine) Send(_ context.Context, cmd string, payload, resp any, _ i
 	switch cmd {
 	case "worktree.create":
 		pp, _ := p["project_path"].(string)
-		out := resp.(*struct {
-			Success      bool   `json:"success"`
-			WorktreePath string `json:"worktree_path"`
-			BaseBranch   string `json:"base_branch,omitempty"`
-			Error        string `json:"error,omitempty"`
-		})
+		out := resp.(*checkoutResponse)
 		if f.failRepo != "" && filepath.Base(pp) == f.failRepo {
-			out.Error = "fatal: invalid reference"
+			if f.failWith != nil {
+				*out = *f.failWith
+				return nil
+			}
+			base, _ := p["base_branch"].(string)
+			*out = checkoutResponse{
+				Error:       "fatal: invalid reference: " + base,
+				ErrorCode:   worktreeerr.BaseNotFound,
+				ErrorDetail: base,
+			}
 			return nil
 		}
 		out.Success = true
@@ -181,7 +189,7 @@ func TestFinishRepoFailureRollsBackEverything(t *testing.T) {
 
 	err := Finish(context.Background(), st, m, req, wt)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid branch or reference")
+	assert.Contains(t, err.Error(), "doesn't exist in b")
 
 	row := st.rows[wt.ID]
 	assert.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED), row.Status)

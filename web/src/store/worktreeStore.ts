@@ -48,6 +48,7 @@ export interface Worktree {
   last_active: string;
   deleted_at?: string | null; // Archive timestamp
   cleanup_metadata?: CleanupMetadata | null; // Tracks what was deleted during archive
+  failure_reason?: string; // Why a FAILED create failed, when it is the user's to fix
 }
 
 // Create-only inputs. base_branches carries per-repo base-branch overrides
@@ -79,6 +80,7 @@ function grpcToStore(grpc: GrpcWorktree): Worktree {
     last_active: grpc.last_active,
     deleted_at: grpc.deleted_at || null,
     cleanup_metadata: grpc.cleanup_metadata || null,
+    failure_reason: grpc.failure_reason,
   };
 }
 
@@ -163,7 +165,8 @@ function refreshSelection(current: Worktree | null, loaded: Worktree[]): Worktre
     fresh.branch !== current.branch ||
     fresh.base_branch !== current.base_branch ||
     fresh.name !== current.name ||
-    fresh.deleted_at !== current.deleted_at;
+    fresh.deleted_at !== current.deleted_at ||
+    fresh.failure_reason !== current.failure_reason;
   return changed ? fresh : current;
 }
 
@@ -190,7 +193,31 @@ function handleWorktreeRefetch(event: RefetchEvent): void {
     worktreeId: pending.id,
     name: pending.name,
   });
-  void useWorktreeStore.getState().refreshWorktrees(pending.project_id);
+  void useWorktreeStore.getState().refreshWorktrees(pending.project_id).then(() => {
+    const settled = useWorktreeStore.getState().worktrees.find((w) => w.id === pending.id);
+    if (settled?.status === WorktreeStatus.FAILED) announceCreateFailed(settled);
+  });
+}
+
+// Ids already announced: two refetches can land while a row is still CREATING.
+const announcedCreateFailures = new Set<string>();
+
+/**
+ * Say why a create failed. It settles in the background, so without this the
+ * only sign was a "Failed" badge somewhere in the workspace list. The server
+ * writes the reason on the row when it is the user's to fix ("base branch 'x'
+ * doesn't exist in reliant — check the name ...") and leaves it empty when the
+ * failure was ours, which is reported on our side.
+ */
+function announceCreateFailed(worktree: Worktree): void {
+  if (announcedCreateFailures.has(worktree.id)) return;
+  announcedCreateFailures.add(worktree.id);
+  void toast.error(
+    worktree.failure_reason
+      ? `Couldn't create workspace "${worktree.name}": ${worktree.failure_reason}`
+      : `Couldn't create workspace "${worktree.name}": creating it did not finish. Archive it and try again.`,
+    { duration: 10000 },
+  );
 }
 
 // Monotonic ticket per fetch, so a slow response cannot overwrite a newer one.
@@ -848,6 +875,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
   reset: () => {
     // Any in-flight load predates this reset, so let it be dropped on arrival.
     lastAppliedTicket = loadTicket;
+    announcedCreateFailures.clear();
     set({
       worktrees: [],
       currentWorktree: null,

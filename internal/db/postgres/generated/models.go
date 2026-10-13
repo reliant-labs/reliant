@@ -920,4 +920,5 @@ type Worktree struct {
 	BaseBranches    sql.NullString `json:"base_branches"`
 	DaemonID        sql.NullString `json:"daemon_id"`
 	IdempotencyKey  sql.NullString `json:"idempotency_key"`
+	FailureReason   string         `json:"failure_reason"`
 }

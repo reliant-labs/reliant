@@ -182,7 +182,9 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	}
 	wt, err := workspacecreate.Insert(ctx, a.repo, createReq)
 	if err != nil {
-		return CreateWorktreeOutput{}, fmt.Errorf("failed to persist worktree row: %w", err)
+		// %w keeps a refusal's class (a name taken, a branch git would
+		// refuse): a user error crosses the activity boundary as Benign.
+		return CreateWorktreeOutput{}, fmt.Errorf("create worktree: %w", err)
 	}
 	machine := daemonMachine{router: a.daemonRouter, userID: chat.UserID, daemonID: ownerDaemonID}
 	finishErr := workspacecreate.Finish(ctx, a.repo, machine, createReq, wt)

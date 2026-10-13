@@ -1354,7 +1354,8 @@ type Querier interface {
 	UpdateWorkflowWorkerStopped(ctx context.Context, id string) error
 	// `path` is settable because asynchronous creation only learns the on-disk
 	// location after the daemon reports it: the row is inserted as CREATING with
-	// an empty path, then settled here.
+	// an empty path, then settled here — as is `failure_reason`, when it settles
+	// FAILED.
 	UpdateWorktree(ctx context.Context, arg UpdateWorktreeParams) error
 	UpdateWorktreeCleanupMetadata(ctx context.Context, arg UpdateWorktreeCleanupMetadataParams) error
 	// Access-gated routing for app-level provider events. See the migration

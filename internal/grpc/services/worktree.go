@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.temporal.io/sdk/client"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -245,6 +246,9 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 		CreatedAt:  w.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:  w.UpdatedAt.Format(time.RFC3339),
 		LastActive: w.LastActive.Format(time.RFC3339),
+		// Creation from the UI settles in the background, so the row is the
+		// only place the reason reaches the user who asked.
+		FailureReason: w.FailureReason,
 	}
 
 	if w.ChatID != nil {
@@ -576,6 +580,9 @@ func insertWorktreeError(err error, name string) error {
 		return connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree with name '%s' already exists in this project; archive or rename it, or choose another name", name))
 	case errors.As(err, &branchHeld):
 		return connect.NewError(connect.CodeFailedPrecondition, branchHeld)
+	case svcerr.IsUserError(err):
+		// e.g. a branch name git would refuse: its code and its sentence.
+		return svcerr.Wrap(err)
 	}
 	logging.Error("Failed to create worktree row", "error", err)
 	return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
@@ -1225,6 +1232,11 @@ func (s *WorktreeService) ImportWorktree(
 		}
 		if err := workspacecreate.Finish(ctx, s.database, machine, createReq, worktree); err != nil {
 			s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
+			// The user's to fix (a branch checked out elsewhere): its code
+			// and the sentence saying what to change. Ours: Finish logged it.
+			if svcerr.IsUserError(err) {
+				return nil, svcerr.Wrap(err)
+			}
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to import worktree"))
 		}
 		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)

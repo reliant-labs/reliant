@@ -98,7 +98,7 @@ func (q *Queries) DeleteWorktree(ctx context.Context, id string) error {
 }
 
 const getLiveWorktreeByName = `-- name: GetLiveWorktreeByName :one
-SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key FROM worktrees
+SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key, failure_reason FROM worktrees
 WHERE project_id = $1 AND name = $2 AND deleted_at IS NULL
 `
 
@@ -130,12 +130,13 @@ func (q *Queries) GetLiveWorktreeByName(ctx context.Context, arg GetLiveWorktree
 		&i.BaseBranches,
 		&i.DaemonID,
 		&i.IdempotencyKey,
+		&i.FailureReason,
 	)
 	return i, err
 }
 
 const getWorktree = `-- name: GetWorktree :one
-SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key FROM worktrees WHERE id = $1
+SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key, failure_reason FROM worktrees WHERE id = $1
 `
 
 func (q *Queries) GetWorktree(ctx context.Context, id string) (Worktree, error) {
@@ -159,12 +160,13 @@ func (q *Queries) GetWorktree(ctx context.Context, id string) (Worktree, error) 
 		&i.BaseBranches,
 		&i.DaemonID,
 		&i.IdempotencyKey,
+		&i.FailureReason,
 	)
 	return i, err
 }
 
 const getWorktreeByIdempotencyKey = `-- name: GetWorktreeByIdempotencyKey :one
-SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key FROM worktrees
+SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key, failure_reason FROM worktrees
 WHERE project_id = $1 AND idempotency_key = $2
 `
 
@@ -196,12 +198,13 @@ func (q *Queries) GetWorktreeByIdempotencyKey(ctx context.Context, arg GetWorktr
 		&i.BaseBranches,
 		&i.DaemonID,
 		&i.IdempotencyKey,
+		&i.FailureReason,
 	)
 	return i, err
 }
 
 const getWorktreeByPath = `-- name: GetWorktreeByPath :one
-SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key FROM worktrees WHERE path = $1
+SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key, failure_reason FROM worktrees WHERE path = $1
 `
 
 func (q *Queries) GetWorktreeByPath(ctx context.Context, path string) (Worktree, error) {
@@ -225,13 +228,14 @@ func (q *Queries) GetWorktreeByPath(ctx context.Context, path string) (Worktree,
 		&i.BaseBranches,
 		&i.DaemonID,
 		&i.IdempotencyKey,
+		&i.FailureReason,
 	)
 	return i, err
 }
 
 const listHeldWorktreesForUser = `-- name: ListHeldWorktreesForUser :many
 SELECT
-    w.id, w.name, w.path, w.branch, w.base_branch, w.project_id, w.chat_id, w.status, w.created_at, w.updated_at, w.last_active, w.deleted_at, w.is_main, w.cleanup_metadata, w.base_branches, w.daemon_id, w.idempotency_key,
+    w.id, w.name, w.path, w.branch, w.base_branch, w.project_id, w.chat_id, w.status, w.created_at, w.updated_at, w.last_active, w.deleted_at, w.is_main, w.cleanup_metadata, w.base_branches, w.daemon_id, w.idempotency_key, w.failure_reason,
     p.name AS project_name,
     p.path AS project_path
 FROM worktrees w
@@ -281,6 +285,7 @@ func (q *Queries) ListHeldWorktreesForUser(ctx context.Context, userID string) (
 			&i.Worktree.BaseBranches,
 			&i.Worktree.DaemonID,
 			&i.Worktree.IdempotencyKey,
+			&i.Worktree.FailureReason,
 			&i.ProjectName,
 			&i.ProjectPath,
 		); err != nil {
@@ -336,7 +341,7 @@ func (q *Queries) ListLiveWorktreePathsForUser(ctx context.Context, userID strin
 }
 
 const listWorktrees = `-- name: ListWorktrees :many
-SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key FROM worktrees
+SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key, failure_reason FROM worktrees
 WHERE
     ($1::text IS NULL OR project_id = $1::text)
     AND ($2::text IS NULL OR chat_id = $2::text)
@@ -389,6 +394,7 @@ func (q *Queries) ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([
 			&i.BaseBranches,
 			&i.DaemonID,
 			&i.IdempotencyKey,
+			&i.FailureReason,
 		); err != nil {
 			return nil, err
 		}
@@ -404,7 +410,7 @@ func (q *Queries) ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([
 }
 
 const listWorktreesByBranch = `-- name: ListWorktreesByBranch :many
-SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key FROM worktrees
+SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key, failure_reason FROM worktrees
 WHERE project_id = $1 AND branch = $2
 `
 
@@ -442,6 +448,7 @@ func (q *Queries) ListWorktreesByBranch(ctx context.Context, arg ListWorktreesBy
 			&i.BaseBranches,
 			&i.DaemonID,
 			&i.IdempotencyKey,
+			&i.FailureReason,
 		); err != nil {
 			return nil, err
 		}
@@ -458,7 +465,7 @@ func (q *Queries) ListWorktreesByBranch(ctx context.Context, arg ListWorktreesBy
 
 const listWorktreesForReclaim = `-- name: ListWorktreesForReclaim :many
 SELECT
-    w.id, w.name, w.path, w.branch, w.base_branch, w.project_id, w.chat_id, w.status, w.created_at, w.updated_at, w.last_active, w.deleted_at, w.is_main, w.cleanup_metadata, w.base_branches, w.daemon_id, w.idempotency_key,
+    w.id, w.name, w.path, w.branch, w.base_branch, w.project_id, w.chat_id, w.status, w.created_at, w.updated_at, w.last_active, w.deleted_at, w.is_main, w.cleanup_metadata, w.base_branches, w.daemon_id, w.idempotency_key, w.failure_reason,
     p.user_id AS owner_user_id,
     p.path AS project_path
 FROM worktrees w
@@ -510,6 +517,7 @@ func (q *Queries) ListWorktreesForReclaim(ctx context.Context) ([]ListWorktreesF
 			&i.Worktree.BaseBranches,
 			&i.Worktree.DaemonID,
 			&i.Worktree.IdempotencyKey,
+			&i.Worktree.FailureReason,
 			&i.OwnerUserID,
 			&i.ProjectPath,
 		); err != nil {
@@ -547,24 +555,27 @@ UPDATE worktrees SET
     base_branches = $5,
     last_active = $6,
     path = $7,
+    failure_reason = $8,
     updated_at = NOW()
-WHERE id = $8
+WHERE id = $9
 `
 
 type UpdateWorktreeParams struct {
-	Name         string         `json:"name"`
-	Branch       string         `json:"branch"`
-	Status       int32          `json:"status"`
-	BaseBranch   string         `json:"base_branch"`
-	BaseBranches sql.NullString `json:"base_branches"`
-	LastActive   time.Time      `json:"last_active"`
-	Path         string         `json:"path"`
-	ID           string         `json:"id"`
+	Name          string         `json:"name"`
+	Branch        string         `json:"branch"`
+	Status        int32          `json:"status"`
+	BaseBranch    string         `json:"base_branch"`
+	BaseBranches  sql.NullString `json:"base_branches"`
+	LastActive    time.Time      `json:"last_active"`
+	Path          string         `json:"path"`
+	FailureReason string         `json:"failure_reason"`
+	ID            string         `json:"id"`
 }
 
 // `path` is settable because asynchronous creation only learns the on-disk
 // location after the daemon reports it: the row is inserted as CREATING with
-// an empty path, then settled here.
+// an empty path, then settled here — as is `failure_reason`, when it settles
+// FAILED.
 func (q *Queries) UpdateWorktree(ctx context.Context, arg UpdateWorktreeParams) error {
 	_, err := q.db.ExecContext(ctx, updateWorktree,
 		arg.Name,
@@ -574,6 +585,7 @@ func (q *Queries) UpdateWorktree(ctx context.Context, arg UpdateWorktreeParams) 
 		arg.BaseBranches,
 		arg.LastActive,
 		arg.Path,
+		arg.FailureReason,
 		arg.ID,
 	)
 	return err

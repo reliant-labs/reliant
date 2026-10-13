@@ -113,8 +113,13 @@ type Worktree struct {
 	LastActive      string                 `protobuf:"bytes,12,opt,name=last_active,json=lastActive,proto3" json:"last_active,omitempty"`
 	DeletedAt       *string                `protobuf:"bytes,13,opt,name=deleted_at,json=deletedAt,proto3,oneof" json:"deleted_at,omitempty"` // Archive timestamp
 	CleanupMetadata *CleanupMetadata       `protobuf:"bytes,14,opt,name=cleanup_metadata,json=cleanupMetadata,proto3,oneof" json:"cleanup_metadata,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Why creation failed, in words the user can act on ("base branch 'x'
+	// doesn't exist in reliant — check the name ..."). Set only when status is
+	// FAILED and the reason is the user's to fix; empty otherwise, including for
+	// a failure on our side.
+	FailureReason string `protobuf:"bytes,15,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Worktree) Reset() {
@@ -243,6 +248,13 @@ func (x *Worktree) GetCleanupMetadata() *CleanupMetadata {
 		return x.CleanupMetadata
 	}
 	return nil
+}
+
+func (x *Worktree) GetFailureReason() string {
+	if x != nil {
+		return x.FailureReason
+	}
+	return ""
 }
 
 // CleanupMetadata tracks what was cleaned up during archive
@@ -3618,7 +3630,7 @@ var File_reliant_v1_worktree_proto protoreflect.FileDescriptor
 const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/worktree.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\"\x85\x04\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\"\xac\x04\n" +
 	"\bWorktree\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -3640,7 +3652,8 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"lastActive\x12\"\n" +
 	"\n" +
 	"deleted_at\x18\r \x01(\tH\x01R\tdeletedAt\x88\x01\x01\x12K\n" +
-	"\x10cleanup_metadata\x18\x0e \x01(\v2\x1b.reliant.v1.CleanupMetadataH\x02R\x0fcleanupMetadata\x88\x01\x01B\n" +
+	"\x10cleanup_metadata\x18\x0e \x01(\v2\x1b.reliant.v1.CleanupMetadataH\x02R\x0fcleanupMetadata\x88\x01\x01\x12%\n" +
+	"\x0efailure_reason\x18\x0f \x01(\tR\rfailureReasonB\n" +
 	"\n" +
 	"\b_chat_idB\r\n" +
 	"\v_deleted_atB\x13\n" +
