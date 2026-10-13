@@ -238,16 +238,23 @@ jobs:
         # credential was still live (previous step), then tag and push
         # locally — `imagetools create` would re-read from the remote and
         # hit 403.
+        #
+        # ONE TAG, NEVER `latest`. Prod GAR (reliant-prod) is tag-immutable
+        # (control-plane deploy/gcp/provision.sh): a tag cannot be moved to
+        # another digest, so re-pushing `latest` is refused. A moved tag orphaned
+        # the digest it pointed at, and the repo's 7-day untagged cleanup then
+        # deleted bytes a recorded release still named (control-plane
+        # research/clickstack-review/rollout-log.md, session D). Nothing reads
+        # `reliant:latest`: every prod workload is pinned by the release
+        # ledger's digest. The per-commit `sha-<short>` (or a dispatch's
+        # image_tag) is written once; pushing an existing one is refused.
         continue-on-error: true
         run: |
           set -euo pipefail
           SRC="${{ env.GAR_NONPROD }}/reliant@${{ steps.build.outputs.digest }}"
-          TAGS="${{ steps.tag.outputs.tag }}"
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then TAGS="$TAGS latest"; fi
-          for t in $TAGS; do
-            docker tag "$SRC" "${{ env.GAR_PROD }}/reliant:$t"
-            docker push "${{ env.GAR_PROD }}/reliant:$t"
-          done
+          TAG="${{ steps.tag.outputs.tag }}"
+          docker tag "$SRC" "${{ env.GAR_PROD }}/reliant:$TAG"
+          docker push "${{ env.GAR_PROD }}/reliant:$TAG"
 
   summary:
     name: Build Summary
