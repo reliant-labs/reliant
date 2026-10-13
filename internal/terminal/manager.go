@@ -355,38 +355,6 @@ func (m *Manager) ListSessions() []*Session {
 	return sessions
 }
 
-// ListSessionsForUser returns only sessions owned by the given user.
-func (m *Manager) ListSessionsForUser(userID string) []*Session {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	var sessions []*Session
-	for _, session := range m.sessions {
-		if session.UserID == userID {
-			sessions = append(sessions, session)
-		}
-	}
-	return sessions
-}
-
-// CloseSessionForUser closes a session only if it belongs to the given user.
-func (m *Manager) CloseSessionForUser(sessionID, userID string) error {
-	m.mu.Lock()
-	session, ok := m.sessions[sessionID]
-	if !ok {
-		m.mu.Unlock()
-		return fmt.Errorf("session not found: %s", sessionID)
-	}
-	if session.UserID != userID {
-		m.mu.Unlock()
-		return fmt.Errorf("session not found: %s", sessionID) // Don't reveal existence to other users
-	}
-	delete(m.sessions, sessionID)
-	m.mu.Unlock()
-
-	return m.cleanupSession(session)
-}
-
 // Cleanup closes all sessions
 func (m *Manager) Cleanup() {
 	m.mu.Lock()
