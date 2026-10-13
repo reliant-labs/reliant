@@ -289,7 +289,7 @@ func Run(ctx context.Context, opts Options) error {
 			toolexec.WithDaemonResumer(controlplane.NewDaemonClient(cpURL)),
 			// The worker alone may fall back to a trigger's delegated
 			// token: an unattended fire has no user JWT.
-			toolexec.WithControlPlaneCredentials(automationcred.NewResolver(repo)))
+			toolexec.WithControlPlaneCredentials(automationcred.New(automationcred.Deps{Keys: repo})))
 	}
 	router := toolexec.NewNATSDaemonRouter(nc, daemonRouterOpts...)
 	remoteExecutor.SetDaemonRouter(router)

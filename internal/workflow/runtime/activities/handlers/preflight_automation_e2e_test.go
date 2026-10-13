@@ -160,7 +160,7 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 	router := toolexec.NewNATSDaemonRouter(nc,
 		toolexec.WithDatabase(repo),
 		toolexec.WithDaemonResumer(controlplane.NewDaemonClient(cpSrv.URL)),
-		toolexec.WithControlPlaneCredentials(automationcred.NewResolver(repo)))
+		toolexec.WithControlPlaneCredentials(automationcred.New(automationcred.Deps{Keys: repo})))
 
 	projectID, chatID := uuid.NewString(), uuid.NewString()
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{ID: projectID, UserID: userID, Name: "p", Path: "/tmp/p",

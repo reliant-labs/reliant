@@ -24,7 +24,7 @@ func (m memKeys) GetProviderAPIKey(_ context.Context, user, provider string) (st
 func TestBearerForOrder(t *testing.T) {
 	const user = "u-order"
 	keys := memKeys{user + "|" + Provider("d1"): "rlat_d1"}
-	r := NewResolver(keys)
+	r := New(Deps{Keys: keys})
 	trigger := Allow(context.Background())
 
 	// 1. JWT beats the stored token.

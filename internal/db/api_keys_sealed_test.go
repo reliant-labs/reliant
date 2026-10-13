@@ -275,11 +275,11 @@ func TestAutomationCredResolverEndToEndOverSealedStore(t *testing.T) {
 	_, err := raw.ExecContext(ctx, `UPDATE api_keys SET api_key='TAMPERED'`)
 	require.NoError(t, err)
 
-	bearer, err := automationcred.NewResolver(repo).BearerFor(automationcred.Allow(ctx), user, daemon)
+	bearer, err := automationcred.New(automationcred.Deps{Keys: repo}).BearerFor(automationcred.Allow(ctx), user, daemon)
 	require.NoError(t, err)
 	require.Equal(t, "rlat_secret", bearer)
 
-	other, err := automationcred.NewResolver(repo).BearerFor(automationcred.Allow(ctx), user, "daemon-2")
+	other, err := automationcred.New(automationcred.Deps{Keys: repo}).BearerFor(automationcred.Allow(ctx), user, "daemon-2")
 	require.NoError(t, err)
 	require.Equal(t, "", other, "another daemon's token is not served")
 }
