@@ -66,6 +66,12 @@ type WorkflowStatusInput struct {
 	// run a person's reply started later. Only the launcher marks a run, so it
 	// is what tells a trigger's own run from a person's turn in its chat.
 	LaunchRun bool `json:"launch_run,omitempty"`
+	// PausedForMachine is set on a "paused" status the daemon-offline circuit
+	// breaker sent: the pause is because the chat's machine dropped, so the
+	// chat is marked (chats.paused_for_machine_at) and resumed when the
+	// machine connects. A pause without it is someone else's and clears the
+	// mark.
+	PausedForMachine bool `json:"paused_for_machine,omitempty"`
 }
 
 // WorkflowStatusOutput is the output from WorkflowStatus activity
@@ -366,6 +372,7 @@ func (a *WorkflowStatusActivity) reviveThreadForNewRun(ctx context.Context, inpu
 
 // trackWorkflow creates or updates a workflow record in the database
 func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input WorkflowStatusInput) error {
+	a.trackPausedForMachine(ctx, input)
 	switch input.Status {
 	case "started":
 		// Post-resume notification: a resume un-parks the ENTIRE Temporal
@@ -462,6 +469,28 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 	default:
 		// Unknown status - skip tracking
 		return nil
+	}
+}
+
+// trackPausedForMachine keeps chats.paused_for_machine_at — "the daemon-offline
+// breaker paused this chat" — in step with the root run's status: set by the
+// breaker's own pause, cleared by anything else the root run reports (a resume,
+// a different kind of pause, an end). It runs before the status write so the
+// mark is already there when the row first reads paused, which is what
+// internal/queueddelivery lists.
+//
+// Best-effort: a missed mark only costs the automatic resume, and the user's
+// message still resumes the chat.
+func (a *WorkflowStatusActivity) trackPausedForMachine(ctx context.Context, input WorkflowStatusInput) {
+	paused := input.Status == "paused" && input.PausedForMachine
+	// Only a root run's report may clear the mark; a nested workflow's status
+	// says nothing about whether the chat's root run is still parked.
+	if input.ChatID == "" || (!paused && input.ParentWorkflowID != "") {
+		return
+	}
+	if _, err := a.repo.SetChatPausedForMachine(ctx, input.ChatID, paused); err != nil {
+		logging.Warn("[WorkflowStatus] Failed to record whether the chat is paused for its machine",
+			"chatID", input.ChatID, "workflowID", input.WorkflowID, "paused", paused, "error", err)
 	}
 }
 

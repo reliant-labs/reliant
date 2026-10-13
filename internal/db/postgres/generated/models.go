@@ -150,6 +150,7 @@ type Chat struct {
 	DaemonBlockedAt      sql.NullTime   `json:"daemon_blocked_at"`
 	NoMachine            bool           `json:"no_machine"`
 	QueuedForMachineAt   sql.NullTime   `json:"queued_for_machine_at"`
+	PausedForMachineAt   sql.NullTime   `json:"paused_for_machine_at"`
 }
 
 type ChatUpdate struct {

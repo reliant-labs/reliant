@@ -151,6 +151,32 @@ func (s *chatStore) ListChatsQueuedForMachine(ctx context.Context, userID string
 	return chats, nil
 }
 
+func (s *chatStore) SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error) {
+	n, err := s.q.SetChatPausedForMachine(ctx, pgdb.SetChatPausedForMachineParams{Paused: paused, ID: chatID})
+	if err != nil {
+		return false, fmt.Errorf("failed to set chat paused-for-machine marker: %w", err)
+	}
+	return n > 0, nil
+}
+
+func (s *chatStore) ListChatsPausedForMachine(ctx context.Context, userID string, limit int) ([]core.PausedForMachineChat, error) {
+	rows, err := s.q.ListChatsPausedForMachine(ctx, pgdb.ListChatsPausedForMachineParams{UserID: userID, MaxRows: int32(limit)})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list chats paused for their machine: %w", err)
+	}
+	chats := make([]core.PausedForMachineChat, 0, len(rows))
+	for _, row := range rows {
+		chats = append(chats, core.PausedForMachineChat{
+			ChatID:         row.ID,
+			UserID:         row.UserID,
+			WorkflowID:     row.WorkflowID.String,
+			ActiveDaemonID: chatNullStringToPtr(row.ActiveDaemonID),
+			PausedAt:       row.PausedForMachineAt.Time,
+		})
+	}
+	return chats, nil
+}
+
 func (s *chatStore) ListChatsWaitingForMachine(ctx context.Context, userID string) ([]core.WaitingForMachineRun, error) {
 	rows, err := s.q.ListChatsWaitingForMachine(ctx, userID)
 	if err != nil {

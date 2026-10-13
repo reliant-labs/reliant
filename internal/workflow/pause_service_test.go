@@ -112,6 +112,9 @@ type mockPauseRepo struct {
 	reviveCalls []reviveCall
 	reviveErr   error
 	callOrder   []string
+
+	// pausedForMachine is the chat -> mark state SetChatPausedForMachine keeps.
+	pausedForMachine map[string]bool
 }
 
 type reviveCall struct {
@@ -165,6 +168,15 @@ func (m *mockPauseRepo) PauseRunningWorkflowsByChat(_ context.Context, _ string)
 // RunTx runs f inline; the mock has no transactions.
 func (m *mockPauseRepo) RunTx(ctx context.Context, f func(context.Context) error) error {
 	return f(ctx)
+}
+
+func (m *mockPauseRepo) SetChatPausedForMachine(_ context.Context, chatID string, paused bool) (bool, error) {
+	if m.pausedForMachine == nil {
+		m.pausedForMachine = map[string]bool{}
+	}
+	changed := m.pausedForMachine[chatID] != paused
+	m.pausedForMachine[chatID] = paused
+	return changed, nil
 }
 
 func (m *mockPauseRepo) ResumeWorkflowsByChat(_ context.Context, _ string) error {

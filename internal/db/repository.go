@@ -572,6 +572,15 @@ type Repository interface {
 	// queued for their machine, oldest first, at most limit; userID "" lists
 	// every user's.
 	ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error)
+	// SetChatPausedForMachine sets or clears the marker saying the
+	// daemon-offline breaker paused the chat's run (as opposed to the user).
+	// Reports whether the stored value changed — clearing it is how a resumer
+	// claims the chat.
+	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
+	// ListChatsPausedForMachine lists non-archived chats the breaker paused
+	// whose root run still reads paused, oldest first, at most limit; userID ""
+	// lists every user's.
+	ListChatsPausedForMachine(ctx context.Context, userID string, limit int) ([]PausedForMachineChat, error)
 	// ListChatsWaitingForMachine lists a user's chats whose live root run is
 	// parked waiting for a machine.
 	ListChatsWaitingForMachine(ctx context.Context, userID string) ([]WaitingForMachineRun, error)

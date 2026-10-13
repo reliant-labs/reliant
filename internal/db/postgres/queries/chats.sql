@@ -139,6 +139,32 @@ WHERE queued_for_machine_at IS NOT NULL
 ORDER BY queued_for_machine_at ASC, id ASC
 LIMIT sqlc.arg('max_rows');
 
+-- name: SetChatPausedForMachine :execrows
+-- Sets or clears the paused-for-machine marker: the chat's run was paused by
+-- the daemon-offline breaker (not by the user). Returns 1 only when the value
+-- actually changed, so clearing is a claim: of two resumers that race exactly
+-- one sees the row change.
+UPDATE chats SET
+    paused_for_machine_at = CASE WHEN sqlc.arg('paused')::boolean THEN NOW() ELSE NULL END
+WHERE id = sqlc.arg('id')
+  AND (paused_for_machine_at IS NOT NULL) IS DISTINCT FROM sqlc.arg('paused')::boolean;
+
+-- name: ListChatsPausedForMachine :many
+-- Chats whose root run the daemon-offline breaker paused and nothing has
+-- resumed, oldest first. The root run must still read paused: a marker left
+-- behind by a run that ended since is not a chat to resume. An empty user_id
+-- lists every user's (the sweep); otherwise one user's (a machine of theirs
+-- just connected). Archived chats are left alone.
+SELECT c.id, c.user_id, c.workflow_id, c.active_daemon_id, c.paused_for_machine_at
+FROM chats c
+JOIN workflows w ON w.id = c.workflow_id
+WHERE c.paused_for_machine_at IS NOT NULL
+  AND c.state IS DISTINCT FROM 3
+  AND w.state = 3 AND w.stop_reason = 3
+  AND (sqlc.arg('user_id')::text = '' OR c.user_id = sqlc.arg('user_id')::text)
+ORDER BY c.paused_for_machine_at ASC, c.id ASC
+LIMIT sqlc.arg('max_rows');
+
 -- name: ListChatsWaitingForMachine :many
 -- One user's chats whose root run is live and parked waiting for a machine
 -- (the daemon-pending marker on a running root workflow): the runs to tell

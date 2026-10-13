@@ -339,6 +339,65 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWi
 	return items, nil
 }
 
+const listChatsPausedForMachine = `-- name: ListChatsPausedForMachine :many
+SELECT c.id, c.user_id, c.workflow_id, c.active_daemon_id, c.paused_for_machine_at
+FROM chats c
+JOIN workflows w ON w.id = c.workflow_id
+WHERE c.paused_for_machine_at IS NOT NULL
+  AND c.state IS DISTINCT FROM 3
+  AND w.state = 3 AND w.stop_reason = 3
+  AND ($1::text = '' OR c.user_id = $1::text)
+ORDER BY c.paused_for_machine_at ASC, c.id ASC
+LIMIT $2
+`
+
+type ListChatsPausedForMachineParams struct {
+	UserID  string `json:"user_id"`
+	MaxRows int32  `json:"max_rows"`
+}
+
+type ListChatsPausedForMachineRow struct {
+	ID                 string         `json:"id"`
+	UserID             string         `json:"user_id"`
+	WorkflowID         sql.NullString `json:"workflow_id"`
+	ActiveDaemonID     sql.NullString `json:"active_daemon_id"`
+	PausedForMachineAt sql.NullTime   `json:"paused_for_machine_at"`
+}
+
+// Chats whose root run the daemon-offline breaker paused and nothing has
+// resumed, oldest first. The root run must still read paused: a marker left
+// behind by a run that ended since is not a chat to resume. An empty user_id
+// lists every user's (the sweep); otherwise one user's (a machine of theirs
+// just connected). Archived chats are left alone.
+func (q *Queries) ListChatsPausedForMachine(ctx context.Context, arg ListChatsPausedForMachineParams) ([]ListChatsPausedForMachineRow, error) {
+	rows, err := q.db.QueryContext(ctx, listChatsPausedForMachine, arg.UserID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListChatsPausedForMachineRow{}
+	for rows.Next() {
+		var i ListChatsPausedForMachineRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.WorkflowID,
+			&i.ActiveDaemonID,
+			&i.PausedForMachineAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatsQueuedForMachine = `-- name: ListChatsQueuedForMachine :many
 SELECT id, user_id, active_daemon_id, queued_for_machine_at
 FROM chats
@@ -567,6 +626,30 @@ type SetChatDaemonBlockedParams struct {
 // not on every tool call.
 func (q *Queries) SetChatDaemonBlocked(ctx context.Context, arg SetChatDaemonBlockedParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, setChatDaemonBlocked, arg.Blocked, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setChatPausedForMachine = `-- name: SetChatPausedForMachine :execrows
+UPDATE chats SET
+    paused_for_machine_at = CASE WHEN $1::boolean THEN NOW() ELSE NULL END
+WHERE id = $2
+  AND (paused_for_machine_at IS NOT NULL) IS DISTINCT FROM $1::boolean
+`
+
+type SetChatPausedForMachineParams struct {
+	Paused bool   `json:"paused"`
+	ID     string `json:"id"`
+}
+
+// Sets or clears the paused-for-machine marker: the chat's run was paused by
+// the daemon-offline breaker (not by the user). Returns 1 only when the value
+// actually changed, so clearing is a claim: of two resumers that race exactly
+// one sees the row change.
+func (q *Queries) SetChatPausedForMachine(ctx context.Context, arg SetChatPausedForMachineParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setChatPausedForMachine, arg.Paused, arg.ID)
 	if err != nil {
 		return 0, err
 	}

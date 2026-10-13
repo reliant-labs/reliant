@@ -174,6 +174,10 @@ func (ps *PauseService) PauseWorkflow(ctx context.Context, workflowID, chatID, r
 		return fmt.Errorf("failed to send pause signal: %w", err)
 	}
 
+	// A pause the user asked for is theirs to end: it must not be undone when a
+	// machine connects.
+	ps.clearPausedForMachine(ctx, chatID)
+
 	// Update workflow status in DB so the UI shows "paused"
 	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Paused()); err != nil {
 		logging.Error("[PauseService] Failed to update workflow status to paused",
@@ -200,6 +204,21 @@ func (ps *PauseService) PauseWorkflow(ctx context.Context, workflowID, chatID, r
 		"workflowID", workflowID,
 	)
 	return nil
+}
+
+// clearPausedForMachine drops the "paused by the daemon-offline breaker" mark
+// (chats.paused_for_machine_at): the chat was resumed, or paused by the user.
+// Best-effort — a mark left behind is harmless, because the list that reads it
+// also requires the root run to read paused, and the run's own status
+// notifications clear it too.
+func (ps *PauseService) clearPausedForMachine(ctx context.Context, chatID string) {
+	if chatID == "" {
+		return
+	}
+	if _, err := ps.database.SetChatPausedForMachine(ctx, chatID, false); err != nil {
+		logging.Warn("[PauseService] Failed to clear the paused-for-machine mark",
+			"chatID", chatID, "error", err)
+	}
 }
 
 // isWorkflowAlreadyDoneErr checks if a Temporal error indicates the workflow
@@ -452,7 +471,11 @@ func (ps *PauseService) ResumeWorkflow(ctx context.Context, workflowID, chatID s
 		return fmt.Errorf("failed to resume workflow: %w", err)
 	}
 
-	// Signal sent successfully — update DB status to running
+	// Signal sent successfully. The chat is no longer paused for its machine,
+	// whoever resumed it.
+	ps.clearPausedForMachine(ctx, chatID)
+
+	// Update DB status to running
 	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
 		logging.Error("[PauseService] Failed to update workflow status to running",
 			"workflowID", workflowID,
@@ -505,6 +528,8 @@ func (ps *PauseService) ResumeExpiredWorkflow(ctx context.Context, workflowID, c
 	if err != nil {
 		return "", fmt.Errorf("failed to send resume signal after reset: %w", err)
 	}
+
+	ps.clearPausedForMachine(ctx, chatID)
 
 	// Update DB status to running
 	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {

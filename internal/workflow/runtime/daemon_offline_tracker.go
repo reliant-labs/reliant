@@ -46,11 +46,12 @@ func SetDaemonOfflinePauseGraceForTest(d time.Duration) (restore func()) {
 
 // DaemonOfflinePauseMessage is the user-facing chat message emitted (via the
 // WorkflowError activity) when the circuit breaker pauses the workflow.
-// Paused chats resume when the user sends a message (SendMessage routes
-// paused chats through PauseService.ResumeWorkflow). A failed request only
-// proves this workflow could not reach its daemon; it does not prove the
+// A paused chat resumes on its own when its machine connects
+// (internal/queueddelivery), or when the user sends a message (SendMessage
+// routes paused chats through PauseService.ResumeWorkflow). A failed request
+// only proves this workflow could not reach its daemon; it does not prove the
 // machine is stopped, so it must not instruct the user to start it.
-const DaemonOfflinePauseMessage = "Paused: this chat has been unable to reach its machine for two minutes. The machine may still be reconnecting; send a message to retry."
+const DaemonOfflinePauseMessage = "Paused: this chat has been unable to reach its machine for two minutes. The machine may still be reconnecting; this chat will resume on its own when it does, or send a message to retry now."
 
 // DaemonOfflineCircuitBreaker counts consecutive daemon-offline step
 // completions and pauses the workflow when the streak reaches the threshold.

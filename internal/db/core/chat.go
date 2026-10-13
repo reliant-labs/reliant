@@ -284,6 +284,19 @@ type QueuedForMachineChat struct {
 	QueuedAt       time.Time
 }
 
+// PausedForMachineChat is a chat whose root run the daemon-offline circuit
+// breaker paused (chats.paused_for_machine_at) and nothing has resumed.
+type PausedForMachineChat struct {
+	ChatID string
+	UserID string
+	// WorkflowID is the paused root run.
+	WorkflowID string
+	// ActiveDaemonID is the machine the chat is pinned to; nil means the
+	// user's default machine.
+	ActiveDaemonID *string
+	PausedAt       time.Time
+}
+
 // WaitingForMachineRun is a chat's live root run parked waiting for its
 // machine.
 type WaitingForMachineRun struct {
@@ -315,6 +328,15 @@ type ChatStore interface {
 	// queued for their machine, oldest first, at most limit. An empty userID
 	// lists every user's.
 	ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error)
+	// SetChatPausedForMachine sets or clears the marker saying the daemon-offline
+	// breaker paused the chat's run, and reports whether the stored value
+	// changed. Clearing is a claim: of two callers that race, exactly one sees
+	// true.
+	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
+	// ListChatsPausedForMachine lists non-archived chats whose root run the
+	// breaker paused and that still read paused, oldest first, at most limit.
+	// An empty userID lists every user's.
+	ListChatsPausedForMachine(ctx context.Context, userID string, limit int) ([]PausedForMachineChat, error)
 	// ListChatsWaitingForMachine lists a user's chats whose live root run is
 	// parked waiting for a machine.
 	ListChatsWaitingForMachine(ctx context.Context, userID string) ([]WaitingForMachineRun, error)

@@ -246,6 +246,7 @@ CREATE TABLE public.chats (
     daemon_blocked_at timestamp with time zone,
     no_machine boolean DEFAULT false NOT NULL,
     queued_for_machine_at timestamp with time zone,
+    paused_for_machine_at timestamp with time zone,
     CONSTRAINT chats_no_machine_has_no_daemon_check CHECK (((NOT no_machine) OR (active_daemon_id IS NULL)))
 );
 
@@ -2140,6 +2141,12 @@ CREATE INDEX idx_chat_updates_snapshot_heads ON public.chat_updates USING btree 
 CREATE INDEX idx_chat_updates_snapshot_rekeyed ON public.chat_updates USING btree (chat_id, sequence_number) WHERE (update_type = ANY (ARRAY[3, 18]));
 
 --
+-- Name: idx_chats_paused_for_machine; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chats_paused_for_machine ON public.chats USING btree (paused_for_machine_at) WHERE (paused_for_machine_at IS NOT NULL);
+
+--
 -- Name: idx_chats_queued_for_machine; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2608,13 +2615,6 @@ CREATE INDEX idx_workflows_parent_id ON public.workflows USING btree (parent_id)
 CREATE INDEX idx_workflows_state ON public.workflows USING btree (state, stop_reason);
 
 --
--- Name: worktrees_project_id_name_live_key; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX worktrees_project_id_name_live_key ON public.worktrees USING btree (project_id, name) WHERE (deleted_at IS NULL);
-
-
---
 -- Name: idx_worktrees_idempotency_key; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2661,6 +2661,12 @@ CREATE UNIQUE INDEX vault_keys_one_primary ON public.vault_keys USING btree (ten
 --
 
 CREATE INDEX video_generation_jobs_attachment_idx ON public.video_generation_jobs USING btree (attachment_id) WHERE (attachment_id IS NOT NULL);
+
+--
+-- Name: worktrees_project_id_name_live_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX worktrees_project_id_name_live_key ON public.worktrees USING btree (project_id, name) WHERE (deleted_at IS NULL);
 
 --
 -- Name: agent_messages agent_messages_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -

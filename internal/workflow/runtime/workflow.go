@@ -1169,8 +1169,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// is observed at the StepExecutor.HandleCompletion chokepoint. At
 	// DaemonOfflinePauseThreshold it pauses the workflow via the same
 	// cooperative pause machinery used for user pause and retry-exhaustion,
-	// with a user-facing chat message. The user resumes by sending a message
-	// (SendMessage routes paused chats through PauseService.ResumeWorkflow).
+	// with a user-facing chat message. It resumes when the chat's machine
+	// connects (queueddelivery marks the pause via PausedForMachine), or when
+	// the user sends a message (SendMessage routes paused chats through
+	// PauseService.ResumeWorkflow).
 	daemonOfflineBreaker := NewDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, func(callerCtx workflow.Context, streak int) {
 		logger.Warn("[Workflow Runtime] Pausing: daemon offline for consecutive steps",
 			"workflowID", workflowID,
@@ -1200,7 +1202,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 		// Update DB status to paused so the UI reflects it and SendMessage
 		// routes through the resume path instead of starting a new workflow.
-		notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, nil)
+		// PausedForMachine marks the chat so the api-server resumes it when
+		// the machine connects (internal/queueddelivery) — and only this pause:
+		// a user's own pause must stay paused.
+		notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, &workflowStatusOpts{PausedForMachine: true})
 
 		// Signal-based pause: arm the pause and block until resume.
 		// Mirrors the retry-exhaustion self-pause. We deliberately do NOT
@@ -4585,6 +4590,9 @@ type workflowStatusOpts struct {
 	// LaunchRun marks a terminal notification of the chat's launch run
 	// (IsLaunchRun), as opposed to a run a person's reply started.
 	LaunchRun bool
+	// PausedForMachine marks the "paused" notification of the daemon-offline
+	// breaker, so the chat is resumed when its machine connects.
+	PausedForMachine bool
 }
 
 // maxStatusErrorBytes bounds the error text a status notification carries; it
@@ -4674,6 +4682,9 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		}
 		if opts.LaunchRun {
 			input["launch_run"] = true
+		}
+		if opts.PausedForMachine {
+			input["paused_for_machine"] = true
 		}
 	}
 

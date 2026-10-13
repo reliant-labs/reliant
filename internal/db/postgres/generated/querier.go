@@ -614,6 +614,12 @@ type Querier interface {
 	ListBackgroundedProcessToolCalls(ctx context.Context) ([]ListBackgroundedProcessToolCallsRow, error)
 	ListBlockersForTask(ctx context.Context, toTaskID string) ([]TaskDependency, error)
 	ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWithActivity, error)
+	// Chats whose root run the daemon-offline breaker paused and nothing has
+	// resumed, oldest first. The root run must still read paused: a marker left
+	// behind by a run that ended since is not a chat to resume. An empty user_id
+	// lists every user's (the sweep); otherwise one user's (a machine of theirs
+	// just connected). Archived chats are left alone.
+	ListChatsPausedForMachine(ctx context.Context, arg ListChatsPausedForMachineParams) ([]ListChatsPausedForMachineRow, error)
 	// Chats holding a message queued for their machine, oldest first. An empty
 	// user_id lists every user's (the delivery sweep); otherwise one user's (a
 	// machine of theirs just connected). Archived chats are left alone.
@@ -1250,6 +1256,11 @@ type Querier interface {
 	// actually changed, so callers emit chat_activity_changed on transitions and
 	// not on every tool call.
 	SetChatDaemonBlocked(ctx context.Context, arg SetChatDaemonBlockedParams) (int64, error)
+	// Sets or clears the paused-for-machine marker: the chat's run was paused by
+	// the daemon-offline breaker (not by the user). Returns 1 only when the value
+	// actually changed, so clearing is a claim: of two resumers that race exactly
+	// one sees the row change.
+	SetChatPausedForMachine(ctx context.Context, arg SetChatPausedForMachineParams) (int64, error)
 	// Sets or clears the queued-for-machine marker. Returns 1 only when the value
 	// actually changed: clearing is how a deliverer CLAIMS the queued message, so
 	// of two that race exactly one sees the row change.

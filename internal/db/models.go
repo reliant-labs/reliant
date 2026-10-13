@@ -50,9 +50,10 @@ type Chat = core.Chat
 // ArchivedChatInfo represents an archived chat with worktree information.
 type ArchivedChatInfo = core.ArchivedChatInfo
 
-// QueuedForMachineChat and WaitingForMachineRun: see core.
+// QueuedForMachineChat, PausedForMachineChat and WaitingForMachineRun: see core.
 type (
 	QueuedForMachineChat = core.QueuedForMachineChat
+	PausedForMachineChat = core.PausedForMachineChat
 	WaitingForMachineRun = core.WaitingForMachineRun
 )
 

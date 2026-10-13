@@ -17,7 +17,18 @@ import (
 type fakeStore struct {
 	queued  []db.QueuedForMachineChat
 	waiting []db.WaitingForMachineRun
+	paused  []db.PausedForMachineChat
 	users   []string
+}
+
+func (s *fakeStore) ListChatsPausedForMachine(_ context.Context, userID string, _ int) ([]db.PausedForMachineChat, error) {
+	var out []db.PausedForMachineChat
+	for _, c := range s.paused {
+		if userID == "" || c.UserID == userID {
+			out = append(out, c)
+		}
+	}
+	return out, nil
 }
 
 func (s *fakeStore) ListChatsQueuedForMachine(_ context.Context, userID string, _ int) ([]db.QueuedForMachineChat, error) {
@@ -47,7 +58,23 @@ func (m fakeMachines) IsDaemonOnline(_ context.Context, _ string, selector *tool
 	return m.up[id], nil
 }
 
-type fakeDeliverer struct{ continued []string }
+type fakeDeliverer struct {
+	continued []string
+	resumed   []string
+	// resumable is the chats whose paused-for-machine mark is still set; a
+	// resume claims (removes) it, as the real one does, so a second resume of
+	// the same chat reports false.
+	resumable map[string]bool
+}
+
+func (d *fakeDeliverer) ResumePausedForMachine(_ context.Context, chatID string) (bool, error) {
+	d.resumed = append(d.resumed, chatID)
+	if !d.resumable[chatID] {
+		return false, nil
+	}
+	delete(d.resumable, chatID)
+	return true, nil
+}
 
 func (d *fakeDeliverer) ContinueQueued(_ context.Context, chatID string) (bool, error) {
 	d.continued = append(d.continued, chatID)
@@ -112,4 +139,81 @@ func TestSweep_DeliversQueuedMessagesWhoseMachineIsBack(t *testing.T) {
 	assert.Equal(t, 1, delivered)
 	assert.Equal(t, []string{"c2"}, deliverer.continued)
 	assert.Equal(t, []string{""}, store.users, "the sweep reads every user's")
+}
+
+func pausedFor(chatID, userID string, daemonID *string) db.PausedForMachineChat {
+	return db.PausedForMachineChat{ChatID: chatID, UserID: userID, WorkflowID: "wf-" + chatID, ActiveDaemonID: daemonID, PausedAt: time.Now()}
+}
+
+// A connect resumes the chats the offline breaker paused whose machine is back.
+// Only the breaker's pauses are listed, so a chat the user paused is never
+// offered to the deliverer — and one whose machine is still down stays paused.
+func TestMachineConnected_ResumesChatsTheBreakerPaused(t *testing.T) {
+	store := &fakeStore{paused: []db.PausedForMachineChat{
+		pausedFor("c-default", "u", nil),
+		pausedFor("c-pinned-up", "u", ptr("d-up")),
+		pausedFor("c-pinned-down", "u", ptr("d-down")),
+		pausedFor("c-other-user", "someone-else", nil),
+	}}
+	deliverer := &fakeDeliverer{resumable: map[string]bool{"c-default": true, "c-pinned-up": true, "c-pinned-down": true, "c-other-user": true}}
+	svc := New(store, fakeMachines{up: map[string]bool{"": true, "d-up": true}}, deliverer, &fakeSignaler{})
+
+	n := svc.MachineConnected(context.Background(), "u")
+
+	assert.Equal(t, 2, n)
+	assert.Equal(t, []string{"c-default", "c-pinned-up"}, deliverer.resumed,
+		"only this user's chats whose own machine is connected")
+	assert.Empty(t, deliverer.continued)
+}
+
+// A chat the user paused carries no mark, so the store never lists it.
+func TestMachineConnected_DoesNotResumeAUserPausedChat(t *testing.T) {
+	deliverer := &fakeDeliverer{}
+	svc := New(&fakeStore{}, fakeMachines{up: map[string]bool{"": true}}, deliverer, &fakeSignaler{})
+
+	assert.Zero(t, svc.MachineConnected(context.Background(), "u"))
+	assert.Empty(t, deliverer.resumed)
+}
+
+// A connect for a machine other than the chat's pinned one does nothing.
+func TestMachineConnected_OtherMachineConnectingResumesNothing(t *testing.T) {
+	store := &fakeStore{paused: []db.PausedForMachineChat{pausedFor("c1", "u", ptr("d-down"))}}
+	deliverer := &fakeDeliverer{resumable: map[string]bool{"c1": true}}
+	svc := New(store, fakeMachines{up: map[string]bool{"d-other": true}}, deliverer, &fakeSignaler{})
+
+	assert.Zero(t, svc.MachineConnected(context.Background(), "u"))
+	assert.Empty(t, deliverer.resumed)
+}
+
+// A connect handled twice (redelivered, or raced by the sweep) resumes once:
+// the second finds the chat already claimed.
+func TestMachineConnected_DoubleConnectResumesOnce(t *testing.T) {
+	store := &fakeStore{paused: []db.PausedForMachineChat{pausedFor("c1", "u", nil)}}
+	deliverer := &fakeDeliverer{resumable: map[string]bool{"c1": true}}
+	svc := New(store, fakeMachines{up: map[string]bool{"": true}}, deliverer, &fakeSignaler{})
+
+	first := svc.MachineConnected(context.Background(), "u")
+	second := svc.MachineConnected(context.Background(), "u")
+	swept, err := svc.Sweep(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, first)
+	assert.Zero(t, second)
+	assert.Zero(t, swept)
+}
+
+// The sweep is the backstop for a missed connect.
+func TestSweep_ResumesBreakerPausedChatsWhoseMachineIsBack(t *testing.T) {
+	store := &fakeStore{paused: []db.PausedForMachineChat{
+		pausedFor("c1", "u1", ptr("d1")),
+		pausedFor("c2", "u2", ptr("d2")),
+	}}
+	deliverer := &fakeDeliverer{resumable: map[string]bool{"c1": true, "c2": true}}
+	svc := New(store, fakeMachines{up: map[string]bool{"d2": true}}, deliverer, &fakeSignaler{})
+
+	n, err := svc.Sweep(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+	assert.Equal(t, []string{"c2"}, deliverer.resumed)
 }

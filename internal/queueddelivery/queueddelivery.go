@@ -10,6 +10,13 @@
 //   - Wake it. The waiting run sleeps on a timer between checks; when one of
 //     the user's machines connects, MachineConnected signals every run of
 //     theirs that is parked waiting (machinewait), so it checks at once.
+//   - Resume it. A run that was connected but lost its machine mid-turn is
+//     paused by the daemon-offline circuit breaker after two minutes of failed
+//     tool calls, and stays parked until something resumes it. The breaker
+//     marks its pause (chats.paused_for_machine_at); when the machine
+//     connects, MachineConnected resumes every chat so marked, exactly as the
+//     user's own message would. A chat the user paused carries no mark and is
+//     never touched.
 //   - Outlive it. A run whose machine failed to start, was removed, or was
 //     still down after hours ends, and its preflight marks the chat as holding
 //     a message queued for the machine (chats.queued_for_machine_at). When the
@@ -45,6 +52,7 @@ import (
 type Store interface {
 	ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]db.QueuedForMachineChat, error)
 	ListChatsWaitingForMachine(ctx context.Context, userID string) ([]db.WaitingForMachineRun, error)
+	ListChatsPausedForMachine(ctx context.Context, userID string, limit int) ([]db.PausedForMachineChat, error)
 }
 
 // Machines answers whether the machine a chat runs on is connected.
@@ -56,6 +64,9 @@ type Machines interface {
 // reports whether it started one (ChatService.ContinueQueued).
 type Deliverer interface {
 	ContinueQueued(ctx context.Context, chatID string) (bool, error)
+	// ResumePausedForMachine resumes a chat the daemon-offline breaker paused,
+	// and reports whether it did (ChatService.ResumePausedForMachine).
+	ResumePausedForMachine(ctx context.Context, chatID string) (bool, error)
 }
 
 // Signaler signals a workflow (the Temporal client).
@@ -92,28 +103,46 @@ const (
 )
 
 // MachineConnected handles one of userID's machines connecting: it wakes every
-// run of theirs parked waiting for a machine, and starts the run for every
-// message of theirs queued for a machine that is now connected. It returns the
-// number of messages it started delivering.
+// run of theirs parked waiting for a machine, resumes every chat of theirs the
+// offline breaker paused, and starts the run for every message of theirs queued
+// for a machine that is now connected. It returns the number of chats it
+// resumed or started delivering to.
 func (s *Service) MachineConnected(ctx context.Context, userID string) int {
 	s.wakeWaitingRuns(ctx, userID)
+	n := 0
+	paused, err := s.store.ListChatsPausedForMachine(ctx, userID, perUserLimit)
+	if err != nil {
+		logging.Warn("[QueuedDelivery] Could not list the user's chats paused for their machine", "userID", userID, "error", err)
+	} else {
+		n += s.resumePaused(ctx, paused)
+	}
 	queued, err := s.store.ListChatsQueuedForMachine(ctx, userID, perUserLimit)
 	if err != nil {
 		logging.Warn("[QueuedDelivery] Could not list the user's queued messages", "userID", userID, "error", err)
-		return 0
+		return n
 	}
-	return s.deliver(ctx, queued)
+	return n + s.deliver(ctx, queued)
 }
 
-// Sweep starts the run for every message queued for a machine that is now
-// connected — the backstop for a connect whose event was missed (a replica
-// restarting, the stream unavailable). It returns how many it started.
+// Sweep resumes every chat the offline breaker paused, and starts the run for
+// every message queued for a machine, whose machine is now connected — the
+// backstop for a connect whose event was missed (a replica restarting, the
+// stream unavailable). It returns how many it resumed or started.
 func (s *Service) Sweep(ctx context.Context) (int, error) {
+	n := 0
+	paused, pausedErr := s.store.ListChatsPausedForMachine(ctx, "", sweepBatch)
+	if pausedErr == nil {
+		n += s.resumePaused(ctx, paused)
+	}
 	queued, err := s.store.ListChatsQueuedForMachine(ctx, "", sweepBatch)
 	if err != nil {
-		return 0, fmt.Errorf("list chats queued for their machine: %w", err)
+		return n, fmt.Errorf("list chats queued for their machine: %w", err)
 	}
-	return s.deliver(ctx, queued), nil
+	n += s.deliver(ctx, queued)
+	if pausedErr != nil {
+		return n, fmt.Errorf("list chats paused for their machine: %w", pausedErr)
+	}
+	return n, nil
 }
 
 // ContinueQueued starts the run that delivers a chat's undelivered message;
@@ -139,6 +168,34 @@ func (s *Service) wakeWaitingRuns(ctx context.Context, userID string) {
 				"chatID", run.ChatID, "workflowID", run.WorkflowID, "error", err)
 		}
 	}
+}
+
+// resumePaused resumes each chat the offline breaker paused whose machine is
+// connected. One whose machine is still down stays paused for its own connect.
+func (s *Service) resumePaused(ctx context.Context, paused []db.PausedForMachineChat) int {
+	resumed := 0
+	for _, chat := range paused {
+		var selector *toolexec.DaemonSelector
+		if chat.ActiveDaemonID != nil && *chat.ActiveDaemonID != "" {
+			selector = &toolexec.DaemonSelector{ID: *chat.ActiveDaemonID}
+		}
+		online, err := s.machines.IsDaemonOnline(ctx, chat.UserID, selector)
+		if err != nil || !online {
+			continue
+		}
+		ok, err := s.deliverer.ResumePausedForMachine(ctx, chat.ChatID)
+		if err != nil {
+			logging.Warn("[QueuedDelivery] Could not resume a chat paused for its machine; it stays paused",
+				"chatID", chat.ChatID, "error", err)
+			continue
+		}
+		if ok {
+			resumed++
+			logging.Info("[QueuedDelivery] The chat's machine is back; resumed the run the offline breaker paused",
+				"chatID", chat.ChatID, "userID", chat.UserID, "pausedFor", time.Since(chat.PausedAt).Round(time.Second))
+		}
+	}
+	return resumed
 }
 
 // deliver starts the run for each queued chat whose machine is connected.

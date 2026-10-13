@@ -141,6 +141,95 @@ func (s *ChatService) ContinueQueued(ctx context.Context, chatID string) (bool, 
 	return true, nil
 }
 
+// machineBackNote is what the agent is told when its chat is resumed because
+// its machine came back. It sits in the thread, so the resumed run reads it on
+// its next turn: the tool results just above it are the failures of the outage.
+const machineBackNote = "Your machine has reconnected. Tool calls that failed because it was unreachable can be retried; continue where you left off."
+
+// ResumePausedForMachine resumes a chat the daemon-offline circuit breaker
+// paused (chats.paused_for_machine_at), now that its machine is back, and
+// reports whether it did. It is SendMessage's resume of a paused run without a
+// message: PauseService.ResumeWorkflow signals the parked run in place, or
+// reset-replays a dead-but-replayable one, so the agent continues where it
+// stopped. Callers (internal/queueddelivery) have already checked the machine
+// is connected.
+//
+// It resumes only what the breaker paused. The mark is the whole difference
+// between that and a chat the user paused, which must stay paused.
+//
+// It is idempotent and safe across replicas. It holds the chat's run-control
+// lock, as SendMessage does, and clearing the mark is the claim — of two
+// callers exactly one sees it change — so a connect handled twice, or raced by
+// the sweep or by the user's own send, resumes once. A resume that fails puts
+// the mark back so the next connect or sweep tries again.
+func (s *ChatService) ResumePausedForMachine(ctx context.Context, chatID string) (bool, error) {
+	release := s.runs.LockRunControl(ctx, chatID)
+	defer release()
+
+	chat, err := s.database.GetChat(ctx, chatID)
+	if err != nil || chat == nil {
+		return false, fmt.Errorf("load chat %s: %w", chatID, err)
+	}
+	workflowID := chat.MainThreadID()
+	if workflowID == "" {
+		return false, nil
+	}
+	root, err := s.database.GetWorkflow(ctx, workflowID)
+	if err != nil || root == nil {
+		return false, fmt.Errorf("load root run %s: %w", workflowID, err)
+	}
+	if chat.State == db.ChatStateArchived || root.Status != db.Paused() {
+		// Archived, or the run is no longer paused: a send or the user already
+		// resumed or ended it. Nothing is owed; drop the mark.
+		if _, err := s.database.SetChatPausedForMachine(ctx, chatID, false); err != nil {
+			logging.Warn("[ResumePausedForMachine] Could not clear the paused-for-machine mark", "chatID", chatID, "error", err)
+		}
+		return false, nil
+	}
+
+	claimed, err := s.database.SetChatPausedForMachine(ctx, chatID, false)
+	if err != nil {
+		return false, err
+	}
+	if !claimed {
+		return false, nil
+	}
+	restore := func(why error) {
+		logging.Warn("[ResumePausedForMachine] Could not resume the chat; it stays paused for its machine",
+			"chatID", chatID, "workflowID", workflowID, "error", why)
+		if _, err := s.database.SetChatPausedForMachine(ctx, chatID, true); err != nil {
+			logging.Error("[ResumePausedForMachine] Could not put the paused-for-machine mark back; the user's next message resumes the chat",
+				"chatID", chatID, "error", err)
+		}
+	}
+
+	// Saved before the resume so it is in the thread when the woken run takes
+	// its next turn. Best-effort: without it the agent's next tool call simply
+	// succeeds.
+	hidden := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
+	if _, err := s.database.SaveMessageToThread(ctx, chatID, root.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM),
+		machineBackNote, &workflowID, nil, &hidden); err != nil {
+		logging.Warn("[ResumePausedForMachine] Could not tell the agent its machine is back", "chatID", chatID, "error", err)
+	}
+
+	outcome, err := s.runs.Resume(ctx, chatID, nil)
+	if err != nil {
+		restore(err)
+		return false, err
+	}
+	if outcome.Kind != runs.OutcomeResumed {
+		// The run is gone or wedged; resuming it in place is not possible. The
+		// user's next message recovers it (SendMessage restarts at position),
+		// and retrying here would only fail the same way.
+		logging.Warn("[ResumePausedForMachine] The paused run cannot be resumed in place; the user's next message recovers it",
+			"chatID", chatID, "workflowID", workflowID, "outcome", outcome.Kind)
+		return false, nil
+	}
+	logging.Info("[ResumePausedForMachine] The chat's machine is back; resumed the run the offline breaker paused",
+		"chatID", chatID, "workflowID", workflowID, "runID", outcome.RunID)
+	return true, nil
+}
+
 // awaitsDelivery reports whether a thread holds input that no turn has read:
 // a queued mailbox row, or a user message that is its latest turn.
 func (s *ChatService) awaitsDelivery(ctx context.Context, threadID string) (bool, error) {

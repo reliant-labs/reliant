@@ -1789,6 +1789,18 @@ func (r *Repo) ListChatsQueuedForMachine(ctx context.Context, userID string, lim
 	return r.chats.ListChatsQueuedForMachine(ctx, userID, limit)
 }
 
+// SetChatPausedForMachine records (or clears) that the daemon-offline breaker
+// paused the chat's run, and reports whether the stored value changed.
+func (r *Repo) SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error) {
+	return r.chats.SetChatPausedForMachine(ctx, chatID, paused)
+}
+
+// ListChatsPausedForMachine lists chats the breaker paused; see the Repository
+// interface.
+func (r *Repo) ListChatsPausedForMachine(ctx context.Context, userID string, limit int) ([]PausedForMachineChat, error) {
+	return r.chats.ListChatsPausedForMachine(ctx, userID, limit)
+}
+
 // ListChatsWaitingForMachine lists a user's chats whose live root run is
 // parked waiting for a machine.
 func (r *Repo) ListChatsWaitingForMachine(ctx context.Context, userID string) ([]WaitingForMachineRun, error) {
