@@ -16,6 +16,8 @@
 // The incidents behind each rule are recorded beside the tests that enforce
 // them in internal/db: TestNewMigrationsCarryARealTimestamp,
 // TestMigrationVersionsAreUnique and TestMigrationsHaveNoGooseDownSection.
+//
+//forge:exclude-contract: pure rules over a caller-supplied fs.FS (Check returns a Report); no network, state or clock, and nothing to substitute
 package migrationcheck
 
 import (
