@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/runstateproto"
 )
 
 // activeWorkflowNameForResume returns the workflow name to (re)start for an
@@ -176,8 +177,8 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 	proto.NoMachine = c.NoMachine
 	// The root run's lifecycle: the web decides paused/pending from these, and
 	// a pending state is what tells it to StartChat rather than SendMessage.
-	proto.WorkflowState = workflowStateToProto(c.RootStatus.State)
-	proto.WorkflowStopReason = workflowStopReasonToProto(c.RootStatus.StopReason)
+	proto.WorkflowState = runstateproto.State(c.RootStatus.State)
+	proto.WorkflowStopReason = runstateproto.StopReason(c.RootStatus.StopReason)
 	if c.LaunchKind != "" {
 		proto.LaunchKind = &c.LaunchKind
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/runstateproto"
 )
 
 // RunService is the engine's execution API.
@@ -83,8 +84,8 @@ func runToProto(run *core.Workflow) *reliantv1.Run {
 		WorkflowName: run.WorkflowName,
 		Thread:       run.Thread,
 		SessionId:    run.ChatID,
-		State:        workflowStateToProto(run.Status.State),
-		StopReason:   workflowStopReasonToProto(run.Status.StopReason),
+		State:        runstateproto.State(run.Status.State),
+		StopReason:   runstateproto.StopReason(run.Status.StopReason),
 		CreatedAtMs:  run.CreatedAt.UnixMilli(),
 	}
 	if run.ParentID != nil {
@@ -103,34 +104,6 @@ func runToProto(run *core.Workflow) *reliantv1.Run {
 		out.CompletedAtMs = run.CompletedAt.UnixMilli()
 	}
 	return out
-}
-
-func workflowStateToProto(state core.WorkflowState) reliantv1.WorkflowState {
-	switch state {
-	case core.WorkflowStatePending:
-		return reliantv1.WorkflowState_WORKFLOW_STATE_PENDING
-	case core.WorkflowStateActive:
-		return reliantv1.WorkflowState_WORKFLOW_STATE_ACTIVE
-	case core.WorkflowStateStopped:
-		return reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED
-	default:
-		return reliantv1.WorkflowState_WORKFLOW_STATE_UNSPECIFIED
-	}
-}
-
-func workflowStopReasonToProto(reason core.WorkflowStopReason) reliantv1.WorkflowStopReason {
-	switch reason {
-	case core.StopReasonCompleted:
-		return reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_COMPLETED
-	case core.StopReasonFailed:
-		return reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_FAILED
-	case core.StopReasonPaused:
-		return reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_PAUSED
-	case core.StopReasonCancelled:
-		return reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_CANCELLED
-	default:
-		return reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_UNSPECIFIED
-	}
 }
 
 // StartRun starts a workflow execution.
@@ -488,8 +461,8 @@ func runItemToProto(item *db.RunListItem) *reliantv1.Run {
 		WorkflowName: item.WorkflowName,
 		Thread:       item.RunID,
 		SessionId:    item.ChatID,
-		State:        workflowStateToProto(item.RootStatus.State),
-		StopReason:   workflowStopReasonToProto(item.RootStatus.StopReason),
+		State:        runstateproto.State(item.RootStatus.State),
+		StopReason:   runstateproto.StopReason(item.RootStatus.StopReason),
 		Outcome:      item.Outcome,
 		CreatedAtMs:  item.CreatedAt.UnixMilli(),
 		Title:        item.Title,
@@ -545,7 +518,7 @@ func filterRunsToProto(runs []*core.Workflow, req *reliantv1.ListRunsRequest) *r
 			continue
 		}
 		if req.State != reliantv1.WorkflowState_WORKFLOW_STATE_UNSPECIFIED &&
-			workflowStateToProto(run.Status.State) != req.State {
+			runstateproto.State(run.Status.State) != req.State {
 			continue
 		}
 		filtered = append(filtered, run)
