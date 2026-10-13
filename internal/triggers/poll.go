@@ -106,15 +106,6 @@ type Pollers interface {
 	Poller(integration string) (Poller, bool)
 }
 
-// PollRepo is what polling reads and writes. *db.Repo satisfies it.
-type PollRepo interface {
-	EventRepo
-	GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error)
-	UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error
-	// GetConnection returns the user's connection; a foreign id is an error.
-	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
-}
-
 // PollInput is the poll workflow's and activity's input.
 type PollInput struct {
 	TriggerID string `json:"trigger_id"`

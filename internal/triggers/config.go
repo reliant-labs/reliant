@@ -8,6 +8,8 @@
 // is authoritative and nothing has to be repaired by hand.
 //
 // See research/TRIGGERS.md, "Schedules on Temporal".
+//
+//forge:not-a-component: its components (Syncer, Firer, EventFirer, Intake, TriggerPoller, Reconciler, Redriver, Backend) are built by reliant's hand-wired server and worker (internal/serverapi, internal/serverworker, internal/workersetup), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
 package triggers
 
 import (

@@ -16,6 +16,15 @@ import (
 // narrow: *db.Repo, *launch.Launcher and the Temporal client satisfy them
 // structurally without knowing this package exists. That is also what lets the
 // fire path be tested with in-memory fakes rather than a database.
+//
+// They are the collaborators the package's components (Syncer, Firer,
+// EventFirer, Intake, TriggerPoller, Redriver, Backend) share, so this file is
+// the package's forge contract: forge generate writes a mock of each into
+// mock_gen.go. There is no single Service to bind: each component has its own
+// constructor. Interfaces that belong to one concern stay beside it: the poll
+// strategy's Poller, Pollers and PollCredentials, the Reconciler's
+// ProjectionStore and ProjectionSyncer, and WorkflowResolver beside the two
+// resolvers that implement it.
 
 // Repo is the slice of the repository this package reads and writes. The
 // signatures match db.Repository exactly.
@@ -64,4 +73,13 @@ type ScheduleClient interface {
 // by client.Client.
 type WorkflowStarter interface {
 	ExecuteWorkflow(ctx context.Context, options client.StartWorkflowOptions, workflow any, args ...any) (client.WorkflowRun, error)
+}
+
+// PollRepo is what polling reads and writes. *db.Repo satisfies it.
+type PollRepo interface {
+	EventRepo
+	GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error)
+	UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error
+	// GetConnection returns the user's connection; a foreign id is an error.
+	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
 }
