@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package background
 
 import (
 	"context"
@@ -12,11 +12,9 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/processproto"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // bgListTimeoutMs bounds the daemon round trip for a process LIST.
@@ -28,19 +26,11 @@ import (
 // and the caller is a UI list that will simply ask again.
 const bgListTimeoutMs int32 = 5_000
 
-// BackgroundProxyService implements BackgroundServiceHandler by forwarding
-// requests to the user's daemon via DaemonCommand (request/response).
-type BackgroundProxyService struct {
-	reliantv1connect.UnimplementedBackgroundServiceHandler
-	router toolexec.DaemonRouter
-}
+// Every rpc forwards its request to the caller's daemon through Deps.Router:
+// a DaemonCommand (request/response), or for StreamProcessOutput the
+// daemon's output subscription.
 
-// NewBackgroundProxyService creates a new BackgroundProxyService.
-func NewBackgroundProxyService(router toolexec.DaemonRouter) *BackgroundProxyService {
-	return &BackgroundProxyService{router: router}
-}
-
-func (s *BackgroundProxyService) getUserID(ctx context.Context) (string, error) {
+func (s *Service) getUserID(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return "", fmt.Errorf("user ID not found in context")
@@ -48,13 +38,13 @@ func (s *BackgroundProxyService) getUserID(ctx context.Context) (string, error) 
 	return userID, nil
 }
 
-func (s *BackgroundProxyService) sendCommand(ctx context.Context, userID, commandType string, req any, resp any, timeoutMs int32) error {
+func (s *Service) sendCommand(ctx context.Context, userID, commandType string, req any, resp any, timeoutMs int32) error {
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
 	}
 
-	respBytes, err := s.router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 	if err != nil {
 		// A machine that is starting, asleep or absent is not a server
 		// fault: Unavailable while it is on its way, FailedPrecondition when
@@ -73,7 +63,7 @@ func (s *BackgroundProxyService) sendCommand(ctx context.Context, userID, comman
 }
 
 // ListProcesses returns all background processes.
-func (s *BackgroundProxyService) ListProcesses(
+func (s *Service) ListProcesses(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListBackgroundProcessesRequest],
 ) (*connect.Response[reliantv1.ListBackgroundProcessesResponse], error) {
@@ -121,7 +111,7 @@ type daemonProcessInfo struct {
 }
 
 // GetProcessOutput returns the stdout/stderr output of a process.
-func (s *BackgroundProxyService) GetProcessOutput(
+func (s *Service) GetProcessOutput(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetProcessOutputRequest],
 ) (*connect.Response[reliantv1.GetProcessOutputResponse], error) {
@@ -154,7 +144,7 @@ func (s *BackgroundProxyService) GetProcessOutput(
 }
 
 // KillProcess terminates a background process.
-func (s *BackgroundProxyService) KillProcess(
+func (s *Service) KillProcess(
 	ctx context.Context,
 	req *connect.Request[reliantv1.KillProcessRequest],
 ) (*connect.Response[reliantv1.KillProcessResponse], error) {
@@ -183,7 +173,7 @@ func (s *BackgroundProxyService) KillProcess(
 
 // StreamProcessOutput streams real-time process output by subscribing to the
 // daemon's output channel via the router.
-func (s *BackgroundProxyService) StreamProcessOutput(
+func (s *Service) StreamProcessOutput(
 	ctx context.Context,
 	req *connect.Request[reliantv1.StreamProcessOutputRequest],
 	stream *connect.ServerStream[reliantv1.ProcessOutputEvent],
@@ -197,7 +187,7 @@ func (s *BackgroundProxyService) StreamProcessOutput(
 		return connect.NewError(connect.CodeInvalidArgument, errors.New("process_id is required"))
 	}
 
-	outputCh, unsub, err := s.router.SubscribeProcessOutput(ctx, userID, req.Msg.ProcessId, req.Msg.NewOnly)
+	outputCh, unsub, err := s.deps.Router.SubscribeProcessOutput(ctx, userID, req.Msg.ProcessId, req.Msg.NewOnly)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("subscribe process output: %w", err))
 	}

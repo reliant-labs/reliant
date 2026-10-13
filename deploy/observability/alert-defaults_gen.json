@@ -12,6 +12,10 @@
         "rpc_service": "reliant.v1.AttachmentService"
       },
       {
+        "name": "background",
+        "rpc_service": "reliant.v1.BackgroundService"
+      },
+      {
         "name": "connector",
         "rpc_service": "reliant.v1.ConnectorService"
       },

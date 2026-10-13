@@ -38,6 +38,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/attachment"
+	"github.com/reliant-labs/reliant/internal/handlers/background"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
@@ -502,7 +503,14 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 		filesystemPath, filesystemHandler = reliantv1connect.NewFileSystemServiceHandler(fileSystemService, machineWakeOpts...)
 
-		bgProxy := services.NewBackgroundProxyService(router)
+		bgProxy, err := background.New(background.Deps{
+			Logger: handlerLogger,
+			Config: handlerConfig,
+			Router: router,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("background service: %w", err)
+		}
 		backgroundPath, backgroundHandler = reliantv1connect.NewBackgroundServiceHandler(bgProxy, opts...)
 
 		termProxy := services.NewTerminalProxyService(router)

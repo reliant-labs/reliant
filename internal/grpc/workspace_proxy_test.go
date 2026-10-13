@@ -4,6 +4,7 @@ package grpc
 import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/background"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
 )
@@ -17,7 +18,7 @@ import (
 // empty), which is exactly the PackageCommands bug.
 var (
 	_ reliantv1connect.FileSystemServiceHandler      = (*file_system.Service)(nil)
-	_ reliantv1connect.BackgroundServiceHandler      = (*services.BackgroundProxyService)(nil)
+	_ reliantv1connect.BackgroundServiceHandler      = (*background.Service)(nil)
 	_ reliantv1connect.TerminalServiceHandler        = (*services.TerminalProxyService)(nil)
 	_ reliantv1connect.PackageCommandsServiceHandler = (*package_commands.Service)(nil)
 )

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package background
 
 import (
 	"context"
@@ -46,9 +46,9 @@ func TestBackgroundProxy_ListProcesses_UsesAShortDaemonTimeout(t *testing.T) {
 	require.NoError(t, err)
 
 	router := &bgProxyRouter{reply: reply}
-	svc := NewBackgroundProxyService(router)
+	svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: router}))
 
-	_, err = svc.ListProcesses(authedCtx(), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
+	_, err = svc.ListProcesses(AuthedContext(t), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
 	require.NoError(t, err)
 
 	assert.Equal(t, "exec.bg_list", router.lastCommandType)
@@ -63,9 +63,9 @@ func TestBackgroundProxy_ListProcesses_UsesAShortDaemonTimeout(t *testing.T) {
 func TestBackgroundProxy_DaemonTimeoutIsDeadlineExceeded(t *testing.T) {
 	router := &bgProxyRouter{err: fmt.Errorf("daemon command exec.bg_list (subject s) via NATS failed: %w: %w",
 		toolexec.ErrDaemonTimeout, context.DeadlineExceeded)}
-	svc := NewBackgroundProxyService(router)
+	svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: router}))
 
-	_, err := svc.ListProcesses(authedCtx(), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
+	_, err := svc.ListProcesses(AuthedContext(t), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeDeadlineExceeded, connect.CodeOf(err), "error: %v", err)
 }
@@ -78,9 +78,9 @@ func TestBackgroundProxy_KillProcess_KeepsTheLongerTimeout(t *testing.T) {
 	require.NoError(t, err)
 
 	router := &bgProxyRouter{reply: reply}
-	svc := NewBackgroundProxyService(router)
+	svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: router}))
 
-	_, err = svc.KillProcess(authedCtx(), connect.NewRequest(&reliantv1.KillProcessRequest{
+	_, err = svc.KillProcess(AuthedContext(t), connect.NewRequest(&reliantv1.KillProcessRequest{
 		ProcessId: "proc-1",
 	}))
 	require.NoError(t, err)

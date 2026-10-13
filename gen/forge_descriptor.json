@@ -1394,8 +1394,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "OutputStreamType"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "ConnectionService",
@@ -33656,5 +33655,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "9c6546e744fb78183e1c83d3c6a90387904eedf775b2f8379cde1be48200fd06"
+  "source_hash": "7b6eae1c5340576b09d96ffb69af81b34a6667227280fccead233ac672e46eb2"
 }
