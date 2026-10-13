@@ -591,8 +591,10 @@ func (x *RunPackageCommandResponse) GetStartTime() string {
 }
 
 type ListPackageProcessesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WorktreeId    string                 `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3" json:"worktree_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// WorktreeId keeps only that worktree's processes. Unset (or empty) lists
+	// every process.
+	WorktreeId    *string `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -628,8 +630,8 @@ func (*ListPackageProcessesRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListPackageProcessesRequest) GetWorktreeId() string {
-	if x != nil {
-		return x.WorktreeId
+	if x != nil && x.WorktreeId != nil {
+		return *x.WorktreeId
 	}
 	return ""
 }
@@ -1273,10 +1275,11 @@ const file_reliant_v1_package_commands_proto_rawDesc = "" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\tR\acommand\x12\x1d\n" +
 	"\n" +
-	"start_time\x18\x03 \x01(\tR\tstartTime\">\n" +
-	"\x1bListPackageProcessesRequest\x12\x1f\n" +
-	"\vworktree_id\x18\x01 \x01(\tR\n" +
-	"worktreeId\"X\n" +
+	"start_time\x18\x03 \x01(\tR\tstartTime\"S\n" +
+	"\x1bListPackageProcessesRequest\x12$\n" +
+	"\vworktree_id\x18\x01 \x01(\tH\x00R\n" +
+	"worktreeId\x88\x01\x01B\x0e\n" +
+	"\f_worktree_id\"X\n" +
 	"\x1cListPackageProcessesResponse\x128\n" +
 	"\tprocesses\x18\x01 \x03(\v2\x1a.reliant.v1.PackageProcessR\tprocesses\"9\n" +
 	"\x18GetPackageProcessRequest\x12\x1d\n" +
@@ -1416,6 +1419,7 @@ func file_reliant_v1_package_commands_proto_init() {
 	file_reliant_v1_package_commands_proto_msgTypes[1].OneofWrappers = []any{}
 	file_reliant_v1_package_commands_proto_msgTypes[2].OneofWrappers = []any{}
 	file_reliant_v1_package_commands_proto_msgTypes[5].OneofWrappers = []any{}
+	file_reliant_v1_package_commands_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

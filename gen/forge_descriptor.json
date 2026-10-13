@@ -17313,7 +17313,7 @@
           {
             "Name": "worktree_id",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           }
         ],
         "ListPackageProcessesResponse": [
@@ -17501,7 +17501,8 @@
         "reliant.v1.ListPackageProcessesRequest": [
           {
             "name": "worktree_id",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ListPackageProcessesResponse": [
@@ -33576,5 +33577,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "36e3d5eadc7931f96dfe8991cc4bb7e9db71b8f0f69550faf9124f514714a382"
+  "source_hash": "f12444429522c36ebad2e65c8bd1cab4e8e4ccc04713f6b2419f5369ef4e2514"
 }

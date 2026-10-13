@@ -185,7 +185,7 @@ export const packageCommandsGrpc = {
   async listProcesses(worktreeId?: string): Promise<PackageProcess[]> {
     const client = grpcClient.packageCommands();
     const request = create(ListPackageProcessesRequestSchema, {
-      worktreeId: worktreeId || "",
+      worktreeId: worktreeId || undefined,
     });
     const response = await client.listProcesses(request);
     return response.processes.map(protoProcessToFrontend);

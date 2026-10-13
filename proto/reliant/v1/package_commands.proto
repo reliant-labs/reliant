@@ -121,7 +121,9 @@ message RunPackageCommandResponse {
 // ============================================
 
 message ListPackageProcessesRequest {
-  string worktree_id = 1;
+  // WorktreeId keeps only that worktree's processes. Unset (or empty) lists
+  // every process.
+  optional string worktree_id = 1;
 }
 
 message ListPackageProcessesResponse {

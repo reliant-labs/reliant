@@ -220,7 +220,7 @@ func (s *PackageCommandsService) ListProcesses(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListPackageProcessesRequest],
 ) (*connect.Response[reliantv1.ListPackageProcessesResponse], error) {
-	worktreeID := req.Msg.WorktreeId
+	worktreeID := req.Msg.GetWorktreeId()
 
 	var processes []*shell.BackgroundProcess
 	if worktreeID != "" {
