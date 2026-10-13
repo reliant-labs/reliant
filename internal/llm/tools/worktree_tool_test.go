@@ -53,7 +53,14 @@ func (m *fakeRunMachine) Send(_ context.Context, _, daemonID, commandType string
 	switch commandType {
 	case "worktree.create":
 		if pp, _ := req["project_path"].(string); m.failRepo != "" && strings.HasSuffix(pp, m.failRepo) {
-			return json.Marshal(map[string]any{"error": "fatal: invalid reference"})
+			// What the daemon answers for a base branch that does not
+			// exist: git's text for the logs, and the diagnosis.
+			base, _ := req["base_branch"].(string)
+			return json.Marshal(map[string]any{
+				"error":        "fatal: invalid reference: " + base,
+				"error_code":   "base_not_found",
+				"error_detail": base,
+			})
 		}
 		path := filepath.Join(m.home, ".reliant", "worktrees", req["workspace_id"].(string))
 		if sub, _ := req["sub_path"].(string); sub != "" {
@@ -340,7 +347,8 @@ func TestWorktreeTool_Create_FailureIsAllOrNothing(t *testing.T) {
 
 	resp := f.call(t, WorktreeParams{Action: "create", Name: "doomed", BaseBranch: "nope"})
 	require.True(t, resp.IsError)
-	assert.Contains(t, resp.Content, "nope", "the reason names the bad base branch")
+	// The agent is told what to change, so it can retry with a real branch.
+	assert.Contains(t, resp.Content, "base branch 'nope' doesn't exist in web", "the reason names the bad base branch")
 	assert.Contains(t, resp.Content, "failed worktree named 'doomed'")
 
 	row := f.row(t, "doomed")
