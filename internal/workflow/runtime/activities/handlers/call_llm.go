@@ -886,17 +886,32 @@ type yieldLogger interface {
 // promised nothing — the gate counts wakes and reports, not rows, and the
 // previous turn may already have read what they were for — so the yield is
 // that turn's correct answer: INFO.
-func logAssistantTailYield(logger yieldLogger, speculative bool, chatID, thread, lastMsgID string, msgCount int) {
+//
+// The ERROR carries what tells its causes apart without a database query.
+// The thread goes under an id key, so it is a Sentry tag: a spawned thread
+// runs inline in its parent's Temporal execution, so neither chatID nor
+// WorkflowID names it. The tail's shape goes too: tool calls on it are
+// results that never landed; neither text nor tool calls is an empty or
+// interrupted message; text alone is a reply the loop re-entered after with
+// nothing new to read (or a partial one — the lastMsgID row tells them apart).
+func logAssistantTailYield(logger yieldLogger, speculative bool, chatID, thread string, tail message.Message, msgCount int) {
 	if speculative {
 		logger.Info("[CallLLM] Nothing new since the previous turn — yielding without calling the provider. "+
 			"The loop re-entered on a hint (a wake, or a background spawn's report, counted after the "+
 			"previous turn began) that the previous turn had already read.",
 			"chatID", chatID,
-			"thread", thread,
-			"lastMsgID", lastMsgID,
+			"threadID", thread,
+			"lastMsgID", tail.ID,
 			"msgCount", msgCount,
 		)
 		return
+	}
+	hasText := false
+	for _, text := range tail.TextContents() {
+		if strings.TrimSpace(text.Text) != "" {
+			hasText = true
+			break
+		}
 	}
 	logger.Error(
 		"[CallLLM] History ends with an assistant message after the mailbox drain — "+
@@ -907,9 +922,11 @@ func logAssistantTailYield(logger yieldLogger, speculative bool, chatID, thread,
 			"mailbox it expected to drain was empty; or, rarely, the user message was "+
 			"written to a different thread than this one.",
 		"chatID", chatID,
-		"thread", thread,
-		"lastMsgID", lastMsgID,
+		"threadID", thread,
+		"lastMsgID", tail.ID,
 		"msgCount", msgCount,
+		"tailToolCalls", len(tail.ToolCalls()),
+		"tailHasText", hasText,
 	)
 }
 
@@ -1566,7 +1583,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	if len(history) > 0 && !continueTurn {
 		lastMsg := history[len(history)-1]
 		if lastMsg.Role == message.Assistant {
-			logAssistantTailYield(activity.GetLogger(ctx), rtx.SpeculativeTurn, chat.ID, thread, lastMsg.ID, len(history))
+			logAssistantTailYield(activity.GetLogger(ctx), rtx.SpeculativeTurn, chat.ID, thread, lastMsg, len(history))
 			return &reliantv1.CallLLMOutput{
 				Message: &reliantv1.MessageOutput{Role: "assistant", Text: ""},
 				// No tool calls and (set by the caller from a real mailbox
