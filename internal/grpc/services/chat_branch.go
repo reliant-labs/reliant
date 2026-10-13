@@ -12,6 +12,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -205,7 +206,7 @@ func (s *ChatService) BranchChat(
 	// the machine its source chat runs on. Left unpinned it fell to the user's
 	// default machine: a chat on machine B branched onto machine A.
 	if activeDaemonID == nil && !noMachine {
-		sourceDaemonID, err := chatDaemonID(ctx, s.database, fromChat)
+		sourceDaemonID, err := daemonplacement.ChatDaemonID(ctx, s.database, fromChat)
 		if err != nil {
 			logging.Error("Failed to resolve source chat's machine for branch", "error", err, "chatID", fromChat.ID)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve the source chat's machine"))

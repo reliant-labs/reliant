@@ -110,6 +110,7 @@ var serverSidePackages = []string{
 	// research/forge-migration/05-p3a-handler-map.md).
 	"internal/daemonerr",
 	"internal/machinewake",
+	"internal/daemonplacement",
 	"internal/workflow/runtime/activities",
 	"internal/workflow/runtime/activities/handlers",
 

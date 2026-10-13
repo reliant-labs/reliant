@@ -10,7 +10,7 @@ import (
 )
 
 // commitViaDaemon commits staged changes via daemon. daemonID is the
-// worktree's owner (see worktreeOwner), as for every helper here.
+// worktree's owner (see daemonplacement.WorktreeOwner), as for every helper here.
 func (s *WorktreeService) commitViaDaemon(ctx context.Context, userID, daemonID, worktreePath, message string) (string, error) {
 	var resp struct {
 		Success bool   `json:"success"`

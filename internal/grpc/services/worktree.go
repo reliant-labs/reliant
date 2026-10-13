@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/copypath"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -68,21 +69,6 @@ func NewWorktreeService(database db.Repository, tempClient client.Client, daemon
 		daemonRouter: daemonRouter,
 		wake:         machinewake.New(machinewake.Deps{Resumer: machinewake.ResumerOf(daemonRouter), Owners: database}),
 	}
-}
-
-// worktreeOwner is the daemon holding a worktree's checkout on disk, or "" when
-// the row names none — the main checkout, which every machine with the project
-// has, and rows from before ownership was recorded. "" leaves default
-// resolution.
-//
-// Every command about an existing worktree goes to its owner. The checkout
-// exists nowhere else, so sending one to the default daemon reports a missing
-// directory at best, and at worst acts on a same-named path on another machine.
-func worktreeOwner(worktree *db.Worktree) string {
-	if worktree == nil || worktree.DaemonID == nil {
-		return ""
-	}
-	return *worktree.DaemonID
 }
 
 // relockActive tells the owning daemon to lock this worktree's checkouts as
@@ -382,7 +368,7 @@ func (s *WorktreeService) validateWorktreeForGitOps(ctx context.Context, userID 
 		Exists bool   `json:"exists"`
 		Error  string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.validate_path", map[string]string{"path": worktree.Path}, &resp); err != nil {
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.validate_path", map[string]string{"path": worktree.Path}, &resp); err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("cannot access worktree directory: %w", err))
 	}
 	if !resp.Exists {
@@ -833,7 +819,7 @@ func (s *WorktreeService) DeleteWorktree(
 	// knowingly. A permanent delete and a branch delete still reach the machine
 	// from here, so wake an asleep one first; the client retries.
 	if (req.Msg.DeleteGitBranch || isPermanentDelete) && project != nil {
-		if err := s.wakeIfAsleep(ctx, userID, machinewake.Target{DaemonID: worktreeOwner(worktree)}, project.Path); err != nil {
+		if err := s.wakeIfAsleep(ctx, userID, machinewake.Target{DaemonID: daemonplacement.WorktreeOwner(worktree)}, project.Path); err != nil {
 			return nil, err
 		}
 	}
@@ -858,7 +844,7 @@ func (s *WorktreeService) DeleteWorktree(
 		}
 		deletedBranch := false
 		if req.Msg.DeleteGitBranch && project != nil && worktree.Branch != "" {
-			deletedBranch = s.cleanupWorktreeBranch(ctx, userID, worktreeOwner(worktree), project.Path, worktree.Branch)
+			deletedBranch = s.cleanupWorktreeBranch(ctx, userID, daemonplacement.WorktreeOwner(worktree), project.Path, worktree.Branch)
 		}
 		if err := s.database.DeleteWorktree(ctx, req.Msg.WorktreeId); err != nil {
 			logging.Error("Failed to permanently delete worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
@@ -1585,7 +1571,7 @@ func (s *WorktreeService) RecreateWorktree(
 	if worktree.CleanupMetadata != nil {
 		savedRefs = worktree.CleanupMetadata.SnapshotRefs
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.recreate", map[string]any{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.recreate", map[string]any{
 		"project_path":  project.Path,
 		"worktree_path": worktree.Path,
 		"branch":        worktree.Branch,
@@ -1678,7 +1664,7 @@ func (s *WorktreeService) repairActiveWorktree(ctx context.Context, userID strin
 		FallbackPath: project.Path,
 	}
 	var resp toolexec.WorkspaceEnsureResponse
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, worktreeOwner(worktree), toolexec.WorkspaceEnsureCommand, ensureReq, &resp, toolexec.WorkspaceEnsureTimeoutMs); err != nil {
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), toolexec.WorkspaceEnsureCommand, ensureReq, &resp, toolexec.WorkspaceEnsureTimeoutMs); err != nil {
 		if machinewake.IsWaking(err) {
 			return nil, err
 		}
@@ -1751,7 +1737,7 @@ func (s *WorktreeService) GetWorktreeChanges(
 		DefaultBranch string            `json:"default_branch"`
 		Error         string            `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, worktreeOwner(worktree), "worktree.git_changes", map[string]string{
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_changes", map[string]string{
 		"worktree_path": repoPath,
 		"branch":        worktree.Branch,
 		"base_branch":   worktree.BaseBranch,
@@ -1837,7 +1823,7 @@ func (s *WorktreeService) GetWorktreeGitStatus(
 		Ahead          int32    `json:"ahead"`
 		Behind         int32    `json:"behind"`
 	}
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, worktreeOwner(worktree), "worktree.git_status", map[string]string{
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_status", map[string]string{
 		"worktree_path": repoPath,
 		"branch":        worktree.Branch,
 	}, &statusResp, worktreeReadCommandTimeoutMs); err != nil {
@@ -1925,7 +1911,7 @@ func (s *WorktreeService) GetWorktreeCommits(
 		BaseBranch   string `json:"base_branch"`
 		Limit        int32  `json:"limit"`
 	}
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, worktreeOwner(worktree), "worktree.git_commits", commitsReq{
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_commits", commitsReq{
 		WorktreePath: repoPath,
 		Branch:       worktree.Branch,
 		BaseBranch:   baseBranch,
@@ -2004,7 +1990,7 @@ func (s *WorktreeService) StageFiles(
 		Success bool   `json:"success"`
 		Error   string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.stage", stageReq{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.stage", stageReq{
 		WorktreePath: repoPath,
 		Files:        req.Msg.Files,
 	}, &stageResp); err != nil {
@@ -2059,7 +2045,7 @@ func (s *WorktreeService) UnstageFiles(
 		Success bool   `json:"success"`
 		Error   string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.unstage", unstageReq{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.unstage", unstageReq{
 		WorktreePath: repoPath,
 		Files:        req.Msg.Files,
 	}, &unstageResp); err != nil {
@@ -2110,7 +2096,7 @@ func (s *WorktreeService) CommitWorktree(
 	}
 
 	// Commit via daemon
-	output, err := s.commitViaDaemon(ctx, userID, worktreeOwner(worktree), repoPath, req.Msg.Message)
+	output, err := s.commitViaDaemon(ctx, userID, daemonplacement.WorktreeOwner(worktree), repoPath, req.Msg.Message)
 	if err != nil {
 		errStr := err.Error()
 		if strings.Contains(errStr, "nothing to commit") || strings.Contains(errStr, "nothing added to commit") {
@@ -2159,7 +2145,7 @@ func (s *WorktreeService) PushWorktree(
 	// Push via daemon. Branch is resolved daemon-side from HEAD, not from
 	// worktree.Branch — the user may have checked out a different branch in
 	// this repo since creation.
-	output, err := s.pushViaDaemon(ctx, userID, worktreeOwner(worktree), repoPath)
+	output, err := s.pushViaDaemon(ctx, userID, daemonplacement.WorktreeOwner(worktree), repoPath)
 	if err != nil {
 		logging.Error("Failed to push changes", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to push: %w", err))
@@ -2202,7 +2188,7 @@ func (s *WorktreeService) PullWorktree(
 	}
 
 	// Pull via daemon. Branch resolved daemon-side from HEAD.
-	output, err := s.pullViaDaemon(ctx, userID, worktreeOwner(worktree), repoPath)
+	output, err := s.pullViaDaemon(ctx, userID, daemonplacement.WorktreeOwner(worktree), repoPath)
 	if err != nil {
 		logging.Error("Failed to pull changes", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to pull: %w", err))
@@ -2255,7 +2241,7 @@ func (s *WorktreeService) GetWorktreePR(
 		HeadRefOid string `json:"head_ref_oid,omitempty"`
 	}
 	// Branch is resolved daemon-side from HEAD, not from worktree.Branch.
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.get_pr", map[string]string{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.get_pr", map[string]string{
 		"worktree_path": repoPath,
 	}, &prResp); err != nil {
 		logging.Warn("Failed to check PR via daemon", "error", err)
@@ -2338,7 +2324,7 @@ func (s *WorktreeService) CreateWorktreePR(
 		AutoPushed    bool   `json:"auto_pushed"`
 		Error         string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.create_pr", map[string]string{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.create_pr", map[string]string{
 		"worktree_path": repoPath,
 		"title":         req.Msg.Title,
 		"body":          body,
@@ -2419,7 +2405,7 @@ func (s *WorktreeService) RevertFiles(
 		Results []revertResult `json:"results"`
 		Error   string         `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.revert", map[string]interface{}{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.revert", map[string]interface{}{
 		"worktree_path": repoPath,
 		"files":         req.Msg.Files,
 	}, &revertResp); err != nil {
@@ -2521,7 +2507,7 @@ func (s *WorktreeService) ListWorktreeRepoStatuses(
 			Behind         int32    `json:"behind"`
 			Error          string   `json:"error,omitempty"`
 		}
-		if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, worktreeOwner(worktree), "worktree.git_status", map[string]string{
+		if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_status", map[string]string{
 			"worktree_path": repoPath,
 			"branch":        worktree.Branch,
 		}, &statusResp, worktreeReadCommandTimeoutMs); err != nil {

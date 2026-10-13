@@ -3,51 +3,15 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 )
-
-// chatWorktreeReader is what chatDaemonID needs to find the owner of the
-// worktree a chat runs in.
-type chatWorktreeReader interface {
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
-}
-
-// chatDaemonID returns the daemon a chat's tools run on, or "" when the chat
-// names none and default resolution picks one.
-//
-// The precedence is ExecuteTools' (handlers.toolDaemonSelector): the chat's
-// pinned daemon, which its workflow carries as session_daemon_id, beats the
-// owner of its worktree's checkout. A branch chat is pinned to that owner
-// anyway; the two differ only for a chat started in an owned worktree without
-// a pin, and that chat runs on the owner.
-//
-// A worktree row that no longer exists means "no owner", as it does for
-// routing. Any other lookup failure is returned: guessing here puts a checkout
-// on the wrong machine.
-func chatDaemonID(ctx context.Context, worktrees chatWorktreeReader, chat *db.Chat) (string, error) {
-	if chat.ActiveDaemonID != nil && *chat.ActiveDaemonID != "" {
-		return *chat.ActiveDaemonID, nil
-	}
-	if chat.WorktreeID == nil || *chat.WorktreeID == "" {
-		return "", nil
-	}
-	worktree, err := worktrees.GetWorktree(ctx, *chat.WorktreeID)
-	if errors.Is(err, core.ErrWorktreeNotFound) {
-		return "", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("load chat worktree %s: %w", *chat.WorktreeID, err)
-	}
-	return worktreeOwner(worktree), nil
-}
 
 // placeNewWorktree picks the daemon a new worktree is created on: the machine
 // of the chat it is created for (chatID), else the machine holding the
@@ -70,7 +34,7 @@ func (s *WorktreeService) placeNewWorktree(ctx context.Context, userID, projectI
 		if chat.ProjectID != projectID {
 			return machinewake.Target{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat belongs to a different project"))
 		}
-		daemonID, err := chatDaemonID(ctx, s.database, chat)
+		daemonID, err := daemonplacement.ChatDaemonID(ctx, s.database, chat)
 		if err != nil {
 			logging.Error("Failed to resolve the chat's machine for worktree "+verb, "error", err, "chatID", chat.ID)
 			return machinewake.Target{}, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve the chat's machine"))
@@ -81,7 +45,7 @@ func (s *WorktreeService) placeNewWorktree(ctx context.Context, userID, projectI
 		noMachine = chat.NoMachine
 	}
 
-	if owner := worktreeOwner(source); owner != "" {
+	if owner := daemonplacement.WorktreeOwner(source); owner != "" {
 		return machinewake.Target{DaemonID: owner, NoMachine: noMachine}, nil
 	}
 

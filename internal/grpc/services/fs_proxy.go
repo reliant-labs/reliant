@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/filepreview"
@@ -118,7 +119,7 @@ func (s *FileSystemProxyService) resolveScope(ctx context.Context, userID, proje
 //
 // The files exist on one machine. For a request made for a chat (chat_id) it
 // is the chat's machine: its pinned daemon, else its worktree's owner
-// (chatDaemonID, the precedence ExecuteTools routes the chat's tools by). The
+// (daemonplacement.ChatDaemonID, the precedence ExecuteTools routes the chat's tools by). The
 // Files tab and the preview must show the files the chat's tools read and
 // write. Default resolution picks the user's default machine instead, which is
 // the wrong disk for any chat on another machine, main checkout included.
@@ -142,7 +143,7 @@ func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, 
 			worktree = wt
 		}
 	}
-	owner := worktreeOwner(worktree)
+	owner := daemonplacement.WorktreeOwner(worktree)
 
 	if chatID == nil || *chatID == "" {
 		return machinewake.Target{DaemonID: owner}, nil
@@ -167,7 +168,7 @@ func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, 
 	if owner != "" && (chat.WorktreeID == nil || *chat.WorktreeID != worktree.ID) {
 		return machinewake.Target{DaemonID: owner, NoMachine: chat.NoMachine}, nil
 	}
-	daemonID, err := chatDaemonID(ctx, s.database, chat)
+	daemonID, err := daemonplacement.ChatDaemonID(ctx, s.database, chat)
 	if err != nil {
 		logging.Error("[FSProxy] Failed to resolve the chat's machine", "error", err, "chatID", chat.ID)
 		return machinewake.Target{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
