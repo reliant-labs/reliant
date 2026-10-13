@@ -23,9 +23,6 @@ enum FileViewerKind {
   FILE_VIEWER_KIND_BINARY = 6;
 }
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // FileSystemService handles file system operations within projects
 service FileSystemService {
   // GetFileTree returns the file tree structure for a project

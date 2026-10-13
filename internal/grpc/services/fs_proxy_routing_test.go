@@ -15,6 +15,8 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/filepreview"
+	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
@@ -83,7 +85,7 @@ func (r *fsRoutingRouter) sent() bool {
 type fsRoutingFixture struct {
 	*placementFixture
 	router *fsRoutingRouter
-	fs     *FileSystemProxyService
+	fs     *file_system.Service
 }
 
 func newFSRoutingFixture(t *testing.T) *fsRoutingFixture {
@@ -93,7 +95,7 @@ func newFSRoutingFixture(t *testing.T) *fsRoutingFixture {
 	return &fsRoutingFixture{
 		placementFixture: pf,
 		router:           router,
-		fs:               NewFileSystemProxyService(router, pf.repo),
+		fs:               newFileSystemService(t, router, pf.repo),
 	}
 }
 
@@ -274,7 +276,8 @@ func TestFileSystemProxy_ChatFromAnotherProject_IsIgnored(t *testing.T) {
 
 	project, err := f.repo.GetProject(context.Background(), f.projectID)
 	require.NoError(t, err)
-	base, err := f.fs.requireProjectBase(f.ctx, f.projectID, nil, &chatID)
+	// The handler scopes the tree with filepreview.ResolveBasePath.
+	base, err := filepreview.ResolveBasePath(f.ctx, f.repo, f.projectID, nil, &chatID)
 	require.NoError(t, err)
 	assert.Equal(t, project.Path, base, "another project's chat must not scope this project's tree to its worktree")
 }

@@ -11306,8 +11306,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "FileViewerKind"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "ForgeService",
@@ -33658,5 +33657,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "3f09231a7ac9a8486754bf8a7d00d8dcebb86cd6b6fbff6fd269cb0c194c7a80"
+  "source_hash": "afbaf1a851737284966f4998230e37ad156eaa0a8ff8bb5109fd8c710b1e8310"
 }

@@ -2,7 +2,7 @@
 
 // Package checkoutstate says what state a project's checkout is in on one
 // machine, from the project's clone records (project_daemons). The Files tab
-// (FileSystemProxyService) and the terminal (TerminalWSHandler) both explain
+// (internal/handlers/file_system) and the terminal (TerminalWSHandler) both explain
 // a missing project directory with it.
 //
 //forge:exclude-contract: pure reading of clone records the caller already fetched; no I/O, state or time

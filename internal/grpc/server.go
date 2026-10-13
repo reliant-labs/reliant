@@ -39,6 +39,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/attachment"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
+	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
@@ -437,7 +438,8 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	// FileSystem, Background, and Terminal services: when a daemon router is
 	// available, use proxy services that forward requests through the daemon.
-	// Otherwise fall back to the DB-backed / provider-backed implementations.
+	// Otherwise Background falls back to its provider-backed implementation,
+	// and FileSystem is not mounted: its files live on the user's machines.
 	var filesystemPath string
 	var filesystemHandler http.Handler
 	var backgroundPath string
@@ -450,8 +452,16 @@ func NewServer(cfg *Config) (*Server, error) {
 		// distributed mode) to the connected daemon.
 		logging.Info("Registering daemon proxy services (FileSystem, Background, Terminal)")
 
-		fsProxy := services.NewFileSystemProxyService(router, database)
-		filesystemPath, filesystemHandler = reliantv1connect.NewFileSystemServiceHandler(fsProxy, machineWakeOpts...)
+		fileSystemService, err := file_system.New(file_system.Deps{
+			Logger: handlerLogger,
+			Config: handlerConfig,
+			Router: router,
+			Repo:   database,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("file_system service: %w", err)
+		}
+		filesystemPath, filesystemHandler = reliantv1connect.NewFileSystemServiceHandler(fileSystemService, machineWakeOpts...)
 
 		bgProxy := services.NewBackgroundProxyService(router)
 		backgroundPath, backgroundHandler = reliantv1connect.NewBackgroundServiceHandler(bgProxy, opts...)
@@ -478,11 +488,8 @@ func NewServer(cfg *Config) (*Server, error) {
 		mux.Handle("/api/v2/terminal/ws", streams.Handler(
 			services.TerminalWSHandler(router, wsValidator, services.WithTerminalCheckouts(database))))
 	} else {
-		// No daemon router available: use DB-backed FileSystem and provider-backed Background.
-		// These provide read-only / limited functionality without a connected daemon.
-		filesystemService := services.NewFileSystemService(database)
-		filesystemPath, filesystemHandler = reliantv1connect.NewFileSystemServiceHandler(filesystemService, opts...)
-
+		// No daemon router available: provider-backed Background, which
+		// provides limited functionality without a connected daemon.
 		if cfg.BackgroundProvider != nil {
 			backgroundService := services.NewBackgroundService(cfg.BackgroundProvider)
 			backgroundPath, backgroundHandler = reliantv1connect.NewBackgroundServiceHandler(backgroundService, opts...)

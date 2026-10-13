@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package file_system
 
 import (
 	"context"
@@ -40,9 +40,17 @@ func (r *recordingFSDaemonRouter) SendDaemonCommand(_ context.Context, _ string,
 	return json.Marshal(struct{}{})
 }
 
+// newProxy builds the service on router and repo. A nil repo leaves the
+// harness's fail-closed stub in its place, for requests decided before any
+// lookup.
+func newProxy(t *testing.T, router Router, repo db.Repository) *Service {
+	t.Helper()
+	return NewTestFileSystem(t, WithFileSystemDeps(Deps{Router: router, Repo: repo}))
+}
+
 func TestFileSystemProxy_CreateDirectory_RoutesMkdirToDaemon(t *testing.T) {
 	router := &recordingFSDaemonRouter{}
-	svc := NewFileSystemProxyService(router, nil)
+	svc := newProxy(t, router, nil)
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	resp, err := svc.CreateDirectory(ctx, connect.NewRequest(&reliantv1.CreateDirectoryRequest{
@@ -117,7 +125,7 @@ func TestFileSystemProxy_MachineStateIsNotAnInternalError(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := NewFileSystemProxyService(&failingFSDaemonRouter{err: tc.err}, nil)
+			svc := newProxy(t, &failingFSDaemonRouter{err: tc.err}, nil)
 			ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 			_, err := svc.CreateDirectory(ctx, connect.NewRequest(&reliantv1.CreateDirectoryRequest{
 				Path: "/home/workspace/projects/new-folder",
@@ -133,13 +141,15 @@ func TestFileSystemProxy_MachineStateIsNotAnInternalError(t *testing.T) {
 
 func TestFileSystemProxy_CreateDirectory_RejectsEmptyAndRelativePaths(t *testing.T) {
 	router := &recordingFSDaemonRouter{}
-	svc := NewFileSystemProxyService(router, nil)
+	svc := newProxy(t, router, nil)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
-	for _, path := range []string{"", "relative/path"} {
+	// `C:proj` is drive-relative and `\proj` driveless: neither is absolute on
+	// any machine, so widening the check for Windows daemons must not admit them.
+	for _, path := range []string{"", "relative/path", `C:proj`, `\proj`} {
 		_, err := svc.CreateDirectory(ctx, connect.NewRequest(&reliantv1.CreateDirectoryRequest{Path: path}))
-		require.Error(t, err)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		require.Error(t, err, "path %q must be refused", path)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "path %q", path)
 	}
 	// No command should have been forwarded to the daemon.
 	assert.Empty(t, router.lastCommandType)
@@ -147,7 +157,7 @@ func TestFileSystemProxy_CreateDirectory_RejectsEmptyAndRelativePaths(t *testing
 
 func TestFileSystemProxy_CreateDirectory_RequiresAuth(t *testing.T) {
 	router := &recordingFSDaemonRouter{}
-	svc := NewFileSystemProxyService(router, nil)
+	svc := newProxy(t, router, nil)
 
 	_, err := svc.CreateDirectory(context.Background(), connect.NewRequest(&reliantv1.CreateDirectoryRequest{
 		Path: "/home/workspace/projects/new-folder",
@@ -183,7 +193,7 @@ func TestFileSystemProxy_GetFileTree_PrefixesPathsAndForwardsDepth(t *testing.T)
 	]}`
 	repo, projectID, base := seedFSProxyProject(t)
 	router := &fsTreeStubRouter{respJSON: []byte(daemonTree)}
-	svc := NewFileSystemProxyService(router, repo)
+	svc := newProxy(t, router, repo)
 	ctx := fsProxyContext()
 
 	resp, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{
@@ -227,7 +237,7 @@ func TestFileSystemProxy_GetFileTree_RootNotPrefixed(t *testing.T) {
 	// receives the absolute workspace path instead of the "/" sentinel.
 	for _, requested := range []string{"/", ""} {
 		router := &fsTreeStubRouter{respJSON: []byte(daemonTree)}
-		svc := NewFileSystemProxyService(router, repo)
+		svc := newProxy(t, router, repo)
 
 		resp, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
 			ProjectId: projectID,
@@ -248,8 +258,8 @@ func TestFileSystemProxy_GetFileTree_RootNotPrefixed(t *testing.T) {
 // ============================================================================
 // Path confinement
 //
-// FileSystemProxyService is the hosted, multi-tenant implementation: it is
-// mounted whenever a daemon router exists (internal/grpc/server.go), and every
+// The service is the hosted, multi-tenant implementation: it is mounted
+// whenever a daemon router exists (internal/grpc/server.go), and every
 // path it emits is executed on the user's daemon with no further scoping. It
 // used to hand-roll its own path resolution, which joined the request onto the
 // workspace base without ever checking the result stayed under it — so
@@ -257,7 +267,7 @@ func TestFileSystemProxy_GetFileTree_RootNotPrefixed(t *testing.T) {
 // "/" through as the literal filesystem root.
 //
 // These tests attempt the escapes. They are the evidence that the proxy now
-// resolves through the same confined helper as the direct FileSystemService.
+// resolves through the one confined helper, validateWorkspacePath.
 // ============================================================================
 
 const fsProxyTestUser = "fs-proxy-test-user"
@@ -305,7 +315,7 @@ func TestFileSystemProxy_RefusesPathsThatEscapeTheWorkspace(t *testing.T) {
 	for _, tc := range escapes {
 		t.Run(tc.name, func(t *testing.T) {
 			router := &fsTreeStubRouter{respJSON: []byte(`{"nodes":[]}`)}
-			svc := NewFileSystemProxyService(router, repo)
+			svc := newProxy(t, router, repo)
 
 			_, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
 				ProjectId: projectID,
@@ -327,44 +337,44 @@ func TestFileSystemProxy_EveryPathRPCIsConfined(t *testing.T) {
 	const escape = "../../../../../../../etc/passwd"
 	escapePtr := escape
 
-	calls := map[string]func(context.Context, *FileSystemProxyService) error{
-		"GetFileTree": func(ctx context.Context, s *FileSystemProxyService) error {
+	calls := map[string]func(context.Context, *Service) error{
+		"GetFileTree": func(ctx context.Context, s *Service) error {
 			_, err := s.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: escape}))
 			return err
 		},
-		"GetFileContent": func(ctx context.Context, s *FileSystemProxyService) error {
+		"GetFileContent": func(ctx context.Context, s *Service) error {
 			_, err := s.GetFileContent(ctx, connect.NewRequest(&reliantv1.GetFileContentRequest{ProjectId: projectID, Path: escape}))
 			return err
 		},
-		"SaveFileContent": func(ctx context.Context, s *FileSystemProxyService) error {
+		"SaveFileContent": func(ctx context.Context, s *Service) error {
 			_, err := s.SaveFileContent(ctx, connect.NewRequest(&reliantv1.SaveFileContentRequest{ProjectId: projectID, Path: escape, Content: "pwned"}))
 			return err
 		},
-		"GetFileMetadata": func(ctx context.Context, s *FileSystemProxyService) error {
+		"GetFileMetadata": func(ctx context.Context, s *Service) error {
 			_, err := s.GetFileMetadata(ctx, connect.NewRequest(&reliantv1.GetFileMetadataRequest{ProjectId: projectID, Path: escape}))
 			return err
 		},
-		"GetFilePreviewInfo": func(ctx context.Context, s *FileSystemProxyService) error {
+		"GetFilePreviewInfo": func(ctx context.Context, s *Service) error {
 			_, err := s.GetFilePreviewInfo(ctx, connect.NewRequest(&reliantv1.GetFilePreviewInfoRequest{ProjectId: projectID, Path: escape}))
 			return err
 		},
-		"CreateFileOrFolder": func(ctx context.Context, s *FileSystemProxyService) error {
+		"CreateFileOrFolder": func(ctx context.Context, s *Service) error {
 			_, err := s.CreateFileOrFolder(ctx, connect.NewRequest(&reliantv1.CreateFileOrFolderRequest{ProjectId: projectID, Path: escape}))
 			return err
 		},
-		"DeleteFileOrFolder": func(ctx context.Context, s *FileSystemProxyService) error {
+		"DeleteFileOrFolder": func(ctx context.Context, s *Service) error {
 			_, err := s.DeleteFileOrFolder(ctx, connect.NewRequest(&reliantv1.DeleteFileOrFolderRequest{ProjectId: projectID, Path: escape}))
 			return err
 		},
-		"SearchFiles": func(ctx context.Context, s *FileSystemProxyService) error {
+		"SearchFiles": func(ctx context.Context, s *Service) error {
 			_, err := s.SearchFiles(ctx, connect.NewRequest(&reliantv1.SearchFilesRequest{ProjectId: projectID, Query: "secret", Path: &escapePtr}))
 			return err
 		},
-		"CopyFile source": func(ctx context.Context, s *FileSystemProxyService) error {
+		"CopyFile source": func(ctx context.Context, s *Service) error {
 			_, err := s.CopyFile(ctx, connect.NewRequest(&reliantv1.CopyFileRequest{ProjectId: projectID, SourcePath: escape, DestinationPath: "copy.txt"}))
 			return err
 		},
-		"CopyFile destination": func(ctx context.Context, s *FileSystemProxyService) error {
+		"CopyFile destination": func(ctx context.Context, s *Service) error {
 			_, err := s.CopyFile(ctx, connect.NewRequest(&reliantv1.CopyFileRequest{ProjectId: projectID, SourcePath: "README.md", DestinationPath: escape}))
 			return err
 		},
@@ -373,7 +383,7 @@ func TestFileSystemProxy_EveryPathRPCIsConfined(t *testing.T) {
 	for name, call := range calls {
 		t.Run(name, func(t *testing.T) {
 			router := &fsTreeStubRouter{respJSON: []byte(`{}`)}
-			svc := NewFileSystemProxyService(router, repo)
+			svc := newProxy(t, router, repo)
 
 			err := call(fsProxyContext(), svc)
 			require.Error(t, err, "%s forwarded an escaping path", name)
@@ -404,7 +414,7 @@ func TestFileSystemProxy_SendsOnlyAbsolutePathsToTheDaemon(t *testing.T) {
 
 	for _, tc := range cases {
 		router := &fsTreeStubRouter{respJSON: []byte(`{"nodes":[]}`)}
-		svc := NewFileSystemProxyService(router, repo)
+		svc := newProxy(t, router, repo)
 
 		_, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
 			ProjectId: projectID,
@@ -428,8 +438,9 @@ func TestFileSystemProxy_SendsOnlyAbsolutePathsToTheDaemon(t *testing.T) {
 func TestFileSystemProxy_RefusesRequestWithoutAWorkspace(t *testing.T) {
 	t.Run("no project id", func(t *testing.T) {
 		router := &fsTreeStubRouter{respJSON: []byte(`{"nodes":[]}`)}
-		// A nil repository also proves the refusal happens before any DB call.
-		svc := NewFileSystemProxyService(router, nil)
+		// No repository: the harness's stub fails closed, so the refusal
+		// must happen before any DB call.
+		svc := newProxy(t, router, nil)
 
 		_, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
 			Path: "/",
@@ -451,7 +462,7 @@ func TestFileSystemProxy_RefusesRequestWithoutAWorkspace(t *testing.T) {
 		require.NoError(t, err)
 
 		router := &fsTreeStubRouter{respJSON: []byte(`{"nodes":[]}`)}
-		svc := NewFileSystemProxyService(router, repo)
+		svc := newProxy(t, router, repo)
 
 		_, err = svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
 			ProjectId: projectID,
@@ -470,7 +481,7 @@ func TestFileSystemProxy_ReplaceInFilesAlwaysBoundsItsWalk(t *testing.T) {
 	repo, projectID, base := seedFSProxyProject(t)
 
 	router := &fsTreeStubRouter{respJSON: []byte(`{"files_changed":0}`)}
-	svc := NewFileSystemProxyService(router, repo)
+	svc := newProxy(t, router, repo)
 
 	_, err := svc.ReplaceInFiles(fsProxyContext(), connect.NewRequest(&reliantv1.ReplaceInFilesRequest{
 		ProjectId:   projectID,
@@ -487,7 +498,7 @@ func TestFileSystemProxy_ReplaceInFilesAlwaysBoundsItsWalk(t *testing.T) {
 
 	// And with no workspace it is refused rather than sent unbounded.
 	unscoped := &fsTreeStubRouter{respJSON: []byte(`{"files_changed":0}`)}
-	_, err = NewFileSystemProxyService(unscoped, nil).ReplaceInFiles(
+	_, err = newProxy(t, unscoped, nil).ReplaceInFiles(
 		fsProxyContext(),
 		connect.NewRequest(&reliantv1.ReplaceInFilesRequest{SearchText: "a", ReplaceText: "b"}))
 	require.Error(t, err)

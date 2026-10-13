@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package file_system
 
 import (
 	"context"
@@ -15,7 +15,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
@@ -25,29 +24,21 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/ospath"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-// FileSystemProxyService implements FileSystemServiceHandler by forwarding
-// requests to a daemon via DaemonCommand (request/response): the machine that
-// holds the workspace a request names (see workspaceDaemonID).
-type FileSystemProxyService struct {
-	reliantv1connect.UnimplementedFileSystemServiceHandler
-	router   toolexec.DaemonRouter
-	database db.Repository
-	wake     machinewake.Service
+// The service forwards every request to a daemon via DaemonCommand
+// (request/response): the machine that holds the workspace a request names
+// (see workspaceDaemonID).
+
+// wake is the step a command takes after failing to reach its machine. The
+// router resumes an asleep machine when it can (machinewake.ResumerOf's rule:
+// only the NATS router can), and Repo checks the machine is the caller's.
+func (s *Service) wake() machinewake.Service {
+	resumer, _ := s.deps.Router.(machinewake.Resumer)
+	return machinewake.New(machinewake.Deps{Resumer: resumer, Owners: s.deps.Repo})
 }
 
-// NewFileSystemProxyService creates a new FileSystemProxyService.
-func NewFileSystemProxyService(router toolexec.DaemonRouter, database db.Repository) *FileSystemProxyService {
-	return &FileSystemProxyService{
-		router:   router,
-		database: database,
-		wake:     machinewake.New(machinewake.Deps{Resumer: machinewake.ResumerOf(router), Owners: database}),
-	}
-}
-
-func (s *FileSystemProxyService) getUserID(ctx context.Context) (string, error) {
+func (s *Service) getUserID(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return "", fmt.Errorf("user ID not found in context")
@@ -70,12 +61,12 @@ func (s *FileSystemProxyService) getUserID(ctx context.Context) (string, error) 
 // Every client reaches these RPCs with a project id (web/src/api/fileSystem.ts
 // returns early when there is no current project), so nothing legitimate
 // depended on the passthrough.
-func (s *FileSystemProxyService) requireProjectBase(ctx context.Context, projectID string, worktreeID *string, chatID *string) (string, error) {
+func (s *Service) requireProjectBase(ctx context.Context, projectID string, worktreeID *string, chatID *string) (string, error) {
 	if strings.TrimSpace(projectID) == "" {
 		return "", connect.NewError(connect.CodeInvalidArgument,
 			errors.New("project_id is required to scope a filesystem request"))
 	}
-	basePath, err := filepreview.ResolveBasePath(ctx, s.database, projectID, worktreeID, chatID)
+	basePath, err := filepreview.ResolveBasePath(ctx, s.deps.Repo, projectID, worktreeID, chatID)
 	if err != nil {
 		return "", connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
 	}
@@ -100,7 +91,7 @@ type workspaceScope struct {
 // machine it must run on. Every request that names a project goes through
 // here, so a file tree, a preview and a save of the same file cannot land on
 // different machines.
-func (s *FileSystemProxyService) resolveScope(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (workspaceScope, error) {
+func (s *Service) resolveScope(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (workspaceScope, error) {
 	basePath, err := s.requireProjectBase(ctx, projectID, worktreeID, chatID)
 	if err != nil {
 		return workspaceScope{}, err
@@ -129,10 +120,10 @@ func (s *FileSystemProxyService) resolveScope(ctx context.Context, userID, proje
 // checkout. Without a chat, an owned worktree goes to its owner too. Anything
 // else (the main checkout, legacy rows that record no owner) keeps default
 // resolution.
-func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (machinewake.Target, error) {
+func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (machinewake.Target, error) {
 	var worktree *db.Worktree
 	if worktreeID != nil && *worktreeID != "" {
-		wt, err := s.database.GetWorktree(ctx, *worktreeID)
+		wt, err := s.deps.Repo.GetWorktree(ctx, *worktreeID)
 		switch {
 		case errors.Is(err, core.ErrWorktreeNotFound):
 			// A missing row means "no owner", as it does for tool routing.
@@ -148,7 +139,7 @@ func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, 
 	if chatID == nil || *chatID == "" {
 		return machinewake.Target{DaemonID: owner}, nil
 	}
-	chat, err := s.database.GetChat(ctx, *chatID)
+	chat, err := s.deps.Repo.GetChat(ctx, *chatID)
 	switch {
 	case errors.Is(err, core.ErrChatNotFound):
 		// The UI can still name a chat it has just deleted. Degrade to the
@@ -168,7 +159,7 @@ func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, 
 	if owner != "" && (chat.WorktreeID == nil || *chat.WorktreeID != worktree.ID) {
 		return machinewake.Target{DaemonID: owner, NoMachine: chat.NoMachine}, nil
 	}
-	daemonID, err := daemonplacement.ChatDaemonID(ctx, s.database, chat)
+	daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
 	if err != nil {
 		logging.Error("[FSProxy] Failed to resolve the chat's machine", "error", err, "chatID", chat.ID)
 		return machinewake.Target{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
@@ -184,8 +175,7 @@ func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, 
 //
 // The "" | "/" == workspace root rule and the confinement check are NOT
 // reimplemented here: both come from filepreview.ValidatePathScoped via
-// validateWorkspacePath, the same function the direct FileSystemService uses.
-// ScopeBaseOnly is deliberate — unlike the desktop path, this service serves a
+// validateWorkspacePath. ScopeBaseOnly is deliberate — this service serves a
 // user whose files live on a remote daemon, so an absolute path outside the
 // workspace is refused rather than honoured.
 //
@@ -198,6 +188,36 @@ func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, 
 // refused traversal as a missing file.
 func (w workspaceScope) resolve(requestedPath string) (string, error) {
 	return validateWorkspacePath(w.basePath, requestedPath, filepreview.ScopeBaseOnly)
+}
+
+// validateWorkspacePath is the single place this package turns the shared path
+// contract into transport errors.
+//
+// The contract itself is filepreview.ValidatePathScoped and lives there alone:
+// "" and "/" name the workspace root, a relative path is joined onto the base
+// and must stay beneath it, and an absolute path means the location it names.
+// Every path-scoped rpc resolves through this function, so none can drift from
+// that rule or report it with a different code.
+func validateWorkspacePath(basePath, requestedPath string, scope filepreview.PathScope) (string, error) {
+	absFullPath, err := filepreview.ValidatePathScoped(basePath, requestedPath, scope)
+	if err != nil {
+		// The refusal alone cannot be diagnosed: "outside the workspace" names
+		// neither the path the client sent nor the base it was compared
+		// against, and the pair is what distinguishes a traversal attempt from
+		// a client holding paths for a DIFFERENT workspace than the one the
+		// request resolved to (a chat on a worktree whose base is not under
+		// the project root, say). Both are needed, so both are logged here,
+		// once, at the single place the refusal is produced.
+		if errors.Is(err, filepreview.ErrPathOutsideBase) || errors.Is(err, filepreview.ErrAbsolutePathOutsideBase) {
+			logging.Warn("Refused a path outside the workspace",
+				"requested_path", requestedPath, "base_path", basePath, "scope", scope, "error", err)
+			return "", connect.NewError(connect.CodePermissionDenied, err)
+		}
+		logging.Warn("Rejected a malformed workspace path",
+			"requested_path", requestedPath, "base_path", basePath, "scope", scope, "error", err)
+		return "", connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return absFullPath, nil
 }
 
 // projectRelativePrefix reports where resolvedPath sits under basePath, in the
@@ -223,7 +243,7 @@ func projectRelativePrefix(basePath, resolvedPath string) string {
 // to the target machine (daemonID "" = default resolution), and unmarshals the
 // response. A machine found asleep is woken (machinewake) and the request fails
 // as waking, for the client to retry.
-func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID string, target machinewake.Target, commandType string, req any, resp any, timeoutMs int32) error {
+func (s *Service) sendCommand(ctx context.Context, userID string, target machinewake.Target, commandType string, req any, resp any, timeoutMs int32) error {
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
@@ -231,15 +251,15 @@ func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID string,
 
 	var respBytes []byte
 	if target.DaemonID == "" {
-		respBytes, err = s.router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+		respBytes, err = s.deps.Router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 	} else {
-		respBytes, err = s.router.SendDaemonCommandToDaemon(ctx, userID, target.DaemonID, commandType, payload, timeoutMs)
+		respBytes, err = s.deps.Router.SendDaemonCommandToDaemon(ctx, userID, target.DaemonID, commandType, payload, timeoutMs)
 	}
 	if err != nil {
 		// An asleep machine is woken here. The error then carries the wake,
 		// which machinewake.NewInterceptor turns into Unavailable + DaemonWaking
 		// whatever code is chosen below.
-		err = s.wake.AfterFailure(ctx, userID, target, err)
+		err = s.wake().AfterFailure(ctx, userID, target, err)
 		return fsProxyDaemonError(err)
 	}
 
@@ -282,7 +302,7 @@ func fsProxyDaemonError(err error) error {
 }
 
 // GetFileTree returns the file tree structure for a project.
-func (s *FileSystemProxyService) GetFileTree(
+func (s *Service) GetFileTree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetFileTreeRequest],
 ) (*connect.Response[reliantv1.GetFileTreeResponse], error) {
@@ -326,8 +346,8 @@ func (s *FileSystemProxyService) GetFileTree(
 	// The daemon walks the resolved absolute directory and returns node paths
 	// relative to THAT directory (e.g. "inner.txt" for a request scoped to
 	// "pkg"). Rebase them onto the project-relative request path so every node
-	// carries a full project-relative path — matching the local
-	// FileSystemService's contract and what the UI needs to lazily expand a
+	// carries a full project-relative path — the response contract, and what
+	// the UI needs to lazily expand a
 	// subdirectory (child path = parent path + "/" + name). Root requests
 	// ("" / "/") need no prefix.
 	if prefix := projectRelativePrefix(scope.basePath, resolvedPath); prefix != "" {
@@ -393,7 +413,7 @@ func convertFsProxyNode(n *fsProxyFileNode) *reliantv1.FileNode {
 }
 
 // GetFileContent returns the content of a specific file.
-func (s *FileSystemProxyService) GetFileContent(
+func (s *Service) GetFileContent(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetFileContentRequest],
 ) (*connect.Response[reliantv1.GetFileContentResponse], error) {
@@ -431,7 +451,7 @@ func (s *FileSystemProxyService) GetFileContent(
 }
 
 // SaveFileContent saves content to a specific file.
-func (s *FileSystemProxyService) SaveFileContent(
+func (s *Service) SaveFileContent(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SaveFileContentRequest],
 ) (*connect.Response[reliantv1.SaveFileContentResponse], error) {
@@ -469,7 +489,7 @@ func (s *FileSystemProxyService) SaveFileContent(
 }
 
 // GetFileMetadata returns metadata for a file or directory.
-func (s *FileSystemProxyService) GetFileMetadata(
+func (s *Service) GetFileMetadata(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetFileMetadataRequest],
 ) (*connect.Response[reliantv1.GetFileMetadataResponse], error) {
@@ -524,7 +544,7 @@ func (s *FileSystemProxyService) GetFileMetadata(
 }
 
 // GetFilePreviewInfo returns preview metadata for a file.
-func (s *FileSystemProxyService) GetFilePreviewInfo(
+func (s *Service) GetFilePreviewInfo(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetFilePreviewInfoRequest],
 ) (*connect.Response[reliantv1.GetFilePreviewInfoResponse], error) {
@@ -577,13 +597,13 @@ type fsProxyPreviewInfo struct {
 
 // previewInfo asks the machine holding resolvedPath to stat and classify it.
 // requestedPath is the client's path, used only in the log line.
-func (s *FileSystemProxyService) previewInfo(ctx context.Context, userID string, target machinewake.Target, resolvedPath, requestedPath string) (*fsProxyPreviewInfo, error) {
+func (s *Service) previewInfo(ctx context.Context, userID string, target machinewake.Target, resolvedPath, requestedPath string) (*fsProxyPreviewInfo, error) {
 	var info fsProxyPreviewInfo
 	if err := s.sendCommand(ctx, userID, target, "fs.preview_info", map[string]any{"path": resolvedPath}, &info, 30000); err != nil {
 		// Requesting preview info for a directory is a client-input condition
 		// (e.g. the UI asking for a tree folder), not a server failure. Return
-		// the same typed error as the local FileSystemService so it stays out
-		// of ERROR logs / Sentry. The daemon-side error text is the contract
+		// a typed FailedPrecondition so it stays out of ERROR logs / Sentry.
+		// The daemon-side error text is the contract
 		// here (cmd_fs.go returns "path is a directory: <path>").
 		if strings.Contains(err.Error(), "path is a directory") {
 			logging.Debug("[FSProxy] preview requested for a directory", "path", requestedPath)
@@ -612,10 +632,10 @@ const filePreviewTimeoutMs int32 = 60_000
 // It routes exactly as GetFilePreviewInfo does (resolveScope), so the preview
 // comes from the same disk the tree listed. The classification is the
 // daemon's fs.preview_info — internal/filepreview applied to the real file —
-// and only the four previewable kinds are served, as in the local
-// FileSystemService. The bytes come from fs.read_binary_file with the size cap
+// and only the four previewable kinds are served. The bytes come from
+// fs.read_binary_file with the size cap
 // passed down, so the daemon refuses an oversized file before reading it.
-func (s *FileSystemProxyService) GetFilePreview(
+func (s *Service) GetFilePreview(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetFilePreviewRequest],
 ) (*connect.Response[reliantv1.GetFilePreviewResponse], error) {
@@ -683,7 +703,7 @@ func filePreviewTooLarge(size int64) error {
 }
 
 // CreateFileOrFolder creates a new file or folder.
-func (s *FileSystemProxyService) CreateFileOrFolder(
+func (s *Service) CreateFileOrFolder(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateFileOrFolderRequest],
 ) (*connect.Response[reliantv1.CreateFileOrFolderResponse], error) {
@@ -737,7 +757,7 @@ func (s *FileSystemProxyService) CreateFileOrFolder(
 }
 
 // DeleteFileOrFolder deletes a file or folder.
-func (s *FileSystemProxyService) DeleteFileOrFolder(
+func (s *Service) DeleteFileOrFolder(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DeleteFileOrFolderRequest],
 ) (*connect.Response[reliantv1.DeleteFileOrFolderResponse], error) {
@@ -770,7 +790,7 @@ func (s *FileSystemProxyService) DeleteFileOrFolder(
 }
 
 // CopyFile copies a file to a new location.
-func (s *FileSystemProxyService) CopyFile(
+func (s *Service) CopyFile(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CopyFileRequest],
 ) (*connect.Response[reliantv1.CopyFileResponse], error) {
@@ -815,7 +835,7 @@ func (s *FileSystemProxyService) CopyFile(
 }
 
 // SearchFiles searches for text within files in the workspace.
-func (s *FileSystemProxyService) SearchFiles(
+func (s *Service) SearchFiles(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SearchFilesRequest],
 ) (*connect.Response[reliantv1.SearchFilesResponse], error) {
@@ -911,7 +931,7 @@ type daemonSearchMatch struct {
 }
 
 // ReplaceInFiles replaces text in files across the workspace.
-func (s *FileSystemProxyService) ReplaceInFiles(
+func (s *Service) ReplaceInFiles(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ReplaceInFilesRequest],
 ) (*connect.Response[reliantv1.ReplaceInFilesResponse], error) {
@@ -994,7 +1014,7 @@ func viewerKindFromString(kind string) reliantv1.FileViewerKind {
 }
 
 // ListDirectory lists entries in an arbitrary filesystem directory.
-func (s *FileSystemProxyService) ListDirectory(
+func (s *Service) ListDirectory(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListDirectoryRequest],
 ) (*connect.Response[reliantv1.ListDirectoryResponse], error) {
@@ -1048,7 +1068,7 @@ func (s *FileSystemProxyService) ListDirectory(
 // CreateDirectory creates a new directory at an arbitrary absolute path by
 // forwarding an fs.mkdir command to the user's daemon. Mirrors ListDirectory:
 // the path is an absolute filesystem path on the daemon (not project-scoped).
-func (s *FileSystemProxyService) CreateDirectory(
+func (s *Service) CreateDirectory(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateDirectoryRequest],
 ) (*connect.Response[reliantv1.CreateDirectoryResponse], error) {

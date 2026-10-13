@@ -1,4 +1,4 @@
-package services
+package file_system
 
 import (
 	"context"
@@ -61,7 +61,7 @@ func isMissingPathError(err error) bool {
 // raw "no such file or directory" 500), a failed one is CLONE_FAILED, and no
 // record at all is ABSENT — the project was cloned onto another machine, as
 // houndersclub was on 2026-10-07 when the owner's new machine came up empty.
-func (s *FileSystemProxyService) checkoutMissingError(
+func (s *Service) checkoutMissingError(
 	ctx context.Context, userID, projectID string, worktreeID *string, scope workspaceScope, resolvedPath string, err error,
 ) error {
 	if filepath.Clean(resolvedPath) != filepath.Clean(scope.basePath) || !isMissingPathError(err) {
@@ -71,7 +71,7 @@ func (s *FileSystemProxyService) checkoutMissingError(
 	// own checkout, which is still the clone this describes. Only a real
 	// worktree is out of scope.
 	if worktreeID != nil && *worktreeID != "" {
-		wt, werr := s.database.GetWorktree(ctx, *worktreeID)
+		wt, werr := s.deps.Repo.GetWorktree(ctx, *worktreeID)
 		if werr != nil || wt == nil || !wt.IsMain {
 			return nil
 		}
@@ -83,18 +83,18 @@ func (s *FileSystemProxyService) checkoutMissingError(
 		Path:      scope.basePath,
 		State:     reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT,
 	}
-	if detail.DaemonId == "" && s.router != nil {
+	if detail.DaemonId == "" {
 		// Default resolution picked the machine. Ask the router which one,
 		// so the state describes THAT machine rather than any machine the
 		// project was ever cloned onto.
-		if id, rerr := s.router.ResolveDaemonID(ctx, userID); rerr == nil {
+		if id, rerr := s.deps.Router.ResolveDaemonID(ctx, userID); rerr == nil {
 			detail.DaemonId = id
 		}
 	}
-	if project, perr := s.database.GetProject(ctx, projectID); perr == nil && project != nil && project.RemoteURL != nil {
+	if project, perr := s.deps.Repo.GetProject(ctx, projectID); perr == nil && project != nil && project.RemoteURL != nil {
 		detail.RemoteUrl = strings.TrimSpace(*project.RemoteURL)
 	}
-	if rows, lerr := s.database.ListProjectDaemonsForProject(ctx, projectID); lerr != nil {
+	if rows, lerr := s.deps.Repo.ListProjectDaemonsForProject(ctx, projectID); lerr != nil {
 		logging.Warn("[FSProxy] Could not read clone records for a missing project directory",
 			"error", lerr, "projectID", projectID)
 	} else {

@@ -8,6 +8,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -19,7 +20,7 @@ import (
 // left un-proxied (its filesystem work runs on the api-server and returns
 // empty), which is exactly the PackageCommands bug.
 var (
-	_ reliantv1connect.FileSystemServiceHandler      = (*services.FileSystemProxyService)(nil)
+	_ reliantv1connect.FileSystemServiceHandler      = (*file_system.Service)(nil)
 	_ reliantv1connect.BackgroundServiceHandler      = (*services.BackgroundProxyService)(nil)
 	_ reliantv1connect.TerminalServiceHandler        = (*services.TerminalProxyService)(nil)
 	_ reliantv1connect.PackageCommandsServiceHandler = (*services.PackageCommandsProxyService)(nil)

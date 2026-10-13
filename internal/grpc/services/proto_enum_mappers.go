@@ -23,19 +23,6 @@ import (
 // settings, streaming).
 // ============================================================================
 
-// --- FileNodeType ---
-
-func fileNodeTypeFromString(s string) reliantv1.FileNodeType {
-	switch s {
-	case "file":
-		return reliantv1.FileNodeType_FILE_NODE_TYPE_FILE
-	case "directory":
-		return reliantv1.FileNodeType_FILE_NODE_TYPE_DIRECTORY
-	default:
-		return reliantv1.FileNodeType_FILE_NODE_TYPE_UNSPECIFIED
-	}
-}
-
 // --- PackageType ---
 
 func packageTypeFromString(s string) reliantv1.PackageType {

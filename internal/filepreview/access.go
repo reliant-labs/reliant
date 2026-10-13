@@ -54,9 +54,17 @@ func (s PathScope) String() string {
 	}
 }
 
+// BasePathReader is what ResolveBasePath reads: the chat a request names, the
+// worktree it resolves to, and the project.
+type BasePathReader interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+}
+
 // ResolveBasePath resolves the correct base path for file operations.
 // Returns the worktree path if worktree_id or chat_id is provided, otherwise returns project path.
-func ResolveBasePath(ctx context.Context, repo db.Repository, projectID string, worktreeID *string, chatID *string) (string, error) {
+func ResolveBasePath(ctx context.Context, repo BasePathReader, projectID string, worktreeID *string, chatID *string) (string, error) {
 	wtID := ""
 	if worktreeID != nil {
 		wtID = *worktreeID
@@ -149,8 +157,8 @@ func ValidatePathScoped(basePath, requestedPath string, scope PathScope) (string
 	// filesystem root. The file tree relies on it: it defaults an unset path
 	// to "/" to list the top of the workspace.
 	//
-	// This is the ONLY implementation of that rule. FileSystemProxyService
-	// used to encode a second copy of it by hand (resolvePath in fs_proxy.go)
+	// This is the ONLY implementation of that rule. The filesystem handler
+	// (internal/handlers/file_system) used to encode a second copy of it by hand
 	// and, because the copy omitted the withinBase check below, "/" reached
 	// the daemon as the literal filesystem root. It now calls this function,
 	// so the rule and its confinement cannot be separated again.

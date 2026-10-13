@@ -57,6 +57,45 @@
     "internal/handlers/connector/handlers_scaffold_revoke_connector_test.go": {
       "scaffolded_at": "2026-10-13T13:00:02Z"
     },
+    "internal/handlers/file_system/handlers_scaffold_copy_file_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
+    "internal/handlers/file_system/handlers_scaffold_create_directory_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
+    "internal/handlers/file_system/handlers_scaffold_create_file_or_folder_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
+    "internal/handlers/file_system/handlers_scaffold_delete_file_or_folder_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
+    "internal/handlers/file_system/handlers_scaffold_get_file_content_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
+    "internal/handlers/file_system/handlers_scaffold_get_file_metadata_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
+    "internal/handlers/file_system/handlers_scaffold_get_file_preview_info_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
+    "internal/handlers/file_system/handlers_scaffold_get_file_preview_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
+    "internal/handlers/file_system/handlers_scaffold_get_file_tree_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
+    "internal/handlers/file_system/handlers_scaffold_list_directory_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
+    "internal/handlers/file_system/handlers_scaffold_replace_in_files_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
+    "internal/handlers/file_system/handlers_scaffold_save_file_content_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
+    "internal/handlers/file_system/handlers_scaffold_search_files_test.go": {
+      "scaffolded_at": "2026-10-13T15:43:35Z"
+    },
     "internal/handlers/message/handlers_scaffold_get_message_test.go": {
       "scaffolded_at": "2026-10-13T13:35:41Z"
     },
@@ -182,6 +221,17 @@
     "internal/handlers/connector/handlers_scaffold_list_available_tools_test.go",
     "internal/handlers/connector/handlers_scaffold_list_connectors_test.go",
     "internal/handlers/connector/handlers_scaffold_revoke_connector_test.go",
+    "internal/handlers/file_system/handlers_scaffold_copy_file_test.go",
+    "internal/handlers/file_system/handlers_scaffold_create_directory_test.go",
+    "internal/handlers/file_system/handlers_scaffold_create_file_or_folder_test.go",
+    "internal/handlers/file_system/handlers_scaffold_delete_file_or_folder_test.go",
+    "internal/handlers/file_system/handlers_scaffold_get_file_content_test.go",
+    "internal/handlers/file_system/handlers_scaffold_get_file_metadata_test.go",
+    "internal/handlers/file_system/handlers_scaffold_get_file_preview_info_test.go",
+    "internal/handlers/file_system/handlers_scaffold_get_file_tree_test.go",
+    "internal/handlers/file_system/handlers_scaffold_replace_in_files_test.go",
+    "internal/handlers/file_system/handlers_scaffold_save_file_content_test.go",
+    "internal/handlers/file_system/handlers_scaffold_search_files_test.go",
     "internal/handlers/preset/handlers_scaffold_create_preset_test.go",
     "internal/handlers/preset/handlers_scaffold_delete_preset_test.go",
     "internal/handlers/preset/handlers_scaffold_get_default_preset_test.go",

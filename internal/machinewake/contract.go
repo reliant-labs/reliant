@@ -2,7 +2,7 @@
 
 // Package machinewake is the one step a signed-in user's own daemon-bound
 // request takes when the machine it needs is asleep: the Files tab, file
-// previews and file edits (FileSystemProxyService), and the worktree
+// previews and file edits (internal/handlers/file_system), and the worktree
 // operations (WorktreeService).
 //
 // It runs after the request has FAILED to reach its machine, never before, so a

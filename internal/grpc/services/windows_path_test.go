@@ -3,7 +3,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -78,30 +77,6 @@ func TestCreateProject_StillRejectsNonAbsolutePaths(t *testing.T) {
 	}
 }
 
-// TestFileSystemProxy_CreateDirectory_AcceptsWindowsDaemonPaths covers the
-// project picker's "New folder" against a Windows daemon. The path is executed
-// on the daemon, so it must reach it unmodified.
-func TestFileSystemProxy_CreateDirectory_AcceptsWindowsDaemonPaths(t *testing.T) {
-	for _, tc := range windowsProjectPaths {
-		t.Run(tc.name, func(t *testing.T) {
-			router := &recordingFSDaemonRouter{}
-			svc := NewFileSystemProxyService(router, nil)
-			ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-
-			resp, err := svc.CreateDirectory(ctx, connect.NewRequest(&reliantv1.CreateDirectoryRequest{
-				Path: tc.path,
-			}))
-			require.NoError(t, err)
-			assert.Equal(t, tc.path, resp.Msg.Path)
-
-			assert.Equal(t, "fs.mkdir", router.lastCommandType)
-			var sent map[string]string
-			require.NoError(t, json.Unmarshal(router.lastPayload, &sent))
-			assert.Equal(t, tc.path, sent["path"], "the daemon must receive the path it gave us, byte for byte")
-		})
-	}
-}
-
 // TestNormalizeProjectPath_WindowsPaths covers the helper that gates every
 // project-config snapshot and delta from a daemon. Returning "" here is a
 // silent, unrecoverable drop (see the comment in persistProjectConfigSnapshot).
@@ -130,19 +105,5 @@ func TestNormalizeProjectPath_WindowsPaths(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, normalizeProjectPath(tt.in))
 		})
-	}
-}
-
-// TestFileSystemService_CreateDirectory_RejectsNonAbsolute keeps the negative
-// half of the local FileSystemService honest after the widening.
-func TestFileSystemService_CreateDirectory_RejectsNonAbsolute(t *testing.T) {
-	svc, _ := setupTestFileSystemService(t)
-
-	for _, path := range []string{"", "relative/path", `C:proj`, `\proj`} {
-		_, err := svc.CreateDirectory(context.Background(), connect.NewRequest(&reliantv1.CreateDirectoryRequest{
-			Path: path,
-		}))
-		require.Error(t, err, "path %q must be refused", path)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "path %q", path)
 	}
 }

@@ -16,6 +16,10 @@
         "rpc_service": "reliant.v1.ConnectorService"
       },
       {
+        "name": "file_system",
+        "rpc_service": "reliant.v1.FileSystemService"
+      },
+      {
         "name": "message",
         "rpc_service": "reliant.v1.MessageService"
       },

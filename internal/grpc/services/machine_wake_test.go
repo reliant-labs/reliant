@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -22,8 +23,10 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
 // asleepRouter is a daemon router whose machines can be asleep, and that can
@@ -149,11 +152,27 @@ func (r *asleepRouter) record(daemonID, commandType string) {
 type asleepFixture struct {
 	*placementFixture
 	router *asleepRouter
-	fs     *FileSystemProxyService
+	fs     *file_system.Service
 	wt     *WorktreeService
 }
 
 const asleepMachineB = "daemon-b"
+
+// newFileSystemService builds the FileSystem handler these fixtures drive
+// next to a WorktreeService. Its package is internal/handlers/file_system;
+// the tests stay here because the fixtures build a WorktreeService
+// (research/forge-migration/06-p3b-recipe.md, §3.7).
+func newFileSystemService(t *testing.T, router file_system.Router, repo db.Repository) *file_system.Service {
+	t.Helper()
+	svc, err := file_system.New(file_system.Deps{
+		Logger: slog.Default(),
+		Config: &typedconfig.Config{},
+		Router: router,
+		Repo:   repo,
+	})
+	require.NoError(t, err)
+	return svc
+}
 
 func newAsleepFixture(t *testing.T, asleep ...string) *asleepFixture {
 	t.Helper()
@@ -165,7 +184,7 @@ func newAsleepFixture(t *testing.T, asleep ...string) *asleepFixture {
 	return &asleepFixture{
 		placementFixture: pf,
 		router:           router,
-		fs:               NewFileSystemProxyService(router, pf.repo),
+		fs:               newFileSystemService(t, router, pf.repo),
 		wt:               NewWorktreeService(pf.repo, nil, router),
 	}
 }
@@ -471,12 +490,13 @@ func TestFileSystemProxy_GetFilePreview_Refusals(t *testing.T) {
 		code connect.Code
 	}{
 		{"text is not a binary preview", map[string]any{"name": "a.go", "viewer_kind": "text", "mime_type": "text/plain", "size": 10}, connect.CodeFailedPrecondition},
-		{"over the size cap", map[string]any{"name": "clip.mp4", "viewer_kind": "video", "mime_type": "video/mp4", "size": maxFilePreviewBytes + 1}, connect.CodeFailedPrecondition},
+		// 1 TiB: far over file_system's preview cap, whatever it is set to.
+		{"over the size cap", map[string]any{"name": "clip.mp4", "viewer_kind": "video", "mime_type": "video/mp4", "size": int64(1) << 40}, connect.CodeFailedPrecondition},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newAsleepFixture(t)
 			router := &previewRouter{asleepRouter: newAsleepRouter(), info: tc.info}
-			fs := NewFileSystemProxyService(router, f.repo)
+			fs := newFileSystemService(t, router, f.repo)
 			chatID := f.chat(t, f.userID, asleepMachineB, "")
 
 			_, err := fs.GetFilePreview(f.ctx, connect.NewRequest(&reliantv1.GetFilePreviewRequest{

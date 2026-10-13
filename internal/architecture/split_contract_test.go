@@ -225,22 +225,6 @@ func TestCallLLM_NoDirectFilesystem(t *testing.T) {
 	}
 }
 
-// ─── filesystem abstraction ────────────────────────────────────────────────
-
-func TestFilesystemService_UsesLocalFS(t *testing.T) {
-	src := readFile(t, filepath.Join(root(t), "internal/grpc/services/filesystem.go"))
-	// Should NOT contain bare os.ReadFile etc.
-	for _, banned := range []string{"os.ReadFile(", "os.WriteFile(", "os.ReadDir(", "os.Stat(", "os.Open(", "filepath.Walk("} {
-		if strings.Contains(src, banned) {
-			t.Errorf("filesystem.go still contains bare call: %s", banned)
-		}
-	}
-	// Should reference localfs
-	if !strings.Contains(src, "localfs.FS") || !strings.Contains(src, "localfs.New()") {
-		t.Error("filesystem.go should use localfs.FS / localfs.New()")
-	}
-}
-
 // ─── split entrypoints ────────────────────────────────────────────────────
 
 func TestSplitEntrypoints_Exist(t *testing.T) {

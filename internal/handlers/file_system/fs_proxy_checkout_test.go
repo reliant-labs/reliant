@@ -1,4 +1,4 @@
-package services
+package file_system
 
 import (
 	"context"
@@ -68,7 +68,7 @@ func TestFileSystemProxy_GetFileTree_QueuedCloneIsCloningNotInternal(t *testing.
 	require.NoError(t, repo.UpdateProject(ctx, &db.Project{ID: projectID, Name: "forge", Path: base, UserID: fsProxyTestUser, RemoteURL: &remote}, fsProxyTestUser))
 	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, projectID, "2aab1465", base, nil, "clone:"+projectID+":2aab1465"))
 
-	svc := NewFileSystemProxyService(&fsMissingDirRouter{daemonID: "2aab1465"}, repo)
+	svc := newProxy(t, &fsMissingDirRouter{daemonID: "2aab1465"}, repo)
 	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "/"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "a missing project root is NOT_FOUND, not INTERNAL")
@@ -94,7 +94,7 @@ func TestFileSystemProxy_GetFileTree_ProjectNotOnThisMachineIsAbsent(t *testing.
 	// make this machine read as "cloning".
 	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, projectID, "old-machine", base, nil, "clone:"+projectID+":old-machine"))
 
-	svc := NewFileSystemProxyService(&fsMissingDirRouter{daemonID: "2aab1465"}, repo)
+	svc := newProxy(t, &fsMissingDirRouter{daemonID: "2aab1465"}, repo)
 	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
@@ -109,7 +109,7 @@ func TestFileSystemProxy_GetFileTree_ProjectNotOnThisMachineIsAbsent(t *testing.
 // with the user's own edits and keeps its existing handling.
 func TestFileSystemProxy_GetFileTree_MissingSubdirStaysAsItWas(t *testing.T) {
 	repo, projectID, _ := seedFSProxyProject(t)
-	svc := NewFileSystemProxyService(&fsMissingDirRouter{daemonID: "2aab1465"}, repo)
+	svc := newProxy(t, &fsMissingDirRouter{daemonID: "2aab1465"}, repo)
 	_, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "pkg"}))
 	require.Error(t, err)
 	var cerr *connect.Error
@@ -134,7 +134,7 @@ func TestFileSystemProxy_GetFileTree_MissingRootViaMainWorktreeIsACheckoutState(
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 
-	svc := NewFileSystemProxyService(&fsMissingDirRouter{daemonID: "2aab1465"}, repo)
+	svc := newProxy(t, &fsMissingDirRouter{daemonID: "2aab1465"}, repo)
 	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, WorktreeId: &mainID}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
@@ -169,8 +169,7 @@ func TestFileSystemProxy_SendCommand_ClassifiesMissingPath(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := &FileSystemProxyService{router: &fsFailRouter{err: errors.New(tc.err)}}
-			svc.wake = machinewake.New(machinewake.Deps{Resumer: machinewake.ResumerOf(svc.router)})
+			svc := &Service{deps: Deps{Router: &fsFailRouter{err: errors.New(tc.err)}}}
 			var resp struct{}
 			err := svc.sendCommand(fsProxyContext(), fsProxyTestUser, machinewake.Target{}, "fs.read_file", map[string]any{}, &resp, 1000)
 			require.Error(t, err)
