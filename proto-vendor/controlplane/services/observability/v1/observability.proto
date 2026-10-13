@@ -889,8 +889,14 @@ message GetDashboardsRequest {
 
 message GetDashboardsResponse {
   DashboardSpec spec = 1;
-  // "synthesized": built from the services seen in the data (phase 1).
-  // "release": the environment's own generated spec.
+  // "release": the dashboards the environments in scope are running, carried by
+  // their current release (forge's generated set plus any the project owns).
+  // With several environments in scope, a dashboard present in more than one
+  // release is served as defined by the most recently promoted of them.
+  // "synthesized": built from the services seen in the data. Served when no
+  // environment in scope has a recorded set: its current release's bundle was
+  // never recorded (a failed registry push, a self-managed environment), or
+  // predates dashboards in the bundle, or nothing has been promoted into it.
   string source = 2;
 }
 
@@ -899,6 +905,8 @@ message DashboardSpec {
   string project = 2;
   repeated Dashboard dashboards = 3;
   repeated SavedSearch saved_searches = 4;
+  // Always empty: forge stopped writing alerts into the dashboard spec (they are
+  // forge.AlertRule defaults now). Kept because removing a field is a wire break.
   repeated DashboardAlert alerts = 5;
 }
 
@@ -908,12 +916,27 @@ message Dashboard {
   string description = 3;
   repeated DashboardFilter filters = 4;
   repeated Panel panels = 5;
+  // Marker series drawn over every line panel. Empty when the dashboard declares
+  // none.
+  repeated DashboardAnnotation annotations = 6;
 }
 
 message DashboardFilter {
   string id = 1;
   string label = 2;
   string field = 3;
+  // traces | metrics | logs: the telemetry the dropdown reads its values from.
+  // Empty is traces.
+  string signal = 4;
+}
+
+// DashboardAnnotation declares where a dashboard's time-series markers come from.
+// The spec only names the source; the console draws it from data it owns.
+message DashboardAnnotation {
+  // "releases": a marker for every promotion of a release into the environment
+  // (DeliveryInsightsService.ListReleases).
+  string source = 1;
+  string label = 2;
 }
 
 message Panel {
