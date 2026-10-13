@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -146,7 +147,7 @@ func (s *ChatService) StartChat(
 					fmt.Errorf("daemon_id conflicts with the chat's pinned daemon: a branch runs on its worktree's machine"))
 			}
 		}
-		if err := validateOwnedProjectDaemon(ctx, s.database, userID, projectID, chosen); err != nil {
+		if err := daemonchoice.Validate(ctx, s.database, userID, projectID, chosen); err != nil {
 			return nil, err
 		}
 		spec.DaemonID = chosen
@@ -1289,7 +1290,7 @@ func (s *ChatService) SetChatDaemon(
 	// StartChat applies to a chosen daemon.
 	var daemonID *string
 	if req.Msg.DaemonId != "" {
-		if err := validateOwnedProjectDaemon(ctx, s.database, userID, chat.ProjectID, req.Msg.DaemonId); err != nil {
+		if err := daemonchoice.Validate(ctx, s.database, userID, chat.ProjectID, req.Msg.DaemonId); err != nil {
 			return nil, err
 		}
 		daemonID = &req.Msg.DaemonId

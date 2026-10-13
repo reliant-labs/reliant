@@ -1,5 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+
+// Package daemonchoice answers "which machine may this run on?" for a daemon a
+// caller chose explicitly. Trigger creation and StartChat (and a chat's
+// machine switch) share it, so the question has one answer.
+//
+//forge:exclude-contract: pure ownership and install check over daemon rows; it reads only through the Reader its caller passes, and holds no state
+package daemonchoice
 
 import (
 	"context"
@@ -12,7 +18,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// validateOwnedProjectDaemon checks that a daemon a caller chose exists, is
+// Reader is what Validate reads: the chosen daemon, and the project's installs.
+type Reader interface {
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error)
+}
+
+// Validate checks that a daemon a caller chose exists, is
 // theirs, and can run the project. Shared by trigger creation and StartChat so
 // "which machine may this run on" has one answer.
 //
@@ -20,7 +32,7 @@ import (
 // cannot probe which daemon ids exist. A project with no project_daemons rows
 // has no recorded install anywhere, so any owned daemon is accepted; once it is
 // installed somewhere, the daemon must be one that has it.
-func validateOwnedProjectDaemon(ctx context.Context, repo db.Repository, userID, projectID, daemonID string) error {
+func Validate(ctx context.Context, repo Reader, userID, projectID, daemonID string) error {
 	daemon, err := repo.GetDaemon(ctx, daemonID)
 	if err != nil || daemon == nil || daemon.UserID != userID {
 		return connect.NewError(connect.CodeNotFound, errors.New("daemon not found"))

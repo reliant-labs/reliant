@@ -199,7 +199,7 @@ func (r *Repo) removeDaemon(ctx context.Context, daemonID string) (string, bool,
 // Each resolves to a daemon nothing can reach once the machine is gone, so a
 // chat on a deleted machine, or on one that came back under a new id, never
 // recovered: its tools routed to the dead id forever, and
-// validateOwnedProjectDaemon refused every OTHER machine for a project whose
+// daemonchoice.Validate refused every OTHER machine for a project whose
 // only install was on it. Released, each is re-learned from live evidence:
 // the chat falls to its worktree's owner, else default resolution (exactly as
 // a chat that never had a pin), a workspace is adopted by the machine that

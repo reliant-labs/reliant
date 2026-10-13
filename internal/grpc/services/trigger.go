@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -808,7 +809,7 @@ func (s *TriggerService) resolveActivation(ctx context.Context, userID string, d
 // Another user's daemon is NotFound, identical to a missing one, so a caller
 // cannot probe which daemon ids exist.
 func (s *TriggerService) validateTriggerDaemon(ctx context.Context, userID, projectID, daemonID string) error {
-	return validateOwnedProjectDaemon(ctx, s.database, userID, projectID, daemonID)
+	return daemonchoice.Validate(ctx, s.database, userID, projectID, daemonID)
 }
 
 // validateNoMachineWorkflow refuses a no-machine trigger whose workflow will not

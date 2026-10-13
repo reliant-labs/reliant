@@ -242,7 +242,7 @@ func assertKept(t *testing.T, rawDB *sql.DB, daemonID string) {
 // TestRemoveDaemon_ReleasesWhatWasBoundToIt: a machine that no longer exists
 // must not keep serving as a chat's pin, a worktree's owner or a project's
 // install. Each of those resolved to a daemon nothing can reach — routing
-// failed for good, and validateOwnedProjectDaemon refused every OTHER machine
+// failed for good, and daemonchoice.Validate refused every OTHER machine
 // for the project — so a chat on a deleted (or re-identified) machine never
 // recovered. Released, each is re-learned from live evidence: default
 // resolution for the chat, the sweep's adoption for the worktree, the
