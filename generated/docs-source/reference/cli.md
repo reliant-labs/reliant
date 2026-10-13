@@ -76,7 +76,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge component search`](#reliant-forge-component-search) | Search components by keyword |
 | [`reliant forge db`](#reliant-forge-db) | Database and migration commands |
 | [`reliant forge db introspect`](#reliant-forge-db-introspect) | Inspect the migrated database schema |
-| [`reliant forge db migrate`](#reliant-forge-db-migrate) | Run migration lifecycle commands with golang-migrate |
+| [`reliant forge db migrate`](#reliant-forge-db-migrate) | Apply, inspect and repair migration state with forge's migrator |
 | [`reliant forge db migrate force`](#reliant-forge-db-migrate-force) | Clear a dirty migration state by recording a version without running SQL |
 | [`reliant forge db migrate status`](#reliant-forge-db-migrate-status) | Show migration status |
 | [`reliant forge db migrate up`](#reliant-forge-db-migrate-up) | Apply pending migrations |
@@ -156,6 +156,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`reliant forge logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
 | [`reliant forge observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
+| [`reliant forge observe alerts`](#reliant-forge-observe-alerts) | Alert rules declared for an environment |
+| [`reliant forge observe alerts check`](#reliant-forge-observe-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
+| [`reliant forge observe metrics`](#reliant-forge-observe-metrics) | Print the metrics a service declares: name, type, unit, attributes, stability |
 | [`reliant forge observe profile`](#reliant-forge-observe-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`reliant forge package`](#reliant-forge-package) | Manage internal packages |
 | [`reliant forge package new`](#reliant-forge-package-new) | Create a new internal package with contract interface |
@@ -1825,6 +1828,7 @@ reliant forge component install <component-names...> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dir`, `-d` | `string` | - | target directory (default: auto-detect nearest frontend) |
 
 ---
@@ -1863,7 +1867,8 @@ Manage database migrations.
 
 Forge uses a migration-first database model:
 - Checked-in SQL migrations in db/migrations/ are the source of truth
-- golang-migrate is the canonical migration runner
+- forge's migrator (pkg/migratekit, on golang-migrate) applies them, from
+  'forge db migrate' and from the project's own binary alike
 - Entity types are projections of the applied schema (forge generate)
 
 When something is wedged:
@@ -1904,7 +1909,7 @@ reliant forge db
 | Command | Description |
 |---------|-------------|
 | [`introspect`](#reliant-forge-db-introspect) | Inspect the migrated database schema |
-| [`migrate`](#reliant-forge-db-migrate) | Run migration lifecycle commands with golang-migrate |
+| [`migrate`](#reliant-forge-db-migrate) | Apply, inspect and repair migration state with forge's migrator |
 | [`migration`](#reliant-forge-db-migration) | Create and re-version forward-only SQL migration files |
 | [`reset`](#reliant-forge-db-reset) | DROP the dev database, recreate it, migrate to head, and seed (dev-only) |
 | [`seed`](#reliant-forge-db-seed) | Materialize deterministic development seed data at runtime |
@@ -1941,15 +1946,26 @@ reliant forge db introspect [flags]
 
 #### reliant forge db migrate
 
-Run migration lifecycle commands with golang-migrate
+Apply, inspect and repair migration state with forge's migrator
 
-Apply, inspect, and repair migration state using golang-migrate.
+Apply, inspect, and repair migration state with forge's migrator
+(forge/pkg/migratekit, built on golang-migrate) — the same one the project's
+own '<binary> db migrate up' and a server's AUTO_MIGRATE run, so every path
+takes the same run lock, keeps the same applied record, and reaches the same
+verdicts:
+
+  - a version applied from a different file, or one the schema passed without
+    applying, is refused before anything runs;
+  - a database goose migrated is ADOPTED when the first migration declares
+    its history ('-- forge:adopts goose ...');
+  - a schema AHEAD of the directory is reported, and refused unless every
+    newer version was declared '-- forge:backward-compatible'.
 
 There is no "down": forge rolls forward only. A bad migration is repaired by a
 new forward migration written against the state the database is actually in.
 
-Migrations are stored in db/migrations/ by default.
-Install golang-migrate from https://github.com/golang-migrate/migrate/tree/master/cmd/migrate.
+Migrations are read from db/migrations/ by default. Nothing else needs to be
+installed.
 
 The connection string can be provided via --dsn or, if the flag is omitted,
 the DATABASE_URL environment variable.
@@ -1993,6 +2009,10 @@ with 'forge db introspect', then finish or undo the partial migration by hand),
 and force only once the database matches what that version intended. Forcing
 past a migration whose SQL never ran leaves the schema permanently behind what
 forge believes is applied.
+
+The applied record (schema_migrations_applied) follows the version: the
+versions a force asserts are recorded as this directory's files, and rows above
+the forced version are dropped, so the next 'up' accepts the database.
 
 Examples:
   forge db introspect                    # see what actually landed
@@ -2387,15 +2407,24 @@ Output:
 
 No .down.sql is written: forge rolls forward only.
 
+The baseline holds only statements that build the database. pg_dump's session
+prelude (the SET statements and set_config('search_path', '', false)) and its
+psql meta-commands (\restrict, \unrestrict) are dropped: a migrator runs every
+migration of a run on one session, so an emptied search_path would break the
+next migration and leak into a server's pool. Function bodies, comments and
+inserted values are kept byte for byte.
+
 This is the canonical "N migrations → one baseline" workflow used when
 pulling a long-lived schema into a new project, or when collapsing
 historical migrations into a checkpoint. Paths resolve against the project
 root (-C, or the project the current directory is in).
 
 Requires:
-  - docker (for the ephemeral postgres)
-  - migrate (golang-migrate CLI) on PATH
-  - pg_dump on PATH (matching the postgres image major version)
+  - docker (for the ephemeral postgres; pg_dump runs inside it, so its major
+    version matches the server's)
+
+The migrations are applied by forge's migrator, the same one
+'forge db migrate up' runs.
 
 Examples:
   forge db squash
@@ -3558,6 +3587,7 @@ reliant forge env deploy <environment> [version] [flags]
 | `--target` | `stringArray` | `[]` | Deploy ONLY the named application(s) (service/operator/frontend name; repeatable). Scopes K8sCluster apply to the app's workload + shared resources, and External/Compose dispatch to the named apps. Empty = deploy the whole env bundle (default). |
 | `--target-arch` | `string` | - | Override target GOARCH for cross-compilation (default: forge.yaml deploy.target_arch, then amd64) |
 | `--timeout` | `duration` | `0s` | Whole health-gate budget (default 15m hosted, 5m per resource self-managed) |
+| `--to` | `string` | - | With --offline-ledger: deploy this CACHED release instead of the current one — a release version, a cached promotion id, or `previous` (the release before the current one). The rollback for a bad release that took the control plane down. Refused if the release is not in this machine's offline copy (`forge env status <env>` lists what is) |
 | `--wait` | `bool` | - | Block until the deploy is LIVE even when the control plane queues it on a person (billing): wait for them to act, up to --timeout. Without it a queued deploy prints what it waits on and the action URL, and exits 7 |
 | `--yes` | `bool` | - | Proceed without the interactive confirmation: "I read the plan". The paved CI path. The plan is still computed and printed |
 
@@ -3983,6 +4013,7 @@ reliant forge env new <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--bind` | `stringArray` | `[]` | Rebind a workload or frontend in the new env: <workload>=hosted|cluster, <frontend>=hosted|bucket (repeatable) |
 | `--check` | `bool` | - | Don't scaffold; verify the existing env has no REPLACE_ME_* placeholders left and KCL-compiles (CI gate) |
 | `--force` | `bool` | - | Overwrite deploy/kcl/<name>/ if it already exists |
@@ -4792,6 +4823,7 @@ reliant forge generate [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--check` | `bool` | - | Run generate into a tmpdir and diff against the current tree; exit 1 on drift (for CI guards) |
 | `--dry-run` | `bool` | - | Print the pipeline plan ([RUN]/[SKIP] per step + gate reason) and exit without running any step. |
 | `--explain` | `bool` | - | Print a per-file provenance log after generate |
@@ -5127,7 +5159,8 @@ This command will:
   and otherwise runs the frontend's TypeScript compiler with --noEmit.
   Severity is lint.frontend.typecheck (error | warn | off) in forge.yaml.
 - Optionally run targeted rule sets (--contract, --db, --migration-safety,
-  --conventions, --tests)
+  --conventions, --tests). Name several to run them all under one verdict:
+  forge lint --conventions --contract
 
 By default 'forge lint' AUTO-FIXES deterministic-safe issues first, then
 gates on the residue: it canonicalizes Go formatting (goimports/gofmt import
@@ -5219,6 +5252,8 @@ Examples:
                                  # last line — safe to pipe through head/tail.
                                  # Combines with any targeted flag above:
                                  #   forge lint --read-only-fields --quiet
+  forge lint --show-suppressed   # Every suppression the project declares, with
+                                 # file:line and reason. Lints nothing
   forge lint --scope internal/handlers/jobs --scope proto/services/jobs
                                  # Only findings in files under those paths.
                                  # golangci-lint/contract run on the scope's
@@ -5263,6 +5298,7 @@ reliant forge lint [paths...] [flags]
 | `--quiet`, `-q` | `bool` | - | Print only what failed: a one-line summary per failing linter, its error findings, and the verdict as the LAST line (a clean run is one line). Auto-fix still applies; combines with the targeted flags and --scope |
 | `--read-only-fields` | `bool` | - | Flag a forge:read-only field whose column nothing populates — no non-generated Go file assigns it, no meaningful DEFAULT, not GENERATED — so every row ships as the type's zero with no error anywhere. FAILS the build, except while the service still holds forge-scaffolded unwired rpc stubs (then a warning naming them) |
 | `--scope` | `stringSlice` | `[]` | Report only findings in files under `PATH` (repeatable or comma-separated, project-relative). Go linters run on PATH's packages only; file-anchored linters report only findings under PATH; whole-project linters (frontend lint, component-drift, config-reach) cannot be scoped, are skipped, and are named in the verdict. Auto-fix touches only files under PATH |
+| `--show-suppressed` | `bool` | - | List every suppression the project declares, with file:line, what it covers and the stated reason: forge.yaml lint.rules (off/warn) and contracts.exclude, //forge:exclude-contract markers, forge:lint-disable* and nolint directives, and the migration and optional-dep pragmas. Read-only: runs no linter and exits 0; combines with --json and --scope |
 | `--skip-frontends` | `bool` | - | Skip the whole frontend lane (eslint/stylelint + TypeScript typecheck + static-export) for a backend-only gate that needs no Node toolchain |
 | `--static-export` | `bool` | - | For each Next.js frontend that must build to a static export (forge.yaml output: static, or bound to forge.OnHosted / OnBucket / OnFirebase in any env), report with file:line what the export cannot serve. FAILS on what next build refuses (a dynamic route without generateStaticParams, server actions, next/headers, next/image without images.unoptimized, a build that is not an export); WARNS on what it silently drops (middleware, non-GET route handlers, ungated rewrites/redirects/headers, a bucket-bound export without trailingSlash) |
 | `--strict` | `bool` | - | Escalate advisory findings to errors so they fail the build / CI: RPCs missing a (forge.v1.method) auth-posture annotation, and any lane that could NOT run (frontend typecheck or eslint with deps not installed; typed-config guardrail when golangci-lint never reported) |
@@ -5362,7 +5398,105 @@ reliant forge observe
 
 | Command | Description |
 |---------|-------------|
+| [`alerts`](#reliant-forge-observe-alerts) | Alert rules declared for an environment |
+| [`metrics`](#reliant-forge-observe-metrics) | Print the metrics a service declares: name, type, unit, attributes, stability |
 | [`profile`](#reliant-forge-observe-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
+
+---
+
+#### reliant forge observe alerts
+
+Alert rules declared for an environment
+
+```
+reliant forge observe alerts
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`check`](#reliant-forge-observe-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
+
+---
+
+#### reliant forge observe alerts check
+
+Evaluate the env's alert rules against the local ClickStack and print what would fire
+
+Evaluate the env's resolved alert rules (your forge.AlertRule entries plus the
+generated defaults you did not disable, exactly what `forge env shape` records)
+against the local ClickStack's ClickHouse, once, and print every instance that
+is returning a row now: its labels and its value.
+
+Nothing is notified and nothing is stored. A rule's `for` hold time is NOT applied:
+this answers "what does the condition return right now", so a rule listed here
+fires in production only once it has kept returning for its `for`.
+
+Each expr runs read-only with a timeout and a row cap (--timeout, --max-rows);
+a rule that errors is reported and does not stop the others.
+
+  cli forge observe alerts check               # the dev env
+  cli forge observe alerts check --env staging
+  cli forge observe alerts check --rule ServiceErrorRateHigh --sql
+
+Needs the local ClickStack running (`forge env up`).
+
+```
+reliant forge observe alerts check [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--env` | `string` | `dev` | environment whose rules to evaluate |
+| `--json` | `bool` | - | print the result as JSON |
+| `--max-rows` | `int` | `200` | a rule returning more rows than this is reported as an error |
+| `--rule` | `string` | - | evaluate only this alert name |
+| `--sql` | `bool` | - | print each rule's expr instead of running it |
+| `--timeout` | `duration` | `20s` | per-rule query timeout |
+
+---
+
+#### reliant forge observe metrics
+
+Print the metrics a service declares: name, type, unit, attributes, stability
+
+Print the declared metrics schema (forge.metrics/v1) of a service.
+
+Every metric a forge service emits is declared in a typed registry, so the full
+list — with each one's type, UCUM unit, attribute keys and stability — can be
+read without running a query. The schema comes from one of two places:
+
+  forge observe metrics                          # the project's built binary (bin/<name>)
+  forge observe metrics --binary ./bin/api       # a specific binary: runs 'metrics schema --json'
+  forge observe metrics --url http://localhost:6060   # a running service's pprof listener
+
+The same document is served by 'GET /debug/metrics/schema', printed by
+'<bin> metrics schema --json', and written by 'forge build' to
+bin/observability/metrics-schema.json, which a release carries as
+observability/metrics-schema.json.
+
+  forge observe metrics --dashboard > deploy/observability/dashboards/<name>-custom-metrics.json
+
+prints the HyperDX "Custom metrics" dashboard drawn from the schema (counters as
+a rate, histograms as p50/p95/p99, gauges as the last value, grouped by their
+enumerated attributes). It writes nothing itself: commit the file to own it.
+
+```
+reliant forge observe metrics [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--binary` | `string` | - | a built service binary to run (default: the project's bin/<name>) |
+| `--dashboard` | `bool` | - | print the HyperDX Custom metrics dashboard drawn from the schema instead |
+| `--json` | `bool` | - | print the forge.metrics/v1 JSON document |
+| `--timeout` | `duration` | `30s` | how long to wait for the binary or the service |
+| `--url` | `string` | - | a running service's debug listener, e.g. http://localhost:6060 |
 
 ---
 
@@ -5479,6 +5613,7 @@ reliant forge package new <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--kind` | `string` | - | package kind template (e.g. eventbus, client) |
 | `--type` | `string` | `service` | package shape: service|adapter (see --help for details) |
 
@@ -5696,7 +5831,7 @@ Subcommands:
                                 handler is no longer served.
 
 ```
-reliant forge project delete
+reliant forge project delete [flags]
 ```
 
 **Subcommands:**
@@ -5704,6 +5839,12 @@ reliant forge project delete
 | Command | Description |
 |---------|-------------|
 | [`service`](#reliant-forge-project-delete-service) | Retire a service (inverse of `forge scaffold service`) |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -5737,6 +5878,7 @@ reliant forge project delete service <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | Print what would change without touching any files |
 | `--keep-types` | `bool` | `true` | Leave a types-only tombstone in pkg/app/services.go so proto types + Connect client keep generating (default; --keep-types=false to fully unlist) |
 | `--yes` | `bool` | - | Skip the confirmation prompt |
@@ -5781,6 +5923,7 @@ reliant forge project disown <path>... --reason <text> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | Print what would change without writing .forge/disowned.json |
 | `--reason` | `string` | - | WHY forge's generated code couldn't express what you needed (required; recorded in .forge/disowned.json) |
 
@@ -5987,7 +6130,7 @@ Examples:
   forge project migrate tdd --dry-run
 
 ```
-reliant forge project migrate
+reliant forge project migrate [flags]
 ```
 
 **Subcommands:**
@@ -5996,6 +6139,12 @@ reliant forge project migrate
 |---------|-------------|
 | [`import`](#reliant-forge-project-migrate-import) | Import migrations from another format (e.g. goose) into golang-migrate shape |
 | [`tdd`](#reliant-forge-project-migrate-tdd) | Rewrite hand-rolled handler tests to use tdd.RunRPCCases |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -6043,6 +6192,7 @@ reliant forge project migrate import [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dest-dir` | `string` | - | Destination migrations directory (default: project's migrations dir) |
 | `--dry-run` | `bool` | - | Print planned writes without touching disk |
 | `--force` | `bool` | - | Overwrite existing target files (default refuses) |
@@ -6077,6 +6227,7 @@ reliant forge project migrate tdd [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | Print actions without writing files |
 | `--path` | `string` | - | Project root or subtree to walk (default: cwd) |
 
@@ -6200,8 +6351,14 @@ Examples:
   forge project rescaffold internal/handlers/item/handlers_crud_test.go
 
 ```
-reliant forge project rescaffold <path>...
+reliant forge project rescaffold <path>... [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -6773,6 +6930,7 @@ reliant forge scaffold [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | print the full plan (phase 1+2 predictions) and write nothing |
 | `--service` | `string` | - | narrow every phase of the sweep to one service |
 
@@ -6808,11 +6966,14 @@ Example:
   forge scaffold adapter pricing_feed
 
 ```
-reliant forge scaffold adapter <name>
+reliant forge scaffold adapter <name> [flags]
 ```
 
 **Flags:**
 
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -6844,8 +7005,14 @@ Example:
   forge scaffold binary workspace-proxy
 
 ```
-reliant forge scaffold binary <name>
+reliant forge scaffold binary <name> [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -6884,6 +7051,7 @@ reliant forge scaffold crd <Name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--group` | `string` | - | API group (default: parent operator's group) |
 | `--operator` | `string` | - | Target operator name (default: only operator in project) |
 | `--shape` | `string` | `state-machine` | Reconciler scaffold style: state-machine, config, composite |
@@ -6932,6 +7100,7 @@ reliant forge scaffold entity <name> --from-proto <svc>[.<Message>] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | print the --from-proto birth plan (migrations + quintet completion) and write nothing |
 | `--from-proto` | `string` | - | derive the create-table migration from an already-authored proto message: <svc> or <svc>.<Message> (one-time; the migration is yours at birth) |
 | `--no-timestamps` | `bool` | - | skip the managed created_at/updated_at columns |
@@ -7007,6 +7176,7 @@ reliant forge scaffold frontend <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--auth-mode` | `string` | - | Sign-in flow for this frontend. Only `native` (the default) is scaffolded: your own form POSTs credentials to your own API and gets an HttpOnly session cookie; the server runs the OIDC flow (internal/app/login_broker.go) and the browser never contacts the IdP. |
 | `--base-path` | `string` | - | URL prefix the frontend is mounted under (e.g. "/admin"). Only applies to --kind web. |
 | `--kind` | `string` | - | frontend kind (web, mobile, or vite-spa) |
@@ -7039,8 +7209,14 @@ Example:
   forge scaffold handler-file admin user_admin
 
 ```
-reliant forge scaffold handler-file <svc> <name>
+reliant forge scaffold handler-file <svc> <name> [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -7078,6 +7254,7 @@ reliant forge scaffold library <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--force` | `bool` | - | Overwrite the target directory if it already exists |
 | `--no-exclude` | `bool` | - | Skip adding the path to forge.yaml's contracts.exclude |
 | `--path` | `string` | - | Target directory (default: internal/<name>/) |
@@ -7114,6 +7291,7 @@ reliant forge scaffold operator <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--api-package` | `string` | - | (legacy) Go package name for the placeholder CRD types |
 | `--crd-type` | `string` | - | (legacy) Placeholder CRD Go type name |
 | `--group` | `string` | - | API group (default: <project-name>.io) |
@@ -7152,6 +7330,7 @@ reliant forge scaffold package <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--kind` | `string` | - | package kind template (e.g. eventbus, client) |
 | `--type` | `string` | `service` | package shape: service|adapter (see --help) |
 
@@ -7196,6 +7375,7 @@ reliant forge scaffold rpc <svc> <Name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--stream` | `string` | - | stream mode (server, client, bidi); omit for unary — only used when the RPC is not in the proto yet |
 
 ---
@@ -7229,6 +7409,7 @@ reliant forge scaffold scenario <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--description` | `string` | - | Optional human-readable description embedded in the generated file |
 | `--from` | `string` | - | Copy an existing scenario file as a starting point (by name, no .ts suffix) |
 | `--frontend` | `string` | - | Target frontend name (required when the project has multiple frontends) |
@@ -7280,6 +7461,7 @@ reliant forge scaffold service <name>... [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--force` | `bool` | - | Force-overwrite every scaffold output file |
 | `--resume` | `bool` | - | Resume a partial scaffold: skip files that already exist |
 
@@ -7306,6 +7488,7 @@ reliant forge scaffold webhook <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--service` | `string` | - | Target service name (required) |
 
 ---
@@ -7342,6 +7525,7 @@ reliant forge scaffold worker <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--kind` | `string` | - | worker kind (use cron for scheduled workers) |
 | `--no-generate` | `bool` | - | skip the post-scaffold `forge generate` run (scaffold-only mode for parallel-agent rounds) |
 | `--schedule` | `string` | - | cron schedule for --kind cron workers |

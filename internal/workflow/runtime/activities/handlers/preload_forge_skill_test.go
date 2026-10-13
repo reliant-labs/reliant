@@ -190,6 +190,7 @@ func TestForgeSkills_ABodyThatFitsArrivesWhole(t *testing.T) {
 func discoverForgeProjectCatalog(t *testing.T) (string, []cfgpkg.StoredSkill) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir()) // no ~/.forge or ~/.reliant skills
+	runAsReliantBinary(t)
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "forge.yaml"), []byte("name: roofers\n"), 0o644))
 
@@ -202,6 +203,26 @@ func discoverForgeProjectCatalog(t *testing.T) (string, []cfgpkg.StoredSkill) {
 		})
 	}
 	return dir, stored
+}
+
+// runAsReliantBinary makes this test process present itself as the `reliant`
+// binary for the duration of the test.
+//
+// forge spells every command in a skill for the binary that serves it —
+// `filepath.Base(os.Args[0]) + " forge"` — so under `go test` the catalog
+// renders `handlers.test forge generate` where an agent is handed `reliant
+// forge generate`. The start-here skill carries ~90 such references, so the
+// test binary's longer name inflated the body by ~540 bytes and windowed a
+// skill that production delivers whole. These tests assert what an agent
+// receives, so they render it under the name it is received under.
+//
+// Safe: every caller is sequential (t.Setenv forbids t.Parallel), so no other
+// test observes the swap, and it is restored on cleanup.
+func runAsReliantBinary(t *testing.T) {
+	t.Helper()
+	argv0 := os.Args[0]
+	os.Args[0] = "reliant"
+	t.Cleanup(func() { os.Args[0] = argv0 })
 }
 
 // runEmbeddedForge runs forge's real command tree mounted under a parent the
