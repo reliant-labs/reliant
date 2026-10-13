@@ -115,7 +115,7 @@ func RegistryFromEnv(getenv func(string) string) (*Registry, error) {
 		if err != nil {
 			return nil, err
 		}
-		p, err := gmail.NewPoller(m, httpaction.NewRunner(netguard.New()))
+		p, err := gmail.New(gmail.Deps{BaseURL: m.GetConnection().GetBaseUrl(), Runner: httpaction.NewRunner(netguard.New())})
 		if err != nil {
 			return nil, err
 		}

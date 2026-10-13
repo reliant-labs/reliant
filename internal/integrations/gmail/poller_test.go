@@ -22,14 +22,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
-func (f *fakeGmail) poller() *gmail.Poller {
+func (f *fakeGmail) poller() gmail.Service {
 	f.t.Helper()
-	p, err := gmail.NewPoller(f.manifest(), f.runner())
+	p, err := gmail.New(gmail.Deps{BaseURL: f.manifest().GetConnection().GetBaseUrl(), Runner: f.runner()})
 	require.NoError(f.t, err)
 	return p
 }
 
-func (f *fakeGmail) poll(p *gmail.Poller, cursor string) (*triggers.PollResult, error) {
+func (f *fakeGmail) poll(p gmail.Service, cursor string) (*triggers.PollResult, error) {
 	return p.Poll(context.Background(), triggers.PollRequest{TriggerID: "trg-1", OwnerUserID: "alice", ConnectionID: "conn_gmail", Credential: staticCred{}, Cursor: cursor})
 }
 

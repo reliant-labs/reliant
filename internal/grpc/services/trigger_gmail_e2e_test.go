@@ -134,7 +134,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	registry := webhook.NewRegistry()
 	gm, err := catalog.MustBuiltin().Manifest("gmail", 1)
 	require.NoError(t, err)
-	poller, err := gmail.NewPoller(gm, google.runner())
+	poller, err := gmail.New(gmail.Deps{BaseURL: gm.GetConnection().GetBaseUrl(), Runner: google.runner()})
 	require.NoError(t, err)
 	require.NoError(t, registry.RegisterPoller(gmail.ID, poller))
 	intake := triggers.NewIntake(repo, temporalClient, taskQueue)

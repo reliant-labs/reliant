@@ -1,12 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
 
-// Package gmail is the Go half of the Gmail integration
-// (catalog/gmail/manifest.yaml): the go: executors for what a declarative
-// request cannot express — assembling an RFC 2822 message for messages.send,
-// decoding a message's MIME part tree for messages.get — and the poller that
-// delivers the new-email trigger from users.history.list.
-//
-// Importing the package registers the executors in httpaction.Executors().
 package gmail
 
 import (

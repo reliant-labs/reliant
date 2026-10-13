@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -57,23 +55,20 @@ const historyPageSize = 500
 // maxHistoryPages bounds one poll's history.list pages.
 const maxHistoryPages = 20
 
-// Poller is Gmail's triggers.Poller.
-type Poller struct {
+// poller is the Service.
+type poller struct {
 	baseURL string
-	runner  *httpaction.Runner
+	runner  HTTPRunner
 	now     func() time.Time
 }
 
-// NewPoller builds the poller over the manifest's base_url and the guarded
-// runner whose client every call goes through.
-func NewPoller(m *reliantv1.IntegrationManifest, runner *httpaction.Runner) (*Poller, error) {
-	if m.GetId() != ID {
-		return nil, fmt.Errorf("gmail: poller built over manifest %q", m.GetId())
-	}
-	if runner == nil {
+// New builds the poller over deps.BaseURL and the guarded runner whose client
+// every call goes through.
+func New(deps Deps) (Service, error) {
+	if deps.Runner == nil {
 		return nil, fmt.Errorf("gmail: poller needs a runner")
 	}
-	return &Poller{baseURL: m.GetConnection().GetBaseUrl(), runner: runner, now: time.Now}, nil
+	return &poller{baseURL: deps.BaseURL, runner: deps.Runner, now: time.Now}, nil
 }
 
 type profile struct {
@@ -96,8 +91,8 @@ type historyList struct {
 	HistoryID     string `json:"historyId"`
 }
 
-// Poll implements triggers.Poller.
-func (p *Poller) Poll(ctx context.Context, req triggers.PollRequest) (*triggers.PollResult, error) {
+// Poll implements Service.
+func (p *poller) Poll(ctx context.Context, req triggers.PollRequest) (*triggers.PollResult, error) {
 	c, err := newAPI(p.baseURL, p.runner.Client(), req.Credential)
 	if err != nil {
 		return nil, err
@@ -198,7 +193,7 @@ type pendingMessage struct {
 
 // item reads one new message's metadata. A message deleted between the
 // history record and this read (404) is skipped: there is nothing to fire on.
-func (p *Poller) item(ctx context.Context, c *api, pm pendingMessage) (triggers.PollItem, bool, error) {
+func (p *poller) item(ctx context.Context, c *api, pm pendingMessage) (triggers.PollItem, bool, error) {
 	q := url.Values{"format": {"metadata"}, "metadataHeaders": pollHeaders}
 	var m apiMessage
 	if err := c.do(ctx, http.MethodGet, "/messages/"+url.PathEscape(pm.id), q, nil, &m); err != nil {
@@ -253,7 +248,7 @@ func (p *Poller) item(ctx context.Context, c *api, pm pendingMessage) (triggers.
 var pollHeaders = append(append([]string(nil), metadataHeaders...), authResultsHeader)
 
 // position is the mailbox's current history id.
-func (p *Poller) position(ctx context.Context, c *api) (string, error) {
+func (p *poller) position(ctx context.Context, c *api) (string, error) {
 	var prof profile
 	if err := c.do(ctx, http.MethodGet, "/profile", nil, nil, &prof); err != nil {
 		return "", err
@@ -266,7 +261,7 @@ func (p *Poller) position(ctx context.Context, c *api) (string, error) {
 
 // rebaseline restarts from the mailbox's current position, firing nothing,
 // and reports the gap.
-func (p *Poller) rebaseline(ctx context.Context, c *api, why string) (*triggers.PollResult, error) {
+func (p *poller) rebaseline(ctx context.Context, c *api, why string) (*triggers.PollResult, error) {
 	pos, err := p.position(ctx, c)
 	if err != nil {
 		return nil, err
