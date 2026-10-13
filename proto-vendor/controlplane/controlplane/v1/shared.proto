@@ -223,6 +223,11 @@ message DaemonDisk {
   DaemonDiskState state = 4;
   // message is user-facing text explaining a FAILED (or slow) grow.
   string message = 5;
+  // usable_gib is what the RUNNING machine can use now: the disk's size when
+  // it last started. A kata machine does not see a grow until it restarts, so
+  // capacity_gib above usable_gib is space a restart unlocks. Zero when the
+  // machine is not running, or not yet known.
+  int32 usable_gib = 6;
 }
 
 enum DaemonDiskState {

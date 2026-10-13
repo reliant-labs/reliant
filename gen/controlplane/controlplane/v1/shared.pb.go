@@ -968,7 +968,12 @@ type DaemonDisk struct {
 	IncludedGib int32           `protobuf:"varint,3,opt,name=included_gib,json=includedGib,proto3" json:"included_gib,omitempty"`
 	State       DaemonDiskState `protobuf:"varint,4,opt,name=state,proto3,enum=controlplane.v1.DaemonDiskState" json:"state,omitempty"`
 	// message is user-facing text explaining a FAILED (or slow) grow.
-	Message       string `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	Message string `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	// usable_gib is what the RUNNING machine can use now: the disk's size when
+	// it last started. A kata machine does not see a grow until it restarts, so
+	// capacity_gib above usable_gib is space a restart unlocks. Zero when the
+	// machine is not running, or not yet known.
+	UsableGib     int32 `protobuf:"varint,6,opt,name=usable_gib,json=usableGib,proto3" json:"usable_gib,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1036,6 +1041,13 @@ func (x *DaemonDisk) GetMessage() string {
 		return x.Message
 	}
 	return ""
+}
+
+func (x *DaemonDisk) GetUsableGib() int32 {
+	if x != nil {
+		return x.UsableGib
+	}
+	return 0
 }
 
 // Port access control
@@ -3748,14 +3760,16 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x0eoom_kill_count\x18\x1d \x01(\x05R\foomKillCount\x12N\n" +
 	"\x0flifecycle_phase\x18\x1f \x01(\x0e2%.controlplane.v1.DaemonLifecyclePhaseR\x0elifecyclePhase\x12O\n" +
 	"\x13default_port_access\x18\x1e \x01(\x0e2\x1f.controlplane.v1.PortAccessModeR\x11defaultPortAccess\x12/\n" +
-	"\x04disk\x18  \x01(\v2\x1b.controlplane.v1.DaemonDiskR\x04disk\"\xc9\x01\n" +
+	"\x04disk\x18  \x01(\v2\x1b.controlplane.v1.DaemonDiskR\x04disk\"\xe8\x01\n" +
 	"\n" +
 	"DaemonDisk\x12#\n" +
 	"\rrequested_gib\x18\x01 \x01(\x05R\frequestedGib\x12!\n" +
 	"\fcapacity_gib\x18\x02 \x01(\x05R\vcapacityGib\x12!\n" +
 	"\fincluded_gib\x18\x03 \x01(\x05R\vincludedGib\x126\n" +
 	"\x05state\x18\x04 \x01(\x0e2 .controlplane.v1.DaemonDiskStateR\x05state\x12\x18\n" +
-	"\amessage\x18\x05 \x01(\tR\amessage\"\xe0\x01\n" +
+	"\amessage\x18\x05 \x01(\tR\amessage\x12\x1d\n" +
+	"\n" +
+	"usable_gib\x18\x06 \x01(\x05R\tusableGib\"\xe0\x01\n" +
 	"\x0ePortAccessRule\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tdaemon_id\x18\x02 \x01(\tR\bdaemonId\x12\x12\n" +
