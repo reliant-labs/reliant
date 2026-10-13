@@ -13,6 +13,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/daemoncmd"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -235,15 +236,15 @@ type forgeProjectLookup interface {
 // ForgeService serves forge project state to the web tier by forwarding to the
 // user's daemon.
 type ForgeService struct {
-	daemonProxyBase
+	daemon   daemoncmd.Service
 	projects forgeProjectLookup
 }
 
 // NewForgeService creates a ForgeService bound to a daemon router and database.
 func NewForgeService(router toolexec.DaemonRouter, projects forgeProjectLookup) *ForgeService {
 	return &ForgeService{
-		daemonProxyBase: daemonProxyBase{router: router},
-		projects:        projects,
+		daemon:   daemoncmd.New(daemoncmd.Deps{Sender: router}),
+		projects: projects,
 	}
 }
 
@@ -393,7 +394,7 @@ func (s *ForgeService) forgeDispatch(
 	timeoutMs int32,
 	readsCluster bool,
 ) (reply forgeReportReply, unreachableReason string, err error) {
-	if err := s.dispatch(ctx, userID, commandType, payload, &reply, timeoutMs); err != nil {
+	if err := s.daemon.Dispatch(ctx, userID, commandType, payload, &reply, timeoutMs); err != nil {
 		if readsCluster && isForgeClusterReadTimeout(err) {
 			// Nobody answered in time on a path whose whole job is reading a
 			// remote cluster. Report UNKNOWN, not broken.
@@ -549,7 +550,7 @@ func (s *ForgeService) GetTopology(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetForgeTopologyRequest],
 ) (*connect.Response[reliantv1.GetForgeTopologyResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -591,7 +592,7 @@ func (s *ForgeService) VerifyEnv(
 	ctx context.Context,
 	req *connect.Request[reliantv1.VerifyForgeEnvRequest],
 ) (*connect.Response[reliantv1.VerifyForgeEnvResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -639,7 +640,7 @@ func (s *ForgeService) ListSecrets(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListForgeSecretsRequest],
 ) (*connect.Response[reliantv1.ListForgeSecretsResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -676,7 +677,7 @@ func (s *ForgeService) GetAudit(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetForgeAuditRequest],
 ) (*connect.Response[reliantv1.GetForgeAuditResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -707,7 +708,7 @@ func (s *ForgeService) GetEnvStatus(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetForgeEnvStatusRequest],
 ) (*connect.Response[reliantv1.GetForgeEnvStatusResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -753,7 +754,7 @@ func (s *ForgeService) GetEnvShape(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetForgeEnvShapeRequest],
 ) (*connect.Response[reliantv1.GetForgeEnvShapeResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -848,7 +849,7 @@ func (s *ForgeService) PlanPromote(
 	ctx context.Context,
 	req *connect.Request[reliantv1.PlanForgePromoteRequest],
 ) (*connect.Response[reliantv1.PlanForgePromoteResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -904,7 +905,7 @@ func (s *ForgeService) ApplyPromote(
 	ctx context.Context,
 	req *connect.Request[reliantv1.PromoteForgeEnvRequest],
 ) (*connect.Response[reliantv1.PromoteForgeEnvResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -961,7 +962,7 @@ func (s *ForgeService) ApplyPromote(
 	// a timeout as "unknown" — a promote that timed out may or may not have
 	// written, and calling that a reachability verdict would hide it.
 	var reply forgePromoteReply
-	if err := s.dispatch(ctx, userID, "forge.promote_apply", payload, &reply, forgePromoteApplyTimeoutMs); err != nil {
+	if err := s.daemon.Dispatch(ctx, userID, "forge.promote_apply", payload, &reply, forgePromoteApplyTimeoutMs); err != nil {
 		return nil, remapForgeDispatchError("forge.promote_apply", err)
 	}
 
@@ -1226,7 +1227,7 @@ func (s *ForgeService) PlanDeploy(
 	ctx context.Context,
 	req *connect.Request[reliantv1.PlanForgeDeployRequest],
 ) (*connect.Response[reliantv1.PlanForgeDeployResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1271,7 +1272,7 @@ func (s *ForgeService) StartDeployPlan(
 	ctx context.Context,
 	req *connect.Request[reliantv1.StartForgeDeployPlanRequest],
 ) (*connect.Response[reliantv1.StartForgeDeployResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1295,7 +1296,7 @@ func (s *ForgeService) StartDeployPlan(
 	// got a build underway, and reporting that as "cluster unknown" would file
 	// a possibly-running job under a diagnosis of the network.
 	var reply forgeDeployStartReply
-	if err := s.dispatch(ctx, userID, "forge.deploy_plan_start", payload, &reply,
+	if err := s.daemon.Dispatch(ctx, userID, "forge.deploy_plan_start", payload, &reply,
 		forgeDeployStartTimeoutMs); err != nil {
 		return nil, remapForgeDispatchError("forge.deploy_plan_start", err)
 	}
@@ -1333,7 +1334,7 @@ func (s *ForgeService) ListCheckouts(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListForgeCheckoutsRequest],
 ) (*connect.Response[reliantv1.ListForgeCheckoutsResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1366,7 +1367,7 @@ func (s *ForgeService) DiffEnv(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DiffForgeEnvRequest],
 ) (*connect.Response[reliantv1.DiffForgeEnvResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1445,7 +1446,7 @@ func (s *ForgeService) StartDeploy(
 	ctx context.Context,
 	req *connect.Request[reliantv1.StartForgeDeployRequest],
 ) (*connect.Response[reliantv1.StartForgeDeployResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1543,7 +1544,7 @@ func (s *ForgeService) StartDeploy(
 	// "cluster unknown" would file a possibly-live deploy under a diagnosis of
 	// the network.
 	var reply forgeDeployStartReply
-	if err := s.dispatch(ctx, userID, "forge.deploy_start", payload, &reply, forgeDeployStartTimeoutMs); err != nil {
+	if err := s.daemon.Dispatch(ctx, userID, "forge.deploy_start", payload, &reply, forgeDeployStartTimeoutMs); err != nil {
 		return nil, remapForgeDispatchError("forge.deploy_start", err)
 	}
 
@@ -1597,7 +1598,7 @@ func (s *ForgeService) GetDeployStatus(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetForgeDeployStatusRequest],
 ) (*connect.Response[reliantv1.GetForgeDeployStatusResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1617,7 +1618,7 @@ func (s *ForgeService) GetDeployStatus(
 	}{Handle: handle}
 
 	var reply forgeDeployStatusReply
-	if err := s.dispatch(ctx, userID, "forge.deploy_status", payload, &reply, forgeDeployStatusTimeoutMs); err != nil {
+	if err := s.daemon.Dispatch(ctx, userID, "forge.deploy_status", payload, &reply, forgeDeployStatusTimeoutMs); err != nil {
 		return nil, remapForgeDispatchError("forge.deploy_status", err)
 	}
 

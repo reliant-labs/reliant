@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/daemoncmd"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -32,7 +33,7 @@ const pkgListCommandsTimeoutMs = 30000
 // favorites RPCs (GetCommandFavorites/SetCommandFavorite) are DB-backed and
 // correctly belong on the api-server, so delegating them is not a stopgap.
 type PackageCommandsProxyService struct {
-	daemonProxyBase
+	daemon daemoncmd.Service
 	// Embedded local service supplies every handler method by promotion; only
 	// ListCommands below overrides it.
 	*PackageCommandsService
@@ -43,7 +44,7 @@ type PackageCommandsProxyService struct {
 // the user's daemon and delegates all other RPCs to the local service.
 func NewPackageCommandsProxyService(router toolexec.DaemonRouter, database db.Repository) *PackageCommandsProxyService {
 	return &PackageCommandsProxyService{
-		daemonProxyBase:        daemonProxyBase{router: router},
+		daemon:                 daemoncmd.New(daemoncmd.Deps{Sender: router}),
 		PackageCommandsService: NewPackageCommandsService(database),
 		database:               database,
 	}
@@ -62,7 +63,7 @@ func (s *PackageCommandsProxyService) ListCommands(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListPackageCommandsRequest],
 ) (*connect.Response[reliantv1.ListPackageCommandsResponse], error) {
-	userID, err := s.userID(ctx)
+	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +74,7 @@ func (s *PackageCommandsProxyService) ListCommands(
 	}
 
 	var result pkgmgr.CommandListResponse
-	if err := s.dispatch(ctx, userID, "pkg.list_commands",
+	if err := s.daemon.Dispatch(ctx, userID, "pkg.list_commands",
 		pkgListCommandsCmd{WorkingDir: workingDir}, &result, pkgListCommandsTimeoutMs); err != nil {
 		// dispatch already returns a loud Connect error (Unavailable for a dead
 		// daemon / timeout / unknown command; NotFound for a missing dir). We

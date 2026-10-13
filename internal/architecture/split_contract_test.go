@@ -106,6 +106,7 @@ func isKnownViolation(relPath string) string {
 // direct filesystem access.
 var serverSidePackages = []string{
 	"internal/grpc/services",
+	"internal/daemoncmd", // P3a: extracted from grpc/services
 	// Helpers extracted from grpc/services keep its ban (P3a,
 	// research/forge-migration/05-p3a-handler-map.md).
 	"internal/daemonerr",
