@@ -3957,15 +3957,19 @@ func (x *SizeUsage) GetOverageCostCents() string {
 	return ""
 }
 
-// SuspendedDiskUsage is the disk-fee half of a period (design §6.1).
+// SuspendedDiskUsage is the disk-fee half of a period (design §6.1). Despite
+// the name it covers every billed disk GiB: the whole disk of a suspended
+// machine, and the part of a running machine's disk above its size's standard
+// (a grown disk; the hourly price includes the standard). Same fee, one meter.
 type SuspendedDiskUsage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// storage GiB × seconds held suspended this period.
+	// billed disk GiB × seconds this period.
 	GibSeconds int64 `protobuf:"varint,1,opt,name=gib_seconds,json=gibSeconds,proto3" json:"gib_seconds,omitempty"`
 	// gib_seconds priced at the catalog's GiB-month fee (a month = 30 days),
 	// in cents, as an exact decimal string rounded half-up to 4 places.
 	CostCents string `protobuf:"bytes,2,opt,name=cost_cents,json=costCents,proto3" json:"cost_cents,omitempty"`
-	// GiB held by daemons suspended right now.
+	// billed disk GiB right now: suspended machines' disks plus running
+	// machines' disk above their standard.
 	CurrentGib    int64 `protobuf:"varint,3,opt,name=current_gib,json=currentGib,proto3" json:"current_gib,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -4090,8 +4094,13 @@ type GetCurrentUserComputeEligibilityResponse struct {
 	// A coupon buys machine TIME, not a bigger machine, so this stays ["small"]
 	// for a grant-only caller. Empty means no size may be started.
 	AllowedDaemonSizes []string `protobuf:"bytes,6,rep,name=allowed_daemon_sizes,json=allowedDaemonSizes,proto3" json:"allowed_daemon_sizes,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// max_daemon_storage_gib is the largest disk, in GiB of data, this caller's
+	// machines may grow to (DaemonService.GrowDaemonDisk), resolved from the
+	// same plan as allowed_daemon_sizes and already capped at the platform
+	// ceiling. Zero means growth is off for this caller.
+	MaxDaemonStorageGib int32 `protobuf:"varint,7,opt,name=max_daemon_storage_gib,json=maxDaemonStorageGib,proto3" json:"max_daemon_storage_gib,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *GetCurrentUserComputeEligibilityResponse) Reset() {
@@ -4164,6 +4173,13 @@ func (x *GetCurrentUserComputeEligibilityResponse) GetAllowedDaemonSizes() []str
 		return x.AllowedDaemonSizes
 	}
 	return nil
+}
+
+func (x *GetCurrentUserComputeEligibilityResponse) GetMaxDaemonStorageGib() int32 {
+	if x != nil {
+		return x.MaxDaemonStorageGib
+	}
+	return 0
 }
 
 type GetInvoicePreviewRequest struct {
@@ -4710,14 +4726,15 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"cost_cents\x18\x02 \x01(\tR\tcostCents\x12\x1f\n" +
 	"\vcurrent_gib\x18\x03 \x01(\x03R\n" +
 	"currentGib\")\n" +
-	"'GetCurrentUserComputeEligibilityRequest\"\xcb\x02\n" +
+	"'GetCurrentUserComputeEligibilityRequest\"\x80\x03\n" +
 	"(GetCurrentUserComputeEligibilityResponse\x12\x1a\n" +
 	"\beligible\x18\x01 \x01(\bR\beligible\x12@\n" +
 	"\x06reason\x18\x02 \x01(\x0e2(.controlplane.v1.ComputeIneligibleReasonR\x06reason\x126\n" +
 	"\x17has_active_subscription\x18\x03 \x01(\bR\x15hasActiveSubscription\x12:\n" +
 	"\x19granted_minutes_remaining\x18\x04 \x01(\x03R\x17grantedMinutesRemaining\x12\x1b\n" +
 	"\tplan_name\x18\x05 \x01(\tR\bplanName\x120\n" +
-	"\x14allowed_daemon_sizes\x18\x06 \x03(\tR\x12allowedDaemonSizes\"U\n" +
+	"\x14allowed_daemon_sizes\x18\x06 \x03(\tR\x12allowedDaemonSizes\x123\n" +
+	"\x16max_daemon_storage_gib\x18\a \x01(\x05R\x13maxDaemonStorageGib\"U\n" +
 	"\x18GetInvoicePreviewRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\tR\x04size\x12%\n" +
 	"\x0equantity_delta\x18\x02 \x01(\x05R\rquantityDelta\"p\n" +

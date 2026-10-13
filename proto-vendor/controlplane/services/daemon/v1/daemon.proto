@@ -53,6 +53,19 @@ service DaemonService {
   rpc ResizeDaemon(ResizeDaemonRequest) returns (ResizeDaemonResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
+  // GrowDaemonDisk grows a MANAGED daemon's disk so it holds storage_gib of
+  // data — the billed part; the unbilled docker/cache allowance is added on
+  // top. Disks only grow: a smaller target is InvalidArgument, the current
+  // size is a successful no-op. Running or suspended: the cloud disk grows at
+  // once, and a running machine uses the space after its next restart.
+  //
+  // Gated by the compute plan's max_daemon_storage_gib (PermissionDenied,
+  // reason daemon_storage_denied, when the target exceeds it or the plan sets
+  // none) and by the same funding ladder as create and resume. Design:
+  // docs/design/workspace-disk-resize.md.
+  rpc GrowDaemonDisk(GrowDaemonDiskRequest) returns (GrowDaemonDiskResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
   rpc SetPortAccess(SetPortAccessRequest) returns (SetPortAccessResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -158,6 +171,17 @@ message ResizeDaemonRequest {
 }
 
 message ResizeDaemonResponse {
+  Daemon daemon = 1;
+}
+
+message GrowDaemonDiskRequest {
+  string daemon_id = 1;
+  // The disk's new DATA size in GiB: an absolute target, not a delta, so a
+  // retry is safe. A multiple of 10, larger than the current size.
+  int32 storage_gib = 2 [(buf.validate.field).int32.gt = 0];
+}
+
+message GrowDaemonDiskResponse {
   Daemon daemon = 1;
 }
 

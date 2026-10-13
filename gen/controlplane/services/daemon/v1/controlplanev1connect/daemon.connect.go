@@ -62,6 +62,9 @@ const (
 	// DaemonServiceResizeDaemonProcedure is the fully-qualified name of the DaemonService's
 	// ResizeDaemon RPC.
 	DaemonServiceResizeDaemonProcedure = "/controlplane.v1.DaemonService/ResizeDaemon"
+	// DaemonServiceGrowDaemonDiskProcedure is the fully-qualified name of the DaemonService's
+	// GrowDaemonDisk RPC.
+	DaemonServiceGrowDaemonDiskProcedure = "/controlplane.v1.DaemonService/GrowDaemonDisk"
 	// DaemonServiceSetPortAccessProcedure is the fully-qualified name of the DaemonService's
 	// SetPortAccess RPC.
 	DaemonServiceSetPortAccessProcedure = "/controlplane.v1.DaemonService/SetPortAccess"
@@ -98,6 +101,17 @@ type DaemonServiceClient interface {
 	// is a successful no-op. Disks only grow: a downsize keeps the larger disk,
 	// which is billed at its bound capacity.
 	ResizeDaemon(context.Context, *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error)
+	// GrowDaemonDisk grows a MANAGED daemon's disk so it holds storage_gib of
+	// data — the billed part; the unbilled docker/cache allowance is added on
+	// top. Disks only grow: a smaller target is InvalidArgument, the current
+	// size is a successful no-op. Running or suspended: the cloud disk grows at
+	// once, and a running machine uses the space after its next restart.
+	//
+	// Gated by the compute plan's max_daemon_storage_gib (PermissionDenied,
+	// reason daemon_storage_denied, when the target exceeds it or the plan sets
+	// none) and by the same funding ladder as create and resume. Design:
+	// docs/design/workspace-disk-resize.md.
+	GrowDaemonDisk(context.Context, *connect.Request[v1.GrowDaemonDiskRequest]) (*connect.Response[v1.GrowDaemonDiskResponse], error)
 	SetPortAccess(context.Context, *connect.Request[v1.SetPortAccessRequest]) (*connect.Response[v1.SetPortAccessResponse], error)
 	RemovePortAccess(context.Context, *connect.Request[v1.RemovePortAccessRequest]) (*connect.Response[v1.RemovePortAccessResponse], error)
 	ListPortAccessRules(context.Context, *connect.Request[v1.ListPortAccessRulesRequest]) (*connect.Response[v1.ListPortAccessRulesResponse], error)
@@ -168,6 +182,12 @@ func NewDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(daemonServiceMethods.ByName("ResizeDaemon")),
 			connect.WithClientOptions(opts...),
 		),
+		growDaemonDisk: connect.NewClient[v1.GrowDaemonDiskRequest, v1.GrowDaemonDiskResponse](
+			httpClient,
+			baseURL+DaemonServiceGrowDaemonDiskProcedure,
+			connect.WithSchema(daemonServiceMethods.ByName("GrowDaemonDisk")),
+			connect.WithClientOptions(opts...),
+		),
 		setPortAccess: connect.NewClient[v1.SetPortAccessRequest, v1.SetPortAccessResponse](
 			httpClient,
 			baseURL+DaemonServiceSetPortAccessProcedure,
@@ -205,6 +225,7 @@ type daemonServiceClient struct {
 	suspendDaemon        *connect.Client[v1.SuspendDaemonRequest, v1.SuspendDaemonResponse]
 	resumeDaemon         *connect.Client[v1.ResumeDaemonRequest, v1.ResumeDaemonResponse]
 	resizeDaemon         *connect.Client[v1.ResizeDaemonRequest, v1.ResizeDaemonResponse]
+	growDaemonDisk       *connect.Client[v1.GrowDaemonDiskRequest, v1.GrowDaemonDiskResponse]
 	setPortAccess        *connect.Client[v1.SetPortAccessRequest, v1.SetPortAccessResponse]
 	removePortAccess     *connect.Client[v1.RemovePortAccessRequest, v1.RemovePortAccessResponse]
 	listPortAccessRules  *connect.Client[v1.ListPortAccessRulesRequest, v1.ListPortAccessRulesResponse]
@@ -251,6 +272,11 @@ func (c *daemonServiceClient) ResizeDaemon(ctx context.Context, req *connect.Req
 	return c.resizeDaemon.CallUnary(ctx, req)
 }
 
+// GrowDaemonDisk calls controlplane.v1.DaemonService.GrowDaemonDisk.
+func (c *daemonServiceClient) GrowDaemonDisk(ctx context.Context, req *connect.Request[v1.GrowDaemonDiskRequest]) (*connect.Response[v1.GrowDaemonDiskResponse], error) {
+	return c.growDaemonDisk.CallUnary(ctx, req)
+}
+
 // SetPortAccess calls controlplane.v1.DaemonService.SetPortAccess.
 func (c *daemonServiceClient) SetPortAccess(ctx context.Context, req *connect.Request[v1.SetPortAccessRequest]) (*connect.Response[v1.SetPortAccessResponse], error) {
 	return c.setPortAccess.CallUnary(ctx, req)
@@ -293,6 +319,17 @@ type DaemonServiceHandler interface {
 	// is a successful no-op. Disks only grow: a downsize keeps the larger disk,
 	// which is billed at its bound capacity.
 	ResizeDaemon(context.Context, *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error)
+	// GrowDaemonDisk grows a MANAGED daemon's disk so it holds storage_gib of
+	// data — the billed part; the unbilled docker/cache allowance is added on
+	// top. Disks only grow: a smaller target is InvalidArgument, the current
+	// size is a successful no-op. Running or suspended: the cloud disk grows at
+	// once, and a running machine uses the space after its next restart.
+	//
+	// Gated by the compute plan's max_daemon_storage_gib (PermissionDenied,
+	// reason daemon_storage_denied, when the target exceeds it or the plan sets
+	// none) and by the same funding ladder as create and resume. Design:
+	// docs/design/workspace-disk-resize.md.
+	GrowDaemonDisk(context.Context, *connect.Request[v1.GrowDaemonDiskRequest]) (*connect.Response[v1.GrowDaemonDiskResponse], error)
 	SetPortAccess(context.Context, *connect.Request[v1.SetPortAccessRequest]) (*connect.Response[v1.SetPortAccessResponse], error)
 	RemovePortAccess(context.Context, *connect.Request[v1.RemovePortAccessRequest]) (*connect.Response[v1.RemovePortAccessResponse], error)
 	ListPortAccessRules(context.Context, *connect.Request[v1.ListPortAccessRulesRequest]) (*connect.Response[v1.ListPortAccessRulesResponse], error)
@@ -359,6 +396,12 @@ func NewDaemonServiceHandler(svc DaemonServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(daemonServiceMethods.ByName("ResizeDaemon")),
 		connect.WithHandlerOptions(opts...),
 	)
+	daemonServiceGrowDaemonDiskHandler := connect.NewUnaryHandler(
+		DaemonServiceGrowDaemonDiskProcedure,
+		svc.GrowDaemonDisk,
+		connect.WithSchema(daemonServiceMethods.ByName("GrowDaemonDisk")),
+		connect.WithHandlerOptions(opts...),
+	)
 	daemonServiceSetPortAccessHandler := connect.NewUnaryHandler(
 		DaemonServiceSetPortAccessProcedure,
 		svc.SetPortAccess,
@@ -401,6 +444,8 @@ func NewDaemonServiceHandler(svc DaemonServiceHandler, opts ...connect.HandlerOp
 			daemonServiceResumeDaemonHandler.ServeHTTP(w, r)
 		case DaemonServiceResizeDaemonProcedure:
 			daemonServiceResizeDaemonHandler.ServeHTTP(w, r)
+		case DaemonServiceGrowDaemonDiskProcedure:
+			daemonServiceGrowDaemonDiskHandler.ServeHTTP(w, r)
 		case DaemonServiceSetPortAccessProcedure:
 			daemonServiceSetPortAccessHandler.ServeHTTP(w, r)
 		case DaemonServiceRemovePortAccessProcedure:
@@ -448,6 +493,10 @@ func (UnimplementedDaemonServiceHandler) ResumeDaemon(context.Context, *connect.
 
 func (UnimplementedDaemonServiceHandler) ResizeDaemon(context.Context, *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.ResizeDaemon is not implemented"))
+}
+
+func (UnimplementedDaemonServiceHandler) GrowDaemonDisk(context.Context, *connect.Request[v1.GrowDaemonDiskRequest]) (*connect.Response[v1.GrowDaemonDiskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.GrowDaemonDisk is not implemented"))
 }
 
 func (UnimplementedDaemonServiceHandler) SetPortAccess(context.Context, *connect.Request[v1.SetPortAccessRequest]) (*connect.Response[v1.SetPortAccessResponse], error) {

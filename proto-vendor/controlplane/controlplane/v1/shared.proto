@@ -200,6 +200,39 @@ message Daemon {
   // by URL by default". Explicit per-port rules always override this. Set via
   // DaemonService.SetDefaultPortAccess.
   PortAccessMode default_port_access = 30;
+
+  // The disk, as it is and as it was asked to be (managed daemons only).
+  // Unset for an external daemon.
+  DaemonDisk disk = 32;
+}
+
+// DaemonDisk is a managed daemon's disk, in GiB of DATA: the part the customer
+// holds and is billed for. The unbilled docker/cache allowance that shares the
+// disk is never counted here.
+message DaemonDisk {
+  // requested_gib is the size the machine holds: max(tier standard, grown).
+  // Disks only grow (DaemonService.GrowDaemonDisk).
+  int32 requested_gib = 1;
+  // capacity_gib is what the cloud disk has actually grown to, as last
+  // observed. Below requested_gib while a grow is in flight. Zero when not
+  // yet observed.
+  int32 capacity_gib = 2;
+  // included_gib is the machine size's standard disk: the part its hourly
+  // price includes. requested_gib above it is billed while running too.
+  int32 included_gib = 3;
+  DaemonDiskState state = 4;
+  // message is user-facing text explaining a FAILED (or slow) grow.
+  string message = 5;
+}
+
+enum DaemonDiskState {
+  DAEMON_DISK_STATE_UNSPECIFIED = 0;
+  // The disk is the size it was asked to be.
+  DAEMON_DISK_STATE_STABLE = 1;
+  // The cloud disk is being grown to requested_gib.
+  DAEMON_DISK_STATE_EXPANDING = 2;
+  // The grow failed; see message. Nothing extra is billed until it succeeds.
+  DAEMON_DISK_STATE_FAILED = 3;
 }
 
 // Port access control
@@ -423,6 +456,12 @@ message PlanLimits {
   // from plans.limits, so the UI and the meter read one number. Zero for a
   // plan the catalog does not declare: no allowance, never "unlimited".
   int64 included_small_daemon_hours = 34;
+
+  // The largest disk, in GiB of data, a machine on this plan may grow to
+  // (DaemonService.GrowDaemonDisk). Zero means growth is off: every machine
+  // keeps its size's standard disk. A platform ceiling of 1024 applies
+  // whatever a plan declares.
+  int32 max_daemon_storage_gib = 35;
 }
 
 // DaemonPricing is the per-daemon price list, projected from the one catalog

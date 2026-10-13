@@ -850,6 +850,104 @@ func (x *ResizeDaemonResponse) GetDaemon() *v1.Daemon {
 	return nil
 }
 
+type GrowDaemonDiskRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	DaemonId string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	// The disk's new DATA size in GiB: an absolute target, not a delta, so a
+	// retry is safe. A multiple of 10, larger than the current size.
+	StorageGib    int32 `protobuf:"varint,2,opt,name=storage_gib,json=storageGib,proto3" json:"storage_gib,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GrowDaemonDiskRequest) Reset() {
+	*x = GrowDaemonDiskRequest{}
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GrowDaemonDiskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GrowDaemonDiskRequest) ProtoMessage() {}
+
+func (x *GrowDaemonDiskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GrowDaemonDiskRequest.ProtoReflect.Descriptor instead.
+func (*GrowDaemonDiskRequest) Descriptor() ([]byte, []int) {
+	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *GrowDaemonDiskRequest) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+func (x *GrowDaemonDiskRequest) GetStorageGib() int32 {
+	if x != nil {
+		return x.StorageGib
+	}
+	return 0
+}
+
+type GrowDaemonDiskResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Daemon        *v1.Daemon             `protobuf:"bytes,1,opt,name=daemon,proto3" json:"daemon,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GrowDaemonDiskResponse) Reset() {
+	*x = GrowDaemonDiskResponse{}
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GrowDaemonDiskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GrowDaemonDiskResponse) ProtoMessage() {}
+
+func (x *GrowDaemonDiskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GrowDaemonDiskResponse.ProtoReflect.Descriptor instead.
+func (*GrowDaemonDiskResponse) Descriptor() ([]byte, []int) {
+	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GrowDaemonDiskResponse) GetDaemon() *v1.Daemon {
+	if x != nil {
+		return x.Daemon
+	}
+	return nil
+}
+
 type SetPortAccessRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DaemonId      string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
@@ -861,7 +959,7 @@ type SetPortAccessRequest struct {
 
 func (x *SetPortAccessRequest) Reset() {
 	*x = SetPortAccessRequest{}
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[16]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -873,7 +971,7 @@ func (x *SetPortAccessRequest) String() string {
 func (*SetPortAccessRequest) ProtoMessage() {}
 
 func (x *SetPortAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[16]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -886,7 +984,7 @@ func (x *SetPortAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPortAccessRequest.ProtoReflect.Descriptor instead.
 func (*SetPortAccessRequest) Descriptor() ([]byte, []int) {
-	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{16}
+	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SetPortAccessRequest) GetDaemonId() string {
@@ -920,7 +1018,7 @@ type SetPortAccessResponse struct {
 
 func (x *SetPortAccessResponse) Reset() {
 	*x = SetPortAccessResponse{}
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[17]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -932,7 +1030,7 @@ func (x *SetPortAccessResponse) String() string {
 func (*SetPortAccessResponse) ProtoMessage() {}
 
 func (x *SetPortAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[17]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -945,7 +1043,7 @@ func (x *SetPortAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPortAccessResponse.ProtoReflect.Descriptor instead.
 func (*SetPortAccessResponse) Descriptor() ([]byte, []int) {
-	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{17}
+	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SetPortAccessResponse) GetRule() *v1.PortAccessRule {
@@ -972,7 +1070,7 @@ type RemovePortAccessRequest struct {
 
 func (x *RemovePortAccessRequest) Reset() {
 	*x = RemovePortAccessRequest{}
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[18]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -984,7 +1082,7 @@ func (x *RemovePortAccessRequest) String() string {
 func (*RemovePortAccessRequest) ProtoMessage() {}
 
 func (x *RemovePortAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[18]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -997,7 +1095,7 @@ func (x *RemovePortAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemovePortAccessRequest.ProtoReflect.Descriptor instead.
 func (*RemovePortAccessRequest) Descriptor() ([]byte, []int) {
-	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{18}
+	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RemovePortAccessRequest) GetDaemonId() string {
@@ -1022,7 +1120,7 @@ type RemovePortAccessResponse struct {
 
 func (x *RemovePortAccessResponse) Reset() {
 	*x = RemovePortAccessResponse{}
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[19]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1034,7 +1132,7 @@ func (x *RemovePortAccessResponse) String() string {
 func (*RemovePortAccessResponse) ProtoMessage() {}
 
 func (x *RemovePortAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[19]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1047,7 +1145,7 @@ func (x *RemovePortAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemovePortAccessResponse.ProtoReflect.Descriptor instead.
 func (*RemovePortAccessResponse) Descriptor() ([]byte, []int) {
-	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{19}
+	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{21}
 }
 
 type ListPortAccessRulesRequest struct {
@@ -1059,7 +1157,7 @@ type ListPortAccessRulesRequest struct {
 
 func (x *ListPortAccessRulesRequest) Reset() {
 	*x = ListPortAccessRulesRequest{}
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[20]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1071,7 +1169,7 @@ func (x *ListPortAccessRulesRequest) String() string {
 func (*ListPortAccessRulesRequest) ProtoMessage() {}
 
 func (x *ListPortAccessRulesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[20]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1084,7 +1182,7 @@ func (x *ListPortAccessRulesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPortAccessRulesRequest.ProtoReflect.Descriptor instead.
 func (*ListPortAccessRulesRequest) Descriptor() ([]byte, []int) {
-	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{20}
+	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListPortAccessRulesRequest) GetDaemonId() string {
@@ -1103,7 +1201,7 @@ type ListPortAccessRulesResponse struct {
 
 func (x *ListPortAccessRulesResponse) Reset() {
 	*x = ListPortAccessRulesResponse{}
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[21]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1115,7 +1213,7 @@ func (x *ListPortAccessRulesResponse) String() string {
 func (*ListPortAccessRulesResponse) ProtoMessage() {}
 
 func (x *ListPortAccessRulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[21]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1128,7 +1226,7 @@ func (x *ListPortAccessRulesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPortAccessRulesResponse.ProtoReflect.Descriptor instead.
 func (*ListPortAccessRulesResponse) Descriptor() ([]byte, []int) {
-	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{21}
+	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListPortAccessRulesResponse) GetRules() []*v1.PortAccessRule {
@@ -1151,7 +1249,7 @@ type SetDefaultPortAccessRequest struct {
 
 func (x *SetDefaultPortAccessRequest) Reset() {
 	*x = SetDefaultPortAccessRequest{}
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[22]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1163,7 +1261,7 @@ func (x *SetDefaultPortAccessRequest) String() string {
 func (*SetDefaultPortAccessRequest) ProtoMessage() {}
 
 func (x *SetDefaultPortAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[22]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1176,7 +1274,7 @@ func (x *SetDefaultPortAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDefaultPortAccessRequest.ProtoReflect.Descriptor instead.
 func (*SetDefaultPortAccessRequest) Descriptor() ([]byte, []int) {
-	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{22}
+	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SetDefaultPortAccessRequest) GetDaemonId() string {
@@ -1203,7 +1301,7 @@ type SetDefaultPortAccessResponse struct {
 
 func (x *SetDefaultPortAccessResponse) Reset() {
 	*x = SetDefaultPortAccessResponse{}
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[23]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1215,7 +1313,7 @@ func (x *SetDefaultPortAccessResponse) String() string {
 func (*SetDefaultPortAccessResponse) ProtoMessage() {}
 
 func (x *SetDefaultPortAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_daemon_v1_daemon_proto_msgTypes[23]
+	mi := &file_services_daemon_v1_daemon_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1228,7 +1326,7 @@ func (x *SetDefaultPortAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDefaultPortAccessResponse.ProtoReflect.Descriptor instead.
 func (*SetDefaultPortAccessResponse) Descriptor() ([]byte, []int) {
-	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{23}
+	return file_services_daemon_v1_daemon_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SetDefaultPortAccessResponse) GetDaemon() *v1.Daemon {
@@ -1294,6 +1392,12 @@ const file_services_daemon_v1_daemon_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12/\n" +
 	"\x04size\x18\x02 \x01(\x0e2\x1b.controlplane.v1.DaemonSizeR\x04size\"G\n" +
 	"\x14ResizeDaemonResponse\x12/\n" +
+	"\x06daemon\x18\x01 \x01(\v2\x17.controlplane.v1.DaemonR\x06daemon\"U\n" +
+	"\x15GrowDaemonDiskRequest\x12\x1b\n" +
+	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x1f\n" +
+	"\vstorage_gib\x18\x02 \x01(\x05R\n" +
+	"storageGib\"I\n" +
+	"\x16GrowDaemonDiskResponse\x12/\n" +
 	"\x06daemon\x18\x01 \x01(\v2\x17.controlplane.v1.DaemonR\x06daemon\"\x89\x01\n" +
 	"\x14SetPortAccessRequest\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x12\n" +
@@ -1315,7 +1419,8 @@ const file_services_daemon_v1_daemon_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12O\n" +
 	"\x13default_access_mode\x18\x02 \x01(\x0e2\x1f.controlplane.v1.PortAccessModeR\x11defaultAccessMode\"O\n" +
 	"\x1cSetDefaultPortAccessResponse\x12/\n" +
-	"\x06daemon\x18\x01 \x01(\v2\x17.controlplane.v1.DaemonR\x06daemon2\x9e\t\n" +
+	"\x06daemon\x18\x01 \x01(\v2\x17.controlplane.v1.DaemonR\x06daemon2\x81\n" +
+	"\n" +
 	"\rDaemonService\x12[\n" +
 	"\fCreateDaemon\x12$.controlplane.v1.CreateDaemonRequest\x1a%.controlplane.v1.CreateDaemonResponse\x12R\n" +
 	"\tGetDaemon\x12!.controlplane.v1.GetDaemonRequest\x1a\".controlplane.v1.GetDaemonResponse\x12X\n" +
@@ -1324,7 +1429,8 @@ const file_services_daemon_v1_daemon_proto_rawDesc = "" +
 	"\fDeleteDaemon\x12$.controlplane.v1.DeleteDaemonRequest\x1a%.controlplane.v1.DeleteDaemonResponse\x12^\n" +
 	"\rSuspendDaemon\x12%.controlplane.v1.SuspendDaemonRequest\x1a&.controlplane.v1.SuspendDaemonResponse\x12[\n" +
 	"\fResumeDaemon\x12$.controlplane.v1.ResumeDaemonRequest\x1a%.controlplane.v1.ResumeDaemonResponse\x12[\n" +
-	"\fResizeDaemon\x12$.controlplane.v1.ResizeDaemonRequest\x1a%.controlplane.v1.ResizeDaemonResponse\x12^\n" +
+	"\fResizeDaemon\x12$.controlplane.v1.ResizeDaemonRequest\x1a%.controlplane.v1.ResizeDaemonResponse\x12a\n" +
+	"\x0eGrowDaemonDisk\x12&.controlplane.v1.GrowDaemonDiskRequest\x1a'.controlplane.v1.GrowDaemonDiskResponse\x12^\n" +
 	"\rSetPortAccess\x12%.controlplane.v1.SetPortAccessRequest\x1a&.controlplane.v1.SetPortAccessResponse\x12g\n" +
 	"\x10RemovePortAccess\x12(.controlplane.v1.RemovePortAccessRequest\x1a).controlplane.v1.RemovePortAccessResponse\x12p\n" +
 	"\x13ListPortAccessRules\x12+.controlplane.v1.ListPortAccessRulesRequest\x1a,.controlplane.v1.ListPortAccessRulesResponse\x12s\n" +
@@ -1343,7 +1449,7 @@ func file_services_daemon_v1_daemon_proto_rawDescGZIP() []byte {
 	return file_services_daemon_v1_daemon_proto_rawDescData
 }
 
-var file_services_daemon_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_services_daemon_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_services_daemon_v1_daemon_proto_goTypes = []any{
 	(*CreateDaemonRequest)(nil),          // 0: controlplane.v1.CreateDaemonRequest
 	(*CreateDaemonResponse)(nil),         // 1: controlplane.v1.CreateDaemonResponse
@@ -1361,70 +1467,75 @@ var file_services_daemon_v1_daemon_proto_goTypes = []any{
 	(*ResumeDaemonResponse)(nil),         // 13: controlplane.v1.ResumeDaemonResponse
 	(*ResizeDaemonRequest)(nil),          // 14: controlplane.v1.ResizeDaemonRequest
 	(*ResizeDaemonResponse)(nil),         // 15: controlplane.v1.ResizeDaemonResponse
-	(*SetPortAccessRequest)(nil),         // 16: controlplane.v1.SetPortAccessRequest
-	(*SetPortAccessResponse)(nil),        // 17: controlplane.v1.SetPortAccessResponse
-	(*RemovePortAccessRequest)(nil),      // 18: controlplane.v1.RemovePortAccessRequest
-	(*RemovePortAccessResponse)(nil),     // 19: controlplane.v1.RemovePortAccessResponse
-	(*ListPortAccessRulesRequest)(nil),   // 20: controlplane.v1.ListPortAccessRulesRequest
-	(*ListPortAccessRulesResponse)(nil),  // 21: controlplane.v1.ListPortAccessRulesResponse
-	(*SetDefaultPortAccessRequest)(nil),  // 22: controlplane.v1.SetDefaultPortAccessRequest
-	(*SetDefaultPortAccessResponse)(nil), // 23: controlplane.v1.SetDefaultPortAccessResponse
-	(v1.DaemonType)(0),                   // 24: controlplane.v1.DaemonType
-	(*v1.ResourceRequirements)(nil),      // 25: controlplane.v1.ResourceRequirements
-	(v1.DaemonSize)(0),                   // 26: controlplane.v1.DaemonSize
-	(*v1.Daemon)(nil),                    // 27: controlplane.v1.Daemon
-	(v1.DaemonStatus)(0),                 // 28: controlplane.v1.DaemonStatus
-	(v1.PortAccessMode)(0),               // 29: controlplane.v1.PortAccessMode
-	(*v1.PortAccessRule)(nil),            // 30: controlplane.v1.PortAccessRule
+	(*GrowDaemonDiskRequest)(nil),        // 16: controlplane.v1.GrowDaemonDiskRequest
+	(*GrowDaemonDiskResponse)(nil),       // 17: controlplane.v1.GrowDaemonDiskResponse
+	(*SetPortAccessRequest)(nil),         // 18: controlplane.v1.SetPortAccessRequest
+	(*SetPortAccessResponse)(nil),        // 19: controlplane.v1.SetPortAccessResponse
+	(*RemovePortAccessRequest)(nil),      // 20: controlplane.v1.RemovePortAccessRequest
+	(*RemovePortAccessResponse)(nil),     // 21: controlplane.v1.RemovePortAccessResponse
+	(*ListPortAccessRulesRequest)(nil),   // 22: controlplane.v1.ListPortAccessRulesRequest
+	(*ListPortAccessRulesResponse)(nil),  // 23: controlplane.v1.ListPortAccessRulesResponse
+	(*SetDefaultPortAccessRequest)(nil),  // 24: controlplane.v1.SetDefaultPortAccessRequest
+	(*SetDefaultPortAccessResponse)(nil), // 25: controlplane.v1.SetDefaultPortAccessResponse
+	(v1.DaemonType)(0),                   // 26: controlplane.v1.DaemonType
+	(*v1.ResourceRequirements)(nil),      // 27: controlplane.v1.ResourceRequirements
+	(v1.DaemonSize)(0),                   // 28: controlplane.v1.DaemonSize
+	(*v1.Daemon)(nil),                    // 29: controlplane.v1.Daemon
+	(v1.DaemonStatus)(0),                 // 30: controlplane.v1.DaemonStatus
+	(v1.PortAccessMode)(0),               // 31: controlplane.v1.PortAccessMode
+	(*v1.PortAccessRule)(nil),            // 32: controlplane.v1.PortAccessRule
 }
 var file_services_daemon_v1_daemon_proto_depIdxs = []int32{
-	24, // 0: controlplane.v1.CreateDaemonRequest.daemon_type:type_name -> controlplane.v1.DaemonType
-	25, // 1: controlplane.v1.CreateDaemonRequest.resources:type_name -> controlplane.v1.ResourceRequirements
-	26, // 2: controlplane.v1.CreateDaemonRequest.size:type_name -> controlplane.v1.DaemonSize
-	27, // 3: controlplane.v1.CreateDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
-	27, // 4: controlplane.v1.GetDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
-	24, // 5: controlplane.v1.ListDaemonsRequest.daemon_type:type_name -> controlplane.v1.DaemonType
-	28, // 6: controlplane.v1.ListDaemonsRequest.status:type_name -> controlplane.v1.DaemonStatus
-	27, // 7: controlplane.v1.ListDaemonsResponse.daemons:type_name -> controlplane.v1.Daemon
-	27, // 8: controlplane.v1.UpdateDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
-	27, // 9: controlplane.v1.SuspendDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
-	27, // 10: controlplane.v1.ResumeDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
-	26, // 11: controlplane.v1.ResizeDaemonRequest.size:type_name -> controlplane.v1.DaemonSize
-	27, // 12: controlplane.v1.ResizeDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
-	29, // 13: controlplane.v1.SetPortAccessRequest.access_mode:type_name -> controlplane.v1.PortAccessMode
-	30, // 14: controlplane.v1.SetPortAccessResponse.rule:type_name -> controlplane.v1.PortAccessRule
-	30, // 15: controlplane.v1.ListPortAccessRulesResponse.rules:type_name -> controlplane.v1.PortAccessRule
-	29, // 16: controlplane.v1.SetDefaultPortAccessRequest.default_access_mode:type_name -> controlplane.v1.PortAccessMode
-	27, // 17: controlplane.v1.SetDefaultPortAccessResponse.daemon:type_name -> controlplane.v1.Daemon
-	0,  // 18: controlplane.v1.DaemonService.CreateDaemon:input_type -> controlplane.v1.CreateDaemonRequest
-	2,  // 19: controlplane.v1.DaemonService.GetDaemon:input_type -> controlplane.v1.GetDaemonRequest
-	4,  // 20: controlplane.v1.DaemonService.ListDaemons:input_type -> controlplane.v1.ListDaemonsRequest
-	6,  // 21: controlplane.v1.DaemonService.UpdateDaemon:input_type -> controlplane.v1.UpdateDaemonRequest
-	8,  // 22: controlplane.v1.DaemonService.DeleteDaemon:input_type -> controlplane.v1.DeleteDaemonRequest
-	10, // 23: controlplane.v1.DaemonService.SuspendDaemon:input_type -> controlplane.v1.SuspendDaemonRequest
-	12, // 24: controlplane.v1.DaemonService.ResumeDaemon:input_type -> controlplane.v1.ResumeDaemonRequest
-	14, // 25: controlplane.v1.DaemonService.ResizeDaemon:input_type -> controlplane.v1.ResizeDaemonRequest
-	16, // 26: controlplane.v1.DaemonService.SetPortAccess:input_type -> controlplane.v1.SetPortAccessRequest
-	18, // 27: controlplane.v1.DaemonService.RemovePortAccess:input_type -> controlplane.v1.RemovePortAccessRequest
-	20, // 28: controlplane.v1.DaemonService.ListPortAccessRules:input_type -> controlplane.v1.ListPortAccessRulesRequest
-	22, // 29: controlplane.v1.DaemonService.SetDefaultPortAccess:input_type -> controlplane.v1.SetDefaultPortAccessRequest
-	1,  // 30: controlplane.v1.DaemonService.CreateDaemon:output_type -> controlplane.v1.CreateDaemonResponse
-	3,  // 31: controlplane.v1.DaemonService.GetDaemon:output_type -> controlplane.v1.GetDaemonResponse
-	5,  // 32: controlplane.v1.DaemonService.ListDaemons:output_type -> controlplane.v1.ListDaemonsResponse
-	7,  // 33: controlplane.v1.DaemonService.UpdateDaemon:output_type -> controlplane.v1.UpdateDaemonResponse
-	9,  // 34: controlplane.v1.DaemonService.DeleteDaemon:output_type -> controlplane.v1.DeleteDaemonResponse
-	11, // 35: controlplane.v1.DaemonService.SuspendDaemon:output_type -> controlplane.v1.SuspendDaemonResponse
-	13, // 36: controlplane.v1.DaemonService.ResumeDaemon:output_type -> controlplane.v1.ResumeDaemonResponse
-	15, // 37: controlplane.v1.DaemonService.ResizeDaemon:output_type -> controlplane.v1.ResizeDaemonResponse
-	17, // 38: controlplane.v1.DaemonService.SetPortAccess:output_type -> controlplane.v1.SetPortAccessResponse
-	19, // 39: controlplane.v1.DaemonService.RemovePortAccess:output_type -> controlplane.v1.RemovePortAccessResponse
-	21, // 40: controlplane.v1.DaemonService.ListPortAccessRules:output_type -> controlplane.v1.ListPortAccessRulesResponse
-	23, // 41: controlplane.v1.DaemonService.SetDefaultPortAccess:output_type -> controlplane.v1.SetDefaultPortAccessResponse
-	30, // [30:42] is the sub-list for method output_type
-	18, // [18:30] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	26, // 0: controlplane.v1.CreateDaemonRequest.daemon_type:type_name -> controlplane.v1.DaemonType
+	27, // 1: controlplane.v1.CreateDaemonRequest.resources:type_name -> controlplane.v1.ResourceRequirements
+	28, // 2: controlplane.v1.CreateDaemonRequest.size:type_name -> controlplane.v1.DaemonSize
+	29, // 3: controlplane.v1.CreateDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
+	29, // 4: controlplane.v1.GetDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
+	26, // 5: controlplane.v1.ListDaemonsRequest.daemon_type:type_name -> controlplane.v1.DaemonType
+	30, // 6: controlplane.v1.ListDaemonsRequest.status:type_name -> controlplane.v1.DaemonStatus
+	29, // 7: controlplane.v1.ListDaemonsResponse.daemons:type_name -> controlplane.v1.Daemon
+	29, // 8: controlplane.v1.UpdateDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
+	29, // 9: controlplane.v1.SuspendDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
+	29, // 10: controlplane.v1.ResumeDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
+	28, // 11: controlplane.v1.ResizeDaemonRequest.size:type_name -> controlplane.v1.DaemonSize
+	29, // 12: controlplane.v1.ResizeDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
+	29, // 13: controlplane.v1.GrowDaemonDiskResponse.daemon:type_name -> controlplane.v1.Daemon
+	31, // 14: controlplane.v1.SetPortAccessRequest.access_mode:type_name -> controlplane.v1.PortAccessMode
+	32, // 15: controlplane.v1.SetPortAccessResponse.rule:type_name -> controlplane.v1.PortAccessRule
+	32, // 16: controlplane.v1.ListPortAccessRulesResponse.rules:type_name -> controlplane.v1.PortAccessRule
+	31, // 17: controlplane.v1.SetDefaultPortAccessRequest.default_access_mode:type_name -> controlplane.v1.PortAccessMode
+	29, // 18: controlplane.v1.SetDefaultPortAccessResponse.daemon:type_name -> controlplane.v1.Daemon
+	0,  // 19: controlplane.v1.DaemonService.CreateDaemon:input_type -> controlplane.v1.CreateDaemonRequest
+	2,  // 20: controlplane.v1.DaemonService.GetDaemon:input_type -> controlplane.v1.GetDaemonRequest
+	4,  // 21: controlplane.v1.DaemonService.ListDaemons:input_type -> controlplane.v1.ListDaemonsRequest
+	6,  // 22: controlplane.v1.DaemonService.UpdateDaemon:input_type -> controlplane.v1.UpdateDaemonRequest
+	8,  // 23: controlplane.v1.DaemonService.DeleteDaemon:input_type -> controlplane.v1.DeleteDaemonRequest
+	10, // 24: controlplane.v1.DaemonService.SuspendDaemon:input_type -> controlplane.v1.SuspendDaemonRequest
+	12, // 25: controlplane.v1.DaemonService.ResumeDaemon:input_type -> controlplane.v1.ResumeDaemonRequest
+	14, // 26: controlplane.v1.DaemonService.ResizeDaemon:input_type -> controlplane.v1.ResizeDaemonRequest
+	16, // 27: controlplane.v1.DaemonService.GrowDaemonDisk:input_type -> controlplane.v1.GrowDaemonDiskRequest
+	18, // 28: controlplane.v1.DaemonService.SetPortAccess:input_type -> controlplane.v1.SetPortAccessRequest
+	20, // 29: controlplane.v1.DaemonService.RemovePortAccess:input_type -> controlplane.v1.RemovePortAccessRequest
+	22, // 30: controlplane.v1.DaemonService.ListPortAccessRules:input_type -> controlplane.v1.ListPortAccessRulesRequest
+	24, // 31: controlplane.v1.DaemonService.SetDefaultPortAccess:input_type -> controlplane.v1.SetDefaultPortAccessRequest
+	1,  // 32: controlplane.v1.DaemonService.CreateDaemon:output_type -> controlplane.v1.CreateDaemonResponse
+	3,  // 33: controlplane.v1.DaemonService.GetDaemon:output_type -> controlplane.v1.GetDaemonResponse
+	5,  // 34: controlplane.v1.DaemonService.ListDaemons:output_type -> controlplane.v1.ListDaemonsResponse
+	7,  // 35: controlplane.v1.DaemonService.UpdateDaemon:output_type -> controlplane.v1.UpdateDaemonResponse
+	9,  // 36: controlplane.v1.DaemonService.DeleteDaemon:output_type -> controlplane.v1.DeleteDaemonResponse
+	11, // 37: controlplane.v1.DaemonService.SuspendDaemon:output_type -> controlplane.v1.SuspendDaemonResponse
+	13, // 38: controlplane.v1.DaemonService.ResumeDaemon:output_type -> controlplane.v1.ResumeDaemonResponse
+	15, // 39: controlplane.v1.DaemonService.ResizeDaemon:output_type -> controlplane.v1.ResizeDaemonResponse
+	17, // 40: controlplane.v1.DaemonService.GrowDaemonDisk:output_type -> controlplane.v1.GrowDaemonDiskResponse
+	19, // 41: controlplane.v1.DaemonService.SetPortAccess:output_type -> controlplane.v1.SetPortAccessResponse
+	21, // 42: controlplane.v1.DaemonService.RemovePortAccess:output_type -> controlplane.v1.RemovePortAccessResponse
+	23, // 43: controlplane.v1.DaemonService.ListPortAccessRules:output_type -> controlplane.v1.ListPortAccessRulesResponse
+	25, // 44: controlplane.v1.DaemonService.SetDefaultPortAccess:output_type -> controlplane.v1.SetDefaultPortAccessResponse
+	32, // [32:45] is the sub-list for method output_type
+	19, // [19:32] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_services_daemon_v1_daemon_proto_init() }
@@ -1439,7 +1550,7 @@ func file_services_daemon_v1_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_daemon_v1_daemon_proto_rawDesc), len(file_services_daemon_v1_daemon_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   24,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
