@@ -91,7 +91,7 @@ Every change ships as its own **small PR** that leaves everything that works tod
 6. **Old paths are deleted only after the new one is proven** in its own PR (reliant: no backwards compatibility pre-launch, but no flag-day either).
 7. **Forge fixes land in forge first** (released + pinned), then reliant adopts them. reliant never carries a workaround for a forge gap we can fix.
 
-### Status (updated 2026-10-12)
+### Status (updated 2026-10-13)
 
 **Merged** (CI budget exhausted; each change was verified locally before merging, and forge main was re-verified with all of them combined):
 
@@ -117,30 +117,42 @@ Every change ships as its own **small PR** that leaves everything that works tod
 | reliant pins forge `4aa7e58b` | reliant #751 |
 | **1g: reliant `forge.yaml`, all 35 services `// forge:unmanaged`, 11 contract packages `//forge:not-a-component`, sqlc as a generate hook, first generated mocks** | reliant #752 |
 
+**Merged in waves 2–3 (2026-10-13):**
+
+| Item | PR |
+|---|---|
+| forge: composition refuses a package it cannot construct; in-place `.gitignore` never ignores tracked files; in-place adoption starts typed config at `warn`; `forge lint` runs every lane flag given (G6) | forge #674 / #675 / #676 / #677 |
+| forge: `db squash` writes a migration (postgres-accurate lexer, not pg_dump's psql script); `db migrate` runs migratekit, not the golang-migrate CLI | forge #678 / #679 |
+| forge: migratekit works at `MaxOpenConns=1`, then one Postgres session per run on every path (safe behind a 2-connection session pooler); `migratekit.Apply` returns a `Result`; dirty-schema errors name a force command the reader has | forge #690 / #691 / #706 |
+| forge: contract lint skips `_test.go`; `forge lint --show-suppressed`; a type that only satisfies a Deps seam is not bound by the contract rule; mocks/decorators compile whatever a parameter is named; harness imports a config only when the component takes one | forge #692 / #693 / #703 / #701 / #702 |
+| forge F3d and the config layers: `env_var_aliases` (permanent vs deprecated); an empty env var is unset; config-file path variable is `<BINARY>_CONFIG` (`FORGE_CONFIG` removed); one flat `--config` file per process; file lists replace defaults; typed-access guardrail checks env reads or says it cannot | forge #689 / #687 / #696 / #697 / #698 / #685 |
+| forge: `generate` vendors `forge/v1/forge.proto` on demand and refuses a Go template that would generate it twice | forge #699 |
+| reliant: forge pins `3bdbf3db` → `d67d2a72`; `scripts/pin-forge.sh` now syncs `forge.yaml` and runs the pinned `forge generate` | reliant #818 / #827 / #828 |
+| reliant P4: one reader for the control-plane URL chain; dead `DatabaseDriverFromEnv` deleted | reliant #770 |
+| reliant P3a wave 1+2: every helper shared by two services left `internal/grpc/services` (daemonerr, machinewake, daemonplacement, messageproto, daemonchoice, daemoncmd, workflowcatalog, projectfacts, gitremote, processproto, planproto, runstateproto, connectionrpc, auth.BearerToken, checkoutstate) plus the shared test fixtures (toolexectest, dbtest, signaltest, workflowlisttest); map `05-p3a-handler-map.md` | reliant #771–#777, #802–#817 |
+| reliant P6: all 26 contract-lane findings fixed (contracts, adapters, reasoned exclusions); `forge lint --contract` is at **0** | reliant #780–#799, #819–#826 |
+| reliant P2: 10 public rpcs declare `auth_required: false` (the `publicMethods` slice is gone; the interceptor reads forge's generated set, pinned by a test); 17 list filters `optional` | reliant #829, #830–#841 |
+| reliant: regenerate the descriptor #785 left stale | reliant #801 |
+
+**In flight / ready for review:**
+- **P5a (goose → forge migrations): branches ready, NOT merged, needs the user.** `docs/p5a-runbook-fixes`, `feat/p5a-forge-migrations-baseline`, `feat/p5a-migrate-up-migratekit`, `chore/p5a-remove-goose` (merge last). Schema parity proven (normalized `pg_dump` identical, PG 16 and 17), adoption of a goose-head DB verified, an older goose DB refused loudly, concurrent runs verified behind a capped session PgBouncer. Decisions for the user are in the runbook (older-version handling, `forge:backward-compatible` on additive migrations, self-hosted installs, `reliant_cp_session` pool size, CI workflow edits).
+- **P3b pilot:** System and Question moved onto `internal/handlers/<svc>/`; recipe `06-p3b-recipe.md` for the remaining 33 lanes.
+- **P4 lanes 2+:** root `ReliantConfig` (log level/format), `ApiServerConfig`, then `ControlPlaneConfig` / `RELIANT_ENV` via aliases.
+- **forge:** project-kind flip made explicit; parallel lanes' generated files merge without conflicts; generate change count; audit recognises a project's own caller resolver; `shapes` reads `public.x`; **F5** per-rpc CRUD opt-out + ORM placement + integer-backed enums; migration tooling (goose no-tx import, CONCURRENTLY lint, `squash --from-dsn`, deterministic squash output).
+
 **Next:**
 - **1h (needs a human):** CI runs pinned `forge generate` plus a clean-tree check, and `forge lint` goes non-gating, then gating. The GitHub App token cannot push `.github/workflows/*`, so someone with workflow permission lands it.
-- **Before lint can gate:**
-  - the 26 contract-lane findings (P6 waves 1+);
-  - 20 golangci-lint and 2 buf findings (`forge.proto` RPC_REQUEST_RESPONSE_UNIQUE) that predate 1g.
-- **P2:** proto hygiene, one PR per proto file.
-- **P3a:** extract shared helpers out of `internal/grpc/services`.
-- **P4:** typed config, starting with forge F3d (env aliases), or with reliant lanes using `binary_config.command`.
-- **P6 wave 1:** packages with narrow interfaces already.
-- **New contributor obligation:** after editing a proto or one of the 11 contract interfaces, run the pinned `forge generate`.
+- **Before lint can gate:** 20 golangci-lint and 2 buf findings (`forge.proto` RPC_REQUEST_RESPONSE_UNIQUE) that predate 1g. The contract lane is done.
+- **P3b:** fan out per the recipe once the pilot merges.
+- **New contributor obligation:** after editing a proto or a `contract.go`, run the pinned `forge generate` (`/home/workspace/go/bin/forge`, or `go run github.com/reliant-labs/forge/cmd/forge@<go.mod pin>`). Never hand-merge `gen/forge_descriptor.json`: take either side and regenerate.
 
-**Open forge bugs from 1g (reported, not fixed):**
-- composition emits non-compiling `New(Deps{})` for non-canonical contract packages and blames the forge-written `compose.go`;
-- the `--in-place` `.gitignore` merge ignores tracked `/package.json`, `/package-lock.json` and `go.work.sum`;
-- `--in-place` writes `enforce_typed_access: error` instead of the soft default;
-- there is no way to opt out of CI scaffolding except deleting the files;
-- G6 (combined lint lane flags) is still open.
+**Still open in forge:** no way to opt out of CI scaffolding except deleting the files; F6 cross-project KCL; F7 Sentry hook and file log sink; F12 ORM gaps; `EnsureDevWebRuntimeLink` still adds `/package.json` to `.gitignore`.
 
 **Dev databases (user decision, 2026-10-12): fully destroyable.** At the P5a cutover, dev databases (the `forge env up` stack's `reliant` DB on 5434, per-developer 5433 DBs) are dropped and rebuilt from the new baseline, with no goose adoption and no reconciling branch-only versions. **Goose adoption stays mandatory for prod (`reliant_cp` on Cloud SQL `reliant-pg`)** and for any env holding data we keep. Never touch prod in a "dev DB" teardown.
 - As of 2026-10-12 this sandbox has no dev Postgres (no `postgres_data` volume, no k3d cluster); only prod kube contexts exist, and they are untouched. The dev stacks rebuild their DB on next `forge env up`.
-- Reliant pins forge `07720bbc` (reliant #749).
-- Slice 1g landed (reliant #752).
+- Reliant pins forge `d67d2a72` (reliant #828).
 
-Research inputs: `02-contracts-classification.md` (P6) and `03-config-census.md` (P4), both in this dir.
+Research inputs, all in this dir: `02-contracts-classification.md` (P6), `03-config-census.md` (P4), `04-p5a-cutover-runbook.md` (P5a), `05-p3a-handler-map.md` (P3a/P3b).
 
 ### The P1 slice, as separate PRs
 
