@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // TaskStatus tracks the lifecycle of a task
@@ -172,7 +174,7 @@ message RemoveTaskDependencyResponse {
 
 // ListReadyTasksRequest lists tasks ready for work
 message ListReadyTasksRequest {
-  string plan_id = 1;
+  string plan_id = 1 [(buf.validate.field).required = true];
 }
 
 // ListReadyTasksResponse returns ready tasks

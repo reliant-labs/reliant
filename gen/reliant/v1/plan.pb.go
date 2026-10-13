@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -916,7 +917,7 @@ var File_reliant_v1_plan_proto protoreflect.FileDescriptor
 const file_reliant_v1_plan_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/plan.proto\x12\n" +
-	"reliant.v1\x1a\x17reliant/v1/common.proto\x1a\x15reliant/v1/task.proto\"\xc4\x02\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\x1a\x15reliant/v1/task.proto\"\xc4\x02\n" +
 	"\x04Plan\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12\x14\n" +
@@ -971,16 +972,16 @@ const file_reliant_v1_plan_proto_rawDesc = "" +
 	"\x11DeletePlanRequest\x12\x17\n" +
 	"\aplan_id\x18\x01 \x01(\tR\x06planId\".\n" +
 	"\x12DeletePlanResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"/\n" +
-	"\x14ListPlanTasksRequest\x12\x17\n" +
-	"\aplan_id\x18\x01 \x01(\tR\x06planId\"\x95\x01\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"7\n" +
+	"\x14ListPlanTasksRequest\x12\x1f\n" +
+	"\aplan_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06planId\"\x95\x01\n" +
 	"\x15ListPlanTasksResponse\x12&\n" +
 	"\x05tasks\x18\x01 \x03(\v2\x10.reliant.v1.TaskR\x05tasks\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12>\n" +
-	"\fdependencies\x18\x03 \x03(\v2\x1a.reliant.v1.TaskDependencyR\fdependencies\":\n" +
-	"\x19ListPlansByProjectRequest\x12\x1d\n" +
+	"\fdependencies\x18\x03 \x03(\v2\x1a.reliant.v1.TaskDependencyR\fdependencies\"B\n" +
+	"\x19ListPlansByProjectRequest\x12%\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\"Z\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\"Z\n" +
 	"\x1aListPlansByProjectResponse\x12&\n" +
 	"\x05plans\x18\x01 \x03(\v2\x10.reliant.v1.PlanR\x05plans\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total*\x88\x01\n" +

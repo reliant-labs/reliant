@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // forge:unmanaged — reliant's own handlers serve this service, not forge's;
@@ -272,7 +274,7 @@ message ConnectionEvent {
 }
 
 message ListConnectionEventsRequest {
-  string id = 1;
+  string id = 1 [(buf.validate.field).required = true];
   int32 limit = 2;
   // Return events older than this id; unset (or 0) for the newest page.
   optional int64 before_id = 3;

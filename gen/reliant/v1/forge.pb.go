@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -2608,7 +2609,7 @@ var File_reliant_v1_forge_proto protoreflect.FileDescriptor
 const file_reliant_v1_forge_proto_rawDesc = "" +
 	"\n" +
 	"\x16reliant/v1/forge.proto\x12\n" +
-	"reliant.v1\"\xbc\x02\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\xbc\x02\n" +
 	"\x0fForgeReportMeta\x12(\n" +
 	"\x10is_forge_project\x18\x01 \x01(\bR\x0eisForgeProject\x12\x1c\n" +
 	"\tsupported\x18\x02 \x01(\bR\tsupported\x12#\n" +
@@ -2633,11 +2634,11 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	"\x16VerifyForgeEnvResponse\x12/\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
 	"\vreport_json\x18\x02 \x01(\tR\n" +
-	"reportJson\"J\n" +
-	"\x17ListForgeSecretsRequest\x12\x1d\n" +
+	"reportJson\"Z\n" +
+	"\x17ListForgeSecretsRequest\x12%\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
-	"\x03env\x18\x02 \x01(\tR\x03env\"l\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12\x18\n" +
+	"\x03env\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x03env\"l\n" +
 	"\x18ListForgeSecretsResponse\x12/\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
 	"\vreport_json\x18\x02 \x01(\tR\n" +
@@ -2706,10 +2707,10 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
 	"\x03env\x18\x02 \x01(\tR\x03env\x12#\n" +
-	"\rcheckout_path\x18\x03 \x01(\tR\fcheckoutPath\"j\n" +
-	"\x19ListForgeCheckoutsRequest\x12\x1d\n" +
+	"\rcheckout_path\x18\x03 \x01(\tR\fcheckoutPath\"r\n" +
+	"\x19ListForgeCheckoutsRequest\x12%\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12 \n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12 \n" +
 	"\twith_tree\x18\x02 \x01(\bH\x00R\bwithTree\x88\x01\x01B\f\n" +
 	"\n" +
 	"_with_tree\"n\n" +

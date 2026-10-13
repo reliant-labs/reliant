@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -2206,7 +2207,7 @@ var File_reliant_v1_workflow_proto protoreflect.FileDescriptor
 const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/workflow.proto\x12\n" +
-	"reliant.v1\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/trigger.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xc5\a\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/trigger.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xc5\a\n" +
 	"\x10WorkflowListItem\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12 \n" +
@@ -2260,10 +2261,10 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x05field\x18\n" +
 	" \x01(\tR\x05field\x12\x16\n" +
 	"\x06detail\x18\v \x01(\tR\x06detail\x12\x12\n" +
-	"\x04path\x18\f \x01(\tR\x04path\"\xaa\x01\n" +
-	"\x14ListWorkflowsRequest\x12\x1d\n" +
+	"\x04path\x18\f \x01(\tR\x04path\"\xb2\x01\n" +
+	"\x14ListWorkflowsRequest\x12%\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12$\n" +
 	"\vworktree_id\x18\x02 \x01(\tH\x00R\n" +
 	"worktreeId\x88\x01\x01\x12*\n" +
 	"\x0einclude_hidden\x18\x03 \x01(\bH\x01R\rincludeHidden\x88\x01\x01B\x0e\n" +

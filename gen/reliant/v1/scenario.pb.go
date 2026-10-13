@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1321,7 +1322,7 @@ var File_reliant_v1_scenario_proto protoreflect.FileDescriptor
 const file_reliant_v1_scenario_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/scenario.proto\x12\n" +
-	"reliant.v1\"E\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"E\n" +
 	"\x0eSimulatedEvent\x12\x12\n" +
 	"\x04node\x18\x01 \x01(\tR\x04node\x12\x1f\n" +
 	"\voutput_json\x18\x02 \x01(\tR\n" +
@@ -1378,11 +1379,11 @@ const file_reliant_v1_scenario_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\v \x01(\tR\tupdatedAt\x12\x16\n" +
 	"\x06source\x18\f \x01(\tR\x06source\x12\x12\n" +
-	"\x04path\x18\r \x01(\tR\x04path\"n\n" +
+	"\x04path\x18\r \x01(\tR\x04path\"v\n" +
 	"\x14ListScenariosRequest\x12\"\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12#\n" +
-	"\rworkflow_slug\x18\x02 \x01(\tR\fworkflowSlugB\r\n" +
+	"project_id\x18\x01 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12+\n" +
+	"\rworkflow_slug\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\fworkflowSlugB\r\n" +
 	"\v_project_id\"p\n" +
 	"\x15ListScenariosResponse\x122\n" +
 	"\tscenarios\x18\x01 \x03(\v2\x14.reliant.v1.ScenarioR\tscenarios\x12#\n" +

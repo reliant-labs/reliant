@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -6044,7 +6045,7 @@ var File_reliant_v1_chat_proto protoreflect.FileDescriptor
 const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/chat.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\"\x9e\t\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\"\x9e\t\n" +
 	"\x04Chat\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x14\n" +
@@ -6217,10 +6218,10 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\x8f\x01\n" +
-	"\x10ListChatsRequest\x12\x1d\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\x97\x01\n" +
+	"\x10ListChatsRequest\x12%\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12\x19\n" +
 	"\x05limit\x18\x02 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12&\n" +
 	"\fsidebar_only\x18\x03 \x01(\bH\x01R\vsidebarOnly\x88\x01\x01B\b\n" +
 	"\x06_limitB\x0f\n" +
@@ -6316,10 +6317,10 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x12_client_message_id\"N\n" +
 	"\x18SendAgentMessageResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"V\n" +
-	"\x1eListQueuedAgentMessagesRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1b\n" +
-	"\tthread_id\x18\x02 \x01(\tR\bthreadId\"\x9a\x01\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"f\n" +
+	"\x1eListQueuedAgentMessagesRequest\x12\x1f\n" +
+	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\x12#\n" +
+	"\tthread_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\bthreadId\"\x9a\x01\n" +
 	"\x12QueuedAgentMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\tR\x04body\x12\x1d\n" +
@@ -6342,9 +6343,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\tthread_id\x18\x02 \x01(\tR\bthreadId\"\x85\x01\n" +
 	"\x17InterruptThreadResponse\x120\n" +
 	"\x14cancelled_tool_calls\x18\x01 \x01(\x05R\x12cancelledToolCalls\x128\n" +
-	"\x18undeliverable_tool_calls\x18\x02 \x03(\tR\x16undeliverableToolCalls\"\xb9\x01\n" +
-	"\x13ListMessagesRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1b\n" +
+	"\x18undeliverable_tool_calls\x18\x02 \x03(\tR\x16undeliverableToolCalls\"\xc1\x01\n" +
+	"\x13ListMessagesRequest\x12\x1f\n" +
+	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\x12\x1b\n" +
 	"\x06recent\x18\x02 \x01(\x05H\x00R\x06recent\x88\x01\x01\x12\"\n" +
 	"\n" +
 	"before_seq\x18\x03 \x01(\x03H\x01R\tbeforeSeq\x88\x01\x01\x12 \n" +
@@ -6439,9 +6440,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"created_at\x18\x04 \x01(\tR\tcreatedAt\x12\x1f\n" +
 	"\vlast_active\x18\x05 \x01(\tR\n" +
 	"lastActiveB\x16\n" +
-	"\x14_branched_at_ordinal\".\n" +
-	"\x13ListBranchesRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\"`\n" +
+	"\x14_branched_at_ordinal\"6\n" +
+	"\x13ListBranchesRequest\x12\x1f\n" +
+	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\"`\n" +
 	"\x14ListBranchesResponse\x122\n" +
 	"\bbranches\x18\x01 \x03(\v2\x16.reliant.v1.BranchInfoR\bbranches\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\"\x86\x02\n" +
@@ -6485,9 +6486,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"updated_at\x18\a \x01(\tR\tupdatedAt\x12&\n" +
 	"\fcompleted_at\x18\b \x01(\tH\x01R\vcompletedAt\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x0f\n" +
-	"\r_completed_at\"/\n" +
-	"\x14ListChatPlansRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\"Y\n" +
+	"\r_completed_at\"7\n" +
+	"\x14ListChatPlansRequest\x12\x1f\n" +
+	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\"Y\n" +
 	"\x15ListChatPlansResponse\x12*\n" +
 	"\x05plans\x18\x01 \x03(\v2\x14.reliant.v1.ChatPlanR\x05plans\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\"\x85\x05\n" +
@@ -6576,9 +6577,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x1dGetWorkflowExecutionsResponse\x12G\n" +
 	"\rroot_workflow\x18\x01 \x01(\v2\x1d.reliant.v1.WorkflowExecutionH\x00R\frootWorkflow\x88\x01\x01\x12K\n" +
 	"\x12all_root_workflows\x18\x02 \x03(\v2\x1d.reliant.v1.WorkflowExecutionR\x10allRootWorkflowsB\x10\n" +
-	"\x0e_root_workflow\"d\n" +
-	"\x19ListStepExecutionsRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12 \n" +
+	"\x0e_root_workflow\"l\n" +
+	"\x19ListStepExecutionsRequest\x12\x1f\n" +
+	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\x12 \n" +
 	"\tnode_path\x18\x02 \x01(\tH\x00R\bnodePath\x88\x01\x01B\f\n" +
 	"\n" +
 	"_node_path\"~\n" +

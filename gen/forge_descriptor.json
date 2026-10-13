@@ -624,7 +624,10 @@
         "reliant.v1.ListApprovalsByChatRequest": [
           {
             "name": "chat_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListApprovalsByChatResponse": [
@@ -2037,7 +2040,10 @@
         "reliant.v1.ListConnectionEventsRequest": [
           {
             "name": "id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "limit",
@@ -3064,7 +3070,10 @@
         "reliant.v1.ListModelsByProviderRequest": [
           {
             "name": "provider",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListModelsByProviderResponse": [
@@ -5509,7 +5518,10 @@
         "reliant.v1.ListBranchesRequest": [
           {
             "name": "chat_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListBranchesResponse": [
@@ -5527,7 +5539,10 @@
         "reliant.v1.ListChatPlansRequest": [
           {
             "name": "chat_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListChatPlansResponse": [
@@ -5545,7 +5560,10 @@
         "reliant.v1.ListChatsRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "limit",
@@ -5577,7 +5595,10 @@
         "reliant.v1.ListMessagesRequest": [
           {
             "name": "chat_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "recent",
@@ -5622,11 +5643,17 @@
         "reliant.v1.ListQueuedAgentMessagesRequest": [
           {
             "name": "chat_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "thread_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListQueuedAgentMessagesResponse": [
@@ -5640,7 +5667,10 @@
         "reliant.v1.ListStepExecutionsRequest": [
           {
             "name": "chat_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "node_path",
@@ -12210,7 +12240,10 @@
         "reliant.v1.ListForgeCheckoutsRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "with_tree",
@@ -12232,11 +12265,17 @@
         "reliant.v1.ListForgeSecretsRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "env",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListForgeSecretsResponse": [
@@ -13932,7 +13971,10 @@
         "reliant.v1.ListTriggerEventsRequest": [
           {
             "name": "trigger_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "limit",
@@ -15867,7 +15909,10 @@
         "reliant.v1.ListRecommendedRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListRecommendedResponse": [
@@ -15885,7 +15930,10 @@
         "reliant.v1.ListServersRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListServersResponse": [
@@ -18176,7 +18224,10 @@
         "reliant.v1.ListReadyTasksRequest": [
           {
             "name": "plan_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListReadyTasksResponse": [
@@ -18762,7 +18813,10 @@
         "reliant.v1.ListPlanTasksRequest": [
           {
             "name": "plan_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListPlanTasksResponse": [
@@ -18786,7 +18840,10 @@
         "reliant.v1.ListPlansByProjectRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListPlansByProjectResponse": [
@@ -21186,7 +21243,10 @@
         "reliant.v1.ListProjectDaemonsForDaemonRequest": [
           {
             "name": "daemon_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListProjectDaemonsForDaemonResponse": [
@@ -21231,7 +21291,10 @@
         "reliant.v1.ListRepositoriesForDaemonRequest": [
           {
             "name": "daemon_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListRepositoriesForDaemonResponse": [
@@ -22072,7 +22135,10 @@
         "reliant.v1.ListReposRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListReposResponse": [
@@ -22570,7 +22636,10 @@
           },
           {
             "name": "workflow_slug",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListScenariosResponse": [
@@ -24723,7 +24792,10 @@
         "reliant.v1.ListInstalledSkillsRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "page_size",
@@ -24759,7 +24831,10 @@
         "reliant.v1.ListRecommendedSkillsRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "page_size",
@@ -29862,7 +29937,10 @@
         "reliant.v1.ListWorkflowsRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "worktree_id",
@@ -33082,7 +33160,10 @@
         "reliant.v1.ListWorktreeRepoStatusesRequest": [
           {
             "name": "worktree_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListWorktreeRepoStatusesResponse": [
@@ -33096,7 +33177,10 @@
         "reliant.v1.ListWorktreesRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "chat_id",
@@ -33575,5 +33659,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "d065b1ae1b79143ed4204c6e793727d53ecd37c67b78ff2dafa4044a4ff83649"
+  "source_hash": "fdeca40bb44e3db59cd224abbb9d542b3cd846e1b24252e2c742a64c48c3ac36"
 }

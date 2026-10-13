@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1747,7 +1748,7 @@ var File_reliant_v1_mcp_proto protoreflect.FileDescriptor
 const file_reliant_v1_mcp_proto_rawDesc = "" +
 	"\n" +
 	"\x14reliant/v1/mcp.proto\x12\n" +
-	"reliant.v1\x1a\x17reliant/v1/common.proto\"\x84\x02\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\"\x84\x02\n" +
 	"\x0fMCPServerConfig\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
 	"\x04args\x18\x02 \x03(\tR\x04args\x12\x10\n" +
@@ -1814,10 +1815,10 @@ const file_reliant_v1_mcp_proto_rawDesc = "" +
 	"\x0f_setup_requiredB\x15\n" +
 	"\x13_setup_instructionsB\x12\n" +
 	"\x10_config_templateB\v\n" +
-	"\t_docs_url\"3\n" +
-	"\x12ListServersRequest\x12\x1d\n" +
+	"\t_docs_url\";\n" +
+	"\x12ListServersRequest\x12%\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\"\\\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\"\\\n" +
 	"\x13ListServersResponse\x12/\n" +
 	"\aservers\x18\x01 \x03(\v2\x15.reliant.v1.MCPServerR\aservers\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\"E\n" +
@@ -1859,10 +1860,10 @@ const file_reliant_v1_mcp_proto_rawDesc = "" +
 	"\x15RestartServerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\"7\n" +
-	"\x16ListRecommendedRequest\x12\x1d\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\"?\n" +
+	"\x16ListRecommendedRequest\x12%\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\"p\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\"p\n" +
 	"\x17ListRecommendedResponse\x12?\n" +
 	"\vrecommended\x18\x01 \x03(\v2\x1d.reliant.v1.RecommendedServerR\vrecommended\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\"\xc8\x01\n" +

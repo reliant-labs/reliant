@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
 import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -220,7 +221,7 @@ message CreateWorktreeResponse {
 
 // ListWorktreesRequest lists worktrees with filters
 message ListWorktreesRequest {
-  string project_id = 1;  // Required
+  string project_id = 1 [(buf.validate.field).required = true]; // Required
   optional string chat_id = 2;
   int32 limit = 3;
   optional bool include_archived = 4;
@@ -424,7 +425,7 @@ message GetWorktreeCommitsRequest {
 // ListWorktreeRepoStatusesRequest fans the per-repo git status across every
 // nested repo in the worktree's project.
 message ListWorktreeRepoStatusesRequest {
-  string worktree_id = 1;
+  string worktree_id = 1 [(buf.validate.field).required = true];
 }
 
 // WorktreeRepoStatus is the per-repo status row inside the aggregator

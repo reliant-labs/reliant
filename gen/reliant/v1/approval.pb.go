@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -833,7 +834,7 @@ var File_reliant_v1_approval_proto protoreflect.FileDescriptor
 const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/approval.proto\x12\n" +
-	"reliant.v1\"\xd1\x05\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\xd1\x05\n" +
 	"\bApproval\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12=\n" +
@@ -860,9 +861,9 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\f_workflow_idB\t\n" +
 	"\a_run_idB\x0f\n" +
 	"\r_action_takenJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17R\ttool_nameR\ftool_call_idR\n" +
-	"tool_inputR\x10integration_nameR\x10integration_icon\"5\n" +
-	"\x1aListApprovalsByChatRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\"g\n" +
+	"tool_inputR\x10integration_nameR\x10integration_icon\"=\n" +
+	"\x1aListApprovalsByChatRequest\x12\x1f\n" +
+	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\"g\n" +
 	"\x1bListApprovalsByChatResponse\x122\n" +
 	"\tapprovals\x18\x01 \x03(\v2\x14.reliant.v1.ApprovalR\tapprovals\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\"h\n" +

@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
 import "google/protobuf/struct.proto";
 import "reliant/v1/common.proto";
 
@@ -488,7 +489,7 @@ message StartChatResponse {
 
 // ListChatsRequest lists chats for a project
 message ListChatsRequest {
-  string project_id = 1;               // Required
+  string project_id = 1 [(buf.validate.field).required = true]; // Required
   optional int32 limit = 2;
   // When true, return only chats the sidebar lists (chats_with_activity.
   // list_in_sidebar): interactive chats and adopted chats. An automation or
@@ -656,8 +657,8 @@ message SendAgentMessageResponse {
 // ListQueuedAgentMessagesRequest asks for the still-undelivered mailbox
 // entries addressed to a specific thread.
 message ListQueuedAgentMessagesRequest {
-  string chat_id = 1;
-  string thread_id = 2;   // Must belong to chat_id.
+  string chat_id = 1 [(buf.validate.field).required = true];
+  string thread_id = 2 [(buf.validate.field).required = true]; // Must belong to chat_id.
 }
 
 // QueuedAgentMessage is one undelivered agent_messages row.
@@ -715,7 +716,7 @@ message InterruptThreadResponse {
 
 // ListMessagesRequest lists messages for a chat
 message ListMessagesRequest {
-  string chat_id = 1;
+  string chat_id = 1 [(buf.validate.field).required = true];
   optional int32 recent = 2;           // Number of most recent messages
   optional int64 before_seq = 3;       // Load messages before this seq
 
@@ -890,7 +891,7 @@ message BranchInfo {
 
 // ListBranchesRequest lists branches of a chat
 message ListBranchesRequest {
-  string chat_id = 1;                  // Parent chat ID
+  string chat_id = 1 [(buf.validate.field).required = true]; // Parent chat ID
 }
 
 // ListBranchesResponse returns the branches
@@ -948,7 +949,7 @@ message ChatPlan {
 
 // ListChatPlansRequest lists plans for a chat
 message ListChatPlansRequest {
-  string chat_id = 1;
+  string chat_id = 1 [(buf.validate.field).required = true];
 }
 
 // ListChatPlansResponse returns the plans
@@ -1097,7 +1098,7 @@ message GetWorkflowExecutionsResponse {
 }
 
 message ListStepExecutionsRequest {
-  string chat_id = 1;
+  string chat_id = 1 [(buf.validate.field).required = true];
   // Scopes the result to one node and everything that ran inside it (an
   // Agent step's own turns, a loop's body): "summarize", or "attempt.review"
   // for a node inside a loop body. Unset (or empty) means every step of the

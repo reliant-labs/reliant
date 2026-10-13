@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -2943,7 +2944,7 @@ var File_reliant_v1_catalog_proto protoreflect.FileDescriptor
 const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/catalog.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1breliant/v1/connection.proto\"\xb8\x05\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1breliant/v1/connection.proto\"\xb8\x05\n" +
 	"\tModelInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
@@ -2979,9 +2980,9 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x0eTierResolution\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x19\n" +
 	"\bmodel_id\x18\x02 \x01(\tR\amodelId\x12%\n" +
-	"\x0ethinking_level\x18\x03 \x01(\tR\rthinkingLevel\"9\n" +
-	"\x1bListModelsByProviderRequest\x12\x1a\n" +
-	"\bprovider\x18\x01 \x01(\tR\bprovider\"M\n" +
+	"\x0ethinking_level\x18\x03 \x01(\tR\rthinkingLevel\"A\n" +
+	"\x1bListModelsByProviderRequest\x12\"\n" +
+	"\bprovider\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\bprovider\"M\n" +
 	"\x1cListModelsByProviderResponse\x12-\n" +
 	"\x06models\x18\x01 \x03(\v2\x15.reliant.v1.ModelInfoR\x06models\"\xbf\x03\n" +
 	"\x12AvailableModelInfo\x12\x0e\n" +

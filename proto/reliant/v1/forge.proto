@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // forge:unmanaged — reliant's own handlers serve this service, not forge's;
@@ -259,8 +261,8 @@ message VerifyForgeEnvResponse {
 // ============================================
 
 message ListForgeSecretsRequest {
-  string project_id = 1;
-  string env = 2;
+  string project_id = 1 [(buf.validate.field).required = true];
+  string env = 2 [(buf.validate.field).required = true];
 }
 
 // ListForgeSecretsResponse is CONSTRAINED BY DESIGN: meta plus forge's
@@ -598,7 +600,7 @@ message StartForgeDeployPlanRequest {
 // ============================================
 
 message ListForgeCheckoutsRequest {
-  string project_id = 1;
+  string project_id = 1 [(buf.validate.field).required = true];
 
   // Also compute each checkout's content hash. It costs about half a second per
   // checkout, so it is opt-in: the picker does not need it, a diff cache does.

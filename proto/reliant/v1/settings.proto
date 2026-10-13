@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
 import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -585,7 +586,7 @@ message InstalledSkill {
 }
 
 message ListInstalledSkillsRequest {
-  string project_id = 1;
+  string project_id = 1 [(buf.validate.field).required = true];
   int32 page_size = 2;
   string page_token = 3;
 }
@@ -645,7 +646,7 @@ message RecommendedSkill {
 }
 
 message ListRecommendedSkillsRequest {
-  string project_id = 1;
+  string project_id = 1 [(buf.validate.field).required = true];
   int32 page_size = 2;
   string page_token = 3;
 }

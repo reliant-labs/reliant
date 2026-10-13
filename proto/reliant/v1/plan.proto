@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
 import "reliant/v1/common.proto";
 import "reliant/v1/task.proto";
 
@@ -117,7 +118,7 @@ message DeletePlanResponse {
 
 // ListPlanTasksRequest lists tasks for a plan
 message ListPlanTasksRequest {
-  string plan_id = 1;
+  string plan_id = 1 [(buf.validate.field).required = true];
 }
 
 // ListPlanTasksResponse returns tasks for a plan
@@ -129,7 +130,7 @@ message ListPlanTasksResponse {
 
 // ListPlansByProjectRequest lists plans for a project
 message ListPlansByProjectRequest {
-  string project_id = 1;
+  string project_id = 1 [(buf.validate.field).required = true];
 }
 
 // ListPlansByProjectResponse returns plans for a project

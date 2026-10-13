@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -3154,7 +3155,7 @@ var File_reliant_v1_trigger_proto protoreflect.FileDescriptor
 const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/trigger.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x15reliant/v1/chat.proto\x1a\x14reliant/v1/run.proto\"\xd8\x01\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x15reliant/v1/chat.proto\x1a\x14reliant/v1/run.proto\"\xd8\x01\n" +
 	"\rTriggerHealth\x127\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x1f.reliant.v1.TriggerHealthStatusR\x06status\x121\n" +
 	"\x14consecutive_failures\x18\x02 \x01(\x05R\x13consecutiveFailures\x12+\n" +
@@ -3358,10 +3359,10 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x12FireTriggerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"?\n" +
 	"\x13FireTriggerResponse\x12(\n" +
-	"\x10fire_workflow_id\x18\x01 \x01(\tR\x0efireWorkflowId\"\xbf\x01\n" +
-	"\x18ListTriggerEventsRequest\x12\x1d\n" +
+	"\x10fire_workflow_id\x18\x01 \x01(\tR\x0efireWorkflowId\"\xc7\x01\n" +
+	"\x18ListTriggerEventsRequest\x12%\n" +
 	"\n" +
-	"trigger_id\x18\x01 \x01(\tR\ttriggerId\x12\x14\n" +
+	"trigger_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\ttriggerId\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\"\n" +
 	"\n" +
 	"page_token\x18\x03 \x01(\tH\x00R\tpageToken\x88\x01\x01\x12;\n" +

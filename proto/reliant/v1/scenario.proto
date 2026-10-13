@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // ============================================
@@ -114,7 +116,7 @@ message Scenario {
 // ListScenarios
 message ListScenariosRequest {
   optional string project_id = 1;
-  string workflow_slug = 2;  // Workflow to list scenarios for
+  string workflow_slug = 2 [(buf.validate.field).required = true]; // Workflow to list scenarios for
 }
 
 message ListScenariosResponse {

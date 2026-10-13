@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // ApprovalType is the kind of approval request. Workflow step approvals are
@@ -72,7 +74,7 @@ message Approval {
 
 // ListApprovalsByChatRequest lists pending approvals for a chat
 message ListApprovalsByChatRequest {
-  string chat_id = 1;
+  string chat_id = 1 [(buf.validate.field).required = true];
 }
 
 // ListApprovalsByChatResponse returns the list of approvals

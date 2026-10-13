@@ -27,16 +27,19 @@
 version: v2
 managed:
   enabled: false
-# proto/forge/v1/forge.proto is forge's annotation vocabulary (the
-# (forge.v1.method) options), a copy of the file forge embeds; `forge lint
-# --vendored-protos` reports drift. It is an import here, never a target: its
-# Go home is github.com/reliant-labs/forge/pkg/forgepb (which the generated
-# code imports), and a second Go copy would register forge/v1/forge.proto twice
-# and panic at init. web/src/gen still gets it, through include_imports.
+# proto/forge/v1/forge.proto and proto/buf/validate/validate.proto are
+# annotation vocabularies forge vendors: the (forge.v1.method) options and
+# protovalidate's (buf.validate.field) rules, copies of the files forge embeds;
+# `forge lint --vendored-protos` reports drift. They are imports here, never
+# targets: their Go homes are github.com/reliant-labs/forge/pkg/forgepb and
+# buf.build/gen/go/bufbuild/protovalidate (which the generated code imports),
+# and a second Go copy would register the same file twice and panic at init.
+# web/src/gen still gets both, through include_imports.
 inputs:
   - directory: proto
     exclude_paths:
       - proto/forge/v1
+      - proto/buf/validate
 plugins:
   # Generate Go protobuf code
   - local: [go, tool, protoc-gen-go]

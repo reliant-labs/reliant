@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -5052,7 +5053,7 @@ var File_reliant_v1_settings_proto protoreflect.FileDescriptor
 const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/settings.proto\x12\n" +
-	"reliant.v1\x1a\x17reliant/v1/common.proto\"\xd1\x01\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\"\xd1\x01\n" +
 	"\aSetting\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
@@ -5347,10 +5348,10 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x0fdefinition_path\x18\a \x01(\tR\x0edefinitionPath\x12\x16\n" +
 	"\x06active\x18\b \x01(\bR\x06active\x12B\n" +
 	"\x1bshadowed_by_definition_path\x18\t \x01(\tH\x00R\x18shadowedByDefinitionPath\x88\x01\x01B\x1e\n" +
-	"\x1c_shadowed_by_definition_path\"w\n" +
-	"\x1aListInstalledSkillsRequest\x12\x1d\n" +
+	"\x1c_shadowed_by_definition_path\"\x7f\n" +
+	"\x1aListInstalledSkillsRequest\x12%\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\"v\n" +
@@ -5398,10 +5399,10 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"bundled_by\x18\a \x01(\tH\x02R\tbundledBy\x88\x01\x01B\x11\n" +
 	"\x0f_source_subpathB\x06\n" +
 	"\x04_refB\r\n" +
-	"\v_bundled_by\"y\n" +
-	"\x1cListRecommendedSkillsRequest\x12\x1d\n" +
+	"\v_bundled_by\"\x81\x01\n" +
+	"\x1cListRecommendedSkillsRequest\x12%\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\"\x9d\x01\n" +

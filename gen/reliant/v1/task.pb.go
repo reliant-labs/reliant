@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1223,7 +1224,7 @@ var File_reliant_v1_task_proto protoreflect.FileDescriptor
 const file_reliant_v1_task_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/task.proto\x12\n" +
-	"reliant.v1\"\x8b\x03\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\x8b\x03\n" +
 	"\x04Task\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12\x14\n" +
@@ -1314,9 +1315,9 @@ const file_reliant_v1_task_proto_rawDesc = "" +
 	"to_task_id\x18\x02 \x01(\tR\btoTaskId\x12C\n" +
 	"\x0fdependency_type\x18\x03 \x01(\x0e2\x1a.reliant.v1.DependencyTypeR\x0edependencyType\"8\n" +
 	"\x1cRemoveTaskDependencyResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"0\n" +
-	"\x15ListReadyTasksRequest\x12\x17\n" +
-	"\aplan_id\x18\x01 \x01(\tR\x06planId\"V\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"8\n" +
+	"\x15ListReadyTasksRequest\x12\x1f\n" +
+	"\aplan_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06planId\"V\n" +
 	"\x16ListReadyTasksResponse\x12&\n" +
 	"\x05tasks\x18\x01 \x03(\v2\x10.reliant.v1.TaskR\x05tasks\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total*\xdf\x01\n" +

@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1812,7 +1813,7 @@ var File_reliant_v1_connection_proto protoreflect.FileDescriptor
 const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\n" +
 	"\x1breliant/v1/connection.proto\x12\n" +
-	"reliant.v1\"\x9b\x05\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\x9b\x05\n" +
 	"\n" +
 	"Connection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
@@ -1942,9 +1943,9 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\ftool_call_id\x18\x06 \x01(\tR\n" +
 	"toolCallId\x12\x14\n" +
 	"\x05actor\x18\a \x01(\tR\x05actor\x12\x0e\n" +
-	"\x02at\x18\b \x01(\tR\x02at\"s\n" +
-	"\x1bListConnectionEventsRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x02at\x18\b \x01(\tR\x02at\"{\n" +
+	"\x1bListConnectionEventsRequest\x12\x16\n" +
+	"\x02id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12 \n" +
 	"\tbefore_id\x18\x03 \x01(\x03H\x00R\bbeforeId\x88\x01\x01B\f\n" +
 	"\n" +

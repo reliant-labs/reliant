@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
 import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -126,7 +127,7 @@ message RecommendedServer {
 // ============================================
 
 message ListServersRequest {
-  string project_id = 1;
+  string project_id = 1 [(buf.validate.field).required = true];
 }
 
 message ListServersResponse {
@@ -210,7 +211,7 @@ message RestartServerResponse {
 // ============================================
 
 message ListRecommendedRequest {
-  string project_id = 1;
+  string project_id = 1 [(buf.validate.field).required = true];
 }
 
 message ListRecommendedResponse {

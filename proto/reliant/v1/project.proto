@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
 import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -424,7 +425,7 @@ message InitializeGitRepoResponse {
 
 // ListProjectDaemonsForDaemonRequest filters project_daemons rows by daemon.
 message ListProjectDaemonsForDaemonRequest {
-  string daemon_id = 1;
+  string daemon_id = 1 [(buf.validate.field).required = true];
 }
 
 // ListProjectDaemonsForDaemonResponse returns the matching rows.
@@ -517,7 +518,7 @@ message DaemonRepository {
 
 // ListRepositoriesForDaemonRequest filters by daemon.
 message ListRepositoriesForDaemonRequest {
-  string daemon_id = 1;
+  string daemon_id = 1 [(buf.validate.field).required = true];
 }
 
 // ListRepositoriesForDaemonResponse returns matching rows joined with project

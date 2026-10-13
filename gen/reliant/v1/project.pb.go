@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -3357,7 +3358,7 @@ var File_reliant_v1_project_proto protoreflect.FileDescriptor
 const file_reliant_v1_project_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/project.proto\x12\n" +
-	"reliant.v1\x1a\x17reliant/v1/common.proto\"\xe7\x03\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\"\xe7\x03\n" +
 	"\aProject\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
@@ -3564,9 +3565,9 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tR\tprojectId\x12\x1e\n" +
 	"\vis_git_repo\x18\x03 \x01(\bR\tisGitRepo\x12%\n" +
-	"\x0edefault_branch\x18\x04 \x01(\tR\rdefaultBranch\"A\n" +
-	"\"ListProjectDaemonsForDaemonRequest\x12\x1b\n" +
-	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\"i\n" +
+	"\x0edefault_branch\x18\x04 \x01(\tR\rdefaultBranch\"I\n" +
+	"\"ListProjectDaemonsForDaemonRequest\x12#\n" +
+	"\tdaemon_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\bdaemonId\"i\n" +
 	"#ListProjectDaemonsForDaemonResponse\x12B\n" +
 	"\x0fproject_daemons\x18\x01 \x03(\v2\x19.reliant.v1.ProjectDaemonR\x0eprojectDaemons\"\x1b\n" +
 	"\x19ListProjectDaemonsRequest\"`\n" +
@@ -3604,9 +3605,9 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"remote_url\x18\x03 \x01(\tR\tremoteUrl\x12\x16\n" +
 	"\x06branch\x18\x04 \x01(\tR\x06branch\x12\x12\n" +
 	"\x04path\x18\x05 \x01(\tR\x04path\x12\x1b\n" +
-	"\tcloned_at\x18\x06 \x01(\tR\bclonedAt\"?\n" +
-	" ListRepositoriesForDaemonRequest\x12\x1b\n" +
-	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\"e\n" +
+	"\tcloned_at\x18\x06 \x01(\tR\bclonedAt\"G\n" +
+	" ListRepositoriesForDaemonRequest\x12#\n" +
+	"\tdaemon_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\bdaemonId\"e\n" +
 	"!ListRepositoriesForDaemonResponse\x12@\n" +
 	"\frepositories\x18\x01 \x03(\v2\x1c.reliant.v1.DaemonRepositoryR\frepositories\"X\n" +
 	"\x1aPullProjectOnDaemonRequest\x12\x1d\n" +

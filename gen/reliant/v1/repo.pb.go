@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -657,7 +658,7 @@ var File_reliant_v1_repo_proto protoreflect.FileDescriptor
 const file_reliant_v1_repo_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/repo.proto\x12\n" +
-	"reliant.v1\"\xcb\x01\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\xcb\x01\n" +
 	"\x04Repo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -677,10 +678,10 @@ const file_reliant_v1_repo_proto_rawDesc = "" +
 	"\x15DiscoverReposResponse\x120\n" +
 	"\n" +
 	"discovered\x18\x01 \x03(\v2\x10.reliant.v1.RepoR\n" +
-	"discovered\"1\n" +
-	"\x10ListReposRequest\x12\x1d\n" +
+	"discovered\"9\n" +
+	"\x10ListReposRequest\x12%\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\";\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\";\n" +
 	"\x11ListReposResponse\x12&\n" +
 	"\x05repos\x18\x01 \x03(\v2\x10.reliant.v1.RepoR\x05repos\"v\n" +
 	"\x0eAddRepoRequest\x12\x1d\n" +

@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
 import "google/protobuf/struct.proto";
 import "reliant/v1/chat.proto";
 import "reliant/v1/run.proto";
@@ -750,7 +751,7 @@ message FireTriggerResponse {
 // ListTriggerEventsRequest is the request for ListTriggerEvents.
 message ListTriggerEventsRequest {
   // Trigger whose firings to list.
-  string trigger_id = 1;
+  string trigger_id = 1 [(buf.validate.field).required = true];
 
   // Maximum firings to return. Unset or zero applies the server default.
   int32 limit = 2;

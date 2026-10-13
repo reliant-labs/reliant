@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
 import "google/protobuf/struct.proto";
 import "reliant/v1/connection.proto";
 
@@ -144,7 +145,7 @@ message TierResolution {
 // ListModelsByProviderRequest is the request for ListModelsByProvider
 message ListModelsByProviderRequest {
   // Provider name to filter by (e.g., "anthropic", "openai")
-  string provider = 1;
+  string provider = 1 [(buf.validate.field).required = true];
 }
 
 // ListModelsByProviderResponse is the response for ListModelsByProvider

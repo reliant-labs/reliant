@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -3617,7 +3618,7 @@ var File_reliant_v1_worktree_proto protoreflect.FileDescriptor
 const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/worktree.proto\x12\n" +
-	"reliant.v1\x1a\x17reliant/v1/common.proto\"\x85\x04\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\"\x85\x04\n" +
 	"\bWorktree\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -3707,10 +3708,10 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x13_source_worktree_idB\x12\n" +
 	"\x10_idempotency_key\"J\n" +
 	"\x16CreateWorktreeResponse\x120\n" +
-	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"\xba\x01\n" +
-	"\x14ListWorktreesRequest\x12\x1d\n" +
+	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"\xc2\x01\n" +
+	"\x14ListWorktreesRequest\x12%\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1c\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12\x1c\n" +
 	"\achat_id\x18\x02 \x01(\tH\x00R\x06chatId\x88\x01\x01\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12.\n" +
 	"\x10include_archived\x18\x04 \x01(\bH\x01R\x0fincludeArchived\x88\x01\x01B\n" +
@@ -3830,9 +3831,9 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
 	"worktreeId\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x17\n" +
-	"\arepo_id\x18\x03 \x01(\tR\x06repoId\"B\n" +
-	"\x1fListWorktreeRepoStatusesRequest\x12\x1f\n" +
-	"\vworktree_id\x18\x01 \x01(\tR\n" +
+	"\arepo_id\x18\x03 \x01(\tR\x06repoId\"J\n" +
+	"\x1fListWorktreeRepoStatusesRequest\x12'\n" +
+	"\vworktree_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"worktreeId\"\xa9\x02\n" +
 	"\x12WorktreeRepoStatus\x12\x17\n" +
 	"\arepo_id\x18\x01 \x01(\tR\x06repoId\x12\x1b\n" +
