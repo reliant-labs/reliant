@@ -4189,6 +4189,11 @@
             "Name": "is_running",
             "ProtoType": "bool",
             "IsOptional": false
+          },
+          {
+            "Name": "resumable",
+            "ProtoType": "bool",
+            "IsOptional": false
           }
         ],
         "GetWorkflowExecutionsRequest": [
@@ -5414,6 +5419,10 @@
           },
           {
             "name": "is_running",
+            "kind": "bool"
+          },
+          {
+            "name": "resumable",
             "kind": "bool"
           }
         ],
@@ -33559,5 +33568,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "c3954cfeb84368dc0a89b4f2907505350fd11e2ef53e269499777d0e30761912"
+  "source_hash": "9623cec1bf6b302683d15befbca333d956ebaf13fc2f8560c395b3b6940d0540"
 }
