@@ -121,7 +121,7 @@ type localInventorySnapshot struct {
 }
 
 type localModelProber struct {
-	client    *http.Client
+	probes    localprobe.Service
 	wellKnown []wellKnownLocalEndpoint
 	loadCfg   func() localModelsConfig
 
@@ -131,7 +131,7 @@ type localModelProber struct {
 
 func newLocalModelProber() *localModelProber {
 	return &localModelProber{
-		client:    &http.Client{},
+		probes:    localprobe.New(localprobe.Deps{HTTPClient: &http.Client{}}),
 		wellKnown: defaultWellKnownLocalEndpoints(),
 		loadCfg:   loadLocalModelsConfig,
 		showCache: localprobe.NewShowCache(),
@@ -224,7 +224,7 @@ func sortLocalInventory(inv *reliantv1.LocalModelInventory) {
 // it) and which endpoints are well-known ports.
 func (p *localModelProber) probeEndpoint(ctx context.Context, id, root, source, apiKey string, timeout time.Duration) (*reliantv1.LocalModelEndpoint, localEndpointTarget) {
 	tgt := localEndpointTarget{root: root, apiKey: apiKey, kind: "openai_compatible"}
-	ep := localprobe.Probe(ctx, p.client, id, localprobe.Target{Root: root, APIKey: apiKey}, localprobe.Options{
+	ep := p.probes.Probe(ctx, id, localprobe.Target{Root: root, APIKey: apiKey}, localprobe.Options{
 		ListTimeout:    timeout,
 		DetectTimeout:  localModelDetectTimeout,
 		VRAMBytes:      p.vramFn,

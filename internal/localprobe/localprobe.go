@@ -1,17 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
-//
-//forge:exclude-contract: a stateless prober/parser for OpenAI-compatible model servers; its only I/O is the *http.Client the caller supplies
 package localprobe
 
-// Probing an OpenAI-compatible server: list its models, detect the server
-// family (Ollama, LM Studio, llama.cpp, vLLM) and ask the family's own
-// metadata endpoints what /v1/models cannot say (context window, vision,
-// tools, thinking).
-//
-// The caller supplies the *http.Client, which is what decides where the
-// bytes go: a plain client for a server Reliant dials directly, an
-// SSRF-guarded one for a user-supplied URL in a hosted deployment.
-//
 // The daemon's own prober (internal/toolexec/daemonruntime/localmodels_probe.go)
 // predates this package and carries copies of the same parsers plus daemon-only
 // work (VRAM estimation). It should delegate its pure parsing here; that was
@@ -126,15 +115,31 @@ func (c *ShowCache) put(k string, v OllamaShow) {
 	c.mu.Unlock()
 }
 
+// prober is the Service: every probe goes through one *http.Client.
+type prober struct {
+	client *http.Client
+}
+
+// New returns the probe adapter.
+//
+// forge:constructor
+func New(deps Deps) Service {
+	client := deps.HTTPClient
+	if client == nil {
+		client = &http.Client{}
+	}
+	return &prober{client: client}
+}
+
 // Probe asks the server what it serves. It never returns nil: a server that
 // does not answer yields an endpoint with Error set and no models.
-func Probe(ctx context.Context, client *http.Client, id string, t Target, opt Options) *reliantv1.LocalModelEndpoint {
+func (p *prober) Probe(ctx context.Context, id string, t Target, opt Options) *reliantv1.LocalModelEndpoint {
 	ep := &reliantv1.LocalModelEndpoint{Id: id, Kind: "openai_compatible", BaseUrl: t.Root + "/v1", Source: "configured"}
 	if _, err := NormalizeRoot(t.Root); err != nil {
 		ep.Error = err.Error()
 		return ep
 	}
-	f := fetcher{client: client, t: t, opt: opt}
+	f := fetcher{client: p.client, t: t, opt: opt}
 	listTO := listTimeout
 	if opt.ListTimeout > 0 {
 		listTO = opt.ListTimeout

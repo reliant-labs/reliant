@@ -170,7 +170,7 @@ func TestProbeDetectsEachServerFamily(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := fakeServer(t, tc.routes, nil)
-			ep := Probe(context.Background(), srv.Client(), "id-1", Target{Root: srv.URL}, Options{})
+			ep := New(Deps{HTTPClient: srv.Client()}).Probe(context.Background(), "id-1", Target{Root: srv.URL}, Options{})
 			require.Empty(t, ep.Error)
 			assert.Equal(t, tc.kind, ep.Kind)
 			assert.Equal(t, srv.URL+"/v1", ep.BaseUrl)
@@ -201,11 +201,11 @@ func TestProbeSendsCredentialsAndReportsFailures(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ep := Probe(context.Background(), srv.Client(), "x", Target{Root: srv.URL}, Options{})
+	ep := New(Deps{HTTPClient: srv.Client()}).Probe(context.Background(), "x", Target{Root: srv.URL}, Options{})
 	assert.Contains(t, ep.Error, "401")
 	assert.Empty(t, ep.Models)
 
-	ep = Probe(context.Background(), srv.Client(), "x", Target{Root: srv.URL, APIKey: "sk-ok", Headers: map[string]string{"X-Org": "acme"}}, Options{})
+	ep = New(Deps{HTTPClient: srv.Client()}).Probe(context.Background(), "x", Target{Root: srv.URL, APIKey: "sk-ok", Headers: map[string]string{"X-Org": "acme"}}, Options{})
 	require.Empty(t, ep.Error)
 	assert.Equal(t, "Bearer sk-ok", gotAuth.Load())
 	assert.Equal(t, "acme", gotOrg.Load())
@@ -213,7 +213,7 @@ func TestProbeSendsCredentialsAndReportsFailures(t *testing.T) {
 	dead := httptest.NewServer(http.NotFoundHandler())
 	root := dead.URL
 	dead.Close()
-	ep = Probe(context.Background(), http.DefaultClient, "x", Target{Root: root}, Options{})
+	ep = New(Deps{HTTPClient: http.DefaultClient}).Probe(context.Background(), "x", Target{Root: root}, Options{})
 	assert.NotEmpty(t, ep.Error)
 	assert.NotNil(t, ep, "a dead server still yields an endpoint")
 	assert.False(t, strings.Contains(ep.Error, "dial tcp 127"), "the error is trimmed to the actionable part: %q", ep.Error)
@@ -241,7 +241,7 @@ func TestProbeBoundsPerModelEnrichment(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	ep := Probe(context.Background(), srv.Client(), "x", Target{Root: srv.URL}, Options{})
+	ep := New(Deps{HTTPClient: srv.Client()}).Probe(context.Background(), "x", Target{Root: srv.URL}, Options{})
 	require.Empty(t, ep.Error)
 	assert.Len(t, ep.Models, 200, "every model is listed")
 	assert.LessOrEqual(t, int(shows.Load()), maxEnriched, "but metadata calls are bounded")
@@ -274,7 +274,7 @@ func TestProbeOllamaPublishesHonoredContextNotTrained(t *testing.T) {
 	}
 	ctxOf := func(srv *httptest.Server, vram func() int64) int64 {
 		defer srv.Close()
-		ep := Probe(context.Background(), srv.Client(), "x", Target{Root: srv.URL}, Options{VRAMBytes: vram})
+		ep := New(Deps{HTTPClient: srv.Client()}).Probe(context.Background(), "x", Target{Root: srv.URL}, Options{VRAMBytes: vram})
 		require.Empty(t, ep.Error)
 		require.Equal(t, "ollama", ep.Kind)
 		require.Len(t, ep.Models, 1)
@@ -308,7 +308,7 @@ func TestShowCacheAndContextObserver(t *testing.T) {
 	var rules []string
 	opt := Options{ShowCache: NewShowCache(), OnContext: func(_ string, _ int64, rule string) { rules = append(rules, rule) }}
 	for range 3 {
-		Probe(context.Background(), srv.Client(), "x", Target{Root: srv.URL}, opt)
+		New(Deps{HTTPClient: srv.Client()}).Probe(context.Background(), "x", Target{Root: srv.URL}, opt)
 	}
 	assert.EqualValues(t, 1, shows.Load(), "/api/show is cached by name+digest")
 	assert.Len(t, rules, 3)
