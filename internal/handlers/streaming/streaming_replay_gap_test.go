@@ -1,4 +1,4 @@
-package services
+package streaming
 
 import (
 	"context"
@@ -78,7 +78,7 @@ func (noopSubscription) Unsubscribe()                            {}
 func firstChatSyncEvent(t *testing.T, repo db.Repository, chatSinceSeq int64) *reliantv1.UserStreamEvent {
 	t.Helper()
 
-	svc := NewStreamingService(repo, noopHub{}, nil, nil)
+	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}}))
 	mux := http.NewServeMux()
 	path, handler := reliantv1connect.NewStreamingServiceHandler(svc)
 	mux.Handle(path, authInjector(handler))

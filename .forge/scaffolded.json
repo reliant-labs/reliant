@@ -105,6 +105,9 @@
     "internal/handlers/run/handlers_scaffold_start_run_test.go": {
       "scaffolded_at": "2026-10-13T12:25:31Z"
     },
+    "internal/handlers/streaming/handlers_scaffold_stream_user_updates_test.go": {
+      "scaffolded_at": "2026-10-13T14:36:02Z"
+    },
     "internal/handlers/system/handlers_scaffold_dev_auth_clear_test.go": {
       "scaffolded_at": "2026-10-13T06:58:06Z"
     },

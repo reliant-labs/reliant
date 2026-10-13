@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package streaming
 
 import (
 	"context"
@@ -164,7 +164,7 @@ func TestChatSnapshot_OmitsSpawnThreadTranscripts(t *testing.T) {
 
 	f := seedSpawnSiblingsChat(t, repo, ctx, 3, 250)
 
-	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, f.chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshot(ctx, f.chatID)
 	require.NoError(t, err)
 
 	got := make(map[string]bool, len(snapshot.Messages))
@@ -225,7 +225,7 @@ func TestChatSnapshot_HasMoreWhenMainThreadOutgrowsWindow(t *testing.T) {
 
 	f := seedSpawnSiblingsChat(t, repo, ctx, snapshotMessageLimit+5, 3)
 
-	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, f.chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshot(ctx, f.chatID)
 	require.NoError(t, err)
 
 	mainCount := 0

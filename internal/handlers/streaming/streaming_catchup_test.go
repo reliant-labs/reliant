@@ -1,4 +1,4 @@
-package services
+package streaming
 
 import (
 	"context"
@@ -53,7 +53,7 @@ func (catchupChatRepo) GetLatestContextWindow(context.Context, string) (*db.Cont
 
 // userStreamEvents opens a stream with req and returns a channel of every
 // event the server sends. The stream is closed at test end.
-func userStreamEvents(t *testing.T, svc *StreamingService, req *reliantv1.StreamUserUpdatesRequest) <-chan *reliantv1.UserStreamEvent {
+func userStreamEvents(t *testing.T, svc *Service, req *reliantv1.StreamUserUpdatesRequest) <-chan *reliantv1.UserStreamEvent {
 	t.Helper()
 
 	mux := http.NewServeMux()
@@ -142,7 +142,7 @@ func TestStreamUserUpdates_ChatCaughtUpAfterSnapshot(t *testing.T) {
 	// Cursor ahead of the chat: the server answers with a snapshot.
 	repo := newCatchupChatRepo(50)
 	chatID := raceTestChatID
-	events := userStreamEvents(t, NewStreamingService(repo, noopHub{}, nil, nil),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
 		&reliantv1.StreamUserUpdatesRequest{SubscribeChatId: &chatID, ChatSinceSeq: 5000})
 
 	frames, caughtUp := chatFramesUntilCaughtUp(t, events)
@@ -159,7 +159,7 @@ func TestStreamUserUpdates_ChatCaughtUpAfterMultiBatchReplay(t *testing.T) {
 	const cursor = 10
 	repo := newCatchupChatRepo(cursor + 250)
 	chatID := raceTestChatID
-	events := userStreamEvents(t, NewStreamingService(repo, noopHub{}, nil, nil),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
 		&reliantv1.StreamUserUpdatesRequest{SubscribeChatId: &chatID, ChatSinceSeq: cursor})
 
 	frames, caughtUp := chatFramesUntilCaughtUp(t, events)
@@ -176,7 +176,7 @@ func TestStreamUserUpdates_ChatCaughtUpWhenCursorIsCurrent(t *testing.T) {
 	// so this signal is the ONLY chat frame the client gets.
 	repo := newCatchupChatRepo(77)
 	chatID := raceTestChatID
-	events := userStreamEvents(t, NewStreamingService(repo, noopHub{}, nil, nil),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
 		&reliantv1.StreamUserUpdatesRequest{SubscribeChatId: &chatID, ChatSinceSeq: 77})
 
 	frames, caughtUp := chatFramesUntilCaughtUp(t, events)
@@ -188,7 +188,7 @@ func TestStreamUserUpdates_ChatCaughtUpWhenCursorIsCurrent(t *testing.T) {
 
 func TestStreamUserUpdates_NoChatCaughtUpWithoutChatSubscription(t *testing.T) {
 	repo := newCatchupChatRepo(0)
-	events := userStreamEvents(t, NewStreamingService(repo, noopHub{}, nil, nil),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
 		&reliantv1.StreamUserUpdatesRequest{})
 
 	nextEvent(t, events, "sync", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetSync() != nil })
@@ -260,7 +260,7 @@ func TestStreamUserUpdates_CatchUpReportsCursorWhenEveryUpdateIsFiltered(t *test
 	latest := seeded[len(seeded)-1].SequenceNumber
 
 	project := catchupProject
-	events := userStreamEvents(t, NewStreamingService(repo, noopHub{}, nil, nil),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
 		&reliantv1.StreamUserUpdatesRequest{SinceSeq: 0, ProjectId: &project})
 
 	batch := nextEvent(t, events, "a user batch carrying the cursor", func(ev *reliantv1.UserStreamEvent) bool {
@@ -280,7 +280,7 @@ func TestStreamUserUpdates_CatchUpBatchesCarryCursorPastFilteredTail(t *testing.
 	latest := seeded[len(seeded)-1].SequenceNumber
 
 	project := catchupProject
-	events := userStreamEvents(t, NewStreamingService(repo, noopHub{}, nil, nil),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
 		&reliantv1.StreamUserUpdatesRequest{SinceSeq: 0, ProjectId: &project})
 
 	// Whatever shape the catch-up takes, the client's cursor after it must be
@@ -332,7 +332,7 @@ func TestStreamUserUpdates_LiveSequenceGapIsBackfilledBeforeTheEvent(t *testing.
 
 	hub := newChanUserHub()
 	project := catchupProject
-	events := userStreamEvents(t, NewStreamingService(repo, noopHub{}, hub, nil),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub})),
 		&reliantv1.StreamUserUpdatesRequest{SinceSeq: 0, ProjectId: &project})
 
 	// The stream is live (catch-up over: nothing to replay) before anything
@@ -378,7 +378,7 @@ func TestStreamUserUpdates_FilteredLiveEventAdvancesCursorWithoutBackfill(t *tes
 
 	hub := newChanUserHub()
 	project := catchupProject
-	events := userStreamEvents(t, NewStreamingService(repo, noopHub{}, hub, nil),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub})),
 		&reliantv1.StreamUserUpdatesRequest{SinceSeq: 0, ProjectId: &project})
 	nextEvent(t, events, "sync", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetSync() != nil })
 	<-hub.subscribed

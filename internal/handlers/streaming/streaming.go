@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package streaming
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -64,38 +63,11 @@ const (
 	maxChatReplayGap = 2000
 )
 
-// StreamingService implements the StreamingService RPC handlers
-// Note: Authentication is handled by the WrapStreamingHandler interceptor
-type StreamingService struct {
-	reliantv1connect.UnimplementedStreamingServiceHandler
-	database      db.Repository
-	hub           streaming.StreamingHub             // LLM streaming deltas
-	userUpdateHub streaming.UpdateHub[db.UserUpdate] // user-level events
-	chatUpdateHub streaming.UpdateHub[db.ChatUpdate] // chat-level events
-}
-
-// NewStreamingService creates a new StreamingService.
-// userUpdateHub and chatUpdateHub may be nil, in which case the service will
-// fall back to polling (for backwards compat during rollout).
-func NewStreamingService(
-	database db.Repository,
-	hub streaming.StreamingHub,
-	userUpdateHub streaming.UpdateHub[db.UserUpdate],
-	chatUpdateHub streaming.UpdateHub[db.ChatUpdate],
-) *StreamingService {
-	return &StreamingService{
-		database:      database,
-		hub:           hub,
-		userUpdateHub: userUpdateHub,
-		chatUpdateHub: chatUpdateHub,
-	}
-}
-
 // StreamUserUpdates implements the unified server-streaming for all updates.
 // It always delivers user-level events (chat state, projects, processes, etc.).
 // When subscribe_chat_id is set, it ALSO delivers per-chat detail events
 // (messages, approvals, tool calls, streaming deltas, workflow/node events).
-func (s *StreamingService) StreamUserUpdates(
+func (s *Service) StreamUserUpdates(
 	ctx context.Context,
 	req *connect.Request[reliantv1.StreamUserUpdatesRequest],
 	stream *connect.ServerStream[reliantv1.UserStreamEvent],
@@ -112,7 +84,7 @@ func (s *StreamingService) StreamUserUpdates(
 	projectID := req.Msg.GetProjectId() // empty string if not set
 
 	// --- User-level initialization ---
-	latestSeq, err := s.database.GetLatestUserUpdateSequence(ctx, userID)
+	latestSeq, err := s.deps.Repo.GetLatestUserUpdateSequence(ctx, userID)
 	if err != nil {
 		logging.Error(LOG_PREFIX_STREAM_USER+" Failed to get latest sequence", "error", err, "userID", userID)
 		return err
@@ -134,8 +106,8 @@ func (s *StreamingService) StreamUserUpdates(
 	// reason as the per-chat hub: an event published between the catch-up
 	// query and the subscription would be in neither.
 	var userUpdateSub streaming.UpdateSubscription[db.UserUpdate]
-	if s.userUpdateHub != nil {
-		userUpdateSub = s.userUpdateHub.Subscribe(ctx, userID)
+	if s.deps.UserUpdates != nil {
+		userUpdateSub = s.deps.UserUpdates.Subscribe(ctx, userID)
 		defer userUpdateSub.Unsubscribe()
 	}
 
@@ -157,7 +129,7 @@ func (s *StreamingService) StreamUserUpdates(
 
 	if subscribeChatID != "" {
 		// Verify user owns the chat before subscribing
-		chat, err := s.database.GetChat(ctx, subscribeChatID)
+		chat, err := s.deps.Repo.GetChat(ctx, subscribeChatID)
 		if err != nil {
 			return connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 		}
@@ -169,7 +141,9 @@ func (s *StreamingService) StreamUserUpdates(
 			"userID", userID, "chatID", subscribeChatID[:8])
 
 		// Subscribe to the streaming hub for ephemeral events (streaming deltas)
-		hubSub = s.hub.Subscribe(ctx, subscribeChatID)
+		if s.deps.Deltas != nil {
+			hubSub = s.deps.Deltas.Subscribe(ctx, subscribeChatID)
+		}
 
 		// Subscribe to persisted chat updates BEFORE the snapshot below.
 		// buildChatSnapshot reads its sequence high-water mark first and then
@@ -181,8 +155,8 @@ func (s *StreamingService) StreamUserUpdates(
 		// because no later event ever arrives to trip the client's gap
 		// detection. Subscribing first makes the two overlap instead; the
 		// seq <= lastChatSeq dedup in the main loop drops the redundancy.
-		if s.chatUpdateHub != nil {
-			chatUpdateSub = s.chatUpdateHub.Subscribe(ctx, subscribeChatID)
+		if s.deps.ChatUpdates != nil {
+			chatUpdateSub = s.deps.ChatUpdates.Subscribe(ctx, subscribeChatID)
 			defer chatUpdateSub.Unsubscribe()
 		}
 
@@ -192,7 +166,7 @@ func (s *StreamingService) StreamUserUpdates(
 		useSnapshot := chatSinceSeq == 0
 		var chatLatestSeq int64
 		if !useSnapshot {
-			chatLatestSeq, err = s.database.GetLatestUpdateSequence(ctx, subscribeChatID)
+			chatLatestSeq, err = s.deps.Repo.GetLatestUpdateSequence(ctx, subscribeChatID)
 			if err != nil {
 				logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to get latest sequence", "error", err, "chatID", subscribeChatID[:8])
 				return err
@@ -364,7 +338,7 @@ func chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq int64) bool {
 }
 
 // sendHeartbeat sends a heartbeat through the unified stream
-func (s *StreamingService) sendHeartbeat(stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+func (s *Service) sendHeartbeat(stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
 	event := &reliantv1.UserStreamEvent{
 		Event: &reliantv1.UserStreamEvent_Heartbeat{
 			Heartbeat: &reliantv1.Heartbeat{
@@ -380,7 +354,7 @@ func (s *StreamingService) sendHeartbeat(stream *connect.ServerStream[reliantv1.
 }
 
 // userUpdateToProto converts a db.UserUpdate to its protobuf representation.
-func (s *StreamingService) userUpdateToProto(update db.UserUpdate) *reliantv1.UserUpdateData {
+func (s *Service) userUpdateToProto(update db.UserUpdate) *reliantv1.UserUpdateData {
 	dataJSON, err := json.Marshal(update.Data)
 	if err != nil {
 		logging.Warn(LOG_PREFIX_STREAM_USER+" Failed to marshal update data", "error", err)
@@ -413,7 +387,7 @@ func (s *StreamingService) userUpdateToProto(update db.UserUpdate) *reliantv1.Us
 // UpdateHub. latestSeq is the subscription's user cursor after it — for an
 // ephemeral update, the cursor as it already stood, since nothing persisted
 // was delivered.
-func (s *StreamingService) sendSingleUserUpdate(update db.UserUpdate, latestSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+func (s *Service) sendSingleUserUpdate(update db.UserUpdate, latestSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
 	protoUpdate := s.userUpdateToProto(update)
 	event := &reliantv1.UserStreamEvent{
 		Event: &reliantv1.UserStreamEvent_Updates{
@@ -431,7 +405,7 @@ func (s *StreamingService) sendSingleUserUpdate(update db.UserUpdate, latestSeq 
 }
 
 // sendSingleChatUpdate sends a single chat update event received from the UpdateHub.
-func (s *StreamingService) sendSingleChatUpdate(update db.ChatUpdate, latestSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+func (s *Service) sendSingleChatUpdate(update db.ChatUpdate, latestSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
 	dataJSON := formatChatUpdateDataJSON(update.UpdateType, update.Data)
 	protoUpdate := &reliantv1.ChatUpdateData{
 		UpdateType:     update.UpdateType,
@@ -457,7 +431,7 @@ func (s *StreamingService) sendSingleChatUpdate(update db.ChatUpdate, latestSeq 
 }
 
 // sendStreamingDeltaViaUserStream sends an ephemeral streaming delta through the unified stream
-func (s *StreamingService) sendStreamingDeltaViaUserStream(chatID string, delta streaming.StreamingDelta, lastChatSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+func (s *Service) sendStreamingDeltaViaUserStream(chatID string, delta streaming.StreamingDelta, lastChatSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
 	deltaJSON, err := json.Marshal(delta)
 	if err != nil {
 		logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to marshal streaming delta", "error", err, "chatID", chatID[:8])
@@ -489,7 +463,7 @@ func (s *StreamingService) sendStreamingDeltaViaUserStream(chatID string, delta 
 }
 
 // sendChatSnapshotViaUserStream sends a chat snapshot through the unified stream
-func (s *StreamingService) sendChatSnapshotViaUserStream(ctx context.Context, chatID string, stream *connect.ServerStream[reliantv1.UserStreamEvent]) (int64, error) {
+func (s *Service) sendChatSnapshotViaUserStream(ctx context.Context, chatID string, stream *connect.ServerStream[reliantv1.UserStreamEvent]) (int64, error) {
 	snapshot, latestSeq, err := s.buildChatSnapshot(ctx, chatID)
 	if err != nil {
 		return 0, err
@@ -508,11 +482,11 @@ func (s *StreamingService) sendChatSnapshotViaUserStream(ctx context.Context, ch
 }
 
 // sendChatUpdateBatchesViaUserStream sends chat update batches through the unified stream
-func (s *StreamingService) sendChatUpdateBatchesViaUserStream(ctx context.Context, chatID string, startSeq, latestSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+func (s *Service) sendChatUpdateBatchesViaUserStream(ctx context.Context, chatID string, startSeq, latestSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
 	currentSeq := startSeq
 
 	for currentSeq < latestSeq {
-		updates, err := s.database.GetUpdatesSince(ctx, chatID, currentSeq, batchSize)
+		updates, err := s.deps.Repo.GetUpdatesSince(ctx, chatID, currentSeq, batchSize)
 		if err != nil {
 			return err
 		}
@@ -559,7 +533,7 @@ func (s *StreamingService) sendChatUpdateBatchesViaUserStream(ctx context.Contex
 
 // buildChatSnapshot builds the chat sync snapshot data.
 // This is the shared logic for initial sync that assembles messages, approvals, etc.
-func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string) (*reliantv1.ChatSyncSnapshot, int64, error) {
+func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*reliantv1.ChatSyncSnapshot, int64, error) {
 	// ── Phase 1: parallel queries with no interdependencies ──
 	var (
 		latestSeq         int64
@@ -573,19 +547,19 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 
 	g1.Go(func() error {
 		var err error
-		latestSeq, err = s.database.GetLatestUpdateSequence(gctx, chatID)
+		latestSeq, err = s.deps.Repo.GetLatestUpdateSequence(gctx, chatID)
 		return err
 	})
 
 	g1.Go(func() error {
 		var err error
-		chat, err = s.database.GetChat(gctx, chatID)
+		chat, err = s.deps.Repo.GetChat(gctx, chatID)
 		return err
 	})
 
 	g1.Go(func() error {
 		var err error
-		totalMessageCount, err = s.database.CountMessagesInChat(gctx, chatID)
+		totalMessageCount, err = s.deps.Repo.CountMessagesInChat(gctx, chatID)
 		if err != nil {
 			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to count messages", "error", err, "chatID", chatID[:8])
 			return nil // non-fatal; falls back to the assembled count below
@@ -597,7 +571,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		// Independent of the message window, so it rides phase 1. A failure
 		// degrades to "no out-of-window live calls" rather than failing the open.
 		var err error
-		liveToolCalls, err = s.database.ListLiveToolCallsByChat(gctx, chatID)
+		liveToolCalls, err = s.deps.Repo.ListLiveToolCallsByChat(gctx, chatID)
 		if err != nil {
 			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list live tool calls", "error", err, "chatID", chatID[:8])
 			liveToolCalls = nil
@@ -645,7 +619,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 	g2, gctx2 := errgroup.WithContext(ctx)
 
 	g2.Go(func() error {
-		threadsSvc := threads.NewService(s.database)
+		threadsSvc := threads.NewService(s.deps.Repo)
 		// One row past the window answers "is there older history?" exactly,
 		// without a second query.
 		recent, err := threadsSvc.LoadRecentDisplayMessages(gctx2, mainThread, snapshotMessageLimit+1)
@@ -667,7 +641,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 	})
 
 	g2.Go(func() error {
-		contextUsage, err := s.database.GetContextUsage(gctx2, chatID, mainThread)
+		contextUsage, err := s.deps.Repo.GetContextUsage(gctx2, chatID, mainThread)
 		if err != nil {
 			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to get context usage", "error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
 			return nil // non-fatal
@@ -710,7 +684,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 			fromSeq = msg.Seq
 		}
 	}
-	siblingMessages, err := s.database.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThread, fromSeq, snapshotMessageLimit)
+	siblingMessages, err := s.deps.Repo.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThread, fromSeq, snapshotMessageLimit)
 	if err != nil {
 		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to load sibling thread messages",
 			"error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
@@ -741,7 +715,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		messageIDs = append(messageIDs, msg.ID)
 	}
 
-	allBlocks, err := s.database.ListContentBlocksForMessages(ctx, messageIDs)
+	allBlocks, err := s.deps.Repo.ListContentBlocksForMessages(ctx, messageIDs)
 	if err != nil {
 		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to batch load content blocks",
 			"error", err, "chatID", chatID[:8], "messageCount", len(messages))
@@ -767,7 +741,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 
 	attachmentMap := make(map[string]*db.Attachment)
 	if len(attachmentIDs) > 0 {
-		attachmentsData, err := s.database.GetAttachmentsByIDs(ctx, attachmentIDs)
+		attachmentsData, err := s.deps.Repo.GetAttachmentsByIDs(ctx, attachmentIDs)
 		if err == nil {
 			for _, att := range attachmentsData {
 				attachmentMap[att.ID] = att
@@ -797,7 +771,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 	// pass SequenceNumber alone, which left live spawns with no thread to
 	// preview: they showed "Starting…" until something else refetched them.
 	assembledMessages := messageproto.AssembleForDisplay(
-		ctx, s.database, displayable, displayableIDs, messageBlocks, attachmentMap, mainThread, latestSeq)
+		ctx, s.deps.Repo, displayable, displayableIDs, messageBlocks, attachmentMap, mainThread, latestSeq)
 
 	// Calculate pagination metadata.
 	//
@@ -861,8 +835,8 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 // non-message updates past the cap silently never reached the client (measured:
 // 8,465 updates dropped on a real 24k-update chat), and the snapshot's separate
 // sequence high-water mark meant gap detection never backfilled them.
-func (s *StreamingService) getNonMessageUpdates(ctx context.Context, chatID string) ([]*reliantv1.ChatUpdateData, error) {
-	updates, err := s.database.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
+func (s *Service) getNonMessageUpdates(ctx context.Context, chatID string) ([]*reliantv1.ChatUpdateData, error) {
+	updates, err := s.deps.Repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
 	if err != nil {
 		return nil, err
 	}
@@ -906,8 +880,8 @@ type threadSnapshotMetadata struct {
 // Returns an empty map on error: reconciliation below is an enhancement of the
 // stored payload, so losing it degrades the snapshot to exactly what it was
 // before rather than failing the whole initial sync.
-func (s *StreamingService) threadMetadata(ctx context.Context, chatID string) map[string]threadSnapshotMetadata {
-	threadRows, err := s.database.ListThreadsByConversation(ctx, chatID)
+func (s *Service) threadMetadata(ctx context.Context, chatID string) map[string]threadSnapshotMetadata {
+	threadRows, err := s.deps.Repo.ListThreadsByConversation(ctx, chatID)
 	if err != nil {
 		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list threads for metadata reconciliation",
 			"error", err, "chatID", chatID[:8])
@@ -964,8 +938,8 @@ func (s *StreamingService) threadMetadata(ctx context.Context, chatID string) ma
 // Returns an empty map on error, matching threadMetadata: reconciliation is an
 // enhancement of the stored payload, so losing it degrades the snapshot to what
 // it was before rather than failing the whole initial sync.
-func (s *StreamingService) spawnToolCallIDsByThread(ctx context.Context, chatID string) map[string]string {
-	byThread, err := s.database.SpawnToolCallIDsByChildThread(ctx, chatID)
+func (s *Service) spawnToolCallIDsByThread(ctx context.Context, chatID string) map[string]string {
+	byThread, err := s.deps.Repo.SpawnToolCallIDsByChildThread(ctx, chatID)
 	if err != nil {
 		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to resolve spawn tool call ids for cancel reconciliation",
 			"error", err, "chatID", chatID[:8])
@@ -1098,7 +1072,7 @@ func withThreadMetadata(data json.RawMessage, metadata map[string]threadSnapshot
 // live calls have no block in the snapshot to contradict, so they keep their
 // real status; they stay correct if a scroll-back page later renders them,
 // because that block path computes the same status from the same row.
-func (s *StreamingService) snapshotToolCalls(ctx context.Context, blocks []*db.MessageContentBlock, liveCalls []*db.ToolCall, viewingThreadID string, latestSeq int64) []*reliantv1.ChatUpdateData {
+func (s *Service) snapshotToolCalls(ctx context.Context, blocks []*db.MessageContentBlock, liveCalls []*db.ToolCall, viewingThreadID string, latestSeq int64) []*reliantv1.ChatUpdateData {
 	blockCallIDs := make([]string, 0)
 	inWindow := make(map[string]struct{})
 	for _, block := range blocks {
@@ -1124,7 +1098,7 @@ func (s *StreamingService) snapshotToolCalls(ctx context.Context, blocks []*db.M
 		calls[call.ID] = call
 	}
 	if len(blockCallIDs) > 0 {
-		byID, err := s.database.ListToolCallsByIDs(ctx, blockCallIDs)
+		byID, err := s.deps.Repo.ListToolCallsByIDs(ctx, blockCallIDs)
 		if err != nil {
 			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list tool calls for snapshot", "error", err, "toolCallCount", len(blockCallIDs))
 		}
@@ -1227,11 +1201,11 @@ func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.
 // the last one, with no updates — its only content is the cursor, and without
 // it a client whose project saw nothing new would resume from a stale cursor
 // and re-read the same rows on every reconnect.
-func (s *StreamingService) sendUserUpdateBatches(ctx context.Context, userID string, startSeq, latestSeq int64, projectID string, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, startSeq, latestSeq int64, projectID string, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
 	currentSeq := startSeq
 
 	for currentSeq < latestSeq {
-		updates, err := s.database.GetUserUpdatesSince(ctx, userID, currentSeq, batchSize)
+		updates, err := s.deps.Repo.GetUserUpdatesSince(ctx, userID, currentSeq, batchSize)
 		if err != nil {
 			return err
 		}

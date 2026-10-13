@@ -1,4 +1,4 @@
-package services
+package streaming
 
 import (
 	"context"
@@ -25,7 +25,7 @@ func TestStreamUserUpdates_BinaryConnectWire(t *testing.T) {
 	contentTypes := make(chan string, 1)
 	chatID := raceTestChatID
 	path, handler := reliantv1connect.NewStreamingServiceHandler(
-		NewStreamingService(newCatchupChatRepo(42), noopHub{}, nil, nil),
+		NewTestStreaming(t, WithStreamingDeps(Deps{Repo: newCatchupChatRepo(42), Deltas: noopHub{}})),
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, authInjector(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

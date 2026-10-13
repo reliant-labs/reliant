@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package streaming
 
 import (
 	"context"
@@ -101,7 +101,7 @@ func TestChatSnapshot_ThreadUpdateCarriesSpawnedByToolCallID(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnWorkflowID, string(lifecycle)))
 
-	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshot(ctx, chatID)
 	require.NoError(t, err)
 
 	var payload map[string]any
@@ -191,7 +191,7 @@ func TestChatSnapshot_ResumedSpawnUsesNewestToolCallID(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, firstWorkflowID, string(lifecycle)))
 
-	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshot(ctx, chatID)
 	require.NoError(t, err)
 
 	var payload map[string]any
@@ -263,7 +263,7 @@ func TestChatSnapshot_ThreadUpdateKeepsStoredSpawnedByToolCallID(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnWorkflowID, string(stated)))
 
-	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshot(ctx, chatID)
 	require.NoError(t, err)
 
 	for _, u := range snapshot.OtherUpdates {

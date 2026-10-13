@@ -1,4 +1,4 @@
-package services
+package streaming
 
 import (
 	"encoding/json"

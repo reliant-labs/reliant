@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package streaming
 
 import (
 	"context"
@@ -70,7 +70,7 @@ func TestChatSnapshot_ThreadUpdateCarriesOriginFromThreadsTable(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnThreadID, string(legacy)))
 
-	svc := NewStreamingService(repo, nil, nil, nil)
+	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo}))
 	snapshot, _, err := svc.buildChatSnapshot(ctx, chatID)
 	require.NoError(t, err)
 
@@ -141,7 +141,7 @@ func TestChatSnapshot_ThreadUpdateUsesThreadsTableLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnWorkflowID, string(stale)))
 
-	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshot(ctx, chatID)
 	require.NoError(t, err)
 
 	var payload map[string]any
@@ -198,7 +198,7 @@ func TestChatSnapshot_ThreadUpdateKeepsStoredOrigin(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, threadID, string(stored)))
 
-	svc := NewStreamingService(repo, nil, nil, nil)
+	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo}))
 	snapshot, _, err := svc.buildChatSnapshot(ctx, chatID)
 	require.NoError(t, err)
 

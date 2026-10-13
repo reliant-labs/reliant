@@ -1,4 +1,4 @@
-package services
+package streaming
 
 import (
 	"context"
@@ -183,7 +183,7 @@ func TestStreamUserUpdates_ChatUpdatePublishedDuringSnapshotIsNotLost(t *testing
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = deltaHub.Close() })
 
-	svc := NewStreamingService(repo, deltaHub, userHub, chatHub)
+	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: deltaHub, UserUpdates: userHub, ChatUpdates: chatHub}))
 
 	mux := http.NewServeMux()
 	path, handler := reliantv1connect.NewStreamingServiceHandler(svc)

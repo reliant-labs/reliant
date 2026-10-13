@@ -1,4 +1,4 @@
-package services
+package streaming
 
 import (
 	"context"
@@ -60,7 +60,7 @@ func TestStreamUserUpdates_LiveHeartbeatReachesProjectScopedClientWithoutMovingC
 
 	hub := newChanUserHub()
 	project := catchupProject
-	events := userStreamEvents(t, NewStreamingService(repo, noopHub{}, hub, nil),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub})),
 		&reliantv1.StreamUserUpdatesRequest{SinceSeq: 0, ProjectId: &project})
 
 	caughtUp := nextEvent(t, events, "catch-up batch at the latest user sequence", func(ev *reliantv1.UserStreamEvent) bool {
@@ -112,7 +112,7 @@ func TestStreamUserUpdates_LiveHeartbeatAtCursorZero(t *testing.T) {
 
 	hub := newChanUserHub()
 	project := catchupProject
-	events := userStreamEvents(t, NewStreamingService(repo, noopHub{}, hub, nil),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub})),
 		&reliantv1.StreamUserUpdatesRequest{SinceSeq: 0, ProjectId: &project})
 	nextEvent(t, events, "sync", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetSync() != nil })
 	<-hub.subscribed
@@ -171,7 +171,7 @@ func TestStreamUserUpdates_DrainedAnnouncementsAreLiveOnlyNotInSnapshot(t *testi
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeApproval, "approval-1", `{"k":"v"}`))
 
 	chatHub := &chanChatHub{subscribed: make(chan struct{}), events: make(chan streaming.UpdateEvent[db.ChatUpdate], 4)}
-	events := userStreamEvents(t, NewStreamingService(repo, noopHub{}, nil, chatHub),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, ChatUpdates: chatHub})),
 		&reliantv1.StreamUserUpdatesRequest{SubscribeChatId: &chatID})
 
 	snapshot := nextEvent(t, events, "the chat snapshot", func(ev *reliantv1.UserStreamEvent) bool {
@@ -226,7 +226,7 @@ func TestStreamUserUpdates_DrainedAnnouncementsAreReplayed(t *testing.T) {
 		Thread: chatID, MessageIDs: []string{"missed-agent-msg"},
 	}))
 
-	events := userStreamEvents(t, NewStreamingService(repo, noopHub{}, nil, nil),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
 		&reliantv1.StreamUserUpdatesRequest{SubscribeChatId: &chatID, ChatSinceSeq: seen})
 
 	replay := nextEvent(t, events, "the replay batch", func(ev *reliantv1.UserStreamEvent) bool {

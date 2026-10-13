@@ -26742,8 +26742,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "WorkflowExecutionStatus"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "SystemService",
@@ -33578,5 +33577,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "a800d7f94596d603d996ac27b1c426465310075a8559a478db8613b7b25f4a79"
+  "source_hash": "3d53b901733b2ec667c73c74e99b65ebf86552d7a838cc32de199d23d399578d"
 }

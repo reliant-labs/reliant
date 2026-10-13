@@ -41,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
+	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
@@ -254,7 +255,17 @@ func NewServer(cfg *Config) (*Server, error) {
 	// discovery ran against the api-server's filesystem. See pickPackageCommandsService.
 	packageCommandsService := pickPackageCommandsService(router, database)
 
-	streamingService := services.NewStreamingService(database, cfg.StreamingHub, cfg.UserUpdateHub, cfg.ChatUpdateHub)
+	streamingService, err := streaminghandler.New(streaminghandler.Deps{
+		Logger:      handlerLogger,
+		Config:      handlerConfig,
+		Repo:        database,
+		Deltas:      cfg.StreamingHub,
+		UserUpdates: cfg.UserUpdateHub,
+		ChatUpdates: cfg.ChatUpdateHub,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("streaming service: %w", err)
+	}
 
 	attachmentService := services.NewAttachmentService(database)
 	presetService, err := preset.New(preset.Deps{
