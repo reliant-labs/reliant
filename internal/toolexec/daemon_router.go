@@ -41,6 +41,40 @@ func IsDaemonPending(err error) bool {
 	return errors.Is(err, ErrDaemonPending)
 }
 
+// ErrDaemonSuspended is ErrDaemonPending for a machine that is asleep rather
+// than starting. errors.Is(err, ErrDaemonPending) holds for it, so everything
+// that waits on a pending machine still does; only its text differs, and says
+// what is true.
+//
+// Wrapping ErrDaemonPending itself described a suspended machine as starting:
+// "...is suspended and will wake when you next message it: no daemon
+// connected: daemon record exists but has not registered yet (still
+// starting)". Agents whose machine was suspended mid-task read the second half
+// and reported a daemon that "never re-registers" (prod 2026-10-11, GO-12 to
+// GO-19) instead of a machine that was asleep and needed waking.
+//
+// The text keeps the "no daemon connected" marker (daemonoffline.ErrorSubstring)
+// and the word "suspended", which together are what the web's machine-wait
+// classification keys on (web/src/lib/daemon-errors.ts), even where a surface
+// shows this sentinel without the router's wrapping.
+var ErrDaemonSuspended error = &pendingMachineError{msg: "no daemon connected: the machine is asleep (suspended)", cause: ErrDaemonPending}
+
+// pendingMachineError is a more specific ErrDaemonPending: its own text, and
+// ErrDaemonPending (with its ClassUser) on its chain.
+type pendingMachineError struct {
+	msg   string
+	cause error
+}
+
+func (e *pendingMachineError) Error() string { return e.msg }
+func (e *pendingMachineError) Unwrap() error { return e.cause }
+
+// IsDaemonSuspended reports whether err says the machine is suspended, as
+// opposed to still starting. Both are IsDaemonPending.
+func IsDaemonSuspended(err error) bool {
+	return errors.Is(err, ErrDaemonSuspended)
+}
+
 // ErrNoDaemon means no machine for the request exists at all: the user has
 // none registered, or the selector names none of theirs. Unlike
 // ErrDaemonPending there is nothing to wait for, so a surface shows "no

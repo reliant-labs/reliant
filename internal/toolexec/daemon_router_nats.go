@@ -424,7 +424,7 @@ func routableDaemonID(userID string, selector *DaemonSelector, rec daemonRecord,
 		case recordSuspended:
 			logMachineState("suspended", userID, "[DaemonRouter] daemon is suspended; not waking it from tool-time resolution",
 				append([]any{"user_id", userID, "daemon_id", rec.id}, selectorLogFields(selector)...)...)
-			return "", fmt.Errorf("the machine for this request is suspended and will wake when you next message it: %w", ErrDaemonPending)
+			return "", fmt.Errorf("the machine for this request is suspended and will wake when you next message it: %w", ErrDaemonSuspended)
 		}
 		// recordStarting falls through to the "still starting" error below.
 	}

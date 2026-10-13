@@ -5,6 +5,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -111,6 +112,40 @@ func TestResolveDaemonID_PendingKeepsTheConnectingMarker(t *testing.T) {
 	assert.True(t, IsDaemonPending(err))
 	assert.Contains(t, err.Error(), "no daemon connected",
 		"isDaemonConnectingError keys on this marker")
+}
+
+// A suspended machine is reported as asleep, never as starting. Both are
+// pending (everything that waits on one waits on the other), but agents whose
+// machine was suspended mid-task read "has not registered yet (still
+// starting)" and reported a daemon that never re-registered, when the machine
+// was asleep and needed a wake (prod 2026-10-11, GO-12 to GO-19).
+func TestResolveDaemonID_SuspendedIsAsleepNotStarting(t *testing.T) {
+	router := recordsRouter(&fakeDaemonRecords{daemons: []*db.Daemon{{
+		ID: "daemon-suspended", UserID: "user-1",
+		DaemonType: strPtr("managed"), LifecyclePhase: strPtr("suspended"),
+	}}})
+
+	_, err := router.resolveDaemonID(context.Background(), "user-1", &DaemonSelector{Type: "cloud"})
+	require.Error(t, err)
+	assert.True(t, IsDaemonPending(err), "a suspended machine is still a pending one: %v", err)
+	assert.True(t, IsDaemonSuspended(err), "expected ErrDaemonSuspended, got: %v", err)
+	assert.True(t, svcerr.IsUserError(err), "a machine that is asleep is a user state, not a server failure")
+	msg := err.Error()
+	assert.Contains(t, msg, "no daemon connected", "the marker every wait surface keys on")
+	assert.Contains(t, msg, "suspended", "the web classifies a suspended machine by this word")
+	assert.NotContains(t, msg, "still starting", "a suspended machine is not starting")
+	assert.NotContains(t, msg, "has not registered yet", "a suspended machine is not starting")
+
+	// And a starting machine is never called suspended.
+	router = recordsRouter(&fakeDaemonRecords{daemons: []*db.Daemon{{
+		ID: "daemon-provisioning", UserID: "user-1",
+		DaemonType: strPtr("managed"), LifecyclePhase: strPtr("provisioning"),
+	}}})
+	_, err = router.resolveDaemonID(context.Background(), "user-1", &DaemonSelector{Type: "cloud"})
+	require.Error(t, err)
+	assert.True(t, IsDaemonPending(err))
+	assert.False(t, IsDaemonSuspended(err), "a provisioning machine is not suspended: %v", err)
+	assert.Contains(t, err.Error(), "still starting")
 }
 
 // A daemon that is attached must return the id with no error, pending or
