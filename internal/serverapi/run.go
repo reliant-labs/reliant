@@ -31,7 +31,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/drain"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -373,9 +372,6 @@ func Run(ctx context.Context, opts Options) error {
 	// 3. Start servers
 	// -----------------------------------------------------------------
 
-	// Background process provider: always DB-backed
-	bgProvider := services.NewDBBackgroundProcessProvider(repo, daemonRouter)
-
 	// Inbound triggers: the receivers record an event and start its fire on
 	// the worker; launching never happens here.
 	inboundRegistry, err := webhook.RegistryFromEnv(os.Getenv)
@@ -435,7 +431,6 @@ func Run(ctx context.Context, opts Options) error {
 		PauseService:        pauseService,
 		SharedTaskQueue:     v2workflow.SharedTaskQueue,
 		DaemonRouter:        daemonRouter,
-		BackgroundProvider:  bgProvider,
 		NATSChecker:         natsChecker,
 		TLSCertFile:         tlsCertFile,
 		TLSKeyFile:          tlsKeyFile,

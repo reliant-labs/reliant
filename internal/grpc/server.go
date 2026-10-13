@@ -115,8 +115,6 @@ type Config struct {
 
 	DaemonRouter toolexec.DaemonRouter // Optional pre-created daemon router for transport-agnostic daemon access
 
-	BackgroundProvider services.BackgroundProcessProvider // Provider for background process state
-
 	NATSChecker func() bool // Optional: returns true if NATS is connected; nil means NATS not in use
 
 	// TLS configuration for HTTP/2 support
@@ -479,8 +477,8 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	// FileSystem, Background, and Terminal services: when a daemon router is
 	// available, use proxy services that forward requests through the daemon.
-	// Otherwise Background falls back to its provider-backed implementation,
-	// and FileSystem is not mounted: its files live on the user's machines.
+	// Otherwise none of them is mounted: their files, processes and
+	// sessions live on the user's machines.
 	var filesystemPath string
 	var filesystemHandler http.Handler
 	var backgroundPath string
@@ -528,13 +526,6 @@ func NewServer(cfg *Config) (*Server, error) {
 		// drain so it ends with a reconnect close code when Stop begins.
 		mux.Handle("/api/v2/terminal/ws", streams.Handler(
 			services.TerminalWSHandler(router, wsValidator, services.WithTerminalCheckouts(database))))
-	} else {
-		// No daemon router available: provider-backed Background, which
-		// provides limited functionality without a connected daemon.
-		if cfg.BackgroundProvider != nil {
-			backgroundService := services.NewBackgroundService(cfg.BackgroundProvider)
-			backgroundPath, backgroundHandler = reliantv1connect.NewBackgroundServiceHandler(backgroundService, opts...)
-		}
 	}
 
 	// DaemonRegistryService: browser-driven list/get/resolve/resume. The
