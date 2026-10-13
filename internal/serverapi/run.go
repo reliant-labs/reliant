@@ -1,4 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
+
+// Package serverapi implements the api-server bootstrap: `reliant server api`
+// builds every collaborator the stateless API server needs and serves it
+// (Run).
+//
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: a composition root dials NATS, Postgres and Temporal to build the collaborators it hands out; the boundaries are those collaborators, and this moves into forge's internal/app in P3c
+//forge:exclude-contract: reliant's hand-wired api-server composition root (`reliant server api`); it constructs services rather than being one, and forge's Serve replaces it in P3c (research/forge-migration/PLAN.md)
 package serverapi
 
 import (
