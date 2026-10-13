@@ -15,6 +15,12 @@
     ".github/workflows/proto-breaking.yml": {
       "scaffolded_at": "2026-10-12T05:30:41Z"
     },
+    "internal/handlers/account/handlers_scaffold_delete_account_test.go": {
+      "scaffolded_at": "2026-10-13T12:24:49Z"
+    },
+    "internal/handlers/account/handlers_scaffold_preview_account_deletion_test.go": {
+      "scaffolded_at": "2026-10-13T12:24:49Z"
+    },
     "internal/handlers/question/handlers_scaffold_get_pending_question_test.go": {
       "scaffolded_at": "2026-10-13T07:28:55Z"
     },

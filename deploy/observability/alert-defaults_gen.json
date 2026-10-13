@@ -4,6 +4,10 @@
     "project": "reliant",
     "services": [
       {
+        "name": "account",
+        "rpc_service": "reliant.v1.AccountService"
+      },
+      {
         "name": "question",
         "rpc_service": "reliant.v1.QuestionService"
       },

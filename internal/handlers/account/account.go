@@ -1,9 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package account
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,7 +10,6 @@ import (
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
@@ -41,50 +39,13 @@ var retainedElsewhere = []string{
 	"Your sign-in identity is removed, so you will be signed out everywhere and this email can be used to sign up again.",
 }
 
-// AccountService lets a user delete everything reliant stores about them.
-//
-// It is a thin Connect surface over internal/accountpurge, which owns the
-// ordered delete sequence and the transaction. This layer does auth, the
-// confirm-email check, and proto translation — nothing else.
-type AccountService struct {
-	reliantv1connect.UnimplementedAccountServiceHandler
-	db *sql.DB
-	// controlPlane deletes the caller's platform account (billing identity,
-	// daemons, PII) before the local purge. Optional: a deployment with no
-	// control plane configured leaves it nil and deletes only local data.
-	controlPlane controlplane.Client
-}
-
-// NewAccountService constructs the account-deletion service. It takes the raw
-// *sql.DB because the purge is an ordered multi-statement transaction across
-// 23 tables, which is not expressible through the per-entity Repository
-// surface and should not be smeared across it.
-//
-// The control-plane client is wired only when this deployment HAS a control
-// plane (RELIANT_CONTROL_PLANE_URL and friends). Self-hosted reliant has no
-// platform account to delete, and defaulting to localhost would make every
-// such deployment fail deletion against a control plane that isn't there.
-func NewAccountService(sqlDB *sql.DB) *AccountService {
-	svc := &AccountService{db: sqlDB}
-	if baseURL := controlplane.BaseURLFromEnv(); baseURL != "" {
-		svc.controlPlane = controlplane.NewClient(baseURL)
-	}
-	return svc
-}
-
-// WithControlPlaneClient overrides the control-plane client, for tests.
-func (s *AccountService) WithControlPlaneClient(client controlplane.Client) *AccountService {
-	s.controlPlane = client
-	return s
-}
-
 // callerIdentity extracts the caller's user id and email, and enforces the
 // session-only rule.
 //
 // An access-token bearer is refused: an automation credential must not be
 // able to perform the one irreversible action on its owner's data. This
 // mirrors TokenService.CreateToken, for the same reason.
-func (s *AccountService) callerIdentity(ctx context.Context, authHeader string) (userID, email string, err error) {
+func (s *Service) callerIdentity(ctx context.Context, authHeader string) (userID, email string, err error) {
 	if _, isMachine := auth.MachineTokenFromContext(ctx); isMachine || auth.IsAccessTokenFormat(auth.BearerToken(authHeader)) {
 		return "", "", connect.NewError(connect.CodeUnauthenticated,
 			fmt.Errorf("account deletion requires an interactive session"))
@@ -99,7 +60,7 @@ func (s *AccountService) callerIdentity(ctx context.Context, authHeader string) 
 }
 
 // PreviewAccountDeletion reports what DeleteAccount would destroy.
-func (s *AccountService) PreviewAccountDeletion(
+func (s *Service) PreviewAccountDeletion(
 	ctx context.Context,
 	req *connect.Request[reliantv1.PreviewAccountDeletionRequest],
 ) (*connect.Response[reliantv1.PreviewAccountDeletionResponse], error) {
@@ -108,7 +69,7 @@ func (s *AccountService) PreviewAccountDeletion(
 		return nil, err
 	}
 
-	counts, err := accountpurge.Preview(ctx, s.db, userID)
+	counts, err := accountpurge.Preview(ctx, s.deps.SQL, userID)
 	if err != nil {
 		logging.Error("[AccountService] preview failed", "user_id", userID, "error", err)
 		return nil, connect.NewError(connect.CodeInternal,
@@ -121,8 +82,8 @@ func (s *AccountService) PreviewAccountDeletion(
 	// confirms, and a dialog silently missing that line reads as "nothing
 	// happens to your money".
 	var wallet *reliantv1.AccountDeletionWalletQuote
-	if s.controlPlane != nil {
-		quote, cpErr := s.controlPlane.PreviewAccountDeletionWallet(ctx,
+	if s.deps.ControlPlane != nil {
+		quote, cpErr := s.deps.ControlPlane.PreviewAccountDeletionWallet(ctx,
 			auth.BearerToken(req.Header().Get("Authorization")))
 		if cpErr != nil {
 			logging.Error("[AccountService] control-plane wallet quote failed", "user_id", userID, "error", cpErr)
@@ -145,7 +106,7 @@ func (s *AccountService) PreviewAccountDeletion(
 }
 
 // DeleteAccount permanently removes every row reliant holds for the caller.
-func (s *AccountService) DeleteAccount(
+func (s *Service) DeleteAccount(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DeleteAccountRequest],
 ) (*connect.Response[reliantv1.DeleteAccountResponse], error) {
@@ -183,8 +144,8 @@ func (s *AccountService) DeleteAccount(
 	// retryable. The reverse order has an unacceptable failure: every chat and
 	// project destroyed, and the billing still running.
 	resp := &reliantv1.DeleteAccountResponse{}
-	if s.controlPlane != nil {
-		result, cpErr := s.controlPlane.DeleteCurrentUserAccount(ctx,
+	if s.deps.ControlPlane != nil {
+		result, cpErr := s.deps.ControlPlane.DeleteCurrentUserAccount(ctx,
 			auth.BearerToken(req.Header().Get("Authorization")))
 		if cpErr != nil {
 			logging.Error("[AccountService] control-plane deletion failed", "user_id", userID, "error", cpErr)
@@ -211,7 +172,7 @@ func (s *AccountService) DeleteAccount(
 		resp.RefundOwedCents = result.RefundOwedCents
 	}
 
-	deleted, err := accountpurge.Purge(ctx, s.db, userID)
+	deleted, err := accountpurge.Purge(ctx, s.deps.SQL, userID)
 	if err != nil {
 		logging.Error("[AccountService] purge failed", "user_id", userID, "error", err)
 		// The purge is transactional: a failure changed nothing, so the client

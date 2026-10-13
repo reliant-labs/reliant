@@ -36,6 +36,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
@@ -437,7 +438,24 @@ func NewServer(cfg *Config) (*Server, error) {
 	var accountPath string
 	var accountHandler http.Handler
 	if repo, ok := database.(*db.Repo); ok && repo != nil && repo.DB != nil {
-		accountService := services.NewAccountService(repo.DB.SQLDB())
+		// The control-plane client is wired only when this deployment HAS a
+		// control plane (RELIANT_CONTROL_PLANE_URL and friends). Self-hosted
+		// reliant has no platform account to delete, and defaulting to
+		// localhost would make every such deployment fail deletion against a
+		// control plane that isn't there.
+		var accountControlPlane account.ControlPlane
+		if baseURL := controlplane.BaseURLFromEnv(); baseURL != "" {
+			accountControlPlane = controlplane.NewClient(baseURL)
+		}
+		accountService, err := account.New(account.Deps{
+			Logger:       handlerLogger,
+			Config:       handlerConfig,
+			SQL:          repo.DB.SQLDB(),
+			ControlPlane: accountControlPlane,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("account service: %w", err)
+		}
 		accountPath, accountHandler = reliantv1connect.NewAccountServiceHandler(accountService, opts...)
 	}
 	daemonPath, daemonHandler := reliantv1connect.NewDaemonServiceHandler(daemonProxyService, opts...)

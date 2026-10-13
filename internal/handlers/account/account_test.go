@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package account
 
 import (
 	"context"
@@ -32,7 +32,7 @@ func TestDeleteAccount_ConfirmEmailMismatch(t *testing.T) {
 	defer cleanup()
 	_ = repo
 
-	svc := newLocalOnlyAccountService(rawDB)
+	svc := newLocalOnlyAccountService(t, rawDB)
 
 	_, err := svc.DeleteAccount(accountAuthedCtx("u1", "owner@example.com"), deleteReq("someone@else.com"))
 	if err == nil {
@@ -50,7 +50,7 @@ func TestDeleteAccount_ConfirmEmailIsCaseAndSpaceInsensitive(t *testing.T) {
 	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	svc := newLocalOnlyAccountService(rawDB)
+	svc := newLocalOnlyAccountService(t, rawDB)
 
 	resp, err := svc.DeleteAccount(
 		accountAuthedCtx("u-case", "Owner@Example.com"),
@@ -70,7 +70,7 @@ func TestDeleteAccount_AnonymousSessionNeedsNoConfirmation(t *testing.T) {
 	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	svc := newLocalOnlyAccountService(rawDB)
+	svc := newLocalOnlyAccountService(t, rawDB)
 
 	if _, err := svc.DeleteAccount(accountAuthedCtx("anon-user", ""), deleteReq("")); err != nil {
 		t.Fatalf("DeleteAccount rejected an anonymous session: %v", err)
@@ -82,7 +82,7 @@ func TestDeleteAccount_RequiresAuth(t *testing.T) {
 	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	svc := newLocalOnlyAccountService(rawDB)
+	svc := newLocalOnlyAccountService(t, rawDB)
 
 	_, err := svc.DeleteAccount(context.Background(), deleteReq("owner@example.com"))
 	if err == nil {
@@ -100,7 +100,7 @@ func TestPreviewAccountDeletion_ReportsScopeBoundary(t *testing.T) {
 	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	svc := newLocalOnlyAccountService(rawDB)
+	svc := newLocalOnlyAccountService(t, rawDB)
 
 	resp, err := svc.PreviewAccountDeletion(
 		accountAuthedCtx("u-preview", "owner@example.com"),

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package account
 
 import (
 	"context"
@@ -15,18 +15,20 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// newLocalOnlyAccountService builds an AccountService with NO control-plane
-// client, for tests that exercise only the local purge.
+// newLocalOnlyAccountService builds the service with NO control-plane client,
+// for tests that exercise only the local purge.
 //
-// This is not incidental. NewAccountService wires a client whenever
-// RELIANT_CONTROL_PLANE_URL is set in the environment, and a developer machine
-// commonly has it pointed at PRODUCTION — so a test calling the bare
-// constructor would issue a real account-deletion RPC against the live control
-// plane. Every local-purge test must opt out explicitly.
-func newLocalOnlyAccountService(rawDB *sql.DB) *AccountService {
-	svc := NewAccountService(rawDB)
-	svc.controlPlane = nil
-	return svc
+// The service never reads RELIANT_CONTROL_PLANE_URL itself (server.go does,
+// and passes the client in), so a developer machine with it pointed at
+// PRODUCTION cannot turn a local-purge test into a real account-deletion RPC
+// against the live control plane.
+func newLocalOnlyAccountService(t *testing.T, rawDB *sql.DB) *Service {
+	return NewTestAccount(t, WithAccountDeps(Deps{SQL: rawDB}))
+}
+
+// newAccountService builds the service against a scripted control plane.
+func newAccountService(t *testing.T, rawDB *sql.DB, cp ControlPlane) *Service {
+	return NewTestAccount(t, WithAccountDeps(Deps{SQL: rawDB, ControlPlane: cp}))
 }
 
 // stubControlPlane records the deletion call and returns a scripted outcome.
@@ -46,10 +48,6 @@ func (s *stubControlPlane) PreviewAccountDeletionWallet(_ context.Context, jwt s
 	return s.quote, s.quoteErr
 }
 
-func (s *stubControlPlane) MintLLMKey(context.Context, string, string) (controlplane.LLMKey, error) {
-	return controlplane.LLMKey{}, nil
-}
-
 func (s *stubControlPlane) DeleteCurrentUserAccount(_ context.Context, jwt string) (*controlplane.AccountDeletionResult, error) {
 	s.calls++
 	s.lastJWT = jwt
@@ -62,10 +60,6 @@ func (s *stubControlPlane) DeleteCurrentUserAccount(_ context.Context, jwt strin
 	}
 	out.Blockers = s.blockers
 	return out, nil
-}
-
-func (s *stubControlPlane) CloneRepoOntoDaemon(context.Context, string, controlplane.CloneRepoRequest) (controlplane.CloneRepoResult, error) {
-	return controlplane.CloneRepoResult{}, nil
 }
 
 // TestDeleteAccount_ControlPlaneBlockStopsBeforeLocalPurge is the ordering
@@ -84,7 +78,7 @@ func TestDeleteAccount_ControlPlaneBlockStopsBeforeLocalPurge(t *testing.T) {
 		Reason: "paid_subscription",
 		Detail: "You have an active paid subscription. Cancel it in Billing first.",
 	}}}
-	svc := NewAccountService(rawDB).WithControlPlaneClient(cp)
+	svc := newAccountService(t, rawDB, cp)
 
 	_, err := svc.DeleteAccount(
 		accountAuthedCtx("u-blocked", "owner@example.com"),
@@ -114,7 +108,7 @@ func TestDeleteAccount_ControlPlaneErrorAbortsWithNothingDeleted(t *testing.T) {
 	defer cleanup()
 
 	cp := &stubControlPlane{err: errors.New("control plane unreachable")}
-	svc := NewAccountService(rawDB).WithControlPlaneClient(cp)
+	svc := newAccountService(t, rawDB, cp)
 
 	_, err := svc.DeleteAccount(
 		accountAuthedCtx("u-err", "owner@example.com"),
@@ -135,7 +129,7 @@ func TestDeleteAccount_ProceedsWhenControlPlaneClears(t *testing.T) {
 	defer cleanup()
 
 	cp := &stubControlPlane{}
-	svc := NewAccountService(rawDB).WithControlPlaneClient(cp)
+	svc := newAccountService(t, rawDB, cp)
 
 	_, err := svc.DeleteAccount(
 		accountAuthedCtx("u-ok", "owner@example.com"),
@@ -154,21 +148,13 @@ func TestDeleteAccount_WithoutControlPlaneStillPurgesLocally(t *testing.T) {
 	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	svc := newLocalOnlyAccountService(rawDB)
+	svc := newLocalOnlyAccountService(t, rawDB)
 
 	if _, err := svc.DeleteAccount(
 		accountAuthedCtx("u-local", "owner@example.com"),
 		deleteReq("owner@example.com")); err != nil {
 		t.Fatalf("deletion must work without a control plane: %v", err)
 	}
-}
-
-func (s *stubControlPlane) MintDaemonResumeToken(context.Context, string, string, string) (controlplane.DaemonResumeToken, error) {
-	return controlplane.DaemonResumeToken{}, nil
-}
-
-func (s *stubControlPlane) RevokeDaemonResumeTokens(context.Context, string, string) error {
-	return nil
 }
 
 // TestPreviewAccountDeletion_CarriesControlPlaneWalletQuote: the dialog's
@@ -183,7 +169,7 @@ func TestPreviewAccountDeletion_CarriesControlPlaneWalletQuote(t *testing.T) {
 		Destinations:        []controlplane.RefundDestination{{CardBrand: "visa", CardLast4: "1234", AmountCents: 2500}},
 		ForfeitedPromoCents: 700,
 	}}
-	svc := NewAccountService(rawDB).WithControlPlaneClient(cp)
+	svc := newAccountService(t, rawDB, cp)
 
 	req := connect.NewRequest(&reliantv1.PreviewAccountDeletionRequest{})
 	req.Header().Set("Authorization", "Bearer jwt-abc")
@@ -214,7 +200,7 @@ func TestPreviewAccountDeletion_FailsWhenWalletQuoteUnavailable(t *testing.T) {
 	defer cleanup()
 
 	cp := &stubControlPlane{quoteErr: errors.New("control plane unreachable")}
-	svc := NewAccountService(rawDB).WithControlPlaneClient(cp)
+	svc := newAccountService(t, rawDB, cp)
 
 	_, err := svc.PreviewAccountDeletion(accountAuthedCtx("u-q", "owner@example.com"),
 		connect.NewRequest(&reliantv1.PreviewAccountDeletionRequest{}))
@@ -236,7 +222,7 @@ func TestDeleteAccount_ReportsRefundOutcome(t *testing.T) {
 		ForfeitedPromoCents: 200,
 		RefundPending:       true,
 	}}
-	svc := NewAccountService(rawDB).WithControlPlaneClient(cp)
+	svc := newAccountService(t, rawDB, cp)
 
 	resp, err := svc.DeleteAccount(accountAuthedCtx("u-r", "owner@example.com"), deleteReq("owner@example.com"))
 	if err != nil {
@@ -257,7 +243,7 @@ func TestDeleteAccount_UnconfirmedRefundIsRetryableAndPurgesNothing(t *testing.T
 	defer cleanup()
 
 	cp := &stubControlPlane{err: connect.NewError(connect.CodeUnavailable, errors.New("refund outcome unknown"))}
-	svc := NewAccountService(rawDB).WithControlPlaneClient(cp)
+	svc := newAccountService(t, rawDB, cp)
 
 	_, err := svc.DeleteAccount(accountAuthedCtx("u-u", "owner@example.com"), deleteReq("owner@example.com"))
 	if connect.CodeOf(err) != connect.CodeUnavailable {

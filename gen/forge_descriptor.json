@@ -235,8 +235,7 @@
         "reliant.v1.PreviewAccountDeletionRequest": "reliant/v1/account.proto",
         "reliant.v1.PreviewAccountDeletionResponse": "reliant/v1/account.proto",
         "reliant.v1.RefundDestination": "reliant/v1/account.proto"
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "ApprovalService",
@@ -33583,5 +33582,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "8bb946d8c6918d8cc8a07bdd5476d965c11c328b4518df462bd0fcb013f6bb5f"
+  "source_hash": "8633c14e5602bdbac667c79932965996e6316c97b1cd0050341acdb9be39bc03"
 }
