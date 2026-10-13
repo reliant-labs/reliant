@@ -15,6 +15,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // fsRoutingDefaultDaemon is what default resolution reaches in these tests:
@@ -26,7 +27,7 @@ const fsRoutingDefaultDaemon = "daemon-default"
 // fsRoutingDefaultDaemon, so it is distinguishable from one sent to a chat's
 // machine.
 type fsRoutingRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 
 	mu      sync.Mutex
 	targets map[string][]string

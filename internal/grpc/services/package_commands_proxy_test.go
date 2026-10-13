@@ -14,14 +14,15 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // pkgProxyRouter stubs the daemon round trip for PackageCommandsProxyService.
-// It embeds worktreeTestDaemonRouter (defined in worktree_test.go) to satisfy
+// It embeds toolexectest.Stub to satisfy
 // the full DaemonRouter interface, and lets each test dictate the reply for
 // pkg.list_commands.
 type pkgProxyRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	lastCommandType string
 	lastPayload     []byte
 	reply           []byte

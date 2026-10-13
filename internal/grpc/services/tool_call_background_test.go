@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,7 +65,7 @@ func TestConvertToBackground_SendsRequestToDaemon(t *testing.T) {
 
 	_, toolCallID := seedRunningToolCall(t, repo, ctx)
 
-	router := &fakeDaemonRouter{}
+	router := &toolexectest.Recorder{}
 	svc := NewToolCallService(repo, nil, router)
 
 	resp, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
@@ -73,10 +74,10 @@ func TestConvertToBackground_SendsRequestToDaemon(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	require.Len(t, router.backgroundCalls, 1,
+	require.Len(t, router.BackgroundCalls, 1,
 		"the request must cross the wire — the command runs in the daemon, not here")
-	require.Equal(t, toolCallID, router.backgroundCalls[0].toolCallID)
-	require.Equal(t, toolCallID, router.backgroundCalls[0].requestID,
+	require.Equal(t, toolCallID, router.BackgroundCalls[0].ToolCallID)
+	require.Equal(t, toolCallID, router.BackgroundCalls[0].RequestID,
 		"addressed by tool call id: the only id the UI can name")
 }
 
@@ -90,7 +91,7 @@ func TestConvertToBackground_DaemonUnreachable_DoesNotClaimSuccess(t *testing.T)
 
 	_, toolCallID := seedRunningToolCall(t, repo, ctx)
 
-	router := &fakeDaemonRouter{backgroundErr: errors.New("daemon offline")}
+	router := &toolexectest.Recorder{BackgroundErr: errors.New("daemon offline")}
 	svc := NewToolCallService(repo, nil, router)
 
 	_, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{

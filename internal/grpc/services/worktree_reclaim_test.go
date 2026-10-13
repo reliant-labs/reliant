@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
@@ -30,7 +31,7 @@ import (
 // registry the daemon dispatches from), against real git repositories. The
 // worktree root is redirected to a temp HOME.
 type realDaemonRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	calls []string
 }
 
@@ -414,7 +415,7 @@ func TestUnarchive_UnreachableMachineLeavesTheRowArchived(t *testing.T) {
 	assert.NotNil(t, got.DeletedAt, "an unverified re-lock must not make the row active")
 }
 
-type failingRouter struct{ worktreeTestDaemonRouter }
+type failingRouter struct{ toolexectest.Stub }
 
 func (f *failingRouter) SendDaemonCommandToDaemon(context.Context, string, string, string, []byte, int32) ([]byte, error) {
 	return nil, assert.AnError

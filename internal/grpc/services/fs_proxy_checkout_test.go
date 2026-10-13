@@ -15,13 +15,14 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/machinewake"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // fsMissingDirRouter answers fs.get_tree the way a daemon does when the
 // project directory is not there, verbatim from the reliant-api-server log on
 // 2026-10-07 (15:04:10, the queued forge clone; 14:48:21, houndersclub).
 type fsMissingDirRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	daemonID string
 }
 
@@ -143,7 +144,7 @@ func TestFileSystemProxy_GetFileTree_MissingRootViaMainWorktreeIsACheckoutState(
 
 // fsFailRouter fails every daemon command with a fixed error.
 type fsFailRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	err error
 }
 

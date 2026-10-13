@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -138,7 +139,7 @@ func newFirstTurnSendFixture(t *testing.T) (*ChatService, *codePresenceHangingRo
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())
 
 	router := &codePresenceHangingRouter{
-		wakeRecordingRouter: &wakeRecordingRouter{fakeDaemonRouter: &fakeDaemonRouter{}},
+		wakeRecordingRouter: &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}},
 		release:             make(chan struct{}),
 	}
 	t.Cleanup(func() { close(router.release) })

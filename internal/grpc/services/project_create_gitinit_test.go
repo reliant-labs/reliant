@@ -13,12 +13,13 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // createProjectDaemonRouter fakes the daemon side of CreateProject: an empty
 // fresh directory (zero discovered repos) whose auto git-init succeeds.
 type createProjectDaemonRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	gitInitCalled bool
 }
 

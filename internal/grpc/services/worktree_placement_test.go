@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // placementDefaultDaemon is what default resolution answers in these tests:
@@ -30,7 +31,7 @@ const placementDefaultDaemon = "daemon-default"
 // placementDefaultDaemon, so it is distinguishable from one pinned to a chat's
 // machine.
 type placementRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 
 	// Guarded because CreateWorktree does its daemon work on a detached
 	// goroutine while the test body reads.
@@ -86,7 +87,7 @@ func (r *placementRouter) deliver(daemonID, commandType string, payload []byte) 
 	case "worktree.git_status":
 		return json.Marshal(map[string]any{"branch": "feature", "status": "clean"})
 	}
-	return r.worktreeTestDaemonRouter.SendDaemonCommand(context.Background(), "", commandType, payload, 0)
+	return r.Stub.SendDaemonCommand(context.Background(), "", commandType, payload, 0)
 }
 
 // daemonsFor returns the daemons commandType was delivered to, in send order.

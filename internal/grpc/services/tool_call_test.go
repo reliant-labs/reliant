@@ -10,86 +10,9 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/stretchr/testify/require"
 )
-
-// fakeDaemonRouter implements toolexec.DaemonRouter for test assertions.
-type fakeDaemonRouter struct {
-	cancelCalls     []forwardCancelCall
-	backgroundCalls []forwardBackgroundCall
-	backgroundErr   error
-}
-
-type forwardCancelCall struct {
-	userID    string
-	requestID string
-	reason    string
-}
-
-type forwardBackgroundCall struct {
-	userID     string
-	requestID  string
-	toolCallID string
-}
-
-func (f *fakeDaemonRouter) IsDaemonOnline(_ context.Context, userID string, _ *toolexec.DaemonSelector) (bool, error) {
-	return true, nil
-}
-func (f *fakeDaemonRouter) SendToolRequest(ctx context.Context, userID string, request *toolexec.ToolExecutionRequest) error {
-	return nil
-}
-func (f *fakeDaemonRouter) SendToolExecutionCancel(_ context.Context, userID, requestID, reason string) error {
-	f.cancelCalls = append(f.cancelCalls, forwardCancelCall{userID: userID, requestID: requestID, reason: reason})
-	return nil
-}
-func (f *fakeDaemonRouter) SendToolExecutionBackground(_ context.Context, userID, requestID, toolCallID string) error {
-	f.backgroundCalls = append(f.backgroundCalls, forwardBackgroundCall{userID: userID, requestID: requestID, toolCallID: toolCallID})
-	return f.backgroundErr
-}
-func (f *fakeDaemonRouter) SendKillProcess(ctx context.Context, userID, processID string) error {
-	return nil
-}
-func (f *fakeDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
-	return f.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
-}
-
-func (f *fakeDaemonRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
-	return nil, nil
-}
-func (f *fakeDaemonRouter) SendToolRequestSync(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
-	return &toolexec.ToolExecutionResponse{Success: true}, nil
-}
-func (f *fakeDaemonRouter) SendToolRequestSyncWithSelector(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest, _ *toolexec.DaemonSelector) (*toolexec.ToolExecutionResponse, error) {
-	return &toolexec.ToolExecutionResponse{Success: true}, nil
-}
-func (f *fakeDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _ string, _ string) error {
-	return nil
-}
-func (f *fakeDaemonRouter) SendWatchProjectConfigs(_ context.Context, _ string, _ string, _ bool) error {
-	return nil
-}
-func (f *fakeDaemonRouter) SendTerminalInput(_ context.Context, _, _ string, _ []byte) error {
-	return nil
-}
-func (f *fakeDaemonRouter) SendTerminalResize(_ context.Context, _, _ string, _, _ uint32) error {
-	return nil
-}
-func (f *fakeDaemonRouter) SubscribeTerminalOutput(_ context.Context, _, _ string) (<-chan *toolexec.TerminalOutputEvent, func(), error) {
-	ch := make(chan *toolexec.TerminalOutputEvent)
-	return ch, func() { close(ch) }, nil
-}
-func (f *fakeDaemonRouter) SubscribeProcessOutput(_ context.Context, _, _ string, _ bool) (<-chan *toolexec.ProcessOutputEvent, func(), error) {
-	ch := make(chan *toolexec.ProcessOutputEvent)
-	return ch, func() { close(ch) }, nil
-}
-func (f *fakeDaemonRouter) Close() error { return nil }
-func (f *fakeDaemonRouter) EnqueueDaemonCommand(_ context.Context, _, _ string, _ []byte, _ int32) (int, error) {
-	return 0, nil
-}
-func (f *fakeDaemonRouter) ResolveDaemonID(_ context.Context, _ string) (string, error) {
-	return "test-daemon-id", nil
-}
 
 func TestCancelToolCall_DeliversCancelToDaemonAndSucceeds(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
@@ -144,22 +67,15 @@ func TestCancelToolCall_DeliversCancelToDaemonAndSucceeds(t *testing.T) {
 		UpdatedAt:  now,
 	}))
 
-	router := &fakeDaemonRouter{}
+	router := &toolexectest.Recorder{}
 	svc := NewToolCallService(repo, nil, router)
 
 	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{ToolCallId: toolCallID}))
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	require.Len(t, router.cancelCalls, 1)
-	require.Equal(t, toolCallID, router.cancelCalls[0].requestID)
+	require.Len(t, router.CancelCalls, 1)
+	require.Equal(t, toolCallID, router.CancelCalls[0].RequestID)
 }
 
 func toolCallTestIntPtr(v int) *int { return &v }
-
-func (f *fakeDaemonRouter) OpenLocalModelHTTP(context.Context, string, string, *reliantv1.LocalModelHTTPRequest) (*toolexec.LocalModelHTTPStream, error) {
-	return nil, nil
-}
-func (f *fakeDaemonRouter) RefreshLocalModels(context.Context, string, string) (*reliantv1.LocalModelInventory, error) {
-	return nil, nil
-}

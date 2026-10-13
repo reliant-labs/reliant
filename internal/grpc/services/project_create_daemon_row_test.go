@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // createProjectRowRouter drives the two daemon states CreateProject must
@@ -23,7 +24,7 @@ import (
 // daemon id ResolveDaemonID reports, and mkdirFails flips fs.mkdir into the
 // pending path.
 type createProjectRowRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	resolveID  string
 	mkdirFails bool
 	enqueued   int

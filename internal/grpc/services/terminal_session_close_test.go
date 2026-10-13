@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // These tests pin one invariant for every server-side terminal transport:
@@ -40,9 +41,9 @@ import (
 const terminalTestUserID = "user-terminal-test"
 
 // terminalCommandRouter records the daemon commands a terminal handler sends.
-// It embeds fakeDaemonRouter for the rest of toolexec.DaemonRouter.
+// It embeds toolexectest.Recorder for the rest of toolexec.DaemonRouter.
 type terminalCommandRouter struct {
-	fakeDaemonRouter
+	toolexectest.Recorder
 
 	mu       sync.Mutex
 	commands []recordedDaemonCommand
@@ -215,7 +216,7 @@ func TestStreamTerminal_ClosesDaemonSessionOnceOnExplicitClose(t *testing.T) {
 
 // sessionGoneRouter answers terminal.close the way a daemon does for a session
 // it no longer has, verbatim from ELECTRON-97.
-type sessionGoneRouter struct{ fakeDaemonRouter }
+type sessionGoneRouter struct{ toolexectest.Recorder }
 
 func (*sessionGoneRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, _ []byte, _ int32) ([]byte, error) {
 	return nil, fmt.Errorf(`daemon command %q failed: close session: session not found: e0f413d9-94c0-44f2-aa5c-4b9f1ac1d167`, commandType)
@@ -250,7 +251,7 @@ func TestCloseSession_OtherDaemonFailureIsStillAnError(t *testing.T) {
 }
 
 type closeFailsRouter struct {
-	fakeDaemonRouter
+	toolexectest.Recorder
 	err error
 }
 

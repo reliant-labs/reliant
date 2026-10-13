@@ -17,9 +17,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
-// orderRecordingPauseController wraps *fakeDaemonRouter-style order recording
+// orderRecordingPauseController wraps *toolexectest.Recorder-style order recording
 // for the workflow-pause signal side, sharing the same log with the daemon
 // cancel push so a test can assert relative order.
 type orderRecordingPauseController struct {
@@ -46,10 +47,10 @@ func (p orderRecordingPauseController) SignalWithRecovery(context.Context, strin
 	return nil
 }
 
-// orderRecordingDaemonRouter embeds fakeDaemonRouter and overrides only the
+// orderRecordingDaemonRouter embeds toolexectest.Recorder and overrides only the
 // cancel push to append into the shared order log.
 type orderRecordingDaemonRouter struct {
-	*fakeDaemonRouter
+	*toolexectest.Recorder
 	mu  *sync.Mutex
 	log *[]string
 }
@@ -58,7 +59,7 @@ func (r orderRecordingDaemonRouter) SendToolExecutionCancel(ctx context.Context,
 	r.mu.Lock()
 	*r.log = append(*r.log, "cancel:"+requestID)
 	r.mu.Unlock()
-	return r.fakeDaemonRouter.SendToolExecutionCancel(ctx, userID, requestID, reason)
+	return r.Recorder.SendToolExecutionCancel(ctx, userID, requestID, reason)
 }
 
 // TestPauseChat_CancelsToolsBeforeSignalingWorkflow pins the fast-cancel
@@ -112,7 +113,7 @@ func TestPauseChat_CancelsToolsBeforeSignalingWorkflow(t *testing.T) {
 	var mu sync.Mutex
 	var order []string
 	pauseController := orderRecordingPauseController{mu: &mu, log: &order}
-	daemonRouter := orderRecordingDaemonRouter{fakeDaemonRouter: &fakeDaemonRouter{}, mu: &mu, log: &order}
+	daemonRouter := orderRecordingDaemonRouter{Recorder: &toolexectest.Recorder{}, mu: &mu, log: &order}
 
 	service := &ChatService{
 		database: repo,

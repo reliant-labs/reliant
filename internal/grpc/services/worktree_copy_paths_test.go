@@ -16,12 +16,13 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // copyPathsRecordingRouter answers worktree.create, and records every
 // worktree.create payload and every worktree.copy_paths request.
 type copyPathsRecordingRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	home string
 
 	mu        sync.Mutex
@@ -62,7 +63,7 @@ func (r *copyPathsRecordingRouter) SendDaemonCommand(ctx context.Context, userID
 		r.mu.Unlock()
 		return json.Marshal(map[string]any{"copied": call.Paths})
 	}
-	return r.worktreeTestDaemonRouter.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+	return r.Stub.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }
 
 // copy_files are workspace-root-relative and copied ONCE, root to root, after

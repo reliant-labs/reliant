@@ -13,13 +13,14 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // bgProxyRouter records the timeout the proxy asks the daemon for. It embeds
-// worktreeTestDaemonRouter (worktree_test.go) to satisfy the full DaemonRouter
+// toolexectest.Stub to satisfy the full DaemonRouter
 // interface.
 type bgProxyRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	lastCommandType string
 	lastTimeoutMs   int32
 	reply           []byte

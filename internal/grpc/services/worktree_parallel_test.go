@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // A workspace spanning several repos used to check them out ONE AT A TIME, so
@@ -31,7 +32,7 @@ import (
 // concurrentCreateRouter answers worktree.create the way a daemon would, and
 // records how the creates overlapped.
 type concurrentCreateRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 
 	// rendezvous, when > 0, holds every create until that many are in flight
 	// at once — or until rendezvousTimeout passes. Sequential creates can
@@ -83,7 +84,7 @@ func (r *concurrentCreateRouter) SendDaemonCommand(ctx context.Context, userID s
 		r.mu.Unlock()
 		return json.Marshal(map[string]bool{"deleted": true})
 	}
-	return r.worktreeTestDaemonRouter.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+	return r.Stub.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }
 
 func (r *concurrentCreateRouter) create(payload []byte) ([]byte, error) {

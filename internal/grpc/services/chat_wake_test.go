@@ -15,12 +15,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // wakeRecordingRouter is a daemon router that can also wake, recording each
 // EnsureAwake with the JWT the user held at that moment.
 type wakeRecordingRouter struct {
-	*fakeDaemonRouter
+	*toolexectest.Recorder
 	mu        sync.Mutex
 	selectors []*toolexec.DaemonSelector
 	jwts      []string
@@ -51,7 +52,7 @@ func newAttendedSendFixture(t *testing.T, wakeErr error) (*ChatService, *wakeRec
 
 	temporal := &wakeTestTemporalClient{absorbTestTemporalClient: absorbTestTemporalClient{
 		exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED}}
-	router := &wakeRecordingRouter{fakeDaemonRouter: &fakeDaemonRouter{}, err: wakeErr}
+	router := &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}, err: wakeErr}
 	svc := &ChatService{
 		database: repo, tempClient: temporal, daemonRouter: router,
 		runs: runs.NewService(repo, temporal, nil),

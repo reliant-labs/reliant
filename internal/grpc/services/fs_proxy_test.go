@@ -16,15 +16,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // recordingFSDaemonRouter records the last daemon command it received so tests
 // can assert that CreateDirectory routes an fs.mkdir to the daemon. It embeds
-// worktreeTestDaemonRouter to satisfy the full DaemonRouter interface.
+// toolexectest.Stub to satisfy the full DaemonRouter interface.
 type recordingFSDaemonRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	lastCommandType string
 	lastPayload     []byte
 }
@@ -59,7 +60,7 @@ func TestFileSystemProxy_CreateDirectory_RoutesMkdirToDaemon(t *testing.T) {
 
 // failingFSDaemonRouter fails every daemon command with err.
 type failingFSDaemonRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	err error
 }
 
@@ -158,7 +159,7 @@ func TestFileSystemProxy_CreateDirectory_RequiresAuth(t *testing.T) {
 // fsTreeStubRouter returns a canned fs.get_tree response and records the payload
 // the proxy forwarded, so tests can assert depth threading and node conversion.
 type fsTreeStubRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	lastPayload []byte
 	respJSON    []byte
 }

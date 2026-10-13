@@ -4,7 +4,6 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,16 +18,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// worktreeTestDaemonRouter implements toolexec.DaemonRouter for worktree tests.
-type worktreeTestDaemonRouter struct{}
-
 type recordingWorktreeDaemonRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	// Guarded because CreateWorktree now performs its daemon work on a
 	// detached goroutine, so these are written from that goroutine while the
 	// test body reads them.
@@ -69,103 +65,7 @@ func (r *recordingWorktreeDaemonRouter) SendDaemonCommand(ctx context.Context, u
 		})
 	}
 
-	return r.worktreeTestDaemonRouter.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
-}
-
-func (r *worktreeTestDaemonRouter) IsDaemonOnline(_ context.Context, _ string, _ *toolexec.DaemonSelector) (bool, error) {
-	return true, nil
-}
-func (r *worktreeTestDaemonRouter) SendToolRequest(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) error {
-	return nil
-}
-func (r *worktreeTestDaemonRouter) SendToolRequestSync(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
-	return &toolexec.ToolExecutionResponse{Success: true}, nil
-}
-func (r *worktreeTestDaemonRouter) SendToolRequestSyncWithSelector(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest, _ *toolexec.DaemonSelector) (*toolexec.ToolExecutionResponse, error) {
-	return &toolexec.ToolExecutionResponse{Success: true}, nil
-}
-func (r *worktreeTestDaemonRouter) SendToolExecutionBackground(_ context.Context, _, _, _ string) error {
-	return nil
-}
-
-func (r *worktreeTestDaemonRouter) SendToolExecutionCancel(_ context.Context, _, _, _ string) error {
-	return nil
-}
-func (r *worktreeTestDaemonRouter) SendKillProcess(_ context.Context, _, _ string) error {
-	return nil
-}
-func (r *worktreeTestDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
-	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
-}
-
-func (r *worktreeTestDaemonRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, payload []byte, _ int32) ([]byte, error) {
-	switch commandType {
-	case "worktree.validate_path":
-		var req map[string]string
-		_ = json.Unmarshal(payload, &req)
-		path := req["path"]
-		if _, err := os.Stat(path); err != nil {
-			return json.Marshal(map[string]interface{}{"exists": false, "error": "not_found"})
-		}
-		return json.Marshal(map[string]interface{}{"exists": true})
-	case "worktree.revert":
-		var req struct {
-			WorktreePath string   `json:"worktree_path"`
-			Files        []string `json:"files"`
-		}
-		_ = json.Unmarshal(payload, &req)
-
-		type revertResult struct {
-			File    string `json:"file"`
-			Success bool   `json:"success"`
-			Error   string `json:"error,omitempty"`
-		}
-		var results []revertResult
-		for _, file := range req.Files {
-			absPath := filepath.Join(req.WorktreePath, file)
-			cmd := exec.Command("git", "checkout", "--", file)
-			cmd.Dir = req.WorktreePath
-			if err := cmd.Run(); err != nil {
-				if _, statErr := os.Stat(absPath); statErr == nil {
-					_ = os.RemoveAll(absPath)
-					results = append(results, revertResult{File: file, Success: true})
-				} else {
-					results = append(results, revertResult{File: file, Success: false, Error: "file not in changed state"})
-				}
-			} else {
-				results = append(results, revertResult{File: file, Success: true})
-			}
-		}
-		return json.Marshal(map[string]interface{}{"results": results})
-	}
-	return nil, fmt.Errorf("unhandled command: %s", commandType)
-}
-func (r *worktreeTestDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _, _ string) error {
-	return nil
-}
-func (r *worktreeTestDaemonRouter) SendWatchProjectConfigs(_ context.Context, _, _ string, _ bool) error {
-	return nil
-}
-func (r *worktreeTestDaemonRouter) SendTerminalInput(_ context.Context, _, _ string, _ []byte) error {
-	return nil
-}
-func (r *worktreeTestDaemonRouter) SendTerminalResize(_ context.Context, _, _ string, _, _ uint32) error {
-	return nil
-}
-func (r *worktreeTestDaemonRouter) SubscribeTerminalOutput(_ context.Context, _, _ string) (<-chan *toolexec.TerminalOutputEvent, func(), error) {
-	ch := make(chan *toolexec.TerminalOutputEvent)
-	return ch, func() { close(ch) }, nil
-}
-func (r *worktreeTestDaemonRouter) SubscribeProcessOutput(_ context.Context, _, _ string, _ bool) (<-chan *toolexec.ProcessOutputEvent, func(), error) {
-	ch := make(chan *toolexec.ProcessOutputEvent)
-	return ch, func() { close(ch) }, nil
-}
-func (r *worktreeTestDaemonRouter) Close() error { return nil }
-func (r *worktreeTestDaemonRouter) EnqueueDaemonCommand(_ context.Context, _, _ string, _ []byte, _ int32) (int, error) {
-	return 0, nil
-}
-func (r *worktreeTestDaemonRouter) ResolveDaemonID(_ context.Context, _ string) (string, error) {
-	return "test-daemon-id", nil
+	return r.Stub.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }
 
 // setupTestGitRepoWithRemote creates a git repo with a bare remote
@@ -328,7 +228,7 @@ func setupTestWorktreeServiceForRevert(t *testing.T) (*WorktreeService, string, 
 	t.Helper()
 
 	repo := db.NewTestRepo(t)
-	svc := NewWorktreeService(repo, nil, &worktreeTestDaemonRouter{})
+	svc := NewWorktreeService(repo, nil, &toolexectest.Stub{})
 
 	userID := uuid.New().String()
 	projectID := uuid.New().String()
@@ -406,11 +306,4 @@ func TestRevertFiles_ReturnsFailedPreconditionWhenAllRequestedFilesFail(t *testi
 	require.ErrorAs(t, err, &connectErr)
 	assert.Equal(t, connect.CodeFailedPrecondition, connectErr.Code())
 	assert.Contains(t, connectErr.Message(), "file not in changed state")
-}
-
-func (r *worktreeTestDaemonRouter) OpenLocalModelHTTP(context.Context, string, string, *reliantv1.LocalModelHTTPRequest) (*toolexec.LocalModelHTTPStream, error) {
-	return nil, nil
-}
-func (r *worktreeTestDaemonRouter) RefreshLocalModels(context.Context, string, string) (*reliantv1.LocalModelInventory, error) {
-	return nil, nil
 }

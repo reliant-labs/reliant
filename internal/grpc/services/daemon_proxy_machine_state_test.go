@@ -17,12 +17,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // failingCommandRouter fails every daemon command with err, wrapped the way
 // NATSDaemonRouter.SendDaemonCommand wraps a resolution failure.
 type failingCommandRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	err error
 }
 

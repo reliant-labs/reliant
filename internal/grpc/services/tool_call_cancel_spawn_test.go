@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/stretchr/testify/require"
 )
@@ -118,7 +119,7 @@ func TestCancelToolCall_SignalsParentToCancelSpawn(t *testing.T) {
 	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
 	tc := &spawnCancelTemporalClient{}
-	svc := NewToolCallService(repo, tc, &fakeDaemonRouter{})
+	svc := NewToolCallService(repo, tc, &toolexectest.Recorder{})
 
 	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
@@ -146,7 +147,7 @@ func TestCancelToolCall_SignalFails_DoesNotClaimCancelled(t *testing.T) {
 	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
 	tc := &spawnCancelTemporalClient{signalErr: errors.New("workflow not found")}
-	svc := NewToolCallService(repo, tc, &fakeDaemonRouter{})
+	svc := NewToolCallService(repo, tc, &toolexectest.Recorder{})
 
 	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
@@ -169,7 +170,7 @@ func TestCancelToolCall_ReconcilesSpawnWorkflowRow(t *testing.T) {
 
 	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
-	svc := NewToolCallService(repo, &spawnCancelTemporalClient{}, &fakeDaemonRouter{})
+	svc := NewToolCallService(repo, &spawnCancelTemporalClient{}, &toolexectest.Recorder{})
 	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
 	}))
@@ -229,7 +230,7 @@ func TestCancelToolCall_RegularToolTouchesNoWorkflow(t *testing.T) {
 		Thread: threadID, Status: core.Active(), CreatedAt: now,
 	}))
 
-	svc := NewToolCallService(repo, nil, &fakeDaemonRouter{})
+	svc := NewToolCallService(repo, nil, &toolexectest.Recorder{})
 	_, err = svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
 	}))
@@ -281,7 +282,7 @@ func TestCancelToolCall_ResumedSpawn_SignalsOriginalThreadAndReconcilesWorkflowR
 	// Cancel by the resumption's call. It has no content block, so go through
 	// the helper directly rather than the RPC, which resolves chat via a block.
 	tc := &spawnCancelTemporalClient{}
-	svc := NewToolCallService(repo, tc, &fakeDaemonRouter{})
+	svc := NewToolCallService(repo, tc, &toolexectest.Recorder{})
 	require.NoError(t, svc.cancelChildWorkflowForToolCall(ctx, resumeToolCallID))
 	_ = toolCallID
 

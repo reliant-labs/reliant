@@ -15,14 +15,15 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // forgeTestRouter stubs the daemon round trip. It embeds
-// worktreeTestDaemonRouter (worktree_test.go) to satisfy the full DaemonRouter
+// toolexectest.Stub to satisfy the full DaemonRouter
 // interface and records what was dispatched so the tests can assert the
 // per-command timeouts and payloads.
 type forgeTestRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	lastCommandType string
 	lastPayload     []byte
 	lastTimeoutMs   int32

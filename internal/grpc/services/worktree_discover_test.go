@@ -19,12 +19,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/machinewake"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // discoverRouter answers worktree.discover_repos and worktree.prune from
 // canned data and records each payload and the daemon it went to.
 type discoverRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	mu       sync.Mutex
 	payloads map[string][]byte
 	daemons  map[string]string

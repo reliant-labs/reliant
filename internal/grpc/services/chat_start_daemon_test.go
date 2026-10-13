@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -62,7 +63,7 @@ func newStartDaemonEnv(t *testing.T) *startDaemonEnv {
 	t.Cleanup(func() { auth.SetUserJWT("test-user", "") })
 
 	temporal := &inputRecordingTemporal{}
-	router := &wakeRecordingRouter{fakeDaemonRouter: &fakeDaemonRouter{}}
+	router := &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}}
 	return &startDaemonEnv{
 		svc: &ChatService{
 			database: repo, threads: threads.NewService(repo), tempClient: temporal,

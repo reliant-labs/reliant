@@ -28,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // These tests pin what the server does with the working directory a terminal
@@ -51,7 +52,7 @@ var missingWorkingDirTransportError = errors.New(`daemon command "terminal.creat
 // terminalCreateRouter answers terminal.create with a fixed response or
 // error, and records the create payloads it was sent.
 type terminalCreateRouter struct {
-	fakeDaemonRouter
+	toolexectest.Recorder
 
 	createResponse []byte
 	createErr      error
@@ -323,7 +324,7 @@ func TestTerminalWS_MissingDirClassification(t *testing.T) {
 				Status: int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)},
 		},
 		projectDaemons: map[string][]*db.ProjectDaemon{
-			// fakeDaemonRouter resolves every user to "test-daemon-id".
+			// toolexectest.Recorder resolves every user to "test-daemon-id".
 			"p-cloning": {{ProjectID: "p-cloning", DaemonID: "test-daemon-id", InstallState: core.ProjectInstallInstalling}},
 			"p-cloned":  {{ProjectID: "p-cloned", DaemonID: "test-daemon-id", InstallState: core.ProjectInstallInstalled}},
 		},

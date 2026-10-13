@@ -13,12 +13,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // adoptTestDaemonRouter serves canned repo.discover results so tests can
 // simulate a filesystem that has repos the registry doesn't know about.
 type adoptTestDaemonRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	discovered    []map[string]any
 	discoverCalls int
 }
@@ -32,7 +33,7 @@ func (r *adoptTestDaemonRouter) SendDaemonCommand(ctx context.Context, userID, c
 		r.discoverCalls++
 		return json.Marshal(map[string]any{"discovered": r.discovered})
 	}
-	return r.worktreeTestDaemonRouter.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+	return r.Stub.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }
 
 func newAdoptTestProject(t *testing.T, repo db.Repository) *db.Project {

@@ -15,13 +15,14 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // stalePathRouter answers fs.stat with a configurable "does the directory
 // exist" verdict, and can fail every daemon command to model an unreachable
 // daemon. It stands in for the workspace filesystem the API tier cannot see.
 type stalePathRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	dirExists    bool
 	daemonDown   bool
 	statCommands int

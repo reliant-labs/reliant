@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // gatedPauseController behaves like workflow.PauseService in the one respect
@@ -137,7 +138,7 @@ func TestSendMessage_RacingAnInFlightPauseResumesTheRun(t *testing.T) {
 		database:   repo,
 		tempClient: temporal,
 		runs:       runs.NewService(repo, temporal, pause),
-		threads:    threads.NewService(repo, threads.WithToolCanceler(&fakeDaemonRouter{})),
+		threads:    threads.NewService(repo, threads.WithToolCanceler(&toolexectest.Recorder{})),
 	}
 
 	pauseDone := make(chan error, 1)

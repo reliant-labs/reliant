@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // blockingWorktreeDaemonRouter holds `worktree.create` until released, so a
@@ -24,7 +25,7 @@ import (
 // still running* — the window that used to be invisible because the handler
 // blocked until everything finished.
 type blockingWorktreeDaemonRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 
 	release chan struct{}
 	// failCreate makes the daemon report an unsuccessful create, which is the
@@ -69,7 +70,7 @@ func (r *blockingWorktreeDaemonRouter) SendDaemonCommand(ctx context.Context, us
 			"worktree_path": "/tmp/reliant-test-worktree",
 		})
 	}
-	return r.worktreeTestDaemonRouter.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+	return r.Stub.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }
 
 // seedWorktreeProject creates the project + one nested repo CreateWorktree needs.

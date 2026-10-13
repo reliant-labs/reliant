@@ -19,11 +19,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // localModelRouter records the calls DaemonRegistryService makes.
 type localModelRouter struct {
-	fakeDaemonRouter
+	toolexectest.Recorder
 
 	mu         sync.Mutex
 	commands   []recordedLocalModelCommand

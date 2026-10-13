@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -97,7 +98,7 @@ func TestCancelToolCall_PersistsCancelledStatus(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	f := setupToolCallDurableFixture(t, ctx, repo, `{"command":"sleep 600"}`)
 
-	svc := NewToolCallService(repo, nil, &fakeDaemonRouter{})
+	svc := NewToolCallService(repo, nil, &toolexectest.Recorder{})
 	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: f.toolCallID,
 	}))
@@ -127,7 +128,7 @@ func TestConvertToBackground_PersistsBackgroundedStatus(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	f := setupToolCallDurableFixture(t, ctx, repo, `{"command":"npm run dev"}`)
 
-	svc := NewToolCallService(repo, nil, &fakeDaemonRouter{})
+	svc := NewToolCallService(repo, nil, &toolexectest.Recorder{})
 	resp, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
 		ToolCallId: f.toolCallID,
 	}))
@@ -164,7 +165,7 @@ func TestCancelToolCall_PreservesExistingExecutionFields(t *testing.T) {
 		UpdatedAt:   startedAt,
 	}))
 
-	svc := NewToolCallService(repo, nil, &fakeDaemonRouter{})
+	svc := NewToolCallService(repo, nil, &toolexectest.Recorder{})
 	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: f.toolCallID,
 	}))
@@ -190,7 +191,7 @@ func TestCancelToolCall_IsIdempotent(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	f := setupToolCallDurableFixture(t, ctx, repo, `{"command":"sleep 600"}`)
 
-	svc := NewToolCallService(repo, nil, &fakeDaemonRouter{})
+	svc := NewToolCallService(repo, nil, &toolexectest.Recorder{})
 	for i := 0; i < 3; i++ {
 		_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 			ToolCallId: f.toolCallID,

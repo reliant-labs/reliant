@@ -12,11 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
 // mkdirRecordingRouter records every fs.mkdir path the heal asks a daemon for.
 type mkdirRecordingRouter struct {
-	worktreeTestDaemonRouter
+	toolexectest.Stub
 	mu      sync.Mutex
 	mkdired []string
 }
