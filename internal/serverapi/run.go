@@ -466,7 +466,7 @@ func Run(ctx context.Context, opts Options) error {
 	// whose run already ended. The reconciler sweeps for connects this misses
 	// and continues the message of a run it ends as wedged.
 	if chatSvc := grpcSrv.ChatService(); chatSvc != nil {
-		queued := queueddelivery.New(repo, daemonRouter, chatSvc, temporalClient)
+		queued := queueddelivery.New(queueddelivery.Deps{Store: repo, Machines: daemonRouter, Deliverer: chatSvc, Signaler: temporalClient})
 		reconciler.SetQueuedDelivery(queued)
 		go func() {
 			if err := queued.Run(ctx, nc); err != nil {

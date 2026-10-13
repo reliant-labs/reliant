@@ -111,7 +111,7 @@ func TestMachineConnected_WakesWaitingRunsAndDeliversWhatIsNowReachable(t *testi
 	}
 	deliverer := &fakeDeliverer{}
 	signaler := &fakeSignaler{}
-	svc := New(store, fakeMachines{up: map[string]bool{"": true, "d-up": true}}, deliverer, signaler)
+	svc := New(Deps{Store: store, Machines: fakeMachines{up: map[string]bool{"": true, "d-up": true}}, Deliverer: deliverer, Signaler: signaler})
 
 	delivered := svc.MachineConnected(context.Background(), "u")
 
@@ -131,7 +131,7 @@ func TestSweep_DeliversQueuedMessagesWhoseMachineIsBack(t *testing.T) {
 		{ChatID: "c2", UserID: "u2", ActiveDaemonID: ptr("d2")},
 	}}
 	deliverer := &fakeDeliverer{}
-	svc := New(store, fakeMachines{up: map[string]bool{"d2": true}}, deliverer, &fakeSignaler{})
+	svc := New(Deps{Store: store, Machines: fakeMachines{up: map[string]bool{"d2": true}}, Deliverer: deliverer, Signaler: &fakeSignaler{}})
 
 	delivered, err := svc.Sweep(context.Background())
 
@@ -156,7 +156,7 @@ func TestMachineConnected_ResumesChatsTheBreakerPaused(t *testing.T) {
 		pausedFor("c-other-user", "someone-else", nil),
 	}}
 	deliverer := &fakeDeliverer{resumable: map[string]bool{"c-default": true, "c-pinned-up": true, "c-pinned-down": true, "c-other-user": true}}
-	svc := New(store, fakeMachines{up: map[string]bool{"": true, "d-up": true}}, deliverer, &fakeSignaler{})
+	svc := New(Deps{Store: store, Machines: fakeMachines{up: map[string]bool{"": true, "d-up": true}}, Deliverer: deliverer, Signaler: &fakeSignaler{}})
 
 	n := svc.MachineConnected(context.Background(), "u")
 
@@ -169,7 +169,7 @@ func TestMachineConnected_ResumesChatsTheBreakerPaused(t *testing.T) {
 // A chat the user paused carries no mark, so the store never lists it.
 func TestMachineConnected_DoesNotResumeAUserPausedChat(t *testing.T) {
 	deliverer := &fakeDeliverer{}
-	svc := New(&fakeStore{}, fakeMachines{up: map[string]bool{"": true}}, deliverer, &fakeSignaler{})
+	svc := New(Deps{Store: &fakeStore{}, Machines: fakeMachines{up: map[string]bool{"": true}}, Deliverer: deliverer, Signaler: &fakeSignaler{}})
 
 	assert.Zero(t, svc.MachineConnected(context.Background(), "u"))
 	assert.Empty(t, deliverer.resumed)
@@ -179,7 +179,7 @@ func TestMachineConnected_DoesNotResumeAUserPausedChat(t *testing.T) {
 func TestMachineConnected_OtherMachineConnectingResumesNothing(t *testing.T) {
 	store := &fakeStore{paused: []db.PausedForMachineChat{pausedFor("c1", "u", ptr("d-down"))}}
 	deliverer := &fakeDeliverer{resumable: map[string]bool{"c1": true}}
-	svc := New(store, fakeMachines{up: map[string]bool{"d-other": true}}, deliverer, &fakeSignaler{})
+	svc := New(Deps{Store: store, Machines: fakeMachines{up: map[string]bool{"d-other": true}}, Deliverer: deliverer, Signaler: &fakeSignaler{}})
 
 	assert.Zero(t, svc.MachineConnected(context.Background(), "u"))
 	assert.Empty(t, deliverer.resumed)
@@ -190,7 +190,7 @@ func TestMachineConnected_OtherMachineConnectingResumesNothing(t *testing.T) {
 func TestMachineConnected_DoubleConnectResumesOnce(t *testing.T) {
 	store := &fakeStore{paused: []db.PausedForMachineChat{pausedFor("c1", "u", nil)}}
 	deliverer := &fakeDeliverer{resumable: map[string]bool{"c1": true}}
-	svc := New(store, fakeMachines{up: map[string]bool{"": true}}, deliverer, &fakeSignaler{})
+	svc := New(Deps{Store: store, Machines: fakeMachines{up: map[string]bool{"": true}}, Deliverer: deliverer, Signaler: &fakeSignaler{}})
 
 	first := svc.MachineConnected(context.Background(), "u")
 	second := svc.MachineConnected(context.Background(), "u")
@@ -209,7 +209,7 @@ func TestSweep_ResumesBreakerPausedChatsWhoseMachineIsBack(t *testing.T) {
 		pausedFor("c2", "u2", ptr("d2")),
 	}}
 	deliverer := &fakeDeliverer{resumable: map[string]bool{"c1": true, "c2": true}}
-	svc := New(store, fakeMachines{up: map[string]bool{"d2": true}}, deliverer, &fakeSignaler{})
+	svc := New(Deps{Store: store, Machines: fakeMachines{up: map[string]bool{"d2": true}}, Deliverer: deliverer, Signaler: &fakeSignaler{}})
 
 	n, err := svc.Sweep(context.Background())
 

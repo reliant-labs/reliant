@@ -382,7 +382,7 @@ func (onlineMachines) IsDaemonOnline(context.Context, string, *toolexec.DaemonSe
 func TestMachineConnected_DeliversTheMessageQueuedForAFailedMachineOnce(t *testing.T) {
 	f := newContinueFixture(t, true)
 	f.queueForMachine(t)
-	delivery := queueddelivery.New(f.repo, onlineMachines{}, f.svc, f.temporal)
+	delivery := queueddelivery.New(queueddelivery.Deps{Store: f.repo, Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal})
 
 	assert.Equal(t, 1, delivery.MachineConnected(f.ctx, "test-user"))
 	assert.Equal(t, 0, delivery.MachineConnected(f.ctx, "test-user"), "a second connect finds nothing queued")

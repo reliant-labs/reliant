@@ -29,6 +29,13 @@
 // idempotent (ContinueQueued claims the message under the chat's run-control
 // lock), so a connect handled twice, or raced by the sweep, still delivers
 // once.
+//
+// forge:outbound-io
+//
+// Run is a NATS JetStream consumer: it creates or updates the durable consumer
+// on DAEMON_EVENTS and consumes its connect events.
+//
+//forge:not-a-component: built by reliant's hand-wired server (internal/serverapi), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
 package queueddelivery
 
 import (
@@ -48,34 +55,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/machinewait"
 )
 
-// Store is the chat state this package reads.
-type Store interface {
-	ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]db.QueuedForMachineChat, error)
-	ListChatsWaitingForMachine(ctx context.Context, userID string) ([]db.WaitingForMachineRun, error)
-	ListChatsPausedForMachine(ctx context.Context, userID string, limit int) ([]db.PausedForMachineChat, error)
-}
-
-// Machines answers whether the machine a chat runs on is connected.
-type Machines interface {
-	IsDaemonOnline(ctx context.Context, userID string, selector *toolexec.DaemonSelector) (bool, error)
-}
-
-// Deliverer starts the run that delivers a chat's undelivered message, and
-// reports whether it started one (ChatService.ContinueQueued).
-type Deliverer interface {
-	ContinueQueued(ctx context.Context, chatID string) (bool, error)
-	// ResumePausedForMachine resumes a chat the daemon-offline breaker paused,
-	// and reports whether it did (ChatService.ResumePausedForMachine).
-	ResumePausedForMachine(ctx context.Context, chatID string) (bool, error)
-}
-
-// Signaler signals a workflow (the Temporal client).
-type Signaler interface {
-	SignalWorkflow(ctx context.Context, workflowID, runID, signalName string, arg interface{}) error
-}
-
-// Service delivers messages queued for a machine. See the package doc.
-type Service struct {
+// service delivers messages queued for a machine. See the package doc.
+type service struct {
 	store     Store
 	machines  Machines
 	deliverer Deliverer
@@ -83,8 +64,8 @@ type Service struct {
 }
 
 // New builds the service.
-func New(store Store, machines Machines, deliverer Deliverer, signaler Signaler) *Service {
-	return &Service{store: store, machines: machines, deliverer: deliverer, signaler: signaler}
+func New(deps Deps) Service {
+	return &service{store: deps.Store, machines: deps.Machines, deliverer: deps.Deliverer, signaler: deps.Signaler}
 }
 
 const (
@@ -102,12 +83,8 @@ const (
 	consumerName = "api-server-queued-delivery"
 )
 
-// MachineConnected handles one of userID's machines connecting: it wakes every
-// run of theirs parked waiting for a machine, resumes every chat of theirs the
-// offline breaker paused, and starts the run for every message of theirs queued
-// for a machine that is now connected. It returns the number of chats it
-// resumed or started delivering to.
-func (s *Service) MachineConnected(ctx context.Context, userID string) int {
+// MachineConnected implements Service.
+func (s *service) MachineConnected(ctx context.Context, userID string) int {
 	s.wakeWaitingRuns(ctx, userID)
 	n := 0
 	paused, err := s.store.ListChatsPausedForMachine(ctx, userID, perUserLimit)
@@ -124,11 +101,8 @@ func (s *Service) MachineConnected(ctx context.Context, userID string) int {
 	return n + s.deliver(ctx, queued)
 }
 
-// Sweep resumes every chat the offline breaker paused, and starts the run for
-// every message queued for a machine, whose machine is now connected — the
-// backstop for a connect whose event was missed (a replica restarting, the
-// stream unavailable). It returns how many it resumed or started.
-func (s *Service) Sweep(ctx context.Context) (int, error) {
+// Sweep implements Service.
+func (s *service) Sweep(ctx context.Context) (int, error) {
 	n := 0
 	paused, pausedErr := s.store.ListChatsPausedForMachine(ctx, "", sweepBatch)
 	if pausedErr == nil {
@@ -145,16 +119,15 @@ func (s *Service) Sweep(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// ContinueQueued starts the run that delivers a chat's undelivered message;
-// the reconciler calls it for a run it ended as wedged.
-func (s *Service) ContinueQueued(ctx context.Context, chatID string) (bool, error) {
+// ContinueQueued implements Service.
+func (s *service) ContinueQueued(ctx context.Context, chatID string) (bool, error) {
 	return s.deliverer.ContinueQueued(ctx, chatID)
 }
 
 // wakeWaitingRuns signals every run of the user's that is parked waiting for a
 // machine, so it checks now rather than at its next recheck. A run waiting for
 // a different machine checks, finds it still down, and goes back to waiting.
-func (s *Service) wakeWaitingRuns(ctx context.Context, userID string) {
+func (s *service) wakeWaitingRuns(ctx context.Context, userID string) {
 	waiting, err := s.store.ListChatsWaitingForMachine(ctx, userID)
 	if err != nil {
 		logging.Warn("[QueuedDelivery] Could not list the user's runs waiting for a machine", "userID", userID, "error", err)
@@ -172,7 +145,7 @@ func (s *Service) wakeWaitingRuns(ctx context.Context, userID string) {
 
 // resumePaused resumes each chat the offline breaker paused whose machine is
 // connected. One whose machine is still down stays paused for its own connect.
-func (s *Service) resumePaused(ctx context.Context, paused []db.PausedForMachineChat) int {
+func (s *service) resumePaused(ctx context.Context, paused []db.PausedForMachineChat) int {
 	resumed := 0
 	for _, chat := range paused {
 		var selector *toolexec.DaemonSelector
@@ -200,7 +173,7 @@ func (s *Service) resumePaused(ctx context.Context, paused []db.PausedForMachine
 
 // deliver starts the run for each queued chat whose machine is connected.
 // One whose machine is still down stays queued for its own connect.
-func (s *Service) deliver(ctx context.Context, queued []db.QueuedForMachineChat) int {
+func (s *service) deliver(ctx context.Context, queued []db.QueuedForMachineChat) int {
 	started := 0
 	for _, chat := range queued {
 		var selector *toolexec.DaemonSelector
@@ -226,10 +199,8 @@ func (s *Service) deliver(ctx context.Context, queued []db.QueuedForMachineChat)
 	return started
 }
 
-// Run consumes machine connects from the DAEMON_EVENTS stream until ctx ends.
-// The daemon-gateway owns the stream; if it does not exist yet this returns
-// and the sweep alone delivers until the next api-server start.
-func (s *Service) Run(ctx context.Context, nc *nats.Conn) error {
+// Run implements Service.
+func (s *service) Run(ctx context.Context, nc *nats.Conn) error {
 	if nc == nil {
 		return errors.New("queued delivery: nil NATS connection")
 	}

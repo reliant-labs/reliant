@@ -71,7 +71,7 @@ func newTerminatedRunFixture(t *testing.T) (continueFixture, *reconciliation.Rec
 	f.temporal.status = enums.WORKFLOW_EXECUTION_STATUS_TERMINATED
 
 	rec := reconciliation.NewReconciler(f.repo, terminatedRunTemporal{f.temporal}, reconciliation.DefaultConfig())
-	rec.SetQueuedDelivery(queueddelivery.New(f.repo, onlineMachines{}, f.svc, f.temporal))
+	rec.SetQueuedDelivery(queueddelivery.New(queueddelivery.Deps{Store: f.repo, Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal}))
 	return f, rec
 }
 
