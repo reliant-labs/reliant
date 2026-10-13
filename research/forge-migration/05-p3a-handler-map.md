@@ -6,6 +6,12 @@ per Connect service) in [PLAN.md](PLAN.md) §4. Measured on origin/main
 
 ## Summary
 
+**Status (2026-10-13):** wave 1 (G1, G2, G4, G5, G12) is merged (#772–#777).
+Wave 2 (G3, G6–G11, G13, the shared test fixtures and the dead code) is the
+branch series under "Wave plan" below. With both waves in, every service is
+extraction-ready for P3b on the production side. The tables below describe
+the package as measured before either wave.
+
 - **80 non-test files, 42,290 LOC; 192 test files.** 35 Connect services are
   implemented here (39 handler types, because FileSystem, Background, Terminal
   and PackageCommands each have a local and a `*Proxy` implementation). Four
@@ -117,17 +123,17 @@ All identifiers are unexported unless capitalised.
 |---|---|---|---|---|
 | **G1 daemon-command errors** | `daemon_proxy_base.go`, `machine_wake.go` | `machineUnreachable`, `machineStateConnectError`, `IsDaemonOutdatedError`, `DaemonOutdatedConnectError`, `mapDaemonDispatchError`, `daemonErrOutdatedMarker`, `daemonErrDirNotExistMarker` | Background, Daemon, FileSystem, Forge, PackageCommands, Terminal (+WS), Worktree | `internal/daemonerr`, pure (wave 1) |
 | **G2 machine wake** | `machine_wake.go` | `machineWake` (+`wake`, `ownedBy`, `afterFailure`), `wakeTarget`, `machineWakingError`, `noWakeKey`, `wakeSuppressed`, `withoutWake`, `isMachineWaking`, `requestWakeTimeout`, `machineResumer`, `machineOwners`, `NewMachineWakingInterceptor` | FileSystem, Worktree, server wiring (interceptor) | `internal/machinewake`, canonical contract (wave 1; needs G1) |
-| G3 daemon proxy base | `daemon_proxy_base.go` | `daemonProxyBase` (+`userID`, `dispatch`) | Forge, PackageCommands | wave 2: `dispatch` becomes a function over a consumer-declared `SendDaemonCommand` interface; each handler keeps its own `userID` (FileSystem, Background and Terminal already have their own copies) |
+| **G3 daemon proxy base** | `daemon_proxy_base.go` | `daemonProxyBase` (+`userID`, `dispatch`) | Forge, PackageCommands | `internal/daemoncmd`, canonical contract (wave 2): `Service.Dispatch` over a 1-method `Sender`; `daemoncmd.UserID` is a function. The two services hold it as a named field, so their method sets do not grow |
 | **G4 message → proto** | `proto_converters.go` | `MessageToProtoOptions`, `messageToProto`, `contentBlockToProto`, `toolCallStatusToProto`, `inheritedInFlightCall`, `streamingStateFromComputedString`, `assembleMessagesForDisplay` | Chat, Message, Streaming | `internal/messageproto`, pure (wave 1) |
 | **G5 chat/worktree placement** | `worktree_placement.go`, `worktree.go` | `chatDaemonID`, `chatWorktreeReader`, `worktreeOwner` | Chat, FileSystem, Worktree | `internal/daemonplacement` (wave 1) |
-| G6 workflow catalog | `workflow_catalog.go` | `workflowCatalog` (+4 methods), `workflowCatalogReads`, `loadWorkflowCatalog`, `withBuiltinCache`, `cachedBuiltinParse`, `builtinParses`, `memoizeRefLoader` | Preset, Workflow | wave 2 (holds a process-wide parse cache, `builtinParses`; the package must own it) |
-| G7 project git metadata | `forge_name_learn.go`, `project.go`, `log_redact.go` | `learnForgeProjectName`, `forgeNameReader`/`Writer`, `forgeNameReadTimeoutMs`, `reconcileProjectGitRepo`, `remoteURLForLog` | Project, ToolsDaemon | wave 2: three unrelated helpers, so three homes; `remoteURLForLog` alone is the `refactor/extract-log-redact` slice |
-| G8 shared enum mappers | `proto_enum_mappers.go` | `backgroundProcessStatusFromString`, `outputStreamTypeFromString` (Background, PackageCommands); `planStatusFromInt32` (Chat, Plan); `taskStatusFromInt32` (Plan, Task) | Background, Chat, PackageCommands, Plan, Task | wave 2: two cohesive homes (background-process enums; plan/task enums). The file's 10 single-service mappers move with their service in P3b |
-| G9 run-state → proto | `run.go` | `workflowStateToProto`, `workflowStopReasonToProto` | Chat, Run | wave 2 |
-| G10 connection → proto | `connection.go` | `connectionCaller`, `connectionAuthKindToProto` | Catalog, Connection | wave 2 |
-| G11 bearer token | `account.go` | `bearerToken` | Account, Project | wave 2 |
+| **G6 workflow catalog** | `workflow_catalog.go` | `workflowCatalog` (+4 methods), `workflowCatalogReads`, `loadWorkflowCatalog`, `withBuiltinCache`, `cachedBuiltinParse`, `builtinParses`, `memoizeRefLoader` | Preset, Workflow | `internal/workflow/workflowcatalog` (wave 2), which owns the `builtinParses` cache. WorkflowService reads the drafts through `Catalog.Drafts()` |
+| **G7 project git metadata** | `forge_name_learn.go`, `project.go`, `log_redact.go` | `learnForgeProjectName`, `forgeNameReader`/`Writer`, `forgeNameReadTimeoutMs`, `reconcileProjectGitRepo`, `remoteURLForLog` | Project, ToolsDaemon | wave 2, two homes: `internal/projectfacts` (`LearnForgeName`, `ReconcileGitRepo`: the project row's cached copies of facts only a daemon can see) and `internal/gitremote` (`Redacted`) |
+| **G8 shared enum mappers** | `proto_enum_mappers.go` | `backgroundProcessStatusFromString`, `outputStreamTypeFromString` (Background, PackageCommands); `planStatusFromInt32` (Chat, Plan); `taskStatusFromInt32` (Plan, Task) | Background, Chat, PackageCommands, Plan, Task | wave 2, two homes: `internal/processproto` and `internal/planproto`, each with its whole enum family. The file's remaining single-service mappers move with their service in P3b |
+| **G9 run-state → proto** | `run.go` | `workflowStateToProto`, `workflowStopReasonToProto` | Chat, Run | `internal/runstateproto` (wave 2) |
+| **G10 connection → proto** | `connection.go` | `connectionCaller`, `connectionAuthKindToProto` | Catalog, Connection | `internal/connectionrpc` (wave 2) |
+| **G11 bearer token** | `account.go` | `bearerToken` | Account, Project | `auth.BearerToken` (wave 2; existing package) |
 | **G12 daemon choice** | `daemon_choice.go` | `validateOwnedProjectDaemon` | Chat, Trigger | `internal/daemonchoice` (wave 1). It took the 442-method `db.Repository`; the new package declares a 2-method `Reader` |
-| G13 checkout state | `fs_proxy_checkout.go` | `checkoutStateOn` | FileSystem, Terminal (WS) | wave 2 |
+| **G13 checkout state** | `fs_proxy_checkout.go` | `checkoutStateOn` | FileSystem, Terminal (WS) | `internal/checkoutstate` (wave 2) |
 
 Order of dependencies: G2 → G1 (`afterFailure` calls `machineUnreachable`),
 G3 → G1 (`dispatch` maps through `mapDaemonDispatchError`), and G4's
@@ -247,27 +253,32 @@ service, when P3b moves it.
 ## Test-side coupling (P3a wave 2 / P3b)
 
 Test fixtures are shared across services more than production code is. Each
-row below is a fixture defined in one service's `_test.go` and used by test
-files of other services. A P3b lane cannot move those tests until the fixture
-has a home. Options: a small `internal/handlers/handlertest` package of
-exported fakes, or a copy per lane where the fixture is under ~10 lines.
+row below is a fixture defined in one service's `_test.go` and used by the
+test files of other services. A P3b lane cannot move those tests until the
+fixture has a home.
 
-| Fixture | Defined in | Test files of | Using files |
+Wave 2 moved the fixtures that need nothing from a service's internals into
+non-test packages that only `_test.go` files import:
+
+| Fixture | Defined in | Test files of | Using files | Now |
+|---|---|---|---|---|
+| `worktreeTestDaemonRouter` | `worktree_test.go` | Background, Daemon, FileSystem, Forge, PackageCommands, Project, Worktree | 19 | `toolexectest.Stub` |
+| `fakeDaemonRouter` | `tool_call_test.go` | Chat, Terminal (+WS), ToolCall, ToolsDaemon | 11 | `toolexectest.Recorder` |
+| `setupToolCallDurableFixture` / `toolCallDurableFixture` | `tool_call_durable_status_test.go` | Approval, Message, Streaming, ToolCall | 4 | `dbtest.SeedToolCall` / `dbtest.ToolCall` |
+| `recordedSignal`, `spawnCancelTemporalClient` | `tool_call_cancel_spawn_test.go` | Chat, ToolCall | 5 | `signaltest.Signal` / `signaltest.Recorder` |
+| `newWorkflowListFixture`, `workflowListRepo` | `workflow_list_reads_test.go` | Preset, Workflow | 1 | `workflowlisttest.NewFixture` / `.Repo` |
+
+The rest stay where they are, for a stated reason:
+
+| Fixture | Defined in | Test files of | P3b handling |
 |---|---|---|---|
-| `worktreeTestDaemonRouter` | `worktree_test.go` | Background, Daemon, FileSystem, Forge, PackageCommands, Project, Worktree | 19 |
-| `fakeDaemonRouter` | `tool_call_test.go` | Chat, Terminal (+WS), ToolCall, ToolsDaemon | 11 |
-| `strPtr` | `chat_send_resume_name_test.go` | Chat, Inbox, PackageCommands, Trigger | 7 |
-| `authedCtx` | `package_commands_proxy_test.go` | Background, Daemon, Forge, PackageCommands | 6 |
-| `setupToolCallDurableFixture` / `toolCallDurableFixture` | `tool_call_durable_status_test.go` | Approval, Message, Streaming, ToolCall | 4 |
-| `newParkedStream`, `newTestConn` | `tools_daemon_supersede_test.go` | DaemonRegistry, ToolsDaemon | 9 |
-| `recordedSignal`, `spawnCancelTemporalClient` | `tool_call_cancel_spawn_test.go` | Chat, ToolCall | 4 |
-| `placementFixture`, `newPlacementFixture` | `worktree_placement_test.go` | FileSystem, Worktree | 3 |
-| `runListFixture`, `newRunListFixture` | `run_list_test.go` | Inbox, Run | 2 |
-| `localModelRouter`, `seedDaemon`, `userCtx`, … | `daemon_registry_localmodel_test.go` | DaemonRegistry, ToolsDaemon | 1 |
-| `setupTestFileSystemService`, `recordingFSDaemonRouter` | `filesystem_test.go`, `fs_proxy_test.go` | FileSystem, Project (`windows_path_test.go`) | 1 |
-| `fakeControlPlaneClient`, `mintCall` | `settings_reliant_test.go` | Settings, Trigger | 1 |
-| `newWorkflowListFixture`, `workflowListRepo` | `workflow_list_reads_test.go` | Preset, Workflow | 1 |
-| `ptrStr` | `tools_daemon_test.go` | Run, ToolsDaemon | 1 |
+| `strPtr`, `ptrStr` | `chat_send_resume_name_test.go`, `tools_daemon_test.go` | Chat, Inbox, PackageCommands, Run, ToolsDaemon, Trigger | one line each: use `ptr.Of` |
+| `authedCtx`, `userCtx` | `package_commands_proxy_test.go`, `daemon_registry_localmodel_test.go` | Background, Daemon, DaemonRegistry, Forge, PackageCommands, ToolsDaemon | one line each: inline `context.WithValue(ctx, auth.UserIDContextKey, id)`, as 192 tests in the package already do |
+| `placementFixture`, `newPlacementFixture`, `placementRouter`, `asleepFixture`, `awaitWorktreeStatus` | `worktree_placement_test.go`, `machine_wake_test.go`, `worktree_test.go` | FileSystem, Worktree | they build a real `WorktreeService` (exported constructor). The second of the two lanes to move takes `machine_wake_test.go` and `fs_proxy_routing_test.go`, and its tests import the first lane's handler package. That is allowed because neither production package imports the other |
+| `runListFixture`, `newRunListFixture` | `run_list_test.go` | Inbox, Run | builds a real `RunService` (exported). The Inbox lane goes after Run, and its tests import the run handler package |
+| `newParkedStream`, `newTestConn`, `registerTestConn`, `localModelRouter`, `recordingUserHub` | `tools_daemon_*_test.go`, `daemon_registry_localmodel_test.go` | DaemonRegistry, ToolsDaemon | they reach ToolsDaemon's unexported connection types (`daemonConnection`, `daemonStream`). `daemon_registry_disk_test.go` and `daemon_registry_localmodel_test.go` exercise both services together, so they move with ToolsDaemon |
+| `fakeControlPlaneClient`, `mintCall` | `settings_reliant_test.go` | Settings, Trigger | moving it out of `_test.go` gives `controlplane.Client` a second implementation in the module, and forge then refuses `controlplane`'s `//forge:exclude-contract` (`forge-exclude-contract-multi-impl`). The rule is right: a shared fake is the sign that `Client` is a seam. So the fake's home is the `MockClient` forge generates once P6 moves `Client` into a `contract.go`. Until then, the second of the two lanes copies it |
+| `setupTestFileSystemService`, `recordingFSDaemonRouter`, `createProjectDaemonRouter` | `filesystem_test.go`, `fs_proxy_test.go`, `project_create_gitinit_test.go` | FileSystem, Project | used only by `windows_path_test.go`, which mixes three services. Split it by service in P3b |
 
 Mixed-service test files, which are split or assigned in P3b:
 
@@ -283,7 +294,7 @@ Mixed-service test files, which are split or assigned in P3b:
 
 ## Wave plan and P3b readiness
 
-**Wave 1 (this series).** One branch and one commit per group:
+**Wave 1 (merged: #772–#777).** One branch and one commit per group:
 
 | Branch | Group | Base |
 |---|---|---|
@@ -307,8 +318,34 @@ filesystem access.
 |---|---|
 | Today (no shared group) | Approval, Attachment, Connector, DaemonRegistry, Inbox, MCP, ModelEndpoint, Question, Repo, Scenario, Settings, System, Token, ToolCall |
 | After wave 1 | adds Daemon (G1), Message (G4), Streaming (G4), Trigger (G12), Worktree (G1, G2, G5) |
-| Still blocked | Account (G11), Background (G8), Catalog (G10), Chat (G8, G9), Connection (G10), FileSystem (G13), Forge (G3), PackageCommands (G3, G8), Plan (G8), Preset (G6), Project (G7, G11), Run (G9, plus the Chat interface), Task (G8), Terminal (G13), ToolsDaemon (G7), Workflow (G6) |
+| After wave 2 | adds the remaining 16: Account (G11), Background (G8), Catalog (G10), Chat (G8, G9), Connection (G10), FileSystem (G13), Forge (G3), PackageCommands (G3, G8), Plan (G8), Preset (G6), Project (G7, G11), Run (G9; declares its Chat interface in P3b), Task (G8), Terminal (G13), ToolsDaemon (G7), Workflow (G6) |
 
-**Wave 2:** G3, G6–G11 and G13, plus the shared test fixtures above. The groups are
-mutually independent, so they parallelise one lane per group. Then delete
-`chatUpdateTypeFromString` and `LOG_PREFIX_STREAM`.
+**Wave 2.** One branch and one commit per group, all on origin/main except
+where noted:
+
+| Branch | Group |
+|---|---|
+| `refactor/delete-dead-chat-update-mapper` | dead code: `chatUpdateTypeFromString` (+ its tests), `LOG_PREFIX_STREAM` |
+| `refactor/extract-daemoncmd` | G3 → `internal/daemoncmd` |
+| `refactor/extract-workflowcatalog` | G6 → `internal/workflow/workflowcatalog` |
+| `refactor/extract-projectfacts` | G7 → `internal/projectfacts` |
+| `refactor/extract-gitremote` | G7 → `internal/gitremote` |
+| `refactor/extract-processproto` | G8 → `internal/processproto` |
+| `refactor/extract-planproto` | G8 → `internal/planproto` |
+| `refactor/extract-runstateproto` | G9 → `internal/runstateproto` |
+| `refactor/extract-connectionrpc` | G10 → `internal/connectionrpc` |
+| `refactor/extract-bearer-token` | G11 → `auth.BearerToken` |
+| `refactor/extract-checkoutstate` | G13 → `internal/checkoutstate` |
+| `refactor/extract-toolexectest` | fixtures → `internal/toolexec/toolexectest` |
+| `refactor/extract-dbtest-toolcall` | fixtures → `internal/db/dbtest`; stacked on toolexectest, because both edit the import block of `tool_call_durable_status_test.go` |
+| `refactor/extract-temporal-signal-recorder` | fixtures → `internal/temporal/signaltest`; stacked on toolexectest, because both rewrite the same `NewToolCallService(...)` lines |
+| `refactor/extract-workflowlisttest` | fixtures → `internal/workflow/workflowlisttest` |
+
+**After wave 2, every service is extraction-ready for P3b on the production
+side.** No declaration in `internal/grpc/services` is reached by two
+services any more. The one service-to-service edge remains RunService →
+`*ChatService` (6 exported methods). It creates no cycle; in P3b, Run
+declares a consumer interface for those methods.
+
+On the test side, the remaining couplings are the ones in the second table
+above. Each has a P3b recipe and none needs another P3a extraction.
