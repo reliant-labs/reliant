@@ -101,6 +101,24 @@
     },
     "internal/handlers/system/handlers_scaffold_version_test.go": {
       "scaffolded_at": "2026-10-13T06:58:06Z"
+    },
+    "internal/handlers/token/handlers_scaffold_create_token_test.go": {
+      "scaffolded_at": "2026-10-13T13:25:02Z"
+    },
+    "internal/handlers/token/handlers_scaffold_exchange_token_test.go": {
+      "scaffolded_at": "2026-10-13T13:25:02Z"
+    },
+    "internal/handlers/token/handlers_scaffold_get_git_token_test.go": {
+      "scaffolded_at": "2026-10-13T13:25:02Z"
+    },
+    "internal/handlers/token/handlers_scaffold_list_tokens_test.go": {
+      "scaffolded_at": "2026-10-13T13:25:02Z"
+    },
+    "internal/handlers/token/handlers_scaffold_revoke_token_test.go": {
+      "scaffolded_at": "2026-10-13T13:25:02Z"
+    },
+    "internal/handlers/token/handlers_scaffold_update_token_test.go": {
+      "scaffolded_at": "2026-10-13T13:25:02Z"
     }
   },
   "absent_reported": [
@@ -120,6 +138,12 @@
     "internal/handlers/preset/handlers_scaffold_get_preset_test.go",
     "internal/handlers/preset/handlers_scaffold_list_presets_for_workflow_test.go",
     "internal/handlers/preset/handlers_scaffold_list_presets_test.go",
-    "internal/handlers/preset/handlers_scaffold_update_preset_test.go"
+    "internal/handlers/preset/handlers_scaffold_update_preset_test.go",
+    "internal/handlers/token/handlers_scaffold_create_token_test.go",
+    "internal/handlers/token/handlers_scaffold_exchange_token_test.go",
+    "internal/handlers/token/handlers_scaffold_get_git_token_test.go",
+    "internal/handlers/token/handlers_scaffold_list_tokens_test.go",
+    "internal/handlers/token/handlers_scaffold_revoke_token_test.go",
+    "internal/handlers/token/handlers_scaffold_update_token_test.go"
   ]
 }

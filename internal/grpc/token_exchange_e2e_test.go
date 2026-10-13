@@ -15,7 +15,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
@@ -55,7 +55,7 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	require.Equal(t, tokenauthority.ModeControlPlane, mode)
 
 	signer := newSessionSigner(t)
-	apiURL := serveTokenService(t, authority, signer.pubPEM, services.TokenControlPlane{
+	apiURL := serveTokenService(t, authority, signer.pubPEM, token.TokenControlPlane{
 		Issuer: controlPlane, ClipsGrants: mode == tokenauthority.ModeControlPlane,
 	})
 	gatewayURL := serveGateway(t, authority)
@@ -146,7 +146,7 @@ func TestForgeCredential_NeverEscalates(t *testing.T) {
 	)
 	authority := tokenauthority.NewMemory()
 	signer := newSessionSigner(t)
-	apiURL := serveTokenService(t, authority, signer.pubPEM, services.TokenControlPlane{Issuer: controlPlane})
+	apiURL := serveTokenService(t, authority, signer.pubPEM, token.TokenControlPlane{Issuer: controlPlane})
 	tokens := func(bearer string) reliantv1connect.TokenServiceClient {
 		return reliantv1connect.NewTokenServiceClient(&http.Client{Transport: bearerTransport(bearer)}, apiURL)
 	}

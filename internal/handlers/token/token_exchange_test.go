@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package token
 
 import (
 	"context"
@@ -45,7 +45,7 @@ var fullDaemon = []fat.Scope{
 
 func TestExchangeToken_InheritsBindingAndNarrows(t *testing.T) {
 	authority := tokenauthority.NewMemory()
-	svc := NewTokenService(authority, TokenControlPlane{Issuer: testControlPlane})
+	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{
 		Scopes: fullDaemon, Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon-1"},
 	})
@@ -89,7 +89,7 @@ func listNames(t *testing.T, authority tokenauthority.Authority, userID string) 
 
 func TestExchangeToken_NeverOutlivesItsParent(t *testing.T) {
 	authority := tokenauthority.NewMemory()
-	svc := NewTokenService(authority, TokenControlPlane{Issuer: testControlPlane})
+	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
 	soon := time.Now().Add(10 * time.Minute)
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon, ExpiresAt: &soon})
 
@@ -108,7 +108,7 @@ func TestExchangeToken_NeverOutlivesItsParent(t *testing.T) {
 
 func TestExchangeToken_EphemeralParentMakesAnEphemeralChild(t *testing.T) {
 	authority := tokenauthority.NewMemory()
-	svc := NewTokenService(authority, TokenControlPlane{Issuer: testControlPlane})
+	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
 	end := time.Now().Add(2 * time.Hour)
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{
 		Scopes: fullDaemon, Ephemeral: true, ExpiresAt: &end,
@@ -140,7 +140,7 @@ func TestExchangeToken_Audience(t *testing.T) {
 		{"http://localhost:8090", "http://example.com:8090", false},
 	} {
 		authority := tokenauthority.NewMemory()
-		svc := NewTokenService(authority, TokenControlPlane{Issuer: tc.issuer})
+		svc := newTokenService(t, authority, TokenControlPlane{Issuer: tc.issuer})
 		bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
 		_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: tc.audience}))
 		if tc.ok && err != nil {
@@ -159,7 +159,7 @@ func TestExchangeToken_Audience(t *testing.T) {
 
 func TestExchangeToken_SelfHostedIssuesNothing(t *testing.T) {
 	authority := tokenauthority.NewMemory()
-	svc := NewTokenService(authority, TokenControlPlane{})
+	svc := newTokenService(t, authority, TokenControlPlane{})
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
 	_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "no control plane") {
@@ -169,7 +169,7 @@ func TestExchangeToken_SelfHostedIssuesNothing(t *testing.T) {
 
 func TestExchangeToken_ScopeRequests(t *testing.T) {
 	authority := tokenauthority.NewMemory()
-	svc := NewTokenService(authority, TokenControlPlane{Issuer: testControlPlane})
+	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
 
 	for _, tc := range []struct {
@@ -203,7 +203,7 @@ func TestExchangeToken_ScopeRequests(t *testing.T) {
 
 func TestExchangeToken_RefusesNonSessionCallers(t *testing.T) {
 	authority := tokenauthority.NewMemory()
-	svc := NewTokenService(authority, TokenControlPlane{Issuer: testControlPlane})
+	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
 	ctx := context.Background()
 
 	// An org automation token acts as no one.
@@ -260,7 +260,7 @@ func (a orgShiftAuthority) Introspect(ctx context.Context, token string) (*fat.P
 func TestExchangeToken_NeverCrossesOrgs(t *testing.T) {
 	mem := tokenauthority.NewMemory()
 	bearer := mintSession(t, mem, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
-	svc := NewTokenService(orgShiftAuthority{Memory: mem, parentToken: bearer}, TokenControlPlane{Issuer: testControlPlane})
+	svc := newTokenService(t, orgShiftAuthority{Memory: mem, parentToken: bearer}, TokenControlPlane{Issuer: testControlPlane})
 
 	_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
@@ -275,7 +275,7 @@ func TestExchangeToken_NeverCrossesOrgs(t *testing.T) {
 func TestCreateToken_DaemonCarriesTheClippedCeilingOnlyWhereClipped(t *testing.T) {
 	for _, clips := range []bool{true, false} {
 		authority := tokenauthority.NewMemory()
-		svc := NewTokenService(authority, TokenControlPlane{Issuer: testControlPlane, ClipsGrants: clips})
+		svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane, ClipsGrants: clips})
 		resp, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
 			Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
 		}))

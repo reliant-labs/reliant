@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package token
 
 import (
 	"context"
@@ -14,9 +14,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
-func newTokenSvc() (*TokenService, *tokenauthority.Memory) {
+func newTokenSvc(t *testing.T) (*Service, *tokenauthority.Memory) {
 	authority := tokenauthority.NewMemory()
-	return NewTokenService(authority, TokenControlPlane{}), authority
+	return newTokenService(t, authority, TokenControlPlane{}), authority
+}
+
+// newTokenService builds the service over authority for the deployment cp
+// describes, through the generated harness. GitTokens stays nil: a
+// self-hosted server.
+func newTokenService(t *testing.T, authority Authority, cp TokenControlPlane) *Service {
+	return NewTestToken(t, WithTokenDeps(Deps{Authority: authority, ControlPlane: cp}))
 }
 
 // tokenAuthCtx returns a context carrying an interactive-session identity, as
@@ -37,7 +44,7 @@ func machineAuthCtx(userID string) context.Context {
 func req[T any](msg *T) *connect.Request[T] { return connect.NewRequest(msg) }
 
 func TestTokenServiceCreateListRevokeFlow(t *testing.T) {
-	svc, authority := newTokenSvc()
+	svc, authority := newTokenSvc(t)
 
 	createResp, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
 		Name: "ci", Kind: reliantv1.TokenKind_TOKEN_KIND_API,
@@ -104,7 +111,7 @@ func TestTokenServiceCreateListRevokeFlow(t *testing.T) {
 }
 
 func TestTokenServiceKindsMapToScopesAndFilter(t *testing.T) {
-	svc, authority := newTokenSvc()
+	svc, authority := newTokenSvc(t)
 	ctx := tokenAuthCtx("user-1")
 
 	daemon, err := svc.CreateToken(ctx, req(&reliantv1.CreateTokenRequest{Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON}))
@@ -141,7 +148,7 @@ func TestTokenServiceKindsMapToScopesAndFilter(t *testing.T) {
 // Tokens of scopes this surface does not manage (LLM keys, connector
 // credentials) are the user's too, but never listed here.
 func TestTokenServiceListHidesForeignKinds(t *testing.T) {
-	svc, authority := newTokenSvc()
+	svc, authority := newTokenSvc(t)
 	if _, err := authority.MintForUser(context.Background(), tokenauthority.MintRequest{
 		UserID: "user-1", Name: "llm", Scopes: []fat.Scope{fat.ScopeLLMInvoke},
 	}); err != nil {
@@ -158,7 +165,7 @@ func TestTokenServiceListHidesForeignKinds(t *testing.T) {
 
 // A machine credential can never mint a credential.
 func TestTokenServiceCreateRejectsMachineCaller(t *testing.T) {
-	svc, _ := newTokenSvc()
+	svc, _ := newTokenSvc(t)
 	_, err := svc.CreateToken(machineAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
 		Name: "x", Kind: reliantv1.TokenKind_TOKEN_KIND_API,
 	}))
@@ -173,7 +180,7 @@ func TestTokenServiceCreateRejectsMachineCaller(t *testing.T) {
 // List and revoke work for a machine caller: headless CI can inspect and
 // retire its own tokens without a browser login.
 func TestTokenServiceListRevokeAcceptMachineCaller(t *testing.T) {
-	svc, _ := newTokenSvc()
+	svc, _ := newTokenSvc(t)
 	created, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
 		Name: "ci", Kind: reliantv1.TokenKind_TOKEN_KIND_API,
 	}))
@@ -189,7 +196,7 @@ func TestTokenServiceListRevokeAcceptMachineCaller(t *testing.T) {
 }
 
 func TestTokenServiceCreateValidation(t *testing.T) {
-	svc, _ := newTokenSvc()
+	svc, _ := newTokenSvc(t)
 	ctx := tokenAuthCtx("user-1")
 	cases := map[string]*reliantv1.CreateTokenRequest{
 		"empty name":   {Name: "", Kind: reliantv1.TokenKind_TOKEN_KIND_API},
@@ -205,7 +212,7 @@ func TestTokenServiceCreateValidation(t *testing.T) {
 }
 
 func TestTokenServiceRequiresIdentity(t *testing.T) {
-	svc, _ := newTokenSvc()
+	svc, _ := newTokenSvc(t)
 	anon := context.Background()
 	if _, err := svc.CreateToken(anon, req(&reliantv1.CreateTokenRequest{Name: "x", Kind: reliantv1.TokenKind_TOKEN_KIND_API})); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Errorf("create without identity code = %v, want Unauthenticated", connect.CodeOf(err))
@@ -219,7 +226,7 @@ func TestTokenServiceRequiresIdentity(t *testing.T) {
 }
 
 func TestTokenServiceRevokeRequiresID(t *testing.T) {
-	svc, _ := newTokenSvc()
+	svc, _ := newTokenSvc(t)
 	if _, err := svc.RevokeToken(tokenAuthCtx("user-1"), req(&reliantv1.RevokeTokenRequest{Id: ""})); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("empty id code = %v, want InvalidArgument", connect.CodeOf(err))
 	}

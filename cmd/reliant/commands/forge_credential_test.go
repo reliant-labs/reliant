@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,9 +24,10 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cliauth"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // ── forge reuses the Reliant session, end to end through the CLI ─────────
@@ -77,9 +79,17 @@ type reliantAPI struct {
 func serveReliantAPI(t *testing.T, controlPlane string) *reliantAPI {
 	t.Helper()
 	authority := tokenauthority.NewMemory()
+	tokenService, err := token.New(token.Deps{
+		Logger:       slog.New(slog.DiscardHandler),
+		Config:       &config.Config{},
+		Authority:    authority,
+		ControlPlane: token.TokenControlPlane{Issuer: controlPlane},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewTokenServiceHandler(
-		services.NewTokenService(authority, services.TokenControlPlane{Issuer: controlPlane}))
+	path, handler := reliantv1connect.NewTokenServiceHandler(tokenService)
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

@@ -41,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
+	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -270,10 +271,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	modelEndpointService := services.NewModelEndpointService(database, router, nil)
 	// TokenService: the ONE token surface (daemon credentials and API
 	// tokens), a facade over the token authority.
-	tokenService := services.NewTokenService(authority, services.TokenControlPlane{
-		Issuer:      os.Getenv(cliauth.AuthorizationServerEnv),
-		ClipsGrants: authorityMode == tokenauthority.ModeControlPlane,
-	})
+	var gitTokens token.GitTokenSource
 	if cpURL := controlplane.BaseURLFromEnv(); cpURL != "" {
 		// Hosted users' git tokens live at control-plane. tokenauthority.New
 		// already refused to boot without the secret; check again so this
@@ -282,10 +280,23 @@ func NewServer(cfg *Config) (*Server, error) {
 		if secret == "" {
 			return nil, errors.New("git tokens: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not")
 		}
-		tokenService.WithGitTokens(gitcredentialclient.New(gitcredentialclient.Deps{
+		gitTokens = gitcredentialclient.New(gitcredentialclient.Deps{
 			BaseURL: cpURL,
 			Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
-		}))
+		})
+	}
+	tokenService, err := token.New(token.Deps{
+		Logger:    handlerLogger,
+		Config:    handlerConfig,
+		Authority: authority,
+		ControlPlane: token.TokenControlPlane{
+			Issuer:      os.Getenv(cliauth.AuthorizationServerEnv),
+			ClipsGrants: authorityMode == tokenauthority.ModeControlPlane,
+		},
+		GitTokens: gitTokens,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("token service: %w", err)
 	}
 	daemonProxyService := services.NewDaemonProxyService(router)
 	toolCallService := services.NewToolCallService(database, cfg.TemporalClient, router)

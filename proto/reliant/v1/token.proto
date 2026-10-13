@@ -7,9 +7,6 @@ import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // TokenService is reliant's ONE surface for machine credentials. Every token
 // it mints is an `rlat_` access token (forge/pkg/accesstoken) — the same
 // credential control-plane issues; there is no reliant-specific family.

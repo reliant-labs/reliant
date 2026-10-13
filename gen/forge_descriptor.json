@@ -27933,8 +27933,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "TokenKind"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "ToolCallService",
@@ -33580,5 +33579,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "4f2b9c6932e1c6cb4de5dc9c0e9f26b541271a7f0ee07e851e1545649b16add6"
+  "source_hash": "6f2e6d50abff9fd675339d8bc3be0538f095937bde75317d6c23d7fd3a733efc"
 }

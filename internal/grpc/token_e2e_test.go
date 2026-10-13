@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -29,7 +30,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
+	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/middleware"
 )
 
@@ -281,13 +284,20 @@ func (s *sessionSigner) sign(t *testing.T, userID string) string {
 // interceptor, with the authority's introspector wired exactly as NewServer
 // wires it (cached) and the same public procedures (ExchangeToken and
 // GetGitToken among them).
-func serveTokenService(t *testing.T, authority tokenauthority.Authority, jwtPubPEM string, cp services.TokenControlPlane) string {
+func serveTokenService(t *testing.T, authority tokenauthority.Authority, jwtPubPEM string, cp token.TokenControlPlane) string {
 	t.Helper()
 	authInterceptor, err := interceptors.NewAuthInterceptor(jwtPubPEM, "", middleware.UnauthenticatedProcedures)
 	require.NoError(t, err)
 	authInterceptor.SetAccessTokenIntrospector(accesstokenclient.NewCachedIntrospector(authority))
+	tokenService, err := token.New(token.Deps{
+		Logger:       slog.New(slog.DiscardHandler),
+		Config:       &config.Config{},
+		Authority:    authority,
+		ControlPlane: cp,
+	})
+	require.NoError(t, err)
 	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewTokenServiceHandler(services.NewTokenService(authority, cp),
+	path, handler := reliantv1connect.NewTokenServiceHandler(tokenService,
 		connect.WithInterceptors(authInterceptor))
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
@@ -349,7 +359,7 @@ func TestDaemonCredential_HostedEndToEnd(t *testing.T) {
 	require.Equal(t, tokenauthority.ModeControlPlane, mode)
 
 	signer := newSessionSigner(t)
-	apiURL := serveTokenService(t, authority, signer.pubPEM, services.TokenControlPlane{})
+	apiURL := serveTokenService(t, authority, signer.pubPEM, token.TokenControlPlane{})
 	gatewayURL := serveGateway(t, authority)
 
 	tokens := func(bearer string) reliantv1connect.TokenServiceClient {
@@ -434,7 +444,7 @@ func TestDaemonCredential_SelfHostedEndToEnd(t *testing.T) {
 	require.Equal(t, tokenauthority.ModeLocal, mode)
 
 	signer := newSessionSigner(t)
-	apiURL := serveTokenService(t, authority, signer.pubPEM, services.TokenControlPlane{})
+	apiURL := serveTokenService(t, authority, signer.pubPEM, token.TokenControlPlane{})
 	gatewayURL := serveGateway(t, authority)
 	tokens := reliantv1connect.NewTokenServiceClient(&http.Client{Transport: bearerTransport(signer.sign(t, userID))}, apiURL)
 

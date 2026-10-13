@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package token
 
 import (
 	"context"
@@ -103,7 +103,7 @@ type TokenControlPlane struct {
 // any SESSION credential: one that acts as a person and carries daemon:connect
 // or reliant:api. What it can do with that is bounded by the attenuation rule,
 // not by which session it is.
-func (s *TokenService) ExchangeToken(
+func (s *Service) ExchangeToken(
 	ctx context.Context, req *connect.Request[reliantv1.ExchangeTokenRequest],
 ) (*connect.Response[reliantv1.ExchangeTokenResponse], error) {
 	// Re-read the calling token AUTHORITATIVELY: a cached answer can serve a
@@ -114,15 +114,15 @@ func (s *TokenService) ExchangeToken(
 		return nil, err
 	}
 	userID := subject.ActingUserID
-	if strings.TrimSpace(s.controlPlane.Issuer) == "" {
+	if strings.TrimSpace(s.deps.ControlPlane.Issuer) == "" {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"this server has no control plane, so it issues no control-plane credentials"))
 	}
 	audience := strings.TrimSpace(req.Msg.GetAudience())
-	if !sameControlPlane(audience, s.controlPlane.Issuer) {
+	if !sameControlPlane(audience, s.deps.ControlPlane.Issuer) {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"tokens from this server are valid at %s, not %q; nothing was minted",
-			strings.TrimRight(s.controlPlane.Issuer, "/"), audience))
+			strings.TrimRight(s.deps.ControlPlane.Issuer, "/"), audience))
 	}
 	requested, err := requestedExchangeScopes(req.Msg.GetScopes())
 	if err != nil {
@@ -151,7 +151,7 @@ func (s *TokenService) ExchangeToken(
 	if subject.ExpiresAt != nil && subject.ExpiresAt.Before(expiresAt) {
 		expiresAt = *subject.ExpiresAt
 	}
-	minted, err := s.authority.MintForUser(ctx, tokenauthority.MintRequest{
+	minted, err := s.deps.Authority.MintForUser(ctx, tokenauthority.MintRequest{
 		UserID: userID,
 		// The parent's id makes the audit trail one hop: which session
 		// produced this deploy credential.
@@ -192,14 +192,14 @@ func (s *TokenService) ExchangeToken(
 // sessionCredential authenticates the request's bearer against the authority,
 // uncached, and requires it to be a Reliant session credential: live, acting
 // as a person, carrying daemon:connect or reliant:api.
-func (s *TokenService) sessionCredential(ctx context.Context, header http.Header) (*fat.Principal, error) {
+func (s *Service) sessionCredential(ctx context.Context, header http.Header) (*fat.Principal, error) {
 	bearer, ok := strings.CutPrefix(header.Get("Authorization"), "Bearer ")
 	bearer = strings.TrimSpace(bearer)
 	if !ok || !auth.IsAccessTokenFormat(bearer) {
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf(
 			"ExchangeToken needs a Reliant access token (rlat_) as its bearer; sign in to Reliant (`reliant auth login` / the app)"))
 	}
-	subject, err := s.authority.Introspect(ctx, bearer)
+	subject, err := s.deps.Authority.Introspect(ctx, bearer)
 	if errors.Is(err, tokenauthority.ErrInactive) {
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf(
 			"this Reliant credential is no longer valid; sign in to Reliant again (`reliant auth login` / the app)"))
@@ -221,12 +221,12 @@ func (s *TokenService) sessionCredential(ctx context.Context, header http.Header
 
 // confirmSameOrg introspects the freshly minted token and revokes it if it
 // landed in a different org from its parent.
-func (s *TokenService) confirmSameOrg(ctx context.Context, userID string, minted tokenauthority.Minted, subject *fat.Principal) error {
-	child, err := s.authority.Introspect(ctx, minted.Plaintext)
+func (s *Service) confirmSameOrg(ctx context.Context, userID string, minted tokenauthority.Minted, subject *fat.Principal) error {
+	child, err := s.deps.Authority.Introspect(ctx, minted.Plaintext)
 	if err == nil && child.OrgID == subject.OrgID {
 		return nil
 	}
-	if revokeErr := s.authority.RevokeForUser(ctx, userID, minted.TokenID); revokeErr != nil {
+	if revokeErr := s.deps.Authority.RevokeForUser(ctx, userID, minted.TokenID); revokeErr != nil {
 		logging.Error("could not revoke a mis-scoped exchanged token", "token_id", minted.TokenID,
 			"error", tokenauthority.Describe(revokeErr))
 	}

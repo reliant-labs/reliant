@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package token
 
 import (
 	"testing"
@@ -20,7 +20,7 @@ import (
 
 // TestListTokens_ReportsTheScopes: the permissions must reach the UI.
 func TestListTokens_ReportsTheScopes(t *testing.T) {
-	svc, _ := newTokenSvc()
+	svc, _ := newTokenSvc(t)
 
 	if _, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
 		Name: "build-box", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
@@ -56,7 +56,7 @@ func TestListTokens_ReportsTheScopes(t *testing.T) {
 // bare repeated field cannot distinguish "not set" from "set to empty", and a
 // rename would silently strip every permission.
 func TestUpdateToken_RenamesWithoutTouchingScopes(t *testing.T) {
-	svc, _ := newTokenSvc()
+	svc, _ := newTokenSvc(t)
 	created, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
 		Name: "old-name", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
 	}))
@@ -85,7 +85,7 @@ func TestUpdateToken_RenamesWithoutTouchingScopes(t *testing.T) {
 // makes editing usable on a remote daemon: the credential keeps working, with
 // different authority, and nothing has to log in again.
 func TestUpdateToken_ChangesScopesWithoutReissuingTheSecret(t *testing.T) {
-	svc, authority := newTokenSvc()
+	svc, authority := newTokenSvc(t)
 	created, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
 		Name: "build-box", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
 	}))
@@ -121,7 +121,7 @@ func TestUpdateToken_ChangesScopesWithoutReissuingTheSecret(t *testing.T) {
 // TestUpdateToken_ScopedToTheCaller: one user must not be able to rename or
 // re-scope another user's credential.
 func TestUpdateToken_ScopedToTheCaller(t *testing.T) {
-	svc, _ := newTokenSvc()
+	svc, _ := newTokenSvc(t)
 	created, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
 		Name: "victim", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
 	}))
@@ -139,7 +139,7 @@ func TestUpdateToken_ScopedToTheCaller(t *testing.T) {
 // TestUpdateToken_RejectsAnEmptyUpdate. Neither field set is a request that
 // asks for nothing; answering OK would hide a UI bug that sends no change.
 func TestUpdateToken_RejectsAnEmptyUpdate(t *testing.T) {
-	svc, _ := newTokenSvc()
+	svc, _ := newTokenSvc(t)
 	created, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
 		Name: "build-box", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
 	}))
@@ -155,7 +155,7 @@ func TestUpdateToken_RejectsAnEmptyUpdate(t *testing.T) {
 
 // TestUpdateToken_RequiresAnID.
 func TestUpdateToken_RequiresAnID(t *testing.T) {
-	svc, _ := newTokenSvc()
+	svc, _ := newTokenSvc(t)
 	newName := "x"
 	if _, err := svc.UpdateToken(tokenAuthCtx("user-1"), req(&reliantv1.UpdateTokenRequest{
 		Name: &newName,
@@ -169,7 +169,7 @@ func TestUpdateToken_RequiresAnID(t *testing.T) {
 // authority, which is the one thing the no-mint-beyond-your-scopes rule
 // exists to prevent.
 func TestUpdateToken_MachineCallerCannotWiden(t *testing.T) {
-	svc, _ := newTokenSvc()
+	svc, _ := newTokenSvc(t)
 	created, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
 		Name: "build-box", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
 	}))

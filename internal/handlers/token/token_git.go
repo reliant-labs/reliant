@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package token
 
 import (
 	"context"
@@ -30,23 +30,10 @@ const (
 
 const defaultGitProvider = "github"
 
-// gitTokenSource is what GetGitToken needs from the git token authority.
-// *gitcredentialclient.Client satisfies it.
-type gitTokenSource interface {
-	UserAccessToken(ctx context.Context, externalUserID, provider string) (gitcredentialclient.Token, error)
-}
-
-// WithGitTokens sets the git token authority (control-plane). Without one the
-// server is self-hosted and GetGitToken answers FailedPrecondition.
-func (s *TokenService) WithGitTokens(src gitTokenSource) *TokenService {
-	s.gitTokens = src
-	return s
-}
-
 // GetGitToken returns the calling daemon's acting user's current git provider
 // token. It authenticates its own bearer, uncached, and admits only a daemon
 // credential. The token is passed through: never stored, cached or logged here.
-func (s *TokenService) GetGitToken(
+func (s *Service) GetGitToken(
 	ctx context.Context, req *connect.Request[reliantv1.GetGitTokenRequest],
 ) (*connect.Response[reliantv1.GetGitTokenResponse], error) {
 	subject, err := s.daemonCredential(ctx, req.Header())
@@ -58,12 +45,12 @@ func (s *TokenService) GetGitToken(
 	if provider == "" {
 		provider = defaultGitProvider
 	}
-	if s.gitTokens == nil {
+	if s.deps.GitTokens == nil {
 		return nil, gitError(connect.CodeFailedPrecondition, reasonGitNoControlPlane,
 			"this server has no control plane, so it holds no git provider token for you")
 	}
 
-	tok, err := s.gitTokens.UserAccessToken(ctx, userID, provider)
+	tok, err := s.deps.GitTokens.UserAccessToken(ctx, userID, provider)
 	switch {
 	case errors.Is(err, gitcredentialclient.ErrNotConnected):
 		slog.Info("git token refused", "user_id", userID, "provider", provider, "outcome", reasonGitNotConnected)
@@ -101,14 +88,14 @@ func gitError(code connect.Code, reason, msg string) *connect.Error {
 
 // daemonCredential authenticates the bearer against the authority, uncached,
 // and admits only a live daemon credential acting as a user.
-func (s *TokenService) daemonCredential(ctx context.Context, header http.Header) (*fat.Principal, error) {
+func (s *Service) daemonCredential(ctx context.Context, header http.Header) (*fat.Principal, error) {
 	bearer, ok := strings.CutPrefix(header.Get("Authorization"), "Bearer ")
 	bearer = strings.TrimSpace(bearer)
 	if !ok || !auth.IsAccessTokenFormat(bearer) {
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf(
 			"GetGitToken needs a Reliant daemon access token (rlat_) as its bearer"))
 	}
-	subject, err := s.authority.Introspect(ctx, bearer)
+	subject, err := s.deps.Authority.Introspect(ctx, bearer)
 	if errors.Is(err, tokenauthority.ErrInactive) {
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf(
 			"this Reliant credential is no longer valid; sign in to Reliant again"))

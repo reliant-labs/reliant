@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package token
 
 import (
 	"bytes"
@@ -56,13 +56,13 @@ func gitReq(bearer string, provider string) *connect.Request[reliantv1.GetGitTok
 	return r
 }
 
-func gitSvc(src *fakeGitTokens) (*TokenService, *tokenauthority.Memory) {
+func gitSvc(t *testing.T, src *fakeGitTokens) (*Service, *tokenauthority.Memory) {
 	authority := tokenauthority.NewMemory()
-	svc := NewTokenService(authority, TokenControlPlane{})
-	if src != nil {
-		svc.WithGitTokens(src)
+	deps := Deps{Authority: authority}
+	if src != nil { // never a typed-nil GitTokens
+		deps.GitTokens = src
 	}
-	return svc, authority
+	return NewTestToken(t, WithTokenDeps(deps)), authority
 }
 
 func wantCode(t *testing.T, err error, code connect.Code, reason string) {
@@ -79,7 +79,7 @@ func wantCode(t *testing.T, err error, code connect.Code, reason string) {
 func TestGetGitToken_DaemonOK(t *testing.T) {
 	exp := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
 	src := &fakeGitTokens{tok: gitcredentialclient.NewToken(secretGitToken, &exp)}
-	svc, authority := gitSvc(src)
+	svc, authority := gitSvc(t, src)
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect}})
 
 	resp, err := svc.GetGitToken(context.Background(), gitReq(bearer, ""))
@@ -95,7 +95,7 @@ func TestGetGitToken_DaemonOK(t *testing.T) {
 }
 
 func TestGetGitToken_NonExpiringHasEmptyExpiry(t *testing.T) {
-	svc, authority := gitSvc(&fakeGitTokens{tok: gitcredentialclient.NewToken(secretGitToken, nil)})
+	svc, authority := gitSvc(t, &fakeGitTokens{tok: gitcredentialclient.NewToken(secretGitToken, nil)})
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect}})
 	resp, err := svc.GetGitToken(context.Background(), gitReq(bearer, "GitHub"))
 	if err != nil || resp.Msg.GetExpiresAt() != "" {
@@ -104,12 +104,12 @@ func TestGetGitToken_NonExpiringHasEmptyExpiry(t *testing.T) {
 }
 
 func TestGetGitToken_RejectsNonDaemonCredentials(t *testing.T) {
-	svc, authority := gitSvc(&fakeGitTokens{tok: gitcredentialclient.NewToken(secretGitToken, nil)})
+	svc, authority := gitSvc(t, &fakeGitTokens{tok: gitcredentialclient.NewToken(secretGitToken, nil)})
 	api := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeReliantAPI}})
 	_, err := svc.GetGitToken(context.Background(), gitReq(api, ""))
 	wantCode(t, err, connect.CodePermissionDenied, "")
 
-	orgSvc := NewTokenService(actsAsNoOne{authority}, TokenControlPlane{}).WithGitTokens(&fakeGitTokens{})
+	orgSvc := NewTestToken(t, WithTokenDeps(Deps{Authority: actsAsNoOne{authority}, GitTokens: &fakeGitTokens{}}))
 	_, err = orgSvc.GetGitToken(context.Background(), gitReq(api, ""))
 	wantCode(t, err, connect.CodePermissionDenied, "")
 
@@ -120,7 +120,7 @@ func TestGetGitToken_RejectsNonDaemonCredentials(t *testing.T) {
 }
 
 func TestGetGitToken_RevokedIsUnauthenticated(t *testing.T) {
-	svc, authority := gitSvc(&fakeGitTokens{tok: gitcredentialclient.NewToken(secretGitToken, nil)})
+	svc, authority := gitSvc(t, &fakeGitTokens{tok: gitcredentialclient.NewToken(secretGitToken, nil)})
 	minted, err := authority.MintForUser(context.Background(), tokenauthority.MintRequest{
 		UserID: "user-1", Name: "d", Scopes: []fat.Scope{fat.ScopeDaemonConnect}})
 	if err != nil {
@@ -147,7 +147,7 @@ func TestGetGitToken_ErrorMapping(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			svc, authority := gitSvc(c.src)
+			svc, authority := gitSvc(t, c.src)
 			bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect}})
 			_, err := svc.GetGitToken(context.Background(), gitReq(bearer, ""))
 			wantCode(t, err, c.code, c.reason)
@@ -169,7 +169,7 @@ func TestGetGitToken_NeverLogsToken(t *testing.T) {
 		{err: errors.New("upstream said " + secretGitToken)},
 		{err: gitcredentialclient.ErrNeedsReconnect},
 	} {
-		svc, authority := gitSvc(src)
+		svc, authority := gitSvc(t, src)
 		bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect}})
 		_, _ = svc.GetGitToken(context.Background(), gitReq(bearer, ""))
 		if strings.Contains(buf.String(), bearer) {

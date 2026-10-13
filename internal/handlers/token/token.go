@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package token
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -19,22 +18,6 @@ import (
 
 // maxTokenNameLen bounds a token label.
 const maxTokenNameLen = 128
-
-// TokenService is reliant's ONE machine-credential surface — a thin facade
-// over the deployment's token authority (control-plane when hosted, the local
-// store when self-hosted). It never hashes, validates or stores a token.
-type TokenService struct {
-	reliantv1connect.UnimplementedTokenServiceHandler
-	authority    tokenauthority.Authority
-	controlPlane TokenControlPlane
-	gitTokens    gitTokenSource
-}
-
-// NewTokenService constructs the facade over authority. controlPlane is the
-// deployment's control plane; its zero value is a self-hosted server.
-func NewTokenService(authority tokenauthority.Authority, controlPlane TokenControlPlane) *TokenService {
-	return &TokenService{authority: authority, controlPlane: controlPlane}
-}
 
 // scopeForKind maps the wire kind onto its one scope.
 func scopeForKind(kind reliantv1.TokenKind) (fat.Scope, error) {
@@ -88,11 +71,11 @@ func daemonCeiling() fat.Set {
 // mint narrow, then widen through the clip. A failed widen leaves a working,
 // narrower daemon credential and is logged, never surfaced: the daemon still
 // connects, and ExchangeToken will say what it lacks.
-func (s *TokenService) widenDaemonCredential(ctx context.Context, userID, tokenID string) []string {
-	if !s.controlPlane.ClipsGrants {
+func (s *Service) widenDaemonCredential(ctx context.Context, userID, tokenID string) []string {
+	if !s.deps.ControlPlane.ClipsGrants {
 		return nil
 	}
-	info, err := s.authority.UpdateForUser(ctx, userID, tokenID, nil, daemonCeiling())
+	info, err := s.deps.Authority.UpdateForUser(ctx, userID, tokenID, nil, daemonCeiling())
 	if err != nil {
 		logging.Warn("daemon credential minted without control-plane authority", "user_id", userID,
 			"token_id", tokenID, "error", tokenauthority.Describe(err))
@@ -153,7 +136,7 @@ func authorityError(op string, err error) error {
 
 // CreateToken mints a token acting as the caller. Interactive session only: a
 // machine credential never mints a credential.
-func (s *TokenService) CreateToken(
+func (s *Service) CreateToken(
 	ctx context.Context, req *connect.Request[reliantv1.CreateTokenRequest],
 ) (*connect.Response[reliantv1.CreateTokenResponse], error) {
 	userID, isMachine, err := callerUser(ctx)
@@ -182,7 +165,7 @@ func (s *TokenService) CreateToken(
 		expiresAt = &at
 	}
 
-	minted, err := s.authority.MintForUser(ctx, tokenauthority.MintRequest{
+	minted, err := s.deps.Authority.MintForUser(ctx, tokenauthority.MintRequest{
 		UserID: userID, Name: name, Scopes: []fat.Scope{scope}, ExpiresAt: expiresAt,
 	})
 	if err != nil {
@@ -215,7 +198,7 @@ func (s *TokenService) CreateToken(
 }
 
 // ListTokens lists the caller's live tokens, optionally of one kind.
-func (s *TokenService) ListTokens(
+func (s *Service) ListTokens(
 	ctx context.Context, req *connect.Request[reliantv1.ListTokensRequest],
 ) (*connect.Response[reliantv1.ListTokensResponse], error) {
 	userID, _, err := callerUser(ctx)
@@ -228,7 +211,7 @@ func (s *TokenService) ListTokens(
 			return nil, err
 		}
 	}
-	tokens, err := s.authority.ListForUser(ctx, userID, scope)
+	tokens, err := s.deps.Authority.ListForUser(ctx, userID, scope)
 	if err != nil {
 		return nil, authorityError("list", err)
 	}
@@ -245,7 +228,7 @@ func (s *TokenService) ListTokens(
 }
 
 // RevokeToken revokes one of the caller's tokens.
-func (s *TokenService) RevokeToken(
+func (s *Service) RevokeToken(
 	ctx context.Context, req *connect.Request[reliantv1.RevokeTokenRequest],
 ) (*connect.Response[reliantv1.RevokeTokenResponse], error) {
 	userID, _, err := callerUser(ctx)
@@ -256,7 +239,7 @@ func (s *TokenService) RevokeToken(
 	if id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token id is required"))
 	}
-	if err := s.authority.RevokeForUser(ctx, userID, id); err != nil {
+	if err := s.deps.Authority.RevokeForUser(ctx, userID, id); err != nil {
 		return nil, authorityError("revoke", err)
 	}
 	logging.Info("access token revoked", "user_id", userID, "token_id", id)
@@ -275,7 +258,7 @@ func (s *TokenService) RevokeToken(
 // no-mint-beyond-your-scopes rule exists to prevent. Renaming is refused on the
 // same path rather than carved out: one rule is easier to reason about than a
 // field-by-field exception, and headless automation has no reason to rename.
-func (s *TokenService) UpdateToken(
+func (s *Service) UpdateToken(
 	ctx context.Context, req *connect.Request[reliantv1.UpdateTokenRequest],
 ) (*connect.Response[reliantv1.UpdateTokenResponse], error) {
 	userID, isMachine, err := callerUser(ctx)
@@ -315,7 +298,7 @@ func (s *TokenService) UpdateToken(
 			"nothing to update: set name, or set scopes with the permissions to grant"))
 	}
 
-	info, err := s.authority.UpdateForUser(ctx, userID, id, name, scopes)
+	info, err := s.deps.Authority.UpdateForUser(ctx, userID, id, name, scopes)
 	if err != nil {
 		return nil, authorityError("update", err)
 	}
