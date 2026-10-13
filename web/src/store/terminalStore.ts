@@ -47,8 +47,10 @@ export interface TerminalSession {
  * panel creates for itself make none. The visible terminal claims a request as
  * soon as it can take focus (claimFocusRequest), so a request made before the
  * terminal exists waits for it, but it is withdrawn the moment the user does
- * something elsewhere (armFocusRequestExpiry): a terminal that turns up after
- * the user moved on must not pull them back.
+ * something elsewhere — a key, a pointer, or text by any route
+ * (armFocusRequestExpiry), or when the panel stops showing the workspace it
+ * was made in (withdrawFocusRequest): a terminal that turns up after the user
+ * moved on must not pull them back.
  */
 export interface TerminalFocusRequest {
   id: number;
@@ -112,6 +114,11 @@ interface TerminalState {
   /** Ask for the cursor in the active terminal, now or as soon as it exists. User intent only. */
   requestFocus: () => void;
   /**
+   * Drop the pending request: the panel no longer shows the workspace it was
+   * made in, and another workspace's terminal must never claim it.
+   */
+  withdrawFocusRequest: () => void;
+  /**
    * The visible terminal settles request `id`: clears it and returns whether
    * to take focus — false when it is stale, or focus has since gone somewhere
    * other than where the user left it.
@@ -159,8 +166,21 @@ function isInsideTerminalPanel(target: EventTarget | null): boolean {
 }
 
 /**
+ * The events that mean the user is doing something: a key, a pointer, or text
+ * arriving by any route.
+ *
+ * beforeinput is not redundant with keydown. Text reaches the composer with no
+ * keydown at all — dictation, an IME commit, paste from the context menu, a
+ * drop — and a request made from the composer cannot use focus to tell "still
+ * waiting" from "writing again", because focus never left the element it
+ * remembers (restingFocus). Missing that text left the request standing, and
+ * the terminal took the cursor mid-sentence when it connected.
+ */
+const USER_ACTIVITY_EVENTS = ["keydown", "pointerdown", "beforeinput"] as const;
+
+/**
  * Call `withdraw` the moment the user does something outside the terminal
- * panel — presses a key or a pointer. Returns the disarm function.
+ * panel (USER_ACTIVITY_EVENTS). Returns the disarm function.
  *
  * Armed on the next task, not now: a request is made from inside the very
  * keydown or click that expressed it, and that event is the intent, not the
@@ -174,14 +194,12 @@ function armFocusRequestExpiry(withdraw: () => void): () => void {
   let armed = false;
   const timer = setTimeout(() => {
     armed = true;
-    document.addEventListener("keydown", onActivity, true);
-    document.addEventListener("pointerdown", onActivity, true);
+    for (const type of USER_ACTIVITY_EVENTS) document.addEventListener(type, onActivity, true);
   }, 0);
   return () => {
     clearTimeout(timer);
     if (!armed) return;
-    document.removeEventListener("keydown", onActivity, true);
-    document.removeEventListener("pointerdown", onActivity, true);
+    for (const type of USER_ACTIVITY_EVENTS) document.removeEventListener(type, onActivity, true);
   };
 }
 
@@ -452,6 +470,10 @@ export const useTerminalStore = create(
 
   requestFocus: () => {
     set({ focusRequest: newFocusRequest() });
+  },
+
+  withdrawFocusRequest: () => {
+    if (get().focusRequest) set({ focusRequest: dropFocusRequest() });
   },
 
   claimFocusRequest: (id: number) => {

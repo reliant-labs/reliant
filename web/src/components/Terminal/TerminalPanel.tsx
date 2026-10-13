@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect, useState, useMemo } from "react";
+import { useCallback, useRef, useEffect, useLayoutEffect, useState, useMemo } from "react";
 import {
   Plus,
   Trash2,
@@ -184,6 +184,22 @@ export function TerminalPanel(_props: TerminalPanelProps) {
     if (!isTerminalOpen) return;
     window.dispatchEvent(new CustomEvent("terminal-container-changed"));
   }, [activeSessionId, isTerminalOpen]);
+
+  // A focus request is for the terminal of the workspace it was made in. When
+  // the panel stops showing that workspace (or project, which remounts the
+  // panel), withdraw it. A user switching by key or pointer has withdrawn it
+  // already; this covers switches no input event announces — a notification
+  // click, a deep link, a restore.
+  //
+  // A layout-effect cleanup, not a passive effect: the new workspace's
+  // terminal can be active in the very commit that switches (activeSessionId
+  // already names it), and its claim — a child's passive effect — would run
+  // before this panel's passive effects. Layout cleanups run first.
+  const withdrawFocusRequest = useTerminalStore((state) => state.withdrawFocusRequest);
+  const currentProjectId = currentProject?.id;
+  useLayoutEffect(() => {
+    return () => withdrawFocusRequest();
+  }, [currentProjectId, currentWorktreeId, withdrawFocusRequest]);
 
   // "focus-terminal": the user asked for the terminal by shortcut (Cmd+J
   // while the panel is open, or pane navigation). A request rather than a

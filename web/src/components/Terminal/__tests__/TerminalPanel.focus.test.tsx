@@ -51,6 +51,17 @@ class FakeWebSocket {
     this.onopen?.();
     this.onmessage?.({ data: JSON.stringify({ type: "init", pid: 4242, session_id: "daemon-1" }) });
   }
+
+  /** Drive the server side: the checkout is not on disk yet, so the daemon refuses the directory. */
+  refuseWorkingDir() {
+    this.readyState = FakeWebSocket.OPEN;
+    this.onopen?.();
+    this.onmessage?.({
+      data: JSON.stringify({ type: "error", code: "working_dir_unavailable", data: "not on the machine yet" }),
+    });
+    this.readyState = FakeWebSocket.CLOSED;
+    this.onclose?.({ code: 1000, reason: "" });
+  }
 }
 
 vi.mock("../../../api/worktree-grpc", () => ({
@@ -209,6 +220,26 @@ async function connectNewestTerminal() {
   });
 }
 
+/** Let the newest terminal open its socket, without bringing its session up. */
+async function openNewestSocket() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const ws = sockets.at(-1);
+  if (!ws) throw new Error("no websocket was opened");
+  return ws;
+}
+
+/**
+ * Text arriving in `el` with no keydown: macOS dictation, an IME commit, paste
+ * from the context menu, a drop. The browser still fires beforeinput for all of
+ * them.
+ */
+function enterTextWithoutKeys(el: HTMLElement, data: string) {
+  fireEvent(el, new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data }));
+}
+
 /** One macrotask: what separates the action that asked for focus from what the user does next. */
 async function nextTask() {
   await act(async () => {
@@ -280,6 +311,85 @@ describe("terminal focus is never taken without the user asking", () => {
     expect(useTerminalStore.getState().sessions).toHaveLength(1);
     await connectNewestTerminal();
 
+    expect(document.activeElement).toBe(composer);
+  });
+
+  it("keeps the cursor in the composer when the terminal waits for the folder and then connects", async () => {
+    // The usual shape on a new workspace: the session exists as soon as the
+    // path is known, the daemon refuses the directory until the checkout is
+    // on disk, and the shell opens on a later retry — the "terminal connects"
+    // moment, while the user is mid-sentence.
+    useTerminalStore.getState().restoreOpen(true);
+    const composer = renderApp();
+    composer.focus();
+    fireEvent.keyDown(composer, { key: "h" });
+
+    settleNewWorkspace();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const first = await openNewestSocket();
+      await act(async () => first.refuseWorkingDir());
+      expect(screen.getByText(/waiting for this folder/i)).toBeTruthy();
+
+      fireEvent.keyDown(composer, { key: "e" });
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(sockets).toHaveLength(2);
+    await connectNewestTerminal();
+
+    expect(screen.queryByText(/waiting for this folder/i)).toBeNull();
+    expect(document.activeElement).toBe(composer);
+  });
+
+  it("does not take the cursor back once the user is entering text without keys", async () => {
+    // Asked for the terminal from the composer, so focus never left the spot
+    // the request remembers: only the user's activity can tell "still waiting"
+    // from "writing again". Dictation, an IME commit or a context-menu paste
+    // fires no keydown.
+    const composer = renderApp();
+    composer.focus();
+    act(() => useTerminalStore.getState().toggleTerminal());
+    await nextTask();
+    enterTextWithoutKeys(composer, "hello there");
+
+    settleNewWorkspace();
+    await connectNewestTerminal();
+
+    expect(document.activeElement).toBe(composer);
+  });
+
+  it("does not let another workspace's terminal claim a request made in this one", async () => {
+    // Cmd+J in a workspace still being set up, while workspace B's terminal is
+    // still the active session (A has none yet). Then the app switches to B
+    // without a key or pointer — a notification click, a deep link, a
+    // restore. B's terminal is already the active session, so it shows the
+    // moment B does: the request was for A's terminal, not this one.
+    const other = worktree({ id: "wt-other", name: "other", path: "/w/other", branch: "other", is_main: false });
+    useWorktreeStore.setState({ worktrees: [mainWorktree, creatingWorktree, other], currentWorktree: creatingWorktree });
+    useTerminalStore.setState({
+      sessions: [sessionFor("wt-other", "t-other", "/w/other")],
+      activeSessionId: "t-other",
+      activeSessionPerWorktree: { "wt-other": "t-other" },
+      isOpen: true,
+    });
+    const composer = renderApp();
+    composer.focus();
+    act(() => {
+      window.dispatchEvent(new CustomEvent("focus-terminal"));
+    });
+    await nextTask();
+    expect(useTerminalStore.getState().focusRequest).not.toBeNull();
+
+    act(() => {
+      useWorktreeStore.setState({ currentWorktree: other });
+    });
+    await connectNewestTerminal();
+
+    expect(useTerminalStore.getState().focusRequest).toBeNull();
     expect(document.activeElement).toBe(composer);
   });
 
