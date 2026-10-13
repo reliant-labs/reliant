@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package projectfacts
 
 import (
 	"context"
@@ -43,21 +43,22 @@ import (
 // guaranteed deadlock, held until the command's own timeout expires, and it
 // stalls every other message from that daemon meanwhile.
 //
-// That is why learnForgeNameForProject dispatches and returns. The settle this
-// follows is already committed, so nothing downstream depends on the read.
+// That is why ToolsDaemonService.learnForgeNameForProject dispatches and
+// returns. The settle this follows is already committed, so nothing downstream
+// depends on the read.
 
-// forgeNameReader is the one daemon capability this needs: ask a SPECIFIC
+// ForgeNameReader is the one daemon capability this needs: ask a SPECIFIC
 // daemon for forge.yaml's name at a path.
 //
 // Declared at the consumer and limited to one method. The daemon id matters —
 // the project was cloned onto one particular machine, and asking the user's
 // default daemon could read a different disk that does not have the checkout.
-type forgeNameReader interface {
+type ForgeNameReader interface {
 	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 }
 
-// forgeNameWriter is the one database capability this needs.
-type forgeNameWriter interface {
+// ForgeNameWriter is the one database capability this needs.
+type ForgeNameWriter interface {
 	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
 }
 
@@ -66,16 +67,16 @@ type forgeNameWriter interface {
 // daemon defers the label instead of holding the caller open.
 const forgeNameReadTimeoutMs = 10_000
 
-// learnForgeProjectName asks the daemon holding a checkout for forge.yaml's
+// LearnForgeName asks the daemon holding a checkout for forge.yaml's
 // `name` and persists it, so the project knows its forge name with no daemon
 // online and without anyone opening the Forge tab.
 //
 // Returns the name it persisted, or "" when the project is not a forge project
 // or the read did not succeed. Callers log; nothing here is fatal.
-func learnForgeProjectName(
+func LearnForgeName(
 	ctx context.Context,
-	daemons forgeNameReader,
-	projects forgeNameWriter,
+	daemons ForgeNameReader,
+	projects ForgeNameWriter,
 	userID, daemonID, projectID, path string,
 ) string {
 	if daemons == nil || projects == nil {

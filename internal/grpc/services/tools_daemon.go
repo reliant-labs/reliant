@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
+	"github.com/reliant-labs/reliant/internal/projectfacts"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -1860,13 +1861,13 @@ func (s *ToolsDaemonService) learnForgeNameForProject(ctx context.Context, conn 
 			case <-readCtx.Done():
 			}
 		}()
-		learnForgeProjectName(readCtx, connCommandSender{svc: s, conn: conn},
+		projectfacts.LearnForgeName(readCtx, connCommandSender{svc: s, conn: conn},
 			s.database, conn.userID, conn.daemonID, project.ID, project.Path)
 	}()
 }
 
-// connCommandSender adapts one daemon CONNECTION to the forgeNameReader the
-// learn helper declares.
+// connCommandSender adapts one daemon CONNECTION to the ForgeNameReader that
+// projectfacts.LearnForgeName declares.
 //
 // It targets the connection directly rather than resolving the user's default
 // daemon: the checkout exists on the machine that just cloned it, and a user
@@ -2146,9 +2147,9 @@ func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn
 	}
 
 	// Reconcile the cached git flag against what daemon discovery actually
-	// observed on disk (bidirectional; see reconcileProjectGitRepo).
+	// observed on disk (bidirectional; see projectfacts.ReconcileGitRepo).
 	if discovered != nil {
-		if updateErr := reconcileProjectGitRepo(ctx, s.database, project, discovered.IsGitRepo); updateErr != nil {
+		if updateErr := projectfacts.ReconcileGitRepo(ctx, s.database, project, discovered.IsGitRepo); updateErr != nil {
 			logging.Warn("ensureOwnedProjectForPath: failed to update git status", "error", updateErr, "projectID", project.ID)
 		}
 	}

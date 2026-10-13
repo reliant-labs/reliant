@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/mcpconfig"
+	"github.com/reliant-labs/reliant/internal/projectfacts"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -31,27 +32,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
-
-// reconcileProjectGitRepo trues up a project's cached is_git_repo flag against
-// a fresh filesystem observation from the daemon, persisting only on change.
-//
-// is_git_repo is a cache of ONE fact: does the daemon see a .git at the
-// project path. It is intentionally NOT derived from the repos table — repo
-// rows are created only by the multi-repo/worktree flows, so a plain git
-// project the user never registers as a worktree repo has zero repo rows yet
-// is still a git repo. The API tier can't observe the filesystem itself, so
-// it caches the daemon's answer and reconciles here, in BOTH directions,
-// every time the daemon reports. Callers must pass a value that came from an
-// actual daemon observation (project.check_git / repo.discover), never from a
-// repo-count, so the cache stays honest.
-func reconcileProjectGitRepo(ctx context.Context, database db.Repository, project *db.Project, observed bool) error {
-	if project.IsGitRepo == observed {
-		return nil
-	}
-	project.IsGitRepo = observed
-	project.UpdatedAt = time.Now().UTC()
-	return database.UpdateProject(ctx, project, project.UserID)
-}
 
 // ProjectService implements the ProjectService RPC handlers
 type ProjectService struct {
@@ -864,7 +844,7 @@ func (s *ProjectService) GetProject(
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "project.check_git", map[string]string{"path": project.Path}, &checkGitResp); err != nil {
 		logging.Warn("GetProject: failed to live-check git status, using DB value", "error", err, "projectID", project.ID)
-	} else if err := reconcileProjectGitRepo(ctx, s.database, project, checkGitResp.IsGitRepo); err != nil {
+	} else if err := projectfacts.ReconcileGitRepo(ctx, s.database, project, checkGitResp.IsGitRepo); err != nil {
 		logging.Warn("GetProject: failed to persist updated git status", "error", err, "projectID", project.ID)
 	}
 
@@ -1712,7 +1692,7 @@ func (s *ProjectService) MarkProjectInstalled(
 	// saying "not read yet" until someone opens the Forge tab with a daemon
 	// online — see forge_name_learn.go. Non-forge repos are left unmarked,
 	// and a failed read is never the RPC's failure: the install is recorded.
-	learnForgeProjectName(ctx, s.daemonRouter, s.database,
+	projectfacts.LearnForgeName(ctx, s.daemonRouter, s.database,
 		userID, req.Msg.DaemonId, req.Msg.ProjectId, req.Msg.Path)
 
 	// Return the resolved row so the client can populate UI state without
