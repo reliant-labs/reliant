@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/gitremote"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -163,12 +164,12 @@ func backfillProjectRemoteURL(ctx context.Context, database db.Repository, proje
 	case err == nil && existing != nil && existing.ID != project.ID:
 		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" reconcile: skipping remote backfill, remote already claimed by another project",
 			"userID", project.UserID, "projectID", project.ID,
-			"otherProjectID", existing.ID, "remoteURL", remoteURLForLog(remoteURL))
+			"otherProjectID", existing.ID, "remoteURL", gitremote.Redacted(remoteURL))
 		return false
 	case err != nil && !isNotFoundErr(err):
 		// Couldn't verify uniqueness — don't risk violating the index.
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" reconcile: remote uniqueness check failed, skipping backfill",
-			"error", err, "userID", project.UserID, "projectID", project.ID, "remoteURL", remoteURLForLog(remoteURL))
+			"error", err, "userID", project.UserID, "projectID", project.ID, "remoteURL", gitremote.Redacted(remoteURL))
 		return false
 	}
 
@@ -177,7 +178,7 @@ func backfillProjectRemoteURL(ctx context.Context, database db.Repository, proje
 	updated.RemoteURL = &ru
 	if err := database.UpdateProject(ctx, &updated, project.UserID); err != nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to backfill remote_url",
-			"error", err, "userID", project.UserID, "projectID", project.ID, "remoteURL", remoteURLForLog(remoteURL))
+			"error", err, "userID", project.UserID, "projectID", project.ID, "remoteURL", gitremote.Redacted(remoteURL))
 		return false
 	}
 	project.RemoteURL = &ru

@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/gitremote"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 )
@@ -118,7 +119,7 @@ func (s *ProjectService) CreateProjectFromRepo(
 		// someone else's daemon), so pass them through rather than
 		// flattening everything to Internal.
 		logging.Error("CreateProjectFromRepo: clone dispatch failed",
-			"error", err, "daemon_id", daemonID, "clone_url", remoteURLForLog(cloneURL))
+			"error", err, "daemon_id", daemonID, "clone_url", gitremote.Redacted(cloneURL))
 		return nil, err
 	}
 	clonedPath := cloneResult.ClonedPath
@@ -168,7 +169,7 @@ func (s *ProjectService) CreateProjectFromRepo(
 
 	logging.Info("CreateProjectFromRepo: project added",
 		"project_id", project.ID, "daemon_id", daemonID,
-		"queued", cloneResult.Queued, "repo", remoteURLForLog(cloneURL))
+		"queued", cloneResult.Queued, "repo", gitremote.Redacted(cloneURL))
 
 	return connect.NewResponse(&reliantv1.CreateProjectFromRepoResponse{
 		Project:       projectToProto(project),

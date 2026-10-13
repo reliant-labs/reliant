@@ -1,8 +1,8 @@
-package services
+package gitremote
 
 import "testing"
 
-func TestRemoteURLForLog_StripsUserinfo(t *testing.T) {
+func TestRedacted_StripsUserinfo(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
 		"https://ghp_secretTOKEN123@github.com/acme/repo.git":      "https://github.com/acme/repo.git",
@@ -12,8 +12,8 @@ func TestRemoteURLForLog_StripsUserinfo(t *testing.T) {
 		"":                                                         "",
 	}
 	for in, want := range cases {
-		if got := remoteURLForLog(in); got != want {
-			t.Errorf("remoteURLForLog(%q) = %q, want %q", in, got, want)
+		if got := Redacted(in); got != want {
+			t.Errorf("Redacted(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
