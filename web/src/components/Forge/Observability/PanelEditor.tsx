@@ -29,7 +29,7 @@ const FIELD =
   "h-8 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const LABEL = "mb-1 block text-xs font-medium text-muted-foreground";
 
-const UNIT_LABELS: Record<Unit, string> = { "": "none", count: "count", ms: "milliseconds", bytes: "bytes", percent: "percent (0–1)" };
+const UNIT_LABELS: Record<Unit, string> = { "": "none", count: "count", ms: "milliseconds", s: "seconds", bytes: "bytes", percent: "percent (0–1)" };
 const KIND_LABELS: Record<string, string> = { line: "Line chart", number: "Number", table: "Table", search: "Rows (opens Logs or Traces)" };
 const WIDTHS = [6, 8, 12, 16, 24];
 

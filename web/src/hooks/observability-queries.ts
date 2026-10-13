@@ -14,10 +14,10 @@
  * request), or rows slip between pages as time moves.
  */
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
-import { obsRetry } from "@/services/controlPlane/observability/errors";
+import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { alertingRetry, obsRetry } from "@/services/controlPlane/observability/errors";
 import type {
   ObsScope,
   ListTracesResult,
@@ -323,5 +323,98 @@ export function useWorkload(scope: ObsScope | null, range: RangePreset, workload
     enabled: !!scope && !!workload,
     staleTime: 30_000,
     retry: obsRetry,
+  });
+}
+
+// ── Alerting (AlertingService) ───────────────────────────────────────────────
+//
+// Org-scoped, not env-scoped: the server takes one optional env id on the
+// alert reads, so an env page passes its own and the project area filters the
+// org's list to the environments it has selected. Firing alerts and the
+// notification count poll; receivers and silences change only by hand.
+
+export const alertKeys = {
+  all: (orgId: string | null) => ["observability", "alerting", orgId ?? ""] as const,
+  alerts: (orgId: string | null, envId: string) => [...alertKeys.all(orgId), "alerts", envId] as const,
+  history: (orgId: string | null, envId: string, range: RangePreset) => [...alertKeys.all(orgId), "history", envId, range] as const,
+  silences: (orgId: string | null, includeExpired: boolean) => [...alertKeys.all(orgId), "silences", includeExpired] as const,
+  receivers: (orgId: string | null) => [...alertKeys.all(orgId), "receivers"] as const,
+  notifications: (orgId: string | null) => [...alertKeys.all(orgId), "notifications"] as const,
+};
+
+/** Pending and firing alerts. One env id narrows server-side; undefined is every env of the org. */
+export function useAlerts(orgId: string | null, envId?: string) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: alertKeys.alerts(orgId, envId ?? ""),
+    queryFn: () => api.listAlerts(orgId as string, envId),
+    enabled: !!orgId,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    retry: alertingRetry,
+  });
+}
+
+export function useAlertHistory(orgId: string | null, range: RangePreset, envId?: string) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: alertKeys.history(orgId, envId ?? "", range),
+    queryFn: () => api.listAlertHistory(orgId as string, { envId, sinceMs: resolveWindow(range).startMs, limit: 500 }),
+    enabled: !!orgId,
+    staleTime: 30_000,
+    retry: alertingRetry,
+  });
+}
+
+export function useSilences(orgId: string | null, includeExpired: boolean) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: alertKeys.silences(orgId, includeExpired),
+    queryFn: () => api.listSilences(orgId as string, includeExpired),
+    enabled: !!orgId,
+    staleTime: 30_000,
+    retry: alertingRetry,
+  });
+}
+
+export function useReceivers(orgId: string | null) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: alertKeys.receivers(orgId),
+    queryFn: () => api.listReceivers(orgId as string),
+    enabled: !!orgId,
+    staleTime: 60_000,
+    retry: alertingRetry,
+  });
+}
+
+/**
+ * The org's in-app notifications and unread count — the indicator in the
+ * Observability header and the forge nav. Polls once a minute; Alertmanager
+ * groups and repeats on its own schedule, so faster would show nothing new.
+ */
+export function useNotifications(orgId: string | null) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: alertKeys.notifications(orgId),
+    queryFn: () => api.listNotifications(orgId as string, { limit: 50 }),
+    enabled: !!orgId,
+    staleTime: 30_000,
+    // Stop polling an org whose alerting answered "not configured" or "denied".
+    refetchInterval: (query) => (query.state.error ? false : 60_000),
+    retry: alertingRetry,
+  });
+}
+
+/**
+ * Every alerting write: it runs, then re-reads everything alerting shows for
+ * the org (a silence changes what fires; a receiver changes what routes).
+ */
+export function useAlertingMutation<TArgs, TResult>(orgId: string | null, run: (api: ObservabilityApi, orgId: string, args: TArgs) => Promise<TResult>) {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: TArgs) => run(api, orgId as string, args),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: alertKeys.all(orgId) }),
   });
 }

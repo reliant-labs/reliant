@@ -18,6 +18,12 @@
           "field": "deployment.environment.name"
         }
       ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
+        }
+      ],
       "panels": [
         {
           "id": "requests",
@@ -467,6 +473,12 @@
           "id": "env",
           "label": "deployment.environment.name",
           "field": "deployment.environment.name"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
         }
       ],
       "panels": [
@@ -966,6 +978,12 @@
           "id": "env",
           "label": "deployment.environment.name",
           "field": "deployment.environment.name"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
         }
       ],
       "panels": [
@@ -1696,6 +1714,577 @@
       ]
     },
     {
+      "id": "workloads",
+      "title": "shop: workloads",
+      "description": "Per-workload customer metadata from the node agent: CPU and memory against requests and limits, restarts and the last exit reason, the image versions that ran, and Kubernetes events. Present in deployed environments only (a local forge env up has no node agent).",
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name",
+          "signal": "metrics"
+        },
+        {
+          "id": "env",
+          "label": "deployment.environment.name",
+          "field": "deployment.environment.name",
+          "signal": "metrics"
+        },
+        {
+          "id": "workload",
+          "label": "k8s.workload.name",
+          "field": "resource.attr.k8s.workload.name",
+          "signal": "metrics"
+        },
+        {
+          "id": "container",
+          "label": "k8s.container.name",
+          "field": "resource.attr.k8s.container.name",
+          "signal": "metrics"
+        },
+        {
+          "id": "namespace",
+          "label": "k8s.namespace.name",
+          "field": "resource.attr.k8s.namespace.name",
+          "signal": "metrics"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
+        }
+      ],
+      "panels": [
+        {
+          "id": "cpu-usage",
+          "title": "CPU usage",
+          "description": "Average CPU cores used per container, one line per workload.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "cpu",
+              "agg": "avg",
+              "field": "container.cpu.usage",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "memory-working-set",
+          "title": "Memory working set",
+          "description": "Average working-set bytes per container, one line per workload.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "memory",
+              "agg": "avg",
+              "field": "container.memory.working_set",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "bytes",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "cpu-vs-request",
+          "title": "CPU against its request",
+          "description": "The busiest container of each workload as a fraction of the CPU it requested (1 = at the request).",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of request",
+              "agg": "max",
+              "field": "k8s.container.cpu_request_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "cpu-vs-limit",
+          "title": "CPU against its limit",
+          "description": "The busiest container of each workload as a fraction of its CPU limit. Near 1 the container is being throttled.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of limit",
+              "agg": "max",
+              "field": "k8s.container.cpu_limit_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "memory-vs-request",
+          "title": "Memory against its request",
+          "description": "The fullest container of each workload as a fraction of the memory it requested.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of request",
+              "agg": "max",
+              "field": "k8s.container.memory_request_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "memory-vs-limit",
+          "title": "Memory against its limit",
+          "description": "The fullest container of each workload as a fraction of its memory limit. Near 1 the container is about to be OOM-killed.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of limit",
+              "agg": "max",
+              "field": "k8s.container.memory_limit_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "restarts",
+          "title": "Container restarts",
+          "description": "The highest restart count among each workload's containers; a step is a restart.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "restarts",
+              "agg": "max",
+              "field": "k8s.container.restarts",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "restarts-by-exit-reason",
+          "title": "Restarts by last exit reason",
+          "description": "The same restart count split by why the container last terminated (OOMKilled, Error, Completed, ...).",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "restarts",
+              "agg": "max",
+              "field": "k8s.container.restarts",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "metric.attr.k8s.container.last_terminated_reason"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "cpu-by-image-tag",
+          "title": "CPU by image version",
+          "description": "CPU used per container, split by the image tag it ran (container.image.tag), so a rollout shows as one line replacing another.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "cpu",
+              "agg": "avg",
+              "field": "container.cpu.usage",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.container.image.tag"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "memory-by-image-tag",
+          "title": "Memory by image version",
+          "description": "Working-set bytes per container, split by image tag: a version that leaks memory climbs above its predecessor.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "memory",
+              "agg": "avg",
+              "field": "container.memory.working_set",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.container.image.tag"
+          ],
+          "unit": "bytes",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "events-by-reason",
+          "title": "Kubernetes events by reason",
+          "description": "Count of Kubernetes events per reason (BackOff, Failed, Evicted, Killing, ...) over time.",
+          "kind": "line",
+          "signal": "logs",
+          "series": [
+            {
+              "label": "events",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "log.attr.k8s.event.reason",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "log.attr.k8s.event.reason"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "warning-events",
+          "title": "Warning events by workload",
+          "description": "Warning-type Kubernetes events per workload: crash loops, failed image pulls, evictions, failed scheduling.",
+          "kind": "line",
+          "signal": "logs",
+          "series": [
+            {
+              "label": "warnings",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "log.attr.k8s.event.type",
+              "op": "eq",
+              "value": "Warning"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "container-terminations",
+          "title": "Container terminations",
+          "description": "Events that carry a container's last terminated reason.",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "log.attr.k8s.container.last_terminated_reason",
+              "op": "exists"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "resource.attr.k8s.workload.name",
+            "resource.attr.k8s.container.name",
+            "log.attr.k8s.container.last_terminated_reason",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "id": "events",
+          "title": "Kubernetes events",
+          "description": "Every Kubernetes event of the selected workloads, newest first.",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "log.attr.k8s.event.reason",
+              "op": "exists"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "resource.attr.k8s.workload.name",
+            "log.attr.k8s.event.type",
+            "log.attr.k8s.event.reason",
+            "log.attr.k8s.object.kind",
+            "log.attr.k8s.object.name",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 10
+        }
+      ]
+    },
+    {
+      "id": "releases",
+      "title": "shop: releases",
+      "description": "Request rate, error rate and latency split by service.version, so a deploy shows as one version replacing another. Deploy markers come from the release ledger. Narrow with the service.name and deployment.environment.name filters.",
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name"
+        },
+        {
+          "id": "env",
+          "label": "deployment.environment.name",
+          "field": "deployment.environment.name"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
+        }
+      ],
+      "panels": [
+        {
+          "id": "request-rate-by-version",
+          "title": "Requests by version",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "error-rate-by-version",
+          "title": "Error rate by version",
+          "description": "Server faults (span status Error) over all requests, per version.",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "p95-by-version",
+          "title": "p95 latency by version",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "p99-by-version",
+          "title": "p99 latency by version",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "version-comparison",
+          "title": "Version comparison",
+          "description": "Requests, errors and latency per service.version over the selected range. Pick a range that spans a deploy to read old against new.",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "id": "error-logs-by-version",
+          "title": "Error logs by version",
+          "kind": "line",
+          "signal": "logs",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "log.severity",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "count",
+          "width": 24,
+          "height": 7
+        }
+      ]
+    },
+    {
       "id": "frontend",
       "title": "shop: frontend",
       "description": "Browser errors, page loads, web vitals and API calls from the HyperDX browser SDK (service.name shop-frontend). Panels follow HyperDX's Browser RUM template: a browser span carries the rum.sessionId resource attribute.",
@@ -1709,6 +2298,12 @@
           "id": "env",
           "label": "deployment.environment.name",
           "field": "deployment.environment.name"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
         }
       ],
       "panels": [
@@ -2278,38 +2873,6 @@
         "log.severity",
         "log.body"
       ]
-    }
-  ],
-  "alerts": [
-    {
-      "id": "error-rate",
-      "title": "Error rate above 5%",
-      "panel": "overview/error-rate",
-      "interval": "5m",
-      "thresholdType": "above",
-      "threshold": 0.05,
-      "status": "pending",
-      "note": "Not provisioned: HyperDX 2.40 never evaluates an alert declared in a provisioned file (hyperdx PR #3233). Create it through the HyperDX alerts API."
-    },
-    {
-      "id": "p99-latency",
-      "title": "p99 latency above 1s",
-      "panel": "overview/p99",
-      "interval": "5m",
-      "thresholdType": "above",
-      "threshold": 1000,
-      "status": "pending",
-      "note": "Not provisioned: HyperDX 2.40 never evaluates an alert declared in a provisioned file (hyperdx PR #3233). Create it through the HyperDX alerts API."
-    },
-    {
-      "id": "no-data",
-      "title": "No requests received",
-      "panel": "overview/requests",
-      "interval": "15m",
-      "thresholdType": "below",
-      "threshold": 1,
-      "status": "pending",
-      "note": "Not provisioned: HyperDX 2.40 never evaluates an alert declared in a provisioned file (hyperdx PR #3233). Create it through the HyperDX alerts API."
     }
   ]
 }

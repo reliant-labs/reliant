@@ -292,7 +292,7 @@ export interface SeriesIntent {
 export type Signal = string;
 /** number | line | table | search */
 export type PanelKind = string;
-export type Unit = "" | "count" | "ms" | "bytes" | "percent";
+export type Unit = "" | "count" | "ms" | "bytes" | "percent" | "s";
 
 export interface Panel {
   id: string;
@@ -319,19 +319,40 @@ export interface DashboardFilter {
   signal?: Signal;
 }
 
+/**
+ * A marker series a dashboard declares over its line panels. `releases` (the
+ * only source today) is a marker for every promotion of a release into the
+ * environment, drawn from the release ledger (DeliveryInsightsService).
+ */
+export interface DashboardAnnotation {
+  source: string;
+  label?: string;
+}
+
 export interface Dashboard {
   id: string;
   title: string;
   description?: string;
   filters: DashboardFilter[];
+  /** Declared marker series; empty when the dashboard declares none. */
+  annotations?: DashboardAnnotation[];
   panels: Panel[];
+  /**
+   * Who authored it, for a dashboard served from a release: `gen` (forge
+   * generated it) or `user` (the project's own file). Absent when synthesized.
+   */
+  source?: "gen" | "user";
 }
 
 export interface DashboardSpec {
   version: string;
   project: string;
   dashboards: Dashboard[];
-  /** "synthesized": built from the services seen in the data. "release": the environment's own generated spec. */
+  /**
+   * "release": the dashboards the environments in scope are running, carried by
+   * their current release (contract K4). "synthesized": built from the services
+   * seen in the data, because no environment in scope has a recorded set.
+   */
   source: string;
 }
 
@@ -559,4 +580,18 @@ export interface WorkloadDetail {
   versionChanges: VersionChange[];
   stepSeconds: number;
   truncated: boolean;
+}
+
+// ── Release markers (contract K5, DeliveryInsightsService.ListReleases) ──────
+
+/** One promotion of a release into an environment: a marker on the time-series charts. */
+export interface ReleaseMarker {
+  envId: string;
+  envName: string;
+  releaseId: string;
+  version: string;
+  promotedAtMs: number;
+  promotedBy: string;
+  /** "promote", "rollback"… as the ledger records it. */
+  kind: string;
 }

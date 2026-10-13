@@ -77,6 +77,7 @@
  * empty and rendering it would imply a capability the system does not have.
  */
 
+import type { DeclaredAlertRoute, DeclaredAlertRule } from "@/services/controlPlane/observability/alertingTypes";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { JsonObject } from "@bufbuild/protobuf";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
@@ -478,6 +479,19 @@ export interface LiveShape {
   secrets: LiveShapeSecret[];
   domains: string[];
   clusters: string[];
+  /**
+   * The env's resolved alert rules (`shape.alerts`): its own forge.AlertRule
+   * entries and the generated defaults it kept, each tagged with its source.
+   * Optional only so older fixtures type-check; toLiveShape always sets it.
+   */
+  alerts?: DeclaredAlertRule[];
+  /** Its routes (`shape.alert_routes`); empty means forge's default routing. */
+  alertRoutes?: DeclaredAlertRoute[];
+  /**
+   * What the env opted out of (`shape.observability_policy`). Null: the shape
+   * records no policy, which is "nothing opted out".
+   */
+  observability?: { enabled: boolean; disabled: string[] } | null;
 }
 
 function str(value: unknown): string {
@@ -528,7 +542,37 @@ export function toLiveShape(declared: JsonObject | undefined): LiveShape | null 
       .filter((secret) => secret.name !== ""),
     domains: strings(raw.domains),
     clusters: strings(raw.clusters),
+    alerts: objects(raw.alerts)
+      .map((rule): DeclaredAlertRule => ({
+        alert: str(rule.alert),
+        expr: str(rule.expr),
+        for: str(rule.for),
+        interval: str(rule.interval),
+        keepFiringFor: str(rule.keep_firing_for),
+        labels: stringMap(rule.labels),
+        annotations: stringMap(rule.annotations),
+        source: str(rule.source) === "default" ? "default" : "user",
+        defaultId: str(rule.default_id),
+      }))
+      .filter((rule) => rule.alert !== ""),
+    alertRoutes: objects(raw.alert_routes)
+      .map((route) => ({ match: stringMap(route.match), receiver: str(route.receiver), continue: route.continue === true }))
+      .filter((route) => route.receiver !== ""),
+    observability: observabilityPolicyOf(raw.observability_policy),
   };
+}
+
+function stringMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+  );
+}
+
+function observabilityPolicyOf(value: unknown): { enabled: boolean; disabled: string[] } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  return { enabled: raw.enabled !== false, disabled: strings(raw.disabled) };
 }
 
 /** forge's own kind string (release.EnvKind), which is a closed set. */

@@ -20,7 +20,7 @@ import { Modal } from "@/components/ui/Modal";
 import type { AttributeFilter, Dashboard } from "@/services/controlPlane/observability/types";
 
 import { attributeLabel } from "./attributes";
-import { buildDashboardSpec, dashboardFileName, DASHBOARDS_DIR, defaultDashboardName, specJson, specProblems } from "./obsdashSpec";
+import { buildDashboardFile, dashboardFileJson, dashboardFileName, dashboardFileProblems, DASHBOARDS_DIR, defaultDashboardName } from "./obsdashSpec";
 
 export interface SaveAsCodeDialogProps {
   open: boolean;
@@ -41,13 +41,15 @@ export function SaveAsCodeDialog({ open, onClose, project, dashboard, filters, g
 
   const name = dashboardFileName(rawName);
   const path = `${DASHBOARDS_DIR}/${name}.json`;
-  const spec = useMemo(
-    () => buildDashboardSpec({ project, dashboard, name, title: title.trim() || dashboard.title, filters, groupBy }),
-    [project, dashboard, name, title, filters, groupBy]
+  const file = useMemo(
+    () => buildDashboardFile({ dashboard, name, title: title.trim() || dashboard.title, filters, groupBy }),
+    [dashboard, name, title, filters, groupBy]
   );
-  const json = useMemo(() => specJson(spec), [spec]);
-  const problems = useMemo(() => specProblems(spec), [spec]);
-  const replacesGenerated = name === defaultDashboardName(project, dashboard.id);
+  const json = useMemo(() => dashboardFileJson(file), [file]);
+  const problems = useMemo(() => dashboardFileProblems(file), [file]);
+  // Saved under its own name, the file takes the place of what is served now:
+  // forge's generated dashboard, or the project's own file, which it updates.
+  const sameName = name === defaultDashboardName(project, dashboard.id);
 
   const copy = async () => {
     try {
@@ -74,7 +76,8 @@ export function SaveAsCodeDialog({ open, onClose, project, dashboard, filters, g
       <div className="space-y-4" data-testid="obs-save-as-code">
         <p className="text-sm text-foreground">
           Dashboards live in your repository, next to the code they watch. Commit this file and it ships with your next
-          release; every environment that release is promoted to shows it here.
+          release; every environment that release is promoted to shows it here. Check it locally with{" "}
+          <code className="font-mono text-xs">forge observe dashboards check</code>.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -105,7 +108,11 @@ export function SaveAsCodeDialog({ open, onClose, project, dashboard, filters, g
         <div className="space-y-1 rounded-md border border-border/60 bg-background px-3 py-2 text-xs text-muted-foreground">
           <p>
             Save it as <code className="font-mono text-foreground" data-testid="obs-save-path">{path}</code>
-            {replacesGenerated ? ", where it replaces the dashboard forge generates under that name. Rename it to keep both." : "."}
+            {!sameName
+              ? "."
+              : dashboard.source === "user"
+                ? ", replacing your project's file of that name."
+                : ", where it replaces the dashboard forge generates under that name. Rename it to keep both."}
           </p>
           <p>
             {filters.length > 0 || groupBy.length > 0 ? (

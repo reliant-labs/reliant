@@ -26,7 +26,11 @@ import { ObservabilityApiProvider } from "@/services/controlPlane/observability/
 import { FORGE_OBSERVABILITY_PATH, ForgeShell } from "../../ForgeShell";
 import ObservabilityPanel, { type ObsPlace } from "../ObservabilityPanel";
 import type { ObsNavigate, ObsSearch } from "../obsSearch";
+import { FIXTURE_DECLARED } from "../__fixtures__/fixtureAlerting";
 import { createFixtureApi, FIXTURE_ENVS, FIXTURE_PROJECT, type FixtureOptions } from "../__fixtures__/fixtureApi";
+
+/** The fixture environments with what each declares (rules, routes, observability policy). */
+const ENVIRONMENTS = FIXTURE_ENVS.map((env) => ({ ...env, declared: FIXTURE_DECLARED[env.id] ?? null }));
 
 const SCHEMES = [
   "professional-blue",
@@ -55,6 +59,13 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "usage-billed", label: "usage: over, funded (billed)", options: { usage: { usedBytes: 14 * 2 ** 30, state: "ok", usageState: "over_100", funded: true, overageCents: 100, projectedOverageCents: 180 } } },
   { id: "usage-cap", label: "usage: spend cap reached", options: { usage: { usedBytes: 230 * 2 ** 30, state: "over_100", usageState: "over_150", funded: true, spendCapReached: true, overageCents: 5000 } } },
   { id: "usage-exempt", label: "usage: exempt org", options: { usage: { exempt: true, usedBytes: 40 * 2 ** 30, usageState: "over_150" } } },
+  // Alerting states (view=alerts).
+  { id: "alerting-not-configured", label: "alerting: not configured", options: { alerting: "not-configured" } },
+  { id: "alerting-viewer", label: "alerting: member, not admin", options: { alerting: "viewer" } },
+  { id: "alerting-quiet", label: "alerting: nothing firing", options: { alerting: "quiet" } },
+  // Dashboards (view=dashboards): a recorded release bundle, with and without the release ledger.
+  { id: "dashboards-release", label: "dashboards: from the release", options: { dashboards: "release" } },
+  { id: "dashboards-no-markers", label: "dashboards: release, no ledger", options: { dashboards: "release", releaseMarkers: false } },
 ];
 
 const LIST_KEYS = new Set(["envs", "f", "groupBy"]);
@@ -102,10 +113,10 @@ export default function ObservabilityPreview() {
     });
   };
 
-  const prod = FIXTURE_ENVS[2];
+  const prod = ENVIRONMENTS[2];
   const place: ObsPlace =
     placeKind === "project"
-      ? { kind: "project", project: FIXTURE_PROJECT, environments: [...FIXTURE_ENVS] }
+      ? { kind: "project", project: FIXTURE_PROJECT, environments: ENVIRONMENTS }
       : {
           kind: "env",
           env: prod,
@@ -185,7 +196,7 @@ export default function ObservabilityPreview() {
             title="Observability"
             subtitle={
               <>
-                Logs, traces, dashboards and workloads across every environment of <span className="font-mono">{FIXTURE_PROJECT}</span>.
+                Logs, traces, dashboards, workloads and alerts across every environment of <span className="font-mono">{FIXTURE_PROJECT}</span>.
                 Narrow to some, or group by environment to compare them.
               </>
             }

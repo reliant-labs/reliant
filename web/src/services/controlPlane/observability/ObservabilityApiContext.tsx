@@ -14,7 +14,9 @@
 import { createContext, useContext, type ReactNode } from "react";
 
 import { getWalletOverview } from "../reliantAI";
+import * as alerting from "./alertingApi";
 import * as rpc from "./api";
+import type { ObsScope, ReleaseMarker, TimeWindow } from "./types";
 
 export interface ObservabilityApi {
   /** The caller's current organization — what every request is scoped by. Null while it is still being provisioned. */
@@ -30,6 +32,25 @@ export interface ObservabilityApi {
   listAttributeValues: typeof rpc.listAttributeValues;
   listWorkloads: typeof rpc.listWorkloads;
   getWorkload: typeof rpc.getWorkload;
+  // Alerting (AlertingService): org-scoped, mutations need admin.
+  listAlerts: typeof alerting.listAlerts;
+  listAlertHistory: typeof alerting.listAlertHistory;
+  listSilences: typeof alerting.listSilences;
+  createSilence: typeof alerting.createSilence;
+  expireSilence: typeof alerting.expireSilence;
+  listReceivers: typeof alerting.listReceivers;
+  createReceiver: typeof alerting.createReceiver;
+  updateReceiver: typeof alerting.updateReceiver;
+  deleteReceiver: typeof alerting.deleteReceiver;
+  testReceiver: typeof alerting.testReceiver;
+  listNotifications: typeof alerting.listNotifications;
+  markNotificationsRead: typeof alerting.markNotificationsRead;
+  /**
+   * Release promotions in the scope, for chart markers (contract K5). Absent
+   * until DeliveryInsightsService is wired: dashboards that declare release
+   * annotations then say the markers are not available yet.
+   */
+  listReleaseMarkers?: (req: ObsScope & { window: TimeWindow }) => Promise<ReleaseMarker[]>;
 }
 
 export const controlPlaneObservabilityApi: ObservabilityApi = {
@@ -46,6 +67,18 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   listAttributeValues: rpc.listAttributeValues,
   listWorkloads: rpc.listWorkloads,
   getWorkload: rpc.getWorkload,
+  listAlerts: alerting.listAlerts,
+  listAlertHistory: alerting.listAlertHistory,
+  listSilences: alerting.listSilences,
+  createSilence: alerting.createSilence,
+  expireSilence: alerting.expireSilence,
+  listReceivers: alerting.listReceivers,
+  createReceiver: alerting.createReceiver,
+  updateReceiver: alerting.updateReceiver,
+  deleteReceiver: alerting.deleteReceiver,
+  testReceiver: alerting.testReceiver,
+  listNotifications: alerting.listNotifications,
+  markNotificationsRead: alerting.markNotificationsRead,
 };
 
 const ObservabilityApiContext = createContext<ObservabilityApi>(controlPlaneObservabilityApi);

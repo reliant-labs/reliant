@@ -1,0 +1,383 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/alerting/v1;alertingv1";
+
+// === AlertingService ===
+//
+// The console's surface over an org's alerts (ALERTING_PLAN; the evaluator is
+// forge/pkg/alerting, the router is Alertmanager). Rules are NOT managed here:
+// they are declared in code, in the release's shape, and converged from the
+// env's current release. What an org manages here is WHERE notifications go
+// (receivers), WHEN they pause (silences), and what already happened (alerts,
+// history, in-app notifications).
+//
+// ORG-SCOPED, AND THE ORG IS A REQUEST FIELD THAT IS NEVER TRUSTED. Every RPC
+// carries org_id; the handler verifies the caller belongs to it before anything
+// else. Mutations need the admin role. Machine credentials are refused.
+//
+// CUSTOMERS NEVER TOUCH ALERTMANAGER. Silences go through this service, which
+// ALWAYS adds the matcher reliant_org_id="<org_id>" and refuses a matcher of its
+// own on any reliant_* label, so a silence can only ever mute the caller's org.
+//
+// ERRORS: InvalidArgument, PermissionDenied (not a member / not an admin),
+// NotFound (also for another org's id), AlreadyExists (receiver name),
+// FailedPrecondition (a receiver still routed to cannot be deleted),
+// Unavailable (Alertmanager unreachable).
+service AlertingService {
+  option (forge.v1.service) = {
+    name: "AlertingService"
+    version: "1.0.0"
+    description: "Org alerts: receivers, silences, firing alerts, history, in-app notifications"
+  };
+
+  // ListReceivers returns the org's receivers. Never a secret value.
+  rpc ListReceivers(ListReceiversRequest) returns (ListReceiversResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // CreateReceiver adds a receiver. The secret (Slack URL, PagerDuty key,
+  // webhook bearer) is sealed at rest and reaches Alertmanager as a mounted
+  // file; it is never returned.
+  rpc CreateReceiver(CreateReceiverRequest) returns (CreateReceiverResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // UpdateReceiver changes a receiver's settings and/or replaces its secret.
+  // The name and type are immutable (routes name receivers).
+  rpc UpdateReceiver(UpdateReceiverRequest) returns (UpdateReceiverResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // DeleteReceiver removes a receiver. Refused while an env route still names
+  // it: delete the route from the code first.
+  rpc DeleteReceiver(DeleteReceiverRequest) returns (DeleteReceiverResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // TestReceiver sends a synthetic alert that is routed to exactly this
+  // receiver, and reports whether Alertmanager accepted it.
+  rpc TestReceiver(TestReceiverRequest) returns (TestReceiverResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // CreateSilence mutes matching alerts of THIS org until ends_at.
+  rpc CreateSilence(CreateSilenceRequest) returns (CreateSilenceResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // ListSilences returns the org's silences (active and pending by default).
+  rpc ListSilences(ListSilencesRequest) returns (ListSilencesResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ExpireSilence ends one of the org's silences now.
+  rpc ExpireSilence(ExpireSilenceRequest) returns (ExpireSilenceResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // ListAlerts returns the org's pending and firing alert instances.
+  rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListAlertHistory returns state transitions, newest first.
+  rpc ListAlertHistory(ListAlertHistoryRequest) returns (ListAlertHistoryResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListNotifications returns in-app notifications, newest first.
+  rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // MarkNotificationsRead marks notifications read (all of the org's unread
+  // when ids is empty).
+  rpc MarkNotificationsRead(MarkNotificationsReadRequest) returns (MarkNotificationsReadResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+}
+
+// === Receivers ===
+
+enum ReceiverType {
+  RECEIVER_TYPE_UNSPECIFIED = 0;
+  RECEIVER_TYPE_SLACK = 1;
+  RECEIVER_TYPE_WEBHOOK = 2;
+  RECEIVER_TYPE_EMAIL = 3;
+  RECEIVER_TYPE_PAGERDUTY = 4;
+  // The Reliant console and desktop app. Every org has one implicitly.
+  RECEIVER_TYPE_RELIANT_INAPP = 5;
+}
+
+message Receiver {
+  string id = 1;
+  string org_id = 2;
+  // Referenced by env routes in the code. [a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}.
+  string name = 3;
+  ReceiverType type = 4;
+  // Non-secret settings: slack {channel}, email {to}, webhook {send_resolved},
+  // pagerduty {severity}. See the per-type notes on CreateReceiverRequest.
+  map<string, string> settings = 5;
+  // Whether a secret is stored. The value is never returned.
+  bool has_secret = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message ListReceiversRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message ListReceiversResponse {
+  repeated Receiver receivers = 1;
+}
+
+message CreateReceiverRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string name = 2 [(buf.validate.field).string.pattern = "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$"];
+  ReceiverType type = 3 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [
+      0,
+      5
+    ]
+  }];
+  // slack:     secret = incoming-webhook URL; settings.channel optional.
+  // webhook:   secret = bearer token (optional); settings.url (https) required.
+  // email:     no secret; settings.to (comma-separated addresses) required.
+  // pagerduty: secret = Events v2 routing key.
+  map<string, string> settings = 4;
+  // Write-only.
+  string secret = 5 [(buf.validate.field).string.max_len = 4096];
+}
+
+message CreateReceiverResponse {
+  Receiver receiver = 1;
+}
+
+message UpdateReceiverRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string id = 2 [(buf.validate.field).string.min_len = 1];
+  // Replaces the whole settings map when set_settings is true.
+  bool set_settings = 3;
+  map<string, string> settings = 4;
+  // Replaces the stored secret when non-empty. Write-only.
+  string secret = 5 [(buf.validate.field).string.max_len = 4096];
+}
+
+message UpdateReceiverResponse {
+  Receiver receiver = 1;
+}
+
+message DeleteReceiverRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message DeleteReceiverResponse {}
+
+message TestReceiverRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message TestReceiverResponse {
+  // True when Alertmanager accepted the test alert for routing. Delivery to
+  // the receiver itself is asynchronous.
+  bool accepted = 1;
+  // True when the receiver is already in the configuration Alertmanager is
+  // running. A receiver created seconds ago may not be yet.
+  bool receiver_live = 2;
+}
+
+// === Silences ===
+
+message Matcher {
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[a-zA-Z_][a-zA-Z0-9_]*$"
+  }];
+  string value = 2 [(buf.validate.field).string.max_len = 1024];
+  bool is_regex = 3;
+  // False means "not equal".
+  bool is_equal = 4;
+}
+
+message Silence {
+  string id = 1;
+  // Includes the server-added reliant_org_id matcher.
+  repeated Matcher matchers = 2;
+  google.protobuf.Timestamp starts_at = 3;
+  google.protobuf.Timestamp ends_at = 4;
+  string created_by = 5;
+  string comment = 6;
+  // pending | active | expired
+  string state = 7;
+}
+
+message CreateSilenceRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The matchers to silence. Must not name a reliant_* label: the org scope is
+  // added by the server. At least one is required, so an org cannot mute
+  // everything by accident.
+  repeated Matcher matchers = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 20
+  }];
+  // Defaults to now.
+  google.protobuf.Timestamp starts_at = 3;
+  google.protobuf.Timestamp ends_at = 4 [(buf.validate.field).required = true];
+  string comment = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1024
+  }];
+}
+
+message CreateSilenceResponse {
+  Silence silence = 1;
+}
+
+message ListSilencesRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  optional bool include_expired = 2;
+}
+
+message ListSilencesResponse {
+  repeated Silence silences = 1;
+}
+
+message ExpireSilenceRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message ExpireSilenceResponse {}
+
+// === Alerts and history ===
+
+message AlertInstance {
+  string env_id = 1;
+  string rule = 2;
+  string fingerprint = 3;
+  map<string, string> labels = 4;
+  map<string, string> annotations = 5;
+  // pending | firing
+  string state = 6;
+  google.protobuf.Timestamp active_at = 7;
+  google.protobuf.Timestamp firing_at = 8;
+  google.protobuf.Timestamp last_eval_at = 9;
+  double last_value = 10;
+}
+
+message ListAlertsRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  optional string env_id = 2;
+}
+
+message ListAlertsResponse {
+  repeated AlertInstance alerts = 1;
+}
+
+message AlertEvent {
+  string env_id = 1;
+  string rule = 2;
+  string fingerprint = 3;
+  map<string, string> labels = 4;
+  // pending | firing | resolved | inactive | removed
+  string transition = 5;
+  double value = 6;
+  google.protobuf.Timestamp at = 7;
+}
+
+message ListAlertHistoryRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  optional string env_id = 2;
+  // Defaults to 24h ago.
+  google.protobuf.Timestamp since = 3;
+  // Default 200, max 1000.
+  int32 limit = 4 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000
+  }];
+}
+
+message ListAlertHistoryResponse {
+  repeated AlertEvent events = 1;
+}
+
+// === In-app notifications ===
+
+message Notification {
+  string id = 1;
+  string env_id = 2;
+  // firing | resolved
+  string status = 3;
+  string alertname = 4;
+  string severity = 5;
+  map<string, string> labels = 6;
+  map<string, string> annotations = 7;
+  google.protobuf.Timestamp starts_at = 8;
+  google.protobuf.Timestamp received_at = 9;
+  bool read = 10;
+}
+
+message ListNotificationsRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  optional bool unread_only = 2;
+  // Default 100, max 500.
+  int32 limit = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 500
+  }];
+}
+
+message ListNotificationsResponse {
+  repeated Notification notifications = 1;
+  int32 unread = 2;
+}
+
+message MarkNotificationsReadRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  repeated string ids = 2 [(buf.validate.field).repeated.max_items = 500];
+}
+
+message MarkNotificationsReadResponse {
+  int32 marked = 1;
+}

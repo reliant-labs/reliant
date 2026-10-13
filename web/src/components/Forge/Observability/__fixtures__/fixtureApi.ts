@@ -14,6 +14,9 @@
 
 import { Code, ConnectError } from "@connectrpc/connect";
 
+import forgeSpecRaw from "./forge-dashboard-spec.json?raw";
+import { createAlertingFixture, type AlertingFixtureOptions } from "./fixtureAlerting";
+
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type {
   AttributeValueCount,
@@ -321,7 +324,7 @@ export function fixtureDashboards(): DashboardSpec {
       { id: "red-by-service", title: "Rate, errors and latency by service", kind: "table", signal: "traces", where: rpcServer, series: redTable, groupBy: ["service.name"], width: 24, height: 8 },
       { id: "go-goroutines", title: "Goroutines", kind: "line", signal: "metrics", series: [{ label: "goroutines", agg: "sum", field: "go.goroutine.count", metricType: "sum" }], unit: "count", width: 12, height: 7 },
       { id: "sessions", title: "Browser sessions", kind: "number", signal: "traces", series: [{ label: "sessions", agg: "count_distinct", field: "resource.attr.rum.sessionId" }], unit: "count", width: 12, height: 4 },
-      { id: "error-logs", title: "Recent error logs", kind: "search", signal: "logs", where: [{ field: "log.severity", op: "eq", value: "error" }], series: [], width: 12, height: 7 },
+      { id: "error-logs", title: "Recent error logs", kind: "search", signal: "logs", where: [{ field: "log.severity", op: "eq", value: "error" }], series: [], columns: ["timestamp", "service.name", "log.severity", "log.body"], width: 12, height: 7 },
     ],
   };
   const service: Dashboard = {
@@ -335,6 +338,32 @@ export function fixtureDashboards(): DashboardSpec {
     ],
   };
   return { version: "forge.dashboards/v1", project: "shop", source: "synthesized", dashboards: [overview, service] };
+}
+
+/**
+ * What GetDashboards serves once a release bundle was recorded (contract K4):
+ * forge's own generated set (its golden testdata, so the new workloads and
+ * releases dashboards render exactly as forge writes them) with release
+ * markers declared, plus one dashboard the project owns.
+ */
+export function fixtureReleaseDashboards(): DashboardSpec {
+  const forge = JSON.parse(forgeSpecRaw) as { dashboards: (Dashboard & { annotations?: { source: string; label?: string }[] })[] };
+  const generated: Dashboard[] = forge.dashboards
+    .filter((d) => ["overview", "workloads", "releases", "service-orders"].includes(d.id))
+    .map((d) => ({ ...d, filters: d.filters ?? [], annotations: d.annotations ?? [], source: "gen" as const }));
+  const checkout: Dashboard = {
+    id: "checkout",
+    title: "Checkout funnel",
+    description: "The project's own dashboard: deploy/observability/dashboards/checkout.json.",
+    filters: [{ id: "service", label: "service.name", field: "service.name" }],
+    annotations: [{ source: "releases", label: "Releases" }],
+    source: "user",
+    panels: [
+      { id: "orders", title: "Orders created", kind: "line", signal: "traces", where: [{ field: "span.name", op: "eq", value: PROCEDURE("CreateOrder") }], series: [{ label: "orders", agg: "count" }], unit: "count", width: 12, height: 7 },
+      { id: "checkout-p95", title: "Checkout p95", kind: "number", signal: "traces", where: [{ field: "span.name", op: "eq", value: PROCEDURE("CreateOrder") }], series: [{ label: "p95", agg: "quantile", quantile: 0.95, field: "span.duration" }], unit: "ms", width: 12, height: 4 },
+    ],
+  };
+  return { version: "forge.dashboards/v1", project: "shop", source: "release", dashboards: [...generated, checkout] };
 }
 
 /** A small speedscope "sampled" profile: an rpc handler, JSON encoding and a database call. */
@@ -382,7 +411,9 @@ export function fixturePanel(
       ? services.map((name) => ({ "service.name": name }))
       : groupBy.length === 1 && groupBy[0] === "span.name"
         ? RPCS.map((rpc) => ({ "span.name": PROCEDURE(rpc) }))
-        : fixtureGroups(groupBy, scope);
+        : fixtureGroups(groupBy.map((key) => key.replace(/^(resource|metric|log|span)\.attr\./, "")), scope).map((group, i) =>
+            Object.fromEntries(Object.entries(group).map(([k, v], j) => [groupBy[j] ?? k, v ?? String(i)]))
+          );
   const base = { kind: panel.kind, unit: panel.unit ?? "", stepSeconds: 120, truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"] };
 
   if (panel.kind === "table") {
@@ -616,7 +647,16 @@ export function fixtureWorkloadDetail(scope: Pick<ObsScope, "envIds">, workload:
   return { series, events, imageChanges, versionChanges, stepSeconds: Math.round((window.endMs - window.startMs) / 1000 / 40), truncated: false };
 }
 
-export interface FixtureOptions {
+export interface FixtureOptions extends AlertingFixtureOptions {
+  /**
+   * Where GetDashboards says its set came from. "release" serves forge's
+   * generated set (with the K4 workloads and releases dashboards) and one the
+   * project owns; the default "synthesized" is what an env with no recorded
+   * release bundle gets.
+   */
+  dashboards?: "release" | "synthesized";
+  /** False: no release ledger (the real console before K5). Default: a few promotions per environment. */
+  releaseMarkers?: boolean;
   /** Overrides on the usage fixture, to put the page in a given state. */
   usage?: Partial<ObservabilityUsage>;
   /** Every call fails with this (FailedPrecondition is the "not set up" org). */
@@ -712,7 +752,26 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         truncated: false,
       })),
     getObservabilityUsage: (orgId) => call("GetObservabilityUsage", { orgId }, () => fixtureUsage(Date.now(), options.usage)),
-    getDashboards: (req) => call("GetDashboards", req, () => (options.empty ? { ...fixtureDashboards(), dashboards: [] } : fixtureDashboards())),
+    getDashboards: (req) =>
+      call("GetDashboards", req, () => {
+        const spec = options.dashboards === "release" ? fixtureReleaseDashboards() : fixtureDashboards();
+        return options.empty ? { ...spec, dashboards: [] } : spec;
+      }),
+    ...createAlertingFixture(options, call),
+    ...(options.releaseMarkers === false
+      ? {}
+      : {
+          listReleaseMarkers: (req: ObsScope & { window: TimeWindow }) =>
+            call("ListReleases", req, () => {
+              const span = req.window.endMs - req.window.startMs;
+              return envsOf(req).flatMap((env, i) => [
+                { envId: env.id, envName: env.name, releaseId: `rel-${i}a`, version: VERSIONS[0], promotedAtMs: req.window.startMs + span * (0.2 + i * 0.05), promotedBy: "ada@example.com", kind: "promote" },
+                ...(env.name === "prod" || env.name === "staging"
+                  ? [{ envId: env.id, envName: env.name, releaseId: `rel-${i}b`, version: VERSIONS[1], promotedAtMs: req.window.startMs + span * (0.62 + i * 0.04), promotedBy: "ci", kind: "promote" }]
+                  : []),
+              ]);
+            }),
+        }),
     listAttributeValues: (req) =>
       call("ListAttributeValues", req, () => {
         const values: AttributeValueCount[] = valuesOf(req.key, req)

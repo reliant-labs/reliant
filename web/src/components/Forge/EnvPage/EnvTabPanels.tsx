@@ -126,7 +126,7 @@ export function ObservabilityTab({
   }
   return (
     <Suspense fallback={<PanelSkeleton testId="obs-tab-loading" rows={4} />}>
-      <ObservabilityPanel place={{ kind: "env", env: { id: live.id, name: envName }, onWiden }} search={search} navigate={navigate} />
+      <ObservabilityPanel place={{ kind: "env", env: { id: live.id, name: envName, declared: live.declaredShape }, onWiden }} search={search} navigate={navigate} />
     </Suspense>
   );
 }

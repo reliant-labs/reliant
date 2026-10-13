@@ -919,6 +919,12 @@ message Dashboard {
   // Marker series drawn over every line panel. Empty when the dashboard declares
   // none.
   repeated DashboardAnnotation annotations = 6;
+  // Who authored it, when it came from a release (GetDashboardsResponse.source
+  // "release"): "gen" for a dashboard forge generated, "user" for one the project
+  // owns (deploy/observability/dashboards/<name>.json, which replaces a generated
+  // one of the same name). Empty for a synthesized dashboard. Set by the server
+  // from the recorded row, never read from the dashboard's own JSON.
+  string source = 7;
 }
 
 message DashboardFilter {

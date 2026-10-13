@@ -58,6 +58,11 @@ export interface ObsScopeBarProps {
   onGroupByChange: (keys: string[]) => void;
   /** False on the views that list rows rather than aggregate them. */
   groupable: boolean;
+  /**
+   * False where attribute filters mean nothing (Alerts: rules, silences and
+   * receivers are not telemetry rows). The environment picker stays. Default true.
+   */
+  filterable?: boolean;
 }
 
 const CONTROL =
@@ -89,7 +94,7 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
         </span>
       ) : null}
 
-      {filters.map((filter, index) => (
+      {props.filterable !== false && filters.map((filter, index) => (
         <span
           key={formatFilterToken(filter)}
           className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card pl-2 pr-1 text-xs"
@@ -116,7 +121,7 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
         </span>
       ))}
 
-      {filters.length < MAX_FILTERS && (
+      {props.filterable !== false && filters.length < MAX_FILTERS && (
         <AddFilter scope={props.scope} range={props.range} onAdd={(token) => onFiltersChange([...filters, token])} />
       )}
 
@@ -149,10 +154,12 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
 
 // ── A small popover, the dropdown standard (click outside, Escape) ───────────
 
-function Popover({
+export function Popover({
   label,
   trigger,
   triggerClassName,
+  triggerLabel,
+  panelClassName,
   testId,
   children,
   open,
@@ -161,6 +168,10 @@ function Popover({
   label: string;
   trigger: ReactNode;
   triggerClassName?: string;
+  /** An accessible name for a trigger whose content is only an icon. */
+  triggerLabel?: string;
+  /** Replaces the panel's placement and width (default: below, left-aligned, w-72). */
+  panelClassName?: string;
   testId: string;
   children: ReactNode;
   open: boolean;
@@ -185,6 +196,7 @@ function Popover({
         className={triggerClassName ?? CONTROL}
         aria-expanded={open}
         aria-haspopup="dialog"
+        aria-label={triggerLabel}
         onClick={() => onOpenChange(!open)}
         data-testid={testId}
       >
@@ -195,7 +207,7 @@ function Popover({
           {...escapeLayer}
           role="dialog"
           aria-label={label}
-          className="absolute left-0 top-full z-30 mt-1 w-72 rounded-lg border border-border bg-card p-2 shadow-lg"
+          className={cn("absolute top-full z-30 mt-1 rounded-lg border border-border bg-card p-2 shadow-lg", panelClassName ?? "left-0 w-72")}
           data-testid={`${testId}-popover`}
         >
           {children}

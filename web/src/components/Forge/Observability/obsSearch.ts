@@ -18,11 +18,12 @@ import type { RangePreset } from "@/services/controlPlane/observability/window";
  * control-plane DeliveryInsightsService) here: a view is one entry in this
  * list (the route schema reads it), one label and one branch in ObservabilityPanel.
  */
-export const OBS_VIEWS = ["overview", "logs", "traces", "dashboards", "workloads", "profiles", "usage"] as const;
+export const OBS_VIEWS = ["overview", "alerts", "logs", "traces", "dashboards", "workloads", "profiles", "usage"] as const;
 export type ObsView = (typeof OBS_VIEWS)[number];
 
 export const OBS_VIEW_LABELS: Record<ObsView, string> = {
   overview: "Overview",
+  alerts: "Alerts",
   logs: "Logs",
   traces: "Traces",
   dashboards: "Dashboards",
@@ -85,6 +86,17 @@ export interface ObsSearch {
    * code" turns the result into a file to commit.
    */
   edit?: Record<string, Panel | null>;
+  /** Alerts: which part of the area is open. Absent: what is firing. */
+  alerts?: AlertsTab;
+  /** Alerts → Rules: the rule open in detail, `<env name>/<rule>`. */
+  rule?: string;
+}
+
+export const ALERTS_TABS = ["firing", "history", "silences", "rules", "receivers"] as const;
+export type AlertsTab = (typeof ALERTS_TABS)[number];
+
+export function alertsTabOf(param: string | undefined): AlertsTab {
+  return (ALERTS_TABS as readonly string[]).includes(param ?? "") ? (param as AlertsTab) : "firing";
 }
 
 /** Every key above — what leaving the Observability tab clears, so its filters do not ride along to Secrets. */
@@ -107,6 +119,8 @@ export const OBS_SEARCH_KEYS = [
   "workload",
   "container",
   "edit",
+  "alerts",
+  "rule",
 ] as const satisfies readonly (keyof ObsSearch)[];
 
 /**

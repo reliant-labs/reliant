@@ -411,7 +411,7 @@ function mapPredicate(p: WirePredicate): Predicate {
   return { field: p.field, op: p.op, value: p.value || undefined, values: p.values.length ? [...p.values] : undefined };
 }
 
-const UNITS: readonly Unit[] = ["", "count", "ms", "bytes", "percent"];
+const UNITS: readonly Unit[] = ["", "count", "ms", "bytes", "percent", "s"];
 
 function mapPanel(p: WirePanel): Panel {
   return {
@@ -449,8 +449,10 @@ export async function getDashboards(req: ObsScope & { window: TimeWindow }): Pro
       id: d.id,
       title: d.title,
       description: d.description || undefined,
-      filters: d.filters.map((f) => ({ id: f.id, label: f.label, field: f.field })),
+      filters: d.filters.map((f) => ({ id: f.id, label: f.label, field: f.field, signal: f.signal || undefined })),
+      annotations: d.annotations.map((a) => ({ source: a.source, label: a.label || undefined })),
       panels: d.panels.map(mapPanel),
+      source: d.source === "gen" || d.source === "user" ? d.source : undefined,
     })),
   };
 }

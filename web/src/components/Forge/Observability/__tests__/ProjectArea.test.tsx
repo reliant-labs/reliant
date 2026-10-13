@@ -215,9 +215,12 @@ describe("dashboards, semi-dynamic", () => {
     expect(dialog).toHaveTextContent("replaces the dashboard forge generates");
     expect(dialog).toHaveTextContent("Not saved: the environments, service and time range");
     const doc = JSON.parse(within(dialog).getByTestId("obs-save-json").textContent ?? "");
-    expect(doc).toMatchObject({ version: "forge.dashboards/v1", project: "shop", savedSearches: [], alerts: [] });
-    const [dashboard] = doc.dashboards;
-    expect(dashboard.id).toBe("shop-overview");
+    // One dashboard file, forge's dashboardFile: the version, then the dashboard's own fields.
+    expect(Object.keys(doc)[0]).toBe("version");
+    expect(doc).toMatchObject({ version: "forge.dashboards/v1", id: "shop-overview" });
+    expect(doc).not.toHaveProperty("dashboards");
+    expect(doc).not.toHaveProperty("source");
+    const dashboard = doc;
     expect(dashboard.panels.find((p: { id: string }) => p.id === "requests")).toMatchObject({
       title: "All requests",
       where: [{ field: "span.status", op: "eq", value: "error" }],

@@ -27,21 +27,22 @@ import { ArrowRight, EyeOff, FileCode2, Info, Pencil, Plus, RotateCcw, Undo2 } f
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import { Button } from "@/components/ui/Button";
-import { useDashboards, usePanelQuery } from "@/hooks/observability-queries";
+import { useAttributeValues, useDashboards, usePanelQuery } from "@/hooks/observability-queries";
 import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
-import type { Dashboard, ObsScope, Panel, PanelResult, Predicate, Series, Unit } from "@/services/controlPlane/observability/types";
+import type { Dashboard, DashboardFilter, ObsScope, Panel, PanelResult, Predicate, Series, Unit } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
-import { attributeLabel } from "./attributes";
-import { UPlotChart } from "./charts/UPlotChart";
+import { attributeLabel, ENV_KEY, isAttributeKeyShaped } from "./attributes";
+import { ObsChartMarkersProvider, UPlotChart } from "./charts/UPlotChart";
 import { formatValue } from "./format";
 import { ServiceSelect } from "./LogsView";
 import { applyEdits, editKey, editsFor, newPanelId, type PanelEdits } from "./obsdashSpec";
-import { groupLabel, scopeFiltersOf, type FilterToken } from "./obsFilters";
+import { filterParam, groupLabel, scopeFiltersOf, type FilterToken } from "./obsFilters";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
 import { PanelEditor } from "./PanelEditor";
+import { useReleaseMarkers, type ReleaseMarkers } from "./releaseMarkers";
 import { SaveAsCodeDialog } from "./SaveAsCodeDialog";
 
 const SERVICE_FIELD = "service.name";
@@ -87,6 +88,8 @@ export function DashboardsView({
   const base = pickDashboard(dashboards, dashboardId, service);
   const shown = useMemo(() => (base ? applyEdits(base, edits) : undefined), [base, edits]);
   const scopeFilters = useMemo(() => scopeFiltersOf(filterTokens), [filterTokens]);
+  const releaseAnnotation = shown?.annotations?.find((a) => a.source === "releases");
+  const releases = useReleaseMarkers(scope, range, !!releaseAnnotation);
 
   if (spec.isLoading) return <ObsLoadingRows testId="obs-dashboards-loading" />;
   if (spec.error) {
@@ -153,11 +156,12 @@ export function DashboardsView({
             id="obs-dashboard-service"
           />
         )}
-        {spec.data?.source === "synthesized" && (
-          <span className="text-xs text-muted-foreground" data-testid="obs-dashboards-synthesized">
-            Built from the services seen in the last 7 days.
-          </span>
-        )}
+        {base.filters
+          .filter((f) => f.field !== SERVICE_FIELD && f.field !== ENV_KEY)
+          .map((f) => (
+            <DashboardFilterSelect key={f.id} scope={scope} range={range} filter={f} tokens={filterTokens} navigate={navigate} />
+          ))}
+        <DashboardOrigin specSource={spec.data?.source ?? ""} dashboard={base} />
         <div className="ml-auto flex flex-wrap gap-2">
           <Button
             variant="outline"
@@ -179,6 +183,18 @@ export function DashboardsView({
         </div>
         {shown.description && <p className="w-full text-xs text-muted-foreground">{shown.description}</p>}
       </div>
+
+      {spec.data?.source === "synthesized" && (
+        <p className="rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-muted-foreground" data-testid="obs-dashboards-synthesized">
+          <span className="font-medium text-foreground">Built from the services seen in the last 7 days.</span> Dashboards ride in a
+          release: forge&apos;s generated set and your own files in <code className="font-mono">deploy/observability/dashboards/</code>.
+          None of the environments in view has a recorded release bundle — nothing was promoted yet, the release predates
+          dashboards in the bundle, or its bundle was not recorded (a failed push to the registry) — so these stand in until
+          one is.
+        </p>
+      )}
+
+      {releaseAnnotation && <ReleaseMarkersNote label={releaseAnnotation.label || "Releases"} releases={releases} />}
 
       {changed && (
         <div
@@ -206,6 +222,7 @@ export function DashboardsView({
         </div>
       )}
 
+      <ObsChartMarkersProvider markers={releases.markers}>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[repeat(24,minmax(0,1fr))]">
         {shown.panels.map((panel) => (
           <PanelCard
@@ -224,6 +241,7 @@ export function DashboardsView({
           />
         ))}
       </div>
+      </ObsChartMarkersProvider>
       {editing && (
         <PanelEditor
           open
@@ -432,7 +450,7 @@ function hasData(result: PanelResult): boolean {
   return result.series.some((s) => s.value !== null || s.values.some((v) => v !== null));
 }
 
-const UNITS: readonly string[] = ["", "count", "ms", "bytes", "percent"];
+const UNITS: readonly string[] = ["", "count", "ms", "bytes", "percent", "s"];
 
 /** The panel's declared unit; the server's when the panel declares none. */
 function unitOf(panel: Panel, result: PanelResult): Unit {
@@ -568,4 +586,99 @@ export function unionTimestamps(series: { timestamps: number[] }[]): number[] {
 export function alignTo(timestamps: number[], series: { timestamps: number[]; values: (number | null)[] }): (number | null)[] {
   const byTime = new Map(series.timestamps.map((t, i) => [t, series.values[i] ?? null]));
   return timestamps.map((t) => byTime.get(t) ?? null);
+}
+
+/** Where the dashboard on screen came from: forge's generated set, the project's own file, or synthesized. */
+function DashboardOrigin({ specSource, dashboard }: { specSource: string; dashboard: Dashboard }) {
+  const [label, title] =
+    specSource !== "release"
+      ? ["Synthesized", "Built from the services seen in the data: no environment in view has a recorded release bundle."]
+      : dashboard.source === "user"
+        ? ["Yours", "Your project's own file in deploy/observability/dashboards/, from the release that is running."]
+        : ["Generated by forge", "forge generated it from your services, and it shipped with the release that is running."];
+  return (
+    <span
+      className="rounded border border-border px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground"
+      title={title}
+      data-testid="obs-dashboard-origin"
+      data-origin={specSource !== "release" ? "synthesized" : (dashboard.source ?? "gen")}
+    >
+      {label}
+    </span>
+  );
+}
+
+/** The release markers a dashboard declares, said in words: drawn, none in the window, or not available yet. */
+function ReleaseMarkersNote({ label, releases }: { label: string; releases: ReleaseMarkers }) {
+  const text =
+    releases.status === "ready"
+      ? releases.count
+        ? `${label}: ${releases.count} promotion${releases.count === 1 ? "" : "s"} in this window, marked on every time-series panel.`
+        : `${label}: nothing was promoted in this window.`
+      : releases.status === "unavailable"
+        ? `${label}: this dashboard marks every promotion on its charts. Release history isn't available here yet, so no markers are drawn.`
+        : releases.status === "error"
+          ? `${label}: the release history couldn't be loaded, so no markers are drawn.`
+          : `${label}: loading release history…`;
+  return (
+    <p className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="obs-release-markers" data-status={releases.status}>
+      <span className="inline-block h-3 w-0 border-l border-dashed border-current" aria-hidden="true" />
+      {text}
+    </p>
+  );
+}
+
+/**
+ * One of a dashboard's own filter dropdowns (DashboardFilter): its values come
+ * from the telemetry the filter names (`signal`, empty is traces) and picking
+ * one adds it as an attribute filter, so it shows in the scope bar too.
+ */
+function DashboardFilterSelect({
+  scope,
+  range,
+  filter,
+  tokens,
+  navigate,
+}: {
+  scope: ObsScope;
+  range: RangePreset;
+  filter: DashboardFilter;
+  tokens: FilterToken[];
+  navigate: ObsNavigate;
+}) {
+  const key = filter.field.replace(/^(resource|metric|log|span)\.attr\./, "");
+  const usable = isAttributeKeyShaped(key);
+  const signal = (filter.signal || "traces") as "traces" | "logs" | "metrics";
+  const values = useAttributeValues(usable ? scope : null, range, key, "", signal);
+  const current = tokens.find((t) => t.key === key && t.op === "eq")?.value ?? "";
+  const id = `obs-dashboard-filter-${filter.id}`;
+  if (!usable) return null;
+  const options = values.data?.values.map((v) => v.value) ?? [];
+  if (current && !options.includes(current)) options.unshift(current);
+  return (
+    <>
+      <label htmlFor={id} className="sr-only">
+        {filter.label || attributeLabel(key)}
+      </label>
+      <select
+        id={id}
+        value={current}
+        onChange={(event) => {
+          const rest = tokens.filter((t) => !(t.key === key && t.op === "eq"));
+          const next = event.target.value ? [...rest, { key, op: "eq" as const, value: event.target.value }] : rest;
+          navigate({ f: filterParam(next) }, { replace: true });
+        }}
+        className="h-8 max-w-[14rem] rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        data-testid={id}
+        data-signal={signal}
+      >
+        <option value="">All {attributeLabel(key).toLowerCase()}s</option>
+        {options.map((value) => (
+          <option key={value} value={value}>
+            {value || "(empty)"}
+          </option>
+        ))}
+      </select>
+    </>
+  );
 }

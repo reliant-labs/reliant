@@ -4331,7 +4331,13 @@ type Dashboard struct {
 	Panels      []*Panel               `protobuf:"bytes,5,rep,name=panels,proto3" json:"panels,omitempty"`
 	// Marker series drawn over every line panel. Empty when the dashboard declares
 	// none.
-	Annotations   []*DashboardAnnotation `protobuf:"bytes,6,rep,name=annotations,proto3" json:"annotations,omitempty"`
+	Annotations []*DashboardAnnotation `protobuf:"bytes,6,rep,name=annotations,proto3" json:"annotations,omitempty"`
+	// Who authored it, when it came from a release (GetDashboardsResponse.source
+	// "release"): "gen" for a dashboard forge generated, "user" for one the project
+	// owns (deploy/observability/dashboards/<name>.json, which replaces a generated
+	// one of the same name). Empty for a synthesized dashboard. Set by the server
+	// from the recorded row, never read from the dashboard's own JSON.
+	Source        string `protobuf:"bytes,7,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4406,6 +4412,13 @@ func (x *Dashboard) GetAnnotations() []*DashboardAnnotation {
 		return x.Annotations
 	}
 	return nil
+}
+
+func (x *Dashboard) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
 }
 
 type DashboardFilter struct {
@@ -5815,14 +5828,15 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"dashboards\x18\x03 \x03(\v2\x1a.controlplane.v1.DashboardR\n" +
 	"dashboards\x12C\n" +
 	"\x0esaved_searches\x18\x04 \x03(\v2\x1c.controlplane.v1.SavedSearchR\rsavedSearches\x127\n" +
-	"\x06alerts\x18\x05 \x03(\v2\x1f.controlplane.v1.DashboardAlertR\x06alerts\"\x87\x02\n" +
+	"\x06alerts\x18\x05 \x03(\v2\x1f.controlplane.v1.DashboardAlertR\x06alerts\"\x9f\x02\n" +
 	"\tDashboard\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12:\n" +
 	"\afilters\x18\x04 \x03(\v2 .controlplane.v1.DashboardFilterR\afilters\x12.\n" +
 	"\x06panels\x18\x05 \x03(\v2\x16.controlplane.v1.PanelR\x06panels\x12F\n" +
-	"\vannotations\x18\x06 \x03(\v2$.controlplane.v1.DashboardAnnotationR\vannotations\"e\n" +
+	"\vannotations\x18\x06 \x03(\v2$.controlplane.v1.DashboardAnnotationR\vannotations\x12\x16\n" +
+	"\x06source\x18\a \x01(\tR\x06source\"e\n" +
 	"\x0fDashboardFilter\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +

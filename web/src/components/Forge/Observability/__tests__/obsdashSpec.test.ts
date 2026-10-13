@@ -1,25 +1,33 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * "Save as code" writes forge's dashboard spec (forge.dashboards/v1,
- * forge internal/obsdash/spec.go). The parity test feeds forge's OWN golden
- * output (`__fixtures__/forge-dashboard-spec.json`, a verbatim copy of forge's
- * internal/obsdash/testdata/dashboard-spec.json) through the console's
- * serializer and expects the same bytes back — key order, omitted empty
- * fields, Go's HTML escaping — so a saved file diffs cleanly against what
- * forge generates. Refresh the copy when forge's spec changes.
+ * "Save as code" writes one forge dashboard FILE (forge.dashboards/v1, forge
+ * internal/obsdash dashboardFile: the version, then the dashboard). The parity
+ * tests feed forge's OWN output through the console's serializers and expect
+ * the same bytes back — key order, omitted empty fields, Go's HTML escaping —
+ * so a saved file diffs cleanly against what forge generates:
+ *
+ *   __fixtures__/forge-dashboard-spec.json   forge's golden whole-spec document
+ *                                            (internal/obsdash/testdata/dashboard-spec.json)
+ *   __fixtures__/forge-dashboard-file.json   forge's marshalDashboardFile output
+ *                                            for that spec's releases dashboard
+ *
+ * Refresh both copies when forge's spec changes.
  */
 
 import { describe, expect, it } from "vitest";
 
 import type { Dashboard, Panel } from "@/services/controlPlane/observability/types";
 
+import forgeFile from "../__fixtures__/forge-dashboard-file.json?raw";
 import forgeGolden from "../__fixtures__/forge-dashboard-spec.json?raw";
 import { fixtureDashboards } from "../__fixtures__/fixtureApi";
 import {
   applyEdits,
-  buildDashboardSpec,
+  buildDashboardFile,
   containsPattern,
+  dashboardFileJson,
+  dashboardFileProblems,
   dashboardFileName,
   defaultDashboardName,
   editKey,
@@ -30,6 +38,7 @@ import {
   SPEC_VERSION,
   specJson,
   specProblems,
+  type DashboardFile,
   type ObsdashSpec,
 } from "../obsdashSpec";
 
@@ -43,6 +52,18 @@ describe("serialization parity with forge", () => {
 
   it("forge's generated spec is valid by the console's own rules", () => {
     expect(specProblems(JSON.parse(forgeGolden) as ObsdashSpec)).toEqual([]);
+  });
+
+  it("re-serializes forge's own dashboard file byte for byte", () => {
+    const parsed = JSON.parse(forgeFile) as DashboardFile;
+    expect(dashboardFileJson(parsed)).toBe(forgeFile);
+    expect(dashboardFileProblems(parsed)).toEqual([]);
+  });
+
+  it("the file is the spec's dashboard with the version in front", () => {
+    const spec = JSON.parse(forgeGolden) as ObsdashSpec;
+    const file = JSON.parse(forgeFile) as DashboardFile;
+    expect(file).toEqual({ version: spec.version, ...spec.dashboards.find((d) => d.id === file.id) });
   });
 });
 
@@ -102,45 +123,49 @@ describe("filters and group-by become panel predicates", () => {
 
   it("bakes the filters into every panel and the group-by into the aggregating ones", () => {
     const base = overview();
-    const spec = buildDashboardSpec({
-      project: "shop",
+    const file = buildDashboardFile({
       dashboard: base,
       name: "shop-overview",
       title: "Shop overview (by environment)",
       filters: [{ key: "service.version", op: "eq", value: "v1.8.3" }],
       groupBy: ["deployment.environment.name", "status"],
     });
-    expect(spec).toMatchObject({ version: SPEC_VERSION, project: "shop", savedSearches: [], alerts: [] });
-    const [dashboard] = spec.dashboards;
-    expect(dashboard).toMatchObject({ id: "shop-overview", title: "Shop overview (by environment)", filters: base.filters });
-    const rate = dashboard.panels.find((p) => p.id === "request-rate")!;
+    expect(file).toMatchObject({ version: SPEC_VERSION, id: "shop-overview", title: "Shop overview (by environment)", filters: base.filters });
+    const rate = file.panels.find((p) => p.id === "request-rate")!;
     expect(rate.where?.at(-1)).toEqual({ field: "resource.attr.service.version", op: "eq", value: "v1.8.3" });
     expect(rate.where).toHaveLength((base.panels.find((p) => p.id === "request-rate")!.where ?? []).length + 1);
     expect(rate.groupBy).toEqual(["deployment.environment.name", "span.status"]);
     // A metrics panel reads its own attribute map, so its status is metric.attr.status.
-    expect(dashboard.panels.find((p) => p.id === "go-goroutines")!.groupBy).toEqual(["deployment.environment.name", "metric.attr.status"]);
+    expect(file.panels.find((p) => p.id === "go-goroutines")!.groupBy).toEqual(["deployment.environment.name", "metric.attr.status"]);
     // A search panel lists rows: filtered, never grouped.
-    const search = dashboard.panels.find((p) => p.kind === "search")!;
+    const search = file.panels.find((p) => p.kind === "search")!;
     expect(search.groupBy).toBeUndefined();
     expect(search.where?.at(-1)?.field).toBe("resource.attr.service.version");
-    expect(specProblems(spec)).toEqual([]);
+    expect(dashboardFileProblems(file)).toEqual([]);
   });
 
   it("keeps each panel's own group-by when no group-by was chosen", () => {
     const base = overview();
-    const spec = buildDashboardSpec({ project: "shop", dashboard: base, name: "x", title: "x", filters: [], groupBy: [] });
-    expect(spec.dashboards[0].panels.find((p) => p.id === "request-rate")!.groupBy).toEqual(["service.name"]);
+    const file = buildDashboardFile({ dashboard: base, name: "x", title: "x", filters: [], groupBy: [] });
+    expect(file.panels.find((p) => p.id === "request-rate")!.groupBy).toEqual(["service.name"]);
   });
 
-  it("writes the document the way forge does", () => {
+  it("keeps the release markers and drops who served it", () => {
+    const base: Dashboard = { ...overview(), source: "gen", annotations: [{ source: "releases", label: "Deploys" }] };
+    const file = buildDashboardFile({ dashboard: base, name: "x", title: "x", filters: [], groupBy: [] });
+    expect(file.annotations).toEqual([{ source: "releases", label: "Deploys" }]);
+    expect(file).not.toHaveProperty("source");
+    expect(JSON.parse(dashboardFileJson(file))).not.toHaveProperty("source");
+  });
+
+  it("writes the file the way forge does", () => {
     const base = overview();
-    const json = specJson(buildDashboardSpec({ project: "shop", dashboard: base, name: "shop-overview", title: "t", filters: [], groupBy: [] }));
+    const json = dashboardFileJson(buildDashboardFile({ dashboard: base, name: "shop-overview", title: "t", filters: [], groupBy: [] }));
     expect(json.endsWith("}\n")).toBe(true);
     const doc = JSON.parse(json);
-    expect(Object.keys(doc)).toEqual(["version", "project", "dashboards", "savedSearches", "alerts"]);
-    expect(Object.keys(doc.dashboards[0])).toEqual(["id", "title", "description", "filters", "panels"]);
+    expect(Object.keys(doc)).toEqual(["version", "id", "title", "description", "filters", "panels"]);
     // omitempty: an unset unit, ratio or width is absent, not "" / false / 0.
-    const sessions = doc.dashboards[0].panels.find((p: { id: string }) => p.id === "error-logs");
+    const sessions = doc.panels.find((p: { id: string }) => p.id === "error-logs");
     expect(sessions).not.toHaveProperty("ratio");
     expect(sessions).not.toHaveProperty("unit");
     expect(sessions).not.toHaveProperty("groupBy");
@@ -173,7 +198,7 @@ describe("validation", () => {
   });
 
   it("refuses two panels with one id, and a wrong version", () => {
-    const spec: ObsdashSpec = { version: "forge.dashboards/v0", project: "p", dashboards: [{ id: "d", title: "D", filters: [], panels: [good, good] }], savedSearches: [], alerts: [] };
+    const spec: ObsdashSpec = { version: "forge.dashboards/v0", project: "p", dashboards: [{ id: "d", title: "D", filters: [], panels: [good, good] }], savedSearches: [] };
     expect(specProblems(spec)).toEqual(["The version must be forge.dashboards/v1.", 'Two panels share the id "p".']);
   });
 });

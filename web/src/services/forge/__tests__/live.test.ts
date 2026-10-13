@@ -347,6 +347,42 @@ describe("toLiveShape", () => {
     expect(shape?.domains).toEqual(["a.example.com"]);
     expect(shape?.clusters).toEqual([]);
   });
+
+  it("reads the alert rules, routes and observability policy an env declares (forge release.ShapeAlert)", () => {
+    const shape = toLiveShape({
+      kind: "persistent",
+      workloads: [],
+      secrets: [],
+      domains: [],
+      clusters: [],
+      alerts: [
+        { alert: "CheckoutSlow", expr: "SELECT 1 AS value", for: "10m", labels: { severity: "critical", n: 3 }, annotations: { summary: "slow" }, source: "user" },
+        { alert: "ServiceSilent", expr: "SELECT 0 AS value", interval: "1m", keep_firing_for: "10m", source: "default", default_id: "service-silent" },
+        { expr: "a rule without a name is dropped", source: "user" },
+        { alert: "Future", expr: "x", source: "something-new" },
+      ],
+      alert_routes: [{ match: { severity: "critical" }, receiver: "pager", continue: true }, { receiver: "reliant-inapp" }, { match: {} }],
+      observability_policy: { enabled: false, disabled: ["traces", "logs"] },
+    } as Record<string, unknown>);
+    expect(shape?.alerts).toEqual([
+      { alert: "CheckoutSlow", expr: "SELECT 1 AS value", for: "10m", interval: "", keepFiringFor: "", labels: { severity: "critical" }, annotations: { summary: "slow" }, source: "user", defaultId: "" },
+      { alert: "ServiceSilent", expr: "SELECT 0 AS value", for: "", interval: "1m", keepFiringFor: "10m", labels: {}, annotations: {}, source: "default", defaultId: "service-silent" },
+      // An unknown source is the project's: only forge's own defaults are "default".
+      expect.objectContaining({ alert: "Future", source: "user" }),
+    ]);
+    expect(shape?.alertRoutes).toEqual([
+      { match: { severity: "critical" }, receiver: "pager", continue: true },
+      { match: {}, receiver: "reliant-inapp", continue: false },
+    ]);
+    expect(shape?.observability).toEqual({ enabled: false, disabled: ["traces", "logs"] });
+  });
+
+  it("reads a shape from before alerting as declaring none", () => {
+    const shape = toLiveShape({ kind: "persistent", workloads: [], secrets: [], domains: [], clusters: [] });
+    expect(shape?.alerts).toEqual([]);
+    expect(shape?.alertRoutes).toEqual([]);
+    expect(shape?.observability).toBeNull();
+  });
 });
 
 // ── The three not-an-error states ───────────────────────────────────────────

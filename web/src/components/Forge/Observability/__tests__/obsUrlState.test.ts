@@ -170,7 +170,13 @@ describe("the URL round trip", () => {
 
   it("lists every key the area owns, so leaving the tab clears them all", () => {
     expect([...OBS_SEARCH_KEYS].sort()).toEqual(
-      ["container", "dashboard", "edit", "envs", "errors", "f", "groupBy", "live", "minDuration", "profileType", "q", "range", "service", "severity", "span", "trace", "view", "workload"].sort()
+      ["alerts", "container", "dashboard", "edit", "envs", "errors", "f", "groupBy", "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view", "workload"].sort()
     );
+  });
+
+  it("carries the alerts tab and an open rule, and drops a tab it does not know", () => {
+    const { parsed } = throughTheUrl({ view: "alerts", alerts: "rules", rule: "prod/CheckoutP95High" });
+    expect(parsed).toMatchObject({ view: "alerts", alerts: "rules", rule: "prod/CheckoutP95High" });
+    expect(throughTheUrl({ view: "alerts", alerts: "nonsense" }).parsed.alerts).toBeUndefined();
   });
 });

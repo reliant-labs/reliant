@@ -56,3 +56,33 @@ export function obsRetry(failureCount: number, error: unknown): boolean {
   if (kind !== "unavailable") return false;
   return failureCount < 1;
 }
+
+/**
+ * What an AlertingService failure means. Alerting adds two answers the query
+ * service does not give:
+ *
+ *   not-configured  Unavailable "alerting is not configured on this server":
+ *                   this control plane runs no Alertmanager yet (hosted
+ *                   observability is off). Explained, never retried.
+ *   in-use          FailedPrecondition on a receiver delete: a route in the
+ *                   code still names it.
+ *
+ * Everything else reads as obsErrorKind does; PermissionDenied on a mutation
+ * means the caller is a member but not an admin.
+ */
+export type AlertingErrorKind = ObsErrorKind | "not-configured" | "in-use";
+
+export function alertingErrorKind(error: unknown): AlertingErrorKind {
+  if (error instanceof ConnectError) {
+    if (error.code === Code.Unavailable && /not configured/i.test(error.rawMessage || error.message)) return "not-configured";
+    if (error.code === Code.FailedPrecondition) return "in-use";
+  }
+  return obsErrorKind(error);
+}
+
+/** Never retry an answer alerting gave on purpose (not configured, not allowed). */
+export function alertingRetry(failureCount: number, error: unknown): boolean {
+  const kind = alertingErrorKind(error);
+  if (kind !== "unavailable") return false;
+  return failureCount < 1;
+}

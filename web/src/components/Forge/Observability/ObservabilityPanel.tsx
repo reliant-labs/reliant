@@ -2,7 +2,9 @@
 
 /**
  * The Observability area: Overview · Logs · Traces · Dashboards · Workloads ·
- * Profiles over one time window for one SCOPE, and Usage (the org's allowance).
+ * Profiles over one time window for one SCOPE, Alerts (what fires, the rules
+ * each environment declares, silences and receivers) and Usage (the org's
+ * allowance).
  *
  * ── ENVIRONMENT IS A FILTER, NOT A PLACE (owner decision 1) ─────────────────
  *
@@ -40,10 +42,13 @@ import { obsErrorKind } from "@/services/controlPlane/observability/errors";
 import { RANGE_LABELS, RANGE_PRESETS, rangeOf } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
+import { AlertNotifications } from "./AlertNotifications";
+import { AlertsView } from "./AlertsView";
 import { DashboardsView } from "./DashboardsView";
 import { LogsView } from "./LogsView";
 import { filterParam, filterTokensOf, groupByOf, groupByParam, scopeFiltersOf } from "./obsFilters";
 import {
+  alertsTabOf,
   GROUPABLE_VIEWS,
   OBS_VIEW_LABELS,
   OBS_VIEWS,
@@ -53,7 +58,7 @@ import {
   type ObsSearch,
   type ObsView,
 } from "./obsSearch";
-import { envIdsOf, type ObsPlace } from "./obsPlace";
+import { envIdsOf, placeEnvironments, type ObsPlace } from "./obsPlace";
 import { ObsScopeBar } from "./ObsScopeBar";
 import { ObsError, ObsLoadingRows, ObsNotSetUp } from "./ObsStates";
 import { OverviewView } from "./OverviewView";
@@ -112,8 +117,11 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       minDuration: undefined,
       workload: undefined,
       container: undefined,
+      alerts: undefined,
+      rule: undefined,
     });
   };
+  const envName = (id: string) => placeEnvironments(place).find((env) => env.id === id)?.name;
 
   return (
     <div className="space-y-4" data-testid="obs-panel" data-view={view} data-place={place.kind}>
@@ -152,6 +160,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
           ))}
         </div>
         <div className="flex items-center gap-2">
+          {org.orgId && <AlertNotifications orgId={org.orgId} envName={envName} onOpenAlerts={() => selectView("alerts")} />}
           <label htmlFor="obs-range" className="sr-only">
             Time range
           </label>
@@ -181,7 +190,8 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       </div>
 
       {/* Usage is the org's allowance, not a query over the scope: nothing here would narrow it. */}
-      {scope && !notSetUp && view !== "usage" && (
+      {/* Alerts keeps the environment picker; attribute filters and group-by mean nothing there. */}
+      {scope && (!notSetUp || view === "alerts") && view !== "usage" && (
         <ObsScopeBar
           scope={scope}
           range={range}
@@ -195,6 +205,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
           groupBy={groupBy}
           onGroupByChange={(keys) => navigate({ groupBy: groupByParam(keys) }, { replace: true })}
           groupable={groupable}
+          filterable={view !== "alerts"}
         />
       )}
 
@@ -213,6 +224,19 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
           // Usage is a Postgres read, not a tenant query: it stays available
           // before the store exists, which is when the allowance is worth seeing.
           <UsageView orgId={scope.orgId} subject={subject} />
+        ) : view === "alerts" ? (
+          // Alerting answers for itself (AlertingService, its own "not
+          // configured"), and the declared rules come from the release shape,
+          // so it stays available before the telemetry store exists.
+          <AlertsView
+            orgId={scope.orgId}
+            place={place}
+            envIds={scope.envIds}
+            range={range}
+            tab={alertsTabOf(search.alerts)}
+            rule={search.rule}
+            navigate={navigate}
+          />
         ) : notSetUp ? (
           <ObsNotSetUp subject={subject} />
         ) : view === "overview" ? (

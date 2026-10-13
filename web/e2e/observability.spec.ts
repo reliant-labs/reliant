@@ -139,6 +139,59 @@ test.describe('observability console', () => {
     expect(errors).toEqual([]);
   });
 
+  test('alerts: what fires, silence it, the rule as code, a receiver a route names, notifications', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+
+    await openHarness(page, '?place=project&view=alerts');
+    await expect(page.getByTestId('obs-panel')).toHaveAttribute('data-view', 'alerts');
+    const checkout = page.getByTestId('obs-alert-CheckoutP95High');
+    await expect(checkout).toHaveAttribute('data-state', 'firing');
+    await expect(checkout.getByTestId('obs-rule-source')).toHaveText('Your rule');
+    // Attribute filters belong to telemetry views; the env picker stays.
+    await expect(page.getByTestId('obs-env-picker')).toBeVisible();
+    await expect(page.getByTestId('obs-add-filter')).toHaveCount(0);
+    await shot(page, 'alerts-firing');
+
+    // Silence it from its row; the dialog starts from the alert's own labels.
+    await page.getByTestId('obs-alert-silence-CheckoutP95High').click();
+    await page.getByTestId('obs-silence-comment').fill('rolling back checkout');
+    await page.getByTestId('obs-silence-create').click();
+    await expect(page.getByTestId('obs-alerts')).toHaveAttribute('data-tab', 'silences');
+    await expect(page.getByTestId('obs-silence-sil-3')).toContainText('alertname="CheckoutP95High"');
+
+    // The rule, and the KCL that declares it.
+    await page.getByTestId('obs-alerts-tab-rules').click();
+    await page.getByTestId('obs-rule-prod/CheckoutP95High').click();
+    await expect(page.getByTestId('obs-rule-as-code')).toContainText('forge.AlertRule {');
+    await expect(page.getByTestId('obs-rule-as-code')).toContainText('deploy/kcl/prod/main.k');
+
+    // Receivers: staging's default route names "slack", which isn't set up yet.
+    await page.getByTestId('obs-alerts-tab-receivers').click();
+    await expect(page.getByTestId('obs-receiver-missing-slack')).toBeVisible();
+    await page.getByTestId('obs-receiver-missing-slack').getByRole('button', { name: 'Set up slack' }).click();
+    await page.getByTestId('obs-receiver-secret-input').fill('https://hooks.slack.com/services/T/B/x');
+    await page.getByTestId('obs-receiver-save').click();
+    await expect(page.getByTestId('obs-receiver-slack')).toContainText('Routed from staging');
+    await expect(page.getByTestId('obs-receivers-missing')).toHaveCount(0);
+
+    // The bell: unread in-app notifications, marked read.
+    await expect(page.getByTestId('obs-notifications-unread')).toHaveText('2');
+    await page.getByTestId('obs-notifications').click();
+    await page.getByTestId('obs-notifications-mark-all').click();
+    await expect(page.getByTestId('obs-notifications-unread')).toHaveCount(0);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('alerting that is not running yet still shows the declared rules', async ({ page }) => {
+    await openHarness(page, '?place=project&view=alerts&case=alerting-not-configured');
+    await expect(page.getByTestId('obs-alerting-not-configured')).toContainText('already declare 7 rules');
+    await expect(page.getByTestId('obs-notifications')).toHaveCount(0);
+    await page.getByTestId('obs-alerting-not-configured').getByRole('button', { name: 'See the rules' }).click();
+    await expect(page.getByTestId('obs-rules')).toBeVisible();
+  });
+
   test('an org without observability gets the set-up explanation, once', async ({ page }) => {
     await openHarness(page, '?case=not-set-up');
     await expect(page.getByTestId('obs-not-set-up')).toHaveCount(1);

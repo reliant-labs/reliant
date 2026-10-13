@@ -53,7 +53,7 @@ export function ForgeObservabilityPage() {
   const project = roster.projectName.name;
 
   const environments = useMemo(
-    () => roster.envs.flatMap((env) => (env.live ? [{ id: env.live.id, name: env.name }] : [])),
+    () => roster.envs.flatMap((env) => (env.live ? [{ id: env.live.id, name: env.name, declared: env.live.declaredShape }] : [])),
     [roster.envs]
   );
 
@@ -75,11 +75,11 @@ export function ForgeObservabilityPage() {
       subtitle={
         project ? (
           <>
-            Logs, traces, dashboards and workloads across every environment of <span className="font-mono">{project}</span>.
+            Logs, traces, dashboards, workloads and alerts across every environment of <span className="font-mono">{project}</span>.
             Narrow to some, or group by environment to compare them.
           </>
         ) : (
-          "Logs, traces, dashboards and workloads across this project's environments."
+          "Logs, traces, dashboards, workloads and alerts across this project's environments."
         )
       }
     />

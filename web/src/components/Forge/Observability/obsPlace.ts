@@ -8,12 +8,27 @@
  * reader's to set, and an env page's tab, where it is pinned.
  */
 
+import type { LiveShape } from "@/services/forge/live";
+
 import type { ObsSearch } from "./obsSearch";
+
+/** What an environment's recorded shape says about alerting: its rules, routes and opt-outs. */
+export type ObsDeclared = Pick<LiveShape, "alerts" | "alertRoutes" | "observability">;
 
 export interface ObsEnvironment {
   /** control-plane environment id. */
   id: string;
   name: string;
+  /**
+   * The env's recorded shape, for the Alerts area: which rules it declares and
+   * where each came from. Null or absent: nothing recorded yet.
+   */
+  declared?: ObsDeclared | null;
+}
+
+/** Every environment the place covers, with what it declares. */
+export function placeEnvironments(place: ObsPlace): ObsEnvironment[] {
+  return place.kind === "env" ? [place.env] : place.environments;
 }
 
 export type ObsPlace =

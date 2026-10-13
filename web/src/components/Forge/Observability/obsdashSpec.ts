@@ -12,20 +12,27 @@
  * changes the URL and nothing else; "Save as code" turns what is on screen
  * into a file for the user to commit at
  * `deploy/observability/dashboards/<name>.json`, which ships with their next
- * release (contract K4). The file is a whole `Spec` — version, project, one
- * dashboard — rather than a bare dashboard, so a consumer can check the
- * version and refuse a shape it does not understand, exactly as forge's
- * `SpecVersion` comment asks.
+ * release (contract K4). The file is ONE dashboard with a leading `"version":
+ * "forge.dashboards/v1"` — exactly the per-dashboard file forge writes into a
+ * release bundle (forge internal/obsdash/bundleset.go, `dashboardFile`) and the
+ * shape `forge observe dashboards check` validates.
  *
  * ── SERIALIZED LIKE encoding/json ────────────────────────────────────────────
  *
  * Keys are written in the Go struct's field order and `omitempty` fields are
- * omitted when empty, so the file a user saves diffs cleanly against
- * forge's own `dashboard-spec_gen.json` (pinned by a test against forge's
- * testdata).
+ * omitted when empty, so the file a user saves diffs cleanly against the one
+ * forge generates (pinned by tests against forge's own output).
  */
 
-import type { AttributeFilter, Dashboard, DashboardFilter, Panel, Predicate, SeriesIntent } from "@/services/controlPlane/observability/types";
+import type {
+  AttributeFilter,
+  Dashboard,
+  DashboardAnnotation,
+  DashboardFilter,
+  Panel,
+  Predicate,
+  SeriesIntent,
+} from "@/services/controlPlane/observability/types";
 
 import { attributeClass, ENV_KEY, SERVICE_KEY } from "./attributes";
 
@@ -38,7 +45,16 @@ export const PANEL_KINDS = ["line", "number", "table", "search"] as const;
 export const SIGNALS = ["traces", "metrics", "logs"] as const;
 export const AGGS = ["count", "count_distinct", "sum", "avg", "max", "quantile", "last"] as const;
 export const OPS = ["eq", "neq", "in", "not_in", "prefix", "match", "exists", "gte"] as const;
-export const UNITS = ["", "count", "ms", "bytes", "percent"] as const;
+export const UNITS = ["", "count", "ms", "bytes", "percent", "s"] as const;
+export const METRIC_TYPES = ["sum", "gauge", "histogram"] as const;
+/** The annotation sources forge knows; `releases` is the only one today. */
+export const ANNOTATION_SOURCES = ["releases"] as const;
+
+/** forge's limits (internal/obsdash/validate.go). */
+const MAX_SERIES = 10;
+const MAX_PANELS = 200;
+const MAX_GRID_HEIGHT = 60;
+const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 
 export const AGG_LABELS: Record<(typeof AGGS)[number], string> = {
   count: "count",
@@ -75,7 +91,6 @@ export interface ObsdashSpec {
   project: string;
   dashboards: Dashboard[];
   savedSearches: unknown[];
-  alerts: unknown[];
 }
 
 /**
@@ -161,7 +176,6 @@ export function predicateForFilter(filter: AttributeFilter, signal: string): Pre
 }
 
 export interface SaveAsCodeInput {
-  project: string;
   /** The dashboard as on screen — edits already applied. */
   dashboard: Dashboard;
   /** File name without `.json`; also the dashboard's id. */
@@ -173,13 +187,17 @@ export interface SaveAsCodeInput {
   groupBy: string[];
 }
 
+/** One dashboard file: the dashboard with the spec version it was written for. */
+export type DashboardFile = Dashboard & { version: string };
+
 /**
- * The dashboard as a document to commit. Environment, service and time range
- * are where the reader is LOOKING and are not baked in — a committed
- * dashboard ships to every environment its release is promoted to, and keeps
- * its own environment and service dropdowns.
+ * The dashboard as a file to commit. Environment, service and time range are
+ * where the reader is LOOKING and are not baked in — a committed dashboard
+ * ships to every environment its release is promoted to, and keeps its own
+ * environment and service dropdowns. Its annotations (release markers) are
+ * kept; `source` is the server's, never the file's.
  */
-export function buildDashboardSpec(input: SaveAsCodeInput): ObsdashSpec {
+export function buildDashboardFile(input: SaveAsCodeInput): DashboardFile {
   const panels = input.dashboard.panels.map((panel) => {
     const where = [...(panel.where ?? []), ...input.filters.map((f) => predicateForFilter(f, panel.signal))];
     const aggregating = panel.kind !== "search";
@@ -189,13 +207,8 @@ export function buildDashboardSpec(input: SaveAsCodeInput): ObsdashSpec {
       groupBy: aggregating && input.groupBy.length ? input.groupBy.map((key) => fieldForKey(key, panel.signal)) : panel.groupBy,
     };
   });
-  return {
-    version: SPEC_VERSION,
-    project: input.project,
-    dashboards: [{ ...input.dashboard, id: input.name, title: input.title, panels }],
-    savedSearches: [],
-    alerts: [],
-  };
+  const { source: _source, ...dashboard } = input.dashboard;
+  return { version: SPEC_VERSION, ...dashboard, id: input.name, title: input.title, panels };
 }
 
 /** A file name a repo can hold: lower case, dashes, no `_gen` suffix (that marks forge's own files). */
@@ -211,7 +224,9 @@ export function dashboardFileName(raw: string): string {
 
 /** The name a generated dashboard's file has, minus `_gen` — saving under it makes the user's copy win (decision 5). */
 export function defaultDashboardName(project: string, dashboardId: string): string {
-  return dashboardFileName(project ? `${project}-${dashboardId}` : dashboardId);
+  // Two projects in scope with the same id are served as `<project>/<id>`.
+  const [owner, id] = dashboardId.includes("/") ? dashboardId.split("/", 2) : [project, dashboardId];
+  return dashboardFileName(owner ? `${owner}-${id}` : id);
 }
 
 // ── Validation ───────────────────────────────────────────────────────────────
@@ -229,48 +244,89 @@ function checkPredicates(where: Predicate[] | undefined, at: string, problems: s
 }
 
 /**
- * What is wrong with a panel, in words for the editor. Empty means the SHAPE
- * is right; whether the server can compile it (a field it does not know) is
- * its own answer, shown on the panel.
+ * What is wrong with a panel, in words for the editor — the rules forge
+ * applies to a dashboard file (internal/obsdash/validate.go), so a file that
+ * passes here passes `forge observe dashboards check`. Whether the server can
+ * compile a field it does not know is its own answer, shown on the panel.
  */
 export function panelProblems(panel: Panel): string[] {
   const problems: string[] = [];
   if (!panel.id?.trim()) problems.push("The panel needs an id.");
+  else if (!ID_PATTERN.test(panel.id)) problems.push(`"${panel.id}" is not a valid panel id (letters, digits, '-', '_' and '.').`);
   if (!panel.title?.trim()) problems.push("Give the panel a title.");
   if (!has(PANEL_KINDS, panel.kind)) problems.push(`"${panel.kind}" is not a panel kind.`);
   if (!has(SIGNALS, panel.signal)) problems.push(`"${panel.signal}" is not a signal.`);
   if (panel.unit !== undefined && !has(UNITS, panel.unit)) problems.push(`"${panel.unit}" is not a unit.`);
   const series = panel.series ?? [];
-  if (panel.kind !== "search" && series.length === 0) problems.push("Add at least one series.");
+  if (panel.kind === "search") {
+    if (series.length > 0) problems.push("A rows panel shows rows and takes no series: list its columns instead.");
+    if (!(panel.columns ?? []).length) problems.push("A rows panel needs at least one column.");
+  } else {
+    if ((panel.columns ?? []).length) problems.push("Only a rows panel takes columns.");
+    if (series.length === 0) problems.push("Add at least one series.");
+    if (series.length > MAX_SERIES) problems.push(`A panel holds at most ${MAX_SERIES} series.`);
+  }
+  const labels = new Set<string>();
   series.forEach((s: SeriesIntent, i) => {
     const at = `Series ${i + 1}`;
     if (!s.label?.trim()) problems.push(`${at}: give it a label.`);
+    else if (labels.has(s.label)) problems.push(`${at}: another series is already labelled "${s.label}".`);
+    labels.add(s.label);
     if (!has(AGGS, s.agg)) problems.push(`${at}: "${s.agg}" is not an aggregation.`);
-    if (s.agg !== "count" && !s.field?.trim()) problems.push(`${at}: ${s.agg} needs a field.`);
-    if (s.agg === "quantile" && !(typeof s.quantile === "number" && s.quantile > 0 && s.quantile < 1)) problems.push(`${at}: the quantile is a fraction, like 0.95.`);
+    if (s.agg === "quantile" && !(typeof s.quantile === "number" && s.quantile > 0 && s.quantile <= 1)) problems.push(`${at}: the quantile is a fraction, like 0.95.`);
+    if (s.agg !== "quantile" && s.quantile !== undefined) problems.push(`${at}: only a quantile series takes a quantile.`);
+    if (panel.signal === "metrics") {
+      if (!s.field?.trim()) problems.push(`${at}: name the metric.`);
+      if (!has(METRIC_TYPES, s.metricType)) problems.push(`${at}: say the metric's type (sum, gauge or histogram).`);
+      if (s.agg === "quantile" && s.metricType !== "histogram") problems.push(`${at}: a quantile over a metric needs a histogram.`);
+      if (s.agg === "count" || s.agg === "count_distinct") problems.push(`${at}: ${s.agg} is not defined over a metric; use sum, avg, max, last or quantile.`);
+    } else {
+      if (s.metricType) problems.push(`${at}: only a metrics series takes a metric type.`);
+      if (s.agg !== "count" && !s.field?.trim()) problems.push(`${at}: ${s.agg} needs a field.`);
+      if (s.agg === "last") problems.push(`${at}: last is defined for metrics; use max or avg.`);
+    }
     checkPredicates(s.where, at, problems);
   });
-  if (panel.ratio && series.length !== 2) problems.push("A ratio divides the first series by the second: it needs exactly two.");
+  if (panel.ratio) {
+    if (series.length !== 2) problems.push("A ratio divides the first series by the second: it needs exactly two.");
+    if (panel.kind !== "line") problems.push("A ratio applies to a line chart.");
+  }
   if ((panel.groupBy ?? []).length > 3) problems.push("Group by at most three fields.");
-  if (panel.width !== undefined && panel.width !== 0 && (panel.width < 1 || panel.width > 24)) problems.push("Width is 1 to 24 grid columns.");
+  if (panel.width !== undefined && panel.width !== 0 && (panel.width < 1 || panel.width > 24 || !Number.isInteger(panel.width))) problems.push("Width is 1 to 24 grid columns.");
+  if (panel.height !== undefined && (panel.height < 0 || panel.height > MAX_GRID_HEIGHT || !Number.isInteger(panel.height))) problems.push(`Height is a whole number of rows up to ${MAX_GRID_HEIGHT}.`);
   checkPredicates(panel.where, "Panel", problems);
   return problems;
 }
 
-export function specProblems(spec: ObsdashSpec): string[] {
+export function dashboardProblems(dashboard: Dashboard): string[] {
   const problems: string[] = [];
-  if (spec.version !== SPEC_VERSION) problems.push(`The version must be ${SPEC_VERSION}.`);
-  for (const dashboard of spec.dashboards ?? []) {
-    if (!dashboard.id?.trim()) problems.push("The dashboard needs an id.");
-    if (!dashboard.title?.trim()) problems.push("The dashboard needs a title.");
-    const ids = new Set<string>();
-    for (const panel of dashboard.panels ?? []) {
-      if (ids.has(panel.id)) problems.push(`Two panels share the id "${panel.id}".`);
-      ids.add(panel.id);
-      for (const problem of panelProblems(panel)) problems.push(`${panel.title || panel.id}: ${problem}`);
-    }
+  if (!dashboard.id?.trim()) problems.push("The dashboard needs an id.");
+  else if (!ID_PATTERN.test(dashboard.id)) problems.push(`"${dashboard.id}" is not a valid dashboard id.`);
+  if (!dashboard.title?.trim()) problems.push("The dashboard needs a title.");
+  const panels = dashboard.panels ?? [];
+  if (panels.length === 0) problems.push("A dashboard needs at least one panel.");
+  if (panels.length > MAX_PANELS) problems.push(`A dashboard holds at most ${MAX_PANELS} panels.`);
+  const sources = new Set<string>();
+  for (const a of dashboard.annotations ?? []) {
+    if (!has(ANNOTATION_SOURCES, a.source)) problems.push(`"${a.source}" is not an annotation source.`);
+    else if (sources.has(a.source)) problems.push(`The annotation source "${a.source}" is declared twice.`);
+    sources.add(a.source);
+  }
+  const ids = new Set<string>();
+  for (const panel of panels) {
+    if (ids.has(panel.id)) problems.push(`Two panels share the id "${panel.id}".`);
+    ids.add(panel.id);
+    for (const problem of panelProblems(panel)) problems.push(`${panel.title || panel.id}: ${problem}`);
   }
   return problems;
+}
+
+export function dashboardFileProblems(file: DashboardFile): string[] {
+  return [...(file.version !== SPEC_VERSION ? [`The version must be ${SPEC_VERSION}.`] : []), ...dashboardProblems(file)];
+}
+
+export function specProblems(spec: ObsdashSpec): string[] {
+  return [...(spec.version !== SPEC_VERSION ? [`The version must be ${SPEC_VERSION}.`] : []), ...(spec.dashboards ?? []).flatMap(dashboardProblems)];
 }
 
 // ── Serialization (encoding/json order, omitempty) ───────────────────────────
@@ -328,6 +384,13 @@ function panelJson(p: Panel) {
   ]);
 }
 
+function annotationJson(a: DashboardAnnotation) {
+  return ordered([
+    ["source", a.source, false],
+    ["label", a.label, true],
+  ]);
+}
+
 function filterJson(f: DashboardFilter) {
   return ordered([
     ["id", f.id, false],
@@ -337,19 +400,38 @@ function filterJson(f: DashboardFilter) {
   ]);
 }
 
-function dashboardJson(d: Dashboard) {
-  return ordered([
+function dashboardEntries(d: Dashboard): [string, unknown, boolean][] {
+  return [
     ["id", d.id, false],
     ["title", d.title, false],
     ["description", d.description, true],
     ["filters", (d.filters ?? []).map(filterJson), true],
+    ["annotations", (d.annotations ?? []).map(annotationJson), true],
     ["panels", (d.panels ?? []).map(panelJson), false],
-  ]);
+  ];
+}
+
+function dashboardJson(d: Dashboard) {
+  return ordered(dashboardEntries(d));
 }
 
 /**
- * The document as forge writes it (json.MarshalIndent, two spaces, then a
- * newline): Go field order, and `<` `>` `&` escaped as encoding/json does.
+ * One dashboard file as forge writes it (`dashboardFile`: the version, then
+ * the dashboard's own fields), two-space indented, ending in a newline.
+ */
+export function dashboardFileJson(file: DashboardFile): string {
+  return goJson(ordered([["version", file.version, false], ...dashboardEntries(file)]));
+}
+
+function goJson(doc: { [key: string]: Json }): string {
+  const goEscapes: Record<string, string> = { "<": "\\u003c", ">": "\\u003e", "&": "\\u0026" };
+  return `${JSON.stringify(doc, null, 2).replace(/[<>&]/g, (c) => goEscapes[c])}\n`;
+}
+
+/**
+ * A whole spec document as forge writes it (dashboard-spec_gen.json):
+ * json.MarshalIndent with two spaces, then a newline; Go field order; `<` `>`
+ * `&` escaped as encoding/json does.
  */
 export function specJson(spec: ObsdashSpec): string {
   const doc = ordered([
@@ -357,8 +439,6 @@ export function specJson(spec: ObsdashSpec): string {
     ["project", spec.project, false],
     ["dashboards", (spec.dashboards ?? []).map(dashboardJson), false],
     ["savedSearches", spec.savedSearches, false],
-    ["alerts", spec.alerts, false],
   ]);
-  const goEscapes: Record<string, string> = { "<": "\\u003c", ">": "\\u003e", "&": "\\u0026" };
-  return `${JSON.stringify(doc, null, 2).replace(/[<>&]/g, (c) => goEscapes[c])}\n`;
+  return goJson(doc);
 }

@@ -14,7 +14,7 @@
 import { z } from "zod";
 import { ONBOARDING_STEP_IDS } from "./components/Onboarding/constants";
 import type { LaunchPlan } from "./components/OnboardingFlow/types";
-import { OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
+import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
 import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
 
 // The guided tour's "active step" lives in the URL as `?tour=<step-id>` —
@@ -483,7 +483,7 @@ const obsPanelSchema = z.object({
   where: z.array(panelPredicateSchema).optional(),
   groupBy: z.array(z.string()).optional(),
   columns: z.array(z.string()).optional(),
-  unit: z.enum(["", "count", "ms", "bytes", "percent"]).optional(),
+  unit: z.enum(["", "count", "ms", "bytes", "percent", "s"]).optional(),
   width: z.number().optional(),
   height: z.number().optional(),
 });
@@ -526,6 +526,8 @@ export const obsSearchShape = {
   workload: z.string().optional().catch(undefined),
   container: z.string().optional().catch(undefined),
   edit: z.record(z.string(), obsPanelSchema.nullable()).optional().catch(undefined),
+  alerts: z.enum(ALERTS_TABS).optional().catch(undefined),
+  rule: z.string().optional().catch(undefined),
 };
 
 /** Every ObsSearch key has a schema entry and vice versa (the launchPlan drift guard, for the same reason). */

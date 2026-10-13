@@ -72,6 +72,8 @@ export function formatValue(value: number | null | undefined, unit: ValueUnit | 
       return formatBytes(value);
     case "cores":
       return formatCores(value);
+    case "s":
+      return formatDuration(value * 1000);
     default:
       return formatCount(value);
   }
@@ -91,6 +93,14 @@ export function formatTimestamp(ms: number, now: number = Date.now()): string {
   if (sameDay) return `${time}.${millis}`;
   const day = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   return `${day} ${time}.${millis}`;
+}
+
+/** A planned moment (when a silence ends): local wall clock to the minute, the date only when it is not today. */
+export function formatWhen(ms: number, now: number = Date.now()): string {
+  const date = new Date(ms);
+  const time = date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (new Date(now).toDateString() === date.toDateString()) return `today ${time}`;
+  return `${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${time}`;
 }
 
 function trim(fixed: string): string {

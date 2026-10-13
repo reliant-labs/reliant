@@ -88,6 +88,52 @@ describe("DashboardsView", () => {
   });
 });
 
+describe("DashboardsView: dashboards from the release (K4)", () => {
+  it("says who wrote each dashboard: forge's generated set, or the project's own file", async () => {
+    const user = userEvent.setup();
+    renderPanel(createFixtureApi({ dashboards: "release" }), { view: "dashboards" });
+    expect(await screen.findByTestId("obs-dashboard-origin")).toHaveAttribute("data-origin", "gen");
+    expect(screen.queryByTestId("obs-dashboards-synthesized")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByTestId("obs-dashboard-picker"), "checkout");
+    await waitFor(() => expect(screen.getByTestId("obs-dashboard-origin")).toHaveAttribute("data-origin", "user"));
+    expect(screen.getByTestId("obs-dashboard-origin")).toHaveTextContent("Yours");
+  });
+
+  it("calls a synthesized set what it is", async () => {
+    renderPanel(createFixtureApi(), { view: "dashboards" });
+    expect(await screen.findByTestId("obs-dashboard-origin")).toHaveAttribute("data-origin", "synthesized");
+  });
+
+  it("draws the release markers a dashboard declares, and says so when the ledger is not there", async () => {
+    renderPanel(createFixtureApi({ dashboards: "release" }), { view: "dashboards", dashboard: "releases" });
+    await waitFor(() => expect(screen.getByTestId("obs-release-markers")).toHaveAttribute("data-status", "ready"));
+    expect(screen.getByTestId("obs-release-markers")).toHaveTextContent(/promotions? in this window/);
+  });
+
+  it("without a release ledger, keeps the dashboard and says no markers are drawn", async () => {
+    renderPanel(createFixtureApi({ dashboards: "release", releaseMarkers: false }), { view: "dashboards", dashboard: "releases" });
+    const note = await screen.findByTestId("obs-release-markers");
+    expect(note).toHaveAttribute("data-status", "unavailable");
+    expect(note).toHaveTextContent("Release history isn't available here yet");
+    expect(await screen.findByTestId("obs-panel-request-rate-by-version")).toBeInTheDocument();
+  });
+
+  it("reads a dashboard filter's values from the signal it names", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn();
+    const harness = renderPanel(createFixtureApi({ dashboards: "release", onCall }), { view: "dashboards", dashboard: "workloads" });
+    const workload = await screen.findByTestId("obs-dashboard-filter-workload");
+    expect(workload).toHaveAttribute("data-signal", "metrics");
+    await waitFor(() =>
+      expect(onCall).toHaveBeenCalledWith("ListAttributeValues", expect.objectContaining({ key: "k8s.workload.name", signal: "metrics" }))
+    );
+    await waitFor(() => expect(within(workload).getAllByRole("option").length).toBeGreaterThan(1));
+    const value = within(workload).getAllByRole("option")[1].getAttribute("value")!;
+    await user.selectOptions(workload, value);
+    expect(harness.current().f).toEqual([`k8s.workload.name:${value}`]);
+  });
+});
+
 describe("ProfilesView", () => {
   const created: string[] = [];
   beforeEach(() => {
