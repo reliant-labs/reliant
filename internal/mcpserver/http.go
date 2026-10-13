@@ -122,7 +122,7 @@ func NewHTTPHandler(deps HTTPDeps) (http.Handler, error) {
 
 	// Reap idle per-grant limiters for the process lifetime. Without this a
 	// service that churns connectors accumulates one entry per grant.
-	go limiter.RunCleanup(context.Background())
+	go limiter.runCleanup(context.Background())
 
 	authenticator := &connectorAuth{
 		store:       deps.Store,
@@ -141,7 +141,7 @@ func NewHTTPHandler(deps HTTPDeps) (http.Handler, error) {
 			// here, so this is defense in depth rather than a live path.
 			return nil
 		}
-		srv, err := NewServer(sess, Deps{
+		srv, err := NewServer(sess, ServerDeps{
 			Sender:   deps.Sender,
 			Waker:    deps.Waker,
 			Audit:    audit,

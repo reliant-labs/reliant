@@ -21,15 +21,6 @@ type AttachmentReader interface {
 	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
 }
 
-// DaemonResumer asks the platform to wake a suspended daemon.
-//
-// Waking is a control-plane capability: in OSS mode there is no orchestrator
-// to schedule a pod, so this is optional and its absence is reported honestly
-// rather than papered over with a wait that could never succeed.
-type DaemonResumer interface {
-	ResumeDaemon(ctx context.Context, userID, daemonID string) error
-}
-
 // AttachmentReadiness implements DaemonReadiness over daemon attachment rows.
 type AttachmentReadiness struct {
 	attachments AttachmentReader

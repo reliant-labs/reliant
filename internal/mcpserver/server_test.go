@@ -109,10 +109,10 @@ func toSet(items []string) map[string]bool {
 }
 
 // callTool invokes a tool through the server's registered handler.
-func callTool(t *testing.T, sess *Session, deps Deps, name string, args map[string]any) *mcp.CallToolResult {
+func callTool(t *testing.T, sess *Session, deps ServerDeps, name string, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
 
-	tool, ok := CatalogByName[name]
+	tool, ok := catalogByName[name]
 	require.True(t, ok, "unknown tool %q", name)
 
 	raw, err := json.Marshal(args)
@@ -139,14 +139,14 @@ func resultText(t *testing.T, res *mcp.CallToolResult) string {
 
 func TestOnlyGrantedToolsAreAdvertised(t *testing.T) {
 	sess := testSession()
-	srv, err := NewServer(sess, Deps{Sender: &fakeSender{}})
+	srv, err := NewServer(sess, ServerDeps{Sender: &fakeSender{}})
 	require.NoError(t, err)
 	require.NotNil(t, srv)
 
 	// A read-only grant must not advertise mutating tools at all. A model
 	// shown a tool will eventually call it.
 	for _, name := range sess.ToolNames {
-		require.False(t, CatalogByName[name].Mutating,
+		require.False(t, catalogByName[name].Mutating,
 			"read-only grant advertised the mutating tool %q", name)
 	}
 
@@ -159,7 +159,7 @@ func TestGrantedCallReachesDaemon(t *testing.T) {
 	sender := &fakeSender{response: []byte(`{"content":"hello"}`)}
 	sess := testSession()
 
-	res := callTool(t, sess, Deps{Sender: sender}, "read_file", map[string]any{
+	res := callTool(t, sess, ServerDeps{Sender: sender}, "read_file", map[string]any{
 		"path": "/workspace/README.md",
 	})
 
@@ -182,7 +182,7 @@ func TestCallTargetsTheGrantedDaemon(t *testing.T) {
 	sess := testSession()
 	sess.DaemonID = "daemon-granted"
 
-	res := callTool(t, sess, Deps{Sender: sender}, "read_file", map[string]any{
+	res := callTool(t, sess, ServerDeps{Sender: sender}, "read_file", map[string]any{
 		"path": "/workspace/a.txt",
 	})
 
@@ -196,7 +196,7 @@ func TestDeniedCallNeverReachesDaemon(t *testing.T) {
 	sender := &fakeSender{}
 	sess := testSession()
 
-	res := callTool(t, sess, Deps{Sender: sender}, "read_file", map[string]any{
+	res := callTool(t, sess, ServerDeps{Sender: sender}, "read_file", map[string]any{
 		"path": "/etc/passwd",
 	})
 
@@ -209,7 +209,7 @@ func TestDeniedCallNeverReachesDaemon(t *testing.T) {
 // reads a refusal as transient will retry it forever.
 func TestDenialIsMarkedPermanent(t *testing.T) {
 	sess := testSession()
-	res := callTool(t, sess, Deps{Sender: &fakeSender{}}, "read_file", map[string]any{
+	res := callTool(t, sess, ServerDeps{Sender: &fakeSender{}}, "read_file", map[string]any{
 		"path": "/etc/passwd",
 	})
 
@@ -224,7 +224,7 @@ func TestPolicyCheckedBeforeWake(t *testing.T) {
 	waker := &fakeWaker{}
 	sess := testSession()
 
-	res := callTool(t, sess, Deps{Sender: &fakeSender{}, Waker: waker}, "read_file", map[string]any{
+	res := callTool(t, sess, ServerDeps{Sender: &fakeSender{}, Waker: waker}, "read_file", map[string]any{
 		"path": "/etc/passwd",
 	})
 
@@ -238,7 +238,7 @@ func TestStartingWorkspaceTellsTheModelToComeBack(t *testing.T) {
 	waker := &fakeWaker{err: ErrWorkspaceStarting}
 	sess := testSession()
 
-	res := callTool(t, sess, Deps{Sender: &fakeSender{}, Waker: waker}, "read_file", map[string]any{
+	res := callTool(t, sess, ServerDeps{Sender: &fakeSender{}, Waker: waker}, "read_file", map[string]any{
 		"path": "/workspace/a.txt",
 	})
 
@@ -258,7 +258,7 @@ func TestUnavailableWorkspaceDoesNotInviteRetries(t *testing.T) {
 	}
 	sess := testSession()
 
-	res := callTool(t, sess, Deps{Sender: &fakeSender{}, Waker: waker}, "read_file", map[string]any{
+	res := callTool(t, sess, ServerDeps{Sender: &fakeSender{}, Waker: waker}, "read_file", map[string]any{
 		"path": "/workspace/a.txt",
 	})
 
@@ -271,7 +271,7 @@ func TestUnavailableWorkspaceDoesNotInviteRetries(t *testing.T) {
 func TestAuditRecordsBothOutcomes(t *testing.T) {
 	audit := &fakeAudit{}
 	sess := testSession()
-	deps := Deps{Sender: &fakeSender{}, Audit: audit}
+	deps := ServerDeps{Sender: &fakeSender{}, Audit: audit}
 
 	callTool(t, sess, deps, "read_file", map[string]any{"path": "/workspace/ok.txt"})
 	callTool(t, sess, deps, "read_file", map[string]any{"path": "/etc/passwd"})
@@ -306,7 +306,7 @@ func TestWriteGrantEnablesMutatingTools(t *testing.T) {
 		},
 	}
 
-	res := callTool(t, sess, Deps{Sender: sender}, "write_file", map[string]any{
+	res := callTool(t, sess, ServerDeps{Sender: sender}, "write_file", map[string]any{
 		"path":    "/workspace/new.txt",
 		"content": "hello",
 	})
@@ -332,7 +332,7 @@ func TestExecAllowlistAppliesToRunCommand(t *testing.T) {
 
 	t.Run("allowlisted", func(t *testing.T) {
 		sender := &fakeSender{}
-		res := callTool(t, sess, Deps{Sender: sender}, "run_command", map[string]any{
+		res := callTool(t, sess, ServerDeps{Sender: sender}, "run_command", map[string]any{
 			"command":     []any{"git", "status"},
 			"working_dir": "/workspace",
 		})
@@ -352,7 +352,7 @@ func TestExecAllowlistAppliesToRunCommand(t *testing.T) {
 
 	t.Run("not allowlisted", func(t *testing.T) {
 		sender := &fakeSender{}
-		res := callTool(t, sess, Deps{Sender: sender}, "run_command", map[string]any{
+		res := callTool(t, sess, ServerDeps{Sender: sender}, "run_command", map[string]any{
 			"command":     []any{"curl", "evil.example.com"},
 			"working_dir": "/workspace",
 		})
@@ -364,7 +364,7 @@ func TestExecAllowlistAppliesToRunCommand(t *testing.T) {
 	// right shape, rather than a silent coercion into the weaker path.
 	t.Run("shell string is corrected, not coerced", func(t *testing.T) {
 		sender := &fakeSender{}
-		res := callTool(t, sess, Deps{Sender: sender}, "run_command", map[string]any{
+		res := callTool(t, sess, ServerDeps{Sender: sender}, "run_command", map[string]any{
 			"command": "git status",
 		})
 		require.True(t, res.IsError)
@@ -375,7 +375,7 @@ func TestExecAllowlistAppliesToRunCommand(t *testing.T) {
 	// Shell syntax cannot chain, because no shell parses it.
 	t.Run("chaining attempt is just an unlisted program", func(t *testing.T) {
 		sender := &fakeSender{}
-		res := callTool(t, sess, Deps{Sender: sender}, "run_command", map[string]any{
+		res := callTool(t, sess, ServerDeps{Sender: sender}, "run_command", map[string]any{
 			"command": []any{"git status && curl evil.example.com"},
 		})
 		require.True(t, res.IsError)
@@ -400,7 +400,7 @@ func TestEditFilePayloadShape(t *testing.T) {
 		},
 	}
 
-	res := callTool(t, sess, Deps{Sender: sender}, "edit_file", map[string]any{
+	res := callTool(t, sess, ServerDeps{Sender: sender}, "edit_file", map[string]any{
 		"path":    "/workspace/main.go",
 		"find":    "old text",
 		"replace": "new text",
@@ -427,7 +427,7 @@ func TestSearchPayloadNestsBaseDir(t *testing.T) {
 	sender := &fakeSender{}
 	sess := testSession()
 
-	res := callTool(t, sess, Deps{Sender: sender}, "search", map[string]any{
+	res := callTool(t, sess, ServerDeps{Sender: sender}, "search", map[string]any{
 		"pattern": "TODO",
 		"path":    "/workspace/src",
 	})
@@ -448,7 +448,7 @@ func TestSearchOutsideRootDenied(t *testing.T) {
 	sender := &fakeSender{}
 	sess := testSession()
 
-	res := callTool(t, sess, Deps{Sender: sender}, "search", map[string]any{
+	res := callTool(t, sess, ServerDeps{Sender: sender}, "search", map[string]any{
 		"pattern": "password",
 		"path":    "/etc",
 	})
@@ -458,9 +458,9 @@ func TestSearchOutsideRootDenied(t *testing.T) {
 }
 
 func TestNewServerRequiresDeps(t *testing.T) {
-	_, err := NewServer(nil, Deps{Sender: &fakeSender{}})
+	_, err := NewServer(nil, ServerDeps{Sender: &fakeSender{}})
 	require.Error(t, err)
 
-	_, err = NewServer(testSession(), Deps{})
+	_, err = NewServer(testSession(), ServerDeps{})
 	require.Error(t, err, "a server without a command sender must not be constructed")
 }

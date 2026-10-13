@@ -141,10 +141,11 @@ func (l *Limiter) Acquire(grantID string) (release func(), err error) {
 	}, nil
 }
 
-// Cleanup drops limiters idle beyond the TTL. Callers run it periodically;
-// without it a service that churns connectors accumulates one entry per grant
-// for the process lifetime.
-func (l *Limiter) Cleanup() {
+// cleanup drops limiters idle beyond the TTL. NewHTTPHandler runs it
+// periodically (runCleanup); without it a service that churns connectors
+// accumulates one entry per grant for the process lifetime. Both stay
+// unexported: CallLimiter.Acquire is the Limiter's whole contract.
+func (l *Limiter) cleanup() {
 	if l == nil {
 		return
 	}
@@ -161,8 +162,8 @@ func (l *Limiter) Cleanup() {
 	}
 }
 
-// RunCleanup runs Cleanup periodically until ctx ends.
-func (l *Limiter) RunCleanup(ctx context.Context) {
+// runCleanup runs cleanup periodically until ctx ends.
+func (l *Limiter) runCleanup(ctx context.Context) {
 	if l == nil {
 		return
 	}
@@ -172,7 +173,7 @@ func (l *Limiter) RunCleanup(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			l.Cleanup()
+			l.cleanup()
 		case <-ctx.Done():
 			return
 		}

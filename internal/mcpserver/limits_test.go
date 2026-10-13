@@ -150,7 +150,7 @@ func TestCleanupKeepsInFlightEntries(t *testing.T) {
 	}
 	l.mu.Unlock()
 
-	l.Cleanup()
+	l.cleanup()
 
 	// Evicting an entry with work in flight would make its release decrement
 	// a fresh entry and corrupt the count.
@@ -161,7 +161,7 @@ func TestCleanupKeepsInFlightEntries(t *testing.T) {
 
 	release()
 
-	l.Cleanup()
+	l.cleanup()
 	l.mu.Lock()
 	_, present := l.perKey["busy"]
 	l.mu.Unlock()
@@ -194,7 +194,7 @@ func TestLimitedCallsAreRefusedWithGuidance(t *testing.T) {
 	sender := &fakeSender{}
 	sess := testSession()
 	limiter := NewLimiter(Limits{RequestsPerMinute: 60, Burst: 1, MaxConcurrent: 10})
-	deps := Deps{Sender: sender, Limiter: limiter}
+	deps := ServerDeps{Sender: sender, Limiter: limiter}
 
 	// First call consumes the burst.
 	res := callTool(t, sess, deps, "read_file", map[string]any{"path": "/workspace/a.txt"})
@@ -213,7 +213,7 @@ func TestLimitedCallsAreNotAudited(t *testing.T) {
 	audit := &fakeAudit{}
 	sess := testSession()
 	limiter := NewLimiter(Limits{RequestsPerMinute: 60, Burst: 1, MaxConcurrent: 10})
-	deps := Deps{Sender: &fakeSender{}, Audit: audit, Limiter: limiter}
+	deps := ServerDeps{Sender: &fakeSender{}, Audit: audit, Limiter: limiter}
 
 	callTool(t, sess, deps, "read_file", map[string]any{"path": "/workspace/a.txt"})
 	before := len(audit.entries)

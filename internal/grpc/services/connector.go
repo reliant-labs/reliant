@@ -204,7 +204,7 @@ func validateTools(requested []string) ([]string, error) {
 		if name == "" {
 			continue
 		}
-		if _, ok := mcpserver.CatalogByName[name]; !ok {
+		if _, ok := mcpserver.ToolByName(name); !ok {
 			return nil, fmt.Errorf("unknown tool %q", name)
 		}
 		if seen[name] {
@@ -258,7 +258,7 @@ func validateExec(
 	// no way to tell why their connector cannot run anything.
 	if execMode == connectorgrant.ExecDeny {
 		for _, name := range tools {
-			if mcpserver.CatalogByName[name].NeedsExec {
+			if tool, _ := mcpserver.ToolByName(name); tool.NeedsExec {
 				return "", nil, fmt.Errorf(
 					"tool %q runs shell commands, so the connector needs an exec mode of allowlist or unrestricted", name)
 			}
@@ -378,8 +378,9 @@ func (s *ConnectorService) ListAvailableTools(
 		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
 	}
 
-	tools := make([]*reliantv1.ConnectorTool, 0, len(mcpserver.Catalog))
-	for _, t := range mcpserver.Catalog {
+	catalog := mcpserver.Tools()
+	tools := make([]*reliantv1.ConnectorTool, 0, len(catalog))
+	for _, t := range catalog {
 		tools = append(tools, &reliantv1.ConnectorTool{
 			Name:        t.Name,
 			Description: t.Description,

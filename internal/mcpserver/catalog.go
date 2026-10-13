@@ -1,34 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
-//
-// Package mcpserver exposes a daemon as an MCP server, so third-party clients
-// (ChatGPT, Claude, and their mobile apps) can run tools inside a user's cloud
-// workspace.
-//
-// The value is specific to mobile: a phone cannot spawn a stdio MCP server, so
-// a hosted daemon is the only way to give a phone-based assistant a real shell
-// and filesystem.
-//
-// Two deliberate narrowings relative to the daemon's own surface:
-//
-//   - The daemon registers ~74 commands, most of them UI plumbing. This catalog
-//     exposes a curated subset. Large tool lists measurably degrade model tool
-//     selection, and commands like worktree.reconcile mean nothing to an
-//     outside caller.
-//   - Every call carries a policy that the daemon enforces at dispatch. This
-//     package decides what to OFFER; it is not the security boundary. See
-//     internal/daemonpolicy.
-//
-// Registry/lookup-table package: the exported vars are populated once at init
-// by the packages that register into them, then read. A getter returns the
-// same map or slice header, so it moves the mutation surface without
-// narrowing it.
-//
-//forge:exclude-contract: exposes a daemon as an MCP server; every collaborator is already a consumer-declared interface in Deps
+
 package mcpserver
 
 import (
 	"errors"
 	"fmt"
+	"slices"
 )
 
 // Tool is one entry in the connector-facing catalog: an MCP tool name, the
@@ -147,11 +124,12 @@ func stringList(args map[string]any, key string) ([]string, error) {
 	}
 }
 
-// Catalog is the curated tool set offered to connectors.
+// catalog is the curated tool set offered to connectors. It is fixed at build
+// time; Tools and ToolByName are the read-only view other packages get.
 //
 // Ordering is intentional: read and search first, since they are what a model
 // reaches for most, and the destructive ones last.
-var Catalog = []Tool{
+var catalog = []Tool{
 	{
 		Name:        "read_file",
 		Command:     "fs.read_file",
@@ -398,21 +376,31 @@ var Catalog = []Tool{
 	},
 }
 
-// CatalogByName indexes Catalog for lookup during a tools/call.
-var CatalogByName = func() map[string]Tool {
-	m := make(map[string]Tool, len(Catalog))
-	for _, t := range Catalog {
+// catalogByName indexes catalog for lookup during a tools/call.
+var catalogByName = func() map[string]Tool {
+	m := make(map[string]Tool, len(catalog))
+	for _, t := range catalog {
 		m[t.Name] = t
 	}
 	return m
 }()
+
+// Tools returns the catalog in offer order. The slice is a copy, so a caller
+// cannot reorder or extend the catalog the server offers.
+func Tools() []Tool { return slices.Clone(catalog) }
+
+// ToolByName looks a tool up by its MCP name.
+func ToolByName(name string) (Tool, bool) {
+	t, ok := catalogByName[name]
+	return t, ok
+}
 
 // ReadOnlyToolNames returns the tools safe for a read-only grant. This is the
 // default grant shape, so it is derived from the catalog rather than
 // maintained as a second list that could drift.
 func ReadOnlyToolNames() []string {
 	var names []string
-	for _, t := range Catalog {
+	for _, t := range catalog {
 		if !t.Mutating {
 			names = append(names, t.Name)
 		}
@@ -422,8 +410,8 @@ func ReadOnlyToolNames() []string {
 
 // AllToolNames returns every catalog tool name.
 func AllToolNames() []string {
-	names := make([]string, 0, len(Catalog))
-	for _, t := range Catalog {
+	names := make([]string, 0, len(catalog))
+	for _, t := range catalog {
 		names = append(names, t.Name)
 	}
 	return names
@@ -437,7 +425,7 @@ func CommandsForTools(toolNames []string) []string {
 	seen := make(map[string]bool)
 	var commands []string
 	for _, name := range toolNames {
-		tool, ok := CatalogByName[name]
+		tool, ok := catalogByName[name]
 		if !ok {
 			continue
 		}

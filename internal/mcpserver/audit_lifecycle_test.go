@@ -43,7 +43,7 @@ func TestGrantNarrowingTakesEffectMidSession(t *testing.T) {
 	// The grant as it stood when the session opened.
 	live := testSession()
 	resolver := &stubResolver{session: live}
-	deps := Deps{Sender: sender, Resolver: resolver}
+	deps := ServerDeps{Sender: sender, Resolver: resolver}
 
 	res := callTool(t, sess, deps, "read_file", map[string]any{"path": "/workspace/a.txt"})
 	require.False(t, res.IsError, "call should succeed before the grant is narrowed: %s", resultText(t, res))
@@ -71,7 +71,7 @@ func TestRevokedGrantEndsAnOpenSession(t *testing.T) {
 	sess := testSession()
 	resolver := &stubResolver{err: connectorgrant.ErrNotFound}
 
-	res := callTool(t, sess, Deps{Sender: sender, Resolver: resolver}, "read_file",
+	res := callTool(t, sess, ServerDeps{Sender: sender, Resolver: resolver}, "read_file",
 		map[string]any{"path": "/workspace/a.txt"})
 
 	require.True(t, res.IsError)
@@ -88,7 +88,7 @@ func TestAuditRecordsIntentBeforeDispatch(t *testing.T) {
 	sender := &fakeSender{}
 	sess := testSession()
 
-	callTool(t, sess, Deps{Sender: sender, Audit: audit}, "read_file",
+	callTool(t, sess, ServerDeps{Sender: sender, Audit: audit}, "read_file",
 		map[string]any{"path": "/workspace/a.txt"})
 
 	require.Len(t, audit.entries, 1)
@@ -134,7 +134,7 @@ func TestDeniedCallIsRecordedInOneShot(t *testing.T) {
 	sender := &fakeSender{}
 	sess := testSession()
 
-	callTool(t, sess, Deps{Sender: sender, Audit: audit}, "read_file",
+	callTool(t, sess, ServerDeps{Sender: sender, Audit: audit}, "read_file",
 		map[string]any{"path": "/etc/passwd"})
 
 	require.Len(t, audit.entries, 1)

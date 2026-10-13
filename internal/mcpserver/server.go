@@ -40,34 +40,6 @@ type CommandSender interface {
 	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 }
 
-// WorkspaceWaker ensures a suspended workspace is running before a command is
-// sent. A phone-initiated request is often the first traffic a workspace has
-// seen in hours, so the common case is a cold one.
-type WorkspaceWaker interface {
-	// EnsureAwake blocks until the daemon is ready to accept commands, or
-	// returns an error if it cannot be woken in time.
-	EnsureAwake(ctx context.Context, userID, daemonID string) error
-}
-
-// AuditSink records what a connector did. Recording is not optional in
-// practice: when a third-party model runs commands in someone's workspace,
-// "what did it actually do" is the first question asked, and it cannot be
-// answered retroactively.
-//
-// Recording is two-phase because a call that is only recorded after it returns
-// is lost precisely when the server dies mid-command — the case where the
-// record matters most. Begin writes durably BEFORE dispatch; Complete resolves
-// it. A record left unresolved is the signal that a command was issued and
-// never accounted for.
-type AuditSink interface {
-	// Begin records an attempt and returns an id for Complete. An empty id
-	// means the attempt could not be recorded; Complete then does nothing.
-	Begin(ctx context.Context, entry AuditEntry) string
-
-	// Complete resolves a previously begun record.
-	Complete(ctx context.Context, id string, denied bool, errMsg string, duration time.Duration)
-}
-
 // AuditEntry is one connector tool invocation.
 type AuditEntry struct {
 	GrantID   string
@@ -105,30 +77,9 @@ type Session struct {
 	ToolNames []string
 }
 
-// GrantResolver re-reads a session's current grant.
-//
-// MCP sessions are long-lived and the SDK builds one server per session, so
-// the Session captured when the connection opened would otherwise stay
-// authoritative for its whole lifetime. Revocation is already immediate (the
-// HTTP layer re-authenticates every request), but NARROWING a grant — removing
-// a tool, tightening the path root — would not take effect until the client
-// reconnected. Re-resolving per call closes that gap.
-type GrantResolver interface {
-	// Resolve returns the session's current policy and tool list, or an error
-	// if the grant is no longer usable.
-	Resolve(ctx context.Context, grantID string) (*Session, error)
-}
-
-// CallLimiter admits or refuses one tool call for a grant. *Limiter is the
-// production implementation; a nil *Limiter admits every call.
-type CallLimiter interface {
-	// Acquire reserves capacity for one call. The returned release function
-	// must be called when the call finishes; it is a no-op on error.
-	Acquire(grantID string) (release func(), err error)
-}
-
-// Deps are the collaborators a Server needs.
-type Deps struct {
+// ServerDeps are the collaborators a Server needs, as HTTPDeps are the HTTP
+// surface's.
+type ServerDeps struct {
 	Sender   CommandSender
 	Waker    WorkspaceWaker
 	Audit    AuditSink
@@ -138,7 +89,7 @@ type Deps struct {
 
 // NewServer builds an MCP server exposing sess's granted tools, backed by the
 // daemon named in the session.
-func NewServer(sess *Session, deps Deps) (*mcp.Server, error) {
+func NewServer(sess *Session, deps ServerDeps) (*mcp.Server, error) {
 	if sess == nil {
 		return nil, errors.New("mcpserver: session is required")
 	}
@@ -153,7 +104,7 @@ func NewServer(sess *Session, deps Deps) (*mcp.Server, error) {
 	}, nil)
 
 	granted := grantedSet(sess.ToolNames)
-	for _, tool := range Catalog {
+	for _, tool := range catalog {
 		if !granted[tool.Name] {
 			continue
 		}
@@ -189,7 +140,7 @@ func grantedSet(names []string) map[string]bool {
 }
 
 // makeHandler builds the MCP handler for one catalog tool.
-func makeHandler(tool Tool, sess *Session, deps Deps) mcp.ToolHandler {
+func makeHandler(tool Tool, sess *Session, deps ServerDeps) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
 

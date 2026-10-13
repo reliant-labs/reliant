@@ -37,19 +37,6 @@ var ErrWorkspaceStarting = errors.New("workspace is starting")
 // orchestrator. Retrying will not help, and callers must not suggest it.
 var ErrWorkspaceUnavailable = errors.New("workspace cannot be started")
 
-// DaemonReadiness reports and requests daemon availability. It is deliberately
-// narrow so this package does not depend on the daemon registry or the control
-// plane directly — in OSS mode there is nothing to resume, and Resume can be a
-// no-op that simply reports the daemon is not routable.
-type DaemonReadiness interface {
-	// IsReady reports whether the daemon is connected and can accept commands.
-	IsReady(ctx context.Context, userID, daemonID string) (bool, error)
-
-	// Resume asks the platform to wake a suspended daemon. It returns quickly;
-	// readiness is then observed through IsReady rather than promised here.
-	Resume(ctx context.Context, userID, daemonID string) error
-}
-
 // PollingWaker triggers a resume and reports what happened, without waiting
 // for the workspace to finish starting.
 //
