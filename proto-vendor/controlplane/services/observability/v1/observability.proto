@@ -187,7 +187,6 @@ service ObservabilityService {
 
 // === Shared ===
 
-
 // TimeRange is a half-open range [start, end). Both ends are required and
 // end must be after start; each RPC caps the length.
 message TimeRange {
@@ -726,7 +725,7 @@ message WorkloadContainer {
   // When the restart that produced the reason was first observed. Unset when
   // the reason is known but no restart happened inside the window.
   google.protobuf.Timestamp last_terminated_at = 6;
-  ResourceUsage cpu = 7;    // cores
+  ResourceUsage cpu = 7; // cores
   ResourceUsage memory = 8; // working set, bytes
 }
 
