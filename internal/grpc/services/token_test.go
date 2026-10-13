@@ -122,7 +122,7 @@ func TestTokenServiceKindsMapToScopesAndFilter(t *testing.T) {
 		t.Errorf("daemon token scopes = %v, want daemon:connect only", p.Scopes.Strings())
 	}
 
-	onlyDaemon, err := svc.ListTokens(ctx, req(&reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON}))
+	onlyDaemon, err := svc.ListTokens(ctx, req(&reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON.Enum()}))
 	if err != nil {
 		t.Fatalf("ListTokens(DAEMON): %v", err)
 	}

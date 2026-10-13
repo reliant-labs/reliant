@@ -157,7 +157,7 @@ message CreateTokenResponse {
 }
 
 message ListTokensRequest {
-  TokenKind kind = 1;  // UNSPECIFIED lists every kind
+  optional TokenKind kind = 1;  // Unset (or UNSPECIFIED) lists every kind
 }
 
 message ListTokensResponse {

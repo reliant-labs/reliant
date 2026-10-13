@@ -27685,7 +27685,7 @@
           {
             "Name": "kind",
             "ProtoType": "enum",
-            "IsOptional": false
+            "IsOptional": true
           }
         ],
         "ListTokensResponse": [
@@ -27808,7 +27808,8 @@
           {
             "name": "kind",
             "kind": "enum",
-            "type_name": "reliant.v1.TokenKind"
+            "type_name": "reliant.v1.TokenKind",
+            "optional": true
           }
         ],
         "reliant.v1.ListTokensResponse": [
@@ -33582,5 +33583,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "7d6251c34b5c0afbf551936a78bbb73efb2a6dd91c8f425963dcd4cbe0d2f416"
+  "source_hash": "3320f876244f26a1020d3a95acc4d0fb082b5dd0b89ba67d84c10922d3e79f4a"
 }

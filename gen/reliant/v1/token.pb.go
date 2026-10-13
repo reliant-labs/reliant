@@ -314,7 +314,7 @@ func (x *CreateTokenResponse) GetToken() string {
 
 type ListTokensRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kind          TokenKind              `protobuf:"varint,1,opt,name=kind,proto3,enum=reliant.v1.TokenKind" json:"kind,omitempty"` // UNSPECIFIED lists every kind
+	Kind          *TokenKind             `protobuf:"varint,1,opt,name=kind,proto3,enum=reliant.v1.TokenKind,oneof" json:"kind,omitempty"` // Unset (or UNSPECIFIED) lists every kind
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -350,8 +350,8 @@ func (*ListTokensRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListTokensRequest) GetKind() TokenKind {
-	if x != nil {
-		return x.Kind
+	if x != nil && x.Kind != nil {
+		return *x.Kind
 	}
 	return TokenKind_TOKEN_KIND_UNSPECIFIED
 }
@@ -888,9 +888,10 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\x06scopes\x18\v \x03(\tR\x06scopes\"V\n" +
 	"\x13CreateTokenResponse\x12)\n" +
 	"\x04info\x18\x01 \x01(\v2\x15.reliant.v1.TokenInfoR\x04info\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token\">\n" +
-	"\x11ListTokensRequest\x12)\n" +
-	"\x04kind\x18\x01 \x01(\x0e2\x15.reliant.v1.TokenKindR\x04kind\"C\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\"L\n" +
+	"\x11ListTokensRequest\x12.\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x15.reliant.v1.TokenKindH\x00R\x04kind\x88\x01\x01B\a\n" +
+	"\x05_kind\"C\n" +
 	"\x12ListTokensResponse\x12-\n" +
 	"\x06tokens\x18\x01 \x03(\v2\x15.reliant.v1.TokenInfoR\x06tokens\"$\n" +
 	"\x12RevokeTokenRequest\x12\x0e\n" +
@@ -997,6 +998,7 @@ func file_reliant_v1_token_proto_init() {
 	if File_reliant_v1_token_proto != nil {
 		return
 	}
+	file_reliant_v1_token_proto_msgTypes[3].OneofWrappers = []any{}
 	file_reliant_v1_token_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -455,7 +455,7 @@ func TestDaemonCredential_SelfHostedEndToEnd(t *testing.T) {
 	require.Equal(t, userID, msg.GetRegistrationAck().GetUserId())
 
 	listed, err := tokens.ListTokens(context.Background(), connect.NewRequest(&reliantv1.ListTokensRequest{
-		Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
+		Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON.Enum(),
 	}))
 	require.NoError(t, err)
 	require.Len(t, listed.Msg.GetTokens(), 1)

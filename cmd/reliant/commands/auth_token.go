@@ -127,7 +127,7 @@ func newAuthTokenListCmd() *cobra.Command {
 			}
 
 			client := tokenServiceClient(conn, conn.Token)
-			resp, err := client.ListTokens(cmd.Context(), connect.NewRequest(&reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_API}))
+			resp, err := client.ListTokens(cmd.Context(), connect.NewRequest(&reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_API.Enum()}))
 			if err != nil {
 				return conn.annotate(err)
 			}
@@ -187,7 +187,7 @@ func newAuthTokenRevokeCmd() *cobra.Command {
 			}
 			client := tokenServiceClient(conn, conn.Token)
 
-			listResp, err := client.ListTokens(cmd.Context(), connect.NewRequest(&reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_API}))
+			listResp, err := client.ListTokens(cmd.Context(), connect.NewRequest(&reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_API.Enum()}))
 			if err != nil {
 				return conn.annotate(err)
 			}
