@@ -79,18 +79,6 @@ type EndpointConfig struct {
 	Models                 []*reliantv1.ModelEndpointModel
 }
 
-// EndpointLister is optionally implemented by a Directory that can also list
-// the user's configured endpoints.
-type EndpointLister interface {
-	ConfiguredEndpoints(ctx context.Context, userID string) ([]EndpointConfig, error)
-}
-
-// EndpointSource is the slice of db.Repository the endpoint listing reads,
-// beyond Source.
-type EndpointSource interface {
-	ListModelEndpoints(ctx context.Context, userID string) ([]*db.ModelEndpoint, error)
-}
-
 // DecodeEndpointModels reads models_json (a JSON array of ModelEndpointModel).
 func DecodeEndpointModels(raw string) ([]*reliantv1.ModelEndpointModel, error) {
 	raw = strings.TrimSpace(raw)
@@ -359,12 +347,6 @@ func (r *RepoDirectory) ConfiguredEndpoints(ctx context.Context, userID string) 
 }
 
 // ---- transports ----
-
-// CredentialSource yields an endpoint's stored credentials. Declared here, at
-// its consumer; modelendpoints.EndpointCredentials satisfies it.
-type CredentialSource interface {
-	Get(ctx context.Context, userID, connectionID string) (apiKey string, headers map[string]string, err error)
-}
 
 // CustomRoutes carries what reaching a configured endpoint needs.
 type CustomRoutes struct {

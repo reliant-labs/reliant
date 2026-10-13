@@ -13,7 +13,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -52,12 +51,6 @@ type DaemonInventory struct {
 	Machine   string
 	Online    bool
 	Inventory *reliantv1.LocalModelInventory
-}
-
-// Directory lists a user's daemons that published local model inventories.
-// Declared here, at the consumer; RepoDirectory is the production one.
-type Directory interface {
-	LocalDaemons(ctx context.Context, userID string) ([]DaemonInventory, error)
 }
 
 // TransportFactory returns the RoundTripper that relays to endpointID on
@@ -355,13 +348,6 @@ func machineOf(m Model) string {
 		return m.Custom.Name
 	}
 	return m.Machine
-}
-
-// Source is the slice of db.Repository RepoDirectory reads.
-type Source interface {
-	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
-	ListDaemonLocalModels(ctx context.Context, userID string) (map[string]string, error)
-	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
 }
 
 // RepoDirectory reads inventories from the database; a daemon is online iff it
