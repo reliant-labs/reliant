@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package message
 
 import (
 	"context"
@@ -8,28 +8,14 @@ import (
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
 )
 
-// MessageService implements the MessageService RPC handlers
-type MessageService struct {
-	reliantv1connect.UnimplementedMessageServiceHandler
-	database db.Repository
-}
-
-// NewMessageService creates a new MessageService
-func NewMessageService(database db.Repository) *MessageService {
-	return &MessageService{
-		database: database,
-	}
-}
-
 // GetMessage retrieves a single message by ID with its content blocks
-func (s *MessageService) GetMessage(
+func (s *Service) GetMessage(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetMessageRequest],
 ) (*connect.Response[reliantv1.GetMessageResponse], error) {
@@ -39,7 +25,7 @@ func (s *MessageService) GetMessage(
 	}
 
 	// Get message from database
-	msg, err := s.database.GetMessage(ctx, messageID)
+	msg, err := s.deps.Repo.GetMessage(ctx, messageID)
 	if err != nil {
 		logging.Error("Failed to get message", "error", err, "messageID", messageID)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("message not found"))
@@ -53,13 +39,13 @@ func (s *MessageService) GetMessage(
 	if !ok || userID == "" {
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
 	}
-	chat, err := s.database.GetChat(ctx, msg.ChatID)
+	chat, err := s.deps.Repo.GetChat(ctx, msg.ChatID)
 	if err != nil || chat == nil || chat.UserID != userID {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("message not found"))
 	}
 
 	// Get content blocks for this message
-	blocks, err := s.database.ListContentBlocks(ctx, msg.ID)
+	blocks, err := s.deps.Repo.ListContentBlocks(ctx, msg.ID)
 	if err != nil {
 		logging.Error("Failed to list content blocks", "error", err, "messageID", msg.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load message content"))
@@ -78,7 +64,7 @@ func (s *MessageService) GetMessage(
 		for id := range attachmentIDSet {
 			attachmentIDs = append(attachmentIDs, id)
 		}
-		attachmentData, err := s.database.GetAttachmentsByIDs(ctx, attachmentIDs)
+		attachmentData, err := s.deps.Repo.GetAttachmentsByIDs(ctx, attachmentIDs)
 		if err != nil {
 			logging.Warn("Failed to get attachments for message", "error", err, "messageID", msg.ID)
 		} else {
@@ -102,7 +88,7 @@ func (s *MessageService) GetMessage(
 	// Build durable tool call status map so a reload/chat-switch sees real
 	// status instead of the frontend having to infer it from workflow activity.
 	toolCallStatusByCallID := make(map[string]*db.ToolCall)
-	toolCalls, err := s.database.ListToolCallsByMessageIDs(ctx, []string{msg.ID})
+	toolCalls, err := s.deps.Repo.ListToolCallsByMessageIDs(ctx, []string{msg.ID})
 	if err != nil {
 		logging.Warn("Failed to list tool calls for message", "error", err, "messageID", msg.ID)
 	} else {

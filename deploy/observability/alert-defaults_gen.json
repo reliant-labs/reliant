@@ -12,6 +12,10 @@
         "rpc_service": "reliant.v1.ConnectorService"
       },
       {
+        "name": "message",
+        "rpc_service": "reliant.v1.MessageService"
+      },
+      {
         "name": "preset",
         "rpc_service": "reliant.v1.PresetService"
       },

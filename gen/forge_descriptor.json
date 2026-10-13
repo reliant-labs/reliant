@@ -16635,8 +16635,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "ToolCallStatus"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "ModelEndpointService",
@@ -33576,5 +33575,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "cdd3391defeaec6d06dfe89bd56c57e1be854b3bd1f6c3dc590ad603aba04bb2"
+  "source_hash": "d065b1ae1b79143ed4204c6e793727d53ecd37c67b78ff2dafa4044a4ff83649"
 }

@@ -45,6 +45,9 @@
     "internal/handlers/connector/handlers_scaffold_revoke_connector_test.go": {
       "scaffolded_at": "2026-10-13T13:00:02Z"
     },
+    "internal/handlers/message/handlers_scaffold_get_message_test.go": {
+      "scaffolded_at": "2026-10-13T13:35:41Z"
+    },
     "internal/handlers/preset/handlers_scaffold_create_preset_test.go": {
       "scaffolded_at": "2026-10-13T13:50:35Z"
     },

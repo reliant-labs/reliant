@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
+	"github.com/reliant-labs/reliant/internal/handlers/message"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,7 +43,12 @@ func TestGetMessage_PopulatesDurableToolCallStatus(t *testing.T) {
 		UpdatedAt:   time.Now().UTC(),
 	}))
 
-	svc := NewMessageService(repo)
+	svc, err := message.New(message.Deps{
+		Logger: slog.Default(),
+		Config: &typedconfig.Config{},
+		Repo:   repo,
+	})
+	require.NoError(t, err)
 	resp, err := svc.GetMessage(ctx, connect.NewRequest(&reliantv1.GetMessageRequest{
 		MessageId: f.MessageID,
 	}))

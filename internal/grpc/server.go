@@ -38,6 +38,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
+	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
@@ -245,7 +246,14 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, fmt.Errorf("question service: %w", err)
 	}
 	chatService := services.NewChatService(database, cfg.TemporalClient, cfg.PauseService, cfg.SharedTaskQueue, cfg.StreamingHub, router)
-	messageService := services.NewMessageService(database)
+	messageService, err := message.New(message.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("message service: %w", err)
+	}
 	settingsService := services.NewSettingsService(database, router)
 	mcpService := services.NewMCPService(database, router)
 	workflowService := services.NewWorkflowService(database, router)
