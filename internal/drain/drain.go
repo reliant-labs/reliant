@@ -25,6 +25,8 @@
 // Step 5 is the one that is easy to get backwards: shutting the health server
 // down FIRST looks like "stop advertising ourselves" but actually blinds the
 // probe at the exact moment it needs an answer.
+//
+//forge:exclude-contract: shutdown plumbing of reliant's hand-wired server mains (serverapi, servergateway, serverworker), not a service; forge serverkit's drain replaces it in P7 (research/forge-migration/PLAN.md)
 package drain
 
 import (
