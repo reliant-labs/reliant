@@ -6,7 +6,14 @@
 // Guard (a dialer that vets resolved IPs, for integration/MCP HTTP clients).
 // It must not import os/exec.
 //
-//forge:exclude-contract: a stateless network-policy helper with no I/O contract of its own
+// Guard.DialContext dials, so forge's exclusion gate reads the package as an
+// outbound boundary. It is a dialer primitive instead: the DialContext of the
+// transports that outbound clients are built from. Those clients' packages
+// are the boundaries, with their own contracts and stub-server tests; a
+// contract here would mock and decorate every TCP connection they open.
+//
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: a dialer primitive (the guarded http.Transport's DialContext), not a boundary; the clients built on it are the outbound adapters
+//forge:exclude-contract: network-policy primitives (address vetting, a guarded dialer and transports) that outbound HTTP clients are built from
 package netguard
 
 import (
