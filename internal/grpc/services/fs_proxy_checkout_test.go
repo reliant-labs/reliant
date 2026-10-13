@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/machinewake"
 )
 
 // fsMissingDirRouter answers fs.get_tree the way a daemon does when the
@@ -169,9 +170,9 @@ func TestFileSystemProxy_SendCommand_ClassifiesMissingPath(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &FileSystemProxyService{router: &fsFailRouter{err: errors.New(tc.err)}}
-			svc.wake = machineWake{router: svc.router}
+			svc.wake = machinewake.New(machinewake.Deps{Resumer: machinewake.ResumerOf(svc.router)})
 			var resp struct{}
-			err := svc.sendCommand(fsProxyContext(), fsProxyTestUser, wakeTarget{}, "fs.read_file", map[string]any{}, &resp, 1000)
+			err := svc.sendCommand(fsProxyContext(), fsProxyTestUser, machinewake.Target{}, "fs.read_file", map[string]any{}, &resp, 1000)
 			require.Error(t, err)
 			assert.Equal(t, tc.want, connect.CodeOf(err))
 		})

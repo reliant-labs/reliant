@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/machinewake"
 )
 
 // discoverRouter answers worktree.discover_repos and worktree.prune from
@@ -238,10 +239,10 @@ func TestDiscoverWorktrees_BackgroundNeverWakesAnAsleepMachine(t *testing.T) {
 			assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 			if background {
 				assert.Empty(t, f.router.wakeCalls(), "a background poll must not start the machine")
-				assert.False(t, isMachineWaking(err))
+				assert.False(t, machinewake.IsWaking(err))
 			} else {
 				require.NotEmpty(t, f.router.wakeCalls())
-				assert.True(t, isMachineWaking(err))
+				assert.True(t, machinewake.IsWaking(err))
 			}
 		})
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -33,7 +34,7 @@ type FileSystemProxyService struct {
 	reliantv1connect.UnimplementedFileSystemServiceHandler
 	router   toolexec.DaemonRouter
 	database db.Repository
-	wake     machineWake
+	wake     machinewake.Service
 }
 
 // NewFileSystemProxyService creates a new FileSystemProxyService.
@@ -41,7 +42,7 @@ func NewFileSystemProxyService(router toolexec.DaemonRouter, database db.Reposit
 	return &FileSystemProxyService{
 		router:   router,
 		database: database,
-		wake:     machineWake{router: router, owners: database},
+		wake:     machinewake.New(machinewake.Deps{Resumer: machinewake.ResumerOf(router), Owners: database}),
 	}
 }
 
@@ -91,7 +92,7 @@ type workspaceScope struct {
 	// target is the machine holding basePath (daemonID "" when default
 	// resolution picks it), and whether the request was made for a chat with
 	// no machine. See workspaceDaemonID.
-	target wakeTarget
+	target machinewake.Target
 }
 
 // resolveScope resolves the workspace root a request is scoped to and the
@@ -113,7 +114,7 @@ func (s *FileSystemProxyService) resolveScope(ctx context.Context, userID, proje
 // workspaceDaemonID returns the machine a workspace-scoped request must run
 // on (daemonID "" leaves it to default resolution), marked noMachine when the
 // request was made for a chat that has no machine: such a request must never
-// wake one (see machineWake).
+// wake one (see machinewake).
 //
 // The files exist on one machine. For a request made for a chat (chat_id) it
 // is the chat's machine: its pinned daemon, else its worktree's owner
@@ -127,7 +128,7 @@ func (s *FileSystemProxyService) resolveScope(ctx context.Context, userID, proje
 // checkout. Without a chat, an owned worktree goes to its owner too. Anything
 // else (the main checkout, legacy rows that record no owner) keeps default
 // resolution.
-func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (wakeTarget, error) {
+func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (machinewake.Target, error) {
 	var worktree *db.Worktree
 	if worktreeID != nil && *worktreeID != "" {
 		wt, err := s.database.GetWorktree(ctx, *worktreeID)
@@ -136,7 +137,7 @@ func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, 
 			// A missing row means "no owner", as it does for tool routing.
 		case err != nil:
 			logging.Error("[FSProxy] Failed to load worktree to route request", "error", err, "worktreeID", *worktreeID)
-			return wakeTarget{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the workspace's machine"))
+			return machinewake.Target{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the workspace's machine"))
 		default:
 			worktree = wt
 		}
@@ -144,37 +145,37 @@ func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, 
 	owner := worktreeOwner(worktree)
 
 	if chatID == nil || *chatID == "" {
-		return wakeTarget{daemonID: owner}, nil
+		return machinewake.Target{DaemonID: owner}, nil
 	}
 	chat, err := s.database.GetChat(ctx, *chatID)
 	switch {
 	case errors.Is(err, core.ErrChatNotFound):
 		// The UI can still name a chat it has just deleted. Degrade to the
 		// routing a request without a chat gets rather than fail the tree.
-		return wakeTarget{daemonID: owner}, nil
+		return machinewake.Target{DaemonID: owner}, nil
 	case err != nil:
 		logging.Error("[FSProxy] Failed to load chat to route request", "error", err, "chatID", *chatID)
-		return wakeTarget{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
+		return machinewake.Target{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
 	case chat.UserID != userID:
-		return wakeTarget{}, connect.NewError(connect.CodeNotFound, errors.New("chat not found"))
+		return machinewake.Target{}, connect.NewError(connect.CodeNotFound, errors.New("chat not found"))
 	case chat.ProjectID != projectID:
 		// A chat from another project says nothing about this project's
 		// files. It is stale UI context (a project switch racing the tree),
 		// and ResolveBasePath ignores it the same way.
-		return wakeTarget{daemonID: owner}, nil
+		return machinewake.Target{DaemonID: owner}, nil
 	}
 	if owner != "" && (chat.WorktreeID == nil || *chat.WorktreeID != worktree.ID) {
-		return wakeTarget{daemonID: owner, noMachine: chat.NoMachine}, nil
+		return machinewake.Target{DaemonID: owner, NoMachine: chat.NoMachine}, nil
 	}
 	daemonID, err := chatDaemonID(ctx, s.database, chat)
 	if err != nil {
 		logging.Error("[FSProxy] Failed to resolve the chat's machine", "error", err, "chatID", chat.ID)
-		return wakeTarget{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
+		return machinewake.Target{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
 	}
 	if daemonID != "" {
-		return wakeTarget{daemonID: daemonID, noMachine: chat.NoMachine}, nil
+		return machinewake.Target{DaemonID: daemonID, NoMachine: chat.NoMachine}, nil
 	}
-	return wakeTarget{daemonID: owner, noMachine: chat.NoMachine}, nil
+	return machinewake.Target{DaemonID: owner, NoMachine: chat.NoMachine}, nil
 }
 
 // resolve turns a client path into the absolute, confined path the daemon
@@ -219,25 +220,25 @@ func projectRelativePrefix(basePath, resolvedPath string) string {
 
 // sendCommand is a helper that marshals the request, sends the daemon command
 // to the target machine (daemonID "" = default resolution), and unmarshals the
-// response. A machine found asleep is woken (machineWake) and the request fails
+// response. A machine found asleep is woken (machinewake) and the request fails
 // as waking, for the client to retry.
-func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID string, target wakeTarget, commandType string, req any, resp any, timeoutMs int32) error {
+func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID string, target machinewake.Target, commandType string, req any, resp any, timeoutMs int32) error {
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
 	}
 
 	var respBytes []byte
-	if target.daemonID == "" {
+	if target.DaemonID == "" {
 		respBytes, err = s.router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 	} else {
-		respBytes, err = s.router.SendDaemonCommandToDaemon(ctx, userID, target.daemonID, commandType, payload, timeoutMs)
+		respBytes, err = s.router.SendDaemonCommandToDaemon(ctx, userID, target.DaemonID, commandType, payload, timeoutMs)
 	}
 	if err != nil {
 		// An asleep machine is woken here. The error then carries the wake,
-		// which MachineWakingInterceptor turns into Unavailable + DaemonWaking
+		// which machinewake.NewInterceptor turns into Unavailable + DaemonWaking
 		// whatever code is chosen below.
-		err = s.wake.afterFailure(ctx, userID, target, err)
+		err = s.wake.AfterFailure(ctx, userID, target, err)
 		return fsProxyDaemonError(err)
 	}
 
@@ -575,7 +576,7 @@ type fsProxyPreviewInfo struct {
 
 // previewInfo asks the machine holding resolvedPath to stat and classify it.
 // requestedPath is the client's path, used only in the log line.
-func (s *FileSystemProxyService) previewInfo(ctx context.Context, userID string, target wakeTarget, resolvedPath, requestedPath string) (*fsProxyPreviewInfo, error) {
+func (s *FileSystemProxyService) previewInfo(ctx context.Context, userID string, target machinewake.Target, resolvedPath, requestedPath string) (*fsProxyPreviewInfo, error) {
 	var info fsProxyPreviewInfo
 	if err := s.sendCommand(ctx, userID, target, "fs.preview_info", map[string]any{"path": resolvedPath}, &info, 30000); err != nil {
 		// Requesting preview info for a directory is a client-input condition
@@ -1013,7 +1014,7 @@ func (s *FileSystemProxyService) ListDirectory(
 		Entries []fsProxyDirEntry `json:"entries"`
 	}
 	// No workspace to follow: the project picker browses the default machine.
-	if err := s.sendCommand(ctx, userID, wakeTarget{}, "fs.list_dir", cmdReq, &cmdResp, 5000); err != nil {
+	if err := s.sendCommand(ctx, userID, machinewake.Target{}, "fs.list_dir", cmdReq, &cmdResp, 5000); err != nil {
 		return nil, err
 	}
 
@@ -1070,7 +1071,7 @@ func (s *FileSystemProxyService) CreateDirectory(
 		"path": path,
 	}
 	var cmdResp struct{}
-	if err := s.sendCommand(ctx, userID, wakeTarget{}, "fs.mkdir", cmdReq, &cmdResp, 5000); err != nil {
+	if err := s.sendCommand(ctx, userID, machinewake.Target{}, "fs.mkdir", cmdReq, &cmdResp, 5000); err != nil {
 		return nil, err
 	}
 

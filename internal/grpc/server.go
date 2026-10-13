@@ -39,6 +39,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -266,10 +267,10 @@ func NewServer(cfg *Config) (*Server, error) {
 	taskPath, taskHandler := reliantv1connect.NewTaskServiceHandler(taskService, opts...)
 	catalogPath, catalogHandler := reliantv1connect.NewCatalogServiceHandler(catalogService, opts...)
 	projectPath, projectHandler := reliantv1connect.NewProjectServiceHandler(projectService, opts...)
-	// The services whose requests wake an asleep machine (services.machineWake)
+	// The services whose requests wake an asleep machine (machinewake)
 	// report the wake as Unavailable + DaemonWaking, whatever error they wrap
 	// it in. Cloned so the shared opts slice is never appended into.
-	machineWakeOpts := append(slices.Clone(opts), connect.WithInterceptors(services.NewMachineWakingInterceptor()))
+	machineWakeOpts := append(slices.Clone(opts), connect.WithInterceptors(machinewake.NewInterceptor()))
 	worktreePath, worktreeHandler := reliantv1connect.NewWorktreeServiceHandler(worktreeService, machineWakeOpts...)
 	repoPath, repoHandler := reliantv1connect.NewRepoServiceHandler(repoService, opts...)
 	approvalPath, approvalHandler := reliantv1connect.NewApprovalServiceHandler(approvalService, opts...)

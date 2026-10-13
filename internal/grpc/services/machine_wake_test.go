@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -188,11 +189,11 @@ func (f *asleepFixture) getTree(worktreeID, chatID *string) error {
 	return err
 }
 
-// asWire passes err through MachineWakingInterceptor, as the server does, and
+// asWire passes err through machinewake.NewInterceptor, as the server does, and
 // returns the Connect error a client receives.
 func asWire(t *testing.T, err error) *connect.Error {
 	t.Helper()
-	wrapped := NewMachineWakingInterceptor().WrapUnary(func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
+	wrapped := machinewake.NewInterceptor().WrapUnary(func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
 		return nil, err
 	})
 	_, wireErr := wrapped(context.Background(), connect.NewRequest(&reliantv1.GetFileTreeRequest{}))
@@ -265,10 +266,10 @@ func TestFileSystemProxy_NoMachineChat_NeverWakes(t *testing.T) {
 
 	err := f.getTree(nil, &chatID)
 	require.Error(t, err)
-	assert.False(t, isMachineWaking(err), "got %v", err)
+	assert.False(t, machinewake.IsWaking(err), "got %v", err)
 	err = f.getTree(&owned.ID, &chatID)
 	require.Error(t, err, "naming another machine's worktree from a no-machine chat does not wake it either")
-	assert.False(t, isMachineWaking(err), "got %v", err)
+	assert.False(t, machinewake.IsWaking(err), "got %v", err)
 
 	assert.Empty(t, f.router.wakeCalls(), "a no-machine chat must never wake anything")
 }
@@ -283,7 +284,7 @@ func TestFileSystemProxy_AnotherUsersMachine_NeverWakes(t *testing.T) {
 
 	err := f.getTree(&wt.ID, nil)
 	require.Error(t, err)
-	assert.False(t, isMachineWaking(err))
+	assert.False(t, machinewake.IsWaking(err))
 	assert.Empty(t, f.router.wakeCalls(), "another user's machine must never be woken")
 }
 
@@ -318,7 +319,7 @@ func TestFileSystemProxy_MachineAlreadyComingUp_NotReportedAsWaking(t *testing.T
 
 	err := f.getTree(nil, &chatID)
 	require.Error(t, err)
-	assert.False(t, isMachineWaking(err), "got %v", err)
+	assert.False(t, machinewake.IsWaking(err), "got %v", err)
 	assert.Contains(t, err.Error(), "no daemon connected", "still the retryable machine error")
 }
 
@@ -334,7 +335,7 @@ func TestMachineWakingInterceptor_OnTheWire(t *testing.T) {
 		}
 	})
 	path, handler := reliantv1connect.NewFileSystemServiceHandler(f.fs,
-		connect.WithInterceptors(withUser), connect.WithInterceptors(NewMachineWakingInterceptor()))
+		connect.WithInterceptors(withUser), connect.WithInterceptors(machinewake.NewInterceptor()))
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)

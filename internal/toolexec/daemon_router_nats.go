@@ -568,7 +568,7 @@ func (r *NATSDaemonRouter) MachineState(ctx context.Context, userID string, sele
 
 // DaemonWaker wakes a suspended daemon. It is held only by the callers that
 // are allowed to: run preflight, the attended send/start path, and a signed-in
-// user's own file and worktree requests (services.machineWake). Tool-time code
+// user's own file and worktree requests (machinewake). Tool-time code
 // holds DaemonRouter, which has no such method.
 type DaemonWaker interface {
 	EnsureAwake(ctx context.Context, userID string, selector *DaemonSelector) (daemonID string, err error)

@@ -5,7 +5,7 @@ import "context"
 
 // MachineStatus is what wait_for_machine learns about the run's machine on one
 // look. It reads the registry and the transport only: nothing here wakes a
-// machine (tool-time traffic never does; see services.machineWake).
+// machine (tool-time traffic never does; see internal/machinewake).
 type MachineStatus struct {
 	// Connected: a daemon the run's selector names is attached right now, so
 	// the run's next machine tool call can reach it.

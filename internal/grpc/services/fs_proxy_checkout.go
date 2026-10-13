@@ -79,7 +79,7 @@ func (s *FileSystemProxyService) checkoutMissingError(
 
 	detail := &reliantv1.ProjectCheckoutMissing{
 		ProjectId: projectID,
-		DaemonId:  scope.target.daemonID,
+		DaemonId:  scope.target.DaemonID,
 		Path:      scope.basePath,
 		State:     reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT,
 	}

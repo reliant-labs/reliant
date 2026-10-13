@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinewake"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workspacecreate"
@@ -46,7 +47,7 @@ type WorktreeService struct {
 	database     db.Repository
 	tempClient   client.Client
 	daemonRouter toolexec.DaemonRouter
-	wake         machineWake
+	wake         machinewake.Service
 	// settler removes an archived worktree's directory when it is provably
 	// safe. Nil in tests that do not exercise it.
 	settler worktreeSettler
@@ -65,7 +66,7 @@ func NewWorktreeService(database db.Repository, tempClient client.Client, daemon
 		database:     database,
 		tempClient:   tempClient,
 		daemonRouter: daemonRouter,
-		wake:         machineWake{router: daemonRouter, owners: database},
+		wake:         machinewake.New(machinewake.Deps{Resumer: machinewake.ResumerOf(daemonRouter), Owners: database}),
 	}
 }
 
@@ -184,25 +185,25 @@ func (s *WorktreeService) sendWorktreeDaemonCommand(ctx context.Context, userID,
 // explicit timeout — use worktreeReadCommandTimeoutMs for the polled read
 // paths so a slow daemon can't pin connections for the full mutation budget.
 func (s *WorktreeService) sendWorktreeDaemonCommandTimeout(ctx context.Context, userID, daemonID, commandType string, payload interface{}, resp interface{}, timeoutMs int32) error {
-	return s.sendToMachine(ctx, userID, wakeTarget{daemonID: daemonID}, commandType, payload, resp, timeoutMs)
+	return s.sendToMachine(ctx, userID, machinewake.Target{DaemonID: daemonID}, commandType, payload, resp, timeoutMs)
 }
 
 // sendToMachine sends a command to the target machine. Every worktree command
-// goes through here, so a machine found asleep is woken (machineWake) and the
+// goes through here, so a machine found asleep is woken (machinewake) and the
 // request fails as waking, for the client to retry once it is up.
-func (s *WorktreeService) sendToMachine(ctx context.Context, userID string, target wakeTarget, commandType string, payload interface{}, resp interface{}, timeoutMs int32) error {
+func (s *WorktreeService) sendToMachine(ctx context.Context, userID string, target machinewake.Target, commandType string, payload interface{}, resp interface{}, timeoutMs int32) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 	var respBytes []byte
-	if target.daemonID == "" {
+	if target.DaemonID == "" {
 		respBytes, err = s.daemonRouter.SendDaemonCommand(ctx, userID, commandType, payloadBytes, timeoutMs)
 	} else {
-		respBytes, err = s.daemonRouter.SendDaemonCommandToDaemon(ctx, userID, target.daemonID, commandType, payloadBytes, timeoutMs)
+		respBytes, err = s.daemonRouter.SendDaemonCommandToDaemon(ctx, userID, target.DaemonID, commandType, payloadBytes, timeoutMs)
 	}
 	if err != nil {
-		err = s.wake.afterFailure(ctx, userID, target, err)
+		err = s.wake.AfterFailure(ctx, userID, target, err)
 		return fmt.Errorf("daemon command %s: %w", commandType, err)
 	}
 	if resp != nil {
@@ -398,16 +399,16 @@ func (s *WorktreeService) validateWorktreeForGitOps(ctx context.Context, userID 
 // would otherwise meet an asleep machine too late: a create that persists its
 // row and makes the checkouts in the background, or a delete whose cleanup is
 // best-effort. An asleep machine is woken and the call fails as waking (see
-// machineWake), so nothing is recorded until a retry finds the machine up.
+// machinewake), so nothing is recorded until a retry finds the machine up.
 //
 // Only a wake is returned. Any other failure of the probe is left for the
 // operation itself to meet, as before.
-func (s *WorktreeService) wakeIfAsleep(ctx context.Context, userID string, target wakeTarget, path string) error {
+func (s *WorktreeService) wakeIfAsleep(ctx context.Context, userID string, target machinewake.Target, path string) error {
 	var resp struct {
 		Exists bool `json:"exists"`
 	}
 	err := s.sendToMachine(ctx, userID, target, "worktree.validate_path", map[string]string{"path": path}, &resp, worktreeReadCommandTimeoutMs)
-	if isMachineWaking(err) {
+	if machinewake.IsWaking(err) {
 		return err
 	}
 	return nil
@@ -500,7 +501,7 @@ func (s *WorktreeService) CreateWorktree(
 	if err != nil {
 		return nil, err
 	}
-	ownerDaemonID := placement.daemonID
+	ownerDaemonID := placement.DaemonID
 	// The checkouts are made after this returns, so an asleep machine would
 	// leave a row that fails in the background. Wake it now instead: nothing
 	// has been recorded yet, so the client's retry creates the worktree, once,
@@ -832,7 +833,7 @@ func (s *WorktreeService) DeleteWorktree(
 	// knowingly. A permanent delete and a branch delete still reach the machine
 	// from here, so wake an asleep one first; the client retries.
 	if (req.Msg.DeleteGitBranch || isPermanentDelete) && project != nil {
-		if err := s.wakeIfAsleep(ctx, userID, wakeTarget{daemonID: worktreeOwner(worktree)}, project.Path); err != nil {
+		if err := s.wakeIfAsleep(ctx, userID, machinewake.Target{DaemonID: worktreeOwner(worktree)}, project.Path); err != nil {
 			return nil, err
 		}
 	}
@@ -1167,7 +1168,7 @@ func (s *WorktreeService) ImportWorktree(
 	if err := s.wakeIfAsleep(ctx, userID, placement, project.Path); err != nil {
 		return nil, err
 	}
-	ownerDaemonID := placement.daemonID
+	ownerDaemonID := placement.DaemonID
 
 	// Re-discover on the daemon and take the entry from there.
 	exclude, err := s.trackedWorktreePaths(ctx, project.ID)
@@ -1180,7 +1181,7 @@ func (s *WorktreeService) ImportWorktree(
 	}
 	payload := map[string]any{"repos": []discoverRepoRef{{RepoID: repo.ID, Path: repoPath}}, "exclude_roots": exclude}
 	if err := s.sendToMachine(ctx, userID, placement, "worktree.discover_repos", payload, &found, worktreeReadCommandTimeoutMs); err != nil {
-		if isMachineWaking(err) {
+		if machinewake.IsWaking(err) {
 			return nil, err
 		}
 		logging.Error("Failed to validate import path via daemon", "error", err)
@@ -1268,7 +1269,7 @@ func (s *WorktreeService) ImportWorktree(
 		}
 		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
 		if moveErr != nil {
-			if isMachineWaking(moveErr) {
+			if machinewake.IsWaking(moveErr) {
 				return nil, moveErr
 			}
 			logging.Error("adopt_move failed", "error", moveErr)
@@ -1405,7 +1406,7 @@ func (s *WorktreeService) DiscoverWorktrees(
 	// A background poll (the sidebar hint) never wakes a suspended machine:
 	// it answers Unavailable and the hint stays hidden.
 	if req.Msg.Background {
-		ctx = withoutWake(ctx)
+		ctx = machinewake.Suppress(ctx)
 	}
 
 	// The same machine a new workspace for this project would be placed on.
@@ -1419,7 +1420,7 @@ func (s *WorktreeService) DiscoverWorktrees(
 	}
 	payload := map[string]any{"repos": refs, "exclude_roots": exclude}
 	if err := s.sendToMachine(ctx, userID, placement, "worktree.discover_repos", payload, &resp, worktreeReadCommandTimeoutMs); err != nil {
-		if isMachineWaking(err) {
+		if machinewake.IsWaking(err) {
 			return nil, err
 		}
 		if req.Msg.Background && daemonerr.Unreachable(err) {
@@ -1485,7 +1486,7 @@ func (s *WorktreeService) PruneWorktrees(
 		Errors []string          `json:"errors"`
 	}
 	if err := s.sendToMachine(ctx, userID, placement, "worktree.prune", map[string]any{"repos": refs}, &resp, worktreeDaemonCommandTimeoutMs); err != nil {
-		if isMachineWaking(err) {
+		if machinewake.IsWaking(err) {
 			return nil, err
 		}
 		logging.Warn("Failed to prune worktrees via daemon", "error", err)
@@ -1678,7 +1679,7 @@ func (s *WorktreeService) repairActiveWorktree(ctx context.Context, userID strin
 	}
 	var resp toolexec.WorkspaceEnsureResponse
 	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, worktreeOwner(worktree), toolexec.WorkspaceEnsureCommand, ensureReq, &resp, toolexec.WorkspaceEnsureTimeoutMs); err != nil {
-		if isMachineWaking(err) {
+		if machinewake.IsWaking(err) {
 			return nil, err
 		}
 		logging.Warn("Failed to repair worktree via daemon", "error", err, "worktreeID", worktree.ID)

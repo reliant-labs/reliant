@@ -18,18 +18,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// A machine woken by the request is asleep, not broken: a user error, both as
-// it travels the handler and in the fresh wire error the interceptor builds.
-func TestMachineWakingErrorIsAUserError(t *testing.T) {
-	waking := &machineWakingError{daemonID: "d1", cause: fmt.Errorf("x: %w", toolexec.ErrDaemonPending)}
-
-	assert.Equal(t, svcerr.ClassUser, svcerr.Classify(fmt.Errorf("failed to get git status: %w", waking)))
-	wire := waking.connectError()
-	assert.Equal(t, connect.CodeUnavailable, wire.Code())
-	assert.Equal(t, svcerr.ClassUser, svcerr.Classify(wire), "the class must survive the rebuilt wire error")
-	assert.Contains(t, wire.Message(), "no daemon connected", "the client's wait marker must survive")
-}
-
 func TestFsProxyDaemonError_MachineStateIsAUserError(t *testing.T) {
 	for name, err := range map[string]error{
 		"starting":   fmt.Errorf("resolving daemon for command: your machine is still starting: %w", toolexec.ErrDaemonPending),
