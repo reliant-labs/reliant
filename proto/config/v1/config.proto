@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package config.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
+
+// Typed process configuration for the reliant binary (P4 in
+// research/forge-migration/PLAN.md; the census and the target layout are
+// research/forge-migration/03-config-census.md).
+//
+// ONE BINARY, SEVERAL PROCESSES. cmd/reliant runs every reliant process as a
+// cobra subcommand: `reliant server api|worker|gateway`, `reliant daemon ...`,
+// and the end-user CLI. So config is bound per (binary, command):
+//
+//   ReliantConfig        binary root: every process loads it, and its flags
+//                        are persistent on `reliant`, so every subcommand
+//                        accepts them.
+//   <Role>Config         one per process (`command: ["server", "api"]`, ...),
+//                        added as each role's reads move here. A process loads
+//                        the root config plus the one config for its own
+//                        command path; command configs do not nest.
+//
+// forge refuses a root config and a command config that declare the same env
+// var or flag, so a block every process reads composes onto the root config,
+// never onto each role.
+//
+// ENV NAMES ARE THE CONTRACT. control-plane sets these variables on reliant
+// processes by name, in KCL and in Go (the workspace operator), so every
+// env_var here keeps the exact spelling the code read before it moved
+// (census §0). Field names and tags are bookkeeping for a Go struct; nothing
+// marshals a config message to a wire or to storage.
+//
+// A name that is not the primary one is an env_var_aliases entry: read after
+// env_var, in order, the first one set winning — what a hand-written fallback
+// chain did. `deprecated: true` marks a name kept only until its setters move
+// (one stderr line at load); a permanent alias (NODE_ENV) is silent.
+//
+// SAME BEHAVIOUR AS THE READ IT REPLACED. A field moves here only when forge's
+// loader gives exactly what the raw read gave. In particular:
+//   - a variable set to "" is unset, as it was for every reader that tested
+//     os.Getenv(...) != "";
+//   - a field whose reader tolerated an unrecognised value (warned and carried
+//     on) gets no allowed_values: forge would refuse to start instead. Parsing
+//     stays with the reader.
+// Readers whose legacy semantics forge's loader cannot reproduce keep their
+// raw reads: a bool that only the exact string "true" (or "false") switched,
+// a number whose malformed value fell back to the default, and a variable that
+// maps onto another field's value (DEBUG=true meaning a DEBUG log level).
+
+// ReliantConfig is the reliant binary's root config: the surface every
+// reliant process reads.
+message ReliantConfig {
+  option (forge.v1.binary_config) = {binary: "reliant"};
+
+  LogConfig log = 1;
+}
+
+// LogConfig is how a process's logger is built. Both fields carry the value
+// exactly as the operator spelled it; internal/logging parses it (any case,
+// surrounding space ignored) and warns, once its logger exists, about a value
+// that names nothing.
+message LogConfig {
+  // Unset: INFO, or DEBUG when the DEBUG / RELIANT_DEV_DEBUG flags ask for it.
+  // Servers never log DEBUG in prod; the daemon honours an explicit level
+  // everywhere (logging.GetLogLevel, logging.DaemonLogLevel).
+  string level = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_LOG_LEVEL"
+    flag: "log-level"
+    description: "Log level: debug, info, warn or error (default info)"
+  }];
+
+  // Unset: text, or JSON for a hosted daemon.
+  string format = 2 [(forge.v1.config) = {
+    env_var: "LOG_FORMAT"
+    flag: "log-format"
+    description: "Log line format: text or json (default text; json for a hosted daemon)"
+  }];
+}

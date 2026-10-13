@@ -23,9 +23,10 @@ import (
 // a test that calls a Setup function, so no test inherits another's handler.
 // It also clears every variable that asks for DEBUG, so a developer's shell
 // cannot make install emit the prod refusal WARN into a test's output.
+// (RELIANT_LOG_LEVEL reaches this package only through Settings.)
 func isolateLogging(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"RELIANT_LOG_LEVEL", "DEBUG", "RELIANT_DEV_DEBUG"} {
+	for _, name := range []string{"DEBUG", "RELIANT_DEV_DEBUG"} {
 		t.Setenv(name, "")
 	}
 	previousDefault := slog.Default()
@@ -45,32 +46,32 @@ func isolateLogging(t *testing.T) {
 // writes somewhere different; read returns what it wrote.
 type setupEntryPoint struct {
 	name  string
-	setup func(t *testing.T) (read func() string)
+	setup func(t *testing.T, s Settings) (read func() string)
 }
 
 var setupEntryPoints = []setupEntryPoint{
 	{
 		name: "Setup",
-		setup: func(t *testing.T) func() string {
+		setup: func(t *testing.T, s Settings) func() string {
 			var buf bytes.Buffer
 			DefaultOutput = &buf
-			Setup(slog.LevelInfo)
+			Setup(s, slog.LevelInfo)
 			return buf.String
 		},
 	},
 	{
 		name: "SetupWithRotation",
-		setup: func(t *testing.T) func() string {
+		setup: func(t *testing.T, s Settings) func() string {
 			file := filepath.Join(t.TempDir(), "api.log")
-			SetupWithRotation(slog.LevelInfo, false, &RotationConfig{Filename: file})
+			SetupWithRotation(s, slog.LevelInfo, false, &RotationConfig{Filename: file})
 			return readLogFile(t, file)
 		},
 	},
 	{
 		name: "SetupFileOnly",
-		setup: func(t *testing.T) func() string {
+		setup: func(t *testing.T, s Settings) func() string {
 			file := filepath.Join(t.TempDir(), "daemon.log")
-			SetupFileOnly(slog.LevelInfo, &RotationConfig{Filename: file})
+			SetupFileOnly(s, slog.LevelInfo, &RotationConfig{Filename: file})
 			return readLogFile(t, file)
 		},
 	},
@@ -92,8 +93,7 @@ func TestLogFormatJSON(t *testing.T) {
 		for _, entry := range setupEntryPoints {
 			t.Run(entry.name+"/LOG_FORMAT="+format, func(t *testing.T) {
 				isolateLogging(t)
-				t.Setenv("LOG_FORMAT", format)
-				read := entry.setup(t)
+				read := entry.setup(t, Settings{Format: format})
 
 				Info("daemon connected", "daemon_id", "dmn_123", "attempt", 2)
 
@@ -118,8 +118,7 @@ func TestLogFormatText(t *testing.T) {
 		for _, entry := range setupEntryPoints {
 			t.Run(entry.name+"/LOG_FORMAT="+format, func(t *testing.T) {
 				isolateLogging(t)
-				t.Setenv("LOG_FORMAT", format)
-				read := entry.setup(t)
+				read := entry.setup(t, Settings{Format: format})
 
 				Info("daemon connected", "daemon_id", "dmn_123")
 
@@ -146,7 +145,6 @@ func TestLogFormatKeepsWrappers(t *testing.T) {
 	for _, format := range []string{"json", "text"} {
 		t.Run(format, func(t *testing.T) {
 			isolateLogging(t)
-			t.Setenv("LOG_FORMAT", format)
 			var out bytes.Buffer
 			DefaultOutput = &out
 			counter := newTestCounter(t)
@@ -154,7 +152,7 @@ func TestLogFormatKeepsWrappers(t *testing.T) {
 			reporter := &recordingReporter{}
 			telemetry.SetReporter(reporter)
 			t.Cleanup(func() { telemetry.SetReporter(previous) })
-			Setup(slog.LevelInfo)
+			Setup(Settings{Format: format}, slog.LevelInfo)
 
 			slog.Error("charge failed", "error", errors.New("stripe: 500"))
 			slog.Error("plan limit hit", "error", svcerr.PlanLimit("seat cap"))

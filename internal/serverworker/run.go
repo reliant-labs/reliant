@@ -76,6 +76,10 @@ type Options struct {
 
 	// PprofPort is the localhost-only diagnostics port (see debugserver).
 	PprofPort int
+
+	// Log is the configured log level and format (the root config's
+	// LogConfig).
+	Log logging.Settings
 }
 
 // Run boots the Temporal worker with the given options. It blocks until a
@@ -102,8 +106,8 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 2. Logging
 	// -----------------------------------------------------------------
-	logLevel := logging.GetLogLevel()
-	logging.SetupWithRotation(logLevel, false, &logging.RotationConfig{
+	logLevel := logging.GetLogLevel(opts.Log)
+	logging.SetupWithRotation(opts.Log, logLevel, false, &logging.RotationConfig{
 		Filename:   filepath.Join(opts.DataDir, "logs", "temporal-worker.log"),
 		MaxSizeMB:  50,
 		MaxBackups: 3,

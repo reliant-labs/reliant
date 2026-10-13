@@ -37,7 +37,20 @@ func SetOutput(w io.Writer) {
 	logOutput = w
 }
 
-// GetLogLevel returns the current log level from environment or default.
+// Settings is how the process logger was configured: the RELIANT_LOG_LEVEL
+// and LOG_FORMAT values exactly as the operator spelled them, "" when unset.
+// The entrypoint fills it from its loaded config (pkg/config's LogConfig);
+// this package never reads those variables itself. Parsing stays here, so a
+// value that names nothing is warned about once the logger exists rather than
+// refusing to start.
+type Settings struct {
+	// Level is RELIANT_LOG_LEVEL: debug, info, warn or error, in any case.
+	Level string
+	// Format is LOG_FORMAT: text or json, in any case.
+	Format string
+}
+
+// GetLogLevel returns the level s asks for, or the default.
 //
 // The servers never log DEBUG in prod, and nothing overrides that:
 // RELIANT_LOG_LEVEL=debug, DEBUG=true and RELIANT_DEV_DEBUG=true are all held at
@@ -52,15 +65,22 @@ func SetOutput(w io.Writer) {
 // closed, so a pod with neither RELIANT_ENV nor NODE_ENV set — which is how
 // prod runs — is prod. This used to test RELIANT_ENV for "prod"/"production"
 // itself; prod never sets it, so the guard never fired where it mattered.
-func GetLogLevel() slog.Level {
-	return capLevel(requestedLevel())
+func GetLogLevel(s Settings) slog.Level {
+	return capLevel(requestedLevel(s))
 }
 
-// requestedLevel is the level the environment variables ask for, before any
-// environment cap. RELIANT_LOG_LEVEL (debug|info|warn|error, any case) wins;
-// otherwise DEBUG=true or RELIANT_DEV_DEBUG=true selects DEBUG; otherwise INFO.
-func requestedLevel() slog.Level {
-	if level, ok := explicitLevel(); ok {
+// requestedLevel is the level the settings ask for, before any environment
+// cap. RELIANT_LOG_LEVEL (debug|info|warn|error, any case) wins; otherwise
+// DEBUG=true or RELIANT_DEV_DEBUG=true selects DEBUG; otherwise INFO.
+//
+// The DEBUG / RELIANT_DEV_DEBUG reads are a deliberate shim, not config still
+// waiting to move: they are not alternative names for RELIANT_LOG_LEVEL (an
+// alias would hand the level "true"), they are bools that MAP onto one of its
+// values, only for the exact string "true". DEBUG is also a name other tools
+// own (DEBUG=express:* is common in a shell), so it must not be parsed as a
+// config bool that refuses to start on anything else.
+func requestedLevel(s Settings) slog.Level {
+	if level, ok := explicitLevel(s); ok {
 		return level
 	}
 	if os.Getenv("DEBUG") == "true" || os.Getenv("RELIANT_DEV_DEBUG") == "true" {
@@ -69,8 +89,9 @@ func requestedLevel() slog.Level {
 	return slog.LevelInfo
 }
 
-// logLevelEnv is the one variable that names a log level. The daemon reads it
-// too, so a pod and a developer's shell spell the request the same way.
+// logLevelEnv is the one variable that names a log level (Settings.Level).
+// The daemon reads it too, so a pod and a developer's shell spell the request
+// the same way.
 const logLevelEnv = "RELIANT_LOG_LEVEL"
 
 // parseEnvLevel parses a level name, case-insensitively. ok is false for a
@@ -91,14 +112,14 @@ func parseEnvLevel(raw string) (slog.Level, bool) {
 }
 
 // explicitLevel is RELIANT_LOG_LEVEL when it is set to a valid name.
-func explicitLevel() (slog.Level, bool) {
-	return parseEnvLevel(os.Getenv(logLevelEnv))
+func explicitLevel(s Settings) (slog.Level, bool) {
+	return parseEnvLevel(s.Level)
 }
 
 // unrecognisedLogLevel returns RELIANT_LOG_LEVEL when it is set but names no
 // level, so the logger can say so once it exists.
-func unrecognisedLogLevel() string {
-	raw := os.Getenv(logLevelEnv)
+func unrecognisedLogLevel(s Settings) string {
+	raw := s.Level
 	if strings.TrimSpace(raw) == "" {
 		return ""
 	}
@@ -122,10 +143,10 @@ func capLevel(level slog.Level) slog.Level {
 // RELIANT_LOG_LEVEL outranks the DEBUG flags, so with a quieter explicit level
 // they are not a request at all. A request prod refuses must be reported
 // however it was spelled.
-func debugRequest() string {
-	if level, ok := explicitLevel(); ok {
+func debugRequest(s Settings) string {
+	if level, ok := explicitLevel(s); ok {
 		if level < slog.LevelInfo {
-			return logLevelEnv + "=" + os.Getenv(logLevelEnv)
+			return logLevelEnv + "=" + s.Level
 		}
 		return ""
 	}

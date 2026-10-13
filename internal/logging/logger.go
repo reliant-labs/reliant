@@ -74,19 +74,19 @@ func Log(level slog.Level, msg string, args ...any) {
 	slog.Log(context.Background(), level, msg, args...)
 }
 
-// logFormatEnv selects the line format: "json" writes one JSON object per line,
-// which is what a log pipeline indexes; "text" writes key=value, which is what
-// a person greps. It is the variable forge's config block already sets, with
-// the same two values.
+// logFormatEnv selects the line format (Settings.Format): "json" writes one
+// JSON object per line, which is what a log pipeline indexes; "text" writes
+// key=value, which is what a person greps. It is the variable forge's config
+// block already sets, with the same two values.
 const logFormatEnv = "LOG_FORMAT"
 
-// resolveLogFormat reads LOG_FORMAT. Text is the default unless the caller
+// resolveLogFormat parses LOG_FORMAT. Text is the default unless the caller
 // passes defaultJSON, so dev logs — and every grep written against them — only
 // change when a deploy asks for JSON.
 // recognised is false for a value that is set but is neither, so the caller can
 // say so once a logger exists to say it with.
-func resolveLogFormat(defaultJSON bool) (asJSON, recognised bool) {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(logFormatEnv))) {
+func resolveLogFormat(format string, defaultJSON bool) (asJSON, recognised bool) {
+	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "":
 		return defaultJSON, true
 	case "text":
@@ -110,7 +110,7 @@ func resolveLogFormat(defaultJSON bool) (asJSON, recognised bool) {
 //
 // The Sentry handler lazily checks the global reporter, so it's safe to create
 // before Sentry is initialised — it will be a no-op until then.
-func install(output io.Writer, level slog.Level, options ...installOption) {
+func install(output io.Writer, s Settings, level slog.Level, options ...installOption) {
 	var cfg installConfig
 	for _, apply := range options {
 		apply(&cfg)
@@ -126,7 +126,7 @@ func install(output io.Writer, level slog.Level, options ...installOption) {
 	if cfg.redact {
 		opts.ReplaceAttr = newRedactor().replaceAttr
 	}
-	asJSON, recognised := resolveLogFormat(cfg.defaultJSON)
+	asJSON, recognised := resolveLogFormat(s.Format, cfg.defaultJSON)
 
 	var handler slog.Handler
 	if asJSON {
@@ -142,13 +142,13 @@ func install(output io.Writer, level slog.Level, options ...installOption) {
 	slog.SetDefault(slog.New(handler))
 
 	if !recognised {
-		slog.Warn("Unrecognised LOG_FORMAT, logging as text", "log_format", os.Getenv(logFormatEnv), "allowed", "json,text")
+		slog.Warn("Unrecognised LOG_FORMAT, logging as text", "log_format", s.Format, "allowed", "json,text")
 	}
-	if bad := unrecognisedLogLevel(); bad != "" {
+	if bad := unrecognisedLogLevel(s); bad != "" {
 		slog.Warn("Unrecognised RELIANT_LOG_LEVEL, ignoring it", "value", bad, "allowed", "debug,info,warn,error")
 	}
 	if !cfg.allowProdDebug {
-		warnRefusedDebug(requested, level)
+		warnRefusedDebug(s, requested, level)
 	}
 }
 
@@ -188,11 +188,11 @@ func withReporting(lines slog.Handler) slog.Handler {
 // warnRefusedDebug reports, once per logger install, that prod refused a DEBUG
 // request. An environment variable is named when one asked; otherwise the
 // request was a caller passing a DEBUG level to a Setup function.
-func warnRefusedDebug(requested, effective slog.Level) {
+func warnRefusedDebug(s Settings, requested, effective slog.Level) {
 	if !runenv.IsProd() {
 		return
 	}
-	source := debugRequest()
+	source := debugRequest(s)
 	if source == "" && requested >= slog.LevelInfo {
 		return
 	}
@@ -232,19 +232,19 @@ func newRotator(config *RotationConfig) *lumberjack.Logger {
 }
 
 // SetupWithTrace configures the logging system with optional trace logging
-func SetupWithTrace(defaultLevel slog.Level, enableTrace bool) {
+func SetupWithTrace(s Settings, defaultLevel slog.Level, enableTrace bool) {
 	TraceEnabled = enableTrace
-	install(DefaultOutput, defaultLevel)
+	install(DefaultOutput, s, defaultLevel)
 }
 
 // Setup configures the logging system (trace disabled by default)
-func Setup(defaultLevel slog.Level) {
-	SetupWithTrace(defaultLevel, false)
+func Setup(s Settings, defaultLevel slog.Level) {
+	SetupWithTrace(s, defaultLevel, false)
 }
 
 // SetupWithRotation configures the logging system with file rotation
 // If config is nil or Filename is empty, logs go to stdout only
-func SetupWithRotation(defaultLevel slog.Level, enableTrace bool, config *RotationConfig) {
+func SetupWithRotation(s Settings, defaultLevel slog.Level, enableTrace bool, config *RotationConfig) {
 	TraceEnabled = enableTrace
 
 	var output io.Writer = os.Stdout
@@ -267,7 +267,7 @@ func SetupWithRotation(defaultLevel slog.Level, enableTrace bool, config *Rotati
 	// Update the default output
 	DefaultOutput = output
 
-	install(output, defaultLevel)
+	install(output, s, defaultLevel)
 }
 
 // SetupFileOnly configures logging to write to the rotating file ONLY, leaving
@@ -282,16 +282,16 @@ func SetupWithRotation(defaultLevel slog.Level, enableTrace bool, config *Rotati
 // Falls back to the normal stdout logger when no file can be opened. Silently
 // discarding logs because a directory was unwritable would turn a broken log
 // path into a daemon that appears to run with no output at all.
-func SetupFileOnly(defaultLevel slog.Level, config *RotationConfig) {
+func SetupFileOnly(s Settings, defaultLevel slog.Level, config *RotationConfig) {
 	if config == nil || config.Filename == "" {
-		Setup(defaultLevel)
+		Setup(s, defaultLevel)
 		return
 	}
 
 	logDir := filepath.Dir(config.Filename)
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		slog.Warn("Failed to create log directory, logging to stdout", "dir", logDir, "error", err)
-		Setup(defaultLevel)
+		Setup(s, defaultLevel)
 		return
 	}
 
@@ -299,7 +299,7 @@ func SetupFileOnly(defaultLevel slog.Level, config *RotationConfig) {
 
 	DefaultOutput = activeLogger
 
-	install(activeLogger, defaultLevel)
+	install(activeLogger, s, defaultLevel)
 }
 
 // Close closes the active log file (should be called on shutdown)

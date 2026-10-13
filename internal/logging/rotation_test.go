@@ -20,7 +20,7 @@ func TestSetupWithRotation(t *testing.T) {
 	logFile := filepath.Join(tempDir, "test.log")
 
 	// Setup logging with rotation
-	SetupWithRotation(slog.LevelInfo, false, &RotationConfig{
+	SetupWithRotation(Settings{}, slog.LevelInfo, false, &RotationConfig{
 		Filename:   logFile,
 		MaxSizeMB:  1,
 		MaxBackups: 2,
@@ -63,7 +63,7 @@ func TestSetupWithRotation(t *testing.T) {
 
 func TestSetupWithRotation_NilConfig(t *testing.T) {
 	// Setup with nil config should not panic and use stdout
-	SetupWithRotation(slog.LevelInfo, false, nil)
+	SetupWithRotation(Settings{}, slog.LevelInfo, false, nil)
 
 	// Should be able to log without error
 	Info("Test with nil config")
@@ -71,7 +71,7 @@ func TestSetupWithRotation_NilConfig(t *testing.T) {
 
 func TestSetupWithRotation_EmptyFilename(t *testing.T) {
 	// Setup with empty filename should use stdout
-	SetupWithRotation(slog.LevelInfo, false, &RotationConfig{
+	SetupWithRotation(Settings{}, slog.LevelInfo, false, &RotationConfig{
 		Filename: "",
 	})
 
@@ -90,7 +90,7 @@ func TestSetupWithRotation_DefaultValues(t *testing.T) {
 	logFile := filepath.Join(tempDir, "defaults.log")
 
 	// Setup with zero values - should apply defaults
-	SetupWithRotation(slog.LevelDebug, true, &RotationConfig{
+	SetupWithRotation(Settings{}, slog.LevelDebug, true, &RotationConfig{
 		Filename:   logFile,
 		MaxSizeMB:  0, // Should default to 50
 		MaxBackups: 0, // Should default to 3
@@ -126,7 +126,7 @@ func TestManualRotate(t *testing.T) {
 	logFile := filepath.Join(tempDir, "rotate.log")
 
 	// Setup logging
-	SetupWithRotation(slog.LevelInfo, false, &RotationConfig{
+	SetupWithRotation(Settings{}, slog.LevelInfo, false, &RotationConfig{
 		Filename:   logFile,
 		MaxSizeMB:  100,
 		MaxBackups: 3,

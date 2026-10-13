@@ -48,10 +48,12 @@ type DaemonLogConfig struct {
 	Managed bool
 	// Fields seeds the correlation fields stamped on every line.
 	Fields DaemonFields
+	// Settings is the configured level and format; see Settings.
+	Settings Settings
 }
 
 // DaemonLogLevel is the level a daemon logs at, and whether that level was
-// explicitly requested with RELIANT_LOG_LEVEL.
+// explicitly requested with RELIANT_LOG_LEVEL (s.Level).
 //
 // An explicit request is honoured in every environment, DEBUG included: the
 // daemon's logs are for us, the redactor sits in front of every line, and
@@ -60,19 +62,19 @@ type DaemonLogConfig struct {
 // it is needed. Without an explicit request the default is INFO, and the
 // ambient DEBUG=true flags stay capped in prod: those are set in people's
 // shells for other tools and say nothing about the daemon.
-func DaemonLogLevel() (level slog.Level, explicit bool) {
-	if level, ok := explicitLevel(); ok {
+func DaemonLogLevel(s Settings) (level slog.Level, explicit bool) {
+	if level, ok := explicitLevel(s); ok {
 		return level, true
 	}
-	return GetLogLevel(), false
+	return GetLogLevel(s), false
 }
 
 // SetupDaemon installs the process logger for the tools daemon: the level and
-// format from the environment, secrets masked and sizes bounded, and the
+// format from cfg.Settings, secrets masked and sizes bounded, and the
 // daemon's correlation fields on every line (plus trace_id/span_id for a record logged
 // with a span in its context).
 func SetupDaemon(cfg DaemonLogConfig) {
-	level, explicit := DaemonLogLevel()
+	level, explicit := DaemonLogLevel(cfg.Settings)
 
 	fields := cfg.Fields
 	daemonFields.Store(&fields)
@@ -83,7 +85,7 @@ func SetupDaemon(cfg DaemonLogConfig) {
 	} else {
 		notices.Store(&noticeSink{w: os.Stdout})
 	}
-	install(output, level,
+	install(output, cfg.Settings, level,
 		func(c *installConfig) {
 			c.defaultJSON = cfg.Managed
 			c.allowProdDebug = explicit
@@ -92,7 +94,8 @@ func SetupDaemon(cfg DaemonLogConfig) {
 		})
 
 	if cfg.Managed {
-		// Read above; see DaemonLogConfig.Managed for why they must not stay.
+		// Already read, into cfg.Settings, by the entrypoint's config load; see
+		// DaemonLogConfig.Managed for why they must not stay.
 		for _, name := range []string{logFormatEnv, logLevelEnv} {
 			_ = os.Unsetenv(name)
 		}

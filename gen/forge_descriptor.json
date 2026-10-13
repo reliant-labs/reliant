@@ -33653,6 +33653,65 @@
       "Unmanaged": true
     }
   ],
-  "configs": null,
-  "source_hash": "8712c5acd9d405df8d48abe720f0dac0fe8e6520737f14fe8e0dc13b9cb386a9"
+  "configs": [
+    {
+      "Name": "ReliantConfig",
+      "Fields": [
+        {
+          "Name": "log",
+          "GoName": "Log",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "LogConfig",
+          "ProtoFile": "config/v1/config.proto"
+        }
+      ],
+      "Binary": "reliant",
+      "ProtoFile": "config/v1/config.proto",
+      "Line": 55
+    },
+    {
+      "Name": "LogConfig",
+      "Fields": [
+        {
+          "Name": "level",
+          "GoName": "Level",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_LOG_LEVEL",
+          "Flag": "log-level",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Log level: debug, info, warn or error (default info)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/config.proto"
+        },
+        {
+          "Name": "format",
+          "GoName": "Format",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "LOG_FORMAT",
+          "Flag": "log-format",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Log line format: text or json (default text; json for a hosted daemon)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/config.proto",
+      "Line": 64
+    }
+  ],
+  "source_hash": "9a82a8cbd6d0823897274cfd44fac13d0d055611de8199c00ba016397c18cda0"
 }

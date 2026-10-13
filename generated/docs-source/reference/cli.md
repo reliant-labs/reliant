@@ -278,7 +278,10 @@ These flags are available on all commands.
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--config` | `string` | - | path to a config file (.json/.yaml/.yml); also settable via RELIANT_CONFIG. Precedence: defaults < file < env < flags |
 | `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (defaults to the gateway subdomain of the resolved server) |
+| `--log-format` | `string` | - | Log line format: text or json (default text; json for a hosted daemon) [env: LOG_FORMAT] |
+| `--log-level` | `string` | - | Log level: debug, info, warn or error (default info) [env: RELIANT_LOG_LEVEL] |
 | `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL (also RELIANT_SERVER_URL) |
 | `--verbose`, `-v` | `bool` | - | Enable verbose output |
 

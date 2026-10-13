@@ -142,7 +142,6 @@ func (b *syncBuffer) records(t *testing.T, message string) []map[string]any {
 // is restored when the test ends.
 func installProcessReporting(t *testing.T) (*sentryRecorder, *syncBuffer) {
 	t.Helper()
-	t.Setenv("LOG_FORMAT", "json")
 
 	previousLogger := slog.Default()
 	previousOutput := logging.DefaultOutput
@@ -160,7 +159,7 @@ func installProcessReporting(t *testing.T) (*sentryRecorder, *syncBuffer) {
 
 	lines := &syncBuffer{}
 	logging.DefaultOutput = lines
-	logging.Setup(slog.LevelInfo)
+	logging.Setup(logging.Settings{Format: "json"}, slog.LevelInfo)
 
 	reporter, err := telemetry.NewSentryReporter(telemetry.SentryConfig{
 		Enabled: true,

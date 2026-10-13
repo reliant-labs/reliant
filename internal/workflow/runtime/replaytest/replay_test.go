@@ -99,7 +99,7 @@ func quietProcessLogging() {
 		return
 	}
 	logging.DefaultOutput = io.Discard
-	logging.Setup(slog.LevelError + 10)
+	logging.Setup(logging.Settings{}, slog.LevelError+10)
 }
 
 // TestReplayFixtures replays every checked-in history fixture through the

@@ -7,6 +7,9 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
+
+	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // verbose is the value of the persistent --verbose flag.
@@ -32,6 +35,10 @@ Reliant server components.`,
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 	registerConnectionFlags(root)
 	enableVersionFlag(root)
+	// The root config's leaves (proto/config/v1 ReliantConfig) are persistent
+	// flags as well. A process that reads them loads the config in its own
+	// RunE, so a command that reads none of them never fails on one.
+	config.RegisterReliantConfigFlags(root)
 
 	// Register subcommand groups
 	root.AddCommand(newServerCmd())
@@ -57,6 +64,20 @@ func Execute() error {
 		return err
 	}
 	return nil
+}
+
+// loadRootConfig loads the reliant binary's root config (proto/config/v1
+// ReliantConfig) for the process cmd runs. Every process that reads it — the
+// servers and the daemon — calls this first thing in its RunE, before it
+// builds anything from the config.
+func loadRootConfig(cmd *cobra.Command) (*config.ReliantConfig, error) {
+	return config.LoadReliantConfig(cmd)
+}
+
+// logSettings is the root config's logger configuration, in the shape
+// internal/logging takes.
+func logSettings(cfg *config.ReliantConfig) logging.Settings {
+	return logging.Settings{Level: cfg.GetLog().GetLevel(), Format: cfg.GetLog().GetFormat()}
 }
 
 // envOrDefault returns the environment variable value or the default.

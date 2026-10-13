@@ -18,11 +18,12 @@ import (
 )
 
 // isolateDaemonLogging is isolateLogging plus the daemon-only globals, and a
-// clean slate for every variable SetupDaemon reads.
+// clean slate for every variable SetupDaemon reads (the level and format reach
+// it through Settings).
 func isolateDaemonLogging(t *testing.T) {
 	t.Helper()
 	isolateLogging(t)
-	for _, name := range []string{"LOG_FORMAT", "RELIANT_ENV", "NODE_ENV"} {
+	for _, name := range []string{"RELIANT_ENV", "NODE_ENV"} {
 		t.Setenv(name, "")
 	}
 	prevFields := daemonFields.Load()
@@ -91,10 +92,15 @@ func TestDaemonLogLevel(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateDaemonLogging(t)
+			var s Settings
 			for k, v := range tc.env {
+				if k == logLevelEnv {
+					s.Level = v // reaches the logger through the loaded config
+					continue
+				}
 				t.Setenv(k, v)
 			}
-			got, explicit := DaemonLogLevel()
+			got, explicit := DaemonLogLevel(s)
 			assert.Equal(t, tc.want, got)
 			assert.Equal(t, tc.wantExplicit, explicit)
 		})
@@ -105,10 +111,10 @@ func TestDaemonLogLevel(t *testing.T) {
 // name; the servers keep it.
 func TestDaemonAllowsExplicitDebugInProd(t *testing.T) {
 	isolateDaemonLogging(t)
-	t.Setenv("RELIANT_LOG_LEVEL", "debug")
+	s := Settings{Level: "debug"}
 	var buf bytes.Buffer
 
-	SetupDaemon(DaemonLogConfig{Output: &buf, Fields: DaemonFields{Version: "v1"}})
+	SetupDaemon(DaemonLogConfig{Output: &buf, Fields: DaemonFields{Version: "v1"}, Settings: s})
 	Debug("debug-line-marker")
 
 	assert.Contains(t, buf.String(), "debug-line-marker")
@@ -117,7 +123,7 @@ func TestDaemonAllowsExplicitDebugInProd(t *testing.T) {
 
 	// ... and the servers' path is unchanged.
 	buf.Reset()
-	Setup(GetLogLevel())
+	Setup(s, GetLogLevel(s))
 	Debug("server-debug-marker")
 	assert.NotContains(t, buf.String(), "server-debug-marker")
 	assert.Contains(t, buf.String(), refusedDebugMessage)
@@ -135,9 +141,8 @@ func TestDaemonDefaultsToInfoInProd(t *testing.T) {
 
 func TestUnrecognisedLogLevelIsReported(t *testing.T) {
 	isolateDaemonLogging(t)
-	t.Setenv("RELIANT_LOG_LEVEL", "verbose")
 	var buf bytes.Buffer
-	SetupDaemon(DaemonLogConfig{Output: &buf})
+	SetupDaemon(DaemonLogConfig{Output: &buf, Settings: Settings{Level: "verbose"}})
 	assert.Contains(t, buf.String(), "Unrecognised RELIANT_LOG_LEVEL")
 	assert.Contains(t, buf.String(), `value=verbose`)
 }
@@ -194,7 +199,8 @@ func TestSetupDaemonManagedScrubsLoggingEnv(t *testing.T) {
 	t.Setenv("LOG_FORMAT", "json")
 	t.Setenv("RELIANT_LOG_LEVEL", "info")
 
-	SetupDaemon(DaemonLogConfig{Managed: true, Output: io.Discard})
+	// The entrypoint has already loaded both into Settings.
+	SetupDaemon(DaemonLogConfig{Managed: true, Output: io.Discard, Settings: Settings{Level: "info", Format: "json"}})
 
 	for _, name := range []string{"LOG_FORMAT", "RELIANT_LOG_LEVEL"} {
 		_, set := os.LookupEnv(name)
@@ -207,7 +213,7 @@ func TestSetupDaemonUnmanagedStaysText(t *testing.T) {
 	isolateDaemonLogging(t)
 	t.Setenv("LOG_FORMAT", "json")
 	var buf bytes.Buffer
-	SetupDaemon(DaemonLogConfig{Output: &buf})
+	SetupDaemon(DaemonLogConfig{Output: &buf, Settings: Settings{Format: "json"}})
 	Info("hello")
 	assert.True(t, json.Valid(bytes.TrimSpace(buf.Bytes())), "an explicit LOG_FORMAT=json is honoured: %s", buf.String())
 	assert.Equal(t, "json", os.Getenv("LOG_FORMAT"), "an unmanaged daemon must not touch the environment")
@@ -221,9 +227,8 @@ func TestSetupDaemonUnmanagedStaysText(t *testing.T) {
 
 func TestSetupDaemonManagedHonoursExplicitTextFormat(t *testing.T) {
 	isolateDaemonLogging(t)
-	t.Setenv("LOG_FORMAT", "text")
 	out := captureStdout(t, func() {
-		SetupDaemon(DaemonLogConfig{Stdout: true, Managed: true})
+		SetupDaemon(DaemonLogConfig{Stdout: true, Managed: true, Settings: Settings{Format: "text"}})
 		Info("hello")
 	})
 	assert.Contains(t, out, "level=INFO")
@@ -245,8 +250,7 @@ func TestSetupDaemonFallsBackToStdoutWithoutFile(t *testing.T) {
 func TestSetDaemonIDRebindsFromThenOn(t *testing.T) {
 	isolateDaemonLogging(t)
 	var buf bytes.Buffer
-	t.Setenv("LOG_FORMAT", "json")
-	SetupDaemon(DaemonLogConfig{Output: &buf})
+	SetupDaemon(DaemonLogConfig{Output: &buf, Settings: Settings{Format: "json"}})
 
 	Info("before")
 	SetDaemonID("dmn_assigned")
@@ -266,8 +270,7 @@ func TestSetDaemonIDRebindsFromThenOn(t *testing.T) {
 func TestIdentityReachesLoggersDerivedEarly(t *testing.T) {
 	isolateDaemonLogging(t)
 	var buf bytes.Buffer
-	t.Setenv("LOG_FORMAT", "json")
-	SetupDaemon(DaemonLogConfig{Output: &buf})
+	SetupDaemon(DaemonLogConfig{Output: &buf, Settings: Settings{Format: "json"}})
 	derived := slog.Default().With("component", "x").WithGroup("g")
 	SetDaemonID("dmn_late")
 	derived.Info("hi")
@@ -280,8 +283,7 @@ func TestIdentityReachesLoggersDerivedEarly(t *testing.T) {
 func TestCallerSuppliedFieldIsNotOverwritten(t *testing.T) {
 	isolateDaemonLogging(t)
 	var buf bytes.Buffer
-	t.Setenv("LOG_FORMAT", "json")
-	SetupDaemon(DaemonLogConfig{Output: &buf, Fields: DaemonFields{DaemonID: "dmn_base"}})
+	SetupDaemon(DaemonLogConfig{Output: &buf, Fields: DaemonFields{DaemonID: "dmn_base"}, Settings: Settings{Format: "json"}})
 	Info("explicit", "daemon_id", "dmn_override")
 	recs := jsonLines(t, buf.String())
 	assert.Equal(t, "dmn_override", recs[0]["daemon_id"])
@@ -290,8 +292,7 @@ func TestCallerSuppliedFieldIsNotOverwritten(t *testing.T) {
 func TestTraceIDsAppearWhenASpanIsActive(t *testing.T) {
 	isolateDaemonLogging(t)
 	var buf bytes.Buffer
-	t.Setenv("LOG_FORMAT", "json")
-	SetupDaemon(DaemonLogConfig{Output: &buf})
+	SetupDaemon(DaemonLogConfig{Output: &buf, Settings: Settings{Format: "json"}})
 
 	sc := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    trace.TraceID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
@@ -314,8 +315,7 @@ func TestTraceIDsAppearWhenASpanIsActive(t *testing.T) {
 func TestDaemonLoggerRedacts(t *testing.T) {
 	isolateDaemonLogging(t)
 	var buf bytes.Buffer
-	t.Setenv("LOG_FORMAT", "json")
-	SetupDaemon(DaemonLogConfig{Output: &buf})
+	SetupDaemon(DaemonLogConfig{Output: &buf, Settings: Settings{Format: "json"}})
 	Info("cloning https://bot:hunter2hunter2@github.com/a/b", "token", "plainvalue", "content", strings.Repeat("c", 3000))
 	out := buf.String()
 	assert.NotContains(t, out, "hunter2hunter2")

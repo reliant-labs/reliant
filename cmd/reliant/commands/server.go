@@ -68,6 +68,12 @@ external Temporal, Postgres, and NATS services.
 
 Designed to run as N replicas behind a load balancer.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			base, err := loadRootConfig(cmd)
+			if err != nil {
+				return err
+			}
+			opts.Log = logSettings(base)
+
 			// Parse CORS origins: "*" → wildcard, otherwise comma-separated
 			corsRaw, _ := cmd.Flags().GetString("cors-origins")
 			if corsRaw == "*" {
@@ -135,6 +141,11 @@ tool execution routing, etc.).
 
 Designed to run as N replicas for horizontal scaling.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			base, err := loadRootConfig(cmd)
+			if err != nil {
+				return err
+			}
+			opts.Log = logSettings(base)
 			return serverworker.Run(cmd.Context(), opts)
 		},
 	}
@@ -173,6 +184,11 @@ and Temporal workers to the correct daemon via NATS.
 
 Designed to run as few stateful replicas.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			base, err := loadRootConfig(cmd)
+			if err != nil {
+				return err
+			}
+			opts.Log = logSettings(base)
 			return servergateway.Run(cmd.Context(), opts)
 		},
 	}

@@ -52,11 +52,10 @@ func TestGetLogLevel(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("RELIANT_ENV", tc.reliantEnv)
 			t.Setenv("NODE_ENV", "")
-			t.Setenv("RELIANT_LOG_LEVEL", tc.reliantLogLevel)
 			t.Setenv("DEBUG", tc.debug)
 			t.Setenv("RELIANT_DEV_DEBUG", tc.devDebug)
 
-			if got := GetLogLevel(); got != tc.want {
+			if got := GetLogLevel(Settings{Level: tc.reliantLogLevel}); got != tc.want {
 				t.Errorf("GetLogLevel() = %v, want %v", got, tc.want)
 			}
 		})
@@ -66,13 +65,13 @@ func TestGetLogLevel(t *testing.T) {
 const refusedDebugMessage = "DEBUG logging requested but ignored: environment is prod"
 
 // setupLikeAServer installs the logger the way serverapi, serverworker and
-// servergateway do — Setup with GetLogLevel's answer — and returns what it
-// wrote after one DEBUG and one INFO line.
-func setupLikeAServer(t *testing.T) string {
+// servergateway do — Setup with GetLogLevel's answer for the same settings —
+// and returns what it wrote after one DEBUG and one INFO line.
+func setupLikeAServer(t *testing.T, s Settings) string {
 	t.Helper()
 	var buf bytes.Buffer
 	DefaultOutput = &buf
-	Setup(GetLogLevel())
+	Setup(s, GetLogLevel(s))
 	Debug("debug-line-marker")
 	Info("info-line-marker")
 	return buf.String()
@@ -97,9 +96,14 @@ func TestProdRefusesDebugAndWarnsOnce(t *testing.T) {
 				isolateLogging(t)
 				t.Setenv("RELIANT_ENV", prodEnv)
 				t.Setenv("NODE_ENV", "")
-				t.Setenv(req.name, req.value)
+				var s Settings
+				if req.name == "RELIANT_LOG_LEVEL" {
+					s.Level = req.value
+				} else {
+					t.Setenv(req.name, req.value)
+				}
 
-				out := setupLikeAServer(t)
+				out := setupLikeAServer(t, s)
 
 				assert.NotContains(t, out, "debug-line-marker", "prod must not emit DEBUG lines")
 				assert.Contains(t, out, "info-line-marker")
@@ -121,7 +125,7 @@ func TestProdCapsDebugPassedByCaller(t *testing.T) {
 
 	var buf bytes.Buffer
 	DefaultOutput = &buf
-	Setup(slog.LevelDebug)
+	Setup(Settings{}, slog.LevelDebug)
 	Debug("debug-line-marker")
 
 	out := buf.String()
@@ -141,10 +145,9 @@ func TestProdWithoutDebugRequestDoesNotWarn(t *testing.T) {
 			isolateLogging(t)
 			t.Setenv("RELIANT_ENV", "")
 			t.Setenv("NODE_ENV", "")
-			t.Setenv("RELIANT_LOG_LEVEL", tc.logLevel)
 			t.Setenv("DEBUG", tc.debug)
 
-			out := setupLikeAServer(t)
+			out := setupLikeAServer(t, Settings{Level: tc.logLevel})
 
 			assert.NotContains(t, out, refusedDebugMessage)
 			assert.NotContains(t, out, "debug-line-marker")
@@ -163,7 +166,7 @@ func TestNonProdHonoursDebug(t *testing.T) {
 				t.Setenv("NODE_ENV", "")
 				t.Setenv(flag, "true")
 
-				out := setupLikeAServer(t)
+				out := setupLikeAServer(t, Settings{})
 
 				assert.Contains(t, out, "debug-line-marker")
 				assert.NotContains(t, out, refusedDebugMessage)

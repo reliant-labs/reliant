@@ -69,7 +69,7 @@ func setupQuietLogging() {
 	}))
 	slog.SetDefault(silent)
 	logging.DefaultOutput = io.Discard
-	logging.Setup(slog.LevelError + 10)
+	logging.Setup(logging.Settings{}, slog.LevelError+10)
 }
 
 func TestMain(m *testing.M) {

@@ -51,8 +51,9 @@ func toolsDaemonLogPath(dataDir string) string {
 //     the stream only with --verbose.
 //
 // The level is RELIANT_LOG_LEVEL (default INFO) and the format is LOG_FORMAT
-// (text, or JSON for a hosted daemon); see logging.SetupDaemon.
-func setupToolsDaemonLogging(dataDir string, verboseOutput bool) {
+// (text, or JSON for a hosted daemon), both from the root config's log
+// settings; see logging.SetupDaemon.
+func setupToolsDaemonLogging(dataDir string, verboseOutput bool, log logging.Settings) {
 	managed := daemonruntime.IsManagedEnvironment()
 	logging.SetupDaemon(logging.DaemonLogConfig{
 		Rotation: &logging.RotationConfig{
@@ -62,9 +63,10 @@ func setupToolsDaemonLogging(dataDir string, verboseOutput bool) {
 			MaxAgeDays: 30,
 			Compress:   true,
 		},
-		Stdout:  verboseOutput || managed,
-		Managed: managed,
-		Fields:  logging.DaemonFields{DaemonID: bootstrap.ReadDaemonID(dataDir), Version: version.Version},
+		Stdout:   verboseOutput || managed,
+		Managed:  managed,
+		Fields:   logging.DaemonFields{DaemonID: bootstrap.ReadDaemonID(dataDir), Version: version.Version},
+		Settings: log,
 	})
 }
 
@@ -741,6 +743,10 @@ To switch back to an account whose token is already stored:
 				// TODO: implement background fork/detach
 				return fmt.Errorf("--background is not yet implemented")
 			}
+			base, err := loadRootConfig(cmd)
+			if err != nil {
+				return err
+			}
 
 			// The target server is resolved before anything else because the
 			// data directory is derived from it: the instance is (origin,
@@ -801,7 +807,7 @@ To switch back to an account whose token is already stored:
 			// reliant.log with the API server: dev-electron can run both processes
 			// against the same data root, and separate lumberjack writers must not
 			// rotate the same file.
-			setupToolsDaemonLogging(dataDir, verbose)
+			setupToolsDaemonLogging(dataDir, verbose, logSettings(base))
 			defer logging.Close() //nolint:errcheck
 
 			// The daemon runtime publishes the record `daemon status` and

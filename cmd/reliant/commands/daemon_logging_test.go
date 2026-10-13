@@ -22,12 +22,12 @@ import (
 func TestSetupToolsDaemonLoggingPersistsWhenQuiet(t *testing.T) {
 	dataDir := t.TempDir()
 
-	setupToolsDaemonLogging(dataDir, false)
+	setupToolsDaemonLogging(dataDir, false, logging.Settings{})
 	logging.Info("quiet-mode persistence test", "source", "file-only")
 	if err := logging.Close(); err != nil {
 		t.Fatalf("close tools-daemon log: %v", err)
 	}
-	logging.Setup(slog.LevelInfo)
+	logging.Setup(logging.Settings{}, slog.LevelInfo)
 
 	contents, err := os.ReadFile(toolsDaemonLogPath(dataDir))
 	if err != nil {
@@ -41,13 +41,13 @@ func TestSetupToolsDaemonLoggingPersistsWhenQuiet(t *testing.T) {
 func TestSetupToolsDaemonLoggingPersistsOutput(t *testing.T) {
 	dataDir := t.TempDir()
 
-	setupToolsDaemonLogging(dataDir, true)
+	setupToolsDaemonLogging(dataDir, true, logging.Settings{})
 	logging.Info("tools-daemon persistence test", "source", "stdout-and-file")
 	if err := logging.Close(); err != nil {
 		t.Fatalf("close tools-daemon log: %v", err)
 	}
 	// Restore the package-global logger for subsequent tests in this process.
-	logging.Setup(slog.LevelInfo)
+	logging.Setup(logging.Settings{}, slog.LevelInfo)
 
 	logPath := toolsDaemonLogPath(dataDir)
 	contents, err := os.ReadFile(logPath)
@@ -68,7 +68,7 @@ func TestSetupToolsDaemonLoggingManagedWritesJSONToStdout(t *testing.T) {
 	t.Setenv("RELIANT_DAEMON_TYPE", "managed")
 	t.Setenv("LOG_FORMAT", "json")
 	t.Setenv("RELIANT_LOG_LEVEL", "info")
-	t.Cleanup(func() { logging.Setup(slog.LevelInfo) })
+	t.Cleanup(func() { logging.Setup(logging.Settings{}, slog.LevelInfo) })
 
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -76,7 +76,7 @@ func TestSetupToolsDaemonLoggingManagedWritesJSONToStdout(t *testing.T) {
 	}
 	prev := os.Stdout
 	os.Stdout = w
-	setupToolsDaemonLogging(dataDir, false)
+	setupToolsDaemonLogging(dataDir, false, loadedLogSettings(t))
 	logging.Info("managed stdout test")
 	os.Stdout = prev
 	_ = w.Close()
@@ -105,4 +105,19 @@ func TestSetupToolsDaemonLoggingManagedWritesJSONToStdout(t *testing.T) {
 	if os.Getenv("LOG_FORMAT") != "" {
 		t.Fatal("LOG_FORMAT must not leak into the daemon's children")
 	}
+}
+
+// loadedLogSettings is what `reliant daemon start` hands setupToolsDaemonLogging:
+// the root config's log settings, loaded from this process's environment.
+func loadedLogSettings(t *testing.T) logging.Settings {
+	t.Helper()
+	cmd, _, err := NewRootCmd().Find([]string{"daemon", "start"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadRootConfig(cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return logSettings(cfg)
 }

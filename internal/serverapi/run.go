@@ -94,6 +94,10 @@ type Options struct {
 	JWTPublicKey     string
 	JWTPublicKeyFile string
 	JWKSURL          string
+
+	// Log is the configured log level and format (the root config's
+	// LogConfig).
+	Log logging.Settings
 }
 
 // Run boots the stateless API server with the given options. It blocks until
@@ -146,8 +150,8 @@ func Run(ctx context.Context, opts Options) error {
 	// the readiness handler below can close over it.
 	drainer := drain.New()
 
-	logLevel := logging.GetLogLevel()
-	logging.SetupWithRotation(logLevel, false, &logging.RotationConfig{
+	logLevel := logging.GetLogLevel(opts.Log)
+	logging.SetupWithRotation(opts.Log, logLevel, false, &logging.RotationConfig{
 		Filename:   filepath.Join(opts.DataDir, "logs", "reliant.log"),
 		MaxSizeMB:  50,
 		MaxBackups: 3,

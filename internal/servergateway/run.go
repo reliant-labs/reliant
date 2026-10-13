@@ -71,6 +71,10 @@ type Options struct {
 	TLSKeyFile string
 	// DisableTLS disables TLS entirely.
 	DisableTLS bool
+
+	// Log is the configured log level and format (the root config's
+	// LogConfig).
+	Log logging.Settings
 }
 
 // Run bootstraps and runs the daemon-gateway server. It blocks until a
@@ -95,8 +99,8 @@ func Run(ctx context.Context, opts Options) error {
 	// Rollout drain budget from PRE_STOP_DELAY / SHUTDOWN_TIMEOUT.
 	drainer := drain.New()
 
-	logLevel := logging.GetLogLevel()
-	logging.SetupWithRotation(logLevel, false, &logging.RotationConfig{
+	logLevel := logging.GetLogLevel(opts.Log)
+	logging.SetupWithRotation(opts.Log, logLevel, false, &logging.RotationConfig{
 		Filename:   filepath.Join(opts.DataDir, "logs", "daemon-gateway.log"),
 		MaxSizeMB:  50,
 		MaxBackups: 3,
