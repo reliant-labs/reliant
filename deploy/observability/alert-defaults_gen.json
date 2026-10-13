@@ -20,6 +20,10 @@
         "rpc_service": "reliant.v1.QuestionService"
       },
       {
+        "name": "run",
+        "rpc_service": "reliant.v1.RunService"
+      },
+      {
         "name": "system",
         "rpc_service": "reliant.v1.SystemService"
       },

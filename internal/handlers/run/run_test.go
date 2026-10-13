@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package run
 
 import (
 	"testing"

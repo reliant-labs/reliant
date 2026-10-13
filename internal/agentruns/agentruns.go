@@ -38,9 +38,9 @@ type Launcher interface {
 }
 
 // RunAPI is the slice of the run service the lifecycle and messaging tools
-// use. It is satisfied by *services.RunService, whose handlers authorize the
-// caller from the request context — so each call below runs as the run's
-// owner, never as whoever happens to be on the worker.
+// use. It is satisfied by *run.Service (internal/handlers/run), whose
+// handlers authorize the caller from the request context — so each call below
+// runs as the run's owner, never as whoever happens to be on the worker.
 type RunAPI interface {
 	PauseRun(context.Context, *connect.Request[reliantv1.PauseRunRequest]) (*connect.Response[reliantv1.PauseRunResponse], error)
 	ResumeRun(context.Context, *connect.Request[reliantv1.ResumeRunRequest]) (*connect.Response[reliantv1.ResumeRunResponse], error)

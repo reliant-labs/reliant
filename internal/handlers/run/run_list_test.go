@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package run
 
 import (
 	"context"
@@ -17,10 +17,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
 type runListFixture struct {
-	svc    *RunService
+	svc    *Service
 	repo   *db.Repo
 	ctx    context.Context
 	userID string
@@ -36,7 +37,9 @@ func newRunListFixture(t *testing.T) *runListFixture {
 		ID: "p-" + userID, UserID: userID, Name: "proj", Path: t.TempDir(),
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	return &runListFixture{svc: NewRunService(repo, nil), repo: repo, ctx: ctx, userID: userID}
+	// The harness stubs Chats: listing never reaches the chat service.
+	svc := NewTestRun(t, WithRunDeps(Deps{Repo: repo}))
+	return &runListFixture{svc: svc, repo: repo, ctx: ctx, userID: userID}
 }
 
 func (f *runListFixture) project() string { return "p-" + f.userID }
@@ -210,7 +213,7 @@ func TestListRuns_ParentChatIDFilterAndFields(t *testing.T) {
 	_, err := f.repo.CreateTriggerEvent(f.ctx, &core.TriggerEvent{
 		ID: "evt-kid", UserID: f.userID, Kind: core.TriggerEventKindAgentStartRun, DedupeKey: "d-kid",
 		OccurredAt: now, Payload: map[string]any{"parent_chat_id": "parent"},
-		Outcome: core.TriggerEventLaunched, ChatID: ptrStr("kid"), CreatedAt: now,
+		Outcome: core.TriggerEventLaunched, ChatID: ptr.Of("kid"), CreatedAt: now,
 	})
 	require.NoError(t, err)
 
@@ -237,7 +240,7 @@ func TestListRuns_BuilderTestsHiddenUnlessFilteredByKind(t *testing.T) {
 	f.seed(t, "test", "wf-a", db.Completed(), base.Add(time.Minute))
 	_, err := f.repo.CreateTriggerEvent(f.ctx, &core.TriggerEvent{
 		ID: "evt-test", UserID: f.userID, Kind: core.TriggerEventKindBuilderTest, DedupeKey: "test",
-		OccurredAt: base, Outcome: core.TriggerEventLaunched, ChatID: ptrString("test"),
+		OccurredAt: base, Outcome: core.TriggerEventLaunched, ChatID: ptr.Of("test"),
 	})
 	require.NoError(t, err)
 
@@ -246,5 +249,3 @@ func TestListRuns_BuilderTestsHiddenUnlessFilteredByKind(t *testing.T) {
 	assert.Equal(t, []string{"test"}, runIDs(tests))
 	assert.Equal(t, "builder.test", tests[0].LaunchKind)
 }
-
-func ptrString(s string) *string { return &s }

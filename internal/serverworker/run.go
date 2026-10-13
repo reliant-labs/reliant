@@ -4,6 +4,7 @@ package serverworker
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -47,6 +49,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/videojobs"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
 // Options holds all configurable values for the Temporal worker.
@@ -303,8 +306,16 @@ func Run(ctx context.Context, opts Options) error {
 	pauseService := v2workflow.NewPauseService(temporalClient, repo)
 	runLifecycle := runs.NewService(repo, temporalClient, pauseService)
 	runLauncher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient, runLifecycle, v2workflow.SharedTaskQueue)
-	agentRuns := agentruns.New(runLauncher, services.NewRunService(repo,
-		services.NewChatService(repo, temporalClient, pauseService, v2workflow.SharedTaskQueue, streamingHub, router)))
+	runService, err := run.New(run.Deps{
+		Logger: slog.Default(),
+		Config: &typedconfig.Config{},
+		Repo:   repo,
+		Chats:  services.NewChatService(repo, temporalClient, pauseService, v2workflow.SharedTaskQueue, streamingHub, router),
+	})
+	if err != nil {
+		return fmt.Errorf("run service: %w", err)
+	}
+	agentRuns := agentruns.New(runLauncher, runService)
 
 	// The same registry the api-server builds, so both agree on which
 	// integrations are polled and which deliver events at all.

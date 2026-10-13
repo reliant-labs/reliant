@@ -40,6 +40,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
+	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
@@ -320,8 +321,16 @@ func NewServer(cfg *Config) (*Server, error) {
 	// RunService is the engine's execution API. It delegates to chatService
 	// rather than reimplementing anything, so mounting it adds surface without
 	// adding behavior.
-	runPath, runHandler := reliantv1connect.NewRunServiceHandler(
-		services.NewRunService(database, chatService), opts...)
+	runService, err := run.New(run.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+		Chats:  chatService,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("run service: %w", err)
+	}
+	runPath, runHandler := reliantv1connect.NewRunServiceHandler(runService, opts...)
 	messagePath, messageHandler := reliantv1connect.NewMessageServiceHandler(messageService, opts...)
 	settingsPath, settingsHandler := reliantv1connect.NewSettingsServiceHandler(settingsService, opts...)
 	mcpPath, mcpHandler := reliantv1connect.NewMCPServiceHandler(mcpService, opts...)

@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -13,7 +14,9 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/threads"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
 // A pending run has never started, and SendMessage refuses to start it, so a
@@ -50,7 +53,13 @@ func TestSignalRunOnPendingRunIsNotDelivered(t *testing.T) {
 	require.NoError(t, err)
 
 	chats := &ChatService{database: repo, threads: threadsSvc}
-	runs := NewRunService(repo, chats)
+	runs, err := run.New(run.Deps{
+		Logger: slog.Default(),
+		Config: &typedconfig.Config{},
+		Repo:   repo,
+		Chats:  chats,
+	})
+	require.NoError(t, err)
 
 	resp, err := runs.SignalRun(ctx, connect.NewRequest(&reliantv1.SignalRunRequest{
 		RunId: chatID,

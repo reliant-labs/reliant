@@ -13475,8 +13475,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "WorkflowStopReason"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "TriggerService",
@@ -33579,5 +33578,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "6f2e6d50abff9fd675339d8bc3be0538f095937bde75317d6c23d7fd3a733efc"
+  "source_hash": "a800d7f94596d603d996ac27b1c426465310075a8559a478db8613b7b25f4a79"
 }
