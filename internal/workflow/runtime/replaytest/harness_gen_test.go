@@ -42,6 +42,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -53,6 +54,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	"github.com/reliant-labs/reliant/internal/workflow"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
 // This harness is a trimmed replica of the e2e story harness
@@ -227,7 +229,7 @@ type Harness struct {
 	LLM *ScriptedLLM
 
 	ChatSvc     *services.ChatService
-	QuestionSvc *services.QuestionService
+	QuestionSvc *question.Service
 	Pause       *workflow.PauseService
 
 	Ctx context.Context
@@ -346,7 +348,13 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	// first turn); the worker above has no router either, so the activity
 	// settles as skipped_no_daemon_router without touching a filesystem.
 	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub, nil)
-	questionSvc := services.NewQuestionService(s.Repo, pause)
+	questionSvc, err := question.New(question.Deps{
+		Logger:  slog.Default(),
+		Config:  &typedconfig.Config{},
+		Repo:    s.Repo,
+		Signals: pause,
+	})
+	require.NoError(t, err, "question service")
 
 	return &Harness{
 		T:           t,

@@ -36,6 +36,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
@@ -227,7 +228,15 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 	repoService := services.NewRepoService(database, router)
 	approvalService := services.NewApprovalService(database, cfg.PauseService)
-	questionService := services.NewQuestionService(database, cfg.PauseService)
+	questionService, err := question.New(question.Deps{
+		Logger:  handlerLogger,
+		Config:  handlerConfig,
+		Repo:    database,
+		Signals: cfg.PauseService,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("question service: %w", err)
+	}
 	chatService := services.NewChatService(database, cfg.TemporalClient, cfg.PauseService, cfg.SharedTaskQueue, cfg.StreamingHub, router)
 	messageService := services.NewMessageService(database)
 	settingsService := services.NewSettingsService(database, router)

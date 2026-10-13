@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package question
 
 import (
 	"context"
@@ -8,11 +8,11 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -32,7 +32,9 @@ func TestGetPendingQuestionRejectsUnknownChat(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
-	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+	// AuthedContext's principal is UserID "test-user", installed the way the
+	// API auth interceptor installs a real caller.
+	ctx := AuthedContext(t)
 	now := time.Now().UTC()
 
 	projectID := "test-project-questions-" + uuid.NewString()
@@ -47,7 +49,7 @@ func TestGetPendingQuestionRejectsUnknownChat(t *testing.T) {
 		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	svc := NewQuestionService(repo, nil)
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
 
 	get := func(ctx context.Context, id string) (*connect.Response[reliantv1.GetPendingQuestionResponse], error) {
 		return svc.GetPendingQuestion(ctx, connect.NewRequest(&reliantv1.GetPendingQuestionRequest{ChatId: id}))
@@ -68,7 +70,7 @@ func TestGetPendingQuestionRejectsUnknownChat(t *testing.T) {
 	})
 
 	t.Run("another user's chat is not found", func(t *testing.T) {
-		otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, "other-user")
+		otherCtx := AuthedContext(t, testkit.WithUserID("other-user"))
 		_, err := get(otherCtx, chatID)
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))

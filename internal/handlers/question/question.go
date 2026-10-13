@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package question
 
 import (
 	"context"
@@ -11,30 +11,13 @@ import (
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/workflow"
 )
 
-// QuestionService implements the QuestionService RPC handlers
-type QuestionService struct {
-	reliantv1connect.UnimplementedQuestionServiceHandler
-	database     db.Repository
-	pauseService *workflow.PauseService
-}
-
-// NewQuestionService creates a new QuestionService
-func NewQuestionService(database db.Repository, pauseService *workflow.PauseService) *QuestionService {
-	return &QuestionService{
-		database:     database,
-		pauseService: pauseService,
-	}
-}
-
 // ResolveQuestion resolves a pending question with the user's answer
-func (s *QuestionService) ResolveQuestion(
+func (s *Service) ResolveQuestion(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ResolveQuestionRequest],
 ) (*connect.Response[reliantv1.ResolveQuestionResponse], error) {
@@ -46,7 +29,7 @@ func (s *QuestionService) ResolveQuestion(
 	}
 
 	// Look up the question
-	question, err := s.database.GetQuestionByID(ctx, req.Msg.QuestionId)
+	question, err := s.deps.Repo.GetQuestionByID(ctx, req.Msg.QuestionId)
 	if err != nil || question == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("question not found"))
 	}
@@ -59,7 +42,7 @@ func (s *QuestionService) ResolveQuestion(
 	if !ok || userID == "" {
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
 	}
-	chat, err := s.database.GetChat(ctx, question.ChatID)
+	chat, err := s.deps.Repo.GetChat(ctx, question.ChatID)
 	if err != nil || chat == nil || chat.UserID != userID {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("question not found"))
 	}
@@ -74,13 +57,13 @@ func (s *QuestionService) ResolveQuestion(
 		responseData = req.Msg.ResponseData
 	}
 
-	if err := s.database.ResolveQuestion(ctx, question.ID, responseData); err != nil {
+	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, responseData); err != nil {
 		logging.Error("Failed to resolve question", "error", err, "questionID", question.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve question"))
 	}
 
 	// Emit question update (resolved)
-	if err := s.database.EmitQuestionUpdate(ctx, question.ChatID, db.QuestionUpdate{
+	if err := s.deps.Repo.EmitQuestionUpdate(ctx, question.ChatID, db.QuestionUpdate{
 		QuestionID: question.ID,
 		ChatID:     question.ChatID,
 		WorkflowID: question.WorkflowID,
@@ -120,7 +103,7 @@ func (s *QuestionService) ResolveQuestion(
 // away from a workflow that is parked on a question. Every other supervision
 // RPC (GetWorkflowExecutions, GetChatUpdates) already verifies; this one was
 // the hole.
-func (s *QuestionService) GetPendingQuestion(
+func (s *Service) GetPendingQuestion(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetPendingQuestionRequest],
 ) (*connect.Response[reliantv1.GetPendingQuestionResponse], error) {
@@ -130,12 +113,12 @@ func (s *QuestionService) GetPendingQuestion(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
 	}
 
-	chat, err := s.database.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil || chat == nil || chat.UserID != userID {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
-	question, err := s.database.GetPendingQuestionByChatID(ctx, req.Msg.ChatId)
+	question, err := s.deps.Repo.GetPendingQuestionByChatID(ctx, req.Msg.ChatId)
 	if err != nil {
 		// No pending question is not an error
 		return connect.NewResponse(&reliantv1.GetPendingQuestionResponse{}), nil
@@ -184,13 +167,13 @@ func questionStatusString(status int) string {
 }
 
 // signalQuestion sends a signal to the workflow using PauseService.SignalWithRecovery
-func (s *QuestionService) signalQuestion(ctx context.Context, question *db.Question, signalData map[string]interface{}) {
+func (s *Service) signalQuestion(ctx context.Context, question *db.Question, signalData map[string]interface{}) {
 	if question.TemporalWorkflowID == "" {
 		logging.Warn("[Question] No temporal_workflow_id on question, cannot signal", "questionID", question.ID)
 		return
 	}
 	signalName := "signal.question." + question.ID
-	if err := s.pauseService.SignalWithRecovery(ctx, question.TemporalWorkflowID, signalName, signalData, nil); err != nil {
+	if err := s.deps.Signals.SignalWithRecovery(ctx, question.TemporalWorkflowID, signalName, signalData, nil); err != nil {
 		logging.Warn("[Question] Failed to signal question resolution",
 			"error", err,
 			"questionID", question.ID,
@@ -215,12 +198,12 @@ func isAskUserQuestion(metadata *string) bool {
 }
 
 // saveUserReplyMessage saves the user's reply as a user message in the question's thread
-func (s *QuestionService) saveUserReplyMessage(ctx context.Context, question *db.Question, responseData string) error {
+func (s *Service) saveUserReplyMessage(ctx context.Context, question *db.Question, responseData string) error {
 	// Parse response data to get the user's reply text
 	var response map[string]interface{}
 	if err := json.Unmarshal([]byte(responseData), &response); err != nil {
 		// If not JSON, use the raw string as the reply
-		_, err := s.database.SaveMessageToThread(ctx, question.ChatID, question.ThreadID,
+		_, err := s.deps.Repo.SaveMessageToThread(ctx, question.ChatID, question.ThreadID,
 			int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), responseData, &question.WorkflowID, nil, nil)
 		return err
 	}
@@ -243,7 +226,7 @@ func (s *QuestionService) saveUserReplyMessage(ctx context.Context, question *db
 		return nil
 	}
 
-	_, err := s.database.SaveMessageToThread(ctx, question.ChatID, question.ThreadID,
+	_, err := s.deps.Repo.SaveMessageToThread(ctx, question.ChatID, question.ThreadID,
 		int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), replyText, &question.WorkflowID, nil, nil)
 	return err
 }

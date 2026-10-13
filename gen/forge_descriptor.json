@@ -21771,8 +21771,7 @@
         "reliant.v1.QuestionInfo": "reliant/v1/question.proto",
         "reliant.v1.ResolveQuestionRequest": "reliant/v1/question.proto",
         "reliant.v1.ResolveQuestionResponse": "reliant/v1/question.proto"
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "RepoService",
@@ -33584,5 +33583,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "d496646ae4439c1034edb2452a7aa943e7ba5fa13d28a7056ec28fcdd303e37f"
+  "source_hash": "8bb946d8c6918d8cc8a07bdd5476d965c11c328b4518df462bd0fcb013f6bb5f"
 }

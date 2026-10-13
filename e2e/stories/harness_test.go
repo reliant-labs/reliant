@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"strconv"
 	"strings"
@@ -32,6 +33,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -45,6 +47,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	"github.com/reliant-labs/reliant/internal/workflow"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
 // ---------------------------------------------------------------------------
@@ -142,7 +145,7 @@ type Harness struct {
 	LLM *ScriptedLLM
 
 	ChatSvc     *services.ChatService
-	QuestionSvc *services.QuestionService
+	QuestionSvc *question.Service
 	ApprovalSvc *services.ApprovalService
 	// TriggerSvc is the production TriggerService over the story's Temporal:
 	// a fire goes through the real fire workflow, Firer and launcher.
@@ -276,7 +279,13 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// only used for the greenfield code-presence probe, which skips itself when
 	// it is nil.
 	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub, nil)
-	questionSvc := services.NewQuestionService(s.Repo, pause)
+	questionSvc, err := question.New(question.Deps{
+		Logger:  slog.Default(),
+		Config:  &typedconfig.Config{},
+		Repo:    s.Repo,
+		Signals: pause,
+	})
+	require.NoError(t, err, "question service")
 	approvalSvc := services.NewApprovalService(s.Repo, pause)
 	triggerSvc := services.NewTriggerServiceFor(s.Repo, s.Temporal, taskQueue)
 

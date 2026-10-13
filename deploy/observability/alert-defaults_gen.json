@@ -4,6 +4,10 @@
     "project": "reliant",
     "services": [
       {
+        "name": "question",
+        "rpc_service": "reliant.v1.QuestionService"
+      },
+      {
         "name": "system",
         "rpc_service": "reliant.v1.SystemService"
       }

@@ -1,0 +1,37 @@
+package question_test
+
+import (
+	"testing"
+
+	"connectrpc.com/connect"
+
+	"github.com/reliant-labs/forge/pkg/tdd"
+
+	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+
+	question "github.com/reliant-labs/reliant/internal/handlers/question"
+)
+
+// TestGetPendingQuestionRejectsUnknownChat (question_pending_lookup_test.go)
+// covers the lookup against a real database; these rows need none.
+func TestGetPendingQuestion_Generated(t *testing.T) {
+	t.Parallel()
+
+	// The generated harness stubs Repo, so no chat exists.
+	svc := question.NewTestQuestion(t)
+
+	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetPendingQuestionRequest, pb.GetPendingQuestionResponse]{
+		{
+			Name:    "chat_id is required",
+			Req:     connect.NewRequest(&pb.GetPendingQuestionRequest{}),
+			Ctx:     question.AuthedContext(t),
+			WantErr: connect.CodeInvalidArgument,
+		},
+		{
+			Name:    "unknown chat is not found",
+			Req:     connect.NewRequest(&pb.GetPendingQuestionRequest{ChatId: "chat-1"}),
+			Ctx:     question.AuthedContext(t),
+			WantErr: connect.CodeNotFound,
+		},
+	}, svc.GetPendingQuestion)
+}
