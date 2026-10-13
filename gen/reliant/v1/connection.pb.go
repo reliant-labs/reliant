@@ -680,8 +680,10 @@ func (x *ListIntegrationsResponse) GetIntegrations() []*Integration {
 }
 
 type ListConnectionsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	IntegrationId string                 `protobuf:"bytes,1,opt,name=integration_id,json=integrationId,proto3" json:"integration_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// IntegrationId keeps only that integration's connections. Unset (or empty)
+	// lists every integration's.
+	IntegrationId *string `protobuf:"bytes,1,opt,name=integration_id,json=integrationId,proto3,oneof" json:"integration_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -717,8 +719,8 @@ func (*ListConnectionsRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListConnectionsRequest) GetIntegrationId() string {
-	if x != nil {
-		return x.IntegrationId
+	if x != nil && x.IntegrationId != nil {
+		return *x.IntegrationId
 	}
 	return ""
 }
@@ -1704,8 +1706,8 @@ type ListConnectionEventsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Limit int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	// Return events older than this id; 0 for the newest page.
-	BeforeId      int64 `protobuf:"varint,3,opt,name=before_id,json=beforeId,proto3" json:"before_id,omitempty"`
+	// Return events older than this id; unset (or 0) for the newest page.
+	BeforeId      *int64 `protobuf:"varint,3,opt,name=before_id,json=beforeId,proto3,oneof" json:"before_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1755,8 +1757,8 @@ func (x *ListConnectionEventsRequest) GetLimit() int32 {
 }
 
 func (x *ListConnectionEventsRequest) GetBeforeId() int64 {
-	if x != nil {
-		return x.BeforeId
+	if x != nil && x.BeforeId != nil {
+		return *x.BeforeId
 	}
 	return 0
 }
@@ -1859,9 +1861,10 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\brequired\x18\x06 \x01(\bR\brequired\"\x19\n" +
 	"\x17ListIntegrationsRequest\"W\n" +
 	"\x18ListIntegrationsResponse\x12;\n" +
-	"\fintegrations\x18\x01 \x03(\v2\x17.reliant.v1.IntegrationR\fintegrations\"?\n" +
-	"\x16ListConnectionsRequest\x12%\n" +
-	"\x0eintegration_id\x18\x01 \x01(\tR\rintegrationId\"S\n" +
+	"\fintegrations\x18\x01 \x03(\v2\x17.reliant.v1.IntegrationR\fintegrations\"W\n" +
+	"\x16ListConnectionsRequest\x12*\n" +
+	"\x0eintegration_id\x18\x01 \x01(\tH\x00R\rintegrationId\x88\x01\x01B\x11\n" +
+	"\x0f_integration_id\"S\n" +
 	"\x17ListConnectionsResponse\x128\n" +
 	"\vconnections\x18\x01 \x03(\v2\x16.reliant.v1.ConnectionR\vconnections\"&\n" +
 	"\x14GetConnectionRequest\x12\x0e\n" +
@@ -1939,11 +1942,13 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\ftool_call_id\x18\x06 \x01(\tR\n" +
 	"toolCallId\x12\x14\n" +
 	"\x05actor\x18\a \x01(\tR\x05actor\x12\x0e\n" +
-	"\x02at\x18\b \x01(\tR\x02at\"`\n" +
+	"\x02at\x18\b \x01(\tR\x02at\"s\n" +
 	"\x1bListConnectionEventsRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1b\n" +
-	"\tbefore_id\x18\x03 \x01(\x03R\bbeforeId\"S\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12 \n" +
+	"\tbefore_id\x18\x03 \x01(\x03H\x00R\bbeforeId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_before_id\"S\n" +
 	"\x1cListConnectionEventsResponse\x123\n" +
 	"\x06events\x18\x01 \x03(\v2\x1b.reliant.v1.ConnectionEventR\x06events*\xe0\x01\n" +
 	"\x12ConnectionAuthKind\x12$\n" +
@@ -2081,6 +2086,8 @@ func file_reliant_v1_connection_proto_init() {
 	if File_reliant_v1_connection_proto != nil {
 		return
 	}
+	file_reliant_v1_connection_proto_msgTypes[6].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[25].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

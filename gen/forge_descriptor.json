@@ -1646,7 +1646,7 @@
           {
             "Name": "before_id",
             "ProtoType": "int64",
-            "IsOptional": false
+            "IsOptional": true
           }
         ],
         "ListConnectionEventsResponse": [
@@ -1661,7 +1661,7 @@
           {
             "Name": "integration_id",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           }
         ],
         "ListConnectionsResponse": [
@@ -2046,7 +2046,8 @@
           },
           {
             "name": "before_id",
-            "kind": "int64"
+            "kind": "int64",
+            "optional": true
           }
         ],
         "reliant.v1.ListConnectionEventsResponse": [
@@ -2060,7 +2061,8 @@
         "reliant.v1.ListConnectionsRequest": [
           {
             "name": "integration_id",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ListConnectionsResponse": [
@@ -33572,5 +33574,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "8e6aa5d90fc30259719262abd49567260b7a578bde7d2550e0c3f345a4fac0d6"
+  "source_hash": "154de3fa05a6860f42e99951106d3e5c6cc02f6577be693ab6dcb8521b536bdb"
 }

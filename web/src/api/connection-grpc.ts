@@ -163,7 +163,7 @@ export const connectionGrpc = {
   async list(integrationId?: string): Promise<Connection[]> {
     const response = await grpcClient
       .connection()
-      .listConnections(create(ListConnectionsRequestSchema, { integrationId: integrationId ?? "" }));
+      .listConnections(create(ListConnectionsRequestSchema, { integrationId }));
     return response.connections.map(connectionFromProto);
   },
 

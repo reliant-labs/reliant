@@ -154,7 +154,9 @@ message ListIntegrationsResponse {
 }
 
 message ListConnectionsRequest {
-  string integration_id = 1;
+  // IntegrationId keeps only that integration's connections. Unset (or empty)
+  // lists every integration's.
+  optional string integration_id = 1;
 }
 message ListConnectionsResponse {
   repeated Connection connections = 1;
@@ -272,8 +274,8 @@ message ConnectionEvent {
 message ListConnectionEventsRequest {
   string id = 1;
   int32 limit = 2;
-  // Return events older than this id; 0 for the newest page.
-  int64 before_id = 3;
+  // Return events older than this id; unset (or 0) for the newest page.
+  optional int64 before_id = 3;
 }
 message ListConnectionEventsResponse {
   repeated ConnectionEvent events = 1;
