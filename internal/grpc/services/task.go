@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/planproto"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
@@ -131,7 +132,7 @@ func (s *TaskService) CreateTask(
 			Id:        task.ID,
 			PlanId:    task.PlanID,
 			Title:     task.Title,
-			Status:    taskStatusFromInt32(task.Status),
+			Status:    planproto.TaskStatus(task.Status),
 			Position:  int32(task.Position),
 			CreatedAt: task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt: task.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -168,7 +169,7 @@ func (s *TaskService) GetTask(
 			Id:        task.ID,
 			PlanId:    task.PlanID,
 			Title:     task.Title,
-			Status:    taskStatusFromInt32(task.Status),
+			Status:    planproto.TaskStatus(task.Status),
 			Position:  int32(task.Position),
 			CreatedAt: task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt: task.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -227,7 +228,7 @@ func (s *TaskService) ListTasks(
 			Id:        task.ID,
 			PlanId:    task.PlanID,
 			Title:     task.Title,
-			Status:    taskStatusFromInt32(task.Status),
+			Status:    planproto.TaskStatus(task.Status),
 			Position:  int32(task.Position),
 			CreatedAt: task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt: task.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -295,7 +296,7 @@ func (s *TaskService) UpdateTask(
 			Id:        task.ID,
 			PlanId:    task.PlanID,
 			Title:     task.Title,
-			Status:    taskStatusFromInt32(task.Status),
+			Status:    planproto.TaskStatus(task.Status),
 			Position:  int32(task.Position),
 			CreatedAt: task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt: task.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),

@@ -113,6 +113,7 @@ var serverSidePackages = []string{
 	"internal/machinewake",
 	"internal/gitremote",
 	"internal/daemonplacement",
+	"internal/planproto",
 	"internal/workflow/runtime/activities",
 	"internal/workflow/runtime/activities/handlers",
 	// Extracted from grpc/services, so it keeps that package's ban (P3a,

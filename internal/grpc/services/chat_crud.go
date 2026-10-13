@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
+	"github.com/reliant-labs/reliant/internal/planproto"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -1425,7 +1426,7 @@ func (s *ChatService) ListChatPlans(
 			Id:        p.ID,
 			ChatId:    req.Msg.ChatId,
 			Title:     p.Title,
-			Status:    planStatusFromInt32(p.Status),
+			Status:    planproto.PlanStatus(p.Status),
 			CreatedAt: p.CreatedAt.Format(time.RFC3339),
 			UpdatedAt: p.UpdatedAt.Format(time.RFC3339),
 		}

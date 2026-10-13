@@ -12,32 +12,6 @@ import (
 // Conversion is a simple cast.
 // ============================================================================
 
-// --- PlanStatus ---
-
-func planStatusFromInt32(v int32) reliantv1.PlanStatus {
-	return reliantv1.PlanStatus(v)
-}
-
-// --- PlanComplexity ---
-
-func planComplexityFromInt32(v int32) reliantv1.PlanComplexity {
-	return reliantv1.PlanComplexity(v)
-}
-
-func planComplexityToInt32Ptr(e *reliantv1.PlanComplexity) *int32 {
-	if e == nil {
-		return nil
-	}
-	v := int32(*e)
-	return &v
-}
-
-// --- TaskStatus ---
-
-func taskStatusFromInt32(v int32) reliantv1.TaskStatus {
-	return reliantv1.TaskStatus(v)
-}
-
 // Note: DaemonStatus, NodeExecutionStatus, and ToolExecutionStatus
 // are type aliases (=) to their proto enum types, so no conversion is needed.
 // The db package types ARE the proto types.

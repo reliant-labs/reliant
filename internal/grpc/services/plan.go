@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/planproto"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
@@ -94,7 +95,7 @@ func (s *PlanService) CreatePlan(
 		Title:       req.Msg.Title,
 		Description: ptr.StringIfNotEmpty(req.Msg.Description),
 		Status:      statusVal,
-		Complexity:  planComplexityToInt32Ptr(&req.Msg.Complexity),
+		Complexity:  planproto.PlanComplexityToInt32Ptr(&req.Msg.Complexity),
 	}
 
 	if err := s.database.CreatePlan(ctx, plan); err != nil {
@@ -111,7 +112,7 @@ func (s *PlanService) CreatePlan(
 			Id:        plan.ID,
 			ChatId:    req.Msg.ChatId,
 			Title:     plan.Title,
-			Status:    planStatusFromInt32(plan.Status),
+			Status:    planproto.PlanStatus(plan.Status),
 			CreatedAt: plan.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt: plan.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		},
@@ -120,7 +121,7 @@ func (s *PlanService) CreatePlan(
 		resp.Plan.Description = *plan.Description
 	}
 	if plan.Complexity != nil {
-		resp.Plan.Complexity = planComplexityFromInt32(*plan.Complexity)
+		resp.Plan.Complexity = planproto.PlanComplexity(*plan.Complexity)
 	}
 
 	return connect.NewResponse(resp), nil
@@ -149,7 +150,7 @@ func (s *PlanService) GetPlan(
 			Id:        plan.ID,
 			ChatId:    chatID,
 			Title:     plan.Title,
-			Status:    planStatusFromInt32(plan.Status),
+			Status:    planproto.PlanStatus(plan.Status),
 			CreatedAt: plan.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt: plan.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		},
@@ -158,7 +159,7 @@ func (s *PlanService) GetPlan(
 		resp.Plan.Description = *plan.Description
 	}
 	if plan.Complexity != nil {
-		resp.Plan.Complexity = planComplexityFromInt32(*plan.Complexity)
+		resp.Plan.Complexity = planproto.PlanComplexity(*plan.Complexity)
 	}
 
 	return connect.NewResponse(resp), nil
@@ -199,7 +200,7 @@ func (s *PlanService) GetPlanByChatId(
 			Id:        plan.ID,
 			ChatId:    req.Msg.ChatId,
 			Title:     plan.Title,
-			Status:    planStatusFromInt32(plan.Status),
+			Status:    planproto.PlanStatus(plan.Status),
 			CreatedAt: plan.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt: plan.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		},
@@ -208,7 +209,7 @@ func (s *PlanService) GetPlanByChatId(
 		resp.Plan.Description = *plan.Description
 	}
 	if plan.Complexity != nil {
-		resp.Plan.Complexity = planComplexityFromInt32(*plan.Complexity)
+		resp.Plan.Complexity = planproto.PlanComplexity(*plan.Complexity)
 	}
 
 	return connect.NewResponse(resp), nil
@@ -243,7 +244,7 @@ func (s *PlanService) UpdatePlan(
 		plan.Status = int32(*req.Msg.Status)
 	}
 	if req.Msg.Complexity != nil {
-		plan.Complexity = planComplexityToInt32Ptr(req.Msg.Complexity)
+		plan.Complexity = planproto.PlanComplexityToInt32Ptr(req.Msg.Complexity)
 	}
 
 	if err := s.database.UpdatePlan(ctx, plan); err != nil {
@@ -260,7 +261,7 @@ func (s *PlanService) UpdatePlan(
 			Id:        plan.ID,
 			ChatId:    chatID,
 			Title:     plan.Title,
-			Status:    planStatusFromInt32(plan.Status),
+			Status:    planproto.PlanStatus(plan.Status),
 			CreatedAt: plan.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt: plan.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		},
@@ -269,7 +270,7 @@ func (s *PlanService) UpdatePlan(
 		resp.Plan.Description = *plan.Description
 	}
 	if plan.Complexity != nil {
-		resp.Plan.Complexity = planComplexityFromInt32(*plan.Complexity)
+		resp.Plan.Complexity = planproto.PlanComplexity(*plan.Complexity)
 	}
 
 	return connect.NewResponse(resp), nil
@@ -329,7 +330,7 @@ func (s *PlanService) ListPlanTasks(
 			Id:        task.ID,
 			PlanId:    task.PlanID,
 			Title:     task.Title,
-			Status:    taskStatusFromInt32(task.Status),
+			Status:    planproto.TaskStatus(task.Status),
 			Position:  int32(task.Position),
 			CreatedAt: task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt: task.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
