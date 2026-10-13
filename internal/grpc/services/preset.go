@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowcatalog"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 )
 
@@ -1012,7 +1013,7 @@ func (s *PresetService) GetDefaultPresetsBatch(
 	var (
 		settings    []*db.Setting
 		settingsErr error
-		catalog     *workflowCatalog
+		catalog     *workflowcatalog.Catalog
 		wg          sync.WaitGroup
 	)
 	wg.Add(2)
@@ -1022,7 +1023,7 @@ func (s *PresetService) GetDefaultPresetsBatch(
 	}()
 	go func() {
 		defer wg.Done()
-		catalog = loadWorkflowCatalog(ctx, s.database, userIDStr, req.Msg.ProjectId)
+		catalog = workflowcatalog.Load(ctx, s.database, userIDStr, req.Msg.ProjectId)
 	}()
 	wg.Wait()
 
@@ -1036,7 +1037,7 @@ func (s *PresetService) GetDefaultPresetsBatch(
 	}
 
 	opts := workflowsource.Options{UserID: userIDStr, ProjectID: req.Msg.ProjectId}
-	load := memoizeRefLoader(withBuiltinCache(func(ref string) (*reliantv1.Workflow, error) {
+	load := workflowcatalog.MemoizeRefLoader(workflowcatalog.WithBuiltinCache(func(ref string) (*reliantv1.Workflow, error) {
 		resolved, err := workflowsource.Resolve(ctx, catalog, opts, ref)
 		if err != nil {
 			return nil, fmt.Errorf("workflow %q: %w", ref, err)

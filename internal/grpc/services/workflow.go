@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowcatalog"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -98,7 +99,7 @@ func (s *WorkflowService) ListWorkflows(
 	// against the catalog in memory.
 	workflowItemType := int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_WORKFLOW)
 	var (
-		catalog          *workflowCatalog
+		catalog          *workflowcatalog.Catalog
 		wfOverrides      map[string]bool
 		wfHiddenDefaults []string
 		overridesErr     error
@@ -108,7 +109,7 @@ func (s *WorkflowService) ListWorkflows(
 	reads.Add(3)
 	go func() {
 		defer reads.Done()
-		catalog = loadWorkflowCatalog(ctx, s.database, userID, project.ID)
+		catalog = workflowcatalog.Load(ctx, s.database, userID, project.ID)
 	}()
 	go func() {
 		defer reads.Done()
@@ -220,19 +221,20 @@ func (s *WorkflowService) ListWorkflows(
 	// a complete workflow can fall behind a stricter validator). Management UIs
 	// such as the Workflow Hub opt into every workflow, drafts included, with
 	// include_hidden=true; each carries its status and current findings.
-	if catalog.draftsErr != nil {
-		logging.Error("Failed to list workflows from database", "error", catalog.draftsErr, "user_id", userID, "include_hidden", req.Msg.IncludeHidden)
+	drafts, draftsErr := catalog.Drafts()
+	if draftsErr != nil {
+		logging.Error("Failed to list workflows from database", "error", draftsErr, "user_id", userID, "include_hidden", req.Msg.IncludeHidden)
 		// Continue with builtins and project workflows
 	} else {
 		// One loader for every workflow validated here, so a ref several of
 		// them share (builtin://agent, a helper of the user's) resolves once.
 		// Its rule is validateWorkflowDefinition's: DraftLoader's, with each
 		// workflow resolving to itself.
-		validationRefs := memoizeRefLoader(withBuiltinCache(workflowsource.DraftLoader(ctx, catalog, userID, nil)))
+		validationRefs := workflowcatalog.MemoizeRefLoader(workflowcatalog.WithBuiltinCache(workflowsource.DraftLoader(ctx, catalog, userID, nil)))
 		validationLoader := func(self *reliantv1.Workflow) v2.WorkflowLoader {
 			return resolvingToSelf(self, validationRefs)
 		}
-		for _, draft := range catalog.drafts {
+		for _, draft := range drafts {
 			if !req.Msg.IncludeHidden && (draft.IsHidden || draft.Status != db.WorkflowDraftStatusComplete) {
 				continue
 			}
@@ -269,7 +271,7 @@ func (s *WorkflowService) ListWorkflows(
 	// empty. Refs resolve by the rule a run uses (workflowsource), against
 	// the catalog read above, and each distinct ref once.
 	refOpts := workflowsource.Options{UserID: userID, ProjectID: project.ID}
-	refLoader := memoizeRefLoader(withBuiltinCache(func(ref string) (*reliantv1.Workflow, error) {
+	refLoader := workflowcatalog.MemoizeRefLoader(workflowcatalog.WithBuiltinCache(func(ref string) (*reliantv1.Workflow, error) {
 		resolved, err := workflowsource.Resolve(ctx, catalog, refOpts, ref)
 		if err != nil {
 			return nil, err

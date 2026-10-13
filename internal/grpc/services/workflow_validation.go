@@ -160,7 +160,7 @@ func (s *WorkflowService) validateWorkflowDefinition(ctx context.Context, userID
 
 // validateWorkflowDefinitionWith validates definition, resolving its refs
 // with the loader loaderFor returns for the parsed definition. A listing
-// passes one built over its workflowCatalog and shared by every workflow it
+// passes one built over its workflowcatalog.Catalog and shared by every workflow it
 // validates (see ListWorkflows).
 func validateWorkflowDefinitionWith(definition []byte, loaderFor func(self *reliantv1.Workflow) v2.WorkflowLoader) workflowCheck {
 	self, err := wfyaml.ParseWorkflow(definition)
