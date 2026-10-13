@@ -10400,7 +10400,7 @@
           {
             "Name": "path",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           }
         ],
         "ListDirectoryResponse": [
@@ -10977,7 +10977,8 @@
         "reliant.v1.ListDirectoryRequest": [
           {
             "name": "path",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ListDirectoryResponse": [
@@ -33574,5 +33575,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "154de3fa05a6860f42e99951106d3e5c6cc02f6577be693ab6dcb8521b536bdb"
+  "source_hash": "40d660829e83aeef77465191b5bb1ef5ff176dc499c3ece6272218f64711166e"
 }

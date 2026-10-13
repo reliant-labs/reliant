@@ -1168,7 +1168,7 @@ func (s *FileSystemService) ListDirectory(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListDirectoryRequest],
 ) (*connect.Response[reliantv1.ListDirectoryResponse], error) {
-	path := req.Msg.Path
+	path := req.Msg.GetPath()
 	if path == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {

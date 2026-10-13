@@ -1003,7 +1003,7 @@ func (s *FileSystemProxyService) ListDirectory(
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	path := req.Msg.Path
+	path := req.Msg.GetPath()
 
 	cmdReq := map[string]any{
 		"path": path,

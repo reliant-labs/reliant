@@ -368,7 +368,7 @@ message ReplaceResult {
 // ============================================
 
 message ListDirectoryRequest {
-  string path = 1; // Absolute path to list. Empty means home directory.
+  optional string path = 1; // Absolute path to list. Unset (or empty) means the home directory.
 }
 
 message ListDirectoryResponse {

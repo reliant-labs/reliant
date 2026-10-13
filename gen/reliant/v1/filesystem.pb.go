@@ -2112,7 +2112,7 @@ func (x *ReplaceResult) GetError() string {
 
 type ListDirectoryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"` // Absolute path to list. Empty means home directory.
+	Path          *string                `protobuf:"bytes,1,opt,name=path,proto3,oneof" json:"path,omitempty"` // Absolute path to list. Unset (or empty) means the home directory.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2148,8 +2148,8 @@ func (*ListDirectoryRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListDirectoryRequest) GetPath() string {
-	if x != nil {
-		return x.Path
+	if x != nil && x.Path != nil {
+		return *x.Path
 	}
 	return ""
 }
@@ -2723,9 +2723,10 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\"\n" +
 	"\freplacements\x18\x02 \x01(\x05R\freplacements\x12\x18\n" +
 	"\asuccess\x18\x03 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x04 \x01(\tR\x05error\"*\n" +
-	"\x14ListDirectoryRequest\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"a\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"8\n" +
+	"\x14ListDirectoryRequest\x12\x17\n" +
+	"\x04path\x18\x01 \x01(\tH\x00R\x04path\x88\x01\x01B\a\n" +
+	"\x05_path\"a\n" +
 	"\x15ListDirectoryResponse\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x124\n" +
 	"\aentries\x18\x02 \x03(\v2\x1a.reliant.v1.DirectoryEntryR\aentries\"\x97\x01\n" +
@@ -2903,6 +2904,7 @@ func file_reliant_v1_filesystem_proto_init() {
 	file_reliant_v1_filesystem_proto_msgTypes[18].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[20].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[24].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[27].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[32].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
