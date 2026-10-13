@@ -229,6 +229,7 @@ func (s *scriptedClient) Submit(context.Context, Request) (Job, error) {
 	s.submits++
 	return Job{}, nil
 }
+func (s *scriptedClient) Info() ModelInfo                   { return ModelInfo{} }
 func (s *scriptedClient) Cancel(context.Context, Job) error { return nil }
 func (s *scriptedClient) Poll(_ context.Context, j Job) (*Response, bool, error) {
 	step := s.script[min(s.polls, len(s.script)-1)]

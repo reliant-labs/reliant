@@ -1,18 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
-//
-// Package videogen is the driver-layer call path for video GENERATION. It is
-// parallel to imagegen, with one structural difference that drives the whole
-// package: video is a long-running job, so the client interface is Submit then
-// Poll, not a single Generate. The split is what makes a render resumable — the
-// caller can persist the Job between the two and, after a worker restart, Poll
-// the job that is already running instead of paying for a second one.
-//
-//forge:lint-disable-next-line forge-exclude-contract-outbound-io: each client calls its provider's video endpoint; they sit behind the consumer-declared VideoGenerator interface in internal/llm/tools
-//forge:exclude-contract: video-generation clients (Veo, Omni) behind the VideoGenerator seam declared at its consumer
 package videogen
 
 import (
-	"context"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -65,18 +54,6 @@ type ModelInfo struct {
 	APIModel     string
 	Driver       string
 	Capabilities *models.VideoCapabilities
-}
-
-// Client is a video provider bound to one model.
-type Client interface {
-	// Submit starts a render and returns as soon as the provider has accepted
-	// it. It retries only failures that happened BEFORE acceptance.
-	Submit(ctx context.Context, request Request) (Job, error)
-	// Poll checks a previously accepted job. done is false while it is still
-	// rendering; a finished job returns its clip, or an *Error.
-	Poll(ctx context.Context, job Job) (response *Response, done bool, err error)
-	// Cancel asks the provider to stop a job. Best effort; Veo has no cancel.
-	Cancel(ctx context.Context, job Job) error
 }
 
 // ErrorKind classifies a failure so the caller can decide what to tell the
