@@ -118,6 +118,17 @@ if [ "${after_forge}" != "${target}" ]; then
   esac
 fi
 
+# ── forge.yaml records the same pin ──────────────────────────────────────
+# forge_version is what `forge generate` and friends compare themselves to
+# (they refuse to rewrite a project under a different forge). Left behind, it
+# names a forge the module no longer builds against, and the next agent runs
+# the wrong generator against a tree it did not produce.
+sed -i.bak "s|^forge_version:.*|forge_version: ${after_forge}|" forge.yaml && rm -f forge.yaml.bak
+if ! grep -qx "forge_version: ${after_forge}" forge.yaml; then
+  echo "error: could not set forge_version in forge.yaml to ${after_forge}" >&2
+  exit 1
+fi
+
 # ── Prove it against the CONSUMER's view ─────────────────────────────────
 # GOWORK=off is the only local signal that sees what CI sees. With go.work
 # active, forge resolves from ../forge on disk, so code calling an API that
@@ -135,6 +146,14 @@ GOWORK=off go build ./...
 # same pinned `make` target CI runs.
 echo "==> make generate-all"
 make --no-print-directory generate-all
+
+# forge's own outputs (descriptor, mocks, vendored protos, generated config)
+# come from the PINNED forge, never whatever `forge` is on PATH: `go run
+# module@version` builds exactly the version go.mod now records. GOFLAGS is
+# cleared because -mod is not allowed with module@version; FORGE_NO_HOOKS
+# keeps it from touching git hook activation.
+echo "==> forge generate (${after_forge})"
+GOFLAGS= FORGE_NO_HOOKS=1 go run "${FORGE_MOD}/cmd/forge@${after_forge}" generate
 
 echo
 echo "pinned forge -> ${source_desc} (${sha})"
