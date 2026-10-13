@@ -98,12 +98,15 @@ export function ObservabilityTab({
   liveLoading,
   search,
   navigate,
+  onWiden,
 }: {
   envName: string;
   live: LiveEnv | null;
   liveLoading: boolean;
   search: ObsSearch;
   navigate: ObsNavigate;
+  /** The project's Observability area, carrying this view: the env tab is a pre-filtered deep link into it. */
+  onWiden?: (search: ObsSearch) => void;
 }) {
   if (liveLoading && !live) return <PanelSkeleton testId="obs-tab-loading" rows={4} />;
   // Telemetry is filed under the control plane's environment id (the env_id
@@ -123,7 +126,7 @@ export function ObservabilityTab({
   }
   return (
     <Suspense fallback={<PanelSkeleton testId="obs-tab-loading" rows={4} />}>
-      <ObservabilityPanel environmentId={live.id} envName={envName} search={search} navigate={navigate} />
+      <ObservabilityPanel place={{ kind: "env", env: { id: live.id, name: envName }, onWiden }} search={search} navigate={navigate} />
     </Suspense>
   );
 }

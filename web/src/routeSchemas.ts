@@ -14,6 +14,8 @@
 import { z } from "zod";
 import { ONBOARDING_STEP_IDS } from "./components/Onboarding/constants";
 import type { LaunchPlan } from "./components/OnboardingFlow/types";
+import { OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
+import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
 
 // The guided tour's "active step" lives in the URL as `?tour=<step-id>` —
 // absence means the wizard is not active. Adding this to every search schema
@@ -446,6 +448,103 @@ export const forgeDomainsSearchSchema = z.object({
   forgeProject: forgeProjectParam,
 });
 
+// ── Observability URL state ────────────────────────────────────────────────
+
+/** A predicate in a panel's own vocabulary (forge obsdash Predicate). */
+const panelPredicateSchema = z.object({
+  field: z.string(),
+  op: z.string(),
+  value: z.string().optional(),
+  values: z.array(z.string()).optional(),
+});
+
+/**
+ * A dashboard panel as an in-place edit carries it in the URL — forge obsdash
+ * `Panel` (forge.dashboards/v1). Validated for SHAPE only: whether the server
+ * can compile it is the server's answer (InvalidArgument, shown on the panel).
+ */
+const obsPanelSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  kind: z.string(),
+  signal: z.string(),
+  series: z.array(
+    z.object({
+      label: z.string(),
+      agg: z.string(),
+      quantile: z.number().optional(),
+      field: z.string().optional(),
+      metricType: z.string().optional(),
+      where: z.array(panelPredicateSchema).optional(),
+    })
+  ),
+  ratio: z.boolean().optional(),
+  where: z.array(panelPredicateSchema).optional(),
+  groupBy: z.array(z.string()).optional(),
+  columns: z.array(z.string()).optional(),
+  unit: z.enum(["", "count", "ms", "bytes", "percent"]).optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+});
+
+/**
+ * The Observability area's URL state (components/Forge/Observability/obsSearch.ts),
+ * shared by the env page's tab and the project-level area so one link shape
+ * opens either. In the URL because "look at these errors in prod" is a link:
+ * which view, which window, the query, the trace someone opened, and every
+ * ad-hoc choice — filters, group-by, panel edits — so a dashboard changed in
+ * place can be sent to a colleague as it is.
+ *
+ * `range` is a PRESET, never timestamps, so a link to the last hour means the
+ * last hour when it is opened. `severity` is a comma list (`warn,error`). `q`
+ * is the Logs query string, or in Traces the root operation to match.
+ * `trace`/`span` name the trace in focus. `f` is attribute filter tokens
+ * (`service.version:v1.8`), `groupBy` up to three keys, `edit` the in-place
+ * panel edits by panel id.
+ *
+ * Every key drops itself (`.catch`) rather than failing the route: a link
+ * from a newer build, or a hand-edited one, must open a slightly wider view,
+ * not an error page.
+ */
+export const obsSearchShape = {
+  view: z.enum(OBS_VIEWS).optional().catch(undefined),
+  range: z.enum(RANGE_PRESETS).optional().catch(undefined),
+  service: z.string().optional().catch(undefined),
+  severity: z.string().optional().catch(undefined),
+  q: z.string().optional().catch(undefined),
+  trace: z.string().optional().catch(undefined),
+  span: z.string().optional().catch(undefined),
+  dashboard: z.string().optional().catch(undefined),
+  profileType: z.string().optional().catch(undefined),
+  live: z.boolean().optional().catch(undefined),
+  errors: z.boolean().optional().catch(undefined),
+  minDuration: z.string().optional().catch(undefined),
+  envs: z.array(z.string()).optional().catch(undefined),
+  f: z.array(z.string()).optional().catch(undefined),
+  groupBy: z.array(z.string()).optional().catch(undefined),
+  workload: z.string().optional().catch(undefined),
+  container: z.string().optional().catch(undefined),
+  edit: z.record(z.string(), obsPanelSchema.nullable()).optional().catch(undefined),
+};
+
+/** Every ObsSearch key has a schema entry and vice versa (the launchPlan drift guard, for the same reason). */
+export type _ObsShapeCoversSearch = AssertNoDrift<Exclude<keyof ObsSearch, keyof typeof obsSearchShape>>;
+export type _ObsSearchCoversShape = AssertNoDrift<Exclude<keyof typeof obsSearchShape, keyof ObsSearch>>;
+export type _ObsShapeMatchesSearch = AssertTrue<
+  z.output<z.ZodObject<typeof obsSearchShape>> extends ObsSearch ? true : false
+>;
+
+/**
+ * /forge/observability: the project's Observability area. Environment is a
+ * FILTER here (`envs`, names; absent = all), not the page's subject.
+ */
+export const forgeObservabilitySearchSchema = z.object({
+  project: z.string().optional(),
+  forgeProject: forgeProjectParam,
+  ...obsSearchShape,
+});
+
 /**
  * /forge/env/$env. The environment is a PATH segment — it is the page's
  * subject, not a filter on it.
@@ -493,29 +592,7 @@ export const forgeEnvPageSearchSchema = z.object({
       "preview",
     ])
     .optional(),
-  /**
-   * The Observability tab's state (components/Forge/Observability/obsSearch.ts).
-   * In the URL because "look at these errors in prod" is a link: which view,
-   * which window, the query, the trace and span someone opened.
-   *
-   * `range` is a PRESET, never timestamps, so a link to the last hour means
-   * the last hour when it is opened. `severity` is a comma list
-   * (`warn,error`). `q` is the Logs query string, or in Traces the root
-   * operation to match. `trace`/`span` name the trace in focus: its waterfall
-   * in Traces, the logs it wrote in Logs, its samples in Profiles.
-   */
-  view: z.enum(["overview", "logs", "traces", "dashboards", "profiles", "usage"]).optional(),
-  range: z.enum(["15m", "1h", "6h", "24h", "7d"]).optional(),
-  service: z.string().optional(),
-  severity: z.string().optional(),
-  q: z.string().optional(),
-  trace: z.string().optional(),
-  span: z.string().optional(),
-  dashboard: z.string().optional(),
-  profileType: z.string().optional(),
-  live: z.boolean().optional(),
-  errors: z.boolean().optional(),
-  minDuration: z.string().optional(),
+  ...obsSearchShape,
 });
 
 /**

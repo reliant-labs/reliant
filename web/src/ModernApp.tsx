@@ -1748,6 +1748,9 @@ function App() {
                 onOpenForge={() => {
                   navigate({ to: '/forge' });
                 }}
+                onOpenObservability={() => {
+                  navigate({ to: '/forge/observability' });
+                }}
               />
             </div>
           </ResizableSidebar>
@@ -1783,6 +1786,9 @@ function App() {
                   }}
                   onOpenForge={() => {
                     navigate({ to: '/forge' });
+                  }}
+                  onOpenObservability={() => {
+                    navigate({ to: '/forge/observability' });
                   }}
                 />
               </div>

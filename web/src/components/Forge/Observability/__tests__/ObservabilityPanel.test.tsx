@@ -24,7 +24,7 @@ describe("ObservabilityPanel", () => {
     await screen.findByTestId("obs-overview");
     expect(onCall).toHaveBeenCalledWith(
       "GetServiceOverview",
-      expect.objectContaining({ orgId: FIXTURE_ORG, environmentId: "env-prod" })
+      expect.objectContaining({ orgId: FIXTURE_ORG, envIds: ["env-prod"], filters: [] })
     );
   });
 
@@ -78,7 +78,7 @@ describe("ObservabilityPanel", () => {
 
   it("explains a quota hit and offers to retry it", async () => {
     renderPanel(createFixtureApi({ failWith: Code.ResourceExhausted }));
-    const error = await screen.findByTestId("obs-error-too-broad");
+    const error = await screen.findByTestId("obs-error-over-quota");
     expect(error).toHaveAttribute("role", "alert");
     expect(error).toHaveTextContent("shorter time range");
     expect(within(error).getByTestId("obs-retry")).toBeInTheDocument();

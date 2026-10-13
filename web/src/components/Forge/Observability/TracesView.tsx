@@ -8,6 +8,10 @@
  * with spacer rows so a few hundred traces stay a screen of DOM. Each row's
  * operation is the button that opens it; the arrow keys move between those
  * buttons, so the table is one tab stop.
+ *
+ * With a group-by, the server also answers the RED summary per group, drawn
+ * as a comparison table above the list: prod against staging, one version
+ * against the next. Choosing a group narrows to it (adds its filters).
  */
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
@@ -28,12 +32,14 @@ import Card from "@/components/forge-ui/card";
 import { Button } from "@/components/ui/Button";
 import { useListTraces, type TraceFilters } from "@/hooks/observability-queries";
 import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
-import type { EnvScope, TraceRed, TraceSummary } from "@/services/controlPlane/observability/types";
+import type { ObsScope, TraceRed, TraceRedGroup, TraceSummary } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
+import { attributeLabel } from "./attributes";
 import { formatCount, formatDuration, formatPercent, formatRate, formatTimestamp } from "./format";
 import { ServiceSelect } from "./LogsView";
+import { filterParam, formatFilterToken, groupLabel, type FilterToken } from "./obsFilters";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
 import { TraceDetail } from "./TraceDetail";
@@ -53,8 +59,8 @@ export const MIN_DURATIONS = ["100ms", "500ms", "1s", "5s"] as const;
 const MIN_DURATION_MS: Record<string, number> = { "100ms": 100, "500ms": 500, "1s": 1000, "5s": 5000 };
 
 export function TracesView(props: {
-  scope: EnvScope;
-  envName: string;
+  scope: ObsScope;
+  subject: string;
   range: RangePreset;
   /** Substring of the root operation (the URL's `q`). */
   rootSpanName: string;
@@ -63,13 +69,16 @@ export function TracesView(props: {
   minDuration: string | undefined;
   traceId: string | undefined;
   spanId: string | undefined;
+  groupBy?: string[];
+  /** The scope's filter tokens, which a group's "narrow to it" extends. */
+  filters?: FilterToken[];
   navigate: ObsNavigate;
 }) {
   if (props.traceId) {
     return (
       <TraceDetail
         scope={props.scope}
-        envName={props.envName}
+        subject={props.subject}
         traceId={props.traceId}
         spanId={props.spanId}
         navigate={props.navigate}
@@ -81,21 +90,25 @@ export function TracesView(props: {
 
 function TraceList({
   scope,
-  envName,
+  subject,
   range,
   rootSpanName,
   service,
   errorsOnly,
   minDuration,
+  groupBy = NO_KEYS,
+  filters: scopeTokens = NO_TOKENS,
   navigate,
 }: {
-  scope: EnvScope;
-  envName: string;
+  scope: ObsScope;
+  subject: string;
   range: RangePreset;
   rootSpanName: string;
   service: string | undefined;
   errorsOnly: boolean;
   minDuration: string | undefined;
+  groupBy?: string[];
+  filters?: FilterToken[];
   navigate: ObsNavigate;
 }) {
   const filters: TraceFilters = useMemo(
@@ -105,12 +118,14 @@ function TraceList({
       services: service ? [service] : [],
       errorsOnly,
       minDurationMs: MIN_DURATION_MS[minDuration ?? ""] ?? 0,
+      groupBy,
     }),
-    [range, rootSpanName, service, errorsOnly, minDuration]
+    [range, rootSpanName, service, errorsOnly, minDuration, groupBy]
   );
   const traces = useListTraces(scope, filters);
   const rows = useMemo(() => traces.data?.pages.flatMap((page) => page.traces) ?? EMPTY, [traces.data]);
   const red = traces.data?.pages[0]?.red ?? null;
+  const redGroups = traces.data?.pages[0]?.redGroups ?? [];
   const filterError = traces.error && obsErrorKind(traces.error) === "invalid" ? obsErrorMessage(traces.error) : null;
   const filtered = !!rootSpanName || !!service || errorsOnly || !!minDuration;
 
@@ -127,12 +142,26 @@ function TraceList({
         navigate={navigate}
       />
       {red && red.traceCount > 0 && <RedStrip red={red} />}
+      {groupBy.length > 0 && redGroups.length > 0 && (
+        <RedGroups
+          groups={redGroups}
+          groupBy={groupBy}
+          onNarrow={(group) => {
+            const known = new Set(scopeTokens.map(formatFilterToken));
+            const added = groupBy
+              .filter((key) => group[key])
+              .map((key): FilterToken => ({ key, op: "eq", value: group[key] }))
+              .filter((token) => !known.has(formatFilterToken(token)));
+            navigate({ f: filterParam([...scopeTokens, ...added]) });
+          }}
+        />
+      )}
       {traces.isLoading ? (
         <Card padding="none">
           <ObsLoadingRows testId="obs-traces-loading" />
         </Card>
       ) : traces.error && !traces.data && !filterError ? (
-        <ObsError error={traces.error} envName={envName} onRetry={() => void traces.refetch()} retrying={traces.isFetching} />
+        <ObsError error={traces.error} subject={subject} onRetry={() => void traces.refetch()} retrying={traces.isFetching} />
       ) : rows.length === 0 && !filterError ? (
         <ObsNoData
           what="traces"
@@ -144,7 +173,7 @@ function TraceList({
       ) : rows.length > 0 ? (
         <TraceTable
           traces={rows}
-          envName={envName}
+          subject={subject}
           hasMore={!!traces.hasNextPage}
           loadingMore={traces.isFetchingNextPage}
           onLoadMore={() => void traces.fetchNextPage()}
@@ -152,6 +181,59 @@ function TraceList({
         />
       ) : null}
     </div>
+  );
+}
+
+const NO_KEYS: string[] = [];
+const NO_TOKENS: FilterToken[] = [];
+
+/** The RED summary per group, worst error rate first: the comparison a group-by asks for. */
+function RedGroups({ groups, groupBy, onNarrow }: { groups: TraceRedGroup[]; groupBy: string[]; onNarrow: (group: Record<string, string>) => void }) {
+  const sorted = [...groups].sort((a, b) => b.red.errorRate - a.red.errorRate || b.red.traceCount - a.red.traceCount);
+  return (
+    <Card padding="none" data-testid="obs-trace-red-groups">
+      <table className="w-full text-sm">
+        <caption className="sr-only">Rate, errors and latency of the matching traces per {groupBy.map(attributeLabel).join(" and ")}</caption>
+        <thead>
+          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <th scope="col" className="px-4 py-2 font-medium">
+              {groupBy.map(attributeLabel).join(" · ")}
+            </th>
+            <th scope="col" className="px-4 py-2 text-right font-medium">Traces</th>
+            <th scope="col" className="px-4 py-2 text-right font-medium">Rate</th>
+            <th scope="col" className="px-4 py-2 text-right font-medium">Failed</th>
+            <th scope="col" className="px-4 py-2 text-right font-medium">p50</th>
+            <th scope="col" className="px-4 py-2 text-right font-medium">p95</th>
+            <th scope="col" className="px-4 py-2 text-right font-medium">p99</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(({ group, red }) => {
+            const label = groupLabel(group, groupBy);
+            return (
+              <tr key={label} className="border-b border-border/60 last:border-b-0" data-testid={`obs-trace-red-group-${label}`}>
+                <th scope="row" className="px-4 py-1.5 text-left font-normal">
+                  <button
+                    type="button"
+                    onClick={() => onNarrow(group)}
+                    title="Narrow to this group"
+                    className="rounded-sm font-mono text-sm text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {label}
+                  </button>
+                </th>
+                <td className="px-4 py-1.5 text-right tabular-nums">{formatCount(red.traceCount)}</td>
+                <td className="px-4 py-1.5 text-right tabular-nums">{formatRate(red.ratePerSecond)}</td>
+                <td className={cn("px-4 py-1.5 text-right tabular-nums", red.errorRate >= 0.05 && "text-destructive")}>{formatPercent(red.errorRate)}</td>
+                <td className="px-4 py-1.5 text-right tabular-nums">{formatDuration(red.p50Ms)}</td>
+                <td className="px-4 py-1.5 text-right tabular-nums">{formatDuration(red.p95Ms)}</td>
+                <td className="px-4 py-1.5 text-right tabular-nums">{formatDuration(red.p99Ms)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </Card>
   );
 }
 
@@ -191,7 +273,7 @@ function TraceToolbar({
   minDuration,
   navigate,
 }: {
-  scope: EnvScope;
+  scope: ObsScope;
   range: RangePreset;
   rootSpanName: string;
   filterError: string | null;
@@ -274,14 +356,14 @@ function TraceToolbar({
 
 function TraceTable({
   traces,
-  envName,
+  subject,
   hasMore,
   loadingMore,
   onLoadMore,
   onOpen,
 }: {
   traces: TraceSummary[];
-  envName: string;
+  subject: string;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
@@ -408,7 +490,7 @@ function TraceTable({
     <Card padding="none" className="overflow-hidden">
       <div ref={scrollRef} className="max-h-[60vh] overflow-auto" onKeyDown={onKeyDown}>
         <table className="w-full table-fixed text-sm" data-testid="obs-trace-table">
-          <caption className="sr-only">Traces from {envName}. Activate a root operation to open its waterfall.</caption>
+          <caption className="sr-only">Traces from {subject}. Activate a root operation to open its waterfall.</caption>
           <colgroup>
             <col className="w-36" />
             <col />

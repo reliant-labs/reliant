@@ -45,12 +45,12 @@ function barTone(u: ObservabilityUsage): string {
   return "bg-primary";
 }
 
-export function UsageView({ orgId, envName = "" }: { orgId: string | null; envName?: string }) {
+export function UsageView({ orgId, subject = "" }: { orgId: string | null; subject?: string }) {
   const usage = useObservabilityUsage(orgId);
 
   if (!orgId || usage.isLoading) return <ObsLoadingRows rows={4} testId="obs-usage-loading" />;
   if (usage.error && !usage.data) {
-    return <ObsError error={usage.error} envName={envName} onRetry={() => void usage.refetch()} retrying={usage.isFetching} />;
+    return <ObsError error={usage.error} subject={subject} onRetry={() => void usage.refetch()} retrying={usage.isFetching} />;
   }
   const u = usage.data;
   if (!u) return null;

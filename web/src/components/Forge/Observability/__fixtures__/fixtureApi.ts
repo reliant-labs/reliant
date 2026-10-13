@@ -3,7 +3,9 @@
 /**
  * An in-memory ObservabilityApi: deterministic telemetry for a small forge
  * app (an `api` service with an orders rpc set, a `worker`, and Reliant's own
- * daemon logs), shaped exactly like what api.ts maps out of control-plane.
+ * daemon logs) across three environments (dev, staging, prod), shaped
+ * exactly like what api.ts maps out of control-plane — including group-by,
+ * attribute values and the customer metadata of its workloads.
  *
  * Shared by the component tests and the dev-only preview route, so the screens
  * a reviewer looks at are the screens the tests assert on. Every generator is
@@ -14,8 +16,16 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type {
+  AttributeValueCount,
   Dashboard,
   DashboardSpec,
+  ObsScope,
+  ResourceUsage,
+  Workload,
+  WorkloadDetail,
+  WorkloadEvent,
+  WorkloadMetric,
+  WorkloadSeries,
   Flamegraph,
   LogRecord,
   ObservabilityUsage,
@@ -31,6 +41,13 @@ import type {
 } from "@/services/controlPlane/observability/types";
 
 export const FIXTURE_ORG = "org-fixture";
+export const FIXTURE_PROJECT = "shop";
+export const FIXTURE_ENVS = [
+  { id: "env-dev", name: "dev" },
+  { id: "env-staging", name: "staging" },
+  { id: "env-prod", name: "prod" },
+] as const;
+const VERSIONS = ["v1.8.2", "v1.8.3"];
 export const FIXTURE_TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const RPCS = ["CreateOrder", "GetOrder", "ListOrders", "CancelOrder"];
@@ -50,6 +67,44 @@ function buckets(window: TimeWindow, count = 30): number[] {
   return Array.from({ length: count }, (_, i) => Math.round((window.startMs + i * step) / 1000));
 }
 
+/** The environments a scope reads: its ids, or every fixture environment. */
+function envsOf(scope: Pick<ObsScope, "envIds">) {
+  return scope.envIds.length ? FIXTURE_ENVS.filter((env) => scope.envIds.includes(env.id)) : [...FIXTURE_ENVS];
+}
+
+/** The values a key takes in the fixture app, for group-by and autocomplete. */
+function valuesOf(key: string, scope: Pick<ObsScope, "envIds">): string[] {
+  switch (key) {
+    case "deployment.environment.name":
+      return envsOf(scope).map((env) => env.name);
+    case "reliant.env.id":
+      return envsOf(scope).map((env) => env.id);
+    case "service.name":
+    case "k8s.workload.name":
+      return ["api", "worker"];
+    case "service.version":
+      return VERSIONS;
+    case "status":
+      return ["ok", "error", "unset"];
+    case "rpc.method":
+      return RPCS;
+    case "k8s.container.last_terminated_reason":
+      return ["OOMKilled", "Error", "Completed"];
+    case "k8s.event.reason":
+      return ["BackOff", "OOMKilling", "Pulled", "Scheduled", "Evicted"];
+    default:
+      return ["value-a", "value-b"];
+  }
+}
+
+/** Every combination of the keys' values: the groups a grouped query answers with. */
+export function fixtureGroups(keys: string[], scope: Pick<ObsScope, "envIds">): Record<string, string>[] {
+  return keys.reduce<Record<string, string>[]>(
+    (groups, key) => groups.flatMap((group) => valuesOf(key, scope).map((value) => ({ ...group, [key]: value }))),
+    [{}]
+  );
+}
+
 function health(name: string, window: TimeWindow, base: number, errorShare: number, seed: number, p95: number): ServiceHealth {
   const random = rng(seed);
   const timestamps = buckets(window);
@@ -61,6 +116,7 @@ function health(name: string, window: TimeWindow, base: number, errorShare: numb
   const errorCount = errorTrend.reduce((a, b) => a + b, 0);
   return {
     name,
+    group: {},
     requestCount,
     requestRate: requestCount / ((window.endMs - window.startMs) / 1000),
     errorCount,
@@ -306,23 +362,27 @@ export function fixtureSpeedscope(): string {
  * What QueryPanel would answer for a panel over the fixture app: one value per
  * series intent, shaped by the panel's kind and group-by.
  */
-export function fixturePanel(panel: Panel, window: TimeWindow, services: string[]): PanelResult {
-  const random = rng(panel.id.length * 31 + 7);
+export function fixturePanel(
+  panel: Panel,
+  window: TimeWindow,
+  services: string[],
+  groupByOverride: string[] = [],
+  scope: Pick<ObsScope, "envIds"> = { envIds: [] }
+): PanelResult {
+  const random = rng(panel.id.length * 31 + 7 + groupByOverride.length * 13);
   const timestamps = buckets(window);
   const sample = (intent: SeriesIntent, scale = 1): number => {
     if (intent.agg === "quantile") return Math.round((intent.quantile ?? 0.5) * 120 * scale * (0.8 + random() * 0.4) * 10) / 10;
     if ((intent.where ?? []).some((p) => p.value === "error")) return Math.round(4 * scale * random());
     return Math.round(300 * scale * (0.7 + random() * 0.6));
   };
-  const groupBy = panel.groupBy ?? [];
+  const groupBy = groupByOverride.length ? groupByOverride : (panel.groupBy ?? []);
   const groups: Record<string, string>[] =
-    groupBy[0] === "service.name"
-      ? (services.length ? services : ["api", "worker"]).map((name) => ({ "service.name": name }))
-      : groupBy[0] === "span.name"
+    groupBy.length === 1 && groupBy[0] === "service.name" && services.length
+      ? services.map((name) => ({ "service.name": name }))
+      : groupBy.length === 1 && groupBy[0] === "span.name"
         ? RPCS.map((rpc) => ({ "span.name": PROCEDURE(rpc) }))
-        : groupBy.length
-          ? [{ [groupBy[0]]: "value-a" }, { [groupBy[0]]: "value-b" }]
-          : [{}];
+        : fixtureGroups(groupBy, scope);
   const base = { kind: panel.kind, unit: panel.unit ?? "", stepSeconds: 120, truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"] };
 
   if (panel.kind === "table") {
@@ -334,9 +394,14 @@ export function fixturePanel(panel: Panel, window: TimeWindow, services: string[
     };
   }
   if (panel.kind === "number") {
-    const value = (intent: SeriesIntent) => (panel.ratio ? 0.012 : sample(intent, 40));
+    const value = (intent: SeriesIntent, scale: number) => (panel.ratio ? 0.012 * scale : sample(intent, 40 * scale));
     const intents = panel.ratio ? [{ label: "ratio", agg: "count" }] : panel.series;
-    return { ...base, series: intents.map((intent) => ({ label: intent.label, group: {}, timestamps: [], values: [], value: value(intent) })) };
+    return {
+      ...base,
+      series: groups.flatMap((group, groupIndex) =>
+        intents.map((intent) => ({ label: intent.label, group, timestamps: [], values: [], value: value(intent, 1 / (groupIndex + 1)) }))
+      ),
+    };
   }
   // Line: one series per (series × group); a ratio, one per group labelled "ratio".
   const intents: SeriesIntent[] = panel.ratio ? [{ label: "ratio", agg: "count" }] : panel.series;
@@ -399,6 +464,158 @@ export function fixtureUsage(now: number = Date.now(), overrides: Partial<Observ
   };
 }
 
+// ── Workloads (customer metadata) ────────────────────────────────────────────
+
+function usage(latest: number, p95: number, limit: number | null, request: number | null): ResourceUsage {
+  return {
+    latest,
+    p95,
+    limit,
+    request,
+    limitUtilizationLatest: limit ? latest / limit : null,
+    limitUtilizationP95: limit ? p95 / limit : null,
+    requestUtilizationLatest: request ? latest / request : null,
+    requestUtilizationP95: request ? p95 / request : null,
+  };
+}
+
+const MiB = 1024 * 1024;
+
+/**
+ * Per environment, an `api` (prod's last restart was an OOMKill, its memory
+ * near the limit), a `worker` (crash-looping in staging) and a `web` with no
+ * limits set — the three shapes the Workloads view has to draw.
+ */
+export function fixtureWorkloads(scope: Pick<ObsScope, "envIds">, now: number): Workload[] {
+  return envsOf(scope).flatMap((env, envIndex): Workload[] => {
+    const prod = env.name === "prod";
+    const staging = env.name === "staging";
+    const version = prod ? VERSIONS[1] : VERSIONS[envIndex % 2];
+    const event = (reason: string, message: string, minutesAgo: number, count: number, container: string, workload: string): WorkloadEvent => ({
+      timeMs: now - minutesAgo * 60_000,
+      envId: env.id,
+      type: "Warning",
+      reason,
+      message,
+      count,
+      objectKind: "Pod",
+      objectName: `${workload}-7d9f8c-x${envIndex}`,
+      container,
+    });
+    return [
+      {
+        envId: env.id,
+        envName: env.name,
+        workload: "api",
+        namespace: `shop-${env.name}`,
+        serviceVersion: version,
+        replicasObserved: prod ? 3 : 1,
+        restartsInWindow: prod ? 3 : 0,
+        latestWarning: prod ? event("OOMKilling", "Memory cgroup out of memory: Killed process 1 (api)", 14, 3, "api", "api") : null,
+        containers: [
+          {
+            container: "api",
+            imageName: "ghcr.io/acme/shop-api",
+            imageTag: version,
+            restartsInWindow: prod ? 3 : 0,
+            lastTerminatedReason: prod ? "OOMKilled" : "",
+            lastTerminatedAtMs: prod ? now - 14 * 60_000 : null,
+            cpu: usage(prod ? 0.42 : 0.08, prod ? 0.61 : 0.12, 1, 0.25),
+            memory: usage(prod ? 497 * MiB : 180 * MiB, prod ? 510 * MiB : 210 * MiB, 512 * MiB, 256 * MiB),
+          },
+        ],
+      },
+      {
+        envId: env.id,
+        envName: env.name,
+        workload: "worker",
+        namespace: `shop-${env.name}`,
+        serviceVersion: version,
+        replicasObserved: 1,
+        restartsInWindow: staging ? 11 : 0,
+        latestWarning: staging ? event("BackOff", "Back-off restarting failed container worker in pod worker-7d9f8c-x1", 2, 11, "worker", "worker") : null,
+        containers: [
+          {
+            container: "worker",
+            imageName: "ghcr.io/acme/shop-worker",
+            imageTag: version,
+            restartsInWindow: staging ? 11 : 0,
+            lastTerminatedReason: staging ? "Error" : "",
+            lastTerminatedAtMs: staging ? now - 2 * 60_000 : null,
+            cpu: usage(0.21, 0.34, 0.5, 0.1),
+            memory: usage(140 * MiB, 160 * MiB, 384 * MiB, 128 * MiB),
+          },
+        ],
+      },
+      {
+        envId: env.id,
+        envName: env.name,
+        workload: "web",
+        namespace: `shop-${env.name}`,
+        serviceVersion: version,
+        replicasObserved: 2,
+        restartsInWindow: 0,
+        latestWarning: null,
+        containers: [
+          {
+            container: "web",
+            imageName: "ghcr.io/acme/shop-web",
+            imageTag: version,
+            restartsInWindow: 0,
+            lastTerminatedReason: "",
+            lastTerminatedAtMs: null,
+            cpu: usage(0.02, 0.05, null, null),
+            memory: usage(64 * MiB, 70 * MiB, null, null),
+          },
+        ],
+      },
+    ];
+  });
+}
+
+/** One workload's time series, events and rollouts, per environment in scope. */
+export function fixtureWorkloadDetail(scope: Pick<ObsScope, "envIds">, workload: string, container: string | undefined, window: TimeWindow): WorkloadDetail {
+  const rows = fixtureWorkloads(scope, window.endMs).filter((w) => w.workload === workload);
+  const timestamps = buckets(window, 40);
+  const series: WorkloadSeries[] = [];
+  const events: WorkloadEvent[] = [];
+  const versionChanges: WorkloadDetail["versionChanges"] = [];
+  const imageChanges: WorkloadDetail["imageChanges"] = [];
+  const pivot = window.startMs + (window.endMs - window.startMs) * 0.62;
+  rows.forEach((row, rowIndex) => {
+    const random = rng(rowIndex * 17 + workload.length);
+    for (const c of row.containers) {
+      if (container && c.container !== container) continue;
+      const add = (metric: WorkloadMetric, unit: string, at: (i: number) => number | null) =>
+        series.push({ envId: row.envId, container: c.container, metric, unit, timestamps, values: timestamps.map((_, i) => at(i)) });
+      const wave = (base: number, i: number) => base * (0.75 + 0.2 * Math.sin(i / 5 + rowIndex) + random() * 0.1);
+      add("cpu_usage", "{cpu}", (i) => (c.cpu ? wave(c.cpu.latest, i) : null));
+      add("memory_working_set", "By", (i) => (c.memory ? Math.min(wave(c.memory.latest, i) * (0.85 + i / 260), c.memory.limit ?? Infinity) : null));
+      if (c.cpu?.limit) add("cpu_limit_utilization", "1", (i) => wave(c.cpu!.latest, i) / c.cpu!.limit!);
+      if (c.cpu?.request) add("cpu_request_utilization", "1", (i) => wave(c.cpu!.latest, i) / c.cpu!.request!);
+      if (c.memory?.limit) add("memory_limit_utilization", "1", (i) => Math.min((wave(c.memory!.latest, i) * (0.85 + i / 260)) / c.memory!.limit!, 1));
+      if (c.memory?.request) add("memory_request_utilization", "1", (i) => (wave(c.memory!.latest, i) * (0.85 + i / 260)) / c.memory!.request!);
+      add("restarts", "{restart}", (i) => (c.restartsInWindow > 0 && i % Math.max(3, Math.floor(40 / c.restartsInWindow)) === 0 ? 1 : 0));
+      imageChanges.push({ envId: row.envId, container: c.container, imageName: c.imageName, imageTag: VERSIONS[0], firstSeenMs: window.startMs, lastSeenMs: pivot });
+      if (row.envName === "prod") {
+        imageChanges.push({ envId: row.envId, container: c.container, imageName: c.imageName, imageTag: VERSIONS[1], firstSeenMs: pivot, lastSeenMs: window.endMs });
+      }
+    }
+    versionChanges.push({ envId: row.envId, serviceVersion: VERSIONS[0], firstSeenMs: window.startMs, lastSeenMs: pivot });
+    if (row.envName === "prod") versionChanges.push({ envId: row.envId, serviceVersion: VERSIONS[1], firstSeenMs: pivot, lastSeenMs: window.endMs });
+    if (row.latestWarning) events.push(row.latestWarning);
+    events.push(
+      { timeMs: pivot + 30_000, envId: row.envId, type: "Normal", reason: "Pulled", message: `Successfully pulled image "${row.containers[0]?.imageName}:${row.serviceVersion}" in 2.1s`, count: 1, objectKind: "Pod", objectName: `${workload}-7d9f8c-x${rowIndex}`, container: row.containers[0]?.container ?? "" },
+      { timeMs: pivot, envId: row.envId, type: "Normal", reason: "Scheduled", message: `Successfully assigned ${row.namespace}/${workload}-7d9f8c-x${rowIndex} to node-a`, count: 1, objectKind: "Pod", objectName: `${workload}-7d9f8c-x${rowIndex}`, container: "" }
+    );
+    if (row.envName === "prod" && workload === "api") {
+      events.push({ timeMs: pivot - 600_000, envId: row.envId, type: "Warning", reason: "Evicted", message: "The node was low on resource: memory. Container api was using 498Mi, request is 256Mi.", count: 1, objectKind: "Pod", objectName: "api-7d9f8c-old", container: "api" });
+    }
+  });
+  events.sort((a, b) => b.timeMs - a.timeMs);
+  return { series, events, imageChanges, versionChanges, stepSeconds: Math.round((window.endMs - window.startMs) / 1000 / 40), truncated: false };
+}
+
 export interface FixtureOptions {
   /** Overrides on the usage fixture, to put the page in a given state. */
   usage?: Partial<ObservabilityUsage>;
@@ -425,10 +642,18 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
     getServiceOverview: (req) =>
       call("GetServiceOverview", req, () => {
         if (options.empty) return { services: [], trendStepSeconds: 60 };
-        const all = [health("api", req.window, 42, 0.012, 3, 86), health("worker", req.window, 6, 0.004, 5, 240)];
+        const trendStepSeconds = Math.round((req.window.endMs - req.window.startMs) / 1000 / 30);
+        const groupBy = req.groupBy ?? [];
+        const make = (scale: number, seed: number, group: Record<string, string>) => [
+          { ...health("api", req.window, 42 * scale, 0.012 / scale, 3 + seed, 86 / scale), group },
+          { ...health("worker", req.window, 6 * scale, 0.004, 5 + seed, 240), group },
+        ];
+        const all = groupBy.length
+          ? fixtureGroups(groupBy, req).flatMap((group, index) => make(1 / (index + 1), index * 7, group))
+          : make(1, 0, {});
         const services = req.services?.length ? all.filter((s) => req.services!.includes(s.name)) : all;
         const daemon: ServiceHealth = { ...health("reliant-daemon", req.window, 0, 0, 9, 0), requestCount: 0, requestRate: 0, errorLogCount: 3, source: "daemon", operatorData: true };
-        return { services: req.services?.length ? services : [...services, daemon], trendStepSeconds: Math.round((req.window.endMs - req.window.startMs) / 1000 / 30) };
+        return { services: req.services?.length || groupBy.length ? services : [...services, daemon], trendStepSeconds };
       }),
     searchLogs: (req) =>
       call("SearchLogs", req, () => {
@@ -442,7 +667,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
       }),
     listTraces: (req) =>
       call("ListTraces", req, () => {
-        if (options.empty) return { traces: [], nextCursor: "", red: null };
+        if (options.empty) return { traces: [], nextCursor: "", red: null, redGroups: [] };
         let traces = traceSummaries(req.window, 40);
         if (req.rootSpanName) traces = traces.filter((t) => t.rootOperation.includes(req.rootSpanName));
         if (req.errorsOnly) traces = traces.filter((t) => t.errorCount > 0);
@@ -450,19 +675,22 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         const durations = traces.map((t) => t.durationMs).sort((a, b) => a - b);
         const at = (p: number) => durations[Math.min(durations.length - 1, Math.floor(p * durations.length))] ?? 0;
         const errors = traces.filter((t) => t.errorCount > 0).length;
-        return {
-          traces: traces.slice(0, req.limit),
-          nextCursor: "",
-          red: {
-            traceCount: traces.length,
-            errorTraceCount: errors,
-            ratePerSecond: traces.length / ((req.window.endMs - req.window.startMs) / 1000),
-            errorRate: traces.length ? errors / traces.length : 0,
-            p50Ms: at(0.5),
-            p95Ms: at(0.95),
-            p99Ms: at(0.99),
-          },
+        const red = {
+          traceCount: traces.length,
+          errorTraceCount: errors,
+          ratePerSecond: traces.length / ((req.window.endMs - req.window.startMs) / 1000),
+          errorRate: traces.length ? errors / traces.length : 0,
+          p50Ms: at(0.5),
+          p95Ms: at(0.95),
+          p99Ms: at(0.99),
         };
+        const redGroups = fixtureGroups(req.groupBy ?? [], req)
+          .filter((group) => Object.keys(group).length > 0)
+          .map((group, index) => ({
+            group,
+            red: { ...red, traceCount: Math.round(red.traceCount / (index + 1)), errorRate: red.errorRate * (index % 2 ? 2.4 : 0.6), p95Ms: red.p95Ms * (1 + index * 0.35) },
+          }));
+        return { traces: traces.slice(0, req.limit), nextCursor: "", red, redGroups };
       }),
     getTrace: (req) => call("GetTrace", req, () => fixtureTrace(req.traceId, req.window.endMs)),
     queryPanel: (req) =>
@@ -472,7 +700,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         if (unsupported) {
           throw new ConnectError(`aggregation "count_distinct" is not supported on field ${unsupported.field}`, Code.InvalidArgument);
         }
-        return fixturePanel(panel, req.window, req.services);
+        return fixturePanel(panel, req.window, req.services, req.groupBy, req);
       }),
     getFlamegraph: (req): Promise<Flamegraph> =>
       call("GetFlamegraph", req, () => ({
@@ -485,5 +713,19 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
       })),
     getObservabilityUsage: (orgId) => call("GetObservabilityUsage", { orgId }, () => fixtureUsage(Date.now(), options.usage)),
     getDashboards: (req) => call("GetDashboards", req, () => (options.empty ? { ...fixtureDashboards(), dashboards: [] } : fixtureDashboards())),
+    listAttributeValues: (req) =>
+      call("ListAttributeValues", req, () => {
+        const values: AttributeValueCount[] = valuesOf(req.key, req)
+          .filter((value) => value.toLowerCase().startsWith((req.prefix ?? "").toLowerCase()))
+          .map((value, index) => ({ value, count: Math.round(4200 / (index + 1)) }));
+        return { values: options.empty ? [] : values, truncated: false };
+      }),
+    listWorkloads: (req) =>
+      call("ListWorkloads", req, () => {
+        if (options.empty) return { workloads: [], truncated: false };
+        const all = fixtureWorkloads(req, req.window.endMs);
+        return { workloads: req.services?.length ? all.filter((w) => req.services!.includes(w.workload)) : all, truncated: false };
+      }),
+    getWorkload: (req) => call("GetWorkload", req, () => fixtureWorkloadDetail(req, req.workload, req.container, req.window)),
   };
 }

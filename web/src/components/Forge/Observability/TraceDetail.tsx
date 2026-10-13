@@ -15,7 +15,7 @@ import { ArrowLeft, Flame, FileText } from "lucide-react";
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import { Button } from "@/components/ui/Button";
 import { useTrace } from "@/hooks/observability-queries";
-import type { EnvScope, Span } from "@/services/controlPlane/observability/types";
+import type { ObsScope, Span } from "@/services/controlPlane/observability/types";
 
 import { AttributeTable } from "./AttributeTable";
 import { formatDuration, formatTimestamp } from "./format";
@@ -27,13 +27,13 @@ import { traceExtent } from "./waterfall/traceTree";
 
 export function TraceDetail({
   scope,
-  envName,
+  subject,
   traceId,
   spanId,
   navigate,
 }: {
-  scope: EnvScope;
-  envName: string;
+  scope: ObsScope;
+  subject: string;
   traceId: string;
   spanId: string | undefined;
   navigate: ObsNavigate;
@@ -70,7 +70,7 @@ export function TraceDetail({
     return (
       <div className="space-y-3">
         {back}
-        <ObsError error={trace.error} envName={envName} onRetry={() => void trace.refetch()} retrying={trace.isFetching} />
+        <ObsError error={trace.error} subject={subject} onRetry={() => void trace.refetch()} retrying={trace.isFetching} />
       </div>
     );
   }

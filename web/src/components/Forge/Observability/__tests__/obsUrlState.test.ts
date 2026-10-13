@@ -1,0 +1,176 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * Every ad-hoc choice in the Observability area lives in the URL (owner
+ * decision 2), so a changed view is a link. These pin the round trip: what a
+ * view writes, through tanstack-router's own search serialization and the
+ * route schema, comes back as what it wrote — and a hand-edited or stale link
+ * narrows to what still makes sense instead of failing the route.
+ */
+
+import { describe, expect, it } from "vitest";
+import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-router";
+
+import { forgeEnvPageSearchSchema, forgeObservabilitySearchSchema } from "@/routeSchemas";
+import type { Panel } from "@/services/controlPlane/observability/types";
+
+import { MAX_FILTERS, MAX_GROUP_BY, MAX_IN_VALUES } from "../attributes";
+import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../__fixtures__/fixtureApi";
+import { envIdsOf, type ObsPlace } from "../obsPlace";
+import {
+  filterParam,
+  filterTokensOf,
+  formatFilterToken,
+  groupByOf,
+  groupLabel,
+  parseFilterToken,
+  scopeFiltersOf,
+  type FilterToken,
+} from "../obsFilters";
+import { OBS_SEARCH_KEYS, type ObsSearch } from "../obsSearch";
+
+const PROJECT_PLACE: ObsPlace = { kind: "project", project: FIXTURE_PROJECT, environments: [...FIXTURE_ENVS] };
+
+/** What the router does to a search object on its way into the address bar and back. */
+function throughTheUrl(search: Record<string, unknown>, schema = forgeObservabilitySearchSchema) {
+  const url = defaultStringifySearch(search);
+  return { url, parsed: schema.parse(defaultParseSearch(url)) };
+}
+
+const PANEL: Panel = {
+  id: "request-rate",
+  title: "Requests by environment",
+  kind: "line",
+  signal: "traces",
+  series: [{ label: "requests", agg: "count", where: [{ field: "span.status", op: "eq", value: "error" }] }],
+  where: [{ field: "span.name", op: "match", value: "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$" }],
+  groupBy: ["service.name"],
+  unit: "count",
+  width: 12,
+  height: 7,
+};
+
+describe("filter tokens", () => {
+  it.each<[string, FilterToken]>([
+    ["service.version:v1.8.2", { key: "service.version", op: "eq", value: "v1.8.2" }],
+    ["status!:error", { key: "status", op: "neq", value: "error" }],
+    ["http.route~orders", { key: "http.route", op: "contains", value: "orders" }],
+    ["k8s.container.name:*", { key: "k8s.container.name", op: "exists", value: "" }],
+    // Everything after the operator is the value: colons and spaces included.
+    ["server.address:db:5432", { key: "server.address", op: "eq", value: "db:5432" }],
+    ["http.route~/orders/{id} list", { key: "http.route", op: "contains", value: "/orders/{id} list" }],
+  ])("reads %s and writes it back unchanged", (raw, token) => {
+    expect(parseFilterToken(raw)).toEqual(token);
+    expect(formatFilterToken(token)).toBe(raw);
+  });
+
+  it.each(["", "no-operator", ":value", "service.name:", "bad key:v", `k:${"x".repeat(1025)}`])("drops %j instead of failing", (raw) => {
+    expect(parseFilterToken(raw)).toBeNull();
+  });
+
+  it("keeps URL order, drops duplicates and junk", () => {
+    expect(filterTokensOf(["a:1", "junk", "b!:2", "a:1"]).map(formatFilterToken)).toEqual(["a:1", "b!:2"]);
+    expect(filterParam([])).toBeUndefined();
+  });
+});
+
+describe("tokens → QueryScope.filters", () => {
+  it("merges two `is` on one key into `in` (how two versions are compared), at the first one's position", () => {
+    const tokens = filterTokensOf(["service.version:v1", "status!:error", "service.version:v2", "service.version:v1"]);
+    expect(scopeFiltersOf(tokens)).toEqual([
+      { key: "service.version", op: "in", values: ["v1", "v2"] },
+      { key: "status", op: "neq", value: "error" },
+    ]);
+  });
+
+  it("passes contains and exists through, and a single `is` stays `eq`", () => {
+    expect(scopeFiltersOf(filterTokensOf(["http.route~orders", "k8s.pod.name:*", "service.name:api"]))).toEqual([
+      { key: "http.route", op: "contains", value: "orders" },
+      { key: "k8s.pod.name", op: "exists" },
+      { key: "service.name", op: "eq", value: "api" },
+    ]);
+  });
+
+  it("caps at the server's limits rather than sending a request it will refuse", () => {
+    const many = Array.from({ length: MAX_FILTERS + 5 }, (_, i): FilterToken => ({ key: `k${i}`, op: "neq", value: "x" }));
+    expect(scopeFiltersOf(many)).toHaveLength(MAX_FILTERS);
+    const values = Array.from({ length: MAX_IN_VALUES + 5 }, (_, i): FilterToken => ({ key: "service.version", op: "eq", value: `v${i}` }));
+    expect(scopeFiltersOf(values)[0].values).toHaveLength(MAX_IN_VALUES);
+  });
+});
+
+describe("group-by", () => {
+  it("keeps shaped keys, once each, at most three", () => {
+    expect(groupByOf(["deployment.environment.name", "x y", "service.version", "deployment.environment.name", "status", "rpc.method"])).toEqual([
+      "deployment.environment.name",
+      "service.version",
+      "status",
+    ]);
+    expect(groupByOf(undefined)).toEqual([]);
+    expect(MAX_GROUP_BY).toBe(3);
+  });
+
+  it("labels a group in group-by order, naming an empty value", () => {
+    expect(groupLabel({ "service.version": "v2", "deployment.environment.name": "prod" }, ["deployment.environment.name", "service.version"])).toBe(
+      "prod · v2"
+    );
+    expect(groupLabel({ status: "" }, ["status"])).toBe("(none)");
+  });
+});
+
+describe("environment is a filter", () => {
+  it("resolves picked names to ids on the project area, empty meaning every environment", () => {
+    expect(envIdsOf(PROJECT_PLACE, undefined)).toEqual([]);
+    expect(envIdsOf(PROJECT_PLACE, ["prod", "staging"])).toEqual(["env-prod", "env-staging"]);
+    // A name from an old link that the project no longer has is dropped, not sent.
+    expect(envIdsOf(PROJECT_PLACE, ["prod", "qa"])).toEqual(["env-prod"]);
+  });
+
+  it("pins the env page to its own environment whatever the URL says", () => {
+    expect(envIdsOf({ kind: "env", env: { id: "env-prod", name: "prod" } }, ["staging"])).toEqual(["env-prod"]);
+  });
+});
+
+describe("the URL round trip", () => {
+  it("brings every ad-hoc choice back as it was written: envs, filters, group-by, panel edits", () => {
+    const search: ObsSearch = {
+      view: "dashboards",
+      range: "6h",
+      dashboard: "overview",
+      envs: ["prod", "staging"],
+      f: ["service.version:v1.8.3", "http.route~orders", "k8s.container.name:*", "server.address:db:5432"],
+      groupBy: ["deployment.environment.name", "service.version"],
+      edit: { "overview/request-rate": PANEL, "overview/errors": null },
+    };
+    const { parsed } = throughTheUrl({ project: "p-1", ...search });
+    expect(parsed).toEqual({ project: "p-1", ...search });
+    expect(filterTokensOf(parsed.f)).toHaveLength(4);
+  });
+
+  it("survives values that look like JSON (a numeric service, a boolean-looking version)", () => {
+    const { parsed } = throughTheUrl({ service: "123", f: ["service.version:true", "http.response.status_code:500"], workload: "007" });
+    expect(parsed).toMatchObject({ service: "123", f: ["service.version:true", "http.response.status_code:500"], workload: "007" });
+  });
+
+  it("drops a bad value instead of failing the route", () => {
+    const parsed = forgeObservabilitySearchSchema.parse({
+      view: "heatmaps",
+      range: "90d",
+      groupBy: "not-a-list",
+      edit: { "overview/x": { title: "missing everything else" } },
+      envs: ["prod"],
+    });
+    expect(parsed).toEqual({ envs: ["prod"] });
+  });
+
+  it("is the same shape on the env page, so a link moves between the two places", () => {
+    const search: ObsSearch = { view: "workloads", workload: "api", container: "api", groupBy: ["service.version"], f: ["status:error"] };
+    expect(throughTheUrl({ tab: "observability", ...search }, forgeEnvPageSearchSchema).parsed).toEqual({ tab: "observability", ...search });
+  });
+
+  it("lists every key the area owns, so leaving the tab clears them all", () => {
+    expect([...OBS_SEARCH_KEYS].sort()).toEqual(
+      ["container", "dashboard", "edit", "envs", "errors", "f", "groupBy", "live", "minDuration", "profileType", "q", "range", "service", "severity", "span", "trace", "view", "workload"].sort()
+    );
+  });
+});

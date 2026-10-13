@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Proving harness for the Observability tab. NOT a product surface.
+ * Proving harness for the Observability area. NOT a product surface.
  *
  * Renders the real ObservabilityPanel, inside the real forge shell, against
  * the in-memory fixture API — unauthenticated and with no backend — so every
@@ -9,20 +9,24 @@
  * driven by the Playwright smoke (e2e/observability.spec.ts). Dev builds only:
  * the route sits behind DevOnlyRoute in routes.tsx.
  *
- * The URL state the env page keeps in search params is held in component
- * state here; the panel cannot tell the difference.
+ * Both places the panel lives are here: the project's area (every
+ * environment, filterable and groupable) and one environment's tab (pinned to
+ * prod). The URL state the pages keep in search params is held in component
+ * state, seeded from this page's own query string, so a screenshot of any
+ * state is a link: `?place=project&view=workloads&groupBy=deployment.environment.name`.
  */
 
 import { useMemo, useState } from "react";
 import { Code } from "@connectrpc/connect";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import PageHeader from "@/components/forge-ui/page_header";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
-import { ForgeShell } from "../../ForgeShell";
-import ObservabilityPanel from "../ObservabilityPanel";
+import { FORGE_OBSERVABILITY_PATH, ForgeShell } from "../../ForgeShell";
+import ObservabilityPanel, { type ObsPlace } from "../ObservabilityPanel";
 import type { ObsNavigate, ObsSearch } from "../obsSearch";
-import { createFixtureApi, type FixtureOptions } from "../__fixtures__/fixtureApi";
+import { createFixtureApi, FIXTURE_ENVS, FIXTURE_PROJECT, type FixtureOptions } from "../__fixtures__/fixtureApi";
 
 const SCHEMES = [
   "professional-blue",
@@ -41,6 +45,7 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "data", label: "telemetry flowing", options: {} },
   { id: "not-set-up", label: "org not set up (FailedPrecondition)", options: { failWith: Code.FailedPrecondition } },
   { id: "empty", label: "no data in range", options: { empty: true } },
+  { id: "denied", label: "no permission", options: { failWith: Code.PermissionDenied } },
   { id: "unavailable", label: "service unavailable", options: { failWith: Code.Unavailable } },
   { id: "quota", label: "query quota hit", options: { failWith: Code.ResourceExhausted } },
   // Usage states (view=usage): the allowance ladder as an org on each rung sees it.
@@ -52,12 +57,33 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "usage-exempt", label: "usage: exempt org", options: { usage: { exempt: true, usedBytes: 40 * 2 ** 30, usageState: "over_150" } } },
 ];
 
+const LIST_KEYS = new Set(["envs", "f", "groupBy"]);
+
+/** The preview's query string as ObsSearch: list keys repeat (`?f=a&f=b`), `edit` is JSON. */
+function searchFromUrl(params: URLSearchParams): ObsSearch {
+  const out: Record<string, unknown> = {};
+  for (const key of new Set(params.keys())) {
+    if (key === "case" || key === "place") continue;
+    if (LIST_KEYS.has(key)) out[key] = params.getAll(key);
+    else if (key === "edit") {
+      try {
+        out.edit = JSON.parse(params.get(key) ?? "");
+      } catch {
+        // A malformed edit is dropped, as the real route's schema drops it.
+      }
+    } else if (key === "live" || key === "errors") out[key] = params.get(key) === "true";
+    else out[key] = params.get(key);
+  }
+  return out as ObsSearch;
+}
+
 export default function ObservabilityPreview() {
   const initial = new URLSearchParams(window.location.search);
   const [scheme, setScheme] = useState(() => document.documentElement.getAttribute("data-color-scheme") ?? "professional-blue");
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [caseId, setCaseId] = useState(() => initial.get("case") ?? CASES[0].id);
-  const [search, setSearch] = useState<ObsSearch>(() => ({ view: (initial.get("view") as ObsSearch["view"]) ?? undefined }));
+  const [placeKind, setPlaceKind] = useState<"project" | "env">(() => (initial.get("place") === "project" ? "project" : "env"));
+  const [search, setSearch] = useState<ObsSearch>(() => searchFromUrl(initial));
 
   const active = CASES.find((c) => c.id === caseId) ?? CASES[0];
   // A fresh client per case, so one case's cached answers never leak into the next.
@@ -76,6 +102,19 @@ export default function ObservabilityPreview() {
     });
   };
 
+  const prod = FIXTURE_ENVS[2];
+  const place: ObsPlace =
+    placeKind === "project"
+      ? { kind: "project", project: FIXTURE_PROJECT, environments: [...FIXTURE_ENVS] }
+      : {
+          kind: "env",
+          env: prod,
+          onWiden: (next) => {
+            setPlaceKind("project");
+            setSearch(next);
+          },
+        };
+
   function applyScheme(next: string) {
     setScheme(next);
     document.documentElement.setAttribute("data-color-scheme", next);
@@ -88,13 +127,23 @@ export default function ObservabilityPreview() {
 
   return (
     <ForgeShell
-      activePath="/forge/env/prod"
+      activePath={placeKind === "project" ? FORGE_OBSERVABILITY_PATH : "/forge/env/prod"}
       envs={[
         { name: "dev", lifecycle: "local", source: "backend" },
+        { name: "staging", lifecycle: "deployed", source: "backend" },
         { name: "prod", lifecycle: "deployed", source: "backend" },
       ]}
       headerContent={
         <div className="flex flex-wrap items-center gap-3 px-4">
+          <select
+            data-testid="preview-place"
+            value={placeKind}
+            onChange={(e) => setPlaceKind(e.target.value as "project" | "env")}
+            className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+          >
+            <option value="env">env page tab (prod)</option>
+            <option value="project">project area (all environments)</option>
+          </select>
           <select
             data-testid="preview-case"
             value={caseId}
@@ -130,10 +179,21 @@ export default function ObservabilityPreview() {
         </div>
       }
     >
-      <div className="h-full overflow-y-auto p-6">
+      <div className="h-full space-y-6 overflow-y-auto p-6">
+        {placeKind === "project" && (
+          <PageHeader
+            title="Observability"
+            subtitle={
+              <>
+                Logs, traces, dashboards and workloads across every environment of <span className="font-mono">{FIXTURE_PROJECT}</span>.
+                Narrow to some, or group by environment to compare them.
+              </>
+            }
+          />
+        )}
         <QueryClientProvider client={queryClient}>
           <ObservabilityApiProvider api={api}>
-            <ObservabilityPanel key={caseId} environmentId="env-prod" envName="prod" search={search} navigate={navigate} />
+            <ObservabilityPanel key={`${caseId}-${placeKind}`} place={place} search={search} navigate={navigate} />
           </ObservabilityApiProvider>
         </QueryClientProvider>
       </div>

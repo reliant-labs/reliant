@@ -17,7 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import { useFlamegraph } from "@/hooks/observability-queries";
-import { DEFAULT_PROFILE_TYPES, type EnvScope, type ProfileType } from "@/services/controlPlane/observability/types";
+import { DEFAULT_PROFILE_TYPES, type ObsScope, type ProfileType } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 
 import { formatBytes, formatCount, formatDuration } from "./format";
@@ -27,15 +27,15 @@ import { ObsError, ObsLoadingRows } from "./ObsStates";
 
 export function ProfilesView({
   scope,
-  envName,
+  subject,
   range,
   service,
   profileType,
   traceId,
   navigate,
 }: {
-  scope: EnvScope;
-  envName: string;
+  scope: ObsScope;
+  subject: string;
   range: RangePreset;
   service: string | undefined;
   profileType: string | undefined;
@@ -103,7 +103,7 @@ export function ProfilesView({
           <ObsLoadingRows testId="obs-profiles-loading" rows={8} />
         </Card>
       ) : flamegraph.error ? (
-        <ObsError error={flamegraph.error} envName={envName} onRetry={() => void flamegraph.refetch()} retrying={flamegraph.isFetching} />
+        <ObsError error={flamegraph.error} subject={subject} onRetry={() => void flamegraph.refetch()} retrying={flamegraph.isFetching} />
       ) : !flamegraph.data || flamegraph.data.stackCount === 0 ? (
         <p
           role="status"

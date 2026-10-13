@@ -69,6 +69,7 @@ import { Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-rou
 import { useProjectStore, type Project } from "@/store/projectStore";
 import { useForgeRoster } from "@/hooks/forge-queries";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
+import { hasOpenEscapeLayer } from "@/hooks/useEscapeLayer";
 import { isQueued, queuedOnLabel } from "@/services/forge/live";
 
 import { ForgeCloseButton, ForgeProjectSwitcher } from "./ForgeHeader";
@@ -211,6 +212,8 @@ export function ForgeLayout() {
       ) {
         return;
       }
+      // A dialog, popover or menu on top owns Escape: it closes first, alone.
+      if (hasOpenEscapeLayer()) return;
       event.preventDefault();
       event.stopPropagation();
       onClose();

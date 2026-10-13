@@ -10,9 +10,23 @@ import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { SortOrder } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import { AttributeOp, Signal, SortOrder, WorkloadMetric } from "@/gen/controlplane/services/observability/v1/observability_pb";
 
-import { composeLogQuery, getServiceOverview, getTrace, listTraces, msOf, queryPanel, searchLogs, severityOf, statusOf } from "../api";
+import {
+  composeLogQuery,
+  getServiceOverview,
+  getTrace,
+  getWorkload,
+  listAttributeValues,
+  listTraces,
+  listWorkloads,
+  msOf,
+  queryPanel,
+  searchLogs,
+  severityOf,
+  statusOf,
+  wireScope,
+} from "../api";
 import { obsErrorKind, obsRetry } from "../errors";
 
 const client = {
@@ -21,11 +35,14 @@ const client = {
   queryPanel: vi.fn(),
   getTrace: vi.fn(),
   getServiceOverview: vi.fn(),
+  listAttributeValues: vi.fn(),
+  listWorkloads: vi.fn(),
+  getWorkload: vi.fn(),
 };
 
 vi.mock("../../client", () => ({ getControlPlaneClient: () => client }));
 
-const env = { orgId: "org-1", environmentId: "env-1" };
+const env = { orgId: "org-1", envIds: ["env-1"], filters: [] };
 const window = { startMs: Date.UTC(2026, 9, 12, 6), endMs: Date.UTC(2026, 9, 12, 7) };
 const ts = (ms: number, extraNanos = 0) =>
   create(TimestampSchema, { seconds: BigInt(Math.floor(ms / 1000)), nanos: (ms % 1000) * 1e6 + extraNanos });
@@ -157,6 +174,7 @@ describe("traces and panels", () => {
     client.listTraces.mockResolvedValue({
       traces: [{ traceId: "t", startTime: ts(window.startMs), durationMs: 300, rootDurationMs: 120, rootService: "api", rootSpanName: "op", spanCount: 3, errorCount: 0, services: ["api"], source: "", operatorData: false }],
       nextPageToken: "",
+      redGroups: [],
     });
     const result = await listTraces({ ...env, window, rootSpanName: "", services: [], errorsOnly: false, minDurationMs: 0, limit: 50 });
     const req = client.listTraces.mock.calls[0][0];
@@ -205,8 +223,142 @@ describe("errors", () => {
     const notSetUp = new ConnectError("not set up", Code.FailedPrecondition);
     expect(obsErrorKind(notSetUp)).toBe("not-set-up");
     expect(obsRetry(0, notSetUp)).toBe(false);
-    expect(obsErrorKind(new ConnectError("quota", Code.ResourceExhausted))).toBe("too-broad");
+    expect(obsErrorKind(new ConnectError("quota", Code.ResourceExhausted))).toBe("over-quota");
+    expect(obsErrorKind(new ConnectError("slow", Code.DeadlineExceeded))).toBe("too-broad");
     expect(obsRetry(0, new ConnectError("down", Code.Unavailable))).toBe(true);
     expect(obsRetry(1, new ConnectError("down", Code.Unavailable))).toBe(false);
+  });
+});
+
+describe("query scope v2 (contract K1)", () => {
+  it("sends the project, every env id and the attribute filters as data, with `in` and `exists` shaped for the server", () => {
+    const scope = wireScope(
+      {
+        orgId: "org-1",
+        projectId: "shop",
+        envIds: ["env-1", "env-2"],
+        filters: [
+          { key: "service.version", op: "in", values: ["v1", "v2"] },
+          { key: "http.route", op: "contains", value: "orders" },
+          { key: "k8s.container.name", op: "exists", value: "ignored" },
+          { key: "status", op: "neq", value: "error" },
+        ],
+      },
+      window,
+      ["api"]
+    );
+    expect(scope).toMatchObject({ orgId: "org-1", projectId: "shop", envIds: ["env-1", "env-2"], services: ["api"] });
+    expect(scope.filters).toEqual([
+      { key: "service.version", op: AttributeOp.IN, value: "", values: ["v1", "v2"] },
+      { key: "http.route", op: AttributeOp.CONTAINS, value: "orders", values: [] },
+      { key: "k8s.container.name", op: AttributeOp.EXISTS, value: "", values: [] },
+      { key: "status", op: AttributeOp.NEQ, value: "error", values: [] },
+    ]);
+  });
+
+  it("leaves project_id unset rather than empty: empty would mean the project-less environments only", () => {
+    expect(wireScope({ orgId: "o", envIds: [], filters: [] }, window).projectId).toBeUndefined();
+    expect(wireScope({ orgId: "o", projectId: "", envIds: [], filters: [] }, window).projectId).toBeUndefined();
+  });
+
+  it("passes group_by to the overview, the trace list and a panel, and reads the groups back", async () => {
+    client.getServiceOverview.mockResolvedValue({
+      trendStepSeconds: 60,
+      services: [{ service: "api", group: { "deployment.environment.name": "prod" }, requestCount: 1n, ratePerSecond: 0, errorCount: 0n, errorRate: 0, p50Ms: 0, p95Ms: 0, p99Ms: 0, errorLogCount: 0n, requestTrend: [], errorTrend: [], source: "", operatorData: false }],
+    });
+    const overview = await getServiceOverview({ ...env, window, groupBy: ["deployment.environment.name"] });
+    expect(client.getServiceOverview.mock.calls[0][0].groupBy).toEqual(["deployment.environment.name"]);
+    expect(overview.services[0].group).toEqual({ "deployment.environment.name": "prod" });
+
+    const red = { traceCount: 10n, errorTraceCount: 1n, ratePerSecond: 0.5, errorRate: 0.1, p50Ms: 1, p95Ms: 2, p99Ms: 3 };
+    client.listTraces.mockResolvedValue({ traces: [], nextPageToken: "", red, redGroups: [{ group: { "service.version": "v2" }, red }, { group: {} }] });
+    const traces = await listTraces({ ...env, window, rootSpanName: "", services: [], errorsOnly: false, minDurationMs: 0, limit: 50, groupBy: ["service.version"] });
+    expect(client.listTraces.mock.calls[0][0].groupBy).toEqual(["service.version"]);
+    // A group without a summary is dropped, not drawn as zeros.
+    expect(traces.redGroups).toEqual([{ group: { "service.version": "v2" }, red: expect.objectContaining({ traceCount: 10, errorRate: 0.1 }) }]);
+
+    client.queryPanel.mockResolvedValue({ panelId: "p", kind: "line", unit: "", stepSeconds: 60, truncated: false, columns: [], rows: [], series: [] });
+    const panel = { id: "p", title: "t", kind: "line", signal: "traces", series: [{ label: "n", agg: "count" }], groupBy: ["service.name"] };
+    await queryPanel({ ...env, window, panel, services: [], stepSeconds: 0, groupBy: ["deployment.environment.name", "service.version"] });
+    const req = client.queryPanel.mock.calls[0][0];
+    // The override rides beside the panel; the panel's own group-by is sent unchanged.
+    expect(req.groupBy).toEqual(["deployment.environment.name", "service.version"]);
+    expect(req.panel.groupBy).toEqual(["service.name"]);
+  });
+
+  it("asks ListAttributeValues for a key's values with the prefix and signal", async () => {
+    client.listAttributeValues.mockResolvedValue({ values: [{ value: "v1.8.3", count: 42n }], truncated: true });
+    const result = await listAttributeValues({ ...env, window, key: "service.version", prefix: "v1", signal: "traces" });
+    expect(client.listAttributeValues.mock.calls[0][0]).toMatchObject({ key: "service.version", prefix: "v1", signal: Signal.TRACES, limit: 50 });
+    expect(result).toEqual({ values: [{ value: "v1.8.3", count: 42 }], truncated: true });
+    await listAttributeValues({ ...env, window, key: "service.name", prefix: "" });
+    expect(client.listAttributeValues.mock.calls[1][0]).toMatchObject({ prefix: undefined, signal: undefined });
+  });
+});
+
+describe("workloads (customer metadata, contract K2)", () => {
+  it("maps a workload, keeping an unset limit or request as null rather than zero", async () => {
+    client.listWorkloads.mockResolvedValue({
+      truncated: false,
+      workloads: [
+        {
+          envId: "env-1",
+          envName: "prod",
+          workload: "api",
+          namespace: "shop",
+          serviceVersion: "v1.8.3",
+          replicasObserved: 3,
+          restartsInWindow: 4n,
+          latestWarning: { time: ts(window.endMs - 60_000), envId: "env-1", type: "Warning", reason: "BackOff", message: "m", count: 7n, objectKind: "Pod", objectName: "api-1", container: "api" },
+          containers: [
+            {
+              container: "api",
+              imageName: "ghcr.io/acme/api",
+              imageTag: "v1.8.3",
+              restartsInWindow: 4n,
+              lastTerminatedReason: "OOMKilled",
+              lastTerminatedAt: ts(window.endMs - 120_000),
+              cpu: { latest: 0.4, p95: 0.6, limitUtilizationLatest: 0.4, limit: 1 },
+              memory: { latest: 500, p95: 510 },
+            },
+          ],
+        },
+      ],
+    });
+    const { workloads } = await listWorkloads({ ...env, window });
+    const [w] = workloads;
+    expect(w).toMatchObject({ envName: "prod", restartsInWindow: 4, latestWarning: { reason: "BackOff", count: 7 } });
+    expect(w.containers[0]).toMatchObject({ lastTerminatedReason: "OOMKilled", lastTerminatedAtMs: window.endMs - 120_000 });
+    expect(w.containers[0].cpu).toEqual({
+      latest: 0.4,
+      p95: 0.6,
+      limitUtilizationLatest: 0.4,
+      limitUtilizationP95: null,
+      requestUtilizationLatest: null,
+      requestUtilizationP95: null,
+      limit: 1,
+      request: null,
+    });
+    expect(w.containers[0].memory?.limit).toBeNull();
+  });
+
+  it("maps a workload's series by metric and drops a metric this build does not know", async () => {
+    client.getWorkload.mockResolvedValue({
+      stepSeconds: 60,
+      truncated: false,
+      series: [
+        { envId: "env-1", container: "api", metric: WorkloadMetric.MEMORY_LIMIT_UTILIZATION, unit: "1", points: [{ time: ts(window.startMs), value: 0.9 }] },
+        { envId: "env-1", container: "api", metric: 99, unit: "?", points: [] },
+      ],
+      events: [],
+      imageChanges: [],
+      versionChanges: [{ envId: "env-1", serviceVersion: "v2", firstSeen: ts(window.startMs), lastSeen: ts(window.endMs) }],
+    });
+    const detail = await getWorkload({ ...env, window, workload: "api" });
+    expect(client.getWorkload.mock.calls[0][0]).toMatchObject({ workload: "api", container: "", stepSeconds: 0 });
+    expect(detail.series).toEqual([
+      { envId: "env-1", container: "api", metric: "memory_limit_utilization", unit: "1", timestamps: [window.startMs / 1000], values: [0.9] },
+    ]);
+    expect(detail.versionChanges[0]).toEqual({ envId: "env-1", serviceVersion: "v2", firstSeenMs: window.startMs, lastSeenMs: window.endMs });
   });
 });

@@ -28,7 +28,7 @@ import Card from "@/components/forge-ui/card";
 import { Button } from "@/components/ui/Button";
 import { useSearchLogs, useServiceOverview, type LogFilters } from "@/hooks/observability-queries";
 import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
-import { SEVERITIES, type EnvScope, type LogRecord, type Severity } from "@/services/controlPlane/observability/types";
+import { SEVERITIES, type ObsScope, type LogRecord, type Severity } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
@@ -78,7 +78,7 @@ const QUERY_SYNTAX: [string, string][] = [
 
 export function LogsView({
   scope,
-  envName,
+  subject,
   range,
   query,
   service,
@@ -88,8 +88,8 @@ export function LogsView({
   live,
   navigate,
 }: {
-  scope: EnvScope;
-  envName: string;
+  scope: ObsScope;
+  subject: string;
   range: RangePreset;
   query: string;
   service: string | undefined;
@@ -144,7 +144,7 @@ export function LogsView({
           <ObsLoadingRows testId="obs-logs-loading" />
         </Card>
       ) : logs.error && !logs.data && !queryError ? (
-        <ObsError error={logs.error} envName={envName} onRetry={() => void logs.refetch()} retrying={logs.isFetching} />
+        <ObsError error={logs.error} subject={subject} onRetry={() => void logs.refetch()} retrying={logs.isFetching} />
       ) : records.length === 0 && !queryError ? (
         <ObsNoData
           what="logs"
@@ -158,7 +158,7 @@ export function LogsView({
       ) : records.length > 0 ? (
         <LogList
           records={records}
-          envName={envName}
+          subject={subject}
           hasMore={!!logs.hasNextPage && !live}
           loadingMore={logs.isFetchingNextPage}
           onLoadMore={() => void logs.fetchNextPage()}
@@ -179,7 +179,7 @@ function LogsToolbar({
   live,
   navigate,
 }: {
-  scope: EnvScope;
+  scope: ObsScope;
   range: RangePreset;
   query: string;
   queryError: string | null;
@@ -299,7 +299,7 @@ export function ServiceSelect({
   includeAll = true,
   id = "obs-service-filter",
 }: {
-  scope: EnvScope;
+  scope: ObsScope;
   range: RangePreset;
   value: string | undefined;
   onChange: (service: string | undefined) => void;
@@ -340,14 +340,14 @@ export function ServiceSelect({
 
 function LogList({
   records,
-  envName,
+  subject,
   hasMore,
   loadingMore,
   onLoadMore,
   navigate,
 }: {
   records: LogRecord[];
-  envName: string;
+  subject: string;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
@@ -419,7 +419,7 @@ function LogList({
         onKeyDown={onKeyDown}
         data-testid="obs-log-list"
       >
-        <div role="list" aria-label={`Log records from ${envName}, newest first`} className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+        <div role="list" aria-label={`Log records from ${subject}, newest first`} className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((item) => {
             const row = rows[item.index];
             if (!row) return null;

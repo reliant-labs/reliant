@@ -55,8 +55,8 @@ export function formatBytes(value: number): string {
   return `${trim(scaled.toFixed(index === 0 ? 0 : 1))} ${units[index]}`;
 }
 
-/** A panel's units, plus the per-second rate the overview draws. */
-export type ValueUnit = Unit | "rate";
+/** A panel's units, plus the per-second rate the overview draws and the CPU cores workloads report. */
+export type ValueUnit = Unit | "rate" | "cores";
 
 /** A value in its declared unit. */
 export function formatValue(value: number | null | undefined, unit: ValueUnit | undefined): string {
@@ -70,6 +70,8 @@ export function formatValue(value: number | null | undefined, unit: ValueUnit | 
       return formatPercent(value);
     case "bytes":
       return formatBytes(value);
+    case "cores":
+      return formatCores(value);
     default:
       return formatCount(value);
   }
@@ -93,4 +95,20 @@ export function formatTimestamp(ms: number, now: number = Date.now()): string {
 
 function trim(fixed: string): string {
   return fixed.includes(".") ? fixed.replace(/\.?0+$/, "") : fixed;
+}
+
+/** CPU in cores: 0.25 → "250m", 1.5 → "1.5 cores" — Kubernetes' own millicore spelling below one core. */
+export function formatCores(cores: number): string {
+  if (!Number.isFinite(cores)) return "—";
+  if (cores < 1) return `${Math.round(cores * 1000)}m`;
+  return `${trim(cores.toFixed(2))} core${cores === 1 ? "" : "s"}`;
+}
+
+/** "3m ago", "2h ago", "4d ago" — for events, where the moment matters less than how recent it is. */
+export function formatAgo(ms: number, now: number = Date.now()): string {
+  const seconds = Math.max(0, Math.round((now - ms) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+  if (seconds < 86_400) return `${Math.round(seconds / 3600)}h ago`;
+  return `${Math.round(seconds / 86_400)}d ago`;
 }

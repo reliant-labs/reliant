@@ -19,6 +19,7 @@ import {
   proxyAuthSearchSchema,
   forgeDomainsSearchSchema,
   forgeEnvPageSearchSchema,
+  forgeObservabilitySearchSchema,
   forgeLegacySearchSchema,
   forgeOverviewSearchSchema,
   settingsSearchSchema,
@@ -152,6 +153,8 @@ const ForgeEnvPage = lazyRoute(
   () => import('./components/Forge/EnvPage/ForgeEnvPage'), 'ForgeEnvPage')
 const ForgeDomainsPage = lazyRoute(
   () => import('./components/Forge/Domains/ForgeDomainsPage'), 'ForgeDomainsPage')
+const ForgeObservabilityPage = lazyRoute(
+  () => import('./components/Forge/Observability/ObservabilityPage'), 'ForgeObservabilityPage')
 const App = lazyRoute(() => import('./App'), 'default')
 
 // Search schemas live in ./routeSchemas (kept dependency-free so tests can
@@ -643,6 +646,16 @@ const forgeDomainsRoute = createRoute({
   component: () => <ForgeGate><ForgeDomainsPage /></ForgeGate>,
 })
 
+// Observability, like Domains, is about the PROJECT rather than one
+// environment (owner decision 1: environment is a filter, not a place). Each
+// env page's Observability tab is the same panel pinned to that environment.
+const forgeObservabilityRoute = createRoute({
+  getParentRoute: () => forgeLayoutRoute,
+  path: '/forge/observability',
+  validateSearch: forgeObservabilitySearchSchema,
+  component: () => <ForgeGate><ForgeObservabilityPage /></ForgeGate>,
+})
+
 // The retired per-command screens. Each REDIRECTS rather than 404ing, because
 // they were bookmarked and linked, and it keeps what the old URL said: the
 // project always, and — where the old URL named an environment — that
@@ -853,6 +866,7 @@ const routeTree = rootRoute.addChildren([
       forgeOverviewRoute,
       forgeEnvRoute,
       forgeDomainsRoute,
+      forgeObservabilityRoute,
       forgeTopologyRedirectRoute,
       forgeEnvironmentsRedirectRoute,
       forgeStatusRedirectRoute,

@@ -18,9 +18,18 @@
  * caption states each series' latest value and range in words. The canvas is
  * aria-hidden. The caption is visually hidden: sighted readers have the
  * canvas, the legend and (for a sparkline) the number beside it.
+ *
+ * ── MARKERS ─────────────────────────────────────────────────────────────────
+ *
+ * A marker is a moment on the time axis — a version first seen, and (phase 2)
+ * a release promoted, from control-plane DeliveryInsightsService.ListReleases.
+ * Each is drawn as a dashed vertical rule with a short label, and named in the
+ * caption. A chart takes them from its `markers` prop or, absent that, from
+ * the nearest ObsChartMarkersProvider — the seam that lets one provider put
+ * release markers on every time-series chart of the area at once.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
@@ -47,6 +56,24 @@ const TONE_VAR: Record<ChartTone, string> = {
   muted: "--muted-foreground",
 };
 
+/** A moment on the time axis: a deploy, a version first seen. */
+export interface ChartMarker {
+  /** Epoch seconds. */
+  timeSec: number;
+  /** Short, drawn beside the rule ("v1.8.2"). */
+  label: string;
+  /** Longer, for the caption ("prod promoted v1.8.2"). Defaults to `label`. */
+  description?: string;
+  tone?: ChartTone;
+}
+
+const ObsChartMarkersContext = createContext<readonly ChartMarker[]>([]);
+
+/** Puts `markers` on every chart below that does not pass its own. */
+export function ObsChartMarkersProvider({ markers, children }: { markers: readonly ChartMarker[]; children: ReactNode }) {
+  return <ObsChartMarkersContext.Provider value={markers}>{children}</ObsChartMarkersContext.Provider>;
+}
+
 export interface UPlotChartProps {
   /** Epoch seconds, shared by every series. */
   timestamps: number[];
@@ -58,11 +85,18 @@ export interface UPlotChartProps {
   /** A sparkline: no axes, legend or cursor. */
   compact?: boolean;
   className?: string;
+  /** Moments to mark. Absent: the area's (ObsChartMarkersProvider). Sparklines draw none. */
+  markers?: readonly ChartMarker[];
 }
 
-export function UPlotChart({ timestamps, series, unit, height, label, compact = false, className }: UPlotChartProps) {
+export function UPlotChart({ timestamps, series, unit, height, label, compact = false, className, markers: own }: UPlotChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const themeVersion = useThemeVersion();
+  const inherited = useContext(ObsChartMarkersContext);
+  const markers = useMemo(
+    () => (compact ? [] : visibleMarkers(own ?? inherited, timestamps)),
+    [compact, own, inherited, timestamps]
+  );
 
   // uPlot wants columns: x, then one array per series.
   const data = useMemo<uPlot.AlignedData>(
@@ -84,6 +118,7 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
       cursor: compact ? { show: false } : { drag: { x: false, y: false } },
       legend: { show: !compact },
       scales: { x: { time: true } },
+      hooks: markers.length ? { draw: [(u: uPlot) => drawMarkers(u, markers, palette)] } : undefined,
       axes: compact
         ? [{ show: false }, { show: false }]
         : [
@@ -133,9 +168,9 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
       observer?.disconnect();
       chart?.destroy();
     };
-  }, [data, series, timestamps.length, height, unit, compact, themeVersion]);
+  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers]);
 
-  const caption = describeSeries(series, unit);
+  const caption = [describeSeries(series, unit), describeMarkers(markers)].filter(Boolean).join(" ");
 
   return (
     <figure className={className} aria-label={label} role="group">
@@ -157,6 +192,44 @@ export function describeSeries(series: ChartSeries[], unit: ValueUnit | undefine
       return `${s.label}: latest ${formatValue(latest, unit)}, between ${formatValue(min, unit)} and ${formatValue(max, unit)}.`;
     })
     .join(" ");
+}
+
+/** The markers inside the chart's x range, oldest first. */
+export function visibleMarkers(markers: readonly ChartMarker[], timestamps: number[]): ChartMarker[] {
+  if (timestamps.length === 0) return [];
+  const first = timestamps[0];
+  const last = timestamps[timestamps.length - 1];
+  return markers.filter((m) => m.timeSec >= first && m.timeSec <= last).sort((a, b) => a.timeSec - b.timeSec);
+}
+
+/** "Marked: v1.8.2 at 14:05." */
+export function describeMarkers(markers: readonly ChartMarker[]): string {
+  if (markers.length === 0) return "";
+  const at = (sec: number) => new Date(sec * 1000).toLocaleString(undefined, { hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" });
+  return `Marked: ${markers.map((m) => `${m.description ?? m.label} at ${at(m.timeSec)}`).join("; ")}.`;
+}
+
+function drawMarkers(u: uPlot, markers: readonly ChartMarker[], palette: Palette) {
+  const { ctx } = u;
+  const { top, height } = u.bbox;
+  const ratio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+  ctx.save();
+  ctx.font = `${11 * ratio}px ui-sans-serif, system-ui, sans-serif`;
+  ctx.textBaseline = "top";
+  for (const marker of markers) {
+    const x = Math.round(u.valToPos(marker.timeSec, "x", true));
+    const color = marker.tone ? palette.tones[marker.tone] : palette.axis;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = ratio;
+    ctx.setLineDash([4 * ratio, 3 * ratio]);
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, top + height);
+    ctx.stroke();
+    ctx.fillText(marker.label, x + 3 * ratio, top + 2 * ratio);
+  }
+  ctx.restore();
 }
 
 interface Palette {

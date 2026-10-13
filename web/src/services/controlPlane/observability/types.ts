@@ -22,14 +22,36 @@ export interface TimeWindow {
 }
 
 /**
- * Every request is scoped to one environment of one organization. The org is
- * the caller's current one; control-plane verifies membership server-side and
- * runs the query as that org's own ClickHouse user.
+ * What every request reads (control-plane QueryScope, contract K1): one
+ * organization, optionally one forge project, and any set of its environments.
+ * The environment is a FILTER, not a place — an env page is this scope with
+ * one id in it, the project's Observability area the same scope with the
+ * selection (empty = every environment the caller can see).
+ *
+ * The org is the caller's current one; control-plane verifies membership, and
+ * that every env id belongs to it, server-side, and runs the query as that
+ * org's own ClickHouse user.
  */
-export interface EnvScope {
+export interface ObsScope {
   orgId: string;
-  /** control-plane's environment id — the `env_id` its telemetry token carries, stamped as `reliant.env.id`. */
-  environmentId: string;
+  /** The forge project (`deploy_environments.project`). Undefined: no project narrowing. */
+  projectId?: string;
+  /** control-plane environment ids (stamped on telemetry as `reliant.env.id`). Empty: every environment. */
+  envIds: string[];
+  /** ANDed attribute predicates over allowlisted keys (attributes.ts). */
+  filters: AttributeFilter[];
+}
+
+/** The operators QueryScope.filters accepts (control-plane AttributeOp). */
+export type AttributeOp = "eq" | "neq" | "exists" | "in" | "contains";
+
+export interface AttributeFilter {
+  key: string;
+  op: AttributeOp;
+  /** eq, neq, contains. */
+  value?: string;
+  /** in. */
+  values?: string[];
 }
 
 /**
@@ -66,7 +88,7 @@ export interface LogRecord extends Provenance {
   resource: Record<string, string>;
 }
 
-export interface SearchLogsRequest extends EnvScope {
+export interface SearchLogsRequest extends ObsScope {
   window: TimeWindow;
   /** The free-text box, sent verbatim. The SERVER parses it (grammar in api.ts). */
   query: string;
@@ -115,7 +137,7 @@ export interface TraceRed {
   p99Ms: number;
 }
 
-export interface ListTracesRequest extends EnvScope {
+export interface ListTracesRequest extends ObsScope {
   window: TimeWindow;
   /** Substring of the root span's name. */
   rootSpanName: string;
@@ -124,12 +146,23 @@ export interface ListTracesRequest extends EnvScope {
   minDurationMs: number;
   limit: number;
   cursor?: string;
+  /** Up to 3 keys: the response gains one RED summary per group. */
+  groupBy?: string[];
+}
+
+/** One group's RED summary — "prod" against "staging", "v1.7" against "v1.8". */
+export interface TraceRedGroup {
+  /** group-by key → value. */
+  group: Record<string, string>;
+  red: TraceRed;
 }
 
 export interface ListTracesResult {
   traces: TraceSummary[];
   nextCursor: string;
   red: TraceRed | null;
+  /** Empty unless the request grouped. */
+  redGroups: TraceRedGroup[];
 }
 
 export interface SpanEvent {
@@ -175,13 +208,15 @@ export interface Series {
   value: number | null;
 }
 
-export interface QueryPanelRequest extends EnvScope {
+export interface QueryPanelRequest extends ObsScope {
   window: TimeWindow;
   panel: Panel;
   /** The dashboard's service filter — applied by the server as scope.services. */
   services: string[];
   /** 0 lets the server pick (~120 buckets). */
   stepSeconds: number;
+  /** Non-empty REPLACES the panel's own group-by (the in-place control). Max 3. */
+  groupBy?: string[];
 }
 
 /**
@@ -204,6 +239,8 @@ export interface PanelResult {
 
 export interface ServiceHealth extends Provenance {
   name: string;
+  /** For a grouped overview, this row's group-by key → value; empty otherwise. */
+  group: Record<string, string>;
   requestCount: number;
   /** Requests per second over the window. */
   requestRate: number;
@@ -278,6 +315,8 @@ export interface DashboardFilter {
   id: string;
   label: string;
   field: string;
+  /** The telemetry the dropdown reads values from; empty is traces. */
+  signal?: Signal;
 }
 
 export interface Dashboard {
@@ -319,7 +358,7 @@ export const DEFAULT_PROFILE_TYPES: readonly ProfileType[] = [
   { id: "goroutine", label: "Goroutines", unit: "goroutines" },
 ];
 
-export interface GetFlamegraphRequest extends EnvScope {
+export interface GetFlamegraphRequest extends ObsScope {
   window: TimeWindow;
   service: string;
   profileType: string;
@@ -380,4 +419,144 @@ export interface ObservabilityUsage {
   metadataBytes: number;
   bySignal: { signal: UsageSignal; billedBytes: number; storedBytes: number; rows: number }[];
   byService: { service: string; signal: UsageSignal; billedBytes: number }[];
+}
+
+// ── Attribute values (filter autocomplete) ───────────────────────────────────
+
+export interface ListAttributeValuesRequest extends ObsScope {
+  window: TimeWindow;
+  key: string;
+  /** What has been typed so far. */
+  prefix: string;
+  /** Narrow to one signal; unset reads resource keys across all three. */
+  signal?: "traces" | "logs" | "metrics";
+  limit?: number;
+}
+
+export interface AttributeValueCount {
+  value: string;
+  count: number;
+}
+
+export interface ListAttributeValuesResult {
+  /** Most frequent first. */
+  values: AttributeValueCount[];
+  truncated: boolean;
+}
+
+// ── Workloads: customer metadata (owner decision 4, contract K2) ─────────────
+//
+// "Customer metadata" is what the node agent reports about the customer's OWN
+// workloads — images, restarts, resource use, Kubernetes events — stamped with
+// the tenant from namespace labels. It is billed and opt-out per environment.
+// "Infrastructure" (nodes, the cluster itself) is ours and never shown here.
+
+/** CPU in cores, memory in bytes (working set). The worst replica's figures. */
+export interface ResourceUsage {
+  latest: number;
+  p95: number;
+  /** Fractions; null when the container sets no limit/request or the agent does not report it. */
+  limitUtilizationLatest: number | null;
+  limitUtilizationP95: number | null;
+  requestUtilizationLatest: number | null;
+  requestUtilizationP95: number | null;
+  limit: number | null;
+  request: number | null;
+}
+
+export interface WorkloadContainer {
+  container: string;
+  imageName: string;
+  imageTag: string;
+  restartsInWindow: number;
+  /** OOMKilled, Error, Completed… Empty when it never terminated. */
+  lastTerminatedReason: string;
+  lastTerminatedAtMs: number | null;
+  cpu: ResourceUsage | null;
+  memory: ResourceUsage | null;
+}
+
+export interface WorkloadEvent {
+  timeMs: number;
+  envId: string;
+  /** Normal | Warning. */
+  type: string;
+  /** BackOff, Failed, Evicted, OOMKilling, Pulled… */
+  reason: string;
+  message: string;
+  count: number;
+  objectKind: string;
+  objectName: string;
+  container: string;
+}
+
+export interface Workload {
+  envId: string;
+  envName: string;
+  workload: string;
+  namespace: string;
+  serviceVersion: string;
+  replicasObserved: number;
+  restartsInWindow: number;
+  containers: WorkloadContainer[];
+  latestWarning: WorkloadEvent | null;
+}
+
+export interface ListWorkloadsResult {
+  /** By env, then name. */
+  workloads: Workload[];
+  truncated: boolean;
+}
+
+export type WorkloadMetric =
+  | "cpu_usage"
+  | "cpu_limit_utilization"
+  | "cpu_request_utilization"
+  | "memory_working_set"
+  | "memory_limit_utilization"
+  | "memory_request_utilization"
+  | "restarts";
+
+export interface WorkloadSeries {
+  envId: string;
+  container: string;
+  metric: WorkloadMetric;
+  unit: string;
+  /** Epoch seconds. */
+  timestamps: number[];
+  values: (number | null)[];
+}
+
+export interface ImageChange {
+  envId: string;
+  container: string;
+  imageName: string;
+  imageTag: string;
+  firstSeenMs: number;
+  lastSeenMs: number;
+}
+
+export interface VersionChange {
+  envId: string;
+  serviceVersion: string;
+  firstSeenMs: number;
+  lastSeenMs: number;
+}
+
+export interface GetWorkloadRequest extends ObsScope {
+  window: TimeWindow;
+  workload: string;
+  /** Narrow to one container; empty is all of them. */
+  container?: string;
+  stepSeconds?: number;
+}
+
+export interface WorkloadDetail {
+  series: WorkloadSeries[];
+  /** Newest first, at most 500. */
+  events: WorkloadEvent[];
+  imageChanges: ImageChange[];
+  versionChanges: VersionChange[];
+  stepSeconds: number;
+  truncated: boolean;
 }

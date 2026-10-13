@@ -19,7 +19,8 @@ import {
   type ObservabilityApi,
 } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
-import ObservabilityPanel from "../ObservabilityPanel";
+import ObservabilityPanel, { type ObsPlace } from "../ObservabilityPanel";
+import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../__fixtures__/fixtureApi";
 import type { ObsNavigate, ObsSearch } from "../obsSearch";
 
 export interface PanelHarness extends RenderResult {
@@ -29,7 +30,12 @@ export interface PanelHarness extends RenderResult {
   current: () => ObsSearch;
 }
 
-export function renderPanel(api: ObservabilityApi, initial: ObsSearch = {}): PanelHarness {
+/** The env page's tab, pinned to prod — what most tests render. */
+export const ENV_PLACE: ObsPlace = { kind: "env", env: { id: "env-prod", name: "prod" } };
+/** The project area, every fixture environment. */
+export const PROJECT_PLACE: ObsPlace = { kind: "project", project: FIXTURE_PROJECT, environments: [...FIXTURE_ENVS] };
+
+export function renderPanel(api: ObservabilityApi, initial: ObsSearch = {}, place: ObsPlace = ENV_PLACE): PanelHarness {
   const navigations: ObsSearch[] = [];
   let latest = initial;
   function Stateful() {
@@ -43,7 +49,7 @@ export function renderPanel(api: ObservabilityApi, initial: ObsSearch = {}): Pan
         return latest;
       });
     };
-    return <ObservabilityPanel environmentId="env-prod" envName="prod" search={search} navigate={navigate} />;
+    return <ObservabilityPanel place={place} search={search} navigate={navigate} />;
   }
   const result = renderWithApi(api, <Stateful />);
   return { ...result, navigations, current: () => latest };

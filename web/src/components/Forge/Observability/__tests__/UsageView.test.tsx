@@ -24,7 +24,7 @@ const GIB = 2 ** 30;
 function renderUsage(usage: Partial<ObservabilityUsage> = {}, failWith?: Code) {
   const onCall = vi.fn();
   const api = createFixtureApi({ usage, onCall, failWith });
-  renderWithApi(api, <UsageView orgId={FIXTURE_ORG} envName="prod" />);
+  renderWithApi(api, <UsageView orgId={FIXTURE_ORG} subject="prod" />);
   return { onCall };
 }
 

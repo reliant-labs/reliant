@@ -58,7 +58,7 @@ describe("DashboardsView", () => {
     expect(table).toHaveTextContent("orders.v1.OrdersService/CreateOrder");
     // The service's own dashboard is not narrowed by the service filter a second time.
     const call = onCall.mock.calls.find(([rpc, req]) => rpc === "QueryPanel" && req.panel.id === "rpc-CreateOrder-latency");
-    expect(call?.[1]).toMatchObject({ services: [], orgId: expect.any(String), environmentId: "env-prod" });
+    expect(call?.[1]).toMatchObject({ services: [], orgId: expect.any(String), envIds: ["env-prod"] });
   });
 
   it("applies the dashboard's service filter to every panel", async () => {

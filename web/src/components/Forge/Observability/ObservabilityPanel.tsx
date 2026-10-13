@@ -1,20 +1,32 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Observability tab of an environment page: Overview · Logs · Traces ·
- * Dashboards · Profiles over one time window, for THIS environment.
+ * The Observability area: Overview · Logs · Traces · Dashboards · Workloads ·
+ * Profiles over one time window for one SCOPE, and Usage (the org's allowance).
  *
- * It is the default export of its own chunk, loaded only when the tab opens
- * (EnvTabPanels.ObservabilityTab), so uPlot, TanStack Table and every view
- * here cost the rest of the app nothing.
+ * ── ENVIRONMENT IS A FILTER, NOT A PLACE (owner decision 1) ─────────────────
+ *
+ * The same panel renders in two places:
+ *
+ *   project area   /forge/observability — every environment of the project
+ *                  the caller can see; `envs` narrows it, `groupBy` compares.
+ *   env page tab   /forge/env/<env>?tab=observability — the same views with
+ *                  the scope pinned to that one environment: a pre-filtered
+ *                  deep link, with a way out to the project area.
+ *
+ * There is one component and one URL shape (obsSearch.ts), so a link can move
+ * between the two and nothing is forked.
+ *
+ * It is the default export of its own chunk, loaded only when a page shows it,
+ * so uPlot, TanStack Table and every view here cost the rest of the app nothing.
  *
  * ── ONE "NOT SET UP" ANSWER, SAID ONCE ──────────────────────────────────────
  *
  * Until control-plane provisions the org's telemetry store, every RPC answers
  * FailedPrecondition. That is a fact about the organization, not about a view,
  * so the panel asks once (the overview, a cache entry every view shares) and,
- * when that is the answer, shows the explanation in place of all five views
- * rather than five copies of it.
+ * when that is the answer, shows the explanation in place of all the views
+ * rather than one copy each.
  */
 
 import { useMemo } from "react";
@@ -23,43 +35,68 @@ import { RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { obsKeys, useObservabilityOrg, useServiceOverview } from "@/hooks/observability-queries";
-import type { EnvScope } from "@/services/controlPlane/observability/types";
+import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
 import { RANGE_LABELS, RANGE_PRESETS, rangeOf } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { DashboardsView } from "./DashboardsView";
 import { LogsView } from "./LogsView";
-import { OBS_VIEW_LABELS, OBS_VIEWS, severitiesOf, viewOf, type ObsNavigate, type ObsSearch, type ObsView } from "./obsSearch";
+import { filterParam, filterTokensOf, groupByOf, groupByParam, scopeFiltersOf } from "./obsFilters";
+import {
+  GROUPABLE_VIEWS,
+  OBS_VIEW_LABELS,
+  OBS_VIEWS,
+  severitiesOf,
+  viewOf,
+  type ObsNavigate,
+  type ObsSearch,
+  type ObsView,
+} from "./obsSearch";
+import { envIdsOf, type ObsPlace } from "./obsPlace";
+import { ObsScopeBar } from "./ObsScopeBar";
 import { ObsError, ObsLoadingRows, ObsNotSetUp } from "./ObsStates";
 import { OverviewView } from "./OverviewView";
 import { ProfilesView } from "./ProfilesView";
 import { TracesView } from "./TracesView";
 import { UsageView } from "./UsageView";
+import { WorkloadsView } from "./WorkloadsView";
+
+export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 
 export interface ObservabilityPanelProps {
-  environmentId: string;
-  envName: string;
+  place: ObsPlace;
   search: ObsSearch;
   navigate: ObsNavigate;
 }
 
-export default function ObservabilityPanel({ environmentId, envName, search, navigate }: ObservabilityPanelProps) {
+export default function ObservabilityPanel({ place, search, navigate }: ObservabilityPanelProps) {
   const view = viewOf(search.view);
   const range = rangeOf(search.range);
   const queryClient = useQueryClient();
   const org = useObservabilityOrg();
-  const scope = useMemo<EnvScope | null>(
-    () => (org.orgId ? { orgId: org.orgId, environmentId } : null),
-    [org.orgId, environmentId]
+
+  const filterTokens = useMemo(() => filterTokensOf(search.f), [search.f]);
+  const groupBy = useMemo(() => groupByOf(search.groupBy), [search.groupBy]);
+  const envIdsKey = envIdsOf(place, search.envs).join(",");
+  const projectId = place.kind === "project" ? place.project : undefined;
+  const scope = useMemo<ObsScope | null>(
+    () =>
+      org.orgId
+        ? { orgId: org.orgId, projectId, envIds: envIdsKey ? envIdsKey.split(",") : [], filters: scopeFiltersOf(filterTokens) }
+        : null,
+    [org.orgId, projectId, envIdsKey, filterTokens]
   );
+  const subject = place.kind === "env" ? place.env.name : place.project;
   const overview = useServiceOverview(scope, range);
   const notSetUp = !!overview.error && obsErrorKind(overview.error) === "not-set-up";
+  const groupable = (GROUPABLE_VIEWS as readonly ObsView[]).includes(view);
 
   /**
-   * A view switch keeps the window and the service — the two things a reader
-   * carries between views — and drops the rest, which belonged to the view
-   * they left (a log query means nothing to the trace list).
+   * A view switch keeps what a reader carries between views — the window, the
+   * service, the environments, the filters and the group-by — and drops the
+   * rest, which belonged to the view they left (a log query means nothing to
+   * the trace list).
    */
   const selectView = (next: ObsView) => {
     if (next === view) return;
@@ -73,16 +110,18 @@ export default function ObservabilityPanel({ environmentId, envName, search, nav
       live: undefined,
       errors: undefined,
       minDuration: undefined,
+      workload: undefined,
+      container: undefined,
     });
   };
 
   return (
-    <div className="space-y-4" data-testid="obs-panel" data-view={view}>
+    <div className="space-y-4" data-testid="obs-panel" data-view={view} data-place={place.kind}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div
           role="tablist"
           aria-label="Observability views"
-          className="inline-flex rounded-lg border border-border bg-background p-0.5"
+          className="inline-flex flex-wrap rounded-lg border border-border bg-background p-0.5"
           onKeyDown={(event) => {
             if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
             const index = OBS_VIEWS.indexOf(view);
@@ -141,29 +180,47 @@ export default function ObservabilityPanel({ environmentId, envName, search, nav
         </div>
       </div>
 
+      {/* Usage is the org's allowance, not a query over the scope: nothing here would narrow it. */}
+      {scope && !notSetUp && view !== "usage" && (
+        <ObsScopeBar
+          scope={scope}
+          range={range}
+          environments={place.kind === "project" ? place.environments : undefined}
+          selectedEnvs={search.envs ?? []}
+          onEnvsChange={(names) => navigate({ envs: names.length ? names : undefined }, { replace: true })}
+          pinnedEnv={place.kind === "env" ? place.env.name : undefined}
+          onWiden={place.kind === "env" && place.onWiden ? () => place.onWiden!({ ...search, envs: [place.env.name] }) : undefined}
+          filters={filterTokens}
+          onFiltersChange={(tokens) => navigate({ f: filterParam(tokens) }, { replace: true })}
+          groupBy={groupBy}
+          onGroupByChange={(keys) => navigate({ groupBy: groupByParam(keys) }, { replace: true })}
+          groupable={groupable}
+        />
+      )}
+
       <div id="obs-view-panel" role="tabpanel" aria-labelledby={`obs-view-${view}`}>
         {!scope ? (
           org.isLoading ? (
             <ObsLoadingRows testId="obs-org-loading" />
           ) : org.error ? (
-            <ObsError error={org.error} envName={envName} onRetry={() => void org.refetch()} />
+            <ObsError error={org.error} subject={subject} onRetry={() => void org.refetch()} />
           ) : (
             // Signed in, but no organization resolved yet (mid-provisioning):
             // there is no tenant to read, which is the not-set-up answer.
-            <ObsNotSetUp envName={envName} />
+            <ObsNotSetUp subject={subject} />
           )
         ) : view === "usage" ? (
           // Usage is a Postgres read, not a tenant query: it stays available
           // before the store exists, which is when the allowance is worth seeing.
-          <UsageView orgId={scope.orgId} envName={envName} />
+          <UsageView orgId={scope.orgId} subject={subject} />
         ) : notSetUp ? (
-          <ObsNotSetUp envName={envName} />
+          <ObsNotSetUp subject={subject} />
         ) : view === "overview" ? (
-          <OverviewView scope={scope} envName={envName} range={range} service={search.service} navigate={navigate} />
+          <OverviewView scope={scope} subject={subject} range={range} service={search.service} groupBy={groupBy} navigate={navigate} />
         ) : view === "logs" ? (
           <LogsView
             scope={scope}
-            envName={envName}
+            subject={subject}
             range={range}
             query={search.q ?? ""}
             service={search.service}
@@ -176,7 +233,7 @@ export default function ObservabilityPanel({ environmentId, envName, search, nav
         ) : view === "traces" ? (
           <TracesView
             scope={scope}
-            envName={envName}
+            subject={subject}
             range={range}
             rootSpanName={search.q ?? ""}
             service={search.service}
@@ -184,21 +241,37 @@ export default function ObservabilityPanel({ environmentId, envName, search, nav
             minDuration={search.minDuration}
             traceId={search.trace}
             spanId={search.span}
+            groupBy={groupBy}
+            filters={filterTokens}
             navigate={navigate}
           />
         ) : view === "dashboards" ? (
           <DashboardsView
             scope={scope}
-            envName={envName}
+            subject={subject}
             range={range}
             dashboardId={search.dashboard}
             service={search.service}
+            groupBy={groupBy}
+            filterTokens={filterTokens}
+            edits={search.edit}
+            navigate={navigate}
+          />
+        ) : view === "workloads" ? (
+          <WorkloadsView
+            scope={scope}
+            subject={subject}
+            range={range}
+            service={search.service}
+            workload={search.workload}
+            container={search.container}
+            showEnv={place.kind === "project"}
             navigate={navigate}
           />
         ) : (
           <ProfilesView
             scope={scope}
-            envName={envName}
+            subject={subject}
             range={range}
             service={search.service}
             profileType={search.profileType}

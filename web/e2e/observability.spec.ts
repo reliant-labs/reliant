@@ -96,6 +96,49 @@ test.describe('observability console', () => {
     await shot(page, 'dashboards-service');
   });
 
+  test('the project area compares environments, edits a dashboard in place and saves it as code', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+
+    await openHarness(page, '?place=project');
+    await expect(page.getByTestId('obs-panel')).toHaveAttribute('data-place', 'project');
+    await expect(page.getByTestId('obs-env-picker')).toContainText('All environments');
+
+    // Group by environment: one overview row per service per environment.
+    await page.getByTestId('obs-add-group-by').click();
+    await page.getByTestId('obs-key-deployment.environment.name').click();
+    await expect(page.getByTestId('obs-service-api-prod')).toBeVisible();
+    await expect(page.getByTestId('obs-service-api-staging')).toBeVisible();
+
+    // A filter, with its value from autocomplete.
+    await page.getByTestId('obs-add-filter').click();
+    await page.getByTestId('obs-key-service.version').click();
+    await page.getByTestId('obs-value-v1.8.3').click();
+    await expect(page.getByTestId('obs-filter-chip')).toContainText('v1.8.3');
+
+    // Dashboards: grouped series, an in-place edit, then Save as code.
+    await page.getByTestId('obs-view-dashboards').click();
+    await page.getByTestId('obs-panel-edit-request-rate').click();
+    await page.getByTestId('obs-editor-title').fill('Requests by environment');
+    await page.getByTestId('obs-editor-apply').click();
+    await expect(page.getByTestId('obs-panel-request-rate')).toHaveAttribute('data-edited', 'true');
+    await expect(page.getByTestId('obs-dashboard-changed')).toContainText('1 panel edited');
+    await page.getByTestId('obs-save-as-code-open').click();
+    await expect(page.getByTestId('obs-save-path')).toHaveText('deploy/observability/dashboards/shop-overview.json');
+    await expect(page.getByTestId('obs-save-json')).toContainText('"version": "forge.dashboards/v1"');
+    await expect(page.getByTestId('obs-save-json')).toContainText('Requests by environment');
+    await page.keyboard.press('Escape');
+
+    // Workloads: customer metadata, and one workload across environments.
+    await page.getByTestId('obs-view-workloads').click();
+    await expect(page.getByTestId('obs-workload-prod-api').getByTestId('obs-exit-reason')).toHaveText('OOMKilled');
+    await page.getByTestId('obs-workload-prod-api').getByRole('button', { name: 'api' }).click();
+    await expect(page.getByTestId('obs-workload-detail')).toBeVisible();
+    await expect(page.getByTestId('obs-workload-events')).toContainText('OOMKilling');
+
+    expect(errors).toEqual([]);
+  });
+
   test('an org without observability gets the set-up explanation, once', async ({ page }) => {
     await openHarness(page, '?case=not-set-up');
     await expect(page.getByTestId('obs-not-set-up')).toHaveCount(1);

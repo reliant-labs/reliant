@@ -3,7 +3,7 @@
 /**
  * Dashboards: forge's dashboard spec (obsdash, `forge.dashboards/v1`) drawn
  * with uPlot — per-rpc RED panels by default, the environment's own spec once
- * a release ships one.
+ * a release ships one (contract K4, through the same GetDashboards).
  *
  * The spec describes WHAT to show, each panel a query intent over OTel field
  * names. QueryPanel compiles that intent server-side and returns the panel's
@@ -12,25 +12,41 @@
  * Traces views do, so it renders as a way into them. A panel the server
  * cannot compile (an unknown field, operator or aggregation) answers
  * InvalidArgument, and says so in place.
+ *
+ * ── SEMI-DYNAMIC (owner decision 2) ─────────────────────────────────────────
+ *
+ * Without saving anything, a reader can change the filters, the group-by and
+ * the window (the scope bar), and edit, hide or add panels (PanelEditor). All
+ * of it lives in the URL, so the changed dashboard is a link. "Save as code"
+ * turns what is on screen into the file to commit (SaveAsCodeDialog); there is
+ * no server-side dashboard store.
  */
 
-import { ArrowRight, Info } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowRight, EyeOff, FileCode2, Info, Pencil, Plus, RotateCcw, Undo2 } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import { Button } from "@/components/ui/Button";
 import { useDashboards, usePanelQuery } from "@/hooks/observability-queries";
 import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
-import type { Dashboard, EnvScope, Panel, PanelResult, Predicate, Series, Unit } from "@/services/controlPlane/observability/types";
+import type { Dashboard, ObsScope, Panel, PanelResult, Predicate, Series, Unit } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
+import { attributeLabel } from "./attributes";
 import { UPlotChart } from "./charts/UPlotChart";
 import { formatValue } from "./format";
 import { ServiceSelect } from "./LogsView";
+import { applyEdits, editKey, editsFor, newPanelId, type PanelEdits } from "./obsdashSpec";
+import { groupLabel, scopeFiltersOf, type FilterToken } from "./obsFilters";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
+import { PanelEditor } from "./PanelEditor";
+import { SaveAsCodeDialog } from "./SaveAsCodeDialog";
 
 const SERVICE_FIELD = "service.name";
+const NO_KEYS: string[] = [];
+const NO_TOKENS: FilterToken[] = [];
 
 /** The dashboard a bare link opens: the service's own when one is named, else the first (forge's overview). */
 export function pickDashboard(dashboards: Dashboard[], requested: string | undefined, service: string | undefined): Dashboard | undefined {
@@ -41,45 +57,72 @@ export function pickDashboard(dashboards: Dashboard[], requested: string | undef
   );
 }
 
+type Editing = { panel: Panel; isNew: boolean } | null;
+
 export function DashboardsView({
   scope,
-  envName,
+  subject,
   range,
   dashboardId,
   service,
+  groupBy = NO_KEYS,
+  filterTokens = NO_TOKENS,
+  edits,
   navigate,
 }: {
-  scope: EnvScope;
-  envName: string;
+  scope: ObsScope;
+  subject: string;
   range: RangePreset;
   dashboardId: string | undefined;
   service: string | undefined;
+  groupBy?: string[];
+  filterTokens?: FilterToken[];
+  edits?: PanelEdits;
   navigate: ObsNavigate;
 }) {
   const spec = useDashboards(scope);
+  const [editing, setEditing] = useState<Editing>(null);
+  const [saving, setSaving] = useState(false);
+  const dashboards = spec.data?.dashboards ?? [];
+  const base = pickDashboard(dashboards, dashboardId, service);
+  const shown = useMemo(() => (base ? applyEdits(base, edits) : undefined), [base, edits]);
+  const scopeFilters = useMemo(() => scopeFiltersOf(filterTokens), [filterTokens]);
 
   if (spec.isLoading) return <ObsLoadingRows testId="obs-dashboards-loading" />;
   if (spec.error) {
-    return <ObsError error={spec.error} envName={envName} onRetry={() => void spec.refetch()} retrying={spec.isFetching} />;
+    return <ObsError error={spec.error} subject={subject} onRetry={() => void spec.refetch()} retrying={spec.isFetching} />;
   }
-  const dashboards = spec.data?.dashboards ?? [];
-  if (dashboards.length === 0) {
+  if (!base || !shown) {
     return (
       <p
         role="status"
         data-testid="obs-dashboards-empty"
         className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground"
       >
-        No dashboards yet. They are built from the services this environment has sent telemetry from in the last 7 days,
-        so they appear once a service has run.
+        No dashboards yet. They are built from the services that have sent telemetry in the last 7 days, so they appear
+        once a service has run.
       </p>
     );
   }
 
-  const dashboard = pickDashboard(dashboards, dashboardId, service)!;
-  const hasServiceFilter = dashboard.filters.some((filter) => filter.field === SERVICE_FIELD);
+  const mine = editsFor(edits, base.id);
+  const hasServiceFilter = base.filters.some((filter) => filter.field === SERVICE_FIELD);
   // A service's own dashboard is already scoped to it; the filter would only narrow it to nothing.
-  const serviceFilter = hasServiceFilter && dashboard.id !== `service-${service}` ? service : undefined;
+  const serviceFilter = hasServiceFilter && base.id !== `service-${service}` ? service : undefined;
+
+  /** One panel's edit into the URL. A push, so Back undoes it. */
+  const setEdit = (panelId: string, panel: Panel | null | undefined) => {
+    const next: PanelEdits = { ...(edits ?? {}) };
+    if (panel === undefined) delete next[editKey(base.id, panelId)];
+    else next[editKey(base.id, panelId)] = panel;
+    navigate({ edit: Object.keys(next).length ? next : undefined });
+  };
+  const discard = () => {
+    const next: PanelEdits = Object.fromEntries(Object.entries(edits ?? {}).filter(([key]) => !key.startsWith(`${base.id}/`)));
+    navigate({ edit: Object.keys(next).length ? next : undefined });
+  };
+  const changed = mine.size > 0 || filterTokens.length > 0 || groupBy.length > 0;
+  const hidden = [...mine.values()].filter((panel) => panel === null).length;
 
   return (
     <div className="space-y-4" data-testid="obs-dashboards">
@@ -89,7 +132,7 @@ export function DashboardsView({
         </label>
         <select
           id="obs-dashboard-picker"
-          value={dashboard.id}
+          value={base.id}
           onChange={(event) => navigate({ dashboard: event.target.value }, { replace: true })}
           className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="obs-dashboard-picker"
@@ -97,6 +140,7 @@ export function DashboardsView({
           {dashboards.map((d) => (
             <option key={d.id} value={d.id}>
               {d.title}
+              {editsFor(edits, d.id).size > 0 ? " (edited)" : ""}
             </option>
           ))}
         </select>
@@ -114,20 +158,96 @@ export function DashboardsView({
             Built from the services seen in the last 7 days.
           </span>
         )}
-        {dashboard.description && <p className="w-full text-xs text-muted-foreground">{dashboard.description}</p>}
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() =>
+              setEditing({
+                isNew: true,
+                panel: { id: newPanelId(shown), title: "New panel", kind: "line", signal: "traces", series: [{ label: "requests", agg: "count" }], width: 12, height: 7 },
+              })
+            }
+            data-testid="obs-add-panel"
+          >
+            Add panel
+          </Button>
+          <Button variant="outline" size="sm" leftIcon={<FileCode2 className="h-3.5 w-3.5" />} onClick={() => setSaving(true)} data-testid="obs-save-as-code-open">
+            Save as code
+          </Button>
+        </div>
+        {shown.description && <p className="w-full text-xs text-muted-foreground">{shown.description}</p>}
       </div>
+
+      {changed && (
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border/60 bg-background px-3 py-2 text-xs"
+          role="status"
+          data-testid="obs-dashboard-changed"
+        >
+          <span className="font-medium text-foreground">Changed in place</span>
+          <span className="text-muted-foreground">
+            {[
+              mine.size - hidden > 0 ? `${mine.size - hidden} panel${mine.size - hidden === 1 ? "" : "s"} edited` : "",
+              hidden > 0 ? `${hidden} hidden` : "",
+              filterTokens.length ? `${filterTokens.length} filter${filterTokens.length === 1 ? "" : "s"}` : "",
+              groupBy.length ? `grouped by ${groupBy.map(attributeLabel).join(", ")}` : "",
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            . This page&apos;s link carries it; Save as code keeps it.
+          </span>
+          {mine.size > 0 && (
+            <Button variant="ghost" size="xs" leftIcon={<Undo2 className="h-3 w-3" />} onClick={discard} data-testid="obs-discard-edits" className="ml-auto">
+              Discard panel edits
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[repeat(24,minmax(0,1fr))]">
-        {dashboard.panels.map((panel) => (
+        {shown.panels.map((panel) => (
           <PanelCard
-            key={`${dashboard.id}/${panel.id}`}
+            key={`${base.id}/${panel.id}`}
             scope={scope}
             range={range}
             panel={panel}
+            edited={mine.has(panel.id)}
+            added={!base.panels.some((p) => p.id === panel.id)}
+            groupBy={groupBy}
             serviceFilter={serviceFilter}
             navigate={navigate}
+            onEdit={() => setEditing({ panel, isNew: false })}
+            onHide={() => setEdit(panel.id, base.panels.some((p) => p.id === panel.id) ? null : undefined)}
+            onReset={() => setEdit(panel.id, undefined)}
           />
         ))}
       </div>
+      {editing && (
+        <PanelEditor
+          open
+          panel={editing.panel}
+          isNew={editing.isNew}
+          pageGroupBy={groupBy}
+          onClose={() => setEditing(null)}
+          onApply={(panel) => {
+            // An Apply that changed nothing is not an edit: it must not mark the panel "Edited".
+            if (editing.isNew || JSON.stringify(panel) !== JSON.stringify(editing.panel)) setEdit(panel.id, panel);
+            setEditing(null);
+          }}
+        />
+      )}
+      {saving && (
+        <SaveAsCodeDialog
+          open
+          onClose={() => setSaving(false)}
+          project={spec.data?.project ?? ""}
+          dashboard={shown}
+          filters={scopeFilters}
+          groupBy={groupBy}
+        />
+      )}
     </div>
   );
 }
@@ -136,31 +256,86 @@ function PanelCard({
   scope,
   range,
   panel,
+  edited,
+  added,
+  groupBy,
   serviceFilter,
   navigate,
+  onEdit,
+  onHide,
+  onReset,
 }: {
-  scope: EnvScope;
+  scope: ObsScope;
   range: RangePreset;
   panel: Panel;
+  edited: boolean;
+  added: boolean;
+  groupBy: string[];
   serviceFilter: string | undefined;
   navigate: ObsNavigate;
+  onEdit: () => void;
+  onHide: () => void;
+  onReset: () => void;
 }) {
   const width = panel.width || (panel.kind === "number" ? 6 : 24);
+  // The in-place group-by replaces an aggregating panel's own; a search panel lists rows and is not grouped.
+  const effectiveGroupBy = panel.kind === "search" ? [] : groupBy;
   return (
     <Card
       padding="md"
-      className="min-w-0 lg:[grid-column:span_var(--panel-span)/span_var(--panel-span)]"
+      className="group/panel min-w-0 lg:[grid-column:span_var(--panel-span)/span_var(--panel-span)]"
       style={{ ["--panel-span" as string]: String(Math.min(Math.max(width, 1), 24)) }}
       data-testid={`obs-panel-${panel.id}`}
       data-kind={panel.kind}
+      data-edited={edited || undefined}
     >
-      <CardHeader title={panel.title} description={panel.description} />
+      <CardHeader
+        title={panel.title}
+        description={panel.description}
+        actions={
+          <div className="flex items-center gap-0.5">
+            {(edited || added) && (
+              <span className="mr-1 rounded border border-border px-1 py-px text-2xs uppercase tracking-wide text-muted-foreground" data-testid="obs-panel-edited">
+                {added ? "Added" : "Edited"}
+              </span>
+            )}
+            <div className="flex items-center gap-0.5 opacity-60 transition-opacity focus-within:opacity-100 group-hover/panel:opacity-100">
+              <PanelAction label={`Edit ${panel.title}`} onClick={onEdit} testId={`obs-panel-edit-${panel.id}`}>
+                <Pencil className="h-3.5 w-3.5" />
+              </PanelAction>
+              {edited && !added && (
+                <PanelAction label={`Reset ${panel.title} to the dashboard's own`} onClick={onReset} testId={`obs-panel-reset-${panel.id}`}>
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </PanelAction>
+              )}
+              <PanelAction label={added ? `Remove ${panel.title}` : `Hide ${panel.title}`} onClick={onHide} testId={`obs-panel-hide-${panel.id}`}>
+                <EyeOff className="h-3.5 w-3.5" />
+              </PanelAction>
+            </div>
+          </div>
+        }
+      />
       {panel.kind === "search" ? (
         <SearchLink panel={panel} serviceFilter={serviceFilter} navigate={navigate} />
       ) : (
-        <PanelData scope={scope} range={range} panel={panel} serviceFilter={serviceFilter} navigate={navigate} />
+        <PanelData scope={scope} range={range} panel={panel} groupBy={effectiveGroupBy} serviceFilter={serviceFilter} navigate={navigate} />
       )}
     </Card>
+  );
+}
+
+function PanelAction({ label, onClick, testId, children }: { label: string; onClick: () => void; testId: string; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      data-testid={testId}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -168,16 +343,18 @@ function PanelData({
   scope,
   range,
   panel,
+  groupBy,
   serviceFilter,
   navigate,
 }: {
-  scope: EnvScope;
+  scope: ObsScope;
   range: RangePreset;
   panel: Panel;
+  groupBy: string[];
   serviceFilter: string | undefined;
   navigate: ObsNavigate;
 }) {
-  const result = usePanelQuery(scope, range, panel, serviceFilter ? [serviceFilter] : []);
+  const result = usePanelQuery(scope, range, panel, serviceFilter ? [serviceFilter] : [], groupBy);
   if (result.isLoading) {
     return <div className="h-16 animate-pulse rounded bg-border/40 motion-reduce:animate-none" aria-busy="true" aria-label="Loading" />;
   }
@@ -219,17 +396,18 @@ function PanelData({
     );
   }
   const unit = unitOf(panel, data);
+  const keys = groupBy.length ? groupBy : (panel.groupBy ?? []);
   const truncated = data.truncated ? (
     <p className="mt-2 text-2xs text-muted-foreground">Only the largest series are shown.</p>
   ) : null;
 
   if (panel.kind === "number") {
-    return <NumberGrid items={data.series.map((s) => ({ label: s.label, value: formatValue(s.value, unit) }))} />;
+    return <NumberGrid items={data.series.map((s) => ({ label: seriesLabel(s, panel, keys), value: formatValue(s.value, unit) }))} />;
   }
   if (panel.kind === "table") {
     return (
       <>
-        <PanelTable panel={panel} result={data} />
+        <PanelTable panel={panel} result={data} groupFields={keys} />
         {truncated}
       </>
     );
@@ -240,7 +418,7 @@ function PanelData({
       <UPlotChart
         height={Math.max((panel.height || 7) * 28 - 72, 120)}
         timestamps={timestamps}
-        series={data.series.map((s) => ({ label: seriesLabel(s, panel), values: alignTo(timestamps, s) }))}
+        series={data.series.map((s) => ({ label: seriesLabel(s, panel, keys), values: alignTo(timestamps, s) }))}
         unit={unit}
         label={panel.title}
       />
@@ -264,10 +442,11 @@ function unitOf(panel: Panel, result: PanelResult): Unit {
 
 function NumberGrid({ items }: { items: { label: string; value: string }[] }) {
   const many = items.length > 1;
+  // Grouped numbers (one per environment, say) can outnumber three columns.
   return (
-    <dl className={cn("grid gap-3", many ? "grid-cols-3" : "grid-cols-1")} data-testid="obs-panel-number">
-      {items.map((item) => (
-        <div key={item.label}>
+    <dl className={cn("grid gap-3", many ? "grid-cols-[repeat(auto-fill,minmax(6rem,1fr))]" : "grid-cols-1")} data-testid="obs-panel-number">
+      {items.map((item, index) => (
+        <div key={`${item.label}-${index}`}>
           <dt className={many ? "text-xs font-medium uppercase tracking-wide text-muted-foreground" : "sr-only"}>{item.label}</dt>
           <dd className={cn("font-semibold tabular-nums text-foreground", many ? "text-lg" : "text-2xl")}>{item.value}</dd>
         </div>
@@ -277,8 +456,7 @@ function NumberGrid({ items }: { items: { label: string; value: string }[] }) {
 }
 
 /** One row per group, one column per series. A latency column is milliseconds whatever the panel's unit. */
-function PanelTable({ panel, result }: { panel: Panel; result: PanelResult }) {
-  const groupFields = panel.groupBy ?? [];
+function PanelTable({ panel, result, groupFields }: { panel: Panel; result: PanelResult; groupFields: string[] }) {
   const columnUnit = (index: number): Unit => {
     const intent = panel.series[index];
     if (intent?.agg === "quantile" && intent.field === "span.duration") return "ms";
@@ -292,8 +470,8 @@ function PanelTable({ panel, result }: { panel: Panel; result: PanelResult }) {
         <thead>
           <tr className="border-b border-border text-left text-muted-foreground">
             {groupFields.map((field) => (
-              <th key={field} scope="col" className="py-1 pr-3 font-medium">
-                {field}
+              <th key={field} scope="col" className="py-1 pr-3 font-medium" title={field}>
+                {attributeLabel(field)}
               </th>
             ))}
             {result.columns.map((label) => (
@@ -372,8 +550,8 @@ function SearchLink({ panel, serviceFilter, navigate }: { panel: Panel; serviceF
 }
 
 /** "api — requests", "api" for a ratio's per-group series, or the series' own label ungrouped. */
-function seriesLabel(series: Series, panel: Panel): string {
-  const group = Object.values(series.group).filter(Boolean).join(" · ");
+export function seriesLabel(series: Series, panel: Panel, keys: string[] = []): string {
+  const group = Object.keys(series.group).length ? groupLabel(series.group, keys.filter((k) => k in series.group)) : "";
   if (!group) return series.label;
   if (series.label === "ratio" || panel.series.length <= 1) return group;
   return `${group} — ${series.label}`;

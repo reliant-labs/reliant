@@ -19,7 +19,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { obsRetry } from "@/services/controlPlane/observability/errors";
 import type {
-  EnvScope,
+  ObsScope,
   ListTracesResult,
   Panel,
   SearchLogsResult,
@@ -28,19 +28,31 @@ import type {
 } from "@/services/controlPlane/observability/types";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
 
+/**
+ * Every key starts with the whole scope — org, project, environments and
+ * attribute filters — so Refresh (invalidate `all(scope)`) re-reads exactly
+ * what is on screen, and two scopes never share an answer.
+ */
 export const obsKeys = {
   org: () => ["observability", "org"] as const,
-  all: (scope: EnvScope | null) => ["observability", scope?.orgId ?? "", scope?.environmentId ?? ""] as const,
-  overview: (scope: EnvScope | null, range: RangePreset, services: string[] = []) =>
-    [...obsKeys.all(scope), "overview", range, services] as const,
-  logs: (scope: EnvScope | null, filters: LogFilters) => [...obsKeys.all(scope), "logs", filters] as const,
-  traces: (scope: EnvScope | null, filters: TraceFilters) => [...obsKeys.all(scope), "traces", filters] as const,
-  trace: (scope: EnvScope | null, traceId: string) => [...obsKeys.all(scope), "trace", traceId] as const,
-  panel: (scope: EnvScope | null, range: RangePreset, panel: Panel, services: string[]) =>
-    [...obsKeys.all(scope), "panel", range, panel, services] as const,
+  all: (scope: ObsScope | null) =>
+    ["observability", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], scope?.filters ?? []] as const,
+  overview: (scope: ObsScope | null, range: RangePreset, services: string[] = [], groupBy: string[] = []) =>
+    [...obsKeys.all(scope), "overview", range, services, groupBy] as const,
+  logs: (scope: ObsScope | null, filters: LogFilters) => [...obsKeys.all(scope), "logs", filters] as const,
+  traces: (scope: ObsScope | null, filters: TraceFilters) => [...obsKeys.all(scope), "traces", filters] as const,
+  trace: (scope: ObsScope | null, traceId: string) => [...obsKeys.all(scope), "trace", traceId] as const,
+  panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[]) =>
+    [...obsKeys.all(scope), "panel", range, panel, services, groupBy] as const,
+  dashboards: (scope: ObsScope | null) => [...obsKeys.all(scope), "dashboards"] as const,
+  flamegraph: (scope: ObsScope | null, filters: FlamegraphFilters) => [...obsKeys.all(scope), "flamegraph", filters] as const,
+  attributeValues: (scope: ObsScope | null, range: RangePreset, key: string, prefix: string, signal: string) =>
+    [...obsKeys.all(scope), "attribute-values", range, key, prefix, signal] as const,
+  workloads: (scope: ObsScope | null, range: RangePreset, services: string[]) =>
+    [...obsKeys.all(scope), "workloads", range, services] as const,
+  workload: (scope: ObsScope | null, range: RangePreset, workload: string, container: string) =>
+    [...obsKeys.all(scope), "workload", range, workload, container] as const,
   usage: (orgId: string | null) => ["observability", orgId ?? "", "usage"] as const,
-  dashboards: (scope: EnvScope | null) => [...obsKeys.all(scope), "dashboards"] as const,
-  flamegraph: (scope: EnvScope | null, filters: FlamegraphFilters) => [...obsKeys.all(scope), "flamegraph", filters] as const,
 };
 
 interface PageParam {
@@ -68,11 +80,11 @@ export function useObservabilityOrg() {
 
 // ── Overview ─────────────────────────────────────────────────────────────────
 
-export function useServiceOverview(scope: EnvScope | null, range: RangePreset, services: string[] = []) {
+export function useServiceOverview(scope: ObsScope | null, range: RangePreset, services: string[] = [], groupBy: string[] = []) {
   const api = useObservabilityApi();
   return useQuery({
-    queryKey: obsKeys.overview(scope, range, services),
-    queryFn: () => api.getServiceOverview({ ...(scope as EnvScope), window: resolveWindow(range), services }),
+    queryKey: obsKeys.overview(scope, range, services, groupBy),
+    queryFn: () => api.getServiceOverview({ ...(scope as ObsScope), window: resolveWindow(range), services, groupBy }),
     enabled: !!scope,
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -95,14 +107,14 @@ export const LOG_PAGE_SIZE = 200;
 /** Live tail re-reads the newest page this often. */
 export const LIVE_TAIL_MS = 5_000;
 
-export function useSearchLogs(scope: EnvScope | null, filters: LogFilters, live: boolean) {
+export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live: boolean) {
   const api = useObservabilityApi();
   return useInfiniteQuery({
     queryKey: obsKeys.logs(scope, filters),
     queryFn: async ({ pageParam }): Promise<SearchLogsResult & { window: TimeWindow }> => {
       const window = pageParam?.window ?? resolveWindow(filters.range);
       const result = await api.searchLogs({
-        ...(scope as EnvScope),
+        ...(scope as ObsScope),
         window,
         query: filters.query,
         services: filters.services,
@@ -133,23 +145,25 @@ export interface TraceFilters {
   services: string[];
   errorsOnly: boolean;
   minDurationMs: number;
+  groupBy?: string[];
 }
 
 export const TRACE_PAGE_SIZE = 100;
 
-export function useListTraces(scope: EnvScope | null, filters: TraceFilters) {
+export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
   const api = useObservabilityApi();
   return useInfiniteQuery({
     queryKey: obsKeys.traces(scope, filters),
     queryFn: async ({ pageParam }): Promise<ListTracesResult & { window: TimeWindow }> => {
       const window = pageParam?.window ?? resolveWindow(filters.range);
       const result = await api.listTraces({
-        ...(scope as EnvScope),
+        ...(scope as ObsScope),
         window,
         rootSpanName: filters.rootSpanName,
         services: filters.services,
         errorsOnly: filters.errorsOnly,
         minDurationMs: filters.minDurationMs,
+        groupBy: filters.groupBy,
         limit: TRACE_PAGE_SIZE,
         cursor: pageParam?.cursor,
       });
@@ -168,11 +182,11 @@ export function useListTraces(scope: EnvScope | null, filters: TraceFilters) {
  * lookup searches the whole 7 days traces are kept, not the list's window: a
  * trace linked from a log may be older than the window the reader is in.
  */
-export function useTrace(scope: EnvScope | null, traceId: string | null) {
+export function useTrace(scope: ObsScope | null, traceId: string | null) {
   const api = useObservabilityApi();
   return useQuery({
     queryKey: obsKeys.trace(scope, traceId ?? ""),
-    queryFn: () => api.getTrace({ ...(scope as EnvScope), traceId: traceId as string, window: resolveWindow("7d") }),
+    queryFn: () => api.getTrace({ ...(scope as ObsScope), traceId: traceId as string, window: resolveWindow("7d") }),
     enabled: !!scope && !!traceId,
     staleTime: Infinity,
     retry: obsRetry,
@@ -185,23 +199,28 @@ export function useTrace(scope: EnvScope | null, traceId: string | null) {
  * One dashboard panel, computed server-side (QueryPanel). The dashboard's
  * service filter rides as `services`; search panels are never run here.
  */
-export function usePanelQuery(scope: EnvScope | null, range: RangePreset, panel: Panel, services: string[]) {
+export function usePanelQuery(scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[] = []) {
   const api = useObservabilityApi();
   return useQuery({
-    queryKey: obsKeys.panel(scope, range, panel, services),
-    queryFn: () => api.queryPanel({ ...(scope as EnvScope), window: resolveWindow(range), panel, services, stepSeconds: 0 }),
+    queryKey: obsKeys.panel(scope, range, panel, services, groupBy),
+    queryFn: () =>
+      api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range), panel, services, stepSeconds: 0, groupBy }),
     enabled: !!scope && panel.kind !== "search",
     staleTime: 30_000,
     retry: obsRetry,
   });
 }
 
-/** The dashboards for this environment. Synthesized from the last week's services until a release ships its own spec. */
-export function useDashboards(scope: EnvScope | null) {
+/**
+ * The dashboards for the scope. Synthesized from the last week's services
+ * until a release ships its own spec; a release's spec (contract K4) arrives
+ * through this same call, so nothing here changes when it does.
+ */
+export function useDashboards(scope: ObsScope | null) {
   const api = useObservabilityApi();
   return useQuery({
     queryKey: obsKeys.dashboards(scope),
-    queryFn: () => api.getDashboards({ ...(scope as EnvScope), window: resolveWindow("7d") }),
+    queryFn: () => api.getDashboards({ ...(scope as ObsScope), window: resolveWindow("7d") }),
     enabled: !!scope,
     staleTime: 5 * 60_000,
     retry: obsRetry,
@@ -217,13 +236,13 @@ export interface FlamegraphFilters {
   traceId?: string;
 }
 
-export function useFlamegraph(scope: EnvScope | null, filters: FlamegraphFilters) {
+export function useFlamegraph(scope: ObsScope | null, filters: FlamegraphFilters) {
   const api = useObservabilityApi();
   return useQuery({
     queryKey: obsKeys.flamegraph(scope, filters),
     queryFn: () =>
       api.getFlamegraph({
-        ...(scope as EnvScope),
+        ...(scope as ObsScope),
         window: resolveWindow(filters.range),
         service: filters.service,
         profileType: filters.profileType,
@@ -251,6 +270,58 @@ export function useObservabilityUsage(orgId: string | null) {
     enabled: !!orgId,
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,
+    retry: obsRetry,
+  });
+}
+
+// ── Filter autocomplete ──────────────────────────────────────────────────────
+
+/**
+ * The values `key` takes in the scope. The server caches each answer a minute,
+ * so the client keeps it as long and asks again only when the prefix moves.
+ */
+export function useAttributeValues(
+  scope: ObsScope | null,
+  range: RangePreset,
+  key: string,
+  prefix: string,
+  signal?: "traces" | "logs" | "metrics"
+) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: obsKeys.attributeValues(scope, range, key, prefix, signal ?? ""),
+    queryFn: () =>
+      // Value lookups are capped at 7 days server-side, which is the widest preset.
+      api.listAttributeValues({ ...(scope as ObsScope), window: resolveWindow(range), key, prefix, signal }),
+    enabled: !!scope && !!key,
+    staleTime: 60_000,
+    placeholderData: (previous) => previous,
+    retry: obsRetry,
+  });
+}
+
+// ── Workloads (customer metadata) ────────────────────────────────────────────
+
+export function useWorkloads(scope: ObsScope | null, range: RangePreset, services: string[] = []) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: obsKeys.workloads(scope, range, services),
+    queryFn: () => api.listWorkloads({ ...(scope as ObsScope), window: resolveWindow(range), services }),
+    enabled: !!scope,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    retry: obsRetry,
+  });
+}
+
+export function useWorkload(scope: ObsScope | null, range: RangePreset, workload: string | undefined, container?: string) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: obsKeys.workload(scope, range, workload ?? "", container ?? ""),
+    queryFn: () =>
+      api.getWorkload({ ...(scope as ObsScope), window: resolveWindow(range), workload: workload as string, container }),
+    enabled: !!scope && !!workload,
+    staleTime: 30_000,
     retry: obsRetry,
   });
 }

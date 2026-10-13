@@ -19,7 +19,7 @@
  *
  * ── THE NAV IS THE ENVIRONMENT ROSTER ───────────────────────────────────────
  *
- * Overview and Domains, then every environment filed by what it IS:
+ * Overview, Observability and Domains, then every environment filed by what it IS:
  *
  *   Local           runs on a developer machine via `forge env up`.
  *   Deployed        everything the control plane records as deployed.
@@ -34,7 +34,7 @@
  */
 
 import { useMemo, type ReactNode } from "react";
-import { CircleDashed, Cloud, Cpu, Globe, LayoutGrid } from "lucide-react";
+import { Activity, CircleDashed, Cloud, Cpu, Globe, LayoutGrid } from "lucide-react";
 
 import SidebarLayout from "@/components/forge-ui/sidebar_layout";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
@@ -51,6 +51,14 @@ export const FORGE_OVERVIEW_PATH = "/forge";
  * Project rather than under any one env.
  */
 export const FORGE_DOMAINS_PATH = "/forge/domains";
+
+/**
+ * Observability across the project's environments (owner decision 1:
+ * environment is a filter, not a place). Under Project for the same reason
+ * Domains is. Phase 2's Delivery view (releases, DORA) is a tab inside it,
+ * not another entry here.
+ */
+export const FORGE_OBSERVABILITY_PATH = "/forge/observability";
 
 /** The path of one environment's page. */
 export function forgeEnvPath(env: string): string {
@@ -134,6 +142,13 @@ export function ForgeShell({
         active: activePath === FORGE_OVERVIEW_PATH || activePath === `${FORGE_OVERVIEW_PATH}/`,
         section: "Project",
         icon: <LayoutGrid className="h-4 w-4" aria-hidden="true" />,
+      },
+      {
+        label: "Observability",
+        href: withSearch(FORGE_OBSERVABILITY_PATH),
+        active: activePath === FORGE_OBSERVABILITY_PATH,
+        section: "Project",
+        icon: <Activity className="h-4 w-4" aria-hidden="true" />,
       },
       {
         label: "Domains",

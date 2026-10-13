@@ -130,6 +130,8 @@ interface SidebarProps {
   onOpenChatSearch?: () => void;
   onNavigateToSettings?: () => void;
   onOpenForge?: () => void;
+  /** The project's Observability area (/forge/observability). */
+  onOpenObservability?: () => void;
   onOpenInbox?: () => void;
 }
 
@@ -665,6 +667,7 @@ function SidebarComponent({
   onOpenChatSearch,
   onNavigateToSettings,
   onOpenForge,
+  onOpenObservability,
 }: SidebarProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
   const { data: listedChats = [] } = useChatList(currentProject?.id);
@@ -1547,6 +1550,15 @@ function SidebarComponent({
               onClick={onOpenForge}
               testId="sidebar-forge-button"
               onboardingId="deployments-button"
+            />
+          )}
+          {/* Same gate as Deployments: it is the same forge surface. */}
+          {showForgeEntry && onOpenObservability && (
+            <SidebarNavButton
+              icon={<Activity className="h-4 w-4" />}
+              label="Observability"
+              onClick={onOpenObservability}
+              testId="sidebar-observability-button"
             />
           )}
           <SidebarNavButton

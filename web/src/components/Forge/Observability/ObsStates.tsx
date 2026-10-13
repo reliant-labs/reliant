@@ -11,7 +11,7 @@
  */
 
 import type { ReactNode } from "react";
-import { Activity, AlertTriangle, Clock, Lock, RefreshCw, SearchX } from "lucide-react";
+import { Activity, AlertTriangle, Boxes, Clock, Lock, RefreshCw, SearchX } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import {
@@ -58,7 +58,7 @@ function StateFrame({
   );
 }
 
-export function ObsNotSetUp({ envName }: { envName: string }) {
+export function ObsNotSetUp({ subject }: { subject: string }) {
   return (
     <StateFrame
       testId="obs-not-set-up"
@@ -67,11 +67,10 @@ export function ObsNotSetUp({ envName }: { envName: string }) {
     >
       <p>
         Reliant keeps each organization&apos;s logs, traces, metrics and profiles in a store of its own. Yours
-        hasn&apos;t been created yet, so there is nothing to show for <span className="font-mono">{envName}</span>.
+        hasn&apos;t been created yet, so there is nothing to show for <span className="font-mono">{subject}</span>.
       </p>
       <p>
-        Once it exists, telemetry from this environment appears here on its own — services built with forge send it
-        without any setup.
+        Once it exists, telemetry appears here on its own — services built with forge send it without any setup.
       </p>
     </StateFrame>
   );
@@ -115,10 +114,61 @@ export function ObsNoData({
     >
       {!filtered && (
         <p>
-          This environment has sent none in that window. A service that is idle, or was deployed after it began, looks
-          exactly like this.
+          Nothing was sent in that window. A service that is idle, or was deployed after it began, looks exactly like
+          this.
         </p>
       )}
+    </StateFrame>
+  );
+}
+
+/**
+ * No customer metadata: the node agent reported nothing about this scope's
+ * workloads. It is collected only where Reliant runs the workloads, and an
+ * environment can opt out — both look like this, and the copy says so rather
+ * than guessing which.
+ */
+export function ObsNoCustomerMetadata({
+  range,
+  filtered = false,
+  onWiden,
+  onClearFilters,
+}: {
+  range: RangePreset;
+  filtered?: boolean;
+  onWiden?: () => void;
+  onClearFilters?: () => void;
+}) {
+  const window = RANGE_LABELS[range].toLowerCase();
+  return (
+    <StateFrame
+      testId="obs-no-customer-metadata"
+      icon={filtered ? <SearchX className="h-4 w-4" /> : <Boxes className="h-4 w-4" />}
+      title={filtered ? `No workloads match in the ${window}` : `No customer metadata in the ${window}`}
+      actions={
+        <>
+          {filtered && onClearFilters && (
+            <Button variant="outline" size="sm" onClick={onClearFilters} data-testid="obs-clear-filters">
+              Clear filters
+            </Button>
+          )}
+          {onWiden && range !== "7d" && (
+            <Button variant="ghost" size="sm" onClick={onWiden} data-testid="obs-widen">
+              Look at the last 7 days
+            </Button>
+          )}
+        </>
+      }
+    >
+      <p>
+        Customer metadata is what Reliant&apos;s node agent records about your own workloads: the images and versions
+        running, restarts and why containers exited, CPU and memory against their requests and limits, and Kubernetes
+        events such as crash loops, failed image pulls and evictions.
+      </p>
+      <p>
+        It is collected for environments Reliant hosts, unless an environment has opted out, and counts toward your
+        observability allowance. Workloads appear here a few minutes after they start.
+      </p>
     </StateFrame>
   );
 }
@@ -132,9 +182,13 @@ const ERROR_COPY: Record<Exclude<ObsErrorKind, "not-set-up">, { title: string; b
     title: "That search couldn't be run",
     body: "The server couldn't parse the query. Check its syntax, or clear it.",
   },
+  "over-quota": {
+    title: "This organization's query quota is used up for now",
+    body: "Queries are metered per organization, and the allowance refills on its own within the hour. A shorter time range or a narrower filter spends less of it.",
+  },
   "too-broad": {
-    title: "That query asked for too much",
-    body: "It hit this organization's query limit. A shorter time range, or a narrower filter, usually fits.",
+    title: "That query took too long",
+    body: "It ran past the time limit. A shorter time range, or a narrower filter, usually fits.",
   },
   unavailable: {
     title: "Telemetry couldn't be loaded",
@@ -149,17 +203,17 @@ const ERROR_COPY: Record<Exclude<ObsErrorKind, "not-set-up">, { title: string; b
  */
 export function ObsError({
   error,
-  envName,
+  subject,
   onRetry,
   retrying,
 }: {
   error: unknown;
-  envName: string;
+  subject: string;
   onRetry?: () => void;
   retrying?: boolean;
 }) {
   const kind = obsErrorKind(error);
-  if (kind === "not-set-up") return <ObsNotSetUp envName={envName} />;
+  if (kind === "not-set-up") return <ObsNotSetUp subject={subject} />;
   const copy = ERROR_COPY[kind];
   const detail = obsErrorMessage(error);
   return (

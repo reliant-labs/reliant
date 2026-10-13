@@ -59,7 +59,7 @@ import { environments } from "@/services/forge/topology";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
 import { DeployDialog } from "../Deploy/DeployDialog";
-import { OBS_SEARCH_KEYS, type ObsNavigate } from "../Observability/obsSearch";
+import { OBS_SEARCH_KEYS, type ObsNavigate, type ObsSearch } from "../Observability/obsSearch";
 import { forgeScopeOf } from "../forgeScope";
 import { PromoteDialog } from "../Promote/PromoteDialog";
 import { CloudNotice } from "../SourceNotices";
@@ -209,6 +209,15 @@ export function ForgeEnvPage() {
       });
     },
     [navigate]
+  );
+
+  // "Compare across environments": the same view in the project's area, this
+  // environment selected to start with.
+  const openObservabilityArea = useCallback(
+    (search: ObsSearch) => {
+      void navigate({ to: "/forge/observability", search: { ...search, project: projectParam, forgeProject: forgeProjectParam } });
+    },
+    [navigate, projectParam, forgeProjectParam]
   );
 
   const openDomainsScreen = useCallback(() => {
@@ -375,6 +384,7 @@ export function ForgeEnvPage() {
             liveLoading={live.isLoading}
             search={obsSearch}
             navigate={navigateObs}
+            onWiden={openObservabilityArea}
           />
         ) : tab === "running" ? (
           <RunningTab

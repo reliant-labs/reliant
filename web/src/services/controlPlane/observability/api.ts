@@ -5,13 +5,15 @@
  * control-plane's public listener — mapped into the console's model
  * (./types.ts). This is the only file that knows the wire shape.
  *
- * Every request carries a QueryScope: the caller's current org (verified
- * server-side against membership), this environment's control-plane id as
- * `envIds` (every id is validated server-side as one of the org's), the
- * services filter, and a time range the server caps per RPC (7 days for logs,
- * traces and the overview; 30 for metrics, profiles and dashboards). The browser sends typed requests and a
- * query STRING; it never sends SQL, and it never builds a filter out of the
- * text a reader typed.
+ * Every request carries a QueryScope (contract K1): the caller's current org
+ * (verified server-side against membership), the forge project when known, the
+ * environments in view as `envIds` (empty = all the caller can see; each id is
+ * validated server-side as one of the org's), the services filter, the
+ * attribute filters, and a time range the server caps per RPC (7 days for
+ * logs, traces, the overview and workloads; 30 for metrics, profiles and
+ * dashboards). The browser sends typed requests and a query STRING; it never
+ * sends SQL. Attribute filters go as key/op/value DATA over an allowlist the
+ * server enforces — never spliced into the log query string.
  *
  * SearchLogs' query grammar, parsed server-side (proto: SearchLogsRequest.query):
  *
@@ -26,21 +28,37 @@ import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
   ObservabilityQuotaState,
+  AttributeOp as WireAttributeOp,
   ObservabilityService,
+  Signal as WireSignal,
   SortOrder,
+  WorkloadMetric as WireWorkloadMetric,
+  type ResourceUsage as WireResourceUsage,
+  type WorkloadEvent as WireWorkloadEvent,
   type PanelSchema,
   type LogRecord as WireLogRecord,
   type Panel as WirePanel,
   type PanelPredicate as WirePredicate,
   type Span as WireSpan,
   type TimePoint,
+  type TraceRedSummary as WireRed,
   type TraceSummary as WireTraceSummary,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 
 import { getControlPlaneClient } from "../client";
 import type {
+  AttributeFilter,
+  AttributeOp,
   DashboardSpec,
-  EnvScope,
+  GetWorkloadRequest,
+  ListAttributeValuesRequest,
+  ListAttributeValuesResult,
+  ListWorkloadsResult,
+  ObsScope,
+  ResourceUsage,
+  WorkloadDetail,
+  WorkloadEvent,
+  WorkloadMetric,
   Flamegraph,
   GetFlamegraphRequest,
   ListTracesRequest,
@@ -62,6 +80,7 @@ import type {
   SpanStatus,
   TimeWindow,
   Trace,
+  TraceRed,
   TraceSummary,
   Unit,
 } from "./types";
@@ -83,14 +102,41 @@ export function msOf(ts: Timestamp | undefined): number {
   return Number(ts.seconds) * 1000 + ts.nanos / 1e6;
 }
 
-function scope(env: EnvScope, window: TimeWindow, services: string[] = []) {
+const WIRE_OP: Record<AttributeOp, WireAttributeOp> = {
+  eq: WireAttributeOp.EQ,
+  neq: WireAttributeOp.NEQ,
+  exists: WireAttributeOp.EXISTS,
+  in: WireAttributeOp.IN,
+  contains: WireAttributeOp.CONTAINS,
+};
+
+/** The console's filters as QueryScope.filters. Values are always sent as data; the server binds them. */
+export function wireFilters(filters: AttributeFilter[]) {
+  return filters.map((f) => ({
+    key: f.key,
+    op: WIRE_OP[f.op],
+    value: f.op === "in" || f.op === "exists" ? "" : (f.value ?? ""),
+    values: f.op === "in" ? (f.values ?? []) : [],
+  }));
+}
+
+/**
+ * QueryScope. `projectId` is sent only when the console knows the project —
+ * absent means "no project narrowing", while an EMPTY string would mean "the
+ * project-less environments only", which no view asks for.
+ */
+export function wireScope(s: ObsScope, window: TimeWindow, services: string[] = []) {
   return {
-    orgId: env.orgId,
-    envIds: [env.environmentId],
+    orgId: s.orgId,
+    projectId: s.projectId || undefined,
+    envIds: s.envIds,
     services,
+    filters: wireFilters(s.filters),
     timeRange: { start: timestamp(window.startMs), end: timestamp(window.endMs) },
   };
 }
+
+const scope = wireScope;
 
 // ── Logs ─────────────────────────────────────────────────────────────────────
 
@@ -189,22 +235,25 @@ export async function listTraces(req: ListTracesRequest): Promise<ListTracesResu
     rootSpanName: req.rootSpanName || undefined,
     pageSize: req.limit,
     pageToken: req.cursor ?? "",
+    groupBy: req.groupBy ?? [],
   });
-  const red = res.red;
   return {
     traces: res.traces.map(mapTraceSummary),
     nextCursor: res.nextPageToken,
-    red: red
-      ? {
-          traceCount: Number(red.traceCount),
-          errorTraceCount: Number(red.errorTraceCount),
-          ratePerSecond: red.ratePerSecond,
-          errorRate: red.errorRate,
-          p50Ms: red.p50Ms,
-          p95Ms: red.p95Ms,
-          p99Ms: red.p99Ms,
-        }
-      : null,
+    red: res.red ? mapRed(res.red) : null,
+    redGroups: res.redGroups.filter((g) => g.red).map((g) => ({ group: { ...g.group }, red: mapRed(g.red!) })),
+  };
+}
+
+function mapRed(red: WireRed): TraceRed {
+  return {
+    traceCount: Number(red.traceCount),
+    errorTraceCount: Number(red.errorTraceCount),
+    ratePerSecond: red.ratePerSecond,
+    errorRate: red.errorRate,
+    p50Ms: red.p50Ms,
+    p95Ms: red.p95Ms,
+    p99Ms: red.p99Ms,
   };
 }
 
@@ -236,7 +285,7 @@ function mapSpan(s: WireSpan): Span {
 }
 
 /** Traces are kept 7 days, so a lookup by id searches all of them. */
-export async function getTrace(req: EnvScope & { traceId: string; window: TimeWindow }): Promise<Trace> {
+export async function getTrace(req: ObsScope & { traceId: string; window: TimeWindow }): Promise<Trace> {
   const res = await client().getTrace({ scope: scope(req, req.window), traceId: req.traceId });
   return { traceId: res.traceId || req.traceId, spans: res.spans.map(mapSpan), truncated: res.truncated };
 }
@@ -285,6 +334,7 @@ export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
     scope: scope(req, req.window, req.services),
     panel: panelInit(req.panel),
     stepSeconds: req.stepSeconds,
+    groupBy: req.groupBy ?? [],
   });
   return {
     kind: res.kind,
@@ -304,8 +354,10 @@ export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
 
 // ── Service overview ─────────────────────────────────────────────────────────
 
-export async function getServiceOverview(req: EnvScope & { window: TimeWindow; services?: string[] }): Promise<ServiceOverview> {
-  const res = await client().getServiceOverview({ scope: scope(req, req.window, req.services) });
+export async function getServiceOverview(
+  req: ObsScope & { window: TimeWindow; services?: string[]; groupBy?: string[] }
+): Promise<ServiceOverview> {
+  const res = await client().getServiceOverview({ scope: scope(req, req.window, req.services), groupBy: req.groupBy ?? [] });
   const step = res.trendStepSeconds > 0 ? res.trendStepSeconds : 60;
   const services: ServiceHealth[] = res.services.map((s) => {
     const requests = pointsOf(s.requestTrend);
@@ -313,6 +365,7 @@ export async function getServiceOverview(req: EnvScope & { window: TimeWindow; s
     const errorTrend = requests.timestamps.map((t) => errorsByTime.get(t) ?? 0);
     return {
       name: s.service,
+      group: { ...s.group },
       requestCount: Number(s.requestCount),
       requestRate: s.ratePerSecond,
       errorCount: Number(s.errorCount),
@@ -385,7 +438,7 @@ function mapPanel(p: WirePanel): Panel {
   };
 }
 
-export async function getDashboards(req: EnvScope & { window: TimeWindow }): Promise<DashboardSpec> {
+export async function getDashboards(req: ObsScope & { window: TimeWindow }): Promise<DashboardSpec> {
   const res = await client().getDashboards({ scope: scope(req, req.window) });
   const spec = res.spec;
   return {
@@ -451,5 +504,126 @@ export async function getObservabilityUsage(orgId: string): Promise<Observabilit
       rows: Number(s.rows),
     })),
     byService: res.byService.map((s) => ({ service: s.service, signal: signal(s.signal), billedBytes: Number(s.billedBytes) })),
+  };
+}
+
+// ── Attribute values ─────────────────────────────────────────────────────────
+
+const WIRE_SIGNAL = { traces: WireSignal.TRACES, logs: WireSignal.LOGS, metrics: WireSignal.METRICS } as const;
+
+/**
+ * The values an allowlisted key takes in the scope, most frequent first — the
+ * filter bar's autocomplete. The server ignores filters on the SAME key, so
+ * choosing a second value is never narrowed to the first one.
+ */
+export async function listAttributeValues(req: ListAttributeValuesRequest): Promise<ListAttributeValuesResult> {
+  const res = await client().listAttributeValues({
+    scope: scope(req, req.window),
+    key: req.key,
+    prefix: req.prefix || undefined,
+    signal: req.signal ? WIRE_SIGNAL[req.signal] : undefined,
+    limit: req.limit ?? 50,
+  });
+  return { values: res.values.map((v) => ({ value: v.value, count: Number(v.count) })), truncated: res.truncated };
+}
+
+// ── Workloads (customer metadata) ────────────────────────────────────────────
+
+function mapUsage(u: WireResourceUsage | undefined): ResourceUsage | null {
+  if (!u) return null;
+  const opt = (v: number | undefined) => (v === undefined || !Number.isFinite(v) ? null : v);
+  return {
+    latest: u.latest,
+    p95: u.p95,
+    limitUtilizationLatest: opt(u.limitUtilizationLatest),
+    limitUtilizationP95: opt(u.limitUtilizationP95),
+    requestUtilizationLatest: opt(u.requestUtilizationLatest),
+    requestUtilizationP95: opt(u.requestUtilizationP95),
+    limit: opt(u.limit),
+    request: opt(u.request),
+  };
+}
+
+function mapEvent(e: WireWorkloadEvent): WorkloadEvent {
+  return {
+    timeMs: msOf(e.time),
+    envId: e.envId,
+    type: e.type,
+    reason: e.reason,
+    message: e.message,
+    count: Number(e.count),
+    objectKind: e.objectKind,
+    objectName: e.objectName,
+    container: e.container,
+  };
+}
+
+export async function listWorkloads(req: ObsScope & { window: TimeWindow; services?: string[] }): Promise<ListWorkloadsResult> {
+  const res = await client().listWorkloads({ scope: scope(req, req.window, req.services) });
+  return {
+    truncated: res.truncated,
+    workloads: res.workloads.map((w) => ({
+      envId: w.envId,
+      envName: w.envName,
+      workload: w.workload,
+      namespace: w.namespace,
+      serviceVersion: w.serviceVersion,
+      replicasObserved: w.replicasObserved,
+      restartsInWindow: Number(w.restartsInWindow),
+      latestWarning: w.latestWarning ? mapEvent(w.latestWarning) : null,
+      containers: w.containers.map((c) => ({
+        container: c.container,
+        imageName: c.imageName,
+        imageTag: c.imageTag,
+        restartsInWindow: Number(c.restartsInWindow),
+        lastTerminatedReason: c.lastTerminatedReason,
+        lastTerminatedAtMs: c.lastTerminatedAt ? msOf(c.lastTerminatedAt) : null,
+        cpu: mapUsage(c.cpu),
+        memory: mapUsage(c.memory),
+      })),
+    })),
+  };
+}
+
+const WORKLOAD_METRIC: Partial<Record<WireWorkloadMetric, WorkloadMetric>> = {
+  [WireWorkloadMetric.CPU_USAGE]: "cpu_usage",
+  [WireWorkloadMetric.CPU_LIMIT_UTILIZATION]: "cpu_limit_utilization",
+  [WireWorkloadMetric.CPU_REQUEST_UTILIZATION]: "cpu_request_utilization",
+  [WireWorkloadMetric.MEMORY_WORKING_SET]: "memory_working_set",
+  [WireWorkloadMetric.MEMORY_LIMIT_UTILIZATION]: "memory_limit_utilization",
+  [WireWorkloadMetric.MEMORY_REQUEST_UTILIZATION]: "memory_request_utilization",
+  [WireWorkloadMetric.RESTARTS]: "restarts",
+};
+
+export async function getWorkload(req: GetWorkloadRequest): Promise<WorkloadDetail> {
+  const res = await client().getWorkload({
+    scope: scope(req, req.window),
+    workload: req.workload,
+    container: req.container ?? "",
+    stepSeconds: req.stepSeconds ?? 0,
+  });
+  return {
+    stepSeconds: res.stepSeconds,
+    truncated: res.truncated,
+    // A metric this build does not know is dropped rather than drawn unlabelled.
+    series: res.series.flatMap((s) => {
+      const metric = WORKLOAD_METRIC[s.metric];
+      return metric ? [{ envId: s.envId, container: s.container, metric, unit: s.unit, ...pointsOf(s.points) }] : [];
+    }),
+    events: res.events.map(mapEvent),
+    imageChanges: res.imageChanges.map((c) => ({
+      envId: c.envId,
+      container: c.container,
+      imageName: c.imageName,
+      imageTag: c.imageTag,
+      firstSeenMs: msOf(c.firstSeen),
+      lastSeenMs: msOf(c.lastSeen),
+    })),
+    versionChanges: res.versionChanges.map((c) => ({
+      envId: c.envId,
+      serviceVersion: c.serviceVersion,
+      firstSeenMs: msOf(c.firstSeen),
+      lastSeenMs: msOf(c.lastSeen),
+    })),
   };
 }
