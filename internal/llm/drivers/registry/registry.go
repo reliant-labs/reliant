@@ -1,4 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
+
+// Package registry is the LLM driver registry: each provider package
+// registers a DriverFactory for its model family (RegisterDriver), and callers
+// build the Client for a family from it.
+//
+//forge:exclude-contract: strategy registry: every provider driver registers its own Client factory by model family (RegisterDriver); there is no single implementation to bind
 package registry
 
 import (
