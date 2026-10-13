@@ -21,6 +21,18 @@
     "internal/handlers/account/handlers_scaffold_preview_account_deletion_test.go": {
       "scaffolded_at": "2026-10-13T12:24:49Z"
     },
+    "internal/handlers/attachment/handlers_scaffold_create_file_reference_test.go": {
+      "scaffolded_at": "2026-10-13T17:39:52Z"
+    },
+    "internal/handlers/attachment/handlers_scaffold_delete_attachment_test.go": {
+      "scaffolded_at": "2026-10-13T17:39:52Z"
+    },
+    "internal/handlers/attachment/handlers_scaffold_get_attachment_test.go": {
+      "scaffolded_at": "2026-10-13T17:39:52Z"
+    },
+    "internal/handlers/attachment/handlers_scaffold_upload_attachment_test.go": {
+      "scaffolded_at": "2026-10-13T17:39:52Z"
+    },
     "internal/handlers/connector/handlers_scaffold_authorize_client_test.go": {
       "scaffolded_at": "2026-10-13T13:00:02Z"
     },

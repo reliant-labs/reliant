@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
+	"github.com/reliant-labs/reliant/internal/handlers/attachment"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
@@ -276,7 +277,14 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, fmt.Errorf("streaming service: %w", err)
 	}
 
-	attachmentService := services.NewAttachmentService(database)
+	attachmentService, err := attachment.New(attachment.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("attachment service: %w", err)
+	}
 	presetService, err := preset.New(preset.Deps{
 		Logger: handlerLogger,
 		Config: handlerConfig,
@@ -567,7 +575,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	mux.Handle(attachmentPath, attachmentHandler)
 	// Range-capable byte serving for <video>; Connect GetAttachment is whole-blob.
-	mux.Handle(services.AttachmentContentPathPrefix, services.AttachmentContentHandler(database, authInterceptor.AuthenticateHTTP))
+	mux.Handle(attachment.AttachmentContentPathPrefix, attachment.AttachmentContentHandler(database, authInterceptor.AuthenticateHTTP))
 	mux.Handle(presetPath, presetHandler)
 	mux.Handle(triggerPath, triggerHandler)
 	mux.Handle(inboxPath, inboxHandler)

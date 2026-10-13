@@ -1,13 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package attachment
 
 import (
 	"bytes"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // AttachmentContentPathPrefix is where AttachmentContentHandler is mounted.
@@ -20,7 +18,7 @@ const AttachmentContentPathPrefix = "/api/attachments/"
 //
 // authenticate resolves the caller's user id from the request. An attachment
 // owned by someone else is reported as 404, never 403, so ids cannot be probed.
-func AttachmentContentHandler(repo db.Repository, authenticate func(*http.Request) (string, error)) http.Handler {
+func AttachmentContentHandler(repo Repository, authenticate func(*http.Request) (string, error)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.Header().Set("Allow", "GET, HEAD")

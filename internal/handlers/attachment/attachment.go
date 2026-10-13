@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package attachment
 
 import (
 	"context"
@@ -15,35 +15,25 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// AttachmentService implements the AttachmentService RPC handlers
-type AttachmentService struct {
-	reliantv1connect.UnimplementedAttachmentServiceHandler
-	database    db.Repository
-	maxFileSize int64 // in bytes
-}
+// defaultMaxFileSize is the largest upload accepted when neither
+// Deps.MaxFileSize nor MAX_UPLOAD_SIZE says otherwise: 10 MB.
+const defaultMaxFileSize = int64(10 * 1024 * 1024)
 
-// NewAttachmentService creates a new AttachmentService
-func NewAttachmentService(database db.Repository) *AttachmentService {
-	// Default max file size: 10MB
-	maxFileSize := int64(10 * 1024 * 1024)
+// maxFileSizeFromEnv is MAX_UPLOAD_SIZE in bytes, else defaultMaxFileSize.
+func maxFileSizeFromEnv() int64 {
 	if maxSizeEnv := os.Getenv("MAX_UPLOAD_SIZE"); maxSizeEnv != "" {
 		var size int64
 		if _, err := fmt.Sscanf(maxSizeEnv, "%d", &size); err == nil {
-			maxFileSize = size
+			return size
 		}
 	}
-
-	return &AttachmentService{
-		database:    database,
-		maxFileSize: maxFileSize,
-	}
+	return defaultMaxFileSize
 }
 
 // ============================================================================
@@ -77,7 +67,7 @@ func dbAttachmentToProto(a *db.Attachment) *reliantv1.AttachmentInfo {
 // ============================================================================
 
 // UploadAttachment uploads a new binary file attachment (for images and text files)
-func (s *AttachmentService) UploadAttachment(
+func (s *Service) UploadAttachment(
 	ctx context.Context,
 	req *connect.Request[reliantv1.UploadAttachmentRequest],
 ) (*connect.Response[reliantv1.UploadAttachmentResponse], error) {
@@ -104,9 +94,9 @@ func (s *AttachmentService) UploadAttachment(
 	}
 
 	// Check file size
-	if int64(len(content)) > s.maxFileSize {
+	if int64(len(content)) > s.deps.MaxFileSize {
 		return nil, connect.NewError(connect.CodeResourceExhausted,
-			fmt.Errorf("file too large: maximum size is %d bytes", s.maxFileSize))
+			fmt.Errorf("file too large: maximum size is %d bytes", s.deps.MaxFileSize))
 	}
 
 	// Default MIME type
@@ -138,7 +128,7 @@ func (s *AttachmentService) UploadAttachment(
 		Content:        content,
 	}
 
-	if err := s.database.CreateAttachment(ctx, dbAttachment); err != nil {
+	if err := s.deps.Repo.CreateAttachment(ctx, dbAttachment); err != nil {
 		logging.Error("Failed to save attachment to database", "error", err, "attachmentID", attachmentID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save attachment"))
 	}
@@ -171,7 +161,7 @@ func (s *AttachmentService) UploadAttachment(
 }
 
 // GetAttachment retrieves an attachment by ID (includes file content)
-func (s *AttachmentService) GetAttachment(
+func (s *Service) GetAttachment(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetAttachmentRequest],
 ) (*connect.Response[reliantv1.GetAttachmentResponse], error) {
@@ -182,7 +172,7 @@ func (s *AttachmentService) GetAttachment(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("attachment_id is required"))
 	}
 
-	dbAttachment, err := s.database.GetAttachment(ctx, attachmentID)
+	dbAttachment, err := s.deps.Repo.GetAttachment(ctx, attachmentID)
 	if err != nil || dbAttachment == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("attachment not found"))
 	}
@@ -201,7 +191,7 @@ func (s *AttachmentService) GetAttachment(
 }
 
 // DeleteAttachment removes an attachment by ID
-func (s *AttachmentService) DeleteAttachment(
+func (s *Service) DeleteAttachment(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DeleteAttachmentRequest],
 ) (*connect.Response[reliantv1.DeleteAttachmentResponse], error) {
@@ -213,7 +203,7 @@ func (s *AttachmentService) DeleteAttachment(
 	}
 
 	// Verify the attachment exists and belongs to this user
-	dbAttachment, err := s.database.GetAttachment(ctx, attachmentID)
+	dbAttachment, err := s.deps.Repo.GetAttachment(ctx, attachmentID)
 	if err != nil || dbAttachment == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("attachment not found"))
 	}
@@ -221,7 +211,7 @@ func (s *AttachmentService) DeleteAttachment(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("attachment not found"))
 	}
 
-	if err := s.database.DeleteAttachment(ctx, attachmentID); err != nil {
+	if err := s.deps.Repo.DeleteAttachment(ctx, attachmentID); err != nil {
 		logging.Error("Failed to delete attachment from database", "error", err, "attachmentID", attachmentID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete attachment"))
 	}
@@ -236,7 +226,7 @@ func (s *AttachmentService) DeleteAttachment(
 // CreateFileReference creates a reference to a local file (for text files).
 // The daemon/frontend reads the file and sends content bytes in the request
 // so the server never needs filesystem access.
-func (s *AttachmentService) CreateFileReference(
+func (s *Service) CreateFileReference(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateFileReferenceRequest],
 ) (*connect.Response[reliantv1.CreateFileReferenceResponse], error) {
@@ -272,9 +262,9 @@ func (s *AttachmentService) CreateFileReference(
 	}
 
 	// Check file size
-	if int64(len(content)) > s.maxFileSize {
+	if int64(len(content)) > s.deps.MaxFileSize {
 		return nil, connect.NewError(connect.CodeResourceExhausted,
-			fmt.Errorf("file too large: %d bytes exceeds maximum of %d bytes", len(content), s.maxFileSize))
+			fmt.Errorf("file too large: %d bytes exceeds maximum of %d bytes", len(content), s.deps.MaxFileSize))
 	}
 
 	// Get MIME type
@@ -301,7 +291,7 @@ func (s *AttachmentService) CreateFileReference(
 		Content:        content,
 	}
 
-	if err := s.database.CreateAttachment(ctx, dbAttachment); err != nil {
+	if err := s.deps.Repo.CreateAttachment(ctx, dbAttachment); err != nil {
 		logging.Error("Failed to save file reference to database", "error", err, "attachmentID", attachmentID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create file reference"))
 	}

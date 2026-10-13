@@ -969,8 +969,7 @@
         "reliant.v1.GetAttachmentResponse": "reliant/v1/attachment.proto",
         "reliant.v1.UploadAttachmentRequest": "reliant/v1/attachment.proto",
         "reliant.v1.UploadAttachmentResponse": "reliant/v1/attachment.proto"
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "BackgroundService",
@@ -33659,5 +33658,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "fdeca40bb44e3db59cd224abbb9d542b3cd846e1b24252e2c742a64c48c3ac36"
+  "source_hash": "3f09231a7ac9a8486754bf8a7d00d8dcebb86cd6b6fbff6fd269cb0c194c7a80"
 }
