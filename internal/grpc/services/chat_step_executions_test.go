@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -66,7 +67,7 @@ func TestListStepExecutions_ReturnsTheNodesFullRecord(t *testing.T) {
 	list := func(nodePath string) *reliantv1.ListStepExecutionsResponse {
 		resp, err := service.ListStepExecutions(ctx, connect.NewRequest(&reliantv1.ListStepExecutionsRequest{
 			ChatId:   chatID,
-			NodePath: nodePath,
+			NodePath: proto.String(nodePath),
 		}))
 		require.NoError(t, err)
 		return resp.Msg

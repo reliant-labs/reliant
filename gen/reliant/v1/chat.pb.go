@@ -5835,8 +5835,9 @@ type ListStepExecutionsRequest struct {
 	ChatId string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
 	// Scopes the result to one node and everything that ran inside it (an
 	// Agent step's own turns, a loop's body): "summarize", or "attempt.review"
-	// for a node inside a loop body. Empty means every step of the chat.
-	NodePath      string `protobuf:"bytes,2,opt,name=node_path,json=nodePath,proto3" json:"node_path,omitempty"`
+	// for a node inside a loop body. Unset (or empty) means every step of the
+	// chat.
+	NodePath      *string `protobuf:"bytes,2,opt,name=node_path,json=nodePath,proto3,oneof" json:"node_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5879,8 +5880,8 @@ func (x *ListStepExecutionsRequest) GetChatId() string {
 }
 
 func (x *ListStepExecutionsRequest) GetNodePath() string {
-	if x != nil {
-		return x.NodePath
+	if x != nil && x.NodePath != nil {
+		return *x.NodePath
 	}
 	return ""
 }
@@ -6575,10 +6576,12 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x1dGetWorkflowExecutionsResponse\x12G\n" +
 	"\rroot_workflow\x18\x01 \x01(\v2\x1d.reliant.v1.WorkflowExecutionH\x00R\frootWorkflow\x88\x01\x01\x12K\n" +
 	"\x12all_root_workflows\x18\x02 \x03(\v2\x1d.reliant.v1.WorkflowExecutionR\x10allRootWorkflowsB\x10\n" +
-	"\x0e_root_workflow\"Q\n" +
+	"\x0e_root_workflow\"d\n" +
 	"\x19ListStepExecutionsRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1b\n" +
-	"\tnode_path\x18\x02 \x01(\tR\bnodePath\"~\n" +
+	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12 \n" +
+	"\tnode_path\x18\x02 \x01(\tH\x00R\bnodePath\x88\x01\x01B\f\n" +
+	"\n" +
+	"_node_path\"~\n" +
 	"\x1aListStepExecutionsResponse\x12B\n" +
 	"\x0fstep_executions\x18\x01 \x03(\v2\x19.reliant.v1.StepExecutionR\x0estepExecutions\x12\x1c\n" +
 	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"L\n" +
@@ -6958,6 +6961,7 @@ func file_reliant_v1_chat_proto_init() {
 	file_reliant_v1_chat_proto_msgTypes[66].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[67].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[71].OneofWrappers = []any{}
+	file_reliant_v1_chat_proto_msgTypes[72].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

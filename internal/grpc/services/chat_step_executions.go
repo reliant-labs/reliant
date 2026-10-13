@@ -33,7 +33,7 @@ func (s *ChatService) ListStepExecutions(
 	if req.Msg.ChatId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
 	}
-	nodePath := strings.TrimSpace(req.Msg.NodePath)
+	nodePath := strings.TrimSpace(req.Msg.GetNodePath())
 
 	chat, err := s.database.GetChat(ctx, req.Msg.ChatId)
 	if err != nil || chat.UserID != userID {

@@ -4417,7 +4417,7 @@
           {
             "Name": "node_path",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           }
         ],
         "ListStepExecutionsResponse": [
@@ -5643,7 +5643,8 @@
           },
           {
             "name": "node_path",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ListStepExecutionsResponse": [
@@ -33571,5 +33572,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "7c040981bb3fc25f0fd9a3632623477a5ff87d99f8e80adcefa5815abb1e9f41"
+  "source_hash": "8e6aa5d90fc30259719262abd49567260b7a578bde7d2550e0c3f345a4fac0d6"
 }

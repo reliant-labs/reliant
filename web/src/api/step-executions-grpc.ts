@@ -65,8 +65,8 @@ export function toStepRecord(execution: StepExecution): StepRecord {
 /** A chat's step records, newest first; `nodePath` scopes them to one node and what ran inside it. */
 export async function listStepExecutions(
   chatId: string,
-  nodePath = "",
+  nodePath?: string,
 ): Promise<{ records: StepRecord[]; truncated: boolean }> {
-  const response = await grpcClient.chat().listStepExecutions({ chatId, nodePath });
+  const response = await grpcClient.chat().listStepExecutions({ chatId, nodePath: nodePath || undefined });
   return { records: response.stepExecutions.map(toStepRecord), truncated: response.truncated };
 }

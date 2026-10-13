@@ -1100,8 +1100,9 @@ message ListStepExecutionsRequest {
   string chat_id = 1;
   // Scopes the result to one node and everything that ran inside it (an
   // Agent step's own turns, a loop's body): "summarize", or "attempt.review"
-  // for a node inside a loop body. Empty means every step of the chat.
-  string node_path = 2;
+  // for a node inside a loop body. Unset (or empty) means every step of the
+  // chat.
+  optional string node_path = 2;
 }
 
 message ListStepExecutionsResponse {
