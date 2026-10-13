@@ -1,21 +1,3 @@
-// Package ghdelegated authenticates the `github` integration with a token
-// DELEGATED by control-plane, the GitHub token authority, instead of one
-// reliant stores.
-//
-// There is ONE GitHub App, control-plane's. In hosted mode (a control plane is
-// configured) each user's GitHub App user token lives in control-plane's
-// git_credentials, and control-plane renews it. reliant never stores it: at
-// call time the worker resolves the RUN OWNER (from the run record, never from
-// anything the workflow supplies), asks control-plane for that user's current
-// token, applies it as a bearer to exactly one host, and scrubs it from
-// everything the call returns.
-//
-// The `github` manifest declares `delegated: { broker: controlplane-github }`
-// first among its auth methods. The worker registers *Broker under BrokerID
-// with connauth.Brokers when a control plane is configured (hosted); the
-// credential source asks it whenever the run owner has no saved GitHub
-// connection. Self-hosted registers nothing, and the manifest's oauth2 method
-// (RELIANT_OAUTH_GITHUB_CLIENT_ID/SECRET) or a pasted token is used instead.
 package ghdelegated
 
 import (
@@ -44,37 +26,28 @@ const (
 	ConnectionID = "controlplane:github"
 )
 
-// tokenSource is what the broker needs from control-plane.
-// *gitcredentialclient.Client satisfies it.
-type tokenSource interface {
-	UserAccessToken(ctx context.Context, externalUserID, provider string) (gitcredentialclient.Token, error)
-}
-
-// Broker asks control-plane for the owner's current GitHub token.
-type Broker struct {
-	tokens tokenSource
+// broker asks control-plane for the owner's current GitHub token.
+type broker struct {
+	tokens TokenSource
 	host   string
 	logger *slog.Logger
 }
 
-// NewBroker returns a broker that pins every credential to api.github.com.
-func NewBroker(tokens tokenSource, logger *slog.Logger) *Broker {
-	return newBroker(tokens, APIHost, logger)
+// New returns a broker that pins every credential to api.github.com.
+func New(deps Deps) Service {
+	return newBroker(deps.Tokens, APIHost, deps.Logger)
 }
 
-// newBroker lets tests pin to an httptest host. Production code uses NewBroker.
-func newBroker(tokens tokenSource, host string, logger *slog.Logger) *Broker {
+// newBroker lets tests pin to an httptest host. Production code uses New.
+func newBroker(tokens TokenSource, host string, logger *slog.Logger) *broker {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return &Broker{tokens: tokens, host: strings.ToLower(host), logger: logger}
+	return &broker{tokens: tokens, host: strings.ToLower(host), logger: logger}
 }
 
-// Credential fetches the owner's token from control-plane, every call. The
-// token is not cached here: control-plane renews it under a lock and is the
-// one place that knows whether it was revoked, and a GitHub call is already a
-// network round trip.
-func (b *Broker) Credential(ctx context.Context, ownerUserID string) (httpaction.Credential, error) {
+// Credential implements Service.
+func (b *broker) Credential(ctx context.Context, ownerUserID string) (httpaction.Credential, error) {
 	if ownerUserID == "" {
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "the run has no owner to act as"}
 	}
