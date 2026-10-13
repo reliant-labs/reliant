@@ -28,7 +28,7 @@ import (
 // because THAT path enriched the blocks. Two read paths for one screen, and
 // the one that was wrong was the one serving live work.
 //
-// Both paths now assemble through assembleMessagesForDisplay. This test asserts
+// Both paths now assemble through messageproto.AssembleForDisplay. This test asserts
 // the snapshot's output directly so the two cannot drift apart again.
 func TestChatSnapshot_CarriesSpawnChildWorkflowID(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)

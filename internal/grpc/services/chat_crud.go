@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -649,7 +650,7 @@ func (s *ChatService) ListMessages(
 	var hasMore bool
 
 	// The thread whose point of view these messages are read from; governs
-	// tool-call status resolution (see MessageToProtoOptions.ViewingThreadID).
+	// tool-call status resolution (see messageproto.Options.ViewingThreadID).
 	viewingThreadID := mainThreadID
 
 	switch {
@@ -760,7 +761,7 @@ func (s *ChatService) ListMessages(
 		}
 	}
 
-	protoMessages := assembleMessagesForDisplay(
+	protoMessages := messageproto.AssembleForDisplay(
 		ctx, s.database, messages, messageIDs, blocksByMessageID, attachmentMap, viewingThreadID, 0)
 
 	return connect.NewResponse(&reliantv1.ListMessagesResponse{

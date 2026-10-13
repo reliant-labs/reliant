@@ -118,7 +118,7 @@ func (r *snapshotGateRepo) GetContextUsage(context.Context, string, string) (*db
 }
 
 // The snapshot enriches tool-call blocks with their durable rows (status and,
-// for a spawn, the thread it owns) via assembleMessagesForDisplay.
+// for a spawn, the thread it owns) via messageproto.AssembleForDisplay.
 func (r *snapshotGateRepo) ListToolCallsByMessageIDs(context.Context, []string) ([]*db.ToolCall, error) {
 	return nil, nil
 }

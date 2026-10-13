@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
@@ -796,7 +797,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 	// tool-call status and a spawn's child_workflow_id. This snapshot used to
 	// pass SequenceNumber alone, which left live spawns with no thread to
 	// preview: they showed "Starting…" until something else refetched them.
-	assembledMessages := assembleMessagesForDisplay(
+	assembledMessages := messageproto.AssembleForDisplay(
 		ctx, s.database, displayable, displayableIDs, messageBlocks, attachmentMap, mainThread, latestSeq)
 
 	// Calculate pagination metadata.
@@ -1090,8 +1091,8 @@ func withThreadMetadata(data json.RawMessage, metadata map[string]threadSnapshot
 // anything newer. A tool_call update that raced in between the two reads is
 // delivered again from the cursor and wins by arriving later.
 //
-// In-window calls apply the same inheritedInFlightCall rule as the block path
-// (contentBlockToProto): an in-flight call owned by another thread is reported
+// In-window calls apply the same messageproto.InheritedInFlightCall rule as the block path
+// (messageproto.FromDB): an in-flight call owned by another thread is reported
 // CANCELLED to the thread being viewed. The client resolves status as live
 // state first and block status second, so a synthesized "executing" here would
 // override the block's "cancelled" and the two would contradict. Out-of-window
@@ -1140,7 +1141,7 @@ func (s *StreamingService) snapshotToolCalls(ctx context.Context, blocks []*db.M
 	for _, id := range order {
 		call := calls[id]
 		status := call.Status
-		if _, ok := inWindow[id]; ok && inheritedInFlightCall(call, viewingThreadID) {
+		if _, ok := inWindow[id]; ok && messageproto.InheritedInFlightCall(call, viewingThreadID) {
 			status = core.ToolCallStatusCancelled
 		}
 		payload := db.ToolCallUpdate{

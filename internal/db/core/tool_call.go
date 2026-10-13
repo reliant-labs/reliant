@@ -167,7 +167,7 @@ type ToolCallStore interface {
 	// a message in hand, that column was NULL and the by-message query could
 	// not see the row at all. A block always carries its tool_call_id, so
 	// keying off it is the lookup that cannot miss. Readers use both and
-	// merge (see assembleMessagesForDisplay).
+	// merge (see messageproto.AssembleForDisplay).
 	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*ToolCall, error)
 	// ListLiveToolCallsByChat reads a chat's non-terminal calls (pending,
 	// executing, backgrounded) without touching its terminal history.

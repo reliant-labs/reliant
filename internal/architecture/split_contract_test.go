@@ -114,6 +114,10 @@ var serverSidePackages = []string{
 	"internal/workflow/runtime/activities",
 	"internal/workflow/runtime/activities/handlers",
 
+	// Extracted from grpc/services, so it keeps that package's ban (P3a,
+	// research/forge-migration/05-p3a-handler-map.md).
+	"internal/messageproto",
+
 	"internal/config",
 }
 

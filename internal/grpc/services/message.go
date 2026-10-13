@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/messageproto"
 )
 
 // MessageService implements the MessageService RPC handlers
@@ -116,7 +117,7 @@ func (s *MessageService) GetMessage(
 	// the caller has not said which thread it is reading as. Statuses are
 	// reported exactly as persisted; the branch-aware reinterpretation belongs
 	// to ListMessages, which knows the thread being displayed.
-	protoMessage := messageToProto(msg, blocks, attachments, &MessageToProtoOptions{
+	protoMessage := messageproto.FromDB(msg, blocks, attachments, &messageproto.Options{
 		ToolResultsByCallID:    toolResultsByCallID,
 		ToolCallStatusByCallID: toolCallStatusByCallID,
 	})

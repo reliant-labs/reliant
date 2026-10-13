@@ -1,5 +1,15 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+
+// Package messageproto converts stored chat messages into the
+// reliantv1.Message every transcript read path returns: ChatService's
+// ListMessages, MessageService's GetMessage and the StreamingService snapshot.
+// The inputs are db.Message rows, their content blocks and attachments, and
+// the durable tool-call rows that give a tool_call block its status. One
+// converter keeps the read paths from disagreeing about what a message looks
+// like (see AssembleForDisplay).
+//
+//forge:exclude-contract: stateless db-to-wire conversion of chat messages; AssembleForDisplay reads tool-call rows only through the ToolCallReader its caller passes, and the package holds no state of its own
+package messageproto
 
 import (
 	"context"
@@ -13,8 +23,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
-// MessageToProtoOptions configures optional behavior for message conversion.
-type MessageToProtoOptions struct {
+// Options configures optional behavior for message conversion.
+type Options struct {
 	// ToolResultsByCallID maps tool_call IDs to their matched results.
 	// When non-nil, tool_call content blocks will have their MatchedResult populated.
 	ToolResultsByCallID map[string]*reliantv1.MatchedToolResult
@@ -36,6 +46,13 @@ type MessageToProtoOptions struct {
 	// SequenceNumber, if non-zero, is set on the resulting proto message.
 	// Used by streaming snapshots to tag messages with the latest sequence.
 	SequenceNumber int64
+}
+
+// ToolCallReader is what AssembleForDisplay reads the durable tool-call rows
+// through.
+type ToolCallReader interface {
+	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*db.ToolCall, error)
+	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*db.ToolCall, error)
 }
 
 // toolCallStatusToProto converts the durable core.ToolCallStatus to the
@@ -62,12 +79,12 @@ func toolCallStatusToProto(s core.ToolCallStatus) reliantv1.ToolCallStatus {
 }
 
 // contentBlockToProto converts a db.MessageContentBlock to proto ContentBlock.
-// inheritedInFlightCall reports whether call is running in a different thread
+// InheritedInFlightCall reports whether call is running in a different thread
 // than the one being viewed. Such a call is unresolvable from here: the thread
 // that owns it will receive its result, and this thread only inherited the
 // request. A call with no recorded thread cannot be attributed either way, so it
 // is left alone.
-func inheritedInFlightCall(call *db.ToolCall, viewingThreadID string) bool {
+func InheritedInFlightCall(call *db.ToolCall, viewingThreadID string) bool {
 	if viewingThreadID == "" || call.ThreadID == nil || call.Status.IsTerminal() {
 		return false
 	}
@@ -95,7 +112,7 @@ func contentBlockToProto(b *db.MessageContentBlock, toolResultsByCallID map[stri
 			}
 			if call, found := toolCallStatusByCallID[*b.ToolCallID]; found {
 				status := toolCallStatusToProto(call.Status)
-				if inheritedInFlightCall(call, viewingThreadID) {
+				if InheritedInFlightCall(call, viewingThreadID) {
 					status = reliantv1.ToolCallStatus_TOOL_CALL_STATUS_CANCELLED
 				}
 				proto.ToolCallStatus = &status
@@ -124,11 +141,11 @@ func contentBlockToProto(b *db.MessageContentBlock, toolResultsByCallID map[stri
 	return proto
 }
 
-// messageToProto converts a db.Message to proto Message.
+// FromDB converts a db.Message to proto Message.
 // blocks and attachments are required; opts is optional (pass nil for defaults).
-func messageToProto(m *db.Message, blocks []*db.MessageContentBlock, attachments []*db.Attachment, opts *MessageToProtoOptions) *reliantv1.Message {
+func FromDB(m *db.Message, blocks []*db.MessageContentBlock, attachments []*db.Attachment, opts *Options) *reliantv1.Message {
 	if opts == nil {
-		opts = &MessageToProtoOptions{}
+		opts = &Options{}
 	}
 
 	// Compute streaming state from blocks
@@ -195,7 +212,7 @@ func messageToProto(m *db.Message, blocks []*db.MessageContentBlock, attachments
 	return proto
 }
 
-// assembleMessagesForDisplay converts a page of messages to proto WITH the
+// AssembleForDisplay converts a page of messages to proto WITH the
 // enrichment every display path needs: matched tool results, durable tool-call
 // status, and the child_workflow_id that tells a spawn which thread it owns.
 //
@@ -214,9 +231,9 @@ func messageToProto(m *db.Message, blocks []*db.MessageContentBlock, attachments
 //
 // blocksByMessageID and attachments must already be fetched; this does the
 // per-message grouping and the tool-call lookups.
-func assembleMessagesForDisplay(
+func AssembleForDisplay(
 	ctx context.Context,
-	database db.Repository,
+	toolCalls ToolCallReader,
 	messages []*db.Message,
 	messageIDs []string,
 	blocksByMessageID map[string][]*db.MessageContentBlock,
@@ -264,11 +281,11 @@ func assembleMessagesForDisplay(
 	// regardless. The by-message read is kept because it also returns calls
 	// whose block is not in this page.
 	toolCallStatusByCallID := make(map[string]*db.ToolCall)
-	toolCalls, err := database.ListToolCallsByMessageIDs(ctx, messageIDs)
+	calls, err := toolCalls.ListToolCallsByMessageIDs(ctx, messageIDs)
 	if err != nil {
 		logging.Warn("Failed to list tool calls for messages", "error", err, "messageCount", len(messageIDs))
 	} else {
-		for _, call := range toolCalls {
+		for _, call := range calls {
 			toolCallStatusByCallID[call.ID] = call
 		}
 	}
@@ -284,7 +301,7 @@ func assembleMessagesForDisplay(
 		}
 	}
 	if len(blockToolCallIDs) > 0 {
-		byID, err := database.ListToolCallsByIDs(ctx, blockToolCallIDs)
+		byID, err := toolCalls.ListToolCallsByIDs(ctx, blockToolCallIDs)
 		if err != nil {
 			logging.Warn("Failed to list tool calls by id", "error", err, "count", len(blockToolCallIDs))
 		} else {
@@ -313,7 +330,7 @@ func assembleMessagesForDisplay(
 			}
 		}
 
-		protoMessages = append(protoMessages, messageToProto(msg, blocks, msgAttachments, &MessageToProtoOptions{
+		protoMessages = append(protoMessages, FromDB(msg, blocks, msgAttachments, &Options{
 			ToolResultsByCallID:    toolResultsByCallID,
 			ToolCallStatusByCallID: toolCallStatusByCallID,
 			ViewingThreadID:        viewingThreadID,

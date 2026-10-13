@@ -26,7 +26,7 @@ import (
 //
 // Tool-call blocks are enriched from the durable tool_calls rows, so status
 // and child_workflow_id travel with the block the same way they do on the
-// read paths (see assembleMessagesForDisplay). A nil-safe lookup is used
+// read paths (see messageproto.AssembleForDisplay). A nil-safe lookup is used
 // rather than requiring callers to pre-fetch: the rows are keyed by the ids
 // already present in the blocks.
 func (r *Repo) ContentBlockPayloads(ctx context.Context, blocks []*MessageContentBlock) []map[string]interface{} {
