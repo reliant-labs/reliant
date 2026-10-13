@@ -11,7 +11,7 @@
  * - Seamless switching between worktrees with full state restoration
  */
 
-import { create } from "zustand";
+import { create, type StateCreator } from "zustand";
 import { persist } from "zustand/middleware";
 import { logger } from "../lib/logger";
 import { structurallyEqual } from "../lib/structuralEqual";
@@ -374,9 +374,48 @@ function cleanupDeprecatedStorage(): void {
 
 const CURRENT_VERSION = 7;
 
+type WorkspaceStateWrite =
+  | Partial<WorkspaceStateStore>
+  | ((state: WorkspaceStateStore) => Partial<WorkspaceStateStore>);
+
+/**
+ * A write that changes nothing publishes nothing — for every action in this
+ * store, not only the ones that remember to check.
+ *
+ * zustand notifies every subscriber whenever a write hands it a new object,
+ * equal or not, and the actions here always build one: a spread of
+ * `projects`, a fresh serialized viewer list. Some writers run again on every
+ * render they cause. The beforeunload save is one — a route that reloads
+ * while rendering (a stale code-split chunk) fires it once per render, and an
+ * always-new state turned that into an update loop that froze the tab on the
+ * Inbox (ELECTRON-CC, React #185). Comparing here, before the write reaches
+ * zustand, also spares persist re-serializing the whole store into
+ * localStorage for a write that changed nothing.
+ *
+ * Structural equality is cheap on this tree: actions spread the paths they
+ * leave alone, so those compare by reference and only the written branch is
+ * walked.
+ */
+function publishOnlyChanges(
+  createState: (
+    set: (write: WorkspaceStateWrite) => void,
+    get: () => WorkspaceStateStore
+  ) => WorkspaceStateStore
+): StateCreator<WorkspaceStateStore, [["zustand/persist", unknown]], []> {
+  return (set, get) =>
+    createState((write) => {
+      const state = get();
+      const partial = typeof write === "function" ? write(state) : write;
+      const changed = (Object.keys(partial) as (keyof WorkspaceStateStore)[]).some(
+        (key) => !structurallyEqual(state[key], partial[key])
+      );
+      if (changed) set(partial);
+    }, get);
+}
+
 export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
   persist(
-    (set, get) => ({
+    publishOnlyChanges((set, get) => ({
       version: CURRENT_VERSION,
       lastProjectId: null,
       leftSidebarExpanded: true,
@@ -462,26 +501,9 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
         set((state) => {
           const projectState =
             state.projects[projectId] ?? createDefaultProjectState();
-          const existingWorktreeState = projectState.worktrees[worktreeKey];
-
-          // A write that changes nothing publishes nothing. Returning the
-          // same state is what tells zustand not to notify: a new object
-          // re-renders every subscriber of this worktree, and some writers
-          // run again on every render they cause. The beforeunload save is
-          // one — a route that reloads while rendering (a stale code-split
-          // chunk) fires it once per render, and an always-new state turned
-          // that into an update loop that froze the tab (ELECTRON-CC).
-          if (
-            existingWorktreeState &&
-            (Object.keys(newState) as (keyof WorktreeState)[]).every((key) =>
-              structurallyEqual(existingWorktreeState[key], newState[key])
-            )
-          ) {
-            return state;
-          }
-
+          // An equal write publishes nothing: publishOnlyChanges compares it.
           const currentWorktreeState =
-            existingWorktreeState ?? createDefaultWorktreeState();
+            projectState.worktrees[worktreeKey] ?? createDefaultWorktreeState();
 
           const newProjects = {
             ...state.projects,
@@ -934,7 +956,7 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
           projects: {},
         });
       },
-    }),
+    })),
     {
       name: "workspace-state",
       version: CURRENT_VERSION,

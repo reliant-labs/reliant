@@ -405,6 +405,50 @@ describe('workspaceStateStore', () => {
     });
   });
 
+  // ELECTRON-CC: the no-op guard lives on the store's own set, so actions
+  // above the worktree level — and any added later — get it too, and an
+  // unchanged write does not re-serialize the store into localStorage.
+  describe('No-op writes', () => {
+    const projectId = 'project-1';
+
+    it('publishes and persists nothing when a project-level or global write changes nothing', () => {
+      const writeAll = () => {
+        const store = useWorkspaceStateStore.getState();
+        store.setLastProject(projectId);
+        store.setLeftSidebarExpandedGlobal(false);
+        store.setLastWorktree(projectId, 'worktree-1');
+        store.setActiveView(projectId, 'settings');
+        store.setNewChatDraft(projectId, 'draft');
+        store.setLastWorkflowViewerMode(projectId, 'side');
+      };
+      act(writeAll);
+      const before = useWorkspaceStateStore.getState();
+      const listener = vi.fn();
+      const unsubscribe = useWorkspaceStateStore.subscribe(listener);
+      const persisted = vi.spyOn(localStorageMock, 'setItem');
+
+      act(() => {
+        writeAll();
+        const store = useWorkspaceStateStore.getState();
+        store.clearNewChatDraft('unknown-project');
+        store.removeWorktreeState('unknown-project', 'worktree-1');
+        // Nothing stale: every reference it would drop is already gone.
+        store.cleanupStaleReferences([projectId], { [projectId]: ['worktree-1'] }, { [projectId]: [] });
+      });
+      expect(listener).not.toHaveBeenCalled();
+      expect(persisted).not.toHaveBeenCalled();
+      expect(useWorkspaceStateStore.getState()).toBe(before);
+
+      act(() => {
+        useWorkspaceStateStore.getState().setActiveView(projectId, 'chats');
+      });
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(persisted).toHaveBeenCalledTimes(1);
+      expect(useWorkspaceStateStore.getState().getProjectState(projectId).activeView).toBe('chats');
+      unsubscribe();
+    });
+  });
+
   describe('Reset', () => {
     it('should reset all state to defaults', () => {
       act(() => {
