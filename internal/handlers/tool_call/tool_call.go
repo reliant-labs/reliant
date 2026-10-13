@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tool_call
 
 import (
 	"context"
@@ -8,37 +8,17 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"go.temporal.io/sdk/client"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-type ToolCallService struct {
-	reliantv1connect.UnimplementedToolCallServiceHandler
-	database   db.Repository
-	tempClient client.Client
-	router     toolexec.DaemonRouter
-}
-
-// NewToolCallService creates a new ToolCallService
-func NewToolCallService(database db.Repository, tempClient client.Client, router toolexec.DaemonRouter) *ToolCallService {
-	return &ToolCallService{
-		database:   database,
-		tempClient: tempClient,
-		router:     router,
-	}
-}
-
 // CancelToolCall cancels an executing tool call by setting an in-memory cancel signal and cancelling the Temporal workflow.
-func (s *ToolCallService) CancelToolCall(
+func (s *Service) CancelToolCall(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CancelToolCallRequest],
 ) (*connect.Response[reliantv1.CancelToolCallResponse], error) {
@@ -53,14 +33,14 @@ func (s *ToolCallService) CancelToolCall(
 	}
 
 	// Find the content block by tool_call_id
-	block, err := s.database.GetContentBlockByToolCallID(ctx, toolCallID)
+	block, err := s.deps.Repo.GetContentBlockByToolCallID(ctx, toolCallID)
 	if err != nil {
 		logging.Error("[CancelToolCall] Failed to find tool call", "error", err, "toolCallID", toolCallID)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("tool call not found: %s", toolCallID))
 	}
 
 	// Get the message to find the chat ID
-	msg, err := s.database.GetMessage(ctx, block.MessageID)
+	msg, err := s.deps.Repo.GetMessage(ctx, block.MessageID)
 	if err != nil {
 		logging.Error("[CancelToolCall] Failed to find message for tool call", "error", err, "messageID", block.MessageID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to find message for tool call"))
@@ -69,7 +49,7 @@ func (s *ToolCallService) CancelToolCall(
 	chatID := msg.ChatID
 
 	// Get the chat and verify ownership
-	chat, err := s.database.GetChat(ctx, chatID)
+	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
@@ -91,8 +71,8 @@ func (s *ToolCallService) CancelToolCall(
 	// so this reaches exactly the one running tool. Best-effort by design: if
 	// the daemon is offline or the tool runs server-side, the tool runs to
 	// completion and reports its real outcome.
-	if s.router != nil {
-		if err := s.router.SendToolExecutionCancel(ctx, userID, toolCallID, "user cancelled tool call"); err != nil {
+	if s.deps.Router != nil {
+		if err := s.deps.Router.SendToolExecutionCancel(ctx, userID, toolCallID, "user cancelled tool call"); err != nil {
 			logging.Warn("[CancelToolCall] Could not deliver cancel to daemon; relying on cancel signal",
 				"error", err, "toolCallID", toolCallID)
 		}
@@ -158,8 +138,8 @@ func (s *ToolCallService) CancelToolCall(
 // Unavailable rather than marking the call cancelled. Only the bookkeeping
 // behind it is best-effort — see temporal.SpawnStopper, which this delegates
 // to and which the spawn_stop tool shares.
-func (s *ToolCallService) cancelChildWorkflowForToolCall(ctx context.Context, toolCallID string) error {
-	calls, err := s.database.ListToolCallsByIDs(ctx, []string{toolCallID})
+func (s *Service) cancelChildWorkflowForToolCall(ctx context.Context, toolCallID string) error {
+	calls, err := s.deps.Repo.ListToolCallsByIDs(ctx, []string{toolCallID})
 	if err != nil {
 		logging.Warn("[CancelToolCall] Could not read tool call; cannot check for a child workflow",
 			"toolCallID", toolCallID, "error", err)
@@ -180,7 +160,7 @@ func (s *ToolCallService) cancelChildWorkflowForToolCall(ctx context.Context, to
 	// and a second copy of "which signal, to which workflow id, with which ids
 	// in the payload" is exactly the drift that produced the phantom cancel
 	// described above.
-	if s.tempClient == nil {
+	if s.deps.Temporal == nil {
 		return fmt.Errorf("no temporal client; cannot deliver cancellation for %s", toolCallID)
 	}
 	// child_workflow_id names the workflow row for THIS call, which is the row
@@ -190,16 +170,21 @@ func (s *ToolCallService) cancelChildWorkflowForToolCall(ctx context.Context, to
 	// link (CreateWorkflowWithThread always sets it, new or resumed), so read
 	// it rather than assuming the two ids coincide.
 	childThreadID := childWorkflowID
-	if wf, wfErr := s.database.GetWorkflow(ctx, childWorkflowID); wfErr == nil && wf != nil && wf.Thread != "" {
+	if wf, wfErr := s.deps.Repo.GetWorkflow(ctx, childWorkflowID); wfErr == nil && wf != nil && wf.Thread != "" {
 		childThreadID = wf.Thread
 	}
 
-	stopper := rtemporal.NewSpawnStopper(s.tempClient, chatWorkflowIDLookup(s.database), s.database)
+	stopper := rtemporal.NewSpawnStopper(s.deps.Temporal, chatWorkflowIDLookup(s.deps.Repo), s.deps.Repo)
 	return stopper.StopSpawn(ctx, call.ChatID, rtemporal.SpawnRef{
 		ThreadID:   childThreadID,
 		WorkflowID: childWorkflowID,
 		ToolCallID: toolCallID,
 	})
+}
+
+// chatReader reads one chat; Repository satisfies it.
+type chatReader interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
 // chatWorkflowIDLookup resolves a chat id to the Temporal workflow id driving
@@ -211,7 +196,7 @@ func (s *ToolCallService) cancelChildWorkflowForToolCall(ctx context.Context, to
 // is normally created with the chat id as its identity, but chats.workflow_id
 // is authoritative — a run restarted after the history limit carries a
 // different id, and signalling the chat id would silently reach nothing.
-func chatWorkflowIDLookup(repo db.Repository) func(ctx context.Context, chatID string) (string, bool) {
+func chatWorkflowIDLookup(repo chatReader) func(ctx context.Context, chatID string) (string, bool) {
 	return func(ctx context.Context, chatID string) (string, bool) {
 		if repo == nil {
 			return "", false
@@ -226,7 +211,7 @@ func chatWorkflowIDLookup(repo db.Repository) func(ctx context.Context, chatID s
 
 // ConvertToBackground converts an executing tool call to a background process
 // This allows the tool to continue running while the workflow can proceed
-func (s *ToolCallService) ConvertToBackground(
+func (s *Service) ConvertToBackground(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ConvertToBackgroundRequest],
 ) (*connect.Response[reliantv1.ConvertToBackgroundResponse], error) {
@@ -241,14 +226,14 @@ func (s *ToolCallService) ConvertToBackground(
 	}
 
 	// Find the content block by tool_call_id
-	block, err := s.database.GetContentBlockByToolCallID(ctx, toolCallID)
+	block, err := s.deps.Repo.GetContentBlockByToolCallID(ctx, toolCallID)
 	if err != nil {
 		logging.Error("[ConvertToBackground] Failed to find tool call", "error", err, "toolCallID", toolCallID)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("tool call not found: %s", toolCallID))
 	}
 
 	// Get the message to find the chat ID
-	msg, err := s.database.GetMessage(ctx, block.MessageID)
+	msg, err := s.deps.Repo.GetMessage(ctx, block.MessageID)
 	if err != nil {
 		logging.Error("[ConvertToBackground] Failed to find message for tool call", "error", err, "messageID", block.MessageID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to find message for tool call"))
@@ -257,7 +242,7 @@ func (s *ToolCallService) ConvertToBackground(
 	chatID := msg.ChatID
 
 	// Get the chat and verify ownership
-	chat, err := s.database.GetChat(ctx, chatID)
+	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
@@ -300,13 +285,13 @@ func (s *ToolCallService) ConvertToBackground(
 	// foreground with a NULL background_process_id.
 	shell.GetBackgroundSignal().SetBackgrounded(toolCallID)
 
-	if s.router == nil {
+	if s.deps.Router == nil {
 		return nil, connect.NewError(connect.CodeUnavailable,
 			fmt.Errorf("cannot background: no daemon router configured"))
 	}
 	// Addressed by tool call id: that is the only id the UI can name, and the
 	// daemon registers each execution under it (see runtime.go).
-	if err := s.router.SendToolExecutionBackground(ctx, userID, toolCallID, toolCallID); err != nil {
+	if err := s.deps.Router.SendToolExecutionBackground(ctx, userID, toolCallID, toolCallID); err != nil {
 		// Do not claim success. The command is still running in the foreground,
 		// and reporting otherwise is what made this look like a working feature
 		// for months.
@@ -342,13 +327,13 @@ func (s *ToolCallService) ConvertToBackground(
 // Keyed by the LLM tool-call id, matching every other tool-status emitter — the
 // block UUID this handler also has on hand is a different identifier space and
 // no status consumer looks it up.
-func (s *ToolCallService) emitToolCallCancelled(ctx context.Context, chatID, toolCallID, toolName string) {
+func (s *Service) emitToolCallCancelled(ctx context.Context, chatID, toolCallID, toolName string) {
 	update := db.ToolCallUpdate{
 		ToolCallID: toolCallID,
 		ToolName:   toolName,
 		Status:     db.ToolCallStatusCancelled,
 	}
-	if err := s.database.EmitToolCallCancelledUpdate(ctx, chatID, update); err != nil {
+	if err := s.deps.Repo.EmitToolCallCancelledUpdate(ctx, chatID, update); err != nil {
 		logging.Error("[CancelToolCall] Failed to create chat update", "error", err)
 	}
 }
@@ -364,7 +349,7 @@ func (s *ToolCallService) emitToolCallCancelled(ctx context.Context, chatID, too
 // Unlike the execution paths, this handler already looked up the block and its
 // message to get here, so thread_id / message_id / input are free and worth
 // recording.
-func (s *ToolCallService) persistToolCallStatus(
+func (s *Service) persistToolCallStatus(
 	ctx context.Context,
 	chatID, toolCallID string,
 	block *db.MessageContentBlock,
@@ -400,20 +385,20 @@ func (s *ToolCallService) persistToolCallStatus(
 		call.BackgroundProcessID = &backgroundProcessID
 	}
 
-	if err := db.UpsertToolCallStatus(ctx, s.database, call); err != nil {
+	if err := db.UpsertToolCallStatus(ctx, s.deps.Repo, call); err != nil {
 		logging.Error("[ToolCallService] Failed to persist tool call status",
 			"error", err, "toolCallID", toolCallID, "status", status)
 	}
 }
 
 // emitToolCallBackgrounded emits a tool_call backgrounded status update to chat_updates
-func (s *ToolCallService) emitToolCallBackgrounded(ctx context.Context, chatID, toolCallID, toolName string) {
+func (s *Service) emitToolCallBackgrounded(ctx context.Context, chatID, toolCallID, toolName string) {
 	update := db.ToolCallUpdate{
 		ToolCallID: toolCallID,
 		ToolName:   toolName,
 		Status:     db.ToolCallStatusBackgrounded,
 	}
-	if err := s.database.EmitToolCallBackgroundedUpdate(ctx, chatID, update); err != nil {
+	if err := s.deps.Repo.EmitToolCallBackgroundedUpdate(ctx, chatID, update); err != nil {
 		logging.Error("[ConvertToBackground] Failed to create chat update", "error", err)
 	}
 }

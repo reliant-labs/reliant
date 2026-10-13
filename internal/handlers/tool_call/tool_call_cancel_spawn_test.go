@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tool_call
 
 import (
 	"context"
@@ -95,7 +95,7 @@ func TestCancelToolCall_SignalsParentToCancelSpawn(t *testing.T) {
 	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
 	tc := &signaltest.Recorder{}
-	svc := NewToolCallService(repo, tc, &toolexectest.Recorder{})
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Temporal: tc, Router: &toolexectest.Recorder{}}))
 
 	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
@@ -123,7 +123,7 @@ func TestCancelToolCall_SignalFails_DoesNotClaimCancelled(t *testing.T) {
 	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
 	tc := &signaltest.Recorder{SignalErr: errors.New("workflow not found")}
-	svc := NewToolCallService(repo, tc, &toolexectest.Recorder{})
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Temporal: tc, Router: &toolexectest.Recorder{}}))
 
 	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
@@ -146,7 +146,7 @@ func TestCancelToolCall_ReconcilesSpawnWorkflowRow(t *testing.T) {
 
 	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
-	svc := NewToolCallService(repo, &signaltest.Recorder{}, &toolexectest.Recorder{})
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Temporal: &signaltest.Recorder{}, Router: &toolexectest.Recorder{}}))
 	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
 	}))
@@ -206,7 +206,7 @@ func TestCancelToolCall_RegularToolTouchesNoWorkflow(t *testing.T) {
 		Thread: threadID, Status: core.Active(), CreatedAt: now,
 	}))
 
-	svc := NewToolCallService(repo, nil, &toolexectest.Recorder{})
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
 	_, err = svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
 	}))
@@ -258,7 +258,7 @@ func TestCancelToolCall_ResumedSpawn_SignalsOriginalThreadAndReconcilesWorkflowR
 	// Cancel by the resumption's call. It has no content block, so go through
 	// the helper directly rather than the RPC, which resolves chat via a block.
 	tc := &signaltest.Recorder{}
-	svc := NewToolCallService(repo, tc, &toolexectest.Recorder{})
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Temporal: tc, Router: &toolexectest.Recorder{}}))
 	require.NoError(t, svc.cancelChildWorkflowForToolCall(ctx, resumeToolCallID))
 	_ = toolCallID
 

@@ -1,4 +1,4 @@
-package services
+package tool_call
 
 import (
 	"context"
@@ -68,7 +68,7 @@ func TestCancelToolCall_DeliversCancelToDaemonAndSucceeds(t *testing.T) {
 	}))
 
 	router := &toolexectest.Recorder{}
-	svc := NewToolCallService(repo, nil, router)
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: router}))
 
 	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{ToolCallId: toolCallID}))
 	require.NoError(t, err)

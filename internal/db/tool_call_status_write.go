@@ -9,6 +9,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
+// ToolCallStatusStore is the slice of Repository UpsertToolCallStatus reads
+// and writes, so a caller holding a narrower repository can still record a
+// transition.
+type ToolCallStatusStore interface {
+	GetToolCall(ctx context.Context, id string) (*core.ToolCall, error)
+	GetContentBlockByToolCallID(ctx context.Context, toolCallID string) (*MessageContentBlock, error)
+	GetMessage(ctx context.Context, id string) (*Message, error)
+	UpsertToolCall(ctx context.Context, call *core.ToolCall) error
+}
+
 // UpsertToolCallStatus records a tool call status transition without losing
 // what an earlier transition already established.
 //
@@ -49,7 +59,7 @@ import (
 // call decide this one's status. Such a write is refused with
 // core.ErrToolCallIDInAnotherChat, and UpsertToolCall refuses it again at the
 // database, where no concurrent first write can slip past the read.
-func UpsertToolCallStatus(ctx context.Context, repo Repository, call *core.ToolCall) error {
+func UpsertToolCallStatus(ctx context.Context, repo ToolCallStatusStore, call *core.ToolCall) error {
 	if call == nil {
 		return nil
 	}
@@ -132,7 +142,7 @@ func pinTerminalOutcome(existing, call *core.ToolCall) {
 //
 // Best-effort, like everything else on this path: a tool call must never fail
 // because its bookkeeping could not find a message.
-func resolveToolCallMessage(ctx context.Context, repo Repository, call *core.ToolCall) {
+func resolveToolCallMessage(ctx context.Context, repo ToolCallStatusStore, call *core.ToolCall) {
 	if call.MessageID != nil && *call.MessageID != "" {
 		return
 	}

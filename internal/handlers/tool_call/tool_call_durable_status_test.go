@@ -1,4 +1,4 @@
-package services
+package tool_call
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func TestCancelToolCall_PersistsCancelledStatus(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	f := dbtest.SeedToolCall(t, ctx, repo, `{"command":"sleep 600"}`)
 
-	svc := NewToolCallService(repo, nil, &toolexectest.Recorder{})
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
 	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: f.ToolCallID,
 	}))
@@ -58,7 +58,7 @@ func TestConvertToBackground_PersistsBackgroundedStatus(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	f := dbtest.SeedToolCall(t, ctx, repo, `{"command":"npm run dev"}`)
 
-	svc := NewToolCallService(repo, nil, &toolexectest.Recorder{})
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
 	resp, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
 		ToolCallId: f.ToolCallID,
 	}))
@@ -95,7 +95,7 @@ func TestCancelToolCall_PreservesExistingExecutionFields(t *testing.T) {
 		UpdatedAt:   startedAt,
 	}))
 
-	svc := NewToolCallService(repo, nil, &toolexectest.Recorder{})
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
 	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: f.ToolCallID,
 	}))
@@ -121,7 +121,7 @@ func TestCancelToolCall_IsIdempotent(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	f := dbtest.SeedToolCall(t, ctx, repo, `{"command":"sleep 600"}`)
 
-	svc := NewToolCallService(repo, nil, &toolexectest.Recorder{})
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
 	for i := 0; i < 3; i++ {
 		_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 			ToolCallId: f.ToolCallID,

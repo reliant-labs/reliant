@@ -149,6 +149,12 @@
     },
     "internal/handlers/token/handlers_scaffold_update_token_test.go": {
       "scaffolded_at": "2026-10-13T13:25:02Z"
+    },
+    "internal/handlers/tool_call/handlers_scaffold_cancel_tool_call_test.go": {
+      "scaffolded_at": "2026-10-13T13:05:38Z"
+    },
+    "internal/handlers/tool_call/handlers_scaffold_convert_to_background_test.go": {
+      "scaffolded_at": "2026-10-13T13:05:38Z"
     }
   },
   "absent_reported": [

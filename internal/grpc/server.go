@@ -44,6 +44,7 @@ import (
 	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/handlers/token"
+	"github.com/reliant-labs/reliant/internal/handlers/tool_call"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -311,7 +312,16 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, fmt.Errorf("token service: %w", err)
 	}
 	daemonProxyService := services.NewDaemonProxyService(router)
-	toolCallService := services.NewToolCallService(database, cfg.TemporalClient, router)
+	toolCallService, err := tool_call.New(tool_call.Deps{
+		Logger:   handlerLogger,
+		Config:   handlerConfig,
+		Repo:     database,
+		Temporal: cfg.TemporalClient,
+		Router:   router,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("tool_call service: %w", err)
+	}
 
 	// Register services with Connect handlers
 	// Connect generates HTTP handlers that work with standard net/http

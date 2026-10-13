@@ -28110,8 +28110,7 @@
         "reliant.v1.CancelToolCallResponse": "reliant/v1/tool_call.proto",
         "reliant.v1.ConvertToBackgroundRequest": "reliant/v1/tool_call.proto",
         "reliant.v1.ConvertToBackgroundResponse": "reliant/v1/tool_call.proto"
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "WorkflowService",
@@ -33577,5 +33576,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "3d53b901733b2ec667c73c74e99b65ebf86552d7a838cc32de199d23d399578d"
+  "source_hash": "cdd3391defeaec6d06dfe89bd56c57e1be854b3bd1f6c3dc590ad603aba04bb2"
 }

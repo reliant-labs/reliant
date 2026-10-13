@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package tool_call
 
 import (
 	"context"
@@ -66,7 +66,7 @@ func TestConvertToBackground_SendsRequestToDaemon(t *testing.T) {
 	_, toolCallID := seedRunningToolCall(t, repo, ctx)
 
 	router := &toolexectest.Recorder{}
-	svc := NewToolCallService(repo, nil, router)
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: router}))
 
 	resp, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
 		ToolCallId: toolCallID,
@@ -92,7 +92,7 @@ func TestConvertToBackground_DaemonUnreachable_DoesNotClaimSuccess(t *testing.T)
 	_, toolCallID := seedRunningToolCall(t, repo, ctx)
 
 	router := &toolexectest.Recorder{BackgroundErr: errors.New("daemon offline")}
-	svc := NewToolCallService(repo, nil, router)
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: router}))
 
 	_, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
 		ToolCallId: toolCallID,
