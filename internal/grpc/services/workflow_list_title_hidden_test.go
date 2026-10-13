@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestWorkflowService_ListWorkflows_TitleAndHiddenBuiltins(t *testing.T) {
@@ -33,7 +34,7 @@ func TestWorkflowService_ListWorkflows_TitleAndHiddenBuiltins(t *testing.T) {
 	svc := &WorkflowService{database: repo}
 	list := func(includeHidden bool) map[string]*reliantv1.WorkflowListItem {
 		resp, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
-			ProjectId: projectID, IncludeHidden: includeHidden,
+			ProjectId: projectID, IncludeHidden: proto.Bool(includeHidden),
 		}))
 		require.NoError(t, err)
 		out := map[string]*reliantv1.WorkflowListItem{}

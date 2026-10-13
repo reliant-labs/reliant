@@ -15,6 +15,7 @@ import (
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 // The workflow draft lifecycle (specs/workflow-draft-lifecycle.md): a DRAFT is
@@ -328,7 +329,7 @@ func TestListWorkflows_StatusAndComputedValidity(t *testing.T) {
 		assert.NotEqual(t, "valid-draft", wf.Filename, "a draft must not be offered where a runnable workflow is required")
 	}
 
-	all, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID, IncludeHidden: true}))
+	all, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID, IncludeHidden: proto.Bool(true)}))
 	require.NoError(t, err)
 	listed := map[string]*reliantv1.WorkflowListItem{}
 	for _, wf := range all.Msg.Workflows {

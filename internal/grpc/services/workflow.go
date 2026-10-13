@@ -172,7 +172,7 @@ func (s *WorkflowService) ListWorkflows(
 
 		// Hidden builtins are building blocks other workflows ref:; they stay
 		// runnable and resolvable, just out of the default listing.
-		if protoWf.Hidden && !req.Msg.IncludeHidden {
+		if protoWf.Hidden && !req.Msg.GetIncludeHidden() {
 			continue
 		}
 
@@ -223,7 +223,7 @@ func (s *WorkflowService) ListWorkflows(
 	// include_hidden=true; each carries its status and current findings.
 	drafts, draftsErr := catalog.Drafts()
 	if draftsErr != nil {
-		logging.Error("Failed to list workflows from database", "error", draftsErr, "user_id", userID, "include_hidden", req.Msg.IncludeHidden)
+		logging.Error("Failed to list workflows from database", "error", draftsErr, "user_id", userID, "include_hidden", req.Msg.GetIncludeHidden())
 		// Continue with builtins and project workflows
 	} else {
 		// One loader for every workflow validated here, so a ref several of
@@ -235,11 +235,11 @@ func (s *WorkflowService) ListWorkflows(
 			return resolvingToSelf(self, validationRefs)
 		}
 		for _, draft := range drafts {
-			if !req.Msg.IncludeHidden && (draft.IsHidden || draft.Status != db.WorkflowDraftStatusComplete) {
+			if !req.Msg.GetIncludeHidden() && (draft.IsHidden || draft.Status != db.WorkflowDraftStatusComplete) {
 				continue
 			}
 			check := validateWorkflowDefinitionWith([]byte(draft.Definition), validationLoader)
-			if !req.Msg.IncludeHidden && !check.valid() {
+			if !req.Msg.GetIncludeHidden() && !check.valid() {
 				continue
 			}
 			item, err := userWorkflowListItem(draft, check)
@@ -289,7 +289,7 @@ func (s *WorkflowService) ListWorkflows(
 	workflows := make([]*reliantv1.WorkflowListItem, 0, len(workflowsBySlug))
 	for _, wf := range workflowsBySlug {
 		// Check visibility for builtin workflows (unless include_hidden is set)
-		if wf.Source == "builtin" && !req.Msg.IncludeHidden {
+		if wf.Source == "builtin" && !req.Msg.GetIncludeHidden() {
 			visible, ok := wfOverrides[wf.Name]
 			if !ok {
 				visible = !wfHiddenDefaultSet[wf.Name]

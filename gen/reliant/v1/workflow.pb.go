@@ -495,9 +495,9 @@ func (x *ValidationError) GetPath() string {
 
 type ListWorkflowsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`              // Required: project ID to list workflows for
-	WorktreeId    *string                `protobuf:"bytes,2,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`     // Optional: worktree ID for layered config (worktree > project > global)
-	IncludeHidden bool                   `protobuf:"varint,3,opt,name=include_hidden,json=includeHidden,proto3" json:"include_hidden,omitempty"` // If true, include items hidden by default (for management UIs)
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`                    // Required: project ID to list workflows for
+	WorktreeId    *string                `protobuf:"bytes,2,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`           // Optional: worktree ID for layered config (worktree > project > global)
+	IncludeHidden *bool                  `protobuf:"varint,3,opt,name=include_hidden,json=includeHidden,proto3,oneof" json:"include_hidden,omitempty"` // If true, include items hidden by default (for management UIs)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -547,8 +547,8 @@ func (x *ListWorkflowsRequest) GetWorktreeId() string {
 }
 
 func (x *ListWorkflowsRequest) GetIncludeHidden() bool {
-	if x != nil {
-		return x.IncludeHidden
+	if x != nil && x.IncludeHidden != nil {
+		return *x.IncludeHidden
 	}
 	return false
 }
@@ -2260,14 +2260,15 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x05field\x18\n" +
 	" \x01(\tR\x05field\x12\x16\n" +
 	"\x06detail\x18\v \x01(\tR\x06detail\x12\x12\n" +
-	"\x04path\x18\f \x01(\tR\x04path\"\x92\x01\n" +
+	"\x04path\x18\f \x01(\tR\x04path\"\xaa\x01\n" +
 	"\x14ListWorkflowsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
 	"\vworktree_id\x18\x02 \x01(\tH\x00R\n" +
-	"worktreeId\x88\x01\x01\x12%\n" +
-	"\x0einclude_hidden\x18\x03 \x01(\bR\rincludeHiddenB\x0e\n" +
-	"\f_worktree_id\"\xb3\x01\n" +
+	"worktreeId\x88\x01\x01\x12*\n" +
+	"\x0einclude_hidden\x18\x03 \x01(\bH\x01R\rincludeHidden\x88\x01\x01B\x0e\n" +
+	"\f_worktree_idB\x11\n" +
+	"\x0f_include_hidden\"\xb3\x01\n" +
 	"\x15ListWorkflowsResponse\x12:\n" +
 	"\tworkflows\x18\x01 \x03(\v2\x1c.reliant.v1.WorkflowListItemR\tworkflows\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12H\n" +

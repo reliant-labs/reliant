@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestWorkflowService_ListWorkflows_OnlyReturnsCreateChatUsableUserWorkflows(t *testing.T) {
@@ -122,7 +123,7 @@ nodes:
 	t.Run("include_hidden exposes management drafts for workflow hub", func(t *testing.T) {
 		resp, err := workflowService.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
 			ProjectId:     projectID,
-			IncludeHidden: true,
+			IncludeHidden: proto.Bool(true),
 		}))
 		require.NoError(t, err)
 

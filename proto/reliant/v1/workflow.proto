@@ -166,7 +166,7 @@ message ValidationError {
 message ListWorkflowsRequest {
   string project_id = 1; // Required: project ID to list workflows for
   optional string worktree_id = 2; // Optional: worktree ID for layered config (worktree > project > global)
-  bool include_hidden = 3; // If true, include items hidden by default (for management UIs)
+  optional bool include_hidden = 3; // If true, include items hidden by default (for management UIs)
 }
 
 message ListWorkflowsResponse {

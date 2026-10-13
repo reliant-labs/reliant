@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -47,7 +48,7 @@ nodes:
 
 	// include_hidden: the fixtures are minimal and need not pass the chat-safe
 	// listing's validation to carry a needs_machine verdict.
-	resp, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID, IncludeHidden: true}))
+	resp, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID, IncludeHidden: proto.Bool(true)}))
 	require.NoError(t, err)
 	byName := map[string]*reliantv1.WorkflowListItem{}
 	for _, wf := range resp.Msg.GetWorkflows() {

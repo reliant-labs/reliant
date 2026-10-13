@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowlisttest"
@@ -24,7 +25,7 @@ func TestListWorkflows_ReadsEachSourceOncePerListing(t *testing.T) {
 	svc := NewWorkflowService(repo, nil)
 
 	resp, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
-		ProjectId: repo.Project.ID, IncludeHidden: true,
+		ProjectId: repo.Project.ID, IncludeHidden: proto.Bool(true),
 	}))
 	require.NoError(t, err)
 
@@ -52,7 +53,7 @@ func TestListWorkflows_ReadsEachSourceOncePerListing(t *testing.T) {
 func TestListWorkflows_LatencyDoesNotScaleWithRefs(t *testing.T) {
 	ctx, repo := workflowlisttest.NewFixture(t, 12)
 	svc := NewWorkflowService(repo, nil)
-	req := connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: repo.Project.ID, IncludeHidden: true})
+	req := connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: repo.Project.ID, IncludeHidden: proto.Bool(true)})
 	// Warm the process-wide caches (parsed builtins, tool registry) so what
 	// is measured is the listing's round trips, not first-use CPU.
 	_, err := svc.ListWorkflows(ctx, req)

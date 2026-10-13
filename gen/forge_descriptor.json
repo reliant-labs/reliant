@@ -28618,7 +28618,7 @@
           {
             "Name": "include_hidden",
             "ProtoType": "bool",
-            "IsOptional": false
+            "IsOptional": true
           }
         ],
         "ListWorkflowsResponse": [
@@ -29881,7 +29881,8 @@
           },
           {
             "name": "include_hidden",
-            "kind": "bool"
+            "kind": "bool",
+            "optional": true
           }
         ],
         "reliant.v1.ListWorkflowsResponse": [
@@ -33583,5 +33584,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "3320f876244f26a1020d3a95acc4d0fb082b5dd0b89ba67d84c10922d3e79f4a"
+  "source_hash": "10856a7471145ecab0a5c71a1aba366bc596c2de8344f8c14485f2f543ae0281"
 }
