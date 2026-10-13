@@ -48,7 +48,7 @@ const (
 	//
 	// The row is a LEASE, not a record: a live stream renews it on every
 	// inbound heartbeat (15s), and every reader already treats it as dead
-	// past 90s (daemonAttachmentStaleThreshold) or 2m (/flow-health). A row
+	// past 90s (daemon_registry.AttachmentStaleThreshold) or 2m (/flow-health). A row
 	// untouched for 15m is therefore useless to every reader and cannot
 	// belong to a live stream on any replica — 10x the widest reader window
 	// is margin enough for a NATS hiccup or a paused DB.
@@ -79,7 +79,7 @@ const (
 	// registryAttachmentFreshness is how recent an attachment lease must be
 	// for a row to count as connected and therefore real. Matches the
 	// registry's own attachment staleness threshold
-	// (services.daemonAttachmentStaleThreshold): a row the list reports as
+	// (daemon_registry.AttachmentStaleThreshold): a row the list reports as
 	// connected must not be the row a snapshot deletes.
 	registryAttachmentFreshness = 90 * time.Second
 

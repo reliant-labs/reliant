@@ -39,6 +39,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/attachment"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
+	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
@@ -311,7 +312,15 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, fmt.Errorf("preset service: %w", err)
 	}
 
-	daemonRegistryService := services.NewDaemonRegistryService(database, router)
+	daemonRegistryService, err := daemon_registry.New(daemon_registry.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+		Router: router,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("daemon_registry service: %w", err)
+	}
 	// Credentials for custom endpoints have one home, the sealed connection
 	// store, which this branch does not have; nil keeps keys unavailable.
 	modelEndpointService := services.NewModelEndpointService(database, router, nil)

@@ -1,0 +1,43 @@
+package daemon_registry_test
+
+import (
+	"context"
+	"testing"
+
+	"connectrpc.com/connect"
+
+	"github.com/reliant-labs/forge/pkg/tdd"
+
+	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+
+	daemon_registry "github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
+)
+
+// The listing itself (status composition, stored local models, disk
+// reports, liveness read failures) runs against a real database in
+// internal/grpc/services (daemon_registry_localmodel_test.go,
+// daemon_registry_disk_test.go, tools_daemon_lease_test.go); these rows pin
+// the caller check and the empty answer.
+func TestListDaemons_Generated(t *testing.T) {
+	t.Parallel()
+
+	svc := daemon_registry.NewTestDaemonRegistry(t)
+	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListDaemonsRequest, pb.ListDaemonsResponse]{
+		{
+			Name:    "unauthenticated caller is rejected",
+			Req:     connect.NewRequest(&pb.ListDaemonsRequest{}),
+			Ctx:     context.Background(),
+			WantErr: connect.CodeUnauthenticated,
+		},
+		{
+			Name: "a caller with no daemons gets an empty list",
+			Req:  connect.NewRequest(&pb.ListDaemonsRequest{}),
+			Ctx:  daemon_registry.AuthedContext(t),
+			Check: func(t *testing.T, resp *connect.Response[pb.ListDaemonsResponse]) {
+				if n := len(resp.Msg.GetDaemons()); n != 0 {
+					t.Fatalf("ListDaemons returned %d daemons, want 0", n)
+				}
+			},
+		},
+	}, svc.ListDaemons)
+}

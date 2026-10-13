@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
-package services
+package daemon_registry
 
 import (
 	"testing"

@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -40,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -49,6 +51,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
 const (
@@ -87,7 +90,14 @@ func e2eAPI(t *testing.T, repo *db.Repo, router toolexec.DaemonRouter) (reliantv
 		}
 	}))
 	mux := http.NewServeMux()
-	p1, h1 := reliantv1connect.NewDaemonRegistryServiceHandler(services.NewDaemonRegistryService(repo, router), asUser)
+	registry, err := daemon_registry.New(daemon_registry.Deps{
+		Logger: slog.Default(),
+		Config: &typedconfig.Config{},
+		Repo:   repo,
+		Router: router,
+	})
+	require.NoError(t, err)
+	p1, h1 := reliantv1connect.NewDaemonRegistryServiceHandler(registry, asUser)
 	mux.Handle(p1, h1)
 	p2, h2 := reliantv1connect.NewCatalogServiceHandler(
 		services.NewCatalogService(nil).WithLocalModels(local.NewRepoDirectory(repo)), asUser)

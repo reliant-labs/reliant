@@ -16,6 +16,10 @@
         "rpc_service": "reliant.v1.ConnectorService"
       },
       {
+        "name": "daemon_registry",
+        "rpc_service": "reliant.v1.DaemonRegistryService"
+      },
+      {
         "name": "file_system",
         "rpc_service": "reliant.v1.FileSystemService"
       },

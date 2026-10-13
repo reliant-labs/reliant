@@ -9932,8 +9932,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "DaemonStatus"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "FileSystemService",
@@ -33656,5 +33655,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "85e515821f962c0d57792684b07869a9fb7b9b7d12fef5719fd73e691c9f359f"
+  "source_hash": "8f265cb55a3c5ee0e07041f65e81c062ccdb8382f4229eea5ea586c420afa32a"
 }

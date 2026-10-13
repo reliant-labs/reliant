@@ -43,7 +43,7 @@ func TestDiskReport_HeartbeatToRegistryAndKeptWhileOffline(t *testing.T) {
 		{Label: "home", Paths: []string{"/home/workspace"}, TotalBytes: 157 << 30, FreeBytes: 124 << 30},
 	}})
 
-	reg := NewDaemonRegistryService(repo, nil)
+	reg := newDaemonRegistry(t, repo, nil)
 	list, err := reg.ListDaemons(userCtx("user-1"), connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
 	require.NoError(t, err)
 	require.Len(t, list.Msg.Daemons, 1)
@@ -74,7 +74,7 @@ func TestClearMachineCaches_RelaysToTheMachine(t *testing.T) {
 		Started: []string{diskwatch.KindGoBuildCache},
 		Skipped: []diskwatch.ClearSkip{{Kind: diskwatch.KindDockerVolumes, Reason: "not clearable"}},
 	}}
-	reg := NewDaemonRegistryService(repo, router)
+	reg := newDaemonRegistry(t, repo, router)
 
 	resp, err := reg.ClearMachineCaches(userCtx("user-1"), connect.NewRequest(&reliantv1.ClearMachineCachesRequest{
 		DaemonId: "daemon-1", Kinds: []string{diskwatch.KindGoBuildCache, diskwatch.KindDockerVolumes},

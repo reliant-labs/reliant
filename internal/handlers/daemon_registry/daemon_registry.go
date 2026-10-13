@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package daemon_registry
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
@@ -22,28 +21,16 @@ import (
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
-// daemonAttachmentStaleThreshold is the freshness window for daemon_attachment
+// AttachmentStaleThreshold is the freshness window for daemon_attachment
 // rows when determining whether a daemon is currently routable. 6 missed 15s
 // heartbeats, matching the gateway's staleConnectionThreshold and
 // daemonliveness.DefaultStaleThreshold — 30s (the old value) left zero margin
 // over the heartbeat interval, so a single delayed lease renewal made the UI
 // status dot flip to DISCONNECTED for a live daemon. Clean disconnects delete
 // the row immediately; this window only bounds crashed-gateway detection.
-const daemonAttachmentStaleThreshold = 90 * time.Second
+const AttachmentStaleThreshold = 90 * time.Second
 
-// DaemonRegistryService handles daemon registry queries (list/get/resolve/resume).
-// Daemon credentials are `rlat_` access tokens managed through TokenService.
-type DaemonRegistryService struct {
-	reliantv1connect.UnimplementedDaemonRegistryServiceHandler
-	database db.Repository
-	router   toolexec.DaemonRouter
-}
-
-func NewDaemonRegistryService(database db.Repository, router toolexec.DaemonRouter) *DaemonRegistryService {
-	return &DaemonRegistryService{database: database, router: router}
-}
-
-func (s *DaemonRegistryService) ListDaemons(
+func (s *Service) ListDaemons(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListDaemonsRequest],
 ) (*connect.Response[reliantv1.ListDaemonsResponse], error) {
@@ -56,11 +43,11 @@ func (s *DaemonRegistryService) ListDaemons(
 
 	// Trigger daemon connection check and wait briefly for it to register
 	// before querying the DB. No-op in cloud mode where the daemon is external.
-	if s.router != nil {
-		_, _ = s.router.IsDaemonOnline(ctx, userID, nil)
+	if s.deps.Router != nil {
+		_, _ = s.deps.Router.IsDaemonOnline(ctx, userID, nil)
 	}
 
-	daemons, err := s.database.ListDaemonsByUserID(ctx, userID)
+	daemons, err := s.deps.Repo.ListDaemonsByUserID(ctx, userID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list daemons: %w", err))
 	}
@@ -93,8 +80,8 @@ func (s *DaemonRegistryService) ListDaemons(
 // the truth, so it shows "Your machine disconnected" for machines that are
 // serving. An error lets the client keep the last status it knew and say that
 // it cannot reach Reliant, which is what actually happened.
-func (s *DaemonRegistryService) attachedDaemonSet(ctx context.Context, userID string) (map[string]*db.DaemonAttachment, error) {
-	attachments, err := s.database.ListFreshDaemonAttachmentsForUser(ctx, userID, daemonAttachmentStaleThreshold)
+func (s *Service) attachedDaemonSet(ctx context.Context, userID string) (map[string]*db.DaemonAttachment, error) {
+	attachments, err := s.deps.Repo.ListFreshDaemonAttachmentsForUser(ctx, userID, AttachmentStaleThreshold)
 	if err != nil {
 		logging.Warn("[DaemonRegistry] Failed to list attached daemons", "error", err, "userID", userID)
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("reading daemon liveness: %w", err))
@@ -106,7 +93,7 @@ func (s *DaemonRegistryService) attachedDaemonSet(ctx context.Context, userID st
 	return attached, nil
 }
 
-func (s *DaemonRegistryService) GetDaemon(
+func (s *Service) GetDaemon(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetDaemonRequest],
 ) (*connect.Response[reliantv1.GetDaemonResponse], error) {
@@ -118,7 +105,7 @@ func (s *DaemonRegistryService) GetDaemon(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id is required"))
 	}
 
-	daemon, err := s.database.GetDaemon(ctx, req.Msg.GetDaemonId())
+	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.GetDaemonId())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found: %w", err))
 	}
@@ -140,8 +127,8 @@ func (s *DaemonRegistryService) GetDaemon(
 // telemetry the gateway keeps on the daemon row) keyed by daemon id. A read
 // failure is logged and treated as "none reported" so it cannot break the
 // daemon list.
-func (s *DaemonRegistryService) storedDiskReports(ctx context.Context, userID string) map[string]string {
-	reports, err := s.database.ListDaemonStorageState(ctx, userID)
+func (s *Service) storedDiskReports(ctx context.Context, userID string) map[string]string {
+	reports, err := s.deps.Repo.ListDaemonStorageState(ctx, userID)
 	if err != nil {
 		logging.Warn("[DaemonRegistry] Failed to list stored disk reports", "error", err, "userID", userID)
 		return map[string]string{}
@@ -152,7 +139,7 @@ func (s *DaemonRegistryService) storedDiskReports(ctx context.Context, userID st
 // ClearMachineCaches relays a confirmed cache clean-up to the machine. The
 // daemon decides what is safe (diskwatch.ClearCaches) and starts it in the
 // background; this returns what started and what it refused.
-func (s *DaemonRegistryService) ClearMachineCaches(
+func (s *Service) ClearMachineCaches(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ClearMachineCachesRequest],
 ) (*connect.Response[reliantv1.ClearMachineCachesResponse], error) {
@@ -160,7 +147,7 @@ func (s *DaemonRegistryService) ClearMachineCaches(
 	if len(req.Msg.GetKinds()) == 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("kinds is required"))
 	}
-	userID, err := s.ownedOnlineDaemon(ctx, daemonID)
+	userID, router, err := s.ownedOnlineDaemon(ctx, daemonID)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +155,7 @@ func (s *DaemonRegistryService) ClearMachineCaches(
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	raw, err := s.router.SendDaemonCommandToDaemon(ctx, userID, daemonID, diskwatch.ClearCachesCommand, payload, 15000)
+	raw, err := router.SendDaemonCommandToDaemon(ctx, userID, daemonID, diskwatch.ClearCachesCommand, payload, 15000)
 	if err != nil {
 		return nil, localModelRelayError(err)
 	}
@@ -186,8 +173,8 @@ func (s *DaemonRegistryService) ClearMachineCaches(
 // storedLocalModels returns the user's stored inventories keyed by daemon id.
 // A read failure is logged and treated as "none published" so it cannot break
 // the daemon list.
-func (s *DaemonRegistryService) storedLocalModels(ctx context.Context, userID string) map[string]string {
-	inventories, err := s.database.ListDaemonLocalModels(ctx, userID)
+func (s *Service) storedLocalModels(ctx context.Context, userID string) map[string]string {
+	inventories, err := s.deps.Repo.ListDaemonLocalModels(ctx, userID)
 	if err != nil {
 		logging.Warn("[DaemonRegistry] Failed to list stored local models", "error", err, "userID", userID)
 		return map[string]string{}
@@ -210,30 +197,31 @@ func localModelsFromJSON(stored string) *reliantv1.LocalModelInventory {
 }
 
 // ownedOnlineDaemon verifies the caller owns the daemon and that it is
-// attached; offline daemons fail with Unavailable.
-func (s *DaemonRegistryService) ownedOnlineDaemon(ctx context.Context, daemonID string) (userID string, err error) {
+// attached; offline daemons fail with Unavailable. It returns the router to
+// relay through, which is non-nil whenever err is nil.
+func (s *Service) ownedOnlineDaemon(ctx context.Context, daemonID string) (userID string, router Router, err error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return "", connect.NewError(connect.CodeUnauthenticated, nil)
+		return "", nil, connect.NewError(connect.CodeUnauthenticated, nil)
 	}
 	if daemonID == "" {
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id is required"))
+		return "", nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id is required"))
 	}
-	daemon, err := s.database.GetDaemon(ctx, daemonID)
+	daemon, err := s.deps.Repo.GetDaemon(ctx, daemonID)
 	if err != nil || daemon == nil || daemon.UserID != userID {
-		return "", connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found"))
+		return "", nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found"))
 	}
 	attached, err := s.attachedDaemonSet(ctx, userID)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if attached[daemon.ID] == nil {
-		return "", connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon %s is offline", daemonID))
+		return "", nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon %s is offline", daemonID))
 	}
-	if s.router == nil {
-		return "", connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon router configured"))
+	if s.deps.Router == nil {
+		return "", nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon router configured"))
 	}
-	return userID, nil
+	return userID, s.deps.Router, nil
 }
 
 // localModelRelayError maps router failures to connect codes.
@@ -248,27 +236,27 @@ func localModelRelayError(err error) error {
 	return connect.NewError(connect.CodeInternal, err)
 }
 
-func (s *DaemonRegistryService) RefreshLocalModels(
+func (s *Service) RefreshLocalModels(
 	ctx context.Context,
 	req *connect.Request[reliantv1.RefreshLocalModelsRequest],
 ) (*connect.Response[reliantv1.RefreshLocalModelsResponse], error) {
-	userID, err := s.ownedOnlineDaemon(ctx, req.Msg.GetDaemonId())
+	userID, router, err := s.ownedOnlineDaemon(ctx, req.Msg.GetDaemonId())
 	if err != nil {
 		return nil, err
 	}
-	inv, err := s.router.RefreshLocalModels(ctx, userID, req.Msg.GetDaemonId())
+	inv, err := router.RefreshLocalModels(ctx, userID, req.Msg.GetDaemonId())
 	if err != nil {
 		return nil, localModelRelayError(err)
 	}
 	return connect.NewResponse(&reliantv1.RefreshLocalModelsResponse{LocalModels: inv}), nil
 }
 
-func (s *DaemonRegistryService) SetLocalModelEndpoints(
+func (s *Service) SetLocalModelEndpoints(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SetLocalModelEndpointsRequest],
 ) (*connect.Response[reliantv1.SetLocalModelEndpointsResponse], error) {
 	daemonID := req.Msg.GetDaemonId()
-	userID, err := s.ownedOnlineDaemon(ctx, daemonID)
+	userID, router, err := s.ownedOnlineDaemon(ctx, daemonID)
 	if err != nil {
 		return nil, err
 	}
@@ -280,17 +268,17 @@ func (s *DaemonRegistryService) SetLocalModelEndpoints(
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	if _, err := s.router.SendDaemonCommandToDaemon(ctx, userID, daemonID, toolexec.CommandLocalModelsSetEndpoints, payload, 15000); err != nil {
+	if _, err := router.SendDaemonCommandToDaemon(ctx, userID, daemonID, toolexec.CommandLocalModelsSetEndpoints, payload, 15000); err != nil {
 		return nil, localModelRelayError(fmt.Errorf("writing local model endpoints on daemon %s: %w", daemonID, err))
 	}
-	inv, err := s.router.RefreshLocalModels(ctx, userID, daemonID)
+	inv, err := router.RefreshLocalModels(ctx, userID, daemonID)
 	if err != nil {
 		return nil, localModelRelayError(err)
 	}
 	return connect.NewResponse(&reliantv1.SetLocalModelEndpointsResponse{LocalModels: inv}), nil
 }
 
-func (s *DaemonRegistryService) ResolveDaemon(
+func (s *Service) ResolveDaemon(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ResolveDaemonRequest],
 ) (*connect.Response[reliantv1.ResolveDaemonResponse], error) {
@@ -299,7 +287,7 @@ func (s *DaemonRegistryService) ResolveDaemon(
 		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
 	}
 
-	daemons, err := s.database.ListDaemonsByUserID(ctx, userID)
+	daemons, err := s.deps.Repo.ListDaemonsByUserID(ctx, userID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("listing daemons: %w", err))
 	}
@@ -336,7 +324,7 @@ func (s *DaemonRegistryService) ResolveDaemon(
 	}), nil
 }
 
-func (s *DaemonRegistryService) ResumeDaemon(
+func (s *Service) ResumeDaemon(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ResumeDaemonRequest],
 ) (*connect.Response[reliantv1.ResumeDaemonResponse], error) {
@@ -350,7 +338,7 @@ func (s *DaemonRegistryService) ResumeDaemon(
 	}
 
 	// Verify ownership.
-	daemon, err := s.database.GetDaemon(ctx, req.Msg.DaemonId)
+	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.DaemonId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found: %w", err))
 	}

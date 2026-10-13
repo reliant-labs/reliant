@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -109,7 +110,7 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 	beat()
 
 	require.Eventually(t, func() bool {
-		attached, err := repo.IsDaemonIDAttached(ctx, daemonID, daemonAttachmentStaleThreshold)
+		attached, err := repo.IsDaemonIDAttached(ctx, daemonID, daemon_registry.AttachmentStaleThreshold)
 		return err == nil && attached
 	}, 3*time.Second, 20*time.Millisecond,
 		"a heartbeat read off a live stream must re-create the lease the reaper deleted; "+
@@ -324,7 +325,7 @@ func dialDaemon(t *testing.T, svc *ToolsDaemonService, userID, daemonID string) 
 }
 
 // registryStatus is what ListDaemons tells the web about daemonID.
-func registryStatus(t *testing.T, registry *DaemonRegistryService, userID, daemonID string) reliantv1.DaemonStatus {
+func registryStatus(t *testing.T, registry *daemon_registry.Service, userID, daemonID string) reliantv1.DaemonStatus {
 	t.Helper()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	resp, err := registry.ListDaemons(ctx, connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
@@ -344,11 +345,11 @@ func heldConn(svc *ToolsDaemonService, daemonID string) *daemonConnection {
 	return svc.connections[daemonID]
 }
 
-func leaseFixture(t *testing.T) (repo *db.Repo, rawDB *sql.DB, registry *DaemonRegistryService, userID, daemonID string) {
+func leaseFixture(t *testing.T) (repo *db.Repo, rawDB *sql.DB, registry *daemon_registry.Service, userID, daemonID string) {
 	t.Helper()
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
-	return repo, rawDB, NewDaemonRegistryService(repo, nil), "lease-user-" + uuid.NewString()[:8], uuid.NewString()
+	return repo, rawDB, newDaemonRegistry(t, repo, nil), "lease-user-" + uuid.NewString()[:8], uuid.NewString()
 }
 
 // The old replica tearing down its half of the stream after the daemon has
@@ -441,7 +442,7 @@ func (livenessDownRepo) ListDaemonLocalModels(context.Context, string) (map[stri
 func TestRegistryReportsUnavailableRatherThanDisconnectedWhenLivenessCannotBeRead(t *testing.T) {
 	selfHosted := "self_hosted"
 	daemon := &db.Daemon{ID: uuid.NewString(), UserID: "u-1", DaemonType: &selfHosted}
-	registry := NewDaemonRegistryService(livenessDownRepo{daemon: daemon}, nil)
+	registry := newDaemonRegistry(t, livenessDownRepo{daemon: daemon}, nil)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "u-1")
 
 	resp, err := registry.ListDaemons(ctx, connect.NewRequest(&reliantv1.ListDaemonsRequest{}))

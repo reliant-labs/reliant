@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -17,9 +18,11 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
 // localModelRouter records the calls DaemonRegistryService makes.
@@ -82,6 +85,20 @@ func seedDaemon(t *testing.T, repo *db.Repo, userID, daemonID string, online boo
 
 func userCtx(userID string) context.Context {
 	return context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+}
+
+// newDaemonRegistry builds the registry the gateway's writes are read back
+// through. A nil router is cloud mode's: the relays report Unavailable.
+func newDaemonRegistry(t *testing.T, repo daemon_registry.Repository, router daemon_registry.Router) *daemon_registry.Service {
+	t.Helper()
+	svc, err := daemon_registry.New(daemon_registry.Deps{
+		Logger: slog.New(slog.DiscardHandler),
+		Config: &typedconfig.Config{},
+		Repo:   repo,
+		Router: router,
+	})
+	require.NoError(t, err)
+	return svc
 }
 
 type recordingUserHub struct {
@@ -260,7 +277,7 @@ func TestDaemonRegistry_ListAndGetCarryStoredLocalModels(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.SetDaemonLocalModels(context.Background(), "daemon-1", string(encoded)))
 
-	svc := NewDaemonRegistryService(repo, &localModelRouter{})
+	svc := newDaemonRegistry(t, repo, &localModelRouter{})
 	list, err := svc.ListDaemons(userCtx("user-1"), connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
 	require.NoError(t, err)
 	byID := map[string]*reliantv1.DaemonInfo{}
@@ -285,7 +302,7 @@ func TestDaemonRegistry_RefreshLocalModels(t *testing.T) {
 	seedDaemon(t, repo, "user-2", "theirs", true)
 
 	router := &localModelRouter{inventory: sampleInventory()}
-	svc := NewDaemonRegistryService(repo, router)
+	svc := newDaemonRegistry(t, repo, router)
 
 	resp, err := svc.RefreshLocalModels(userCtx("user-1"), connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{DaemonId: "online"}))
 	require.NoError(t, err)
@@ -317,7 +334,7 @@ func TestDaemonRegistry_SetLocalModelEndpoints(t *testing.T) {
 	seedDaemon(t, repo, "user-2", "theirs", true)
 
 	router := &localModelRouter{inventory: sampleInventory()}
-	svc := NewDaemonRegistryService(repo, router)
+	svc := newDaemonRegistry(t, repo, router)
 
 	resp, err := svc.SetLocalModelEndpoints(userCtx("user-1"), connect.NewRequest(&reliantv1.SetLocalModelEndpointsRequest{
 		DaemonId: "online", BaseUrls: []string{"http://gpu-box.lan:8000/v1"},
