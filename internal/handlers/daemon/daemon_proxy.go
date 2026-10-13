@@ -1,35 +1,31 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package daemon
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-// DaemonProxyService implements DaemonServiceHandler by forwarding
-// requests to the user's daemon via DaemonCommand (request/response).
-type DaemonProxyService struct {
-	reliantv1connect.UnimplementedDaemonServiceHandler
-	router toolexec.DaemonRouter
-}
+// Every rpc forwards its request to the caller's daemon as one DaemonCommand
+// (request/response) through Deps.Router.
 
-// NewDaemonProxyService creates a new DaemonProxyService.
-func NewDaemonProxyService(router toolexec.DaemonRouter) *DaemonProxyService {
-	return &DaemonProxyService{router: router}
+// errNoRouter answers every rpc of a service composed without a daemon
+// router: this server has no way to reach a daemon.
+func errNoRouter() *connect.Error {
+	return connect.NewError(connect.CodeUnavailable, errors.New("no daemon router: this server cannot reach a daemon"))
 }
 
 // StartOAuthFlow proxies the OAuth flow to the daemon which starts a localhost
 // callback server and opens the browser.
-func (s *DaemonProxyService) StartOAuthFlow(
+func (s *Service) StartOAuthFlow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.StartOAuthFlowRequest],
 ) (*connect.Response[reliantv1.StartOAuthFlowResponse], error) {
@@ -45,10 +41,13 @@ func (s *DaemonProxyService) StartOAuthFlow(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
 	}
 
+	if s.deps.Router == nil {
+		return nil, errNoRouter()
+	}
 	// Use a generous NATS-level timeout (1 hour). OAuth flows have no
 	// application-level timeout — the frontend AbortController handles
 	// cancellation, which propagates via ctx.
-	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "auth.start_oauth", payload, 3_600_000)
+	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "auth.start_oauth", payload, 3_600_000)
 	if err != nil {
 		return nil, oauthDaemonError("OAuth flow failed", err)
 	}
@@ -100,7 +99,7 @@ const openHelperTimeoutMs = 10_000
 
 // OpenOAuthHelper asks the user's daemon to open its localhost OAuth helper
 // port for one linking session.
-func (s *DaemonProxyService) OpenOAuthHelper(
+func (s *Service) OpenOAuthHelper(
 	ctx context.Context,
 	req *connect.Request[reliantv1.OpenOAuthHelperRequest],
 ) (*connect.Response[reliantv1.OpenOAuthHelperResponse], error) {
@@ -116,7 +115,10 @@ func (s *DaemonProxyService) OpenOAuthHelper(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
 	}
 
-	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "auth.open_oauth_helper", payload, openHelperTimeoutMs)
+	if s.deps.Router == nil {
+		return nil, errNoRouter()
+	}
+	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "auth.open_oauth_helper", payload, openHelperTimeoutMs)
 	if err != nil {
 		return nil, oauthDaemonError("open OAuth helper", err)
 	}
@@ -138,7 +140,7 @@ func (s *DaemonProxyService) OpenOAuthHelper(
 }
 
 // CloseOAuthHelper closes the helper port when the linking session ends.
-func (s *DaemonProxyService) CloseOAuthHelper(
+func (s *Service) CloseOAuthHelper(
 	ctx context.Context,
 	_ *connect.Request[reliantv1.CloseOAuthHelperRequest],
 ) (*connect.Response[reliantv1.CloseOAuthHelperResponse], error) {
@@ -147,7 +149,10 @@ func (s *DaemonProxyService) CloseOAuthHelper(
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
 	}
 
-	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "auth.close_oauth_helper", []byte("{}"), openHelperTimeoutMs)
+	if s.deps.Router == nil {
+		return nil, errNoRouter()
+	}
+	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "auth.close_oauth_helper", []byte("{}"), openHelperTimeoutMs)
 	if err != nil {
 		return nil, oauthDaemonError("close OAuth helper", err)
 	}

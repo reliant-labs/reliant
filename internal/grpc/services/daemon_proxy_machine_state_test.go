@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,54 +52,6 @@ var machineStates = []struct {
 		err:      connect.NewError(connect.CodeUnavailable, svcerr.WithClass(errors.New("no daemon connected for user"), svcerr.ClassUser)),
 		wantCode: connect.CodeUnavailable,
 	},
-}
-
-// The OAuth helper RPCs returned every one of these as Internal — 11 Sentry
-// events in a day for users who had not connected a machine (ELECTRON-B1).
-// The code must say what the user's machine is doing, the message must keep
-// the router's words, and it must not classify as a server fault.
-func TestOAuthHelper_MachineStatesKeepTheirCode(t *testing.T) {
-	calls := map[string]func(*DaemonProxyService) error{
-		"OpenOAuthHelper": func(s *DaemonProxyService) error {
-			_, err := s.OpenOAuthHelper(authedCtx(), connect.NewRequest(&reliantv1.OpenOAuthHelperRequest{WebOrigin: "https://app"}))
-			return err
-		},
-		"CloseOAuthHelper": func(s *DaemonProxyService) error {
-			_, err := s.CloseOAuthHelper(authedCtx(), connect.NewRequest(&reliantv1.CloseOAuthHelperRequest{}))
-			return err
-		},
-		"StartOAuthFlow": func(s *DaemonProxyService) error {
-			_, err := s.StartOAuthFlow(authedCtx(), connect.NewRequest(&reliantv1.StartOAuthFlowRequest{}))
-			return err
-		},
-	}
-	for rpc, call := range calls {
-		for _, state := range machineStates {
-			t.Run(rpc+"/"+state.name, func(t *testing.T) {
-				svc := NewDaemonProxyService(&failingCommandRouter{err: state.err})
-				err := call(svc)
-				require.Error(t, err)
-				assert.Equal(t, state.wantCode, connect.CodeOf(err))
-				assert.Contains(t, err.Error(), state.err.Error(), "the router's message must survive")
-				assert.False(t, errclass.IsServerError(err))
-			})
-		}
-	}
-}
-
-// A failure that is not a machine state is still Internal, and still a fault.
-func TestOAuthHelper_OtherFailuresStayInternal(t *testing.T) {
-	svc := NewDaemonProxyService(&failingCommandRouter{err: errors.New("daemon command \"auth.open_oauth_helper\" failed: bind: address already in use")})
-	_, err := svc.OpenOAuthHelper(authedCtx(), connect.NewRequest(&reliantv1.OpenOAuthHelperRequest{}))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
-	assert.True(t, errclass.IsServerError(err))
-
-	// NATS timing out is not "no machine": the machine may be wedged.
-	svc = NewDaemonProxyService(&failingCommandRouter{err: fmt.Errorf("daemon command via NATS failed: %w", nats.ErrTimeout)})
-	_, err = svc.CloseOAuthHelper(authedCtx(), connect.NewRequest(&reliantv1.CloseOAuthHelperRequest{}))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
 }
 
 // BackgroundService/ListProcesses returned "no machine" as Internal

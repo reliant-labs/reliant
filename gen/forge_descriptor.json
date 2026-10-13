@@ -7526,8 +7526,7 @@
         "reliant.v1.OpenOAuthHelperResponse": "reliant/v1/daemon.proto",
         "reliant.v1.StartOAuthFlowRequest": "reliant/v1/daemon.proto",
         "reliant.v1.StartOAuthFlowResponse": "reliant/v1/daemon.proto"
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "ToolsDaemonService",
@@ -33657,5 +33656,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "b7cff4e2b68cfc6f5bb1d1d460136d99ee6541d65ce43cc10594a53b60c0120f"
+  "source_hash": "9c6546e744fb78183e1c83d3c6a90387904eedf775b2f8379cde1be48200fd06"
 }

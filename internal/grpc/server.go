@@ -39,6 +39,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/attachment"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
+	"github.com/reliant-labs/reliant/internal/handlers/daemon"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
@@ -362,7 +363,14 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("token service: %w", err)
 	}
-	daemonProxyService := services.NewDaemonProxyService(router)
+	daemonProxyService, err := daemon.New(daemon.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Router: router,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("daemon service: %w", err)
+	}
 	toolCallService, err := tool_call.New(tool_call.Deps{
 		Logger:   handlerLogger,
 		Config:   handlerConfig,
