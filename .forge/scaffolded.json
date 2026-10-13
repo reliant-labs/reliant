@@ -99,6 +99,21 @@
     "internal/handlers/message/handlers_scaffold_get_message_test.go": {
       "scaffolded_at": "2026-10-13T13:35:41Z"
     },
+    "internal/handlers/model_endpoint/handlers_scaffold_create_model_endpoint_test.go": {
+      "scaffolded_at": "2026-10-13T17:50:37Z"
+    },
+    "internal/handlers/model_endpoint/handlers_scaffold_delete_model_endpoint_test.go": {
+      "scaffolded_at": "2026-10-13T17:50:37Z"
+    },
+    "internal/handlers/model_endpoint/handlers_scaffold_list_model_endpoints_test.go": {
+      "scaffolded_at": "2026-10-13T17:50:37Z"
+    },
+    "internal/handlers/model_endpoint/handlers_scaffold_test_model_endpoint_test.go": {
+      "scaffolded_at": "2026-10-13T17:50:37Z"
+    },
+    "internal/handlers/model_endpoint/handlers_scaffold_update_model_endpoint_test.go": {
+      "scaffolded_at": "2026-10-13T17:50:37Z"
+    },
     "internal/handlers/package_commands/handlers_scaffold_get_command_favorites_test.go": {
       "scaffolded_at": "2026-10-13T17:02:28Z"
     },

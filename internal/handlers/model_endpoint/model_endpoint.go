@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package model_endpoint
 
 import (
 	"context"
@@ -10,39 +10,15 @@ import (
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/modelendpoints"
-	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-// ModelEndpointService is the thin Connect layer over modelendpoints.Manager.
-type ModelEndpointService struct {
-	reliantv1connect.UnimplementedModelEndpointServiceHandler
-	manager *modelendpoints.Manager
-}
-
-// NewModelEndpointService wires the service. router may be nil (monolith with
-// no daemon router): VIA_DAEMON endpoints then report the relay unavailable.
-// creds may be nil, which leaves credential storage unavailable.
-func NewModelEndpointService(database db.Repository, router toolexec.DaemonRouter, creds modelendpoints.EndpointCredentials) *ModelEndpointService {
-	cfg := modelendpoints.Config{
-		Store:       database,
-		Credentials: creds,
-		Policy:      netguard.ForDeployment(controlplane.BaseURLFromEnv()),
-	}
-	if router != nil {
-		cfg.Daemons = routerDaemonControl{router: router}
-	}
-	return &ModelEndpointService{manager: modelendpoints.NewManager(cfg)}
-}
-
 // routerDaemonControl adapts the daemon router to modelendpoints.DaemonControl,
 // the same two operations DaemonRegistryService exposes to the browser.
-type routerDaemonControl struct{ router toolexec.DaemonRouter }
+type routerDaemonControl struct{ router Router }
 
 func daemonErr(err error) error {
 	if errors.Is(err, toolexec.ErrLocalModelDaemonUnavailable) {
@@ -100,7 +76,7 @@ func endpointUser(ctx context.Context) (string, error) {
 	return userID, nil
 }
 
-func (s *ModelEndpointService) ListModelEndpoints(ctx context.Context, _ *connect.Request[reliantv1.ListModelEndpointsRequest]) (*connect.Response[reliantv1.ListModelEndpointsResponse], error) {
+func (s *Service) ListModelEndpoints(ctx context.Context, _ *connect.Request[reliantv1.ListModelEndpointsRequest]) (*connect.Response[reliantv1.ListModelEndpointsResponse], error) {
 	userID, err := endpointUser(ctx)
 	if err != nil {
 		return nil, err
@@ -112,7 +88,7 @@ func (s *ModelEndpointService) ListModelEndpoints(ctx context.Context, _ *connec
 	return connect.NewResponse(&reliantv1.ListModelEndpointsResponse{Endpoints: eps}), nil
 }
 
-func (s *ModelEndpointService) CreateModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.CreateModelEndpointRequest]) (*connect.Response[reliantv1.CreateModelEndpointResponse], error) {
+func (s *Service) CreateModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.CreateModelEndpointRequest]) (*connect.Response[reliantv1.CreateModelEndpointResponse], error) {
 	userID, err := endpointUser(ctx)
 	if err != nil {
 		return nil, err
@@ -124,7 +100,7 @@ func (s *ModelEndpointService) CreateModelEndpoint(ctx context.Context, req *con
 	return connect.NewResponse(&reliantv1.CreateModelEndpointResponse{Endpoint: ep}), nil
 }
 
-func (s *ModelEndpointService) UpdateModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.UpdateModelEndpointRequest]) (*connect.Response[reliantv1.UpdateModelEndpointResponse], error) {
+func (s *Service) UpdateModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.UpdateModelEndpointRequest]) (*connect.Response[reliantv1.UpdateModelEndpointResponse], error) {
 	userID, err := endpointUser(ctx)
 	if err != nil {
 		return nil, err
@@ -136,7 +112,7 @@ func (s *ModelEndpointService) UpdateModelEndpoint(ctx context.Context, req *con
 	return connect.NewResponse(&reliantv1.UpdateModelEndpointResponse{Endpoint: ep}), nil
 }
 
-func (s *ModelEndpointService) DeleteModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.DeleteModelEndpointRequest]) (*connect.Response[reliantv1.DeleteModelEndpointResponse], error) {
+func (s *Service) DeleteModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.DeleteModelEndpointRequest]) (*connect.Response[reliantv1.DeleteModelEndpointResponse], error) {
 	userID, err := endpointUser(ctx)
 	if err != nil {
 		return nil, err
@@ -147,7 +123,7 @@ func (s *ModelEndpointService) DeleteModelEndpoint(ctx context.Context, req *con
 	return connect.NewResponse(&reliantv1.DeleteModelEndpointResponse{}), nil
 }
 
-func (s *ModelEndpointService) TestModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.TestModelEndpointRequest]) (*connect.Response[reliantv1.TestModelEndpointResponse], error) {
+func (s *Service) TestModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.TestModelEndpointRequest]) (*connect.Response[reliantv1.TestModelEndpointResponse], error) {
 	userID, err := endpointUser(ctx)
 	if err != nil {
 		return nil, err

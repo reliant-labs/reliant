@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,8 +15,24 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
+
+// newModelEndpoint builds the endpoint handler with no daemon router and no
+// credential store. It reads the deployment's network policy now, so a test
+// sets RELIANT_CONTROL_PLANE_URL before calling it.
+func newModelEndpoint(t *testing.T, repo db.Repository) *model_endpoint.Service {
+	t.Helper()
+	svc, err := model_endpoint.New(model_endpoint.Deps{
+		Logger: slog.New(slog.DiscardHandler),
+		Config: &typedconfig.Config{},
+		Repo:   repo,
+	})
+	require.NoError(t, err)
+	return svc
+}
 
 func ctxFor(userID string) context.Context {
 	return context.WithValue(context.Background(), auth.UserIDContextKey, userID)
@@ -49,7 +66,7 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 	t.Setenv("CONTROL_PLANE_BASE_URL", "")
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := NewModelEndpointService(repo, nil, nil)
+	svc := newModelEndpoint(t, repo)
 	srv := openAIModels(t, "llama", "mixtral")
 
 	create, err := svc.CreateModelEndpoint(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
@@ -145,7 +162,7 @@ func TestModelEndpointServiceRefusesPrivateTargetsWhenHosted(t *testing.T) {
 	t.Setenv("RELIANT_CONTROL_PLANE_URL", "http://admin-server.cluster.local:8090")
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := NewModelEndpointService(repo, nil, nil)
+	svc := newModelEndpoint(t, repo)
 	srv := openAIModels(t, "m") // 127.0.0.1
 
 	for _, url := range []string{srv.URL + "/v1", "http://169.254.169.254/v1", "http://10.0.0.1/v1", "http://localhost:11434/v1"} {

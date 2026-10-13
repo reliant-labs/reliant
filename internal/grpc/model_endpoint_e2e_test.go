@@ -31,7 +31,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -111,7 +111,13 @@ func TestModelEndpointE2E(t *testing.T) {
 		return true
 	}, 60*time.Second, 500*time.Millisecond, "daemon never published an inventory")
 
-	endpointSvc := services.NewModelEndpointService(repo, router, nil)
+	endpointSvc, err := model_endpoint.New(model_endpoint.Deps{
+		Logger: slog.Default(),
+		Config: &typedconfig.Config{},
+		Repo:   repo,
+		Router: router,
+	})
+	require.NoError(t, err)
 
 	// ── 1. VIA_DAEMON ─────────────────────────────────────────────────────
 	// Use a base URL the daemon's AUTO-DETECTION would not produce
@@ -238,8 +244,14 @@ func TestModelEndpointE2E(t *testing.T) {
 
 	t.Run("f_hosted_policy_refuses_the_same_direct_endpoint", func(t *testing.T) {
 		t.Setenv("RELIANT_CONTROL_PLANE_URL", "http://admin.cluster.local:8090")
-		hosted := services.NewModelEndpointService(repo, router, nil)
-		_, err := hosted.CreateModelEndpoint(epCtx(e2eUserA), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
+		hosted, err := model_endpoint.New(model_endpoint.Deps{
+			Logger: slog.Default(),
+			Config: &typedconfig.Config{},
+			Repo:   repo,
+			Router: router,
+		})
+		require.NoError(t, err)
+		_, err = hosted.CreateModelEndpoint(epCtx(e2eUserA), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
 			Endpoint: &reliantv1.ModelEndpointInput{Name: "Hosted Direct", BaseUrl: e2eOllamaRoot + "/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT},
 		}))
 		require.Error(t, err)

@@ -42,6 +42,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
+	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
@@ -323,7 +324,15 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 	// Credentials for custom endpoints have one home, the sealed connection
 	// store, which this branch does not have; nil keeps keys unavailable.
-	modelEndpointService := services.NewModelEndpointService(database, router, nil)
+	modelEndpointService, err := model_endpoint.New(model_endpoint.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+		Router: router,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("model_endpoint service: %w", err)
+	}
 	// TokenService: the ONE token surface (daemon credentials and API
 	// tokens), a facade over the token authority.
 	var gitTokens token.GitTokenSource

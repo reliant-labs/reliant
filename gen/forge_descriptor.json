@@ -17139,8 +17139,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "ModelEndpointRoute"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "PackageCommandsService",
@@ -33485,6 +33484,10 @@
             "kind": "message",
             "type_name": "reliant.v1.CleanupMetadata",
             "optional": true
+          },
+          {
+            "name": "failure_reason",
+            "kind": "string"
           }
         ],
         "reliant.v1.WorktreeFileChange": [
@@ -33654,5 +33657,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "fc48890f3c232a7ac17e81c9385232923b536b24dff045836f29747674db5f85"
+  "source_hash": "b7cff4e2b68cfc6f5bb1d1d460136d99ee6541d65ce43cc10594a53b60c0120f"
 }

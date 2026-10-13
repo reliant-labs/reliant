@@ -28,6 +28,10 @@
         "rpc_service": "reliant.v1.MessageService"
       },
       {
+        "name": "model_endpoint",
+        "rpc_service": "reliant.v1.ModelEndpointService"
+      },
+      {
         "name": "package_commands",
         "rpc_service": "reliant.v1.PackageCommandsService"
       },
