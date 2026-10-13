@@ -3,38 +3,60 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // forge:unmanaged — reliant's own handlers serve this service, not forge's;
 // it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
 
 // SystemService provides system-level operations like health checks and version info
+//
+// Every rpc here is reachable without credentials (auth_required: false):
+// probes and the sign-in flow run before a caller can hold a token.
 service SystemService {
   // Health returns the health status of the service
-  rpc Health(HealthRequest) returns (HealthResponse) {}
-  
+  rpc Health(HealthRequest) returns (HealthResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
+
   // Ready returns the readiness status of the service
-  rpc Ready(ReadyRequest) returns (ReadyResponse) {}
-  
+  rpc Ready(ReadyRequest) returns (ReadyResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
+
   // Info returns general API information including version, build info, and worktree
-  rpc Info(InfoRequest) returns (InfoResponse) {}
-  
+  rpc Info(InfoRequest) returns (InfoResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
+
   // Version returns detailed version information
-  rpc Version(VersionRequest) returns (VersionResponse) {}
+  rpc Version(VersionRequest) returns (VersionResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
 
   // StartOAuthSignIn completes the Electron-local OAuth sign-in flow
   // by opening the provider in the system browser, waiting for the localhost
   // callback, exchanging the PKCE code, and returning Supabase session tokens.
-  rpc StartOAuthSignIn(StartOAuthSignInRequest) returns (StartOAuthSignInResponse) {}
+  rpc StartOAuthSignIn(StartOAuthSignInRequest) returns (StartOAuthSignInResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
 
-  // DevAuthLoad loads the global auth session (development only)
-  rpc DevAuthLoad(DevAuthLoadRequest) returns (DevAuthLoadResponse) {}
+  // DevAuthLoad loads the global auth session (development only).
+  // Browser dev mode calls the DevAuth rpcs before a JWT exists.
+  rpc DevAuthLoad(DevAuthLoadRequest) returns (DevAuthLoadResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
 
   // DevAuthSave saves the global auth session (development only)
-  rpc DevAuthSave(DevAuthSaveRequest) returns (DevAuthSaveResponse) {}
+  rpc DevAuthSave(DevAuthSaveRequest) returns (DevAuthSaveResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
 
   // DevAuthClear clears the global auth session (development only)
-  rpc DevAuthClear(DevAuthClearRequest) returns (DevAuthClearResponse) {}
+  rpc DevAuthClear(DevAuthClearRequest) returns (DevAuthClearResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
 }
 
 // HealthRequest is the request for the Health RPC

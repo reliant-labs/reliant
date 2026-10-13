@@ -94,7 +94,9 @@ type AuthInterceptor struct {
 	validator      auth.TokenValidator
 	accessTokens   auth.AccessTokenIntrospector // optional; nil disables access-token auth
 	sessionTracker *sessionTracker
-	publicMethods  map[string]bool // Methods that don't require auth
+	// publicProcedures are the procedures this interceptor lets through with
+	// no credentials: middleware.UnauthenticatedProcedures in the server.
+	publicProcedures map[string]struct{}
 }
 
 // SetAccessTokenIntrospector enables `rlat_` bearer auth on this interceptor.
@@ -109,13 +111,12 @@ func (i *AuthInterceptor) SetAccessTokenIntrospector(v auth.AccessTokenIntrospec
 // The auth mode is determined by auth.GetAuthMode():
 //   - "apikey":   validate bearer tokens against AUTH_API_KEY env var
 //   - "supabase": validate JWTs using publicKeyPEM or jwksURL (default)
-func NewAuthInterceptor(publicKeyPEM string, jwksURL string, publicMethods []string) (*AuthInterceptor, error) {
+//
+// publicProcedures skip authentication entirely; the server passes the
+// generated middleware.UnauthenticatedProcedures, which every rpc declaring
+// (forge.v1.method) auth_required: false projects into.
+func NewAuthInterceptor(publicKeyPEM string, jwksURL string, publicProcedures map[string]struct{}) (*AuthInterceptor, error) {
 	mode := auth.GetAuthMode()
-
-	publicMethodsMap := make(map[string]bool)
-	for _, method := range publicMethods {
-		publicMethodsMap[method] = true
-	}
 
 	switch mode {
 	case "apikey":
@@ -129,9 +130,9 @@ func NewAuthInterceptor(publicKeyPEM string, jwksURL string, publicMethods []str
 		}
 		logging.Info("[gRPC Auth] API key auth mode enabled")
 		return &AuthInterceptor{
-			validator:      validator,
-			sessionTracker: newSessionTracker(),
-			publicMethods:  publicMethodsMap,
+			validator:        validator,
+			sessionTracker:   newSessionTracker(),
+			publicProcedures: publicProcedures,
 		}, nil
 
 	default: // "supabase"
@@ -154,9 +155,9 @@ func NewAuthInterceptor(publicKeyPEM string, jwksURL string, publicMethods []str
 		}
 		logging.Info("[gRPC Auth] Supabase JWT auth mode enabled")
 		return &AuthInterceptor{
-			validator:      validator,
-			sessionTracker: newSessionTracker(),
-			publicMethods:  publicMethodsMap,
+			validator:        validator,
+			sessionTracker:   newSessionTracker(),
+			publicProcedures: publicProcedures,
 		}, nil
 	}
 }
@@ -165,7 +166,7 @@ func NewAuthInterceptor(publicKeyPEM string, jwksURL string, publicMethods []str
 // Returns an error if authentication fails.
 func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure string, header func(string) string) (context.Context, *auth.JWTClaims, string, error) {
 	// Check if this method is public
-	if i.publicMethods[procedure] {
+	if _, public := i.publicProcedures[procedure]; public {
 		return ctx, nil, "", nil
 	}
 

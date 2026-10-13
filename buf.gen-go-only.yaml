@@ -6,6 +6,12 @@
 version: v2
 managed:
   enabled: false
+# proto/forge/v1 is an import, never a target: its Go home is forge/pkg/forgepb
+# (see buf.gen.yaml).
+inputs:
+  - directory: proto
+    exclude_paths:
+      - proto/forge/v1
 plugins:
   # Generate Go protobuf code
   - local: [go, tool, protoc-gen-go]

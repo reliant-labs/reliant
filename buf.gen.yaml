@@ -27,6 +27,16 @@
 version: v2
 managed:
   enabled: false
+# proto/forge/v1/forge.proto is forge's annotation vocabulary (the
+# (forge.v1.method) options), a copy of the file forge embeds; `forge lint
+# --vendored-protos` reports drift. It is an import here, never a target: its
+# Go home is github.com/reliant-labs/forge/pkg/forgepb (which the generated
+# code imports), and a second Go copy would register forge/v1/forge.proto twice
+# and panic at init. web/src/gen still gets it, through include_imports.
+inputs:
+  - directory: proto
+    exclude_paths:
+      - proto/forge/v1
 plugins:
   # Generate Go protobuf code
   - local: [go, tool, protoc-gen-go]

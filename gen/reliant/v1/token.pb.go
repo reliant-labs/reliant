@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -864,7 +865,7 @@ var File_reliant_v1_token_proto protoreflect.FileDescriptor
 const file_reliant_v1_token_proto_rawDesc = "" +
 	"\n" +
 	"\x16reliant/v1/token.proto\x12\n" +
-	"reliant.v1\"t\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\"t\n" +
 	"\x12CreateTokenRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
 	"\vttl_seconds\x18\x02 \x01(\x03R\n" +
@@ -923,15 +924,15 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\tTokenKind\x12\x1a\n" +
 	"\x16TOKEN_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11TOKEN_KIND_DAEMON\x10\x01\x12\x12\n" +
-	"\x0eTOKEN_KIND_API\x10\x022\xfd\x03\n" +
+	"\x0eTOKEN_KIND_API\x10\x022\x89\x04\n" +
 	"\fTokenService\x12P\n" +
 	"\vCreateToken\x12\x1e.reliant.v1.CreateTokenRequest\x1a\x1f.reliant.v1.CreateTokenResponse\"\x00\x12M\n" +
 	"\n" +
 	"ListTokens\x12\x1d.reliant.v1.ListTokensRequest\x1a\x1e.reliant.v1.ListTokensResponse\"\x00\x12P\n" +
 	"\vRevokeToken\x12\x1e.reliant.v1.RevokeTokenRequest\x1a\x1f.reliant.v1.RevokeTokenResponse\"\x00\x12P\n" +
-	"\vUpdateToken\x12\x1e.reliant.v1.UpdateTokenRequest\x1a\x1f.reliant.v1.UpdateTokenResponse\"\x00\x12V\n" +
-	"\rExchangeToken\x12 .reliant.v1.ExchangeTokenRequest\x1a!.reliant.v1.ExchangeTokenResponse\"\x00\x12P\n" +
-	"\vGetGitToken\x12\x1e.reliant.v1.GetGitTokenRequest\x1a\x1f.reliant.v1.GetGitTokenResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\vUpdateToken\x12\x1e.reliant.v1.UpdateTokenRequest\x1a\x1f.reliant.v1.UpdateTokenResponse\"\x00\x12\\\n" +
+	"\rExchangeToken\x12 .reliant.v1.ExchangeTokenRequest\x1a!.reliant.v1.ExchangeTokenResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12V\n" +
+	"\vGetGitToken\x12\x1e.reliant.v1.GetGitTokenRequest\x1a\x1f.reliant.v1.GetGitTokenResponse\"\x06\xa2\xbb\x18\x02\b\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_token_proto_rawDescOnce sync.Once

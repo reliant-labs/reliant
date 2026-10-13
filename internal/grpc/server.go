@@ -48,6 +48,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
+	"github.com/reliant-labs/reliant/pkg/middleware"
 )
 
 // Server is the Connect/gRPC server
@@ -153,28 +154,10 @@ func NewServer(cfg *Config) (*Server, error) {
 	mux := http.NewServeMux()
 	database := cfg.Database
 
-	// Create auth interceptor
-	// Public methods (no auth required)
-	publicMethods := []string{
-		"/reliant.v1.SystemService/Health",
-		"/reliant.v1.SystemService/Ready",
-		"/reliant.v1.SystemService/Info",
-		"/reliant.v1.SystemService/Version",
-		"/reliant.v1.SystemService/StartOAuthSignIn",
-		// DevAuth methods for browser dev mode - allows auth to work before JWT is available
-		"/reliant.v1.SystemService/DevAuthLoad",
-		"/reliant.v1.SystemService/DevAuthSave",
-		"/reliant.v1.SystemService/DevAuthClear",
-		// ExchangeToken authenticates its own bearer, against the authority
-		// and uncached: it must admit a daemon's session credential, which
-		// this interceptor (reliant:api only) refuses by design. Public here
-		// means "not gated by the interceptor", never unauthenticated.
-		reliantv1connect.TokenServiceExchangeTokenProcedure,
-		// GetGitToken authenticates its own bearer for the same reason, and
-		// admits only a daemon credential.
-		reliantv1connect.TokenServiceGetGitTokenProcedure,
-	}
-	authInterceptor, err := interceptors.NewAuthInterceptor(cfg.JWTPublicKey, cfg.JWKSURL, publicMethods)
+	// Create auth interceptor. The procedures it lets through unauthenticated
+	// are the ones whose proto declares (forge.v1.method) auth_required: false;
+	// forge generate projects them into middleware.UnauthenticatedProcedures.
+	authInterceptor, err := interceptors.NewAuthInterceptor(cfg.JWTPublicKey, cfg.JWKSURL, middleware.UnauthenticatedProcedures)
 	if err != nil {
 		return nil, fmt.Errorf("auth interceptor setup failed: %w", err)
 	}

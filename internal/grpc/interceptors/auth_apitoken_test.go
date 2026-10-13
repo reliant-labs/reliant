@@ -40,7 +40,7 @@ func TestAuthInterceptorAccessTokenDispatch(t *testing.T) {
 	t.Setenv("AUTH_API_KEY", "legacy-api-key-secret")
 
 	authority := tokenauthority.NewMemory()
-	interceptor, err := NewAuthInterceptor("", "", []string{"/reliant.v1.SystemService/Health"})
+	interceptor, err := NewAuthInterceptor("", "", map[string]struct{}{"/reliant.v1.SystemService/Health": {}})
 	require.NoError(t, err)
 	interceptor.SetAccessTokenIntrospector(authority)
 

@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // forge:unmanaged — reliant's own handlers serve this service, not forge's;
@@ -72,7 +74,14 @@ service TokenService {
   //
   // Machine credential only — the exchange needs a credential to attenuate. A
   // human session signs in with `forge login` or uses the web app.
-  rpc ExchangeToken(ExchangeTokenRequest) returns (ExchangeTokenResponse) {}
+  //
+  // auth_required: false means "not gated by the API's auth interceptor",
+  // never "unauthenticated": the handler authenticates its own bearer, against
+  // the authority and uncached, because it must admit a daemon's session
+  // credential, which the interceptor (reliant:api only) refuses by design.
+  rpc ExchangeToken(ExchangeTokenRequest) returns (ExchangeTokenResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
 
   // GetGitToken returns the CALLING session's acting user's CURRENT token for a
   // git provider, renewed first when it is near expiry. It is what a daemon's
@@ -98,7 +107,12 @@ service TokenService {
   //     reconnect. `x-forge-error-reason` names which. Permanent until the user
   //     acts; do not retry.
   //   - UNAVAILABLE: the control plane or provider could not be reached; retry.
-  rpc GetGitToken(GetGitTokenRequest) returns (GetGitTokenResponse) {}
+  //
+  // auth_required: false for the same reason as ExchangeToken: the handler,
+  // not the interceptor, authenticates the caller.
+  rpc GetGitToken(GetGitTokenRequest) returns (GetGitTokenResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
 }
 
 enum TokenKind {

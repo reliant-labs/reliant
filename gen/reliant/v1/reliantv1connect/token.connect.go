@@ -99,6 +99,11 @@ type TokenServiceClient interface {
 	//
 	// Machine credential only — the exchange needs a credential to attenuate. A
 	// human session signs in with `forge login` or uses the web app.
+	//
+	// auth_required: false means "not gated by the API's auth interceptor",
+	// never "unauthenticated": the handler authenticates its own bearer, against
+	// the authority and uncached, because it must admit a daemon's session
+	// credential, which the interceptor (reliant:api only) refuses by design.
 	ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error)
 	// GetGitToken returns the CALLING session's acting user's CURRENT token for a
 	// git provider, renewed first when it is near expiry. It is what a daemon's
@@ -124,6 +129,9 @@ type TokenServiceClient interface {
 	//     reconnect. `x-forge-error-reason` names which. Permanent until the user
 	//     acts; do not retry.
 	//   - UNAVAILABLE: the control plane or provider could not be reached; retry.
+	//
+	// auth_required: false for the same reason as ExchangeToken: the handler,
+	// not the interceptor, authenticates the caller.
 	GetGitToken(context.Context, *connect.Request[v1.GetGitTokenRequest]) (*connect.Response[v1.GetGitTokenResponse], error)
 }
 
@@ -262,6 +270,11 @@ type TokenServiceHandler interface {
 	//
 	// Machine credential only — the exchange needs a credential to attenuate. A
 	// human session signs in with `forge login` or uses the web app.
+	//
+	// auth_required: false means "not gated by the API's auth interceptor",
+	// never "unauthenticated": the handler authenticates its own bearer, against
+	// the authority and uncached, because it must admit a daemon's session
+	// credential, which the interceptor (reliant:api only) refuses by design.
 	ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error)
 	// GetGitToken returns the CALLING session's acting user's CURRENT token for a
 	// git provider, renewed first when it is near expiry. It is what a daemon's
@@ -287,6 +300,9 @@ type TokenServiceHandler interface {
 	//     reconnect. `x-forge-error-reason` names which. Permanent until the user
 	//     acts; do not retry.
 	//   - UNAVAILABLE: the control plane or provider could not be reached; retry.
+	//
+	// auth_required: false for the same reason as ExchangeToken: the handler,
+	// not the interceptor, authenticates the caller.
 	GetGitToken(context.Context, *connect.Request[v1.GetGitTokenRequest]) (*connect.Response[v1.GetGitTokenResponse], error)
 }
 

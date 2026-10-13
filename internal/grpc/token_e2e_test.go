@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
+	"github.com/reliant-labs/reliant/pkg/middleware"
 )
 
 // ── End-to-end: ONE credential, minted by reliant, owned by control-plane ──
@@ -278,12 +279,11 @@ func (s *sessionSigner) sign(t *testing.T, userID string) string {
 
 // serveTokenService mounts reliant's TokenService behind the REAL API auth
 // interceptor, with the authority's introspector wired exactly as NewServer
-// wires it (cached) — ExchangeToken included among the interceptor's public
-// methods, as NewServer lists it.
+// wires it (cached) and the same public procedures (ExchangeToken and
+// GetGitToken among them).
 func serveTokenService(t *testing.T, authority tokenauthority.Authority, jwtPubPEM string, cp services.TokenControlPlane) string {
 	t.Helper()
-	authInterceptor, err := interceptors.NewAuthInterceptor(jwtPubPEM, "",
-		[]string{reliantv1connect.TokenServiceExchangeTokenProcedure})
+	authInterceptor, err := interceptors.NewAuthInterceptor(jwtPubPEM, "", middleware.UnauthenticatedProcedures)
 	require.NoError(t, err)
 	authInterceptor.SetAccessTokenIntrospector(accesstokenclient.NewCachedIntrospector(authority))
 	mux := http.NewServeMux()

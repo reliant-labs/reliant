@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -842,7 +843,7 @@ var File_reliant_v1_system_proto protoreflect.FileDescriptor
 const file_reliant_v1_system_proto_rawDesc = "" +
 	"\n" +
 	"\x17reliant/v1/system.proto\x12\n" +
-	"reliant.v1\"\x0f\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\"\x0f\n" +
 	"\rHealthRequest\"B\n" +
 	"\x0eHealthResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x18\n" +
@@ -885,16 +886,16 @@ const file_reliant_v1_system_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x15\n" +
 	"\x13DevAuthClearRequest\"0\n" +
 	"\x14DevAuthClearResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess2\xef\x04\n" +
-	"\rSystemService\x12A\n" +
-	"\x06Health\x12\x19.reliant.v1.HealthRequest\x1a\x1a.reliant.v1.HealthResponse\"\x00\x12>\n" +
-	"\x05Ready\x12\x18.reliant.v1.ReadyRequest\x1a\x19.reliant.v1.ReadyResponse\"\x00\x12;\n" +
-	"\x04Info\x12\x17.reliant.v1.InfoRequest\x1a\x18.reliant.v1.InfoResponse\"\x00\x12D\n" +
-	"\aVersion\x12\x1a.reliant.v1.VersionRequest\x1a\x1b.reliant.v1.VersionResponse\"\x00\x12_\n" +
-	"\x10StartOAuthSignIn\x12#.reliant.v1.StartOAuthSignInRequest\x1a$.reliant.v1.StartOAuthSignInResponse\"\x00\x12P\n" +
-	"\vDevAuthLoad\x12\x1e.reliant.v1.DevAuthLoadRequest\x1a\x1f.reliant.v1.DevAuthLoadResponse\"\x00\x12P\n" +
-	"\vDevAuthSave\x12\x1e.reliant.v1.DevAuthSaveRequest\x1a\x1f.reliant.v1.DevAuthSaveResponse\"\x00\x12S\n" +
-	"\fDevAuthClear\x12\x1f.reliant.v1.DevAuthClearRequest\x1a .reliant.v1.DevAuthClearResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\asuccess\x18\x01 \x01(\bR\asuccess2\x9f\x05\n" +
+	"\rSystemService\x12G\n" +
+	"\x06Health\x12\x19.reliant.v1.HealthRequest\x1a\x1a.reliant.v1.HealthResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12D\n" +
+	"\x05Ready\x12\x18.reliant.v1.ReadyRequest\x1a\x19.reliant.v1.ReadyResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12A\n" +
+	"\x04Info\x12\x17.reliant.v1.InfoRequest\x1a\x18.reliant.v1.InfoResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12J\n" +
+	"\aVersion\x12\x1a.reliant.v1.VersionRequest\x1a\x1b.reliant.v1.VersionResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12e\n" +
+	"\x10StartOAuthSignIn\x12#.reliant.v1.StartOAuthSignInRequest\x1a$.reliant.v1.StartOAuthSignInResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12V\n" +
+	"\vDevAuthLoad\x12\x1e.reliant.v1.DevAuthLoadRequest\x1a\x1f.reliant.v1.DevAuthLoadResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12V\n" +
+	"\vDevAuthSave\x12\x1e.reliant.v1.DevAuthSaveRequest\x1a\x1f.reliant.v1.DevAuthSaveResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12Y\n" +
+	"\fDevAuthClear\x12\x1f.reliant.v1.DevAuthClearRequest\x1a .reliant.v1.DevAuthClearResponse\"\x06\xa2\xbb\x18\x02\b\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_system_proto_rawDescOnce sync.Once

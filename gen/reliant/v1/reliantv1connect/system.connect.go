@@ -71,7 +71,8 @@ type SystemServiceClient interface {
 	// by opening the provider in the system browser, waiting for the localhost
 	// callback, exchanging the PKCE code, and returning Supabase session tokens.
 	StartOAuthSignIn(context.Context, *connect.Request[v1.StartOAuthSignInRequest]) (*connect.Response[v1.StartOAuthSignInResponse], error)
-	// DevAuthLoad loads the global auth session (development only)
+	// DevAuthLoad loads the global auth session (development only).
+	// Browser dev mode calls the DevAuth rpcs before a JWT exists.
 	DevAuthLoad(context.Context, *connect.Request[v1.DevAuthLoadRequest]) (*connect.Response[v1.DevAuthLoadResponse], error)
 	// DevAuthSave saves the global auth session (development only)
 	DevAuthSave(context.Context, *connect.Request[v1.DevAuthSaveRequest]) (*connect.Response[v1.DevAuthSaveResponse], error)
@@ -207,7 +208,8 @@ type SystemServiceHandler interface {
 	// by opening the provider in the system browser, waiting for the localhost
 	// callback, exchanging the PKCE code, and returning Supabase session tokens.
 	StartOAuthSignIn(context.Context, *connect.Request[v1.StartOAuthSignInRequest]) (*connect.Response[v1.StartOAuthSignInResponse], error)
-	// DevAuthLoad loads the global auth session (development only)
+	// DevAuthLoad loads the global auth session (development only).
+	// Browser dev mode calls the DevAuth rpcs before a JWT exists.
 	DevAuthLoad(context.Context, *connect.Request[v1.DevAuthLoadRequest]) (*connect.Response[v1.DevAuthLoadResponse], error)
 	// DevAuthSave saves the global auth session (development only)
 	DevAuthSave(context.Context, *connect.Request[v1.DevAuthSaveRequest]) (*connect.Response[v1.DevAuthSaveResponse], error)
