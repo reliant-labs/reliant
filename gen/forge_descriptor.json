@@ -12740,17 +12740,17 @@
           {
             "Name": "session_id",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           },
           {
             "Name": "parent_id",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           },
           {
             "Name": "state",
             "ProtoType": "enum",
-            "IsOptional": false
+            "IsOptional": true
           },
           {
             "Name": "limit",
@@ -12807,7 +12807,7 @@
           {
             "Name": "include_archived",
             "ProtoType": "bool",
-            "IsOptional": false
+            "IsOptional": true
           },
           {
             "Name": "parent_chat_id",
@@ -13040,16 +13040,19 @@
         "reliant.v1.ListRunsRequest": [
           {
             "name": "session_id",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           },
           {
             "name": "parent_id",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           },
           {
             "name": "state",
             "kind": "enum",
-            "type_name": "reliant.v1.WorkflowState"
+            "type_name": "reliant.v1.WorkflowState",
+            "optional": true
           },
           {
             "name": "limit",
@@ -13103,7 +13106,8 @@
           },
           {
             "name": "include_archived",
-            "kind": "bool"
+            "kind": "bool",
+            "optional": true
           },
           {
             "name": "parent_chat_id",
@@ -33577,5 +33581,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "f12444429522c36ebad2e65c8bd1cab4e8e4ccc04713f6b2419f5369ef4e2514"
+  "source_hash": "4201a3557a76608e4e5b2c5ca400f070608731899612c969309c877f9ec804fb"
 }

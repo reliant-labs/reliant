@@ -153,7 +153,7 @@ func TestFilterRuns_StateFilter(t *testing.T) {
 	}
 
 	got := filterRunsToProto(runs, &reliantv1.ListRunsRequest{
-		State: reliantv1.WorkflowState_WORKFLOW_STATE_ACTIVE,
+		State: reliantv1.WorkflowState_WORKFLOW_STATE_ACTIVE.Enum(),
 	})
 
 	require.Len(t, got.Runs, 2)

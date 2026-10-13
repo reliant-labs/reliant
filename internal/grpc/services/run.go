@@ -337,23 +337,23 @@ func (s *RunService) ListRuns(
 	userID := auth.MustGetUserID(ctx)
 
 	switch {
-	case req.Msg.ParentId != "":
+	case req.Msg.GetParentId() != "":
 		// Ownership is checked via the parent, which resolves to a chat.
-		if _, _, err := s.runOwnedBy(ctx, userID, req.Msg.ParentId); err != nil {
+		if _, _, err := s.runOwnedBy(ctx, userID, req.Msg.GetParentId()); err != nil {
 			return nil, err
 		}
-		children, err := s.database.ListChildWorkflows(ctx, req.Msg.ParentId)
+		children, err := s.database.ListChildWorkflows(ctx, req.Msg.GetParentId())
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list runs"))
 		}
 		return connect.NewResponse(filterRunsToProto(children, req.Msg)), nil
 
-	case req.Msg.SessionId != "":
-		chat, err := s.database.GetChat(ctx, req.Msg.SessionId)
+	case req.Msg.GetSessionId() != "":
+		chat, err := s.database.GetChat(ctx, req.Msg.GetSessionId())
 		if err != nil || chat == nil || chat.UserID != userID {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("session not found"))
 		}
-		runs, err := s.database.ListRootWorkflows(ctx, req.Msg.SessionId)
+		runs, err := s.database.ListRootWorkflows(ctx, req.Msg.GetSessionId())
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list runs"))
 		}
@@ -390,7 +390,7 @@ func (s *RunService) listAllRuns(
 		LaunchKinds:     req.LaunchKind,
 		Query:           req.Query,
 		ParentChatID:    req.ParentChatId,
-		IncludeArchived: req.IncludeArchived,
+		IncludeArchived: req.GetIncludeArchived(),
 		Limit:           limit,
 	}
 	for _, st := range req.DisplayStates {
@@ -517,8 +517,8 @@ func filterRunsToProto(runs []*core.Workflow, req *reliantv1.ListRunsRequest) *r
 		if run == nil {
 			continue
 		}
-		if req.State != reliantv1.WorkflowState_WORKFLOW_STATE_UNSPECIFIED &&
-			runstateproto.State(run.Status.State) != req.State {
+		if req.GetState() != reliantv1.WorkflowState_WORKFLOW_STATE_UNSPECIFIED &&
+			runstateproto.State(run.Status.State) != req.GetState() {
 			continue
 		}
 		filtered = append(filtered, run)

@@ -721,13 +721,13 @@ func (x *GetRunResponse) GetRun() *Run {
 type ListRunsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// SessionId scopes the list to one session's runs.
-	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SessionId *string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3,oneof" json:"session_id,omitempty"`
 	// ParentId scopes the list to one run's children.
-	ParentId string `protobuf:"bytes,2,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
-	// State filters by lifecycle state. Unspecified returns all. Applies to the
-	// session and parent lists; the cross-cutting list filters with
-	// display_states.
-	State WorkflowState `protobuf:"varint,3,opt,name=state,proto3,enum=reliant.v1.WorkflowState" json:"state,omitempty"`
+	ParentId *string `protobuf:"bytes,2,opt,name=parent_id,json=parentId,proto3,oneof" json:"parent_id,omitempty"`
+	// State filters by lifecycle state. Unset or UNSPECIFIED returns all.
+	// Applies to the session and parent lists; the cross-cutting list filters
+	// with display_states.
+	State *WorkflowState `protobuf:"varint,3,opt,name=state,proto3,enum=reliant.v1.WorkflowState,oneof" json:"state,omitempty"`
 	// Limit is the page size. The cross-cutting list defaults to 50 and caps at
 	// 200.
 	Limit int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
@@ -753,7 +753,7 @@ type ListRunsRequest struct {
 	PageToken *string `protobuf:"bytes,14,opt,name=page_token,json=pageToken,proto3,oneof" json:"page_token,omitempty"`
 	// IncludeArchived also returns runs whose chat is archived. Archived runs
 	// are hidden by default.
-	IncludeArchived bool `protobuf:"varint,15,opt,name=include_archived,json=includeArchived,proto3" json:"include_archived,omitempty"`
+	IncludeArchived *bool `protobuf:"varint,15,opt,name=include_archived,json=includeArchived,proto3,oneof" json:"include_archived,omitempty"`
 	// ParentChatId restricts to runs an agent started from this chat (launch
 	// kind "agent.start_run"). Still scoped to the caller's own runs, and not
 	// narrowed by any root-only default: an agent-started run is the root run of
@@ -794,22 +794,22 @@ func (*ListRunsRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListRunsRequest) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
+	if x != nil && x.SessionId != nil {
+		return *x.SessionId
 	}
 	return ""
 }
 
 func (x *ListRunsRequest) GetParentId() string {
-	if x != nil {
-		return x.ParentId
+	if x != nil && x.ParentId != nil {
+		return *x.ParentId
 	}
 	return ""
 }
 
 func (x *ListRunsRequest) GetState() WorkflowState {
-	if x != nil {
-		return x.State
+	if x != nil && x.State != nil {
+		return *x.State
 	}
 	return WorkflowState_WORKFLOW_STATE_UNSPECIFIED
 }
@@ -885,8 +885,8 @@ func (x *ListRunsRequest) GetPageToken() string {
 }
 
 func (x *ListRunsRequest) GetIncludeArchived() bool {
-	if x != nil {
-		return x.IncludeArchived
+	if x != nil && x.IncludeArchived != nil {
+		return *x.IncludeArchived
 	}
 	return false
 }
@@ -1541,33 +1541,38 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\rGetRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\"3\n" +
 	"\x0eGetRunResponse\x12!\n" +
-	"\x03run\x18\x01 \x01(\v2\x0f.reliant.v1.RunR\x03run\"\xc0\x05\n" +
-	"\x0fListRunsRequest\x12\x1d\n" +
+	"\x03run\x18\x01 \x01(\v2\x0f.reliant.v1.RunR\x03run\"\x90\x06\n" +
+	"\x0fListRunsRequest\x12\"\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +
-	"\tparent_id\x18\x02 \x01(\tR\bparentId\x12/\n" +
-	"\x05state\x18\x03 \x01(\x0e2\x19.reliant.v1.WorkflowStateR\x05state\x12\x14\n" +
+	"session_id\x18\x01 \x01(\tH\x00R\tsessionId\x88\x01\x01\x12 \n" +
+	"\tparent_id\x18\x02 \x01(\tH\x01R\bparentId\x88\x01\x01\x124\n" +
+	"\x05state\x18\x03 \x01(\x0e2\x19.reliant.v1.WorkflowStateH\x02R\x05state\x88\x01\x01\x12\x14\n" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\"\n" +
 	"\n" +
-	"project_id\x18\x06 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x1a\n" +
+	"project_id\x18\x06 \x01(\tH\x03R\tprojectId\x88\x01\x01\x12\x1a\n" +
 	"\bworkflow\x18\a \x03(\tR\bworkflow\x12\"\n" +
 	"\n" +
-	"trigger_id\x18\b \x01(\tH\x01R\ttriggerId\x88\x01\x01\x12\x1f\n" +
+	"trigger_id\x18\b \x01(\tH\x04R\ttriggerId\x88\x01\x01\x12\x1f\n" +
 	"\vlaunch_kind\x18\t \x03(\tR\n" +
 	"launchKind\x12B\n" +
 	"\x0edisplay_states\x18\n" +
 	" \x03(\x0e2\x1b.reliant.v1.RunDisplayStateR\rdisplayStates\x12?\n" +
 	"\rstarted_after\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\fstartedAfter\x12A\n" +
 	"\x0estarted_before\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\rstartedBefore\x12\x19\n" +
-	"\x05query\x18\r \x01(\tH\x02R\x05query\x88\x01\x01\x12\"\n" +
+	"\x05query\x18\r \x01(\tH\x05R\x05query\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"page_token\x18\x0e \x01(\tH\x03R\tpageToken\x88\x01\x01\x12)\n" +
-	"\x10include_archived\x18\x0f \x01(\bR\x0fincludeArchived\x12)\n" +
-	"\x0eparent_chat_id\x18\x10 \x01(\tH\x04R\fparentChatId\x88\x01\x01B\r\n" +
+	"page_token\x18\x0e \x01(\tH\x06R\tpageToken\x88\x01\x01\x12.\n" +
+	"\x10include_archived\x18\x0f \x01(\bH\aR\x0fincludeArchived\x88\x01\x01\x12)\n" +
+	"\x0eparent_chat_id\x18\x10 \x01(\tH\bR\fparentChatId\x88\x01\x01B\r\n" +
+	"\v_session_idB\f\n" +
+	"\n" +
+	"_parent_idB\b\n" +
+	"\x06_stateB\r\n" +
 	"\v_project_idB\r\n" +
 	"\v_trigger_idB\b\n" +
 	"\x06_queryB\r\n" +
-	"\v_page_tokenB\x11\n" +
+	"\v_page_tokenB\x13\n" +
+	"\x11_include_archivedB\x11\n" +
 	"\x0f_parent_chat_id\"u\n" +
 	"\x10ListRunsResponse\x12#\n" +
 	"\x04runs\x18\x01 \x03(\v2\x0f.reliant.v1.RunR\x04runs\x12\x14\n" +

@@ -276,15 +276,15 @@ message GetRunResponse {
 
 message ListRunsRequest {
   // SessionId scopes the list to one session's runs.
-  string session_id = 1;
+  optional string session_id = 1;
 
   // ParentId scopes the list to one run's children.
-  string parent_id = 2;
+  optional string parent_id = 2;
 
-  // State filters by lifecycle state. Unspecified returns all. Applies to the
-  // session and parent lists; the cross-cutting list filters with
-  // display_states.
-  WorkflowState state = 3;
+  // State filters by lifecycle state. Unset or UNSPECIFIED returns all.
+  // Applies to the session and parent lists; the cross-cutting list filters
+  // with display_states.
+  optional WorkflowState state = 3;
 
   // Limit is the page size. The cross-cutting list defaults to 50 and caps at
   // 200.
@@ -327,7 +327,7 @@ message ListRunsRequest {
 
   // IncludeArchived also returns runs whose chat is archived. Archived runs
   // are hidden by default.
-  bool include_archived = 15;
+  optional bool include_archived = 15;
 
   // ParentChatId restricts to runs an agent started from this chat (launch
   // kind "agent.start_run"). Still scoped to the caller's own runs, and not
