@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package preset
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 
 // setupTestPresetService creates a database and preset service for testing.
 // Returns the service, repo, userID, and projectID.
-func setupTestPresetService(t *testing.T) (*PresetService, *db.Repo, string, string) {
+func setupTestPresetService(t *testing.T) (*Service, *db.Repo, string, string) {
 	t.Helper()
 
 	repo := db.NewTestRepo(t)
@@ -42,7 +42,7 @@ func setupTestPresetService(t *testing.T) (*PresetService, *db.Repo, string, str
 		t.Fatalf("failed to create test project: %v", err)
 	}
 
-	service := NewPresetService(repo)
+	service := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo}))
 	return service, repo, userID, projectID
 }
 

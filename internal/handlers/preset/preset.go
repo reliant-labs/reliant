@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package preset
 
 import (
 	"context"
@@ -17,7 +17,6 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -29,23 +28,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 )
 
-// PresetService implements the gRPC PresetService
-type PresetService struct {
-	reliantv1connect.UnimplementedPresetServiceHandler
-	database db.Repository
-}
-
-// NewPresetService creates a new PresetService
-func NewPresetService(database db.Repository) *PresetService {
-	return &PresetService{
-		database: database,
-	}
-}
-
 // projectBelongsToUser verifies the authenticated user owns projectID, returning
 // a Connect error if the project doesn't exist or belongs to someone else.
-func (s *PresetService) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
-	_, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
+	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
 			return connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
@@ -57,7 +43,7 @@ func (s *PresetService) projectBelongsToUser(ctx context.Context, projectID stri
 
 // ListPresets returns all presets for a project.
 // Priority: user (database) > project (stored config) > builtin
-func (s *PresetService) ListPresets(
+func (s *Service) ListPresets(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListPresetsRequest],
 ) (*connect.Response[reliantv1.ListPresetsResponse], error) {
@@ -98,7 +84,7 @@ func (s *PresetService) ListPresets(
 	}
 
 	// 2. Load user presets from database (highest priority, override file-based)
-	dbPresets, err := s.database.ListUserPresetsByProject(ctx, userID, req.Msg.ProjectId)
+	dbPresets, err := s.deps.Repo.ListUserPresetsByProject(ctx, userID, req.Msg.ProjectId)
 	if err != nil {
 		logging.Warn("Failed to load user presets from database", "error", err)
 	} else {
@@ -110,12 +96,12 @@ func (s *PresetService) ListPresets(
 
 	// Batch-fetch visibility state (2 queries instead of 2×N)
 	presetItemType := int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_PRESET)
-	overrides, err := s.database.ListVisibilityOverrides(ctx, userID, presetItemType)
+	overrides, err := s.deps.Repo.ListVisibilityOverrides(ctx, userID, presetItemType)
 	if err != nil {
 		logging.Warn("Failed to batch-load visibility overrides for presets", "error", err)
 		overrides = nil
 	}
-	hiddenDefaults, err := s.database.ListHiddenItemDefaults(ctx, presetItemType)
+	hiddenDefaults, err := s.deps.Repo.ListHiddenItemDefaults(ctx, presetItemType)
 	if err != nil {
 		logging.Warn("Failed to batch-load hidden defaults for presets", "error", err)
 		hiddenDefaults = nil
@@ -147,7 +133,7 @@ func (s *PresetService) ListPresets(
 
 // GetPreset returns a specific preset by name.
 // Priority: user (database) > project (stored config) > builtin
-func (s *PresetService) GetPreset(
+func (s *Service) GetPreset(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetPresetRequest],
 ) (*connect.Response[reliantv1.GetPresetResponse], error) {
@@ -168,7 +154,7 @@ func (s *PresetService) GetPreset(
 	slug := strings.ToLower(strings.ReplaceAll(req.Msg.Name, " ", "-"))
 
 	// 1. First check database for user preset (highest priority)
-	dbPreset, err := s.database.GetPresetBySlug(ctx, userID, slug)
+	dbPreset, err := s.deps.Repo.GetPresetBySlug(ctx, userID, slug)
 	if err == nil && dbPreset != nil {
 		return connect.NewResponse(&reliantv1.GetPresetResponse{
 			Preset: dbPresetToProto(dbPreset),
@@ -195,7 +181,7 @@ func (s *PresetService) GetPreset(
 // Priority: user (database) > project (stored config) > builtin
 // Presets are matched by tag - a preset with tag "agent" will match any
 // workflow/group with tag "agent".
-func (s *PresetService) ListPresetsForWorkflow(
+func (s *Service) ListPresetsForWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListPresetsForWorkflowRequest],
 ) (*connect.Response[reliantv1.ListPresetsForWorkflowResponse], error) {
@@ -236,7 +222,7 @@ func (s *PresetService) ListPresetsForWorkflow(
 			return
 		}
 		if tag := wf.GetPresets().GetTag(); tag != "" {
-			dbPresets, dbPresetsErr = s.database.ListPresetsByTag(ctx, userID, tag, req.Msg.ProjectId)
+			dbPresets, dbPresetsErr = s.deps.Repo.ListPresetsByTag(ctx, userID, tag, req.Msg.ProjectId)
 		}
 	}()
 	go func() {
@@ -245,11 +231,11 @@ func (s *PresetService) ListPresetsForWorkflow(
 	}()
 	go func() {
 		defer wg.Done()
-		overrides, overridesErr = s.database.ListVisibilityOverrides(ctx, userID, presetItemType)
+		overrides, overridesErr = s.deps.Repo.ListVisibilityOverrides(ctx, userID, presetItemType)
 	}()
 	go func() {
 		defer wg.Done()
-		hiddenDefaults, hiddenErr = s.database.ListHiddenItemDefaults(ctx, presetItemType)
+		hiddenDefaults, hiddenErr = s.deps.Repo.ListHiddenItemDefaults(ctx, presetItemType)
 	}()
 	wg.Wait()
 
@@ -374,7 +360,7 @@ func builtinPresets() []builtinPreset {
 
 // loadAllPresetsFromDB loads all builtin presets then overlays stored project presets from the DB.
 // Project presets override builtins by name (same layering as the old filesystem loader).
-func (s *PresetService) loadAllPresetsFromDB(ctx context.Context, projectID string) *preset.LoadResult {
+func (s *Service) loadAllPresetsFromDB(ctx context.Context, projectID string) *preset.LoadResult {
 	presetMap := make(map[string]*preset.Preset)
 	invalidMap := make(map[string]*preset.InvalidPreset)
 
@@ -391,7 +377,7 @@ func (s *PresetService) loadAllPresetsFromDB(ctx context.Context, projectID stri
 
 	// 2. Overlay stored project presets from DB
 	if projectID != "" {
-		presetsJSON, err := s.database.GetProjectPresetsJSON(ctx, projectID)
+		presetsJSON, err := s.deps.Repo.GetProjectPresetsJSON(ctx, projectID)
 		if err == nil {
 			storedPresets, err := cfg.ParseStoredPresets(presetsJSON)
 			if err == nil {
@@ -421,10 +407,10 @@ func (s *PresetService) loadAllPresetsFromDB(ctx context.Context, projectID stri
 }
 
 // loadPresetByNameFromDB loads a single preset by name from stored project config or builtins.
-func (s *PresetService) loadPresetByNameFromDB(ctx context.Context, projectID, name string) (*preset.Preset, error) {
+func (s *Service) loadPresetByNameFromDB(ctx context.Context, projectID, name string) (*preset.Preset, error) {
 	// Try stored project presets first
 	if projectID != "" {
-		presetsJSON, err := s.database.GetProjectPresetsJSON(ctx, projectID)
+		presetsJSON, err := s.deps.Repo.GetProjectPresetsJSON(ctx, projectID)
 		if err == nil || !errors.Is(err, sql.ErrNoRows) {
 			if err == nil {
 				storedPresets, parseErr := cfg.ParseStoredPresets(presetsJSON)
@@ -460,8 +446,8 @@ func (s *PresetService) loadPresetByNameFromDB(ctx context.Context, projectID, n
 // builtin:// from the embedded builtins; anything else from the user's own
 // complete workflows, then the project's synced workflows by name:.
 // No filesystem access — the API server may run in the cloud without disk access.
-func (s *PresetService) loadWorkflow(ctx context.Context, workflowRef, projectID string) (*reliantv1.Workflow, error) {
-	resolved, err := workflowsource.Resolve(ctx, s.database, workflowsource.Options{
+func (s *Service) loadWorkflow(ctx context.Context, workflowRef, projectID string) (*reliantv1.Workflow, error) {
+	resolved, err := workflowsource.Resolve(ctx, s.deps.Repo, workflowsource.Options{
 		UserID: auth.MustGetUserID(ctx), ProjectID: projectID,
 	}, workflowRef)
 	if err != nil {
@@ -471,7 +457,7 @@ func (s *PresetService) loadWorkflow(ctx context.Context, workflowRef, projectID
 }
 
 // CreatePreset saves a new user preset to the database.
-func (s *PresetService) CreatePreset(
+func (s *Service) CreatePreset(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreatePresetRequest],
 ) (*connect.Response[reliantv1.CreatePresetResponse], error) {
@@ -500,9 +486,9 @@ func (s *PresetService) CreatePreset(
 	// Use project-scoped lookup if project_id is provided, otherwise global
 	var existing *db.Preset
 	if req.Msg.ProjectId != "" {
-		existing, _ = s.database.GetPresetBySlugAndProject(ctx, userID, slug, req.Msg.ProjectId)
+		existing, _ = s.deps.Repo.GetPresetBySlugAndProject(ctx, userID, slug, req.Msg.ProjectId)
 	} else {
-		existing, _ = s.database.GetPresetBySlug(ctx, userID, slug)
+		existing, _ = s.deps.Repo.GetPresetBySlug(ctx, userID, slug)
 	}
 	if existing != nil {
 		return connect.NewResponse(&reliantv1.CreatePresetResponse{
@@ -525,7 +511,7 @@ func (s *PresetService) CreatePreset(
 		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 			return nil, err
 		}
-		presetsJSON, err := s.database.GetProjectPresetsJSON(ctx, req.Msg.ProjectId)
+		presetsJSON, err := s.deps.Repo.GetProjectPresetsJSON(ctx, req.Msg.ProjectId)
 		if err == nil {
 			storedPresets, err := cfg.ParseStoredPresets(presetsJSON)
 			if err == nil && cfg.FindStoredPresetByName(storedPresets, slug) != nil {
@@ -562,7 +548,7 @@ func (s *PresetService) CreatePreset(
 		Params:      params,
 	}
 
-	saved, err := s.database.CreatePreset(ctx, newPreset)
+	saved, err := s.deps.Repo.CreatePreset(ctx, newPreset)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create preset: %w", err))
 	}
@@ -666,7 +652,7 @@ func dbPresetToProto(p *db.Preset) *reliantv1.PresetInfo {
 // For user presets (source=user): updates in database
 // For project presets (source=project): updates the file in place
 // Builtin presets cannot be edited.
-func (s *PresetService) UpdatePreset(
+func (s *Service) UpdatePreset(
 	ctx context.Context,
 	req *connect.Request[reliantv1.UpdatePresetRequest],
 ) (*connect.Response[reliantv1.UpdatePresetResponse], error) {
@@ -687,9 +673,9 @@ func (s *PresetService) UpdatePreset(
 	var dbPreset *db.Preset
 	var err error
 	if req.Msg.ProjectId != "" {
-		dbPreset, err = s.database.GetPresetBySlugAndProject(ctx, userID, slug, req.Msg.ProjectId)
+		dbPreset, err = s.deps.Repo.GetPresetBySlugAndProject(ctx, userID, slug, req.Msg.ProjectId)
 	} else {
-		dbPreset, err = s.database.GetPresetBySlug(ctx, userID, slug)
+		dbPreset, err = s.deps.Repo.GetPresetBySlug(ctx, userID, slug)
 	}
 
 	if err == nil && dbPreset != nil {
@@ -711,7 +697,7 @@ func (s *PresetService) UpdatePreset(
 			dbPreset.Params = params
 		}
 
-		updated, err := s.database.UpdatePreset(ctx, dbPreset)
+		updated, err := s.deps.Repo.UpdatePreset(ctx, dbPreset)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preset: %w", err))
 		}
@@ -756,7 +742,7 @@ func (s *PresetService) UpdatePreset(
 // For user presets (source=user): deletes from database
 // For project presets (source=project): deletes the file
 // Builtin presets cannot be deleted.
-func (s *PresetService) DeletePreset(
+func (s *Service) DeletePreset(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DeletePresetRequest],
 ) (*connect.Response[reliantv1.DeletePresetResponse], error) {
@@ -776,14 +762,14 @@ func (s *PresetService) DeletePreset(
 	// 1. First check if this is a user preset (database)
 	var dbPreset *db.Preset
 	if req.Msg.ProjectId != "" {
-		dbPreset, _ = s.database.GetPresetBySlugAndProject(ctx, userID, slug, req.Msg.ProjectId)
+		dbPreset, _ = s.deps.Repo.GetPresetBySlugAndProject(ctx, userID, slug, req.Msg.ProjectId)
 	} else {
-		dbPreset, _ = s.database.GetPresetBySlug(ctx, userID, slug)
+		dbPreset, _ = s.deps.Repo.GetPresetBySlug(ctx, userID, slug)
 	}
 
 	if dbPreset != nil {
 		// Found in database - delete there
-		if err := s.database.DeletePreset(ctx, dbPreset.ID); err != nil {
+		if err := s.deps.Repo.DeletePreset(ctx, dbPreset.ID); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete preset: %w", err))
 		}
 		logging.Info("Deleted user preset", "slug", slug, "user_id", userID)
@@ -827,7 +813,7 @@ func (s *PresetService) DeletePreset(
 // Defaults are stored as a JSON blob per workflow: preset.defaults.<workflowName>
 // The blob maps group names to preset names: {"": "general", "Proposer": "researcher"}
 // Empty string key "" represents top-level/workflow-level inputs.
-func (s *PresetService) SetDefaultPreset(
+func (s *Service) SetDefaultPreset(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SetDefaultPresetRequest],
 ) (*connect.Response[reliantv1.SetDefaultPresetResponse], error) {
@@ -860,7 +846,7 @@ func (s *PresetService) SetDefaultPreset(
 
 	// Load existing defaults blob
 	defaults := make(map[string]string)
-	setting, err := s.database.GetSetting(ctx, userIDStr, nil, settingKey)
+	setting, err := s.deps.Repo.GetSetting(ctx, userIDStr, nil, settingKey)
 	if err == nil && setting.Value != "" {
 		// Parse existing JSON blob
 		if err := json.Unmarshal([]byte(setting.Value), &defaults); err != nil {
@@ -899,7 +885,7 @@ func (s *PresetService) SetDefaultPreset(
 // Returns a map of group name to preset name.
 // Empty string key "" represents top-level/workflow-level inputs.
 // Merges user settings with system defaults (user settings take precedence).
-func (s *PresetService) GetDefaultPreset(
+func (s *Service) GetDefaultPreset(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetDefaultPresetRequest],
 ) (*connect.Response[reliantv1.GetDefaultPresetResponse], error) {
@@ -933,7 +919,7 @@ func (s *PresetService) GetDefaultPreset(
 // `preset.defaults.<workflow>` setting values so a batch caller can read every
 // override in one query instead of one GetSetting per workflow. Passing nil
 // makes the function fetch the single setting it needs itself.
-func (s *PresetService) resolveDefaultPresets(
+func (s *Service) resolveDefaultPresets(
 	ctx context.Context,
 	userID, projectID, workflowName string,
 	userOverrides map[string]string,
@@ -971,7 +957,7 @@ func (s *PresetService) resolveDefaultPresets(
 	rawOverride := ""
 	if userOverrides != nil {
 		rawOverride = userOverrides[settingKey]
-	} else if setting, err := s.database.GetSetting(ctx, userID, nil, settingKey); err == nil {
+	} else if setting, err := s.deps.Repo.GetSetting(ctx, userID, nil, settingKey); err == nil {
 		rawOverride = setting.Value
 	}
 
@@ -992,7 +978,7 @@ func (s *PresetService) resolveDefaultPresets(
 // through resolveDefaultPresets — but the user's overrides are read with a
 // single ListSettingsByKey rather than one GetSetting per workflow, so the
 // query count stays flat as the workflow list grows.
-func (s *PresetService) GetDefaultPresetsBatch(
+func (s *Service) GetDefaultPresetsBatch(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetDefaultPresetsBatchRequest],
 ) (*connect.Response[reliantv1.GetDefaultPresetsBatchResponse], error) {
@@ -1019,11 +1005,11 @@ func (s *PresetService) GetDefaultPresetsBatch(
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		settings, settingsErr = s.database.ListSettingsByKey(ctx, userIDStr, "preset.defaults.%")
+		settings, settingsErr = s.deps.Repo.ListSettingsByKey(ctx, userIDStr, "preset.defaults.%")
 	}()
 	go func() {
 		defer wg.Done()
-		catalog = workflowcatalog.Load(ctx, s.database, userIDStr, req.Msg.ProjectId)
+		catalog = workflowcatalog.Load(ctx, s.deps.Repo, userIDStr, req.Msg.ProjectId)
 	}()
 	wg.Wait()
 
@@ -1069,8 +1055,8 @@ func (s *PresetService) GetDefaultPresetsBatch(
 }
 
 // upsertSetting creates or updates a setting (similar to SettingsService.upsertSetting)
-func (s *PresetService) upsertSetting(ctx context.Context, userID, key, value string) error {
-	setting, err := s.database.GetSetting(ctx, userID, nil, key)
+func (s *Service) upsertSetting(ctx context.Context, userID, key, value string) error {
+	setting, err := s.deps.Repo.GetSetting(ctx, userID, nil, key)
 	if err != nil {
 		// Setting doesn't exist, create it
 		newSetting := &db.Setting{
@@ -1081,10 +1067,10 @@ func (s *PresetService) upsertSetting(ctx context.Context, userID, key, value st
 			Value:     value,
 			ValueType: "string",
 		}
-		return s.database.CreateSetting(ctx, newSetting)
+		return s.deps.Repo.CreateSetting(ctx, newSetting)
 	}
 
 	// Setting exists, update it
 	setting.Value = value
-	return s.database.UpdateSetting(ctx, setting)
+	return s.deps.Repo.UpdateSetting(ctx, setting)
 }

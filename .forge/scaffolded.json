@@ -45,6 +45,33 @@
     "internal/handlers/connector/handlers_scaffold_revoke_connector_test.go": {
       "scaffolded_at": "2026-10-13T13:00:02Z"
     },
+    "internal/handlers/preset/handlers_scaffold_create_preset_test.go": {
+      "scaffolded_at": "2026-10-13T13:50:35Z"
+    },
+    "internal/handlers/preset/handlers_scaffold_delete_preset_test.go": {
+      "scaffolded_at": "2026-10-13T13:50:35Z"
+    },
+    "internal/handlers/preset/handlers_scaffold_get_default_preset_test.go": {
+      "scaffolded_at": "2026-10-13T13:50:35Z"
+    },
+    "internal/handlers/preset/handlers_scaffold_get_default_presets_batch_test.go": {
+      "scaffolded_at": "2026-10-13T13:50:35Z"
+    },
+    "internal/handlers/preset/handlers_scaffold_get_preset_test.go": {
+      "scaffolded_at": "2026-10-13T13:50:35Z"
+    },
+    "internal/handlers/preset/handlers_scaffold_list_presets_for_workflow_test.go": {
+      "scaffolded_at": "2026-10-13T13:50:35Z"
+    },
+    "internal/handlers/preset/handlers_scaffold_list_presets_test.go": {
+      "scaffolded_at": "2026-10-13T13:50:35Z"
+    },
+    "internal/handlers/preset/handlers_scaffold_set_default_preset_test.go": {
+      "scaffolded_at": "2026-10-13T13:50:35Z"
+    },
+    "internal/handlers/preset/handlers_scaffold_update_preset_test.go": {
+      "scaffolded_at": "2026-10-13T13:50:35Z"
+    },
     "internal/handlers/question/handlers_scaffold_get_pending_question_test.go": {
       "scaffolded_at": "2026-10-13T07:28:55Z"
     },
@@ -85,6 +112,14 @@
     "internal/handlers/connector/handlers_scaffold_create_connector_test.go",
     "internal/handlers/connector/handlers_scaffold_list_available_tools_test.go",
     "internal/handlers/connector/handlers_scaffold_list_connectors_test.go",
-    "internal/handlers/connector/handlers_scaffold_revoke_connector_test.go"
+    "internal/handlers/connector/handlers_scaffold_revoke_connector_test.go",
+    "internal/handlers/preset/handlers_scaffold_create_preset_test.go",
+    "internal/handlers/preset/handlers_scaffold_delete_preset_test.go",
+    "internal/handlers/preset/handlers_scaffold_get_default_preset_test.go",
+    "internal/handlers/preset/handlers_scaffold_get_default_presets_batch_test.go",
+    "internal/handlers/preset/handlers_scaffold_get_preset_test.go",
+    "internal/handlers/preset/handlers_scaffold_list_presets_for_workflow_test.go",
+    "internal/handlers/preset/handlers_scaffold_list_presets_test.go",
+    "internal/handlers/preset/handlers_scaffold_update_preset_test.go"
   ]
 }

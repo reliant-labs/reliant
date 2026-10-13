@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package preset
 
 import (
 	"context"
@@ -48,7 +48,7 @@ func (r *presetReadRepo) ListPresetsByTag(context.Context, string, string, strin
 func TestGetDefaultPresetsBatch_ReadsDoNotScaleWithWorkflowNames(t *testing.T) {
 	ctx, wr := workflowlisttest.NewFixture(t, 12)
 	repo := &presetReadRepo{wr}
-	svc := NewPresetService(repo)
+	svc := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo}))
 
 	names := []string{"builtin://agent", "team-flow-0", "team-flow-1", "no-such-flow"}
 	for i := 0; i < 12; i++ {
@@ -73,7 +73,7 @@ func TestGetDefaultPresetsBatch_ReadsDoNotScaleWithWorkflowNames(t *testing.T) {
 func TestListPresetsForWorkflow_ReadsRunConcurrently(t *testing.T) {
 	ctx, wr := workflowlisttest.NewFixture(t, 1)
 	repo := &presetReadRepo{wr}
-	svc := NewPresetService(repo)
+	svc := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo}))
 	req := connect.NewRequest(&reliantv1.ListPresetsForWorkflowRequest{
 		ProjectId: repo.Project.ID, WorkflowName: "builtin://agent", IncludeHidden: true,
 	})
@@ -106,7 +106,7 @@ func TestBuiltinPresets_ParsedOncePerProcess(t *testing.T) {
 	require.Equal(t, len(first), len(second))
 	assert.Same(t, &first[0], &second[0], "the second call must reuse the first call's parse")
 
-	svc := NewPresetService(nil)
+	svc := NewTestPreset(t)
 	a := svc.loadAllPresetsFromDB(context.Background(), "")
 	b := svc.loadAllPresetsFromDB(context.Background(), "")
 	require.NotEmpty(t, a.Valid)

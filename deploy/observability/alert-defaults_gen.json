@@ -12,6 +12,10 @@
         "rpc_service": "reliant.v1.ConnectorService"
       },
       {
+        "name": "preset",
+        "rpc_service": "reliant.v1.PresetService"
+      },
+      {
         "name": "question",
         "rpc_service": "reliant.v1.QuestionService"
       },

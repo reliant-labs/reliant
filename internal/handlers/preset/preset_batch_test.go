@@ -1,7 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package preset
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 
 // setUserDefaultPresets writes the user-override setting that
 // resolveDefaultPresets merges on top of the workflow's YAML defaults.
-func setUserDefaultPresets(t *testing.T, service *PresetService, userID, workflowName string, defaults map[string]string) {
+func setUserDefaultPresets(t *testing.T, service *Service, userID, workflowName string, defaults map[string]string) {
 	t.Helper()
 	blob, err := json.Marshal(defaults)
 	if err != nil {
@@ -160,5 +161,55 @@ func TestPresetService_GetDefaultPresetsBatch_RequiresProjectID(t *testing.T) {
 	}
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("expected InvalidArgument, got %v", connect.CodeOf(err))
+	}
+}
+
+// TestPresetService_SetDefaultPreset_RoundTrip: a default set for a group is
+// what GetDefaultPreset then serves, clearing it removes only that group, and
+// another user's project is not found.
+func TestPresetService_SetDefaultPreset_RoundTrip(t *testing.T) {
+	service, _, userID, projectID := setupTestPresetService(t)
+	ctx := createTestContext(userID)
+
+	const workflowName = "builtin://get-it-right"
+	set := func(ctx context.Context, group, name string) error {
+		req := &reliantv1.SetDefaultPresetRequest{ProjectId: projectID, WorkflowName: workflowName, PresetName: &name}
+		if group != "" {
+			req.GroupName = &group
+		}
+		_, err := service.SetDefaultPreset(ctx, connect.NewRequest(req))
+		return err
+	}
+	get := func() map[string]string {
+		t.Helper()
+		resp, err := service.GetDefaultPreset(ctx, connect.NewRequest(&reliantv1.GetDefaultPresetRequest{
+			ProjectId: projectID, WorkflowName: workflowName,
+		}))
+		if err != nil {
+			t.Fatalf("GetDefaultPreset: %v", err)
+		}
+		return resp.Msg.GetPresets()
+	}
+
+	if err := set(ctx, "", "general"); err != nil {
+		t.Fatalf("SetDefaultPreset: %v", err)
+	}
+	if err := set(ctx, "Proposer", "researcher"); err != nil {
+		t.Fatalf("SetDefaultPreset: %v", err)
+	}
+	if got := get(); got[""] != "general" || got["Proposer"] != "researcher" {
+		t.Fatalf("defaults = %v, want both groups set", got)
+	}
+
+	if err := set(ctx, "Proposer", ""); err != nil {
+		t.Fatalf("clearing a default: %v", err)
+	}
+	if got := get(); got[""] != "general" || got["Proposer"] == "researcher" {
+		t.Fatalf("defaults = %v, want only the Proposer default cleared", got)
+	}
+
+	err := set(createTestContext("someone-else"), "", "general")
+	if connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("another user's project: got %v, want NotFound", err)
 	}
 }

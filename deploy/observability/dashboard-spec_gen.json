@@ -2170,6 +2170,1395 @@
       ]
     },
     {
+      "id": "service-preset",
+      "title": "reliant: preset service",
+      "description": "RED per rpc of reliant.v1.PresetService (server spans named reliant.v1.PresetService/\u003cMethod\u003e), Go runtime and logs. The Go runtime panels describe the PROCESS that serves this service: narrow with the service.name filter.",
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name"
+        },
+        {
+          "id": "env",
+          "label": "deployment.environment.name",
+          "field": "deployment.environment.name"
+        }
+      ],
+      "panels": [
+        {
+          "id": "requests",
+          "title": "Requests",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "reliant.v1.PresetService/"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "id": "errors",
+          "title": "Server errors",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "reliant.v1.PresetService/"
+            },
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "id": "p95",
+          "title": "p95 latency",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "reliant.v1.PresetService/"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "id": "red-by-rpc",
+          "title": "Rate, errors and latency by rpc",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "reliant.v1.PresetService/"
+            }
+          ],
+          "groupBy": [
+            "span.name"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "id": "rpc-CreatePreset-rate",
+          "title": "CreatePreset: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/CreatePreset"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-CreatePreset-errors",
+          "title": "CreatePreset: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/CreatePreset"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-CreatePreset-latency",
+          "title": "CreatePreset: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/CreatePreset"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-DeletePreset-rate",
+          "title": "DeletePreset: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/DeletePreset"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-DeletePreset-errors",
+          "title": "DeletePreset: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/DeletePreset"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-DeletePreset-latency",
+          "title": "DeletePreset: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/DeletePreset"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetDefaultPreset-rate",
+          "title": "GetDefaultPreset: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/GetDefaultPreset"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetDefaultPreset-errors",
+          "title": "GetDefaultPreset: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/GetDefaultPreset"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetDefaultPreset-latency",
+          "title": "GetDefaultPreset: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/GetDefaultPreset"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetDefaultPresetsBatch-rate",
+          "title": "GetDefaultPresetsBatch: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/GetDefaultPresetsBatch"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetDefaultPresetsBatch-errors",
+          "title": "GetDefaultPresetsBatch: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/GetDefaultPresetsBatch"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetDefaultPresetsBatch-latency",
+          "title": "GetDefaultPresetsBatch: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/GetDefaultPresetsBatch"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetPreset-rate",
+          "title": "GetPreset: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/GetPreset"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetPreset-errors",
+          "title": "GetPreset: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/GetPreset"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetPreset-latency",
+          "title": "GetPreset: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/GetPreset"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListPresets-rate",
+          "title": "ListPresets: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/ListPresets"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListPresets-errors",
+          "title": "ListPresets: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/ListPresets"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListPresets-latency",
+          "title": "ListPresets: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/ListPresets"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListPresetsForWorkflow-rate",
+          "title": "ListPresetsForWorkflow: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/ListPresetsForWorkflow"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListPresetsForWorkflow-errors",
+          "title": "ListPresetsForWorkflow: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/ListPresetsForWorkflow"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListPresetsForWorkflow-latency",
+          "title": "ListPresetsForWorkflow: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/ListPresetsForWorkflow"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-SetDefaultPreset-rate",
+          "title": "SetDefaultPreset: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/SetDefaultPreset"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-SetDefaultPreset-errors",
+          "title": "SetDefaultPreset: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/SetDefaultPreset"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-SetDefaultPreset-latency",
+          "title": "SetDefaultPreset: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/SetDefaultPreset"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-UpdatePreset-rate",
+          "title": "UpdatePreset: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/UpdatePreset"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-UpdatePreset-errors",
+          "title": "UpdatePreset: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/UpdatePreset"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-UpdatePreset-latency",
+          "title": "UpdatePreset: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.PresetService/UpdatePreset"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "go-memory",
+          "title": "Go memory used",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "used",
+              "agg": "sum",
+              "field": "go.memory.used",
+              "metricType": "sum"
+            },
+            {
+              "label": "gc goal",
+              "agg": "avg",
+              "field": "go.memory.gc.goal",
+              "metricType": "sum"
+            }
+          ],
+          "unit": "bytes",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "go-goroutines",
+          "title": "Goroutines",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "goroutines",
+              "agg": "sum",
+              "field": "go.goroutine.count",
+              "metricType": "sum"
+            }
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "go-alloc",
+          "title": "Heap allocation",
+          "description": "Bytes allocated to the heap per time bucket: the rate the garbage collector has to keep up with.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "allocated",
+              "agg": "sum",
+              "field": "go.memory.allocated",
+              "metricType": "sum"
+            }
+          ],
+          "unit": "bytes",
+          "width": 24,
+          "height": 7
+        },
+        {
+          "id": "error-logs",
+          "title": "Error logs",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "log.attr.procedure",
+              "op": "prefix",
+              "value": "/reliant.v1.PresetService/"
+            },
+            {
+              "field": "log.severity",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "log.severity",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 9
+        },
+        {
+          "id": "logs",
+          "title": "Logs",
+          "description": "Every record whose rpc procedure belongs to this service.",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "log.attr.procedure",
+              "op": "prefix",
+              "value": "/reliant.v1.PresetService/"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "log.severity",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 9
+        }
+      ]
+    },
+    {
       "id": "service-question",
       "title": "reliant: question service",
       "description": "RED per rpc of reliant.v1.QuestionService (server spans named reliant.v1.QuestionService/\u003cMethod\u003e), Go runtime and logs. The Go runtime panels describe the PROCESS that serves this service: narrow with the service.name filter.",
@@ -4005,6 +5394,29 @@
           "field": "log.attr.procedure",
           "op": "prefix",
           "value": "/reliant.v1.ConnectorService/"
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ]
+    },
+    {
+      "id": "errors-preset",
+      "title": "preset: error logs",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "log.attr.procedure",
+          "op": "prefix",
+          "value": "/reliant.v1.PresetService/"
         },
         {
           "field": "log.severity",

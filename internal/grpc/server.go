@@ -38,6 +38,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
+	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
@@ -254,7 +255,14 @@ func NewServer(cfg *Config) (*Server, error) {
 	streamingService := services.NewStreamingService(database, cfg.StreamingHub, cfg.UserUpdateHub, cfg.ChatUpdateHub)
 
 	attachmentService := services.NewAttachmentService(database)
-	presetService := services.NewPresetService(database)
+	presetService, err := preset.New(preset.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("preset service: %w", err)
+	}
 
 	daemonRegistryService := services.NewDaemonRegistryService(database, router)
 	// Credentials for custom endpoints have one home, the sealed connection

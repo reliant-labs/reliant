@@ -19782,8 +19782,7 @@
         "reliant.v1.UpdatePresetRequest": "reliant/v1/preset.proto",
         "reliant.v1.UpdatePresetResponse": "reliant/v1/preset.proto",
         "reliant.v1.WorkflowDefaultPresets": "reliant/v1/preset.proto"
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "ProjectService",
@@ -33581,5 +33580,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "dfcbc597a599ed4a740649bf98587f86184a7e5cc0ec19cab526b3462d885ce0"
+  "source_hash": "4f2b9c6932e1c6cb4de5dc9c0e9f26b541271a7f0ee07e851e1545649b16add6"
 }
