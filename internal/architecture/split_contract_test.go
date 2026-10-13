@@ -125,6 +125,7 @@ var serverSidePackages = []string{
 	"internal/daemonchoice",
 	"internal/projectfacts",
 
+	"internal/workflow/workflowlisttest", // P3a: test double extracted from grpc/services
 	// Extracted from grpc/services, so it keeps that package's ban (P3a,
 	// research/forge-migration/05-p3a-handler-map.md).
 	"internal/runstateproto",

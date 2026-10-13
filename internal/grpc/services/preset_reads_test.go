@@ -13,31 +13,32 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowlisttest"
 )
 
-// presetReadRepo is workflowListRepo plus the reads the preset RPCs make,
+// presetReadRepo is workflowlisttest.Repo plus the reads the preset RPCs make,
 // every one counted (and delayed by latency).
 type presetReadRepo struct {
-	*workflowListRepo
+	*workflowlisttest.Repo
 }
 
 func (r *presetReadRepo) ListSettingsByKey(context.Context, string, string) ([]*db.Setting, error) {
-	r.count("ListSettingsByKey")
+	r.Count("ListSettingsByKey")
 	return nil, nil
 }
 
 func (r *presetReadRepo) GetSetting(context.Context, string, *string, string) (*db.Setting, error) {
-	r.count("GetSetting")
+	r.Count("GetSetting")
 	return nil, fmt.Errorf("not found")
 }
 
 func (r *presetReadRepo) GetProjectPresetsJSON(context.Context, string) (*string, error) {
-	r.count("GetProjectPresetsJSON")
+	r.Count("GetProjectPresetsJSON")
 	return nil, nil
 }
 
 func (r *presetReadRepo) ListPresetsByTag(context.Context, string, string, string) ([]*db.Preset, error) {
-	r.count("ListPresetsByTag")
+	r.Count("ListPresetsByTag")
 	return nil, nil
 }
 
@@ -45,7 +46,7 @@ func (r *presetReadRepo) ListPresetsByTag(context.Context, string, string, strin
 // project-workflows read and user-slug lookup: 2 + 2N queries. The catalog
 // answers every name from one snapshot.
 func TestGetDefaultPresetsBatch_ReadsDoNotScaleWithWorkflowNames(t *testing.T) {
-	ctx, wr := newWorkflowListFixture(t, 12)
+	ctx, wr := workflowlisttest.NewFixture(t, 12)
 	repo := &presetReadRepo{wr}
 	svc := NewPresetService(repo)
 
@@ -54,43 +55,41 @@ func TestGetDefaultPresetsBatch_ReadsDoNotScaleWithWorkflowNames(t *testing.T) {
 		names = append(names, fmt.Sprintf("mine-%d", i))
 	}
 	_, err := svc.GetDefaultPresetsBatch(ctx, connect.NewRequest(&reliantv1.GetDefaultPresetsBatchRequest{
-		ProjectId: repo.project.ID, WorkflowNames: names,
+		ProjectId: repo.Project.ID, WorkflowNames: names,
 	}))
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, repo.callCount("GetProjectWithUserCheck"))
-	assert.Equal(t, 1, repo.callCount("ListSettingsByKey"))
-	assert.Equal(t, 1, repo.callCount("ListWorkflowDraftsByUser"))
-	assert.Equal(t, 1, repo.callCount("GetProjectWorkflowsJSON"))
-	assert.Zero(t, repo.callCount("GetUsableWorkflowBySlug"), "slugs are answered from the catalog")
-	assert.Zero(t, repo.callCount("GetSetting"), "overrides come from the one batched read")
-	assert.Equal(t, 4, repo.totalReads(), "ownership, settings, user workflows, project workflows — for any batch size")
+	assert.Equal(t, 1, repo.CallCount("GetProjectWithUserCheck"))
+	assert.Equal(t, 1, repo.CallCount("ListSettingsByKey"))
+	assert.Equal(t, 1, repo.CallCount("ListWorkflowDraftsByUser"))
+	assert.Equal(t, 1, repo.CallCount("GetProjectWorkflowsJSON"))
+	assert.Zero(t, repo.CallCount("GetUsableWorkflowBySlug"), "slugs are answered from the catalog")
+	assert.Zero(t, repo.CallCount("GetSetting"), "overrides come from the one batched read")
+	assert.Equal(t, 4, repo.TotalReads(), "ownership, settings, user workflows, project workflows — for any batch size")
 }
 
 // ListPresetsForWorkflow's reads are independent; with a round trip per read
 // they must overlap rather than add up.
 func TestListPresetsForWorkflow_ReadsRunConcurrently(t *testing.T) {
-	ctx, wr := newWorkflowListFixture(t, 1)
+	ctx, wr := workflowlisttest.NewFixture(t, 1)
 	repo := &presetReadRepo{wr}
 	svc := NewPresetService(repo)
 	req := connect.NewRequest(&reliantv1.ListPresetsForWorkflowRequest{
-		ProjectId: repo.project.ID, WorkflowName: "builtin://agent", IncludeHidden: true,
+		ProjectId: repo.Project.ID, WorkflowName: "builtin://agent", IncludeHidden: true,
 	})
 	_, err := svc.ListPresetsForWorkflow(ctx, req) // warm process caches
 	require.NoError(t, err)
 
-	repo.mu.Lock()
-	repo.calls = nil
-	repo.mu.Unlock()
+	repo.ResetCounts()
 	const latency = 50 * time.Millisecond
-	repo.latency = latency
+	repo.Latency = latency
 
 	start := time.Now()
 	_, err = svc.ListPresetsForWorkflow(ctx, req)
 	elapsed := time.Since(start)
 	require.NoError(t, err)
 
-	reads := repo.totalReads()
+	reads := repo.TotalReads()
 	require.GreaterOrEqual(t, reads, 5, "ownership, presets, visibility x2 and the workflow's own reads")
 	// Serial: reads*latency. Concurrent: ownership, then the longest chain
 	// (workflow, then presets by tag) — three round trips.
