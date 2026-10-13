@@ -9,13 +9,19 @@
 // and live only in connection_secrets; nothing here returns a plaintext value
 // except as a vault.Secret, which cannot be printed or serialized.
 //
-//forge:exclude-contract: reliant is not forge-generated; consumers declare the narrow interfaces they need
+// This file declares the package's interfaces: Sealer, the slice of the vault
+// it consumes, and Authenticator, the strategy that places a credential on a
+// request (one implementation per auth placement). `forge generate` writes a
+// mock of each into mock_gen.go.
+//
+//forge:not-a-component: built by reliant's hand-wired server (internal/serverapi, internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
 package connections
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -101,6 +107,15 @@ type Sealer interface {
 	Seal(ctx context.Context, tenant vault.Tenant, plaintext, aad []byte) ([]byte, error)
 	Open(ctx context.Context, tenant vault.Tenant, ciphertext, aad []byte) ([]byte, error)
 	OpenSecret(ctx context.Context, tenant vault.Tenant, ciphertext, aad []byte) (vault.Secret, error)
+}
+
+// Authenticator applies a connection's credential to an outbound request.
+// authenticatorFor picks the implementation from the integration's manifest:
+// a bearer token, an API key in a header or a query parameter, or basic auth.
+type Authenticator interface {
+	// Apply writes the credential into req and registers its plaintext with
+	// redact. The plaintext is visible only inside Secret.Use.
+	Apply(req *http.Request, secret vault.Secret, redact *Redactor) error
 }
 
 // SecretAAD is the associated data bound to a connection_secrets ciphertext:

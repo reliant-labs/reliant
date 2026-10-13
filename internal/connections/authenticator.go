@@ -89,13 +89,6 @@ func (r *Redactor) ScrubError(err error) error {
 	return err
 }
 
-// Authenticator applies a connection's credential to an outbound request.
-type Authenticator interface {
-	// Apply writes the credential into req and registers its plaintext with
-	// redact. The plaintext is visible only inside Secret.Use.
-	Apply(req *http.Request, secret vault.Secret, redact *Redactor) error
-}
-
 type bearerAuth struct{}
 
 func (bearerAuth) Apply(req *http.Request, secret vault.Secret, redact *Redactor) error {
