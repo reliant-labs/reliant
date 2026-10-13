@@ -34,6 +34,8 @@
 //     is re-recorded silently.
 //   - A root that is suddenly on a DIFFERENT device, with no disappearance in
 //     between, now resolves to a different filesystem. That is a fault.
+//
+//forge:exclude-contract: daemon-side detector over local stat and /proc/self/mountinfo only (no network); one implementation, whose test seam is the Probe func set in Options, and its caller (daemonruntime's workspace guard) drives it through OnFault/OnRestored callbacks a mock could not
 package rootwatch
 
 import (
