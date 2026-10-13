@@ -95,4 +95,28 @@ describe("ToolExecution spawn status under async spawn", () => {
     expect(screen.getByText("Executing...")).toBeInTheDocument();
     expect(screen.queryByText("Completed")).not.toBeInTheDocument();
   });
+
+  // An agent whose run failed stopped on an error and is resumable by a
+  // message: it reads as stopped, not as a warning that ended it.
+  it("renders stopped for a spawn whose child workflow stopped on an error", () => {
+    mockAllWorkflows = [{ id: "wf-child-4", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.FAILED, children: [] }];
+
+    render(
+      <ToolExecution
+        toolCall={{
+          id: "toolu_spawn_4",
+          name: "spawn",
+          input: { title: "reviewer" },
+          finished: true,
+          durableStatus: ToolCallStatus.FAILED,
+          childWorkflowId: "wf-child-4",
+        }}
+        toolResult={{ name: "spawn", content: "Spawned agent_id: wf-child-4", is_error: false }}
+        chatId="chat-1"
+      />,
+    );
+
+    expect(screen.getByText("Stopped")).toBeInTheDocument();
+    expect(screen.queryByText("Warning")).not.toBeInTheDocument();
+  });
 });

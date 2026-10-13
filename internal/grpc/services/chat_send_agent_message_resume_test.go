@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -88,26 +89,102 @@ func TestSendAgentMessage_SubAgentStoppedByTheUserStaysFinished(t *testing.T) {
 	assert.Empty(t, tc.Signals, "nothing was queued, so nothing is woken")
 }
 
-// A failed sub-agent whose chat run has since ended has no run to resume in.
-// The refusal says why and what to do instead, and queues nothing.
-func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunIsRefusedWithGuidance(t *testing.T) {
+// stoppedSpawnRun records the spawn call that started the fixture's child, the
+// durable half of "this agent stopped on a failure" a run resumes it from.
+func stoppedSpawnRun(t *testing.T, repo *db.Repo, ctx context.Context, fx sendAgentMessageFixture, toolCallID string) {
+	t.Helper()
+	now := time.Now().UTC()
+	require.NoError(t, repo.UpsertToolCall(ctx, &db.ToolCall{
+		ID: toolCallID, ChatID: fx.chatID, ThreadID: &fx.rootThreadID, ToolName: "spawn",
+		Status: core.ToolCallStatusFailed, ChildWorkflowID: &fx.childThreadID,
+		Input:       []byte(`{"preset":"general","prompt":"do the risky part"}`),
+		RequestedAt: now, CompletedAt: &now, CreatedAt: now, UpdatedAt: now,
+	}))
+}
+
+// The 9fbaace8 shape as users meet it: the sub-agent stopped, its parent read
+// the failure and finished its turn, and the chat's run COMPLETED. The agent
+// is still only stopped, so a message to it must resume it — by starting the
+// chat's run to do so, since none is going. That run resumes the agent before
+// anything else, and its root waits on the agent's report before taking a
+// turn. (It used to be refused: "this chat's run has since ended".)
+func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
+	stopSubAgent(t, repo, ctx, fx, db.ThreadStatusFailed, db.Failed())
+	stoppedSpawnRun(t, repo, ctx, fx, "tc-stopped")
+	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Completed()))
+	chat, err := repo.GetChat(ctx, fx.chatID)
+	require.NoError(t, err)
+	workflowName := "builtin://agent"
+	chat.WorkflowName = &workflowName
+	require.NoError(t, repo.UpdateChat(ctx, chat))
+
+	// The completed run's inputs, which its successor continues with.
+	temporal := &closingRunTemporalClient{closed: true, lastInputs: map[string]interface{}{
+		"model":              map[string]interface{}{"id": "mock"},
+		v2.InputKeyLaunchRun: true,
+	}}
+	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "the limit has reset; carry on",
+	}))
+	require.NoError(t, err)
+	require.True(t, resp.Msg.Success, "STRANDED: a stopped agent of an idle chat must be resumable by a message, got: %s", resp.Msg.Message)
+	assert.Contains(t, resp.Msg.Message, "restarted where it stopped")
+
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	require.NoError(t, err)
+	require.Len(t, queued, 1, "the message waits in the agent's mailbox for its first turn")
+	assert.Equal(t, "the limit has reset; carry on", queued[0].Body)
+
+	started := temporal.runsStarted()
+	require.Len(t, started, 1, "a run must be started to resume the agent")
+	run := started[0]
+	assert.Equal(t, fx.rootThreadID, run.options.ID, "the chat's own run, under its workflow ID")
+	require.NotNil(t, run.input.ExecContext)
+	assert.Equal(t, fx.rootThreadID, run.input.ExecContext.Thread)
+	require.NotNil(t, run.input.Resume, "the chat's run is resumed, not started over at graph entry")
+	assert.True(t, run.input.Resume.AwaitSpawnsFirst, "its root waits on the resumed agent before taking a turn")
+	require.Len(t, run.input.Resume.ResumeStopped, 1)
+	resumed := run.input.Resume.ResumeStopped[0]
+	assert.Equal(t, "tc-stopped", resumed.ToolCallID)
+	assert.Equal(t, fx.childThreadID, resumed.ChildThread)
+	assert.Equal(t, fx.childThreadID, resumed.ChildWorkflowID)
+	assert.Equal(t, fx.rootThreadID, resumed.ParentThread)
+	assert.Equal(t, "general", resumed.Preset)
+	assert.Equal(t, map[string]interface{}{"id": "mock"}, run.input.Inputs["model"], "it runs on the completed run's own inputs")
+	assert.NotContains(t, run.input.Inputs, v2.InputKeyLaunchRun, "it answers a person, not whatever launched the chat")
+}
+
+// A sub-agent whose parent sub-agent stopped on an error too reports to that
+// parent, which is not running: it is resumed second. The user is told which
+// agent to message first, and nothing is queued.
+func TestSendAgentMessage_StoppedSubAgentOfAStoppedParentSaysToResumeTheParentFirst(t *testing.T) {
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	stopSubAgent(t, repo, ctx, fx, db.ThreadStatusFailed, db.Failed())
-	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Completed()))
+	now := time.Now().UTC()
+	grandchild := uuid.NewString()
+	_, err := repo.CreateThread(ctx, &db.Thread{
+		ID: grandchild, ChatID: fx.chatID, ParentThreadID: &fx.childThreadID,
+		Origin: db.ThreadOriginSpawn, Status: db.ThreadStatusFailed, CreatedAt: now, WorkflowID: &grandchild,
+	})
+	require.NoError(t, err)
 
 	tc := &signaltest.Recorder{}
 	service := &ChatService{database: repo, tempClient: tc, runs: runs.NewService(repo, tc, nil)}
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
-		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "are you there?",
+		ChatId: fx.chatID, ThreadId: grandchild, Message: "carry on",
 	}))
 	require.NoError(t, err)
 	assert.False(t, resp.Msg.Success)
-	assert.Contains(t, resp.Msg.Message, "stopped on an error")
-	assert.Contains(t, resp.Msg.Message, "spawn(agent_id=", "the user must be told how the agent can still be resumed")
-	assert.Equal(t, 0, countAgentMessageRows(t, rawDB, ctx, fx.childThreadID))
+	assert.Contains(t, resp.Msg.Message, fx.childThreadID, "the user must be told which agent to resume first")
+	assert.Equal(t, 0, countAgentMessageRows(t, rawDB, ctx, grandchild))
+	assert.Empty(t, tc.Signals)
 }
 
 // A stopped agent has no next turn of its own: the doorbell is the only thing
@@ -121,9 +198,9 @@ func TestSendAgentMessage_StoppedSubAgentThatCannotBeWokenIsNotLeftQueued(t *tes
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	stopSubAgent(t, repo, ctx, fx, db.ThreadStatusFailed, db.Failed())
 
-	tc := &signaltest.Recorder{SignalErr: errors.New("workflow execution already completed")}
-	service := &ChatService{database: repo, tempClient: tc, runs: runs.NewService(repo, tc, nil)}
-	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	// The run is open, but the doorbell does not reach it.
+	temporal := &closingRunTemporalClient{wakeErr: errors.New("frontend unavailable")}
+	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "resume please",
 	}))
 	require.NoError(t, err)

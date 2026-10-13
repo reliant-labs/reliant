@@ -235,6 +235,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterObservabilityActivity(registry, handlers.NewEmitToolCallStatusActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewDrainAgentMessagesActivity(deps.Repo, deps.Threads))
 	v2.RegisterActivity(registry, handlers.NewEnqueueAgentMessageActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewLookupStoppedSubAgentActivity(deps.Repo))
 
 }
 

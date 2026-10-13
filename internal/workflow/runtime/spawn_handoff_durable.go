@@ -57,3 +57,60 @@ func ResumableSpawnsFromDurableState(ctx context.Context, repo liveBackgroundSpa
 	}
 	return handoffs, nil
 }
+
+// stoppedSpawnReader is the one repository read resuming a stopped sub-agent
+// from durable state needs.
+type stoppedSpawnReader interface {
+	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*db.StoppedSpawnAgent, error)
+}
+
+// StoppedSpawnFromDurableState returns the relaunch record of the sub-agent on
+// thread if it stopped on a failure, nil if it did not (it is running,
+// completed, was stopped by the user, or is not a sub-agent of chatID).
+//
+// It is the durable form of the record the execution that saw the agent stop
+// keeps in memory (ChildWorkflowTracker.stoppedSpawns), and what makes "a
+// message resumes a stopped agent" hold beyond that execution's life: in a
+// successor started after it completed, in a fresh restart after it died, and
+// for an agent that stopped before executions kept such a record at all.
+func StoppedSpawnFromDurableState(ctx context.Context, repo stoppedSpawnReader, chatID, thread string) (*SpawnHandoff, error) {
+	agent, err := repo.GetStoppedSpawnAgent(ctx, chatID, thread)
+	if err != nil {
+		return nil, fmt.Errorf("read stopped sub-agent %s: %w", thread, err)
+	}
+	if agent == nil {
+		return nil, nil
+	}
+	h := stoppedSpawnHandoff(agent)
+	return &h, nil
+}
+
+// stoppedSpawnHandoff is a stopped sub-agent's durable record as the relaunch
+// record a resume works from (resumeStoppedSpawn). Like a live spawn derived
+// from durable state (ResumableSpawnsFromDurableState) it carries no child
+// inputs — the resume rebuilds them from the run's own — and resumes its agent
+// loop at iteration 0; the thread's history is where it left off.
+//
+// Pure: the workflow converts a LookupStoppedSubAgent result with it, so it
+// must give the same answer on replay.
+func stoppedSpawnHandoff(agent *db.StoppedSpawnAgent) SpawnHandoff {
+	h := SpawnHandoff{
+		ToolCallID:       agent.ToolCallID,
+		ParentThread:     agent.ParentThreadID,
+		ChildThread:      agent.ChildThreadID,
+		ChildWorkflowID:  agent.ChildWorkflowID,
+		ParentWorkflowID: agent.IssuingWorkflowID,
+		ProjectPath:      agent.WorktreePath,
+		SpawnDepth:       agent.SpawnDepth,
+		Resumes:          agent.Resumes,
+	}
+	// As for a live spawn: an unparseable input still resumes, under the
+	// default preset.
+	if agent.ToolInput != "" {
+		if parsed, parseErr := parseSpawnToolInput(agent.ToolInput); parseErr == nil || parsed.preset != "" {
+			h.Preset = parsed.preset
+			h.Title = parsed.title
+		}
+	}
+	return h
+}

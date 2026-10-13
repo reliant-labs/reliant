@@ -141,7 +141,12 @@ func (a *ThreadStatusActivity) Execute(ctx context.Context, input ThreadStatusIn
 		}
 	}
 
-	if terminal {
+	// A sub-agent that stopped on an error is not finished: a message to it
+	// resumes it, and its resumed run reads what is queued (runtime's
+	// subagent_resume.go). Its mail waits for that run instead of being
+	// declared undelivered.
+	stoppedSubAgent := status == db.ThreadStatusFailed && updated != nil && updated.Origin == db.ThreadOriginSpawn
+	if terminal && !stoppedSubAgent {
 		a.resolveMailbox(ctx, input.ThreadID)
 	}
 

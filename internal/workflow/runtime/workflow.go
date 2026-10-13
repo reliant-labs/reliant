@@ -110,6 +110,14 @@ type ResumeInput struct {
 	// Carried by a continue-as-new only; they are not relaunched, just
 	// remembered.
 	StoppedSpawns []SpawnHandoff `json:"stopped_spawns,omitempty"`
+	// ResumeStopped are sub-agents that stopped on a failure and that a
+	// message, queued before this run started, is waiting to resume. The run
+	// resumes each one (resumeStoppedSpawn) before it enters its resume node,
+	// parents before children, so a loop with AwaitSpawnsFirst waits on them.
+	// Filled by the end-of-run check of a run that was ending when the
+	// message arrived (stoppedAgentsSuccessorInput), and by SendAgentMessage
+	// for a chat with no run, from durable state (StoppedSpawnFromDurableState).
+	ResumeStopped []SpawnHandoff `json:"resume_stopped,omitempty"`
 	// ThreadInputs are the per-thread param changes the user made (a model
 	// switch on one agent's thread), so a thread rebuilt after the boundary
 	// keeps them (ChildWorkflowTracker.threadInputOverrides).
@@ -368,6 +376,15 @@ type ChildWorkflowTracker struct {
 	// and reports whether it did. Set by DynamicWorkflow, which holds what a
 	// relaunch needs; nil in tests that build a bare tracker.
 	resumeStopped func(ctx workflow.Context, thread string) bool
+	// stoppedLookups is every thread whose doorbell is being answered by a
+	// durable lookup (LookupStoppedSubAgent) that has not returned yet.
+	stoppedLookups map[string]bool
+	// notStopped is every thread a lookup found is not a stopped sub-agent,
+	// so later doorbells for it in this execution do not ask again.
+	notStopped map[string]bool
+	// runEnding is set once the run has left its graph and is ending: a
+	// stopped agent is no longer resumed in it, but by its successor.
+	runEnding bool
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -780,6 +797,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		if caught.value != nil {
 			result, retErr = nil, recoveredPanic(ctx, caught)
 		}
+		// From here a message to a stopped sub-agent is its successor's to
+		// act on, not this run's (subagent_resume.go).
+		childTracker.runEnding = true
 		// Only send done signal if not cancelled - if cancelled, the handler
 		// exits on its own via ctx.Err() check to avoid blocking on Send
 		if handlerDone != nil && ctx.Err() == nil {
@@ -1320,7 +1340,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// A message to a sub-agent that stopped on a failure resumes it, in this
 	// execution, under the parent it reports to (subagent_resume.go).
 	childTracker.resumeStopped = func(resumeCtx workflow.Context, stoppedThread string) bool {
-		return resumeStoppedSpawn(resumeCtx, stoppedThread, stoppedSpawnResumeDeps{
+		return resumeStoppedSubAgent(resumeCtx, stoppedThread, stoppedSpawnResumeDeps{
 			rootThread:          execCtx.Thread,
 			chatID:              input.ChatID,
 			projectPath:         execCtx.ProjectPath,
@@ -1403,6 +1423,15 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// rtx.ProjectPath, which is the execution context's.
 		relaunchCarriedSpawns(ctx, input.Resume.Spawns, input.ChatID, execCtx.ProjectPath, input.Inputs,
 			childTracker, cancelledThreads, makeThreadPauseCtrl, makeThreadInterrupt)
+	}
+	// Likewise the stopped sub-agents a message was queued for before this
+	// run started (ResumeInput.ResumeStopped), after the live ones, so an
+	// agent whose parent was carried live finds it running.
+	if input.Resume != nil && len(input.Resume.ResumeStopped) > 0 {
+		childTracker.seedStoppedSpawns(input.Resume.ResumeStopped)
+		for _, stopped := range input.Resume.ResumeStopped {
+			childTracker.resumeStopped(ctx, stopped.ChildThread)
+		}
 	}
 
 	// STEP 9: Main workflow loop

@@ -2702,6 +2702,17 @@ func (r *Reconciler) mailboxMayStillBeDelivered(ctx context.Context, threadID st
 	if err == nil && thread != nil && thread.WorkflowID != nil && *thread.WorkflowID != "" {
 		ownerID = *thread.WorkflowID
 	}
+	// A sub-agent that stopped on an error has not exited for good: a
+	// message to it resumes it, and the resumed run's first turn drains
+	// these rows — whether its chat's run is open or not, since a message to
+	// a stopped agent of a chat with no run starts one. Its own workflow row
+	// is no Temporal execution to ask (a spawn runs inside its chat's), so
+	// the check below would call every such row orphaned.
+	if err == nil && thread != nil && r.stoppedSubAgentResumable(ctx, thread) {
+		logging.Debug("[Reconciler] Leaving a stopped sub-agent's queued mail: a message resumes it, and its resumed run reads them",
+			"threadID", threadID, "chatID", thread.ChatID)
+		return true
+	}
 	// A chat holding a message queued for its machine is owed a run, and
 	// that run drains this mailbox (queueddelivery). Its rows are not
 	// orphaned, however long the machine takes.
@@ -2726,6 +2737,26 @@ func (r *Reconciler) mailboxMayStillBeDelivered(ctx context.Context, threadID st
 		return true
 	}
 	return false
+}
+
+// stoppedSubAgentResumable reports whether thread is a sub-agent that stopped
+// on an error and can still be resumed: a spawn thread whose run failed, under
+// a parent that has not finished for good. A parent that completed or was
+// cancelled has nothing to report a resumed run to; the chat's main thread,
+// and a parent that is itself stopped on an error, still do. Errs toward
+// resumable when the parent cannot be read — the sweep's fail-closed side.
+func (r *Reconciler) stoppedSubAgentResumable(ctx context.Context, thread *db.Thread) bool {
+	if thread.Origin != db.ThreadOriginSpawn || thread.Status != db.ThreadStatusFailed {
+		return false
+	}
+	if thread.ParentThreadID == nil || *thread.ParentThreadID == "" {
+		return true
+	}
+	parent, err := r.repo.GetThread(ctx, *thread.ParentThreadID)
+	if err != nil || parent == nil || parent.Origin != db.ThreadOriginSpawn {
+		return true
+	}
+	return parent.Status != db.ThreadStatusCompleted && parent.Status != db.ThreadStatusCancelled
 }
 
 // ReconcileRunningWorkflows reconciles all workflows with status running OR

@@ -175,3 +175,35 @@ func TestReconcileRunningWorkflows_RunsOrphanedMailboxSweep(t *testing.T) {
 	assert.Equal(t, []string{"dead-thread-1"}, repo.resolvedMailboxThreads,
 		"the pass must invoke the orphaned-mailbox sweep")
 }
+
+// A sub-agent that stopped on an error is not finished: a message to it
+// resumes it — in its chat's run, or in a run started for it when the chat has
+// none — and the resumed run's first turn drains its mailbox. Its own workflow
+// row is not a Temporal execution (a spawn runs inside its chat's), so asking
+// Temporal about it always answered "gone", and the sweep marked a message
+// undelivered moments before the resumed agent would have read it. Its mail is
+// left alone; that of an agent whose parent finished for good is not.
+func TestResolveOrphanedAgentMessages_LeavesAStoppedSubAgentsMailForItsResume(t *testing.T) {
+	repo := newMockRepo()
+	root, lead, done := "root-thread", "lead-thread", "finished-lead"
+	repo.threads[root] = &db.Thread{ID: root, Origin: db.ThreadOriginMain, Status: db.ThreadStatusCompleted}
+	repo.threads[lead] = &db.Thread{ID: lead, Origin: db.ThreadOriginSpawn, Status: db.ThreadStatusFailed, ParentThreadID: &root}
+	repo.threads[done] = &db.Thread{ID: done, Origin: db.ThreadOriginSpawn, Status: db.ThreadStatusCompleted, ParentThreadID: &root}
+	// Stopped agents under the main thread and under a stopped parent: both
+	// still resumable. One under a parent that completed: not.
+	for id, parent := range map[string]string{"stopped": root, "stopped-under-stopped": lead, "orphan": done} {
+		p := parent
+		wf := id
+		repo.threads[id] = &db.Thread{ID: id, Origin: db.ThreadOriginSpawn, Status: db.ThreadStatusFailed, ParentThreadID: &p, WorkflowID: &wf}
+	}
+	repo.orphanedMailboxThreads = []string{"orphan", "stopped", "stopped-under-stopped"}
+	repo.orphanedMailboxRows = map[string]int64{"orphan": 1, "stopped": 1, "stopped-under-stopped": 1}
+	// Temporal knows none of the spawn rows: they are not executions.
+	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{}}, DefaultConfig())
+
+	resolved, err := reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, resolved)
+	assert.Equal(t, []string{"orphan"}, repo.resolvedMailboxThreads,
+		"a stopped sub-agent's queued message is held for the run that resumes it")
+}

@@ -412,11 +412,13 @@ describe("BackgroundWorkPill", () => {
       renderPill({ onSelectThread });
 
       const pill = screen.getByTestId("background-work-pill");
-      expect(pill).toHaveTextContent("implementer failed");
+      expect(pill).toHaveTextContent("implementer stopped");
 
       fireEvent.click(pill);
       const row = screen.getByTestId("background-work-failed-thread-42");
-      expect(row).toHaveTextContent("Failed");
+      // Stopped, not failed: a message resumes it where it stopped.
+      expect(row).toHaveTextContent("Stopped on an error");
+      expect(row).not.toHaveTextContent("Failed");
 
       fireEvent.click(screen.getByLabelText("Retry failed agent implementer"));
 
@@ -502,7 +504,7 @@ describe("BackgroundWorkPill", () => {
       renderPill();
 
       const pill = screen.getByTestId("background-work-pill");
-      expect(pill).toHaveTextContent("implementer failed");
+      expect(pill).toHaveTextContent("implementer stopped");
       expect(pill).toHaveTextContent("1 agent running");
     });
   });

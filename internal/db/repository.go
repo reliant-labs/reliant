@@ -245,6 +245,10 @@ type Repository interface {
 	// in a root execution that has not reported back — the spawns a coarse
 	// fresh restart of that root must relaunch.
 	ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*LiveBackgroundSpawn, error)
+	// GetStoppedSpawnAgent returns the sub-agent on a thread if it stopped
+	// on a failure (and has not run since), nil if it did not — what a
+	// message resumes, from any execution of the chat.
+	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*StoppedSpawnAgent, error)
 	// ListToolGrants returns, per thread, every tool a recorded tool result
 	// in chatID granted — the load_tool grants a coarse fresh restart of the
 	// chat's run must hand back to each thread.

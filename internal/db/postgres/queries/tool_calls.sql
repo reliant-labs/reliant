@@ -355,3 +355,64 @@ WHERE tc.tool_name = 'spawn'
       WHERE m.chat_id = tc.chat_id AND m.tool_call_id = tc.id AND m.kind IN (2, 3, 4)
   )
 ORDER BY t.depth ASC, tc.id ASC;
+
+-- name: GetLatestSpawnRunForThread :one
+-- The latest spawn run of the sub-agent on one thread: the spawn tool call
+-- that started it, joined to that run's workflow row, the thread, and the
+-- thread's own worktree. What a message needs to resume a sub-agent that
+-- stopped on a failure, read from durable rows alone, so it does not depend on
+-- the execution that saw it stop still being alive (see
+-- db.Repo.GetStoppedSpawnAgent).
+--
+-- One thread can carry several runs: spawn(agent_id=...) resumes an agent as a
+-- new workflow row on the same thread, while a message resumes it on the row it
+-- stopped with. The newest row is the agent's current state; an older failure
+-- that was resumed since is history, not a stopped agent.
+--
+-- spawn_depth counts the run's ancestors up its workflow tree: 1 for a spawn
+-- the root issued, 2 for one a top-level spawn issued, and so on. The walk is
+-- bounded so a malformed parent cycle cannot recurse forever.
+WITH RECURSIVE latest AS (
+    SELECT w.id, w.parent_id
+    FROM workflows w
+    JOIN tool_calls tc ON tc.child_workflow_id = w.id AND tc.tool_name = 'spawn'
+    WHERE w.chat_id = sqlc.arg(chat_id)::text AND w.thread = sqlc.arg(thread_id)::text
+    ORDER BY w.created_at DESC, w.id DESC
+    LIMIT 1
+), ancestors AS (
+    SELECT p.id, p.parent_id, 1 AS depth
+    FROM workflows p JOIN latest l ON p.id = l.parent_id
+    UNION ALL
+    SELECT p.id, p.parent_id, a.depth + 1
+    FROM workflows p JOIN ancestors a ON p.id = a.parent_id
+    WHERE a.depth < 64
+)
+SELECT tc.id AS tool_call_id,
+       COALESCE(tc.thread_id, '')::text AS parent_thread_id,
+       tc.input AS tool_input,
+       w.id AS child_workflow_id,
+       COALESCE(w.parent_id, '')::text AS issuing_workflow_id,
+       w.state AS workflow_state,
+       w.stop_reason AS workflow_stop_reason,
+       t.status AS thread_status,
+       t.origin AS thread_origin,
+       COALESCE(wt.path, '')::text AS worktree_path,
+       (SELECT COALESCE(MAX(a.depth), 0) FROM ancestors a)::int AS spawn_depth
+FROM latest l
+JOIN workflows w ON w.id = l.id
+JOIN tool_calls tc ON tc.child_workflow_id = w.id AND tc.tool_name = 'spawn'
+JOIN threads t ON t.id = w.thread
+LEFT JOIN worktrees wt ON wt.id = t.worktree_id AND wt.deleted_at IS NULL
+ORDER BY tc.requested_at DESC
+LIMIT 1;
+
+-- name: ListSpawnResumeReportIDs :many
+-- The report slots a spawn's resumed runs have written (<tool_call_id>#resume-N,
+-- see runtime.SpawnHandoff.ReportID). The next resume numbers its slot past
+-- the highest: a slot already holding a report drops a second one as a
+-- duplicate (idx_agent_messages_one_terminal_report_per_chat_spawn).
+SELECT m.tool_call_id::text AS report_id
+FROM agent_messages m
+WHERE m.chat_id = sqlc.arg(chat_id)::text
+  AND m.kind IN (2, 3, 4)
+  AND starts_with(m.tool_call_id, sqlc.arg(slot_prefix)::text);

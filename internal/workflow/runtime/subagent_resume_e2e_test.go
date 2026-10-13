@@ -4,6 +4,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -13,10 +14,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -68,6 +73,12 @@ nodes:
 // written "completed" to its own workflow row: the resumed run has finished.
 const milestoneResumedAgentSettled = "tc1-settled-completed"
 
+// milestoneAgentSettled is reached once the agent spawned by toolCallID has
+// written "completed" to its own workflow row.
+func milestoneAgentSettled(toolCallID string) string {
+	return toolCallID + "-settled-completed"
+}
+
 // subAgentResumeEnv is the spawn e2e env with the mailbox, the agents' error
 // rows and their reports modelled. The parent's first turn spawns tc1 (the
 // agent that fails) and, when withBystander is set, tc2 — a sibling held open
@@ -97,6 +108,15 @@ type subAgentResumeEnv struct {
 	bystanderWaitsFor string
 	bystanderTimeout  time.Duration
 
+	// durableStopped is what LookupStoppedSubAgent answers from: the
+	// sub-agents that stopped on a failure as the database records them, by
+	// thread. An agent that stopped in an EARLIER execution of the chat is
+	// in here and not in this execution's memory.
+	durableStopped map[string]*db.StoppedSpawnAgent
+	// onRootFinishing runs while the root writes its own "completed" status:
+	// the run has left its graph and is ending.
+	onRootFinishing func(agentThread string)
+
 	// Recorded, guarded by spawnE2EEnv.mu.
 	parentWorkflowID string
 	turns            map[string]int
@@ -104,6 +124,7 @@ type subAgentResumeEnv struct {
 	modelByTurn      map[string][]string   // per thread: the model each turn was dispatched with
 	errorRows        []map[string]interface{}
 	reports          []map[string]interface{}
+	lookups          []string // threads LookupStoppedSubAgent was asked about
 }
 
 func newSubAgentResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, withBystander bool) *subAgentResumeEnv {
@@ -125,6 +146,7 @@ func newSubAgentResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, 
 		turns:                map[string]int{},
 		readByTurn:           map[string][][]string{},
 		modelByTurn:          map[string][]string{},
+		durableStopped:       map[string]*db.StoppedSpawnAgent{},
 	}
 
 	// The test environment keeps the last registration for a name, so these
@@ -171,16 +193,38 @@ func newSubAgentResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, 
 		func(ctx context.Context, input map[string]interface{}) (map[string]interface{}, error) {
 			e.mu.Lock()
 			e.statuses = append(e.statuses, input)
-			if tc, _ := input["spawned_by_tool_call_id"].(string); tc != "" {
+			tc, _ := input["spawned_by_tool_call_id"].(string)
+			if tc != "" {
 				e.events = append(e.events, fmt.Sprintf("child-status:%s:%v", tc, input["status"]))
-				if tc == "tc1" && input["status"] == "completed" {
-					e.milestoneOf[activity.GetInfo(ctx).ActivityID] = milestoneResumedAgentSettled
+				if input["status"] == "completed" {
+					e.milestoneOf[activity.GetInfo(ctx).ActivityID] = milestoneAgentSettled(tc)
 				}
 			}
+			var finishing func(string)
+			if tc == "" && input["thread"] == e.parentThread && input["status"] == "completed" {
+				finishing, e.onRootFinishing = e.onRootFinishing, nil
+			}
+			failingAgent := e.agentThreadLocked("tc1")
 			e.mu.Unlock()
+			if finishing != nil {
+				finishing(failingAgent)
+			}
 			return map[string]interface{}{"success": true}, nil
 		},
 		activity.RegisterOptions{Name: "WorkflowStatus"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
+			thread, _ := input["thread"].(string)
+			e.mu.Lock()
+			defer e.mu.Unlock()
+			e.lookups = append(e.lookups, thread)
+			if agent := e.durableStopped[thread]; agent != nil {
+				return map[string]interface{}{"agent": agent}, nil
+			}
+			return map[string]interface{}{}, nil
+		},
+		activity.RegisterOptions{Name: LookupStoppedSubAgentActivityName},
 	)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
@@ -588,4 +632,159 @@ func (s *SubAgentResumeE2ESuite) TestCompletedSubAgentIsNotRestartedByAMessage()
 	s.Require().NoError(env.GetWorkflowError())
 	s.Require().Equal(1, e.agentTurns("tc1"), "a completed agent is finished; a message must not restart it")
 	s.Require().Equal([]string{"2@tc1"}, e.reportsFrom("tc1"))
+}
+
+// threadTurns is how many turns thread took, and what each turn's drain read.
+func (e *subAgentResumeEnv) threadTurns(thread string) (int, [][]string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.turns[thread], slices.Clone(e.readByTurn[thread])
+}
+
+// reportsFromThread is reportsFrom for an agent addressed by its thread.
+func (e *subAgentResumeEnv) reportsFromThread(thread string) []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var out []string
+	for _, r := range e.reports {
+		if r["from_thread_id"] == thread {
+			out = append(out, fmt.Sprintf("%v@%v", r["kind"], r["tool_call_id"]))
+		}
+	}
+	return out
+}
+
+func (e *subAgentResumeEnv) lookedUp() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.lookups)
+}
+
+// stoppedBefore is the durable record of an agent that stopped on a failure
+// in an EARLIER execution of chatID: issued by its root, resumed resumes times
+// already.
+func stoppedBefore(chatID, agentThread, toolCallID string, resumes int) *db.StoppedSpawnAgent {
+	root := spawnE2EWorkflowInput(chatID).ExecContext
+	return &db.StoppedSpawnAgent{
+		ToolCallID:        toolCallID,
+		ParentThreadID:    root.Thread,
+		ToolInput:         `{"preset":"general","prompt":"do the risky part"}`,
+		ChildThreadID:     agentThread,
+		ChildWorkflowID:   agentThread,
+		IssuingWorkflowID: root.WorkflowID,
+		SpawnDepth:        1,
+		Resumes:           resumes,
+	}
+}
+
+// The 9fbaace8 shape, after the run that saw the agent stop is gone: the agent
+// stopped in an earlier execution of the chat — one that completed when its
+// root's turn ended, one a fresh restart replaced, or one from before stopped
+// agents were recorded at all — so THIS execution has no memory of it. A
+// message to it must still resume it: the run reads the agent's stopped state
+// from the database, and resumes it as if it had seen it stop itself.
+func (s *SubAgentResumeE2ESuite) TestAgentThatStoppedInAnEarlierRunIsResumedFromDurableState() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newSubAgentResumeEnv(s.T(), env, true)
+	const chatID = "chat-durable-stopped"
+	const stoppedAgent = "agent-stopped-in-an-earlier-run"
+	const msg = "the usage window has reset: carry on"
+
+	e.durableStopped[stoppedAgent] = stoppedBefore(chatID, stoppedAgent, "tc-old", 1)
+	// While this run's sibling holds it open, the user messages the agent
+	// that stopped before this execution began.
+	e.onParentTurn[2] = func(string) { e.messageAgent(stoppedAgent, msg) }
+	e.bystanderWaitsFor = milestoneAgentSettled("tc-old")
+
+	e.execute(chatID)
+
+	s.Require().True(env.IsWorkflowCompleted())
+	s.Require().NoError(env.GetWorkflowError())
+
+	turns, read := e.threadTurns(stoppedAgent)
+	s.Require().Equal(1, turns,
+		"STRANDED: a message to an agent that stopped in an earlier execution never resumed it")
+	s.Require().Equal([]string{msg}, read[0], "the resumed agent's first turn reads the message that resumed it")
+	s.Require().Equal([]string{stoppedAgent}, e.lookedUp(), "the run asks the database once, for the thread it has no record of")
+	s.Require().Equal([]string{"2@tc-old#resume-2"}, e.reportsFromThread(stoppedAgent),
+		"the resumed run reports past the slots its earlier resumes used")
+	s.Require().Equal([]string{"started", "completed"}, e.childStatuses("tc-old"),
+		"the agent's own workflow row goes back to running, then records the resumed outcome")
+}
+
+// The window #785 left open: a message reaches a stopped agent while the run
+// is ending — its root's loop has exited, so nothing would wait on the agent,
+// and the run would end with it mid-turn. The run must leave it stopped and
+// continue as a successor that resumes it, with the message still unread.
+func (s *SubAgentResumeE2ESuite) TestMessageForAStoppedAgentAsTheRunEndsIsLeftToTheSuccessor() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newSubAgentResumeEnv(s.T(), env, false)
+	const msg = "carry on with the other provider"
+
+	e.failingAgentWaitsFor[1] = milestoneParentTurnDelivered(2)
+	e.failTurns[1] = classifyError(usageLimitErr())
+	e.onRootFinishing = func(agent string) { e.messageAgent(agent, msg) }
+
+	e.execute("chat-stopped-agent-at-run-end")
+
+	s.Require().True(env.IsWorkflowCompleted())
+	var contErr *workflow.ContinueAsNewError
+	s.Require().True(errors.As(env.GetWorkflowError(), &contErr),
+		"STRANDED: the run completed with a message waiting for a stopped agent; got %v", env.GetWorkflowError())
+	var successor WorkflowInput
+	s.Require().NoError(converter.GetDefaultDataConverter().FromPayloads(contErr.Input, &successor))
+
+	agent := e.agentThread("tc1")
+	s.Require().NotNil(successor.Resume, "the successor resumes the chat's run rather than starting it over")
+	s.Require().Len(successor.Resume.ResumeStopped, 1)
+	resumed := successor.Resume.ResumeStopped[0]
+	s.Require().Equal("tc1", resumed.ToolCallID)
+	s.Require().Equal(agent, resumed.ChildThread)
+	s.Require().Equal(e.parentThread, resumed.ParentThread)
+	s.Require().True(successor.Resume.AwaitSpawnsFirst,
+		"the successor's root waits on the agent before its first turn — that turn reads the agent's report")
+
+	s.Require().Equal(1, e.agentTurns("tc1"), "the ending run must not start the agent itself")
+	_, queued := e.mailbox.snapshot(agent)
+	s.Require().Equal([]string{msg}, queued, "the message is the successor's agent's to read")
+}
+
+// The run a stopped agent's message starts — by SendAgentMessage for a chat
+// whose run had ended, or by the end-of-run check above: it resumes the agent
+// before anything else, and its root waits for the agent's report before its
+// first turn, so the root reads that report instead of answering nothing.
+func (s *SubAgentResumeE2ESuite) TestRunStartedForAStoppedAgentResumesItBeforeTheRootTakesATurn() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newSubAgentResumeEnv(s.T(), env, false)
+	const chatID = "chat-run-started-for-stopped-agent"
+	const stoppedAgent = "agent-stopped-before-this-run"
+	const msg = "switched you to OpenAI, continue"
+
+	input := spawnE2EWorkflowInput(chatID)
+	input.ExecContext.ThreadMode = model.ThreadModeInherit
+	handoff := stoppedSpawnHandoff(stoppedBefore(chatID, stoppedAgent, "tc-old", 2))
+	input.Resume = &ResumeInput{AwaitSpawnsFirst: true, ResumeStopped: []SpawnHandoff{handoff}}
+	// The message was queued before the run started.
+	e.mailbox.enqueue(stoppedAgent, msg)
+	// The root has nothing of its own to do.
+	e.parentToolCalls[1] = func(string) []map[string]interface{} { return nil }
+
+	e.mu.Lock()
+	e.parentThread = input.ExecContext.Thread
+	e.mu.Unlock()
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+
+	s.Require().True(env.IsWorkflowCompleted())
+	s.Require().NoError(env.GetWorkflowError())
+
+	turns, read := e.threadTurns(stoppedAgent)
+	s.Require().Equal(1, turns, "the stopped agent the run was started for must run")
+	s.Require().Equal([]string{msg}, read[0])
+	s.Require().Equal([]string{"2@tc-old#resume-3"}, e.reportsFromThread(stoppedAgent))
+
+	rootTurns, rootRead := e.threadTurns(input.ExecContext.Thread)
+	s.Require().Equal(1, rootTurns, "the root takes one turn, for the agent's report — not one before it")
+	s.Require().Equal([]string{"report:tc-old#resume-3"}, rootRead[0],
+		"the root's first turn is the one that reads what the resumed agent reported")
+	s.Require().Empty(e.lookedUp(), "an agent handed to the run is not looked up again")
 }

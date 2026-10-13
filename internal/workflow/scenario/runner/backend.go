@@ -1061,6 +1061,10 @@ var infrastructureActivities = []string{
 	// which changed the loop's control flow for a reason no scenario wrote.
 	"FetchThreadResult",
 	"EnqueueAgentMessage",
+	// A doorbell for a thread the run has no record of asks whether it is a
+	// sub-agent that stopped on an error. A scenario has no durable rows, so
+	// "it is not" — an empty result — is the faithful answer.
+	"LookupStoppedSubAgent",
 }
 
 // nonTerminatingMessage is reported when a scenario exhausts scenarioRunBudget.

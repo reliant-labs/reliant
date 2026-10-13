@@ -135,7 +135,10 @@ describe("SpawnToolRenderer", () => {
 
     render(<SpawnToolRenderer ctx={createContext({ isCompleted: false, hasFailed: true })} />);
 
-    expect(screen.getByText("Agent failed")).toBeInTheDocument();
+    // Stopped and resumable, not a terminal failure.
+    expect(screen.queryByText("Agent failed")).not.toBeInTheDocument();
+    expect(screen.getByText(/Agent stopped on an error/)).toBeInTheDocument();
+    expect(screen.getByText(/send it a message to resume it/)).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Message this agent to resume it…")).toBeInTheDocument();
   });
 

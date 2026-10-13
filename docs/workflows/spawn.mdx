@@ -49,7 +49,9 @@ A stopped sub-agent is not finished. A message sent to it resumes it where it st
 
 If it stopped on a provider usage limit, the error says when the limit resets. To carry on before then, switch the sub-agent's thread to a model from another provider first: the resumed agent runs on the model you chose.
 
-A sub-agent that completed, or that you stopped, is finished: a message to it is refused, and its parent can start it again with `spawn` and its `agent_id`. A stopped sub-agent is resumed inside the chat's run, so it can only be resumed while that run is going; once the run has ended, send a message to the chat and the main agent can resume it with `spawn`.
+A stopped sub-agent stays resumable after the chat goes idle. If the chat has finished its turn when you message the sub-agent, the chat starts again where it was: the sub-agent resumes first, and the main agent picks up when the sub-agent reports back. Switching a sub-agent's model needs the chat to be running or paused; while it is idle, the sub-agent resumes on the model it had.
+
+A sub-agent that completed, or that you stopped, is finished: a message to it is refused, and its parent can start it again with `spawn` and its `agent_id`. A sub-agent whose parent sub-agent has finished is not resumed by a message, because its result would have nowhere to go; send a message to the chat and the main agent can resume it with `spawn`. If the parent stopped on an error too, message the parent first.
 
 ### Branching a chat that has sub-agents
 

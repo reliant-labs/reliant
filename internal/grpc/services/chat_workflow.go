@@ -140,17 +140,6 @@ func (s *ChatService) threadAcceptsParamUpdate(ctx context.Context, chat *db.Cha
 	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("thread workflow is not running"))
 }
 
-// canResumeStoppedAgent reports whether threadID is a sub-agent that stopped
-// on an error and that a message could resume now.
-func (s *ChatService) canResumeStoppedAgent(ctx context.Context, chat *db.Chat, threadID string) bool {
-	thread, err := s.database.GetThread(ctx, threadID)
-	if err != nil || !isResumableStoppedAgent(thread, chat) {
-		return false
-	}
-	refusal, _ := s.stoppedAgentResumability(ctx, chat, thread)
-	return refusal == ""
-}
-
 // staleWorkflowSignalError is the error for a param-update signal that found
 // no running workflow, and nil for any other signal failure.
 //

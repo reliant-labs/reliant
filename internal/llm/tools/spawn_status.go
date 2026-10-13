@@ -564,6 +564,13 @@ func (s *spawnStatusTool) lastMessageSnapshot(rctx *rctx.ToolContext, params Spa
 	if truncated := TruncateOutput(SpawnStatusToolName, output, true); truncated != output {
 		output = truncated
 	}
+	// "failed" reads as final, and for a sub-agent it is not: one that
+	// stopped on an error resumes where it stopped when it gets a message.
+	if thread.Origin == core.ThreadOriginSpawn && thread.Status == core.ThreadStatusFailed {
+		output += fmt.Sprintf("\n\n<system>Agent %s stopped on an error; it has not finished. "+
+			"spawn_send(agent_id=%q, ...) or spawn(agent_id=%q, prompt=...) resumes it where it stopped.</system>",
+			params.AgentID, params.AgentID, params.AgentID)
+	}
 	return WithResponseMetadata(NewTextResponse(output), metadata), nil
 }
 

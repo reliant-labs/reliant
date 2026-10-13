@@ -10,11 +10,14 @@
  * per-thread context meters, and ThreadTabs filters spawn-origin threads out of
  * its own visible set. This is a transient activity readout.
  *
- * A spawned agent that FAILS shows here too, with Retry. Its failure stopped
- * that agent and nothing else, so this row — not a chat-wide banner — is where
- * the user sees it. Retry asks the agent's parent to resume it (the parent was
- * already told it failed and holds the plan the agent belongs to); dismissing
- * the row is remembered on this device.
+ * A spawned agent that STOPPED ON AN ERROR shows here too, with Retry. The
+ * error stopped that agent and nothing else, and it is not final — a message
+ * resumes the agent where it stopped — so this row, not a chat-wide banner, is
+ * where the user sees it, as stopped rather than failed. Retry asks the
+ * agent's parent to resume it (the parent was already told it stopped and
+ * holds the plan the agent belongs to); a message sent to the agent from its
+ * own thread resumes it directly. Dismissing the row is remembered on this
+ * device.
  */
 
 import { Tooltip } from "../ui/Tooltip";
@@ -246,10 +249,10 @@ function FailedSpawnRow({
       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
       data-testid={`background-work-failed-${spawn.threadId}`}
     >
-      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 text-destructive" />
+      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 text-warning-ink" />
       <span className="truncate font-medium text-foreground">{spawn.title}</span>
-      <span className={cn("truncate", retry === "requested" ? "text-muted-foreground" : "text-destructive")}>
-        {retry === "requested" ? "Retry requested" : "Failed"}
+      <span className={cn("truncate", retry === "requested" ? "text-muted-foreground" : "text-warning-ink")}>
+        {retry === "requested" ? "Retry requested" : "Stopped on an error"}
       </span>
       <span className="ml-auto flex flex-shrink-0 items-center gap-1.5">
         <Tooltip
@@ -360,7 +363,7 @@ export function BackgroundWorkPill({
   if (!hasAnything) return null;
 
   const isBlocked = blockedSpawns.length > 0;
-  const failedLabel = `${visibleFailed.length === 1 ? visibleFailed[0].title : `${visibleFailed.length} agents`} failed`;
+  const failedLabel = `${visibleFailed.length === 1 ? visibleFailed[0].title : `${visibleFailed.length} agents`} stopped`;
 
   return (
     <div className="flex-shrink-0 border-t border-border bg-muted/20 px-3 py-1.5">
@@ -377,7 +380,7 @@ export function BackgroundWorkPill({
             <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
           </span>
         ) : hasFailed ? (
-          <span className="relative inline-flex h-2 w-2 flex-shrink-0 rounded-full bg-destructive" />
+          <span className="relative inline-flex h-2 w-2 flex-shrink-0 rounded-full bg-warning" />
         ) : (
           <span className="relative flex h-2 w-2 flex-shrink-0">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
@@ -388,7 +391,7 @@ export function BackgroundWorkPill({
         <span
           className={cn(
             "font-medium",
-            isBlocked ? "text-amber-500" : hasFailed ? "text-destructive" : "text-foreground",
+            isBlocked ? "text-amber-500" : hasFailed ? "text-warning-ink" : "text-foreground",
           )}
         >
           {isBlocked
@@ -399,7 +402,7 @@ export function BackgroundWorkPill({
         </span>
 
         {isBlocked && hasFailed && (
-          <span className="text-destructive">· {failedLabel}</span>
+          <span className="text-warning-ink">· {failedLabel}</span>
         )}
         {(isBlocked || hasFailed) && summary && (
           <span className="text-muted-foreground">· {summary} running</span>

@@ -11,9 +11,10 @@
  *     against it.
  *
  * Failed spawns come from the workflow tree alone. A sub-agent whose step
- * fails for good ends on its own — the rest of the chat keeps running — and
- * reports to its parent, so the failure belongs here, on the agent, rather
- * than in a chat-wide banner.
+ * fails stops on its own — the rest of the chat keeps running — and reports to
+ * its parent, so the failure belongs here, on the agent, rather than in a
+ * chat-wide banner. It is stopped, not finished: a message resumes it where it
+ * stopped, even once the chat has gone idle.
  *
  * The blocked attribution is the reason this hook exists rather than a pair
  * of counters. A spawned agent that is waiting on a question or a tool
@@ -51,7 +52,8 @@ export interface ActiveSpawn {
 }
 
 /**
- * A spawned agent whose latest run failed and has not been resumed.
+ * A spawned agent whose latest run failed and has not been resumed: it
+ * stopped on an error, and a message to it resumes it where it stopped.
  *
  * Only that agent stopped: its parent was told (an agent_result with
  * status="failed") and decides what happens next. Retrying from here asks the
@@ -194,7 +196,7 @@ function failedSpawnsOf(workflows: WorkflowExecutionData[], now: number): Failed
  */
 export function failedAgentRetryMessage(spawn: Pick<FailedSpawn, "title" | "threadId">): string {
   return (
-    `Retry the agent "${spawn.title}" that failed: resume it where it stopped with ` +
+    `Retry the agent "${spawn.title}" that stopped on an error: resume it where it stopped with ` +
     `spawn(agent_id="${spawn.threadId}", prompt=...), then carry on.`
   );
 }

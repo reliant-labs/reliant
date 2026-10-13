@@ -76,3 +76,52 @@ func TestFreshRestart_RelaunchesDurableSpawn(t *testing.T) {
 	require.Contains(t, e.toolStatusesFor("tc-spawn"), "completed")
 	require.GreaterOrEqual(t, e.llmCalls[parent], 1, "the parent reacts to the relaunched spawn's report")
 }
+
+type fakeStoppedSpawnReader struct {
+	agents map[string]*db.StoppedSpawnAgent
+	err    error
+}
+
+func (f *fakeStoppedSpawnReader) GetStoppedSpawnAgent(_ context.Context, _, threadID string) (*db.StoppedSpawnAgent, error) {
+	return f.agents[threadID], f.err
+}
+
+// A sub-agent that stopped on a failure is resumable from durable rows alone:
+// the relaunch record a resume works from carries its spawn call, parent,
+// preset and title, its own worktree, its depth, and the resume slots already
+// used — so its next report does not collide with an earlier one.
+func TestStoppedSpawnFromDurableState(t *testing.T) {
+	t.Parallel()
+	reader := &fakeStoppedSpawnReader{agents: map[string]*db.StoppedSpawnAgent{
+		"agent-1": {
+			ToolCallID: "tc-1", ParentThreadID: "lead", ChildThreadID: "agent-1", ChildWorkflowID: "wf-agent-1",
+			IssuingWorkflowID: "wf-lead", SpawnDepth: 2, WorktreePath: "/wt/agent-1", Resumes: 3,
+			ToolInput: `{"preset":"researcher","prompt":"look","title":"Research"}`,
+		},
+		"agent-2": {
+			ToolCallID: "tc-2", ParentThreadID: "root", ChildThreadID: "agent-2", ChildWorkflowID: "agent-2",
+			IssuingWorkflowID: "root", SpawnDepth: 1, ToolInput: `not json`,
+		},
+	}}
+
+	got, err := StoppedSpawnFromDurableState(context.Background(), reader, "chat", "agent-1")
+	require.NoError(t, err)
+	require.Equal(t, &SpawnHandoff{
+		ToolCallID: "tc-1", ParentThread: "lead", ChildThread: "agent-1", ChildWorkflowID: "wf-agent-1",
+		ParentWorkflowID: "wf-lead", Preset: "researcher", Title: "Research",
+		ProjectPath: "/wt/agent-1", SpawnDepth: 2, Resumes: 3,
+	}, got)
+
+	got, err = StoppedSpawnFromDurableState(context.Background(), reader, "chat", "agent-2")
+	require.NoError(t, err)
+	require.Equal(t, "tc-2", got.ToolCallID, "an unparseable input still resumes, under the default preset")
+	require.Empty(t, got.Preset)
+
+	got, err = StoppedSpawnFromDurableState(context.Background(), reader, "chat", "finished-agent")
+	require.NoError(t, err)
+	require.Nil(t, got, "an agent that did not stop on a failure has nothing to resume")
+
+	reader.err = context.DeadlineExceeded
+	_, err = StoppedSpawnFromDurableState(context.Background(), reader, "chat", "agent-1")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}

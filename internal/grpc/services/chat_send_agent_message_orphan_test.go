@@ -103,9 +103,16 @@ func TestSendAgentMessage_ThreadExitsBeforeNextBoundary(t *testing.T) {
 }
 
 // TestThreadStatus_ResolvesMailboxOnEveryTerminalPath pins that the fix is
-// not tied to the happy path. A thread that fails or is cancelled strands its
-// mailbox exactly as completion does, so every terminal verb must resolve it --
+// not tied to the happy path. A thread that is cancelled strands its mailbox
+// exactly as completion does, so every finishing verb must resolve it --
 // handled coherently in one place rather than patched per exit path.
+//
+// Except a sub-agent that FAILED: it stopped on an error and has not
+// finished, and a message to it resumes it (runtime's subagent_resume.go).
+// Its resumed run's first turn reads what is queued, so the mail is held for
+// that run rather than declared undelivered as the agent stops — including a
+// message that arrived while it was reporting its failure, which is exactly
+// the one that resumes it.
 func TestThreadStatus_ResolvesMailboxOnEveryTerminalPath(t *testing.T) {
 	for _, verb := range []string{"completed", "failed", "cancelled"} {
 		t.Run(verb, func(t *testing.T) {
@@ -134,6 +141,11 @@ func TestThreadStatus_ResolvesMailboxOnEveryTerminalPath(t *testing.T) {
 			require.NoError(t, err)
 
 			status, _ := agentMessageStatusOf(t, rawDB, ctx, fx.childThreadID)
+			if verb == "failed" {
+				assert.Equal(t, core.AgentMessageStatusQueued, status,
+					"a sub-agent that stopped on an error keeps its mail for the run that resumes it")
+				return
+			}
 			assert.Equal(t, core.AgentMessageStatusUndelivered, status,
 				"a %s thread strands its mailbox exactly as a completed one does", verb)
 		})

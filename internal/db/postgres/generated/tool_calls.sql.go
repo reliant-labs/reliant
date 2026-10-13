@@ -13,6 +13,95 @@ import (
 	"github.com/lib/pq"
 )
 
+const getLatestSpawnRunForThread = `-- name: GetLatestSpawnRunForThread :one
+WITH RECURSIVE latest AS (
+    SELECT w.id, w.parent_id
+    FROM workflows w
+    JOIN tool_calls tc ON tc.child_workflow_id = w.id AND tc.tool_name = 'spawn'
+    WHERE w.chat_id = $1::text AND w.thread = $2::text
+    ORDER BY w.created_at DESC, w.id DESC
+    LIMIT 1
+), ancestors AS (
+    SELECT p.id, p.parent_id, 1 AS depth
+    FROM workflows p JOIN latest l ON p.id = l.parent_id
+    UNION ALL
+    SELECT p.id, p.parent_id, a.depth + 1
+    FROM workflows p JOIN ancestors a ON p.id = a.parent_id
+    WHERE a.depth < 64
+)
+SELECT tc.id AS tool_call_id,
+       COALESCE(tc.thread_id, '')::text AS parent_thread_id,
+       tc.input AS tool_input,
+       w.id AS child_workflow_id,
+       COALESCE(w.parent_id, '')::text AS issuing_workflow_id,
+       w.state AS workflow_state,
+       w.stop_reason AS workflow_stop_reason,
+       t.status AS thread_status,
+       t.origin AS thread_origin,
+       COALESCE(wt.path, '')::text AS worktree_path,
+       (SELECT COALESCE(MAX(a.depth), 0) FROM ancestors a)::int AS spawn_depth
+FROM latest l
+JOIN workflows w ON w.id = l.id
+JOIN tool_calls tc ON tc.child_workflow_id = w.id AND tc.tool_name = 'spawn'
+JOIN threads t ON t.id = w.thread
+LEFT JOIN worktrees wt ON wt.id = t.worktree_id AND wt.deleted_at IS NULL
+ORDER BY tc.requested_at DESC
+LIMIT 1
+`
+
+type GetLatestSpawnRunForThreadParams struct {
+	ChatID   string `json:"chat_id"`
+	ThreadID string `json:"thread_id"`
+}
+
+type GetLatestSpawnRunForThreadRow struct {
+	ToolCallID         string `json:"tool_call_id"`
+	ParentThreadID     string `json:"parent_thread_id"`
+	ToolInput          []byte `json:"tool_input"`
+	ChildWorkflowID    string `json:"child_workflow_id"`
+	IssuingWorkflowID  string `json:"issuing_workflow_id"`
+	WorkflowState      int32  `json:"workflow_state"`
+	WorkflowStopReason int32  `json:"workflow_stop_reason"`
+	ThreadStatus       int32  `json:"thread_status"`
+	ThreadOrigin       string `json:"thread_origin"`
+	WorktreePath       string `json:"worktree_path"`
+	SpawnDepth         int32  `json:"spawn_depth"`
+}
+
+// The latest spawn run of the sub-agent on one thread: the spawn tool call
+// that started it, joined to that run's workflow row, the thread, and the
+// thread's own worktree. What a message needs to resume a sub-agent that
+// stopped on a failure, read from durable rows alone, so it does not depend on
+// the execution that saw it stop still being alive (see
+// db.Repo.GetStoppedSpawnAgent).
+//
+// One thread can carry several runs: spawn(agent_id=...) resumes an agent as a
+// new workflow row on the same thread, while a message resumes it on the row it
+// stopped with. The newest row is the agent's current state; an older failure
+// that was resumed since is history, not a stopped agent.
+//
+// spawn_depth counts the run's ancestors up its workflow tree: 1 for a spawn
+// the root issued, 2 for one a top-level spawn issued, and so on. The walk is
+// bounded so a malformed parent cycle cannot recurse forever.
+func (q *Queries) GetLatestSpawnRunForThread(ctx context.Context, arg GetLatestSpawnRunForThreadParams) (GetLatestSpawnRunForThreadRow, error) {
+	row := q.db.QueryRowContext(ctx, getLatestSpawnRunForThread, arg.ChatID, arg.ThreadID)
+	var i GetLatestSpawnRunForThreadRow
+	err := row.Scan(
+		&i.ToolCallID,
+		&i.ParentThreadID,
+		&i.ToolInput,
+		&i.ChildWorkflowID,
+		&i.IssuingWorkflowID,
+		&i.WorkflowState,
+		&i.WorkflowStopReason,
+		&i.ThreadStatus,
+		&i.ThreadOrigin,
+		&i.WorktreePath,
+		&i.SpawnDepth,
+	)
+	return i, err
+}
+
 const getToolCall = `-- name: GetToolCall :one
 SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at, daemon_id FROM tool_calls WHERE id = $1
 `
@@ -384,6 +473,46 @@ func (q *Queries) ListSpawnChildrenForThread(ctx context.Context, threadID sql.N
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpawnResumeReportIDs = `-- name: ListSpawnResumeReportIDs :many
+SELECT m.tool_call_id::text AS report_id
+FROM agent_messages m
+WHERE m.chat_id = $1::text
+  AND m.kind IN (2, 3, 4)
+  AND starts_with(m.tool_call_id, $2::text)
+`
+
+type ListSpawnResumeReportIDsParams struct {
+	ChatID     string `json:"chat_id"`
+	SlotPrefix string `json:"slot_prefix"`
+}
+
+// The report slots a spawn's resumed runs have written (<tool_call_id>#resume-N,
+// see runtime.SpawnHandoff.ReportID). The next resume numbers its slot past
+// the highest: a slot already holding a report drops a second one as a
+// duplicate (idx_agent_messages_one_terminal_report_per_chat_spawn).
+func (q *Queries) ListSpawnResumeReportIDs(ctx context.Context, arg ListSpawnResumeReportIDsParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listSpawnResumeReportIDs, arg.ChatID, arg.SlotPrefix)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var report_id string
+		if err := rows.Scan(&report_id); err != nil {
+			return nil, err
+		}
+		items = append(items, report_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

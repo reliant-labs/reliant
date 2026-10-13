@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -32,6 +33,30 @@ import (
 //
 // Truly finished agents stay finished: one that completed, and one the user
 // stopped, are never recorded as stopped and never resumed.
+//
+// "Stopped" is a durable fact, not only this execution's memory. The record
+// kept here (ChildWorkflowTracker.stoppedSpawns) lives as long as the
+// execution that saw the agent stop, and a chat's execution rarely outlives
+// the turn: the root's loop ends once its agent has answered, and the run
+// completes. Without a durable answer every stopped agent was stranded the
+// moment its parent's turn ended — the common case, since the parent's next
+// turn is usually the one that reads the failure and replies — and so was
+// every agent that stopped before the in-memory record existed (9fbaace8
+// itself), and every one a fresh restart of a dead run forgot. So:
+//
+//   - A doorbell for a thread this execution has no record of asks the
+//     database (LookupStoppedSubAgent → db.Repo.GetStoppedSpawnAgent): the
+//     agent's thread and its latest spawn run both recorded failed. If so it
+//     is resumed exactly as a remembered one is.
+//   - A run that is ending does not start an agent nobody would wait on. A
+//     doorbell rung for a stopped agent once the run is ending leaves it
+//     stopped with the message unread, and the end-of-run check continues as
+//     a successor that resumes it (stoppedAgentsAwaitingResume).
+//   - A message to a stopped agent whose chat has no run at all starts one
+//     (ChatService.SendAgentMessage): a successor of the chat's run that
+//     resumes the agent before anything else (ResumeInput.ResumeStopped) and
+//     whose root waits on it first, so the root's next turn is the one that
+//     reads the agent's new outcome.
 
 // resumeStoppedSubAgentChangeID versions every place a message now resumes,
 // or retries, a sub-agent that would otherwise have ended (workflow.GetVersion):
@@ -40,6 +65,233 @@ import (
 // agent that is already running. Histories recorded before it did none of
 // these and must replay the same.
 const resumeStoppedSubAgentChangeID = "message-resumes-stopped-subagent"
+
+// durableStoppedSubAgentChangeID versions what reads a stopped agent from
+// durable state rather than this execution's memory: the database lookup a
+// doorbell for an unknown thread now makes, leaving a stopped agent stopped
+// while the run is ending, and the end-of-run continuation that resumes it.
+// Histories recorded before it did none of these.
+const durableStoppedSubAgentChangeID = "durable-stopped-subagent"
+
+// LookupStoppedSubAgentActivityName reads whether a thread is a sub-agent that
+// stopped on a failure (handlers.LookupStoppedSubAgentActivity).
+const LookupStoppedSubAgentActivityName = "LookupStoppedSubAgent"
+
+// resumeStoppedSubAgent resumes the sub-agent on thread if it stopped on a
+// failure, and reports whether it did so synchronously. Called when its
+// doorbell rings.
+//
+// An agent this execution saw stop is resumed at once. One it has no record
+// of is looked up in the database off the caller's coroutine, and resumed when
+// the lookup finds it stopped; that is reported as false, since nothing has
+// been resumed yet.
+func resumeStoppedSubAgent(ctx workflow.Context, thread string, deps stoppedSpawnResumeDeps) bool {
+	if deps.childTracker.stoppedSpawnFor(thread) != nil {
+		return resumeStoppedSpawn(ctx, thread, deps)
+	}
+	resumeStoppedSpawnFromDurableState(ctx, thread, deps)
+	return false
+}
+
+// resumeStoppedSpawnFromDurableState looks thread up in durable state, off the
+// caller's coroutine, and resumes it if it is a sub-agent that stopped on a
+// failure. Nothing to do for the run's own thread, an agent that is running,
+// one already being looked up, or one already found not to be stopped.
+func resumeStoppedSpawnFromDurableState(ctx workflow.Context, thread string, deps stoppedSpawnResumeDeps) {
+	tracker := deps.childTracker
+	if !tracker.needsStoppedLookup(thread, deps.rootThread) {
+		return
+	}
+	if workflow.GetVersion(ctx, durableStoppedSubAgentChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return
+	}
+	tracker.beginStoppedLookup(thread)
+	workflow.Go(ctx, func(gCtx workflow.Context) {
+		defer tracker.endStoppedLookup(thread)
+		if !tracker.adoptStoppedSpawn(lookupStoppedSpawn(gCtx, deps.chatID, thread)) {
+			return
+		}
+		resumeStoppedSpawn(gCtx, thread, deps)
+	})
+}
+
+// lookupStoppedSpawn reads thread's stopped sub-agent from durable state
+// (LookupStoppedSubAgentActivityName) as its relaunch record. A record with no
+// ToolCallID when thread is not one; nil when the read failed — the message
+// stays queued, and the next doorbell asks again.
+func lookupStoppedSpawn(ctx workflow.Context, chatID, thread string) *SpawnHandoff {
+	lookupCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    10 * time.Second,
+			MaximumAttempts:    3,
+		},
+	})
+	var out struct {
+		Agent *db.StoppedSpawnAgent `json:"agent,omitempty"`
+	}
+	err := workflow.ExecuteActivity(lookupCtx, LookupStoppedSubAgentActivityName, map[string]interface{}{
+		"chat_id": chatID,
+		"thread":  thread,
+	}).Get(ctx, &out)
+	if err != nil {
+		workflow.GetLogger(ctx).Warn("[SpawnResume] Could not read whether a messaged thread is a stopped sub-agent; leaving its message queued",
+			"thread", thread, "error", err)
+		return nil
+	}
+	if out.Agent == nil || out.Agent.ToolCallID == "" || out.Agent.ParentThreadID == "" {
+		return &SpawnHandoff{ChildThread: thread} // looked up: not a stopped sub-agent
+	}
+	h := stoppedSpawnHandoff(out.Agent)
+	h.ChildThread = thread
+	return &h
+}
+
+// needsStoppedLookup reports whether a doorbell for thread should ask the
+// database whether it is a stopped sub-agent: this execution knows nothing of
+// it — not the run's own thread, not running, not remembered as stopped, not
+// already being looked up or found not to be one.
+func (t *ChildWorkflowTracker) needsStoppedLookup(thread, rootThread string) bool {
+	if t == nil || thread == "" || thread == rootThread {
+		return false
+	}
+	return t.liveSpawnFor(thread) == nil && t.stoppedSpawnFor(thread) == nil &&
+		!t.stoppedLookups[thread] && !t.notStopped[thread]
+}
+
+func (t *ChildWorkflowTracker) beginStoppedLookup(thread string) {
+	if t.stoppedLookups == nil {
+		t.stoppedLookups = make(map[string]bool)
+	}
+	t.stoppedLookups[thread] = true
+}
+
+func (t *ChildWorkflowTracker) endStoppedLookup(thread string) {
+	delete(t.stoppedLookups, thread)
+}
+
+// stoppedLookupsInFlight reports whether any lookup has not answered yet.
+func (t *ChildWorkflowTracker) stoppedLookupsInFlight() bool {
+	return len(t.stoppedLookups) > 0
+}
+
+// adoptStoppedSpawn records what a lookup found, and reports whether the
+// thread is now a stopped sub-agent this execution remembers. A lookup that
+// failed (nil) records nothing, so the next doorbell asks again; one that found
+// no stopped agent is remembered as such for this execution. What the
+// execution learned of the thread while the lookup ran wins over it: an agent
+// running again, or one it saw stop itself.
+func (t *ChildWorkflowTracker) adoptStoppedSpawn(h *SpawnHandoff) bool {
+	if h == nil {
+		return false
+	}
+	thread := h.ChildThread
+	if t.liveSpawnFor(thread) != nil {
+		return false
+	}
+	if t.stoppedSpawnFor(thread) != nil {
+		return true
+	}
+	if h.ToolCallID == "" {
+		if t.notStopped == nil {
+			t.notStopped = make(map[string]bool)
+		}
+		t.notStopped[thread] = true
+		return false
+	}
+	t.seedStoppedSpawns([]SpawnHandoff{*h})
+	return t.stoppedSpawnFor(thread) != nil
+}
+
+// stoppedAgentsAwaitingResume is the end-of-run half of "a message resumes a
+// stopped agent": the stopped sub-agents a message is waiting for that this
+// run will not resume, because it is ending. Called by the end-of-run check
+// once the run's bookkeeping is done; a non-empty result continues the run as
+// a successor that resumes them (stoppedAgentsSuccessorInput).
+//
+// Those are the threads woken since their last turn that are not the root's
+// and not running: an agent left stopped because its doorbell rang while the
+// run was ending (resumeStoppedSpawn), and any whose doorbell was only
+// counted — absorbed at the very end, or rung while the agent was not yet
+// known — which are looked up here. Sorted parents before children, so a
+// successor resumes an issuing agent before the agents it issued.
+func stoppedAgentsAwaitingResume(ctx workflow.Context, chatID, rootThread string, tracker *ChildWorkflowTracker) []SpawnHandoff {
+	if tracker == nil {
+		return nil
+	}
+	var candidates []string
+	for thread := range tracker.threadWakes {
+		if thread != rootThread && tracker.wakeSinceLastTurn(thread) && tracker.liveSpawnFor(thread) == nil {
+			candidates = append(candidates, thread)
+		}
+	}
+	if len(candidates) == 0 && !tracker.stoppedLookupsInFlight() {
+		return nil
+	}
+	if workflow.GetVersion(ctx, durableStoppedSubAgentChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return nil
+	}
+	sort.Strings(candidates)
+	// A lookup still in flight adopts what it finds; the run is ending, so
+	// it does not resume it.
+	_ = workflow.Await(ctx, func() bool { return !tracker.stoppedLookupsInFlight() })
+
+	var stopped []SpawnHandoff
+	for _, thread := range candidates {
+		if tracker.needsStoppedLookup(thread, rootThread) {
+			tracker.adoptStoppedSpawn(lookupStoppedSpawn(ctx, chatID, thread))
+		}
+		if rec := tracker.stoppedSpawnFor(thread); rec != nil {
+			stopped = append(stopped, rec.handoff)
+		}
+	}
+	sort.SliceStable(stopped, func(i, j int) bool { return stopped[i].SpawnDepth < stopped[j].SpawnDepth })
+
+	// Only agents the successor can resume: it runs the root and what it
+	// resumes, nothing else, so an agent whose parent is neither would be
+	// refused there too (resumeStoppedSpawn) — a successor started for
+	// nothing.
+	resumable := map[string]bool{rootThread: true}
+	var awaiting []SpawnHandoff
+	for _, h := range stopped {
+		if resumable[h.ParentThread] {
+			resumable[h.ChildThread] = true
+			awaiting = append(awaiting, h)
+		}
+	}
+	return awaiting
+}
+
+// stoppedAgentsSuccessorInput is the run an ending run continues as for the
+// stopped agents a message is waiting to resume: the same workflow, resumed
+// rather than at graph entry, which resumes those agents before it enters its
+// loop. Its root waits on them before its first turn — the turn that reads
+// what they report — unless the root itself was woken too, in which case
+// that wake gets its turn first. The other stopped agents, the load_tool
+// grants and the per-thread params cross as a continue-as-new carries them.
+func stoppedAgentsSuccessorInput(input WorkflowInput, awaiting []SpawnHandoff, tracker *ChildWorkflowTracker, rootWoken bool) WorkflowInput {
+	successor := lateWakeSuccessorInput(input)
+	resuming := make(map[string]bool, len(awaiting))
+	for _, h := range awaiting {
+		resuming[h.ChildThread] = true
+	}
+	var remembered []SpawnHandoff
+	for _, h := range tracker.stoppedSpawnHandoffs() {
+		if !resuming[h.ChildThread] {
+			remembered = append(remembered, h)
+		}
+	}
+	successor.Resume = &ResumeInput{
+		AwaitSpawnsFirst: !rootWoken,
+		ResumeStopped:    awaiting,
+		StoppedSpawns:    remembered,
+		ToolGrants:       tracker.toolGrantsHandoff(),
+		ThreadInputs:     tracker.threadInputOverridesHandoff(),
+	}
+	return successor
+}
 
 // recordStoppedSpawn remembers the live spawn toolCallID as stopped on a
 // failure. Called while it is still registered live, so its handoff — the
@@ -227,6 +479,17 @@ func resumeStoppedSpawn(ctx workflow.Context, thread string, deps stoppedSpawnRe
 		logger.Warn("[SpawnResume] Not resuming a stopped sub-agent: the parent it reports to has finished",
 			"childThread", h.ChildThread,
 			"parentThread", h.ParentThread,
+			"toolCallID", h.ToolCallID,
+		)
+		return false
+	}
+	// Nothing waits on an agent started once the run is ending: its parent's
+	// loop has exited, and the run would end with the agent mid-turn. It
+	// stays stopped, its message unread, and the end-of-run check continues
+	// as a successor that resumes it (stoppedAgentsAwaitingResume).
+	if tracker.runEnding && workflow.GetVersion(ctx, durableStoppedSubAgentChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		logger.Info("[SpawnResume] Run is ending; its successor resumes the stopped sub-agent this message is for",
+			"childThread", h.ChildThread,
 			"toolCallID", h.ToolCallID,
 		)
 		return false

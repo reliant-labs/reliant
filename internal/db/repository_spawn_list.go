@@ -4,7 +4,10 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
@@ -259,6 +262,108 @@ type LiveBackgroundSpawn struct {
 	// Depth is 0 for a spawn issued by the root, 1 for one issued by a
 	// top-level spawn, and so on.
 	Depth int
+}
+
+// StoppedSpawnAgent is a sub-agent that stopped on a failure — its step's
+// retries exhausted, a provider error, a usage limit — and has not run since:
+// everything resuming it needs, read from durable rows. See
+// GetStoppedSpawnAgent.
+//
+// JSON-tagged because it is also an activity's result
+// (LookupStoppedSubAgent), which the workflow decodes.
+type StoppedSpawnAgent struct {
+	// ToolCallID is the spawn call that started the agent's latest run.
+	ToolCallID string `json:"tool_call_id"`
+	// ParentThreadID is the thread that issued that call: the recipient of
+	// the agent's reports.
+	ParentThreadID string `json:"parent_thread_id"`
+	// ToolInput is the spawn call's input as the LLM sent it (preset, title).
+	ToolInput       string `json:"tool_input,omitempty"`
+	ChildThreadID   string `json:"child_thread_id"`
+	ChildWorkflowID string `json:"child_workflow_id"`
+	// IssuingWorkflowID is the workflow that issued the spawn: the chat's
+	// root for a top-level agent, the spawning agent's row for a nested one.
+	IssuingWorkflowID string `json:"issuing_workflow_id"`
+	// SpawnDepth is 1 for an agent the root spawned, 2 for one a top-level
+	// agent spawned, and so on.
+	SpawnDepth int `json:"spawn_depth"`
+	// WorktreePath is the checkout of the thread's own worktree, when it has
+	// one: where the agent works instead of the chat's checkout.
+	WorktreePath string `json:"worktree_path,omitempty"`
+	// Resumes is the highest resume slot its resumed runs have reported
+	// under (ToolCallID#resume-N), 0 when none has: the next resume reports
+	// past it.
+	Resumes int `json:"resumes,omitempty"`
+}
+
+// resumeSlotSeparator joins a spawn's tool call id to the number of a resumed
+// run's report slot. runtime.resumeStoppedSpawn writes the slots; this reads
+// them back.
+const resumeSlotSeparator = "#resume-"
+
+// GetStoppedSpawnAgent returns the sub-agent on threadID if it stopped on a
+// failure, and nil, nil if it did not: no such sub-agent in chatID, or one
+// that is running, completed, or was stopped by the user.
+//
+// "Stopped on a failure" is the agent's thread AND its latest spawn run both
+// recorded failed. That is the durable form of what the workflow keeps in
+// memory as a stopped spawn (runtime.ChildWorkflowTracker.stoppedSpawns), so a
+// message can resume the agent from any execution of the chat — a successor
+// after the run that saw it stop has completed, a fresh restart of a run that
+// died, or a chat whose agent stopped before the run kept such a record at
+// all.
+func (r *Repo) GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*StoppedSpawnAgent, error) {
+	if chatID == "" || threadID == "" {
+		return nil, fmt.Errorf("chat ID and thread ID are required")
+	}
+	if r.DB == nil {
+		return nil, fmt.Errorf("repository has no database connection")
+	}
+	q := pgdb.New(r.DB.DB(ctx))
+	row, err := q.GetLatestSpawnRunForThread(ctx, pgdb.GetLatestSpawnRunForThreadParams{
+		ChatID:   chatID,
+		ThreadID: threadID,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to read the latest spawn run of thread %s: %w", threadID, err)
+	}
+	stopped := row.ThreadOrigin == string(ThreadOriginSpawn) &&
+		row.ThreadStatus == ThreadStatusFailed &&
+		WorkflowState(row.WorkflowState) == WorkflowStateStopped &&
+		WorkflowStopReason(row.WorkflowStopReason) == StopReasonFailed
+	if !stopped || row.ParentThreadID == "" {
+		return nil, nil
+	}
+
+	slots, err := q.ListSpawnResumeReportIDs(ctx, pgdb.ListSpawnResumeReportIDsParams{
+		ChatID:     chatID,
+		SlotPrefix: row.ToolCallID + resumeSlotSeparator,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list the resume reports of spawn %s: %w", row.ToolCallID, err)
+	}
+	resumes := 0
+	for _, slot := range slots {
+		n, convErr := strconv.Atoi(strings.TrimPrefix(slot, row.ToolCallID+resumeSlotSeparator))
+		if convErr == nil && n > resumes {
+			resumes = n
+		}
+	}
+
+	return &StoppedSpawnAgent{
+		ToolCallID:        row.ToolCallID,
+		ParentThreadID:    row.ParentThreadID,
+		ToolInput:         string(row.ToolInput),
+		ChildThreadID:     threadID,
+		ChildWorkflowID:   row.ChildWorkflowID,
+		IssuingWorkflowID: row.IssuingWorkflowID,
+		SpawnDepth:        int(row.SpawnDepth),
+		WorktreePath:      row.WorktreePath,
+		Resumes:           resumes,
+	}, nil
 }
 
 // ListLiveBackgroundSpawns returns every background spawn issued anywhere in

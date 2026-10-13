@@ -686,7 +686,9 @@ function ToolExecutionComponent({
       if (toolResult.content?.includes("blocked")) return "Blocked";
       return "Warning";
     }
-    if (hasFailed) return "Warning";
+    // A spawned agent whose run failed stopped on an error: a message to it
+    // resumes it where it stopped, so it is not shown as a dead end.
+    if (hasFailed) return spawnChildWorkflowId ? "Stopped" : "Warning";
     if (isBackgrounded) return "Background";
     if (isCompleted) {
       if (isTaskToolFlag && taskTargetStatus) {

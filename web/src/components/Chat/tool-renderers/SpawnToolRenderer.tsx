@@ -301,7 +301,14 @@ function SpawnPreview({ ctx }: ToolContentProps) {
           )}
         >
           <AlertCircle className="w-2.5 h-2.5 shrink-0" />
-          <span>{isCancelledChild ? "Agent cancelled" : "Agent failed"}</span>
+          {/* An agent that stopped on an error is not finished — its error
+              is on its own thread, and a message resumes it (even once the
+              chat has gone idle: that message restarts the chat's run). */}
+          <span>
+            {isCancelledChild
+              ? "Agent cancelled"
+              : "Agent stopped on an error — send it a message to resume it where it stopped"}
+          </span>
         </div>
       )}
       {hasContent ? (

@@ -365,6 +365,22 @@ type Querier interface {
 	GetLatestMessageByThread(ctx context.Context, threadID string) (Message, error)
 	// Get the latest message with token data in a thread at a specific context sequence
 	GetLatestMessageWithTokensByThread(ctx context.Context, arg GetLatestMessageWithTokensByThreadParams) (Message, error)
+	// The latest spawn run of the sub-agent on one thread: the spawn tool call
+	// that started it, joined to that run's workflow row, the thread, and the
+	// thread's own worktree. What a message needs to resume a sub-agent that
+	// stopped on a failure, read from durable rows alone, so it does not depend on
+	// the execution that saw it stop still being alive (see
+	// db.Repo.GetStoppedSpawnAgent).
+	//
+	// One thread can carry several runs: spawn(agent_id=...) resumes an agent as a
+	// new workflow row on the same thread, while a message resumes it on the row it
+	// stopped with. The newest row is the agent's current state; an older failure
+	// that was resumed since is history, not a stopped agent.
+	//
+	// spawn_depth counts the run's ancestors up its workflow tree: 1 for a spawn
+	// the root issued, 2 for one a top-level spawn issued, and so on. The walk is
+	// bounded so a malformed parent cycle cannot recurse forever.
+	GetLatestSpawnRunForThread(ctx context.Context, arg GetLatestSpawnRunForThreadParams) (GetLatestSpawnRunForThreadRow, error)
 	// The overlap check ("is this trigger's previous run still going?") asks for
 	// the latest 'launched' event; the detail view asks for the latest of any
 	// outcome. A NULL outcome means no filter.
@@ -839,6 +855,11 @@ type Querier interface {
 	// the fork point's ordinal. NULL when the call was recorded before its
 	// assistant message was finalized.
 	ListSpawnChildrenForThread(ctx context.Context, threadID sql.NullString) ([]ListSpawnChildrenForThreadRow, error)
+	// The report slots a spawn's resumed runs have written (<tool_call_id>#resume-N,
+	// see runtime.SpawnHandoff.ReportID). The next resume numbers its slot past
+	// the highest: a slot already holding a report drops a second one as a
+	// duplicate (idx_agent_messages_one_terminal_report_per_chat_spawn).
+	ListSpawnResumeReportIDs(ctx context.Context, arg ListSpawnResumeReportIDsParams) ([]string, error)
 	// The spawn tool call behind each child thread in one chat, for the reconnect
 	// snapshot: it is what the background-work pill's cancel button addresses, and
 	// threads has no spawned_by_tool_call_id column to read it from.

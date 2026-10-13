@@ -73,7 +73,21 @@ func continueAsNewForLateWake(ctx workflow.Context, input WorkflowInput, thread 
 	// run, then take anything still buffered, before reading the count.
 	yieldToRunnableCoroutines(ctx)
 	absorbPendingWakes(ctx, tracker)
-	if !tracker.wakeSinceLastTurn(thread) {
+	rootWoken := tracker.wakeSinceLastTurn(thread)
+	// A message to a stopped sub-agent that this run, ending, did not resume
+	// is its successor's to resume (subagent_resume.go) — and the successor
+	// is resumed rather than started at graph entry, so its root waits on
+	// that agent before taking a turn.
+	if awaiting := stoppedAgentsAwaitingResume(ctx, input.ChatID, thread, tracker); len(awaiting) > 0 {
+		workflow.GetLogger(ctx).Info("[Workflow Runtime] A message is waiting for a stopped sub-agent; continuing as a run that resumes it",
+			"chatID", input.ChatID,
+			"thread", thread,
+			"agents", len(awaiting),
+			"rootWoken", rootWoken,
+		)
+		return workflow.NewContinueAsNewError(ctx, DynamicWorkflow, stoppedAgentsSuccessorInput(input, awaiting, tracker, rootWoken))
+	}
+	if !rootWoken {
 		return nil
 	}
 	if workflow.GetVersion(ctx, lateUserWakeChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
