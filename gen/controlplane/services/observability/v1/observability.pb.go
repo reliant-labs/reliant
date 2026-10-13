@@ -370,6 +370,63 @@ func (WorkloadMetric) EnumDescriptor() ([]byte, []int) {
 	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{5}
 }
 
+// QuotaState is what the gateway does with the org's telemetry right now.
+type ObservabilityQuotaState int32
+
+const (
+	ObservabilityQuotaState_OBSERVABILITY_QUOTA_STATE_UNSPECIFIED ObservabilityQuotaState = 0
+	// Under the allowance, or billed (funded) / exempt: nothing is dropped.
+	ObservabilityQuotaState_OBSERVABILITY_QUOTA_STATE_OK ObservabilityQuotaState = 1
+	// At or over 100% with no way to bill the overage: debug logs and routine
+	// traces are dropped; errors and metrics are kept.
+	ObservabilityQuotaState_OBSERVABILITY_QUOTA_STATE_OVER_100 ObservabilityQuotaState = 2
+	// At or over 150%: only error logs, error spans and metrics are kept.
+	ObservabilityQuotaState_OBSERVABILITY_QUOTA_STATE_OVER_150 ObservabilityQuotaState = 3
+)
+
+// Enum value maps for ObservabilityQuotaState.
+var (
+	ObservabilityQuotaState_name = map[int32]string{
+		0: "OBSERVABILITY_QUOTA_STATE_UNSPECIFIED",
+		1: "OBSERVABILITY_QUOTA_STATE_OK",
+		2: "OBSERVABILITY_QUOTA_STATE_OVER_100",
+		3: "OBSERVABILITY_QUOTA_STATE_OVER_150",
+	}
+	ObservabilityQuotaState_value = map[string]int32{
+		"OBSERVABILITY_QUOTA_STATE_UNSPECIFIED": 0,
+		"OBSERVABILITY_QUOTA_STATE_OK":          1,
+		"OBSERVABILITY_QUOTA_STATE_OVER_100":    2,
+		"OBSERVABILITY_QUOTA_STATE_OVER_150":    3,
+	}
+)
+
+func (x ObservabilityQuotaState) Enum() *ObservabilityQuotaState {
+	p := new(ObservabilityQuotaState)
+	*p = x
+	return p
+}
+
+func (x ObservabilityQuotaState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ObservabilityQuotaState) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_observability_v1_observability_proto_enumTypes[6].Descriptor()
+}
+
+func (ObservabilityQuotaState) Type() protoreflect.EnumType {
+	return &file_services_observability_v1_observability_proto_enumTypes[6]
+}
+
+func (x ObservabilityQuotaState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ObservabilityQuotaState.Descriptor instead.
+func (ObservabilityQuotaState) EnumDescriptor() ([]byte, []int) {
+	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{6}
+}
+
 // TimeRange is a half-open range [start, end). Both ends are required and
 // end must be after start; each RPC caps the length.
 type TimeRange struct {
@@ -4876,6 +4933,414 @@ func (x *DashboardAlert) GetNote() string {
 	return ""
 }
 
+type GetObservabilityUsageRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org whose usage to return. The caller must be a member.
+	OrgId         string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetObservabilityUsageRequest) Reset() {
+	*x = GetObservabilityUsageRequest{}
+	mi := &file_services_observability_v1_observability_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetObservabilityUsageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetObservabilityUsageRequest) ProtoMessage() {}
+
+func (x *GetObservabilityUsageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_observability_v1_observability_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetObservabilityUsageRequest.ProtoReflect.Descriptor instead.
+func (*GetObservabilityUsageRequest) Descriptor() ([]byte, []int) {
+	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *GetObservabilityUsageRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+type GetObservabilityUsageResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The billing period: the UTC calendar month. period_end is exclusive.
+	PeriodStart *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"`
+	PeriodEnd   *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	// The end of the last fully metered hour. Usage lags real time by up to
+	// about an hour and a quarter; the page must say so.
+	MeasuredThrough *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=measured_through,json=measuredThrough,proto3" json:"measured_through,omitempty"`
+	// Billed bytes this period (uncompressed bytes stored, after the browser cap),
+	// and the included allowance. 1 GB = 2^30 bytes in the product.
+	UsedBytes      int64 `protobuf:"varint,4,opt,name=used_bytes,json=usedBytes,proto3" json:"used_bytes,omitempty"`
+	AllowanceBytes int64 `protobuf:"varint,5,opt,name=allowance_bytes,json=allowanceBytes,proto3" json:"allowance_bytes,omitempty"`
+	// Overage accrued so far, and projected for the whole period at the current
+	// rate of use, in cents. Zero for an exempt org.
+	OverageCents          int64 `protobuf:"varint,6,opt,name=overage_cents,json=overageCents,proto3" json:"overage_cents,omitempty"`
+	ProjectedBytes        int64 `protobuf:"varint,7,opt,name=projected_bytes,json=projectedBytes,proto3" json:"projected_bytes,omitempty"`
+	ProjectedOverageCents int64 `protobuf:"varint,8,opt,name=projected_overage_cents,json=projectedOverageCents,proto3" json:"projected_overage_cents,omitempty"`
+	// Cents per GB above the allowance, as a decimal string ("25.0000").
+	RateCentsPerGb string `protobuf:"bytes,9,opt,name=rate_cents_per_gb,json=rateCentsPerGb,proto3" json:"rate_cents_per_gb,omitempty"`
+	// What the gateway enforces, and the state usage alone implies. They differ
+	// for an org that pays (enforced ok, usage over_100) or is exempt.
+	State      ObservabilityQuotaState `protobuf:"varint,10,opt,name=state,proto3,enum=controlplane.v1.ObservabilityQuotaState" json:"state,omitempty"`
+	UsageState ObservabilityQuotaState `protobuf:"varint,11,opt,name=usage_state,json=usageState,proto3,enum=controlplane.v1.ObservabilityQuotaState" json:"usage_state,omitempty"`
+	Funded     bool                    `protobuf:"varint,12,opt,name=funded,proto3" json:"funded,omitempty"`
+	Exempt     bool                    `protobuf:"varint,13,opt,name=exempt,proto3" json:"exempt,omitempty"`
+	// A funded org's overage is billed up to this many cents a month; at it the
+	// gateway degrades telemetry like an unfunded org.
+	SpendCapCents   int64 `protobuf:"varint,14,opt,name=spend_cap_cents,json=spendCapCents,proto3" json:"spend_cap_cents,omitempty"`
+	SpendCapReached bool  `protobuf:"varint,15,opt,name=spend_cap_reached,json=spendCapReached,proto3" json:"spend_cap_reached,omitempty"`
+	// Anonymous browser telemetry is billed only up to a share of the allowance.
+	BrowserBytes       int64           `protobuf:"varint,16,opt,name=browser_bytes,json=browserBytes,proto3" json:"browser_bytes,omitempty"`
+	BrowserBilledBytes int64           `protobuf:"varint,17,opt,name=browser_billed_bytes,json=browserBilledBytes,proto3" json:"browser_billed_bytes,omitempty"`
+	BrowserCapBytes    int64           `protobuf:"varint,18,opt,name=browser_cap_bytes,json=browserCapBytes,proto3" json:"browser_cap_bytes,omitempty"`
+	BySignal           []*SignalUsage  `protobuf:"bytes,19,rep,name=by_signal,json=bySignal,proto3" json:"by_signal,omitempty"`
+	ByService          []*ServiceUsage `protobuf:"bytes,20,rep,name=by_service,json=byService,proto3" json:"by_service,omitempty"`
+	// Bytes stored that were never billed because they are Reliant's own telemetry
+	// (workspace/daemon and platform logs). Zero for every customer in normal
+	// operation: that data is routed to Reliant's own org.
+	OperatorBytes int64 `protobuf:"varint,21,opt,name=operator_bytes,json=operatorBytes,proto3" json:"operator_bytes,omitempty"`
+	// Billed bytes that are customer metadata: per-workload container data about the
+	// org's own deployments (pod CPU and memory, restarts, k8s events, image and
+	// version). Billed like any other data and included in used_bytes; reported on
+	// its own line. Node- and cluster-level platform data ("infrastructure") is
+	// Reliant's own and is never billed.
+	MetadataBytes int64 `protobuf:"varint,22,opt,name=metadata_bytes,json=metadataBytes,proto3" json:"metadata_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetObservabilityUsageResponse) Reset() {
+	*x = GetObservabilityUsageResponse{}
+	mi := &file_services_observability_v1_observability_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetObservabilityUsageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetObservabilityUsageResponse) ProtoMessage() {}
+
+func (x *GetObservabilityUsageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_observability_v1_observability_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetObservabilityUsageResponse.ProtoReflect.Descriptor instead.
+func (*GetObservabilityUsageResponse) Descriptor() ([]byte, []int) {
+	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *GetObservabilityUsageResponse) GetPeriodStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodStart
+	}
+	return nil
+}
+
+func (x *GetObservabilityUsageResponse) GetPeriodEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodEnd
+	}
+	return nil
+}
+
+func (x *GetObservabilityUsageResponse) GetMeasuredThrough() *timestamppb.Timestamp {
+	if x != nil {
+		return x.MeasuredThrough
+	}
+	return nil
+}
+
+func (x *GetObservabilityUsageResponse) GetUsedBytes() int64 {
+	if x != nil {
+		return x.UsedBytes
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetAllowanceBytes() int64 {
+	if x != nil {
+		return x.AllowanceBytes
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetOverageCents() int64 {
+	if x != nil {
+		return x.OverageCents
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetProjectedBytes() int64 {
+	if x != nil {
+		return x.ProjectedBytes
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetProjectedOverageCents() int64 {
+	if x != nil {
+		return x.ProjectedOverageCents
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetRateCentsPerGb() string {
+	if x != nil {
+		return x.RateCentsPerGb
+	}
+	return ""
+}
+
+func (x *GetObservabilityUsageResponse) GetState() ObservabilityQuotaState {
+	if x != nil {
+		return x.State
+	}
+	return ObservabilityQuotaState_OBSERVABILITY_QUOTA_STATE_UNSPECIFIED
+}
+
+func (x *GetObservabilityUsageResponse) GetUsageState() ObservabilityQuotaState {
+	if x != nil {
+		return x.UsageState
+	}
+	return ObservabilityQuotaState_OBSERVABILITY_QUOTA_STATE_UNSPECIFIED
+}
+
+func (x *GetObservabilityUsageResponse) GetFunded() bool {
+	if x != nil {
+		return x.Funded
+	}
+	return false
+}
+
+func (x *GetObservabilityUsageResponse) GetExempt() bool {
+	if x != nil {
+		return x.Exempt
+	}
+	return false
+}
+
+func (x *GetObservabilityUsageResponse) GetSpendCapCents() int64 {
+	if x != nil {
+		return x.SpendCapCents
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetSpendCapReached() bool {
+	if x != nil {
+		return x.SpendCapReached
+	}
+	return false
+}
+
+func (x *GetObservabilityUsageResponse) GetBrowserBytes() int64 {
+	if x != nil {
+		return x.BrowserBytes
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetBrowserBilledBytes() int64 {
+	if x != nil {
+		return x.BrowserBilledBytes
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetBrowserCapBytes() int64 {
+	if x != nil {
+		return x.BrowserCapBytes
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetBySignal() []*SignalUsage {
+	if x != nil {
+		return x.BySignal
+	}
+	return nil
+}
+
+func (x *GetObservabilityUsageResponse) GetByService() []*ServiceUsage {
+	if x != nil {
+		return x.ByService
+	}
+	return nil
+}
+
+func (x *GetObservabilityUsageResponse) GetOperatorBytes() int64 {
+	if x != nil {
+		return x.OperatorBytes
+	}
+	return 0
+}
+
+func (x *GetObservabilityUsageResponse) GetMetadataBytes() int64 {
+	if x != nil {
+		return x.MetadataBytes
+	}
+	return 0
+}
+
+type SignalUsage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "logs", "traces", "metrics" or "profiles".
+	Signal        string `protobuf:"bytes,1,opt,name=signal,proto3" json:"signal,omitempty"`
+	BilledBytes   int64  `protobuf:"varint,2,opt,name=billed_bytes,json=billedBytes,proto3" json:"billed_bytes,omitempty"`
+	StoredBytes   int64  `protobuf:"varint,3,opt,name=stored_bytes,json=storedBytes,proto3" json:"stored_bytes,omitempty"`
+	Rows          int64  `protobuf:"varint,4,opt,name=rows,proto3" json:"rows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SignalUsage) Reset() {
+	*x = SignalUsage{}
+	mi := &file_services_observability_v1_observability_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SignalUsage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SignalUsage) ProtoMessage() {}
+
+func (x *SignalUsage) ProtoReflect() protoreflect.Message {
+	mi := &file_services_observability_v1_observability_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SignalUsage.ProtoReflect.Descriptor instead.
+func (*SignalUsage) Descriptor() ([]byte, []int) {
+	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *SignalUsage) GetSignal() string {
+	if x != nil {
+		return x.Signal
+	}
+	return ""
+}
+
+func (x *SignalUsage) GetBilledBytes() int64 {
+	if x != nil {
+		return x.BilledBytes
+	}
+	return 0
+}
+
+func (x *SignalUsage) GetStoredBytes() int64 {
+	if x != nil {
+		return x.StoredBytes
+	}
+	return 0
+}
+
+func (x *SignalUsage) GetRows() int64 {
+	if x != nil {
+		return x.Rows
+	}
+	return 0
+}
+
+type ServiceUsage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The service.name; empty for data that carried none.
+	Service       string `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
+	Signal        string `protobuf:"bytes,2,opt,name=signal,proto3" json:"signal,omitempty"`
+	BilledBytes   int64  `protobuf:"varint,3,opt,name=billed_bytes,json=billedBytes,proto3" json:"billed_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceUsage) Reset() {
+	*x = ServiceUsage{}
+	mi := &file_services_observability_v1_observability_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceUsage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceUsage) ProtoMessage() {}
+
+func (x *ServiceUsage) ProtoReflect() protoreflect.Message {
+	mi := &file_services_observability_v1_observability_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceUsage.ProtoReflect.Descriptor instead.
+func (*ServiceUsage) Descriptor() ([]byte, []int) {
+	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *ServiceUsage) GetService() string {
+	if x != nil {
+		return x.Service
+	}
+	return ""
+}
+
+func (x *ServiceUsage) GetSignal() string {
+	if x != nil {
+		return x.Signal
+	}
+	return ""
+}
+
+func (x *ServiceUsage) GetBilledBytes() int64 {
+	if x != nil {
+		return x.BilledBytes
+	}
+	return 0
+}
+
 var File_services_observability_v1_observability_proto protoreflect.FileDescriptor
 
 const file_services_observability_v1_observability_proto_rawDesc = "" +
@@ -5320,7 +5785,46 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x0ethreshold_type\x18\x05 \x01(\tR\rthresholdType\x12\x1c\n" +
 	"\tthreshold\x18\x06 \x01(\x01R\tthreshold\x12\x16\n" +
 	"\x06status\x18\a \x01(\tR\x06status\x12\x12\n" +
-	"\x04note\x18\b \x01(\tR\x04note*a\n" +
+	"\x04note\x18\b \x01(\tR\x04note\"5\n" +
+	"\x1cGetObservabilityUsageRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\xb2\b\n" +
+	"\x1dGetObservabilityUsageResponse\x12=\n" +
+	"\fperiod_start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
+	"\n" +
+	"period_end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12E\n" +
+	"\x10measured_through\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0fmeasuredThrough\x12\x1d\n" +
+	"\n" +
+	"used_bytes\x18\x04 \x01(\x03R\tusedBytes\x12'\n" +
+	"\x0fallowance_bytes\x18\x05 \x01(\x03R\x0eallowanceBytes\x12#\n" +
+	"\roverage_cents\x18\x06 \x01(\x03R\foverageCents\x12'\n" +
+	"\x0fprojected_bytes\x18\a \x01(\x03R\x0eprojectedBytes\x126\n" +
+	"\x17projected_overage_cents\x18\b \x01(\x03R\x15projectedOverageCents\x12)\n" +
+	"\x11rate_cents_per_gb\x18\t \x01(\tR\x0erateCentsPerGb\x12>\n" +
+	"\x05state\x18\n" +
+	" \x01(\x0e2(.controlplane.v1.ObservabilityQuotaStateR\x05state\x12I\n" +
+	"\vusage_state\x18\v \x01(\x0e2(.controlplane.v1.ObservabilityQuotaStateR\n" +
+	"usageState\x12\x16\n" +
+	"\x06funded\x18\f \x01(\bR\x06funded\x12\x16\n" +
+	"\x06exempt\x18\r \x01(\bR\x06exempt\x12&\n" +
+	"\x0fspend_cap_cents\x18\x0e \x01(\x03R\rspendCapCents\x12*\n" +
+	"\x11spend_cap_reached\x18\x0f \x01(\bR\x0fspendCapReached\x12#\n" +
+	"\rbrowser_bytes\x18\x10 \x01(\x03R\fbrowserBytes\x120\n" +
+	"\x14browser_billed_bytes\x18\x11 \x01(\x03R\x12browserBilledBytes\x12*\n" +
+	"\x11browser_cap_bytes\x18\x12 \x01(\x03R\x0fbrowserCapBytes\x129\n" +
+	"\tby_signal\x18\x13 \x03(\v2\x1c.controlplane.v1.SignalUsageR\bbySignal\x12<\n" +
+	"\n" +
+	"by_service\x18\x14 \x03(\v2\x1d.controlplane.v1.ServiceUsageR\tbyService\x12%\n" +
+	"\x0eoperator_bytes\x18\x15 \x01(\x03R\roperatorBytes\x12%\n" +
+	"\x0emetadata_bytes\x18\x16 \x01(\x03R\rmetadataBytes\"\x7f\n" +
+	"\vSignalUsage\x12\x16\n" +
+	"\x06signal\x18\x01 \x01(\tR\x06signal\x12!\n" +
+	"\fbilled_bytes\x18\x02 \x01(\x03R\vbilledBytes\x12!\n" +
+	"\fstored_bytes\x18\x03 \x01(\x03R\vstoredBytes\x12\x12\n" +
+	"\x04rows\x18\x04 \x01(\x03R\x04rows\"c\n" +
+	"\fServiceUsage\x12\x18\n" +
+	"\aservice\x18\x01 \x01(\tR\aservice\x12\x16\n" +
+	"\x06signal\x18\x02 \x01(\tR\x06signal\x12!\n" +
+	"\fbilled_bytes\x18\x03 \x01(\x03R\vbilledBytes*a\n" +
 	"\tSortOrder\x12\x1a\n" +
 	"\x16SORT_ORDER_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17SORT_ORDER_NEWEST_FIRST\x10\x01\x12\x1b\n" +
@@ -5364,7 +5868,12 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\"WORKLOAD_METRIC_MEMORY_WORKING_SET\x10\x04\x12,\n" +
 	"(WORKLOAD_METRIC_MEMORY_LIMIT_UTILIZATION\x10\x05\x12.\n" +
 	"*WORKLOAD_METRIC_MEMORY_REQUEST_UTILIZATION\x10\x06\x12\x1c\n" +
-	"\x18WORKLOAD_METRIC_RESTARTS\x10\a2\xfb\b\n" +
+	"\x18WORKLOAD_METRIC_RESTARTS\x10\a*\xb6\x01\n" +
+	"\x17ObservabilityQuotaState\x12)\n" +
+	"%OBSERVABILITY_QUOTA_STATE_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cOBSERVABILITY_QUOTA_STATE_OK\x10\x01\x12&\n" +
+	"\"OBSERVABILITY_QUOTA_STATE_OVER_100\x10\x02\x12&\n" +
+	"\"OBSERVABILITY_QUOTA_STATE_OVER_150\x10\x032\xf3\t\n" +
 	"\x14ObservabilityService\x12U\n" +
 	"\n" +
 	"SearchLogs\x12\".controlplane.v1.SearchLogsRequest\x1a#.controlplane.v1.SearchLogsResponse\x12U\n" +
@@ -5380,7 +5889,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x13ListAttributeValues\x12+.controlplane.v1.ListAttributeValuesRequest\x1a,.controlplane.v1.ListAttributeValuesResponse\x12^\n" +
 	"\rListWorkloads\x12%.controlplane.v1.ListWorkloadsRequest\x1a&.controlplane.v1.ListWorkloadsResponse\x12X\n" +
 	"\vGetWorkload\x12#.controlplane.v1.GetWorkloadRequest\x1a$.controlplane.v1.GetWorkloadResponse\x12^\n" +
-	"\rGetDashboards\x12%.controlplane.v1.GetDashboardsRequest\x1a&.controlplane.v1.GetDashboardsResponseB\xe1\x01\n" +
+	"\rGetDashboards\x12%.controlplane.v1.GetDashboardsRequest\x1a&.controlplane.v1.GetDashboardsResponse\x12v\n" +
+	"\x15GetObservabilityUsage\x12-.controlplane.v1.GetObservabilityUsageRequest\x1a..controlplane.v1.GetObservabilityUsageResponseB\xe1\x01\n" +
 	"\x13com.controlplane.v1B\x12ObservabilityProtoP\x01ZYgithub.com/reliant-labs/reliant/gen/controlplane/services/observability/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -5395,199 +5905,213 @@ func file_services_observability_v1_observability_proto_rawDescGZIP() []byte {
 	return file_services_observability_v1_observability_proto_rawDescData
 }
 
-var file_services_observability_v1_observability_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_services_observability_v1_observability_proto_msgTypes = make([]protoimpl.MessageInfo, 66)
+var file_services_observability_v1_observability_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_services_observability_v1_observability_proto_msgTypes = make([]protoimpl.MessageInfo, 70)
 var file_services_observability_v1_observability_proto_goTypes = []any{
-	(SortOrder)(0),                      // 0: controlplane.v1.SortOrder
-	(AttributeOp)(0),                    // 1: controlplane.v1.AttributeOp
-	(MetricType)(0),                     // 2: controlplane.v1.MetricType
-	(MetricAggregation)(0),              // 3: controlplane.v1.MetricAggregation
-	(Signal)(0),                         // 4: controlplane.v1.Signal
-	(WorkloadMetric)(0),                 // 5: controlplane.v1.WorkloadMetric
-	(*TimeRange)(nil),                   // 6: controlplane.v1.TimeRange
-	(*QueryScope)(nil),                  // 7: controlplane.v1.QueryScope
-	(*AttributeFilter)(nil),             // 8: controlplane.v1.AttributeFilter
-	(*TimePoint)(nil),                   // 9: controlplane.v1.TimePoint
-	(*SearchLogsRequest)(nil),           // 10: controlplane.v1.SearchLogsRequest
-	(*SearchLogsResponse)(nil),          // 11: controlplane.v1.SearchLogsResponse
-	(*LogRecord)(nil),                   // 12: controlplane.v1.LogRecord
-	(*ListTracesRequest)(nil),           // 13: controlplane.v1.ListTracesRequest
-	(*ListTracesResponse)(nil),          // 14: controlplane.v1.ListTracesResponse
-	(*TraceRedGroup)(nil),               // 15: controlplane.v1.TraceRedGroup
-	(*TraceSummary)(nil),                // 16: controlplane.v1.TraceSummary
-	(*TraceRedSummary)(nil),             // 17: controlplane.v1.TraceRedSummary
-	(*GetTraceRequest)(nil),             // 18: controlplane.v1.GetTraceRequest
-	(*GetTraceResponse)(nil),            // 19: controlplane.v1.GetTraceResponse
-	(*Span)(nil),                        // 20: controlplane.v1.Span
-	(*SpanEvent)(nil),                   // 21: controlplane.v1.SpanEvent
-	(*SpanLink)(nil),                    // 22: controlplane.v1.SpanLink
-	(*ListMetricsRequest)(nil),          // 23: controlplane.v1.ListMetricsRequest
-	(*ListMetricsResponse)(nil),         // 24: controlplane.v1.ListMetricsResponse
-	(*MetricInfo)(nil),                  // 25: controlplane.v1.MetricInfo
-	(*QueryMetricRequest)(nil),          // 26: controlplane.v1.QueryMetricRequest
-	(*QueryMetricResponse)(nil),         // 27: controlplane.v1.QueryMetricResponse
-	(*MetricSeries)(nil),                // 28: controlplane.v1.MetricSeries
-	(*GetServiceOverviewRequest)(nil),   // 29: controlplane.v1.GetServiceOverviewRequest
-	(*GetServiceOverviewResponse)(nil),  // 30: controlplane.v1.GetServiceOverviewResponse
-	(*ServiceOverview)(nil),             // 31: controlplane.v1.ServiceOverview
-	(*GetFlamegraphRequest)(nil),        // 32: controlplane.v1.GetFlamegraphRequest
-	(*GetFlamegraphResponse)(nil),       // 33: controlplane.v1.GetFlamegraphResponse
-	(*ListAttributeValuesRequest)(nil),  // 34: controlplane.v1.ListAttributeValuesRequest
-	(*ListAttributeValuesResponse)(nil), // 35: controlplane.v1.ListAttributeValuesResponse
-	(*AttributeValue)(nil),              // 36: controlplane.v1.AttributeValue
-	(*ListWorkloadsRequest)(nil),        // 37: controlplane.v1.ListWorkloadsRequest
-	(*ListWorkloadsResponse)(nil),       // 38: controlplane.v1.ListWorkloadsResponse
-	(*Workload)(nil),                    // 39: controlplane.v1.Workload
-	(*WorkloadContainer)(nil),           // 40: controlplane.v1.WorkloadContainer
-	(*ResourceUsage)(nil),               // 41: controlplane.v1.ResourceUsage
-	(*WorkloadEvent)(nil),               // 42: controlplane.v1.WorkloadEvent
-	(*GetWorkloadRequest)(nil),          // 43: controlplane.v1.GetWorkloadRequest
-	(*GetWorkloadResponse)(nil),         // 44: controlplane.v1.GetWorkloadResponse
-	(*WorkloadSeries)(nil),              // 45: controlplane.v1.WorkloadSeries
-	(*ImageChange)(nil),                 // 46: controlplane.v1.ImageChange
-	(*VersionChange)(nil),               // 47: controlplane.v1.VersionChange
-	(*QueryPanelRequest)(nil),           // 48: controlplane.v1.QueryPanelRequest
-	(*QueryPanelResponse)(nil),          // 49: controlplane.v1.QueryPanelResponse
-	(*PanelSeriesResult)(nil),           // 50: controlplane.v1.PanelSeriesResult
-	(*PanelTableRow)(nil),               // 51: controlplane.v1.PanelTableRow
-	(*GetDashboardsRequest)(nil),        // 52: controlplane.v1.GetDashboardsRequest
-	(*GetDashboardsResponse)(nil),       // 53: controlplane.v1.GetDashboardsResponse
-	(*DashboardSpec)(nil),               // 54: controlplane.v1.DashboardSpec
-	(*Dashboard)(nil),                   // 55: controlplane.v1.Dashboard
-	(*DashboardFilter)(nil),             // 56: controlplane.v1.DashboardFilter
-	(*Panel)(nil),                       // 57: controlplane.v1.Panel
-	(*PanelSeries)(nil),                 // 58: controlplane.v1.PanelSeries
-	(*PanelPredicate)(nil),              // 59: controlplane.v1.PanelPredicate
-	(*SavedSearch)(nil),                 // 60: controlplane.v1.SavedSearch
-	(*DashboardAlert)(nil),              // 61: controlplane.v1.DashboardAlert
-	nil,                                 // 62: controlplane.v1.LogRecord.AttributesEntry
-	nil,                                 // 63: controlplane.v1.LogRecord.ResourceAttributesEntry
-	nil,                                 // 64: controlplane.v1.TraceRedGroup.GroupEntry
-	nil,                                 // 65: controlplane.v1.Span.AttributesEntry
-	nil,                                 // 66: controlplane.v1.Span.ResourceAttributesEntry
-	nil,                                 // 67: controlplane.v1.SpanEvent.AttributesEntry
-	nil,                                 // 68: controlplane.v1.MetricSeries.LabelsEntry
-	nil,                                 // 69: controlplane.v1.ServiceOverview.GroupEntry
-	nil,                                 // 70: controlplane.v1.PanelSeriesResult.GroupEntry
-	nil,                                 // 71: controlplane.v1.PanelTableRow.GroupEntry
-	(*timestamppb.Timestamp)(nil),       // 72: google.protobuf.Timestamp
+	(SortOrder)(0),                        // 0: controlplane.v1.SortOrder
+	(AttributeOp)(0),                      // 1: controlplane.v1.AttributeOp
+	(MetricType)(0),                       // 2: controlplane.v1.MetricType
+	(MetricAggregation)(0),                // 3: controlplane.v1.MetricAggregation
+	(Signal)(0),                           // 4: controlplane.v1.Signal
+	(WorkloadMetric)(0),                   // 5: controlplane.v1.WorkloadMetric
+	(ObservabilityQuotaState)(0),          // 6: controlplane.v1.ObservabilityQuotaState
+	(*TimeRange)(nil),                     // 7: controlplane.v1.TimeRange
+	(*QueryScope)(nil),                    // 8: controlplane.v1.QueryScope
+	(*AttributeFilter)(nil),               // 9: controlplane.v1.AttributeFilter
+	(*TimePoint)(nil),                     // 10: controlplane.v1.TimePoint
+	(*SearchLogsRequest)(nil),             // 11: controlplane.v1.SearchLogsRequest
+	(*SearchLogsResponse)(nil),            // 12: controlplane.v1.SearchLogsResponse
+	(*LogRecord)(nil),                     // 13: controlplane.v1.LogRecord
+	(*ListTracesRequest)(nil),             // 14: controlplane.v1.ListTracesRequest
+	(*ListTracesResponse)(nil),            // 15: controlplane.v1.ListTracesResponse
+	(*TraceRedGroup)(nil),                 // 16: controlplane.v1.TraceRedGroup
+	(*TraceSummary)(nil),                  // 17: controlplane.v1.TraceSummary
+	(*TraceRedSummary)(nil),               // 18: controlplane.v1.TraceRedSummary
+	(*GetTraceRequest)(nil),               // 19: controlplane.v1.GetTraceRequest
+	(*GetTraceResponse)(nil),              // 20: controlplane.v1.GetTraceResponse
+	(*Span)(nil),                          // 21: controlplane.v1.Span
+	(*SpanEvent)(nil),                     // 22: controlplane.v1.SpanEvent
+	(*SpanLink)(nil),                      // 23: controlplane.v1.SpanLink
+	(*ListMetricsRequest)(nil),            // 24: controlplane.v1.ListMetricsRequest
+	(*ListMetricsResponse)(nil),           // 25: controlplane.v1.ListMetricsResponse
+	(*MetricInfo)(nil),                    // 26: controlplane.v1.MetricInfo
+	(*QueryMetricRequest)(nil),            // 27: controlplane.v1.QueryMetricRequest
+	(*QueryMetricResponse)(nil),           // 28: controlplane.v1.QueryMetricResponse
+	(*MetricSeries)(nil),                  // 29: controlplane.v1.MetricSeries
+	(*GetServiceOverviewRequest)(nil),     // 30: controlplane.v1.GetServiceOverviewRequest
+	(*GetServiceOverviewResponse)(nil),    // 31: controlplane.v1.GetServiceOverviewResponse
+	(*ServiceOverview)(nil),               // 32: controlplane.v1.ServiceOverview
+	(*GetFlamegraphRequest)(nil),          // 33: controlplane.v1.GetFlamegraphRequest
+	(*GetFlamegraphResponse)(nil),         // 34: controlplane.v1.GetFlamegraphResponse
+	(*ListAttributeValuesRequest)(nil),    // 35: controlplane.v1.ListAttributeValuesRequest
+	(*ListAttributeValuesResponse)(nil),   // 36: controlplane.v1.ListAttributeValuesResponse
+	(*AttributeValue)(nil),                // 37: controlplane.v1.AttributeValue
+	(*ListWorkloadsRequest)(nil),          // 38: controlplane.v1.ListWorkloadsRequest
+	(*ListWorkloadsResponse)(nil),         // 39: controlplane.v1.ListWorkloadsResponse
+	(*Workload)(nil),                      // 40: controlplane.v1.Workload
+	(*WorkloadContainer)(nil),             // 41: controlplane.v1.WorkloadContainer
+	(*ResourceUsage)(nil),                 // 42: controlplane.v1.ResourceUsage
+	(*WorkloadEvent)(nil),                 // 43: controlplane.v1.WorkloadEvent
+	(*GetWorkloadRequest)(nil),            // 44: controlplane.v1.GetWorkloadRequest
+	(*GetWorkloadResponse)(nil),           // 45: controlplane.v1.GetWorkloadResponse
+	(*WorkloadSeries)(nil),                // 46: controlplane.v1.WorkloadSeries
+	(*ImageChange)(nil),                   // 47: controlplane.v1.ImageChange
+	(*VersionChange)(nil),                 // 48: controlplane.v1.VersionChange
+	(*QueryPanelRequest)(nil),             // 49: controlplane.v1.QueryPanelRequest
+	(*QueryPanelResponse)(nil),            // 50: controlplane.v1.QueryPanelResponse
+	(*PanelSeriesResult)(nil),             // 51: controlplane.v1.PanelSeriesResult
+	(*PanelTableRow)(nil),                 // 52: controlplane.v1.PanelTableRow
+	(*GetDashboardsRequest)(nil),          // 53: controlplane.v1.GetDashboardsRequest
+	(*GetDashboardsResponse)(nil),         // 54: controlplane.v1.GetDashboardsResponse
+	(*DashboardSpec)(nil),                 // 55: controlplane.v1.DashboardSpec
+	(*Dashboard)(nil),                     // 56: controlplane.v1.Dashboard
+	(*DashboardFilter)(nil),               // 57: controlplane.v1.DashboardFilter
+	(*Panel)(nil),                         // 58: controlplane.v1.Panel
+	(*PanelSeries)(nil),                   // 59: controlplane.v1.PanelSeries
+	(*PanelPredicate)(nil),                // 60: controlplane.v1.PanelPredicate
+	(*SavedSearch)(nil),                   // 61: controlplane.v1.SavedSearch
+	(*DashboardAlert)(nil),                // 62: controlplane.v1.DashboardAlert
+	(*GetObservabilityUsageRequest)(nil),  // 63: controlplane.v1.GetObservabilityUsageRequest
+	(*GetObservabilityUsageResponse)(nil), // 64: controlplane.v1.GetObservabilityUsageResponse
+	(*SignalUsage)(nil),                   // 65: controlplane.v1.SignalUsage
+	(*ServiceUsage)(nil),                  // 66: controlplane.v1.ServiceUsage
+	nil,                                   // 67: controlplane.v1.LogRecord.AttributesEntry
+	nil,                                   // 68: controlplane.v1.LogRecord.ResourceAttributesEntry
+	nil,                                   // 69: controlplane.v1.TraceRedGroup.GroupEntry
+	nil,                                   // 70: controlplane.v1.Span.AttributesEntry
+	nil,                                   // 71: controlplane.v1.Span.ResourceAttributesEntry
+	nil,                                   // 72: controlplane.v1.SpanEvent.AttributesEntry
+	nil,                                   // 73: controlplane.v1.MetricSeries.LabelsEntry
+	nil,                                   // 74: controlplane.v1.ServiceOverview.GroupEntry
+	nil,                                   // 75: controlplane.v1.PanelSeriesResult.GroupEntry
+	nil,                                   // 76: controlplane.v1.PanelTableRow.GroupEntry
+	(*timestamppb.Timestamp)(nil),         // 77: google.protobuf.Timestamp
 }
 var file_services_observability_v1_observability_proto_depIdxs = []int32{
-	72, // 0: controlplane.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
-	72, // 1: controlplane.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
-	6,  // 2: controlplane.v1.QueryScope.time_range:type_name -> controlplane.v1.TimeRange
-	8,  // 3: controlplane.v1.QueryScope.filters:type_name -> controlplane.v1.AttributeFilter
-	1,  // 4: controlplane.v1.AttributeFilter.op:type_name -> controlplane.v1.AttributeOp
-	72, // 5: controlplane.v1.TimePoint.time:type_name -> google.protobuf.Timestamp
-	7,  // 6: controlplane.v1.SearchLogsRequest.scope:type_name -> controlplane.v1.QueryScope
-	0,  // 7: controlplane.v1.SearchLogsRequest.order:type_name -> controlplane.v1.SortOrder
-	12, // 8: controlplane.v1.SearchLogsResponse.logs:type_name -> controlplane.v1.LogRecord
-	72, // 9: controlplane.v1.LogRecord.timestamp:type_name -> google.protobuf.Timestamp
-	62, // 10: controlplane.v1.LogRecord.attributes:type_name -> controlplane.v1.LogRecord.AttributesEntry
-	63, // 11: controlplane.v1.LogRecord.resource_attributes:type_name -> controlplane.v1.LogRecord.ResourceAttributesEntry
-	7,  // 12: controlplane.v1.ListTracesRequest.scope:type_name -> controlplane.v1.QueryScope
-	16, // 13: controlplane.v1.ListTracesResponse.traces:type_name -> controlplane.v1.TraceSummary
-	17, // 14: controlplane.v1.ListTracesResponse.red:type_name -> controlplane.v1.TraceRedSummary
-	15, // 15: controlplane.v1.ListTracesResponse.red_groups:type_name -> controlplane.v1.TraceRedGroup
-	64, // 16: controlplane.v1.TraceRedGroup.group:type_name -> controlplane.v1.TraceRedGroup.GroupEntry
-	17, // 17: controlplane.v1.TraceRedGroup.red:type_name -> controlplane.v1.TraceRedSummary
-	72, // 18: controlplane.v1.TraceSummary.start_time:type_name -> google.protobuf.Timestamp
-	7,  // 19: controlplane.v1.GetTraceRequest.scope:type_name -> controlplane.v1.QueryScope
-	20, // 20: controlplane.v1.GetTraceResponse.spans:type_name -> controlplane.v1.Span
-	72, // 21: controlplane.v1.Span.start_time:type_name -> google.protobuf.Timestamp
-	65, // 22: controlplane.v1.Span.attributes:type_name -> controlplane.v1.Span.AttributesEntry
-	66, // 23: controlplane.v1.Span.resource_attributes:type_name -> controlplane.v1.Span.ResourceAttributesEntry
-	21, // 24: controlplane.v1.Span.events:type_name -> controlplane.v1.SpanEvent
-	22, // 25: controlplane.v1.Span.links:type_name -> controlplane.v1.SpanLink
-	72, // 26: controlplane.v1.SpanEvent.time:type_name -> google.protobuf.Timestamp
-	67, // 27: controlplane.v1.SpanEvent.attributes:type_name -> controlplane.v1.SpanEvent.AttributesEntry
-	7,  // 28: controlplane.v1.ListMetricsRequest.scope:type_name -> controlplane.v1.QueryScope
-	25, // 29: controlplane.v1.ListMetricsResponse.metrics:type_name -> controlplane.v1.MetricInfo
-	2,  // 30: controlplane.v1.MetricInfo.type:type_name -> controlplane.v1.MetricType
-	7,  // 31: controlplane.v1.QueryMetricRequest.scope:type_name -> controlplane.v1.QueryScope
-	2,  // 32: controlplane.v1.QueryMetricRequest.metric_type:type_name -> controlplane.v1.MetricType
-	3,  // 33: controlplane.v1.QueryMetricRequest.aggregation:type_name -> controlplane.v1.MetricAggregation
-	28, // 34: controlplane.v1.QueryMetricResponse.series:type_name -> controlplane.v1.MetricSeries
-	2,  // 35: controlplane.v1.QueryMetricResponse.metric_type:type_name -> controlplane.v1.MetricType
-	3,  // 36: controlplane.v1.QueryMetricResponse.aggregation:type_name -> controlplane.v1.MetricAggregation
-	68, // 37: controlplane.v1.MetricSeries.labels:type_name -> controlplane.v1.MetricSeries.LabelsEntry
-	9,  // 38: controlplane.v1.MetricSeries.points:type_name -> controlplane.v1.TimePoint
-	7,  // 39: controlplane.v1.GetServiceOverviewRequest.scope:type_name -> controlplane.v1.QueryScope
-	31, // 40: controlplane.v1.GetServiceOverviewResponse.services:type_name -> controlplane.v1.ServiceOverview
-	9,  // 41: controlplane.v1.ServiceOverview.request_trend:type_name -> controlplane.v1.TimePoint
-	9,  // 42: controlplane.v1.ServiceOverview.error_trend:type_name -> controlplane.v1.TimePoint
-	69, // 43: controlplane.v1.ServiceOverview.group:type_name -> controlplane.v1.ServiceOverview.GroupEntry
-	7,  // 44: controlplane.v1.GetFlamegraphRequest.scope:type_name -> controlplane.v1.QueryScope
-	7,  // 45: controlplane.v1.ListAttributeValuesRequest.scope:type_name -> controlplane.v1.QueryScope
-	4,  // 46: controlplane.v1.ListAttributeValuesRequest.signal:type_name -> controlplane.v1.Signal
-	36, // 47: controlplane.v1.ListAttributeValuesResponse.values:type_name -> controlplane.v1.AttributeValue
-	7,  // 48: controlplane.v1.ListWorkloadsRequest.scope:type_name -> controlplane.v1.QueryScope
-	39, // 49: controlplane.v1.ListWorkloadsResponse.workloads:type_name -> controlplane.v1.Workload
-	40, // 50: controlplane.v1.Workload.containers:type_name -> controlplane.v1.WorkloadContainer
-	42, // 51: controlplane.v1.Workload.latest_warning:type_name -> controlplane.v1.WorkloadEvent
-	72, // 52: controlplane.v1.WorkloadContainer.last_terminated_at:type_name -> google.protobuf.Timestamp
-	41, // 53: controlplane.v1.WorkloadContainer.cpu:type_name -> controlplane.v1.ResourceUsage
-	41, // 54: controlplane.v1.WorkloadContainer.memory:type_name -> controlplane.v1.ResourceUsage
-	72, // 55: controlplane.v1.WorkloadEvent.time:type_name -> google.protobuf.Timestamp
-	7,  // 56: controlplane.v1.GetWorkloadRequest.scope:type_name -> controlplane.v1.QueryScope
-	45, // 57: controlplane.v1.GetWorkloadResponse.series:type_name -> controlplane.v1.WorkloadSeries
-	42, // 58: controlplane.v1.GetWorkloadResponse.events:type_name -> controlplane.v1.WorkloadEvent
-	46, // 59: controlplane.v1.GetWorkloadResponse.image_changes:type_name -> controlplane.v1.ImageChange
-	47, // 60: controlplane.v1.GetWorkloadResponse.version_changes:type_name -> controlplane.v1.VersionChange
-	5,  // 61: controlplane.v1.WorkloadSeries.metric:type_name -> controlplane.v1.WorkloadMetric
-	9,  // 62: controlplane.v1.WorkloadSeries.points:type_name -> controlplane.v1.TimePoint
-	72, // 63: controlplane.v1.ImageChange.first_seen:type_name -> google.protobuf.Timestamp
-	72, // 64: controlplane.v1.ImageChange.last_seen:type_name -> google.protobuf.Timestamp
-	72, // 65: controlplane.v1.VersionChange.first_seen:type_name -> google.protobuf.Timestamp
-	72, // 66: controlplane.v1.VersionChange.last_seen:type_name -> google.protobuf.Timestamp
-	7,  // 67: controlplane.v1.QueryPanelRequest.scope:type_name -> controlplane.v1.QueryScope
-	57, // 68: controlplane.v1.QueryPanelRequest.panel:type_name -> controlplane.v1.Panel
-	59, // 69: controlplane.v1.QueryPanelRequest.filters:type_name -> controlplane.v1.PanelPredicate
-	50, // 70: controlplane.v1.QueryPanelResponse.series:type_name -> controlplane.v1.PanelSeriesResult
-	51, // 71: controlplane.v1.QueryPanelResponse.rows:type_name -> controlplane.v1.PanelTableRow
-	70, // 72: controlplane.v1.PanelSeriesResult.group:type_name -> controlplane.v1.PanelSeriesResult.GroupEntry
-	9,  // 73: controlplane.v1.PanelSeriesResult.points:type_name -> controlplane.v1.TimePoint
-	71, // 74: controlplane.v1.PanelTableRow.group:type_name -> controlplane.v1.PanelTableRow.GroupEntry
-	7,  // 75: controlplane.v1.GetDashboardsRequest.scope:type_name -> controlplane.v1.QueryScope
-	54, // 76: controlplane.v1.GetDashboardsResponse.spec:type_name -> controlplane.v1.DashboardSpec
-	55, // 77: controlplane.v1.DashboardSpec.dashboards:type_name -> controlplane.v1.Dashboard
-	60, // 78: controlplane.v1.DashboardSpec.saved_searches:type_name -> controlplane.v1.SavedSearch
-	61, // 79: controlplane.v1.DashboardSpec.alerts:type_name -> controlplane.v1.DashboardAlert
-	56, // 80: controlplane.v1.Dashboard.filters:type_name -> controlplane.v1.DashboardFilter
-	57, // 81: controlplane.v1.Dashboard.panels:type_name -> controlplane.v1.Panel
-	58, // 82: controlplane.v1.Panel.series:type_name -> controlplane.v1.PanelSeries
-	59, // 83: controlplane.v1.Panel.where:type_name -> controlplane.v1.PanelPredicate
-	59, // 84: controlplane.v1.PanelSeries.where:type_name -> controlplane.v1.PanelPredicate
-	59, // 85: controlplane.v1.SavedSearch.where:type_name -> controlplane.v1.PanelPredicate
-	10, // 86: controlplane.v1.ObservabilityService.SearchLogs:input_type -> controlplane.v1.SearchLogsRequest
-	13, // 87: controlplane.v1.ObservabilityService.ListTraces:input_type -> controlplane.v1.ListTracesRequest
-	18, // 88: controlplane.v1.ObservabilityService.GetTrace:input_type -> controlplane.v1.GetTraceRequest
-	23, // 89: controlplane.v1.ObservabilityService.ListMetrics:input_type -> controlplane.v1.ListMetricsRequest
-	26, // 90: controlplane.v1.ObservabilityService.QueryMetric:input_type -> controlplane.v1.QueryMetricRequest
-	29, // 91: controlplane.v1.ObservabilityService.GetServiceOverview:input_type -> controlplane.v1.GetServiceOverviewRequest
-	32, // 92: controlplane.v1.ObservabilityService.GetFlamegraph:input_type -> controlplane.v1.GetFlamegraphRequest
-	48, // 93: controlplane.v1.ObservabilityService.QueryPanel:input_type -> controlplane.v1.QueryPanelRequest
-	34, // 94: controlplane.v1.ObservabilityService.ListAttributeValues:input_type -> controlplane.v1.ListAttributeValuesRequest
-	37, // 95: controlplane.v1.ObservabilityService.ListWorkloads:input_type -> controlplane.v1.ListWorkloadsRequest
-	43, // 96: controlplane.v1.ObservabilityService.GetWorkload:input_type -> controlplane.v1.GetWorkloadRequest
-	52, // 97: controlplane.v1.ObservabilityService.GetDashboards:input_type -> controlplane.v1.GetDashboardsRequest
-	11, // 98: controlplane.v1.ObservabilityService.SearchLogs:output_type -> controlplane.v1.SearchLogsResponse
-	14, // 99: controlplane.v1.ObservabilityService.ListTraces:output_type -> controlplane.v1.ListTracesResponse
-	19, // 100: controlplane.v1.ObservabilityService.GetTrace:output_type -> controlplane.v1.GetTraceResponse
-	24, // 101: controlplane.v1.ObservabilityService.ListMetrics:output_type -> controlplane.v1.ListMetricsResponse
-	27, // 102: controlplane.v1.ObservabilityService.QueryMetric:output_type -> controlplane.v1.QueryMetricResponse
-	30, // 103: controlplane.v1.ObservabilityService.GetServiceOverview:output_type -> controlplane.v1.GetServiceOverviewResponse
-	33, // 104: controlplane.v1.ObservabilityService.GetFlamegraph:output_type -> controlplane.v1.GetFlamegraphResponse
-	49, // 105: controlplane.v1.ObservabilityService.QueryPanel:output_type -> controlplane.v1.QueryPanelResponse
-	35, // 106: controlplane.v1.ObservabilityService.ListAttributeValues:output_type -> controlplane.v1.ListAttributeValuesResponse
-	38, // 107: controlplane.v1.ObservabilityService.ListWorkloads:output_type -> controlplane.v1.ListWorkloadsResponse
-	44, // 108: controlplane.v1.ObservabilityService.GetWorkload:output_type -> controlplane.v1.GetWorkloadResponse
-	53, // 109: controlplane.v1.ObservabilityService.GetDashboards:output_type -> controlplane.v1.GetDashboardsResponse
-	98, // [98:110] is the sub-list for method output_type
-	86, // [86:98] is the sub-list for method input_type
-	86, // [86:86] is the sub-list for extension type_name
-	86, // [86:86] is the sub-list for extension extendee
-	0,  // [0:86] is the sub-list for field type_name
+	77,  // 0: controlplane.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
+	77,  // 1: controlplane.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
+	7,   // 2: controlplane.v1.QueryScope.time_range:type_name -> controlplane.v1.TimeRange
+	9,   // 3: controlplane.v1.QueryScope.filters:type_name -> controlplane.v1.AttributeFilter
+	1,   // 4: controlplane.v1.AttributeFilter.op:type_name -> controlplane.v1.AttributeOp
+	77,  // 5: controlplane.v1.TimePoint.time:type_name -> google.protobuf.Timestamp
+	8,   // 6: controlplane.v1.SearchLogsRequest.scope:type_name -> controlplane.v1.QueryScope
+	0,   // 7: controlplane.v1.SearchLogsRequest.order:type_name -> controlplane.v1.SortOrder
+	13,  // 8: controlplane.v1.SearchLogsResponse.logs:type_name -> controlplane.v1.LogRecord
+	77,  // 9: controlplane.v1.LogRecord.timestamp:type_name -> google.protobuf.Timestamp
+	67,  // 10: controlplane.v1.LogRecord.attributes:type_name -> controlplane.v1.LogRecord.AttributesEntry
+	68,  // 11: controlplane.v1.LogRecord.resource_attributes:type_name -> controlplane.v1.LogRecord.ResourceAttributesEntry
+	8,   // 12: controlplane.v1.ListTracesRequest.scope:type_name -> controlplane.v1.QueryScope
+	17,  // 13: controlplane.v1.ListTracesResponse.traces:type_name -> controlplane.v1.TraceSummary
+	18,  // 14: controlplane.v1.ListTracesResponse.red:type_name -> controlplane.v1.TraceRedSummary
+	16,  // 15: controlplane.v1.ListTracesResponse.red_groups:type_name -> controlplane.v1.TraceRedGroup
+	69,  // 16: controlplane.v1.TraceRedGroup.group:type_name -> controlplane.v1.TraceRedGroup.GroupEntry
+	18,  // 17: controlplane.v1.TraceRedGroup.red:type_name -> controlplane.v1.TraceRedSummary
+	77,  // 18: controlplane.v1.TraceSummary.start_time:type_name -> google.protobuf.Timestamp
+	8,   // 19: controlplane.v1.GetTraceRequest.scope:type_name -> controlplane.v1.QueryScope
+	21,  // 20: controlplane.v1.GetTraceResponse.spans:type_name -> controlplane.v1.Span
+	77,  // 21: controlplane.v1.Span.start_time:type_name -> google.protobuf.Timestamp
+	70,  // 22: controlplane.v1.Span.attributes:type_name -> controlplane.v1.Span.AttributesEntry
+	71,  // 23: controlplane.v1.Span.resource_attributes:type_name -> controlplane.v1.Span.ResourceAttributesEntry
+	22,  // 24: controlplane.v1.Span.events:type_name -> controlplane.v1.SpanEvent
+	23,  // 25: controlplane.v1.Span.links:type_name -> controlplane.v1.SpanLink
+	77,  // 26: controlplane.v1.SpanEvent.time:type_name -> google.protobuf.Timestamp
+	72,  // 27: controlplane.v1.SpanEvent.attributes:type_name -> controlplane.v1.SpanEvent.AttributesEntry
+	8,   // 28: controlplane.v1.ListMetricsRequest.scope:type_name -> controlplane.v1.QueryScope
+	26,  // 29: controlplane.v1.ListMetricsResponse.metrics:type_name -> controlplane.v1.MetricInfo
+	2,   // 30: controlplane.v1.MetricInfo.type:type_name -> controlplane.v1.MetricType
+	8,   // 31: controlplane.v1.QueryMetricRequest.scope:type_name -> controlplane.v1.QueryScope
+	2,   // 32: controlplane.v1.QueryMetricRequest.metric_type:type_name -> controlplane.v1.MetricType
+	3,   // 33: controlplane.v1.QueryMetricRequest.aggregation:type_name -> controlplane.v1.MetricAggregation
+	29,  // 34: controlplane.v1.QueryMetricResponse.series:type_name -> controlplane.v1.MetricSeries
+	2,   // 35: controlplane.v1.QueryMetricResponse.metric_type:type_name -> controlplane.v1.MetricType
+	3,   // 36: controlplane.v1.QueryMetricResponse.aggregation:type_name -> controlplane.v1.MetricAggregation
+	73,  // 37: controlplane.v1.MetricSeries.labels:type_name -> controlplane.v1.MetricSeries.LabelsEntry
+	10,  // 38: controlplane.v1.MetricSeries.points:type_name -> controlplane.v1.TimePoint
+	8,   // 39: controlplane.v1.GetServiceOverviewRequest.scope:type_name -> controlplane.v1.QueryScope
+	32,  // 40: controlplane.v1.GetServiceOverviewResponse.services:type_name -> controlplane.v1.ServiceOverview
+	10,  // 41: controlplane.v1.ServiceOverview.request_trend:type_name -> controlplane.v1.TimePoint
+	10,  // 42: controlplane.v1.ServiceOverview.error_trend:type_name -> controlplane.v1.TimePoint
+	74,  // 43: controlplane.v1.ServiceOverview.group:type_name -> controlplane.v1.ServiceOverview.GroupEntry
+	8,   // 44: controlplane.v1.GetFlamegraphRequest.scope:type_name -> controlplane.v1.QueryScope
+	8,   // 45: controlplane.v1.ListAttributeValuesRequest.scope:type_name -> controlplane.v1.QueryScope
+	4,   // 46: controlplane.v1.ListAttributeValuesRequest.signal:type_name -> controlplane.v1.Signal
+	37,  // 47: controlplane.v1.ListAttributeValuesResponse.values:type_name -> controlplane.v1.AttributeValue
+	8,   // 48: controlplane.v1.ListWorkloadsRequest.scope:type_name -> controlplane.v1.QueryScope
+	40,  // 49: controlplane.v1.ListWorkloadsResponse.workloads:type_name -> controlplane.v1.Workload
+	41,  // 50: controlplane.v1.Workload.containers:type_name -> controlplane.v1.WorkloadContainer
+	43,  // 51: controlplane.v1.Workload.latest_warning:type_name -> controlplane.v1.WorkloadEvent
+	77,  // 52: controlplane.v1.WorkloadContainer.last_terminated_at:type_name -> google.protobuf.Timestamp
+	42,  // 53: controlplane.v1.WorkloadContainer.cpu:type_name -> controlplane.v1.ResourceUsage
+	42,  // 54: controlplane.v1.WorkloadContainer.memory:type_name -> controlplane.v1.ResourceUsage
+	77,  // 55: controlplane.v1.WorkloadEvent.time:type_name -> google.protobuf.Timestamp
+	8,   // 56: controlplane.v1.GetWorkloadRequest.scope:type_name -> controlplane.v1.QueryScope
+	46,  // 57: controlplane.v1.GetWorkloadResponse.series:type_name -> controlplane.v1.WorkloadSeries
+	43,  // 58: controlplane.v1.GetWorkloadResponse.events:type_name -> controlplane.v1.WorkloadEvent
+	47,  // 59: controlplane.v1.GetWorkloadResponse.image_changes:type_name -> controlplane.v1.ImageChange
+	48,  // 60: controlplane.v1.GetWorkloadResponse.version_changes:type_name -> controlplane.v1.VersionChange
+	5,   // 61: controlplane.v1.WorkloadSeries.metric:type_name -> controlplane.v1.WorkloadMetric
+	10,  // 62: controlplane.v1.WorkloadSeries.points:type_name -> controlplane.v1.TimePoint
+	77,  // 63: controlplane.v1.ImageChange.first_seen:type_name -> google.protobuf.Timestamp
+	77,  // 64: controlplane.v1.ImageChange.last_seen:type_name -> google.protobuf.Timestamp
+	77,  // 65: controlplane.v1.VersionChange.first_seen:type_name -> google.protobuf.Timestamp
+	77,  // 66: controlplane.v1.VersionChange.last_seen:type_name -> google.protobuf.Timestamp
+	8,   // 67: controlplane.v1.QueryPanelRequest.scope:type_name -> controlplane.v1.QueryScope
+	58,  // 68: controlplane.v1.QueryPanelRequest.panel:type_name -> controlplane.v1.Panel
+	60,  // 69: controlplane.v1.QueryPanelRequest.filters:type_name -> controlplane.v1.PanelPredicate
+	51,  // 70: controlplane.v1.QueryPanelResponse.series:type_name -> controlplane.v1.PanelSeriesResult
+	52,  // 71: controlplane.v1.QueryPanelResponse.rows:type_name -> controlplane.v1.PanelTableRow
+	75,  // 72: controlplane.v1.PanelSeriesResult.group:type_name -> controlplane.v1.PanelSeriesResult.GroupEntry
+	10,  // 73: controlplane.v1.PanelSeriesResult.points:type_name -> controlplane.v1.TimePoint
+	76,  // 74: controlplane.v1.PanelTableRow.group:type_name -> controlplane.v1.PanelTableRow.GroupEntry
+	8,   // 75: controlplane.v1.GetDashboardsRequest.scope:type_name -> controlplane.v1.QueryScope
+	55,  // 76: controlplane.v1.GetDashboardsResponse.spec:type_name -> controlplane.v1.DashboardSpec
+	56,  // 77: controlplane.v1.DashboardSpec.dashboards:type_name -> controlplane.v1.Dashboard
+	61,  // 78: controlplane.v1.DashboardSpec.saved_searches:type_name -> controlplane.v1.SavedSearch
+	62,  // 79: controlplane.v1.DashboardSpec.alerts:type_name -> controlplane.v1.DashboardAlert
+	57,  // 80: controlplane.v1.Dashboard.filters:type_name -> controlplane.v1.DashboardFilter
+	58,  // 81: controlplane.v1.Dashboard.panels:type_name -> controlplane.v1.Panel
+	59,  // 82: controlplane.v1.Panel.series:type_name -> controlplane.v1.PanelSeries
+	60,  // 83: controlplane.v1.Panel.where:type_name -> controlplane.v1.PanelPredicate
+	60,  // 84: controlplane.v1.PanelSeries.where:type_name -> controlplane.v1.PanelPredicate
+	60,  // 85: controlplane.v1.SavedSearch.where:type_name -> controlplane.v1.PanelPredicate
+	77,  // 86: controlplane.v1.GetObservabilityUsageResponse.period_start:type_name -> google.protobuf.Timestamp
+	77,  // 87: controlplane.v1.GetObservabilityUsageResponse.period_end:type_name -> google.protobuf.Timestamp
+	77,  // 88: controlplane.v1.GetObservabilityUsageResponse.measured_through:type_name -> google.protobuf.Timestamp
+	6,   // 89: controlplane.v1.GetObservabilityUsageResponse.state:type_name -> controlplane.v1.ObservabilityQuotaState
+	6,   // 90: controlplane.v1.GetObservabilityUsageResponse.usage_state:type_name -> controlplane.v1.ObservabilityQuotaState
+	65,  // 91: controlplane.v1.GetObservabilityUsageResponse.by_signal:type_name -> controlplane.v1.SignalUsage
+	66,  // 92: controlplane.v1.GetObservabilityUsageResponse.by_service:type_name -> controlplane.v1.ServiceUsage
+	11,  // 93: controlplane.v1.ObservabilityService.SearchLogs:input_type -> controlplane.v1.SearchLogsRequest
+	14,  // 94: controlplane.v1.ObservabilityService.ListTraces:input_type -> controlplane.v1.ListTracesRequest
+	19,  // 95: controlplane.v1.ObservabilityService.GetTrace:input_type -> controlplane.v1.GetTraceRequest
+	24,  // 96: controlplane.v1.ObservabilityService.ListMetrics:input_type -> controlplane.v1.ListMetricsRequest
+	27,  // 97: controlplane.v1.ObservabilityService.QueryMetric:input_type -> controlplane.v1.QueryMetricRequest
+	30,  // 98: controlplane.v1.ObservabilityService.GetServiceOverview:input_type -> controlplane.v1.GetServiceOverviewRequest
+	33,  // 99: controlplane.v1.ObservabilityService.GetFlamegraph:input_type -> controlplane.v1.GetFlamegraphRequest
+	49,  // 100: controlplane.v1.ObservabilityService.QueryPanel:input_type -> controlplane.v1.QueryPanelRequest
+	35,  // 101: controlplane.v1.ObservabilityService.ListAttributeValues:input_type -> controlplane.v1.ListAttributeValuesRequest
+	38,  // 102: controlplane.v1.ObservabilityService.ListWorkloads:input_type -> controlplane.v1.ListWorkloadsRequest
+	44,  // 103: controlplane.v1.ObservabilityService.GetWorkload:input_type -> controlplane.v1.GetWorkloadRequest
+	53,  // 104: controlplane.v1.ObservabilityService.GetDashboards:input_type -> controlplane.v1.GetDashboardsRequest
+	63,  // 105: controlplane.v1.ObservabilityService.GetObservabilityUsage:input_type -> controlplane.v1.GetObservabilityUsageRequest
+	12,  // 106: controlplane.v1.ObservabilityService.SearchLogs:output_type -> controlplane.v1.SearchLogsResponse
+	15,  // 107: controlplane.v1.ObservabilityService.ListTraces:output_type -> controlplane.v1.ListTracesResponse
+	20,  // 108: controlplane.v1.ObservabilityService.GetTrace:output_type -> controlplane.v1.GetTraceResponse
+	25,  // 109: controlplane.v1.ObservabilityService.ListMetrics:output_type -> controlplane.v1.ListMetricsResponse
+	28,  // 110: controlplane.v1.ObservabilityService.QueryMetric:output_type -> controlplane.v1.QueryMetricResponse
+	31,  // 111: controlplane.v1.ObservabilityService.GetServiceOverview:output_type -> controlplane.v1.GetServiceOverviewResponse
+	34,  // 112: controlplane.v1.ObservabilityService.GetFlamegraph:output_type -> controlplane.v1.GetFlamegraphResponse
+	50,  // 113: controlplane.v1.ObservabilityService.QueryPanel:output_type -> controlplane.v1.QueryPanelResponse
+	36,  // 114: controlplane.v1.ObservabilityService.ListAttributeValues:output_type -> controlplane.v1.ListAttributeValuesResponse
+	39,  // 115: controlplane.v1.ObservabilityService.ListWorkloads:output_type -> controlplane.v1.ListWorkloadsResponse
+	45,  // 116: controlplane.v1.ObservabilityService.GetWorkload:output_type -> controlplane.v1.GetWorkloadResponse
+	54,  // 117: controlplane.v1.ObservabilityService.GetDashboards:output_type -> controlplane.v1.GetDashboardsResponse
+	64,  // 118: controlplane.v1.ObservabilityService.GetObservabilityUsage:output_type -> controlplane.v1.GetObservabilityUsageResponse
+	106, // [106:119] is the sub-list for method output_type
+	93,  // [93:106] is the sub-list for method input_type
+	93,  // [93:93] is the sub-list for extension type_name
+	93,  // [93:93] is the sub-list for extension extendee
+	0,   // [0:93] is the sub-list for field type_name
 }
 
 func init() { file_services_observability_v1_observability_proto_init() }
@@ -5605,8 +6129,8 @@ func file_services_observability_v1_observability_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_observability_v1_observability_proto_rawDesc), len(file_services_observability_v1_observability_proto_rawDesc)),
-			NumEnums:      6,
-			NumMessages:   66,
+			NumEnums:      7,
+			NumMessages:   70,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

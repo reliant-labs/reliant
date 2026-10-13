@@ -43,6 +43,13 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "empty", label: "no data in range", options: { empty: true } },
   { id: "unavailable", label: "service unavailable", options: { failWith: Code.Unavailable } },
   { id: "quota", label: "query quota hit", options: { failWith: Code.ResourceExhausted } },
+  // Usage states (view=usage): the allowance ladder as an org on each rung sees it.
+  { id: "usage-near", label: "usage: 85% of allowance", options: { usage: { usedBytes: 8.5 * 2 ** 30 } } },
+  { id: "usage-over", label: "usage: over, unfunded (dropping)", options: { usage: { usedBytes: 11 * 2 ** 30, state: "over_100", usageState: "over_100" } } },
+  { id: "usage-dropping", label: "usage: over 150% (most dropped)", options: { usage: { usedBytes: 16 * 2 ** 30, state: "over_150", usageState: "over_150" } } },
+  { id: "usage-billed", label: "usage: over, funded (billed)", options: { usage: { usedBytes: 14 * 2 ** 30, state: "ok", usageState: "over_100", funded: true, overageCents: 100, projectedOverageCents: 180 } } },
+  { id: "usage-cap", label: "usage: spend cap reached", options: { usage: { usedBytes: 230 * 2 ** 30, state: "over_100", usageState: "over_150", funded: true, spendCapReached: true, overageCents: 5000 } } },
+  { id: "usage-exempt", label: "usage: exempt org", options: { usage: { exempt: true, usedBytes: 40 * 2 ** 30, usageState: "over_150" } } },
 ];
 
 export default function ObservabilityPreview() {

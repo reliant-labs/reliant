@@ -31,6 +31,8 @@ import {
   Tr,
 } from "./ui";
 import { ComputeOverageControl } from "./ComputeOverageControl";
+import { UsageView } from "@/components/Forge/Observability/UsageView";
+import { useObservabilityOrg } from "@/hooks/observability-queries";
 import type { Plan } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import {
   useBillingEmail,
@@ -1360,6 +1362,7 @@ function UsageAndInvoicesTab() {
   // useDeployUsage.ts for the exact unblock). A tab that rendered this
   // half-wired would show a paying customer an empty dashboard about money.
   const deployUsage = useDeployUsage();
+  const obsOrg = useObservabilityOrg();
 
   return (
     <div className="flex flex-col gap-8">
@@ -1367,6 +1370,12 @@ function UsageAndInvoicesTab() {
       <div className="border-t border-border pt-6">
         <UsagePanel />
       </div>
+      {/* The usage notices the gateway sends point here ("Settings → Billing"). */}
+      {obsOrg.orgId && (
+        <div className="border-t border-border pt-6" data-testid="billing-observability-usage">
+          <UsageView orgId={obsOrg.orgId} />
+        </div>
+      )}
       {deployUsage.available && (
         <div className="border-t border-border pt-6">
           <DeployUsageSection

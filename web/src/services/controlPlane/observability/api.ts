@@ -25,6 +25,7 @@ import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
+  ObservabilityQuotaState,
   ObservabilityService,
   SortOrder,
   type PanelSchema,
@@ -45,6 +46,9 @@ import type {
   ListTracesRequest,
   ListTracesResult,
   LogRecord,
+  ObservabilityUsage,
+  QuotaState,
+  UsageSignal,
   Panel,
   PanelResult,
   Predicate,
@@ -395,5 +399,57 @@ export async function getDashboards(req: EnvScope & { window: TimeWindow }): Pro
       filters: d.filters.map((f) => ({ id: f.id, label: f.label, field: f.field })),
       panels: d.panels.map(mapPanel),
     })),
+  };
+}
+
+// ── Usage and billing ────────────────────────────────────────────────────────
+
+function quotaState(state: ObservabilityQuotaState): QuotaState {
+  switch (state) {
+    case ObservabilityQuotaState.OK:
+      return "ok";
+    case ObservabilityQuotaState.OVER_100:
+      return "over_100";
+    case ObservabilityQuotaState.OVER_150:
+      return "over_150";
+    default:
+      return "unknown";
+  }
+}
+
+const USAGE_SIGNALS: readonly UsageSignal[] = ["logs", "traces", "metrics", "profiles"];
+
+/** The org's month-to-date usage. Org-scoped (not environment-scoped): the allowance is per org. */
+export async function getObservabilityUsage(orgId: string): Promise<ObservabilityUsage> {
+  const res = await client().getObservabilityUsage({ orgId });
+  const signal = (value: string): UsageSignal =>
+    (USAGE_SIGNALS as readonly string[]).includes(value) ? (value as UsageSignal) : "logs";
+  return {
+    periodStartMs: msOf(res.periodStart),
+    periodEndMs: msOf(res.periodEnd),
+    measuredThroughMs: res.measuredThrough ? msOf(res.measuredThrough) : null,
+    usedBytes: Number(res.usedBytes),
+    allowanceBytes: Number(res.allowanceBytes),
+    overageCents: Number(res.overageCents),
+    projectedBytes: Number(res.projectedBytes),
+    projectedOverageCents: Number(res.projectedOverageCents),
+    rateCentsPerGb: res.rateCentsPerGb,
+    state: quotaState(res.state),
+    usageState: quotaState(res.usageState),
+    funded: res.funded,
+    exempt: res.exempt,
+    spendCapCents: Number(res.spendCapCents),
+    spendCapReached: res.spendCapReached,
+    browserBytes: Number(res.browserBytes),
+    browserBilledBytes: Number(res.browserBilledBytes),
+    browserCapBytes: Number(res.browserCapBytes),
+    metadataBytes: Number(res.metadataBytes),
+    bySignal: res.bySignal.map((s) => ({
+      signal: signal(s.signal),
+      billedBytes: Number(s.billedBytes),
+      storedBytes: Number(s.storedBytes),
+      rows: Number(s.rows),
+    })),
+    byService: res.byService.map((s) => ({ service: s.service, signal: signal(s.signal), billedBytes: Number(s.billedBytes) })),
   };
 }

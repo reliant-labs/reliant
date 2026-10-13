@@ -504,7 +504,7 @@ export const forgeEnvPageSearchSchema = z.object({
    * operation to match. `trace`/`span` name the trace in focus: its waterfall
    * in Traces, the logs it wrote in Logs, its samples in Profiles.
    */
-  view: z.enum(["overview", "logs", "traces", "dashboards", "profiles"]).optional(),
+  view: z.enum(["overview", "logs", "traces", "dashboards", "profiles", "usage"]).optional(),
   range: z.enum(["15m", "1h", "6h", "24h", "7d"]).optional(),
   service: z.string().optional(),
   severity: z.string().optional(),

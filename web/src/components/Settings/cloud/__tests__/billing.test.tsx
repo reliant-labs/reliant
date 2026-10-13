@@ -85,6 +85,27 @@ vi.mock('@/services/controlPlane/reliantAI', async (importOriginal) => {
   return { ...actual, redeemCoupon: (code: string) => couponState.redeem(code) }
 })
 
+// Observability usage rides on the same tab. The org is mutable so a test can
+// show both "resolved" and "not provisioned yet"; the usage read is a fixed
+// mid-month org, which is all the placement assertions need.
+const obsState = vi.hoisted(() => ({ orgId: null as string | null }))
+
+vi.mock('@/hooks/observability-queries', async () => {
+  const { fixtureUsage } = await import(
+    '@/components/Forge/Observability/__fixtures__/fixtureApi'
+  )
+  return {
+    useObservabilityOrg: () => ({ orgId: obsState.orgId, isLoading: false, error: null, refetch: vi.fn() }),
+    useObservabilityUsage: () => ({
+      data: fixtureUsage(Date.UTC(2026, 9, 12)),
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    }),
+  }
+})
+
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
   // Real object, not a stub: `useRedeemCoupon` (from the OTHER hook module,
   // which is not mocked) dereferences these keys in its own onSuccess to
@@ -131,6 +152,7 @@ function renderSection() {
 describe('BillingSection', () => {
   beforeEach(() => {
     usageState.current = undefined
+    obsState.orgId = null
     routerState.reset()
   })
 
@@ -169,6 +191,25 @@ describe('BillingSection', () => {
     expect(
       screen.getByRole('heading', { level: 3, name: /no invoices yet/i }),
     ).toBeInTheDocument()
+  })
+
+  it('shows observability usage on the merged tab once the org resolves', () => {
+    obsState.orgId = 'org-1'
+    renderSection()
+
+    fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
+
+    const section = screen.getByTestId('billing-observability-usage')
+    expect(section).toHaveTextContent('Observability usage')
+    expect(section).toHaveTextContent('Customer metadata')
+  })
+
+  it('shows no observability usage before an org exists', () => {
+    renderSection()
+
+    fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
+
+    expect(screen.queryByTestId('billing-observability-usage')).not.toBeInTheDocument()
   })
 
   it('shows the usage empty state on the merged tab', () => {

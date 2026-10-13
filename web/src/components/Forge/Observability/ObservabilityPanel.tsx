@@ -35,6 +35,7 @@ import { ObsError, ObsLoadingRows, ObsNotSetUp } from "./ObsStates";
 import { OverviewView } from "./OverviewView";
 import { ProfilesView } from "./ProfilesView";
 import { TracesView } from "./TracesView";
+import { UsageView } from "./UsageView";
 
 export interface ObservabilityPanelProps {
   environmentId: string;
@@ -151,6 +152,10 @@ export default function ObservabilityPanel({ environmentId, envName, search, nav
             // there is no tenant to read, which is the not-set-up answer.
             <ObsNotSetUp envName={envName} />
           )
+        ) : view === "usage" ? (
+          // Usage is a Postgres read, not a tenant query: it stays available
+          // before the store exists, which is when the allowance is worth seeing.
+          <UsageView orgId={scope.orgId} envName={envName} />
         ) : notSetUp ? (
           <ObsNotSetUp envName={envName} />
         ) : view === "overview" ? (

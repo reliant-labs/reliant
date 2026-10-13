@@ -26,6 +26,7 @@ export interface ObservabilityApi {
   getServiceOverview: typeof rpc.getServiceOverview;
   getFlamegraph: typeof rpc.getFlamegraph;
   getDashboards: typeof rpc.getDashboards;
+  getObservabilityUsage: typeof rpc.getObservabilityUsage;
 }
 
 export const controlPlaneObservabilityApi: ObservabilityApi = {
@@ -38,6 +39,7 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   getServiceOverview: rpc.getServiceOverview,
   getFlamegraph: rpc.getFlamegraph,
   getDashboards: rpc.getDashboards,
+  getObservabilityUsage: rpc.getObservabilityUsage,
 };
 
 const ObservabilityApiContext = createContext<ObservabilityApi>(controlPlaneObservabilityApi);

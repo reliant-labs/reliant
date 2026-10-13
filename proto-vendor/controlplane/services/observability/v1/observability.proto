@@ -170,9 +170,23 @@ service ObservabilityService {
       idempotent: true
     };
   }
+
+  // GetObservabilityUsage returns the org's month-to-date observability usage
+  // against its included allowance: billed bytes, projected overage, a
+  // per-signal and per-service breakdown, and the quota state the gateway is
+  // enforcing. It is a plain Postgres read of what the hourly meter wrote
+  // (nothing here queries ClickHouse), so it works when the tenant is
+  // unreachable. Membership-checked on org_id.
+  rpc GetObservabilityUsage(GetObservabilityUsageRequest) returns (GetObservabilityUsageResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
 }
 
 // === Shared ===
+
 
 // TimeRange is a half-open range [start, end). Both ends are required and
 // end must be after start; each RPC caps the length.
@@ -960,4 +974,90 @@ message DashboardAlert {
   double threshold = 6;
   string status = 7;
   string note = 8;
+}
+
+// === Usage and billing ===
+
+message GetObservabilityUsageRequest {
+  // The org whose usage to return. The caller must be a member.
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// QuotaState is what the gateway does with the org's telemetry right now.
+enum ObservabilityQuotaState {
+  OBSERVABILITY_QUOTA_STATE_UNSPECIFIED = 0;
+  // Under the allowance, or billed (funded) / exempt: nothing is dropped.
+  OBSERVABILITY_QUOTA_STATE_OK = 1;
+  // At or over 100% with no way to bill the overage: debug logs and routine
+  // traces are dropped; errors and metrics are kept.
+  OBSERVABILITY_QUOTA_STATE_OVER_100 = 2;
+  // At or over 150%: only error logs, error spans and metrics are kept.
+  OBSERVABILITY_QUOTA_STATE_OVER_150 = 3;
+}
+
+message GetObservabilityUsageResponse {
+  // The billing period: the UTC calendar month. period_end is exclusive.
+  google.protobuf.Timestamp period_start = 1;
+  google.protobuf.Timestamp period_end = 2;
+  // The end of the last fully metered hour. Usage lags real time by up to
+  // about an hour and a quarter; the page must say so.
+  google.protobuf.Timestamp measured_through = 3;
+
+  // Billed bytes this period (uncompressed bytes stored, after the browser cap),
+  // and the included allowance. 1 GB = 2^30 bytes in the product.
+  int64 used_bytes = 4;
+  int64 allowance_bytes = 5;
+
+  // Overage accrued so far, and projected for the whole period at the current
+  // rate of use, in cents. Zero for an exempt org.
+  int64 overage_cents = 6;
+  int64 projected_bytes = 7;
+  int64 projected_overage_cents = 8;
+  // Cents per GB above the allowance, as a decimal string ("25.0000").
+  string rate_cents_per_gb = 9;
+
+  // What the gateway enforces, and the state usage alone implies. They differ
+  // for an org that pays (enforced ok, usage over_100) or is exempt.
+  ObservabilityQuotaState state = 10;
+  ObservabilityQuotaState usage_state = 11;
+  bool funded = 12;
+  bool exempt = 13;
+  // A funded org's overage is billed up to this many cents a month; at it the
+  // gateway degrades telemetry like an unfunded org.
+  int64 spend_cap_cents = 14;
+  bool spend_cap_reached = 15;
+
+  // Anonymous browser telemetry is billed only up to a share of the allowance.
+  int64 browser_bytes = 16;
+  int64 browser_billed_bytes = 17;
+  int64 browser_cap_bytes = 18;
+
+  repeated SignalUsage by_signal = 19;
+  repeated ServiceUsage by_service = 20;
+
+  // Bytes stored that were never billed because they are Reliant's own telemetry
+  // (workspace/daemon and platform logs). Zero for every customer in normal
+  // operation: that data is routed to Reliant's own org.
+  int64 operator_bytes = 21;
+  // Billed bytes that are customer metadata: per-workload container data about the
+  // org's own deployments (pod CPU and memory, restarts, k8s events, image and
+  // version). Billed like any other data and included in used_bytes; reported on
+  // its own line. Node- and cluster-level platform data ("infrastructure") is
+  // Reliant's own and is never billed.
+  int64 metadata_bytes = 22;
+}
+
+message SignalUsage {
+  // "logs", "traces", "metrics" or "profiles".
+  string signal = 1;
+  int64 billed_bytes = 2;
+  int64 stored_bytes = 3;
+  int64 rows = 4;
+}
+
+message ServiceUsage {
+  // The service.name; empty for data that carried none.
+  string service = 1;
+  string signal = 2;
+  int64 billed_bytes = 3;
 }

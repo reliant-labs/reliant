@@ -18,6 +18,7 @@ import type {
   DashboardSpec,
   Flamegraph,
   LogRecord,
+  ObservabilityUsage,
   Panel,
   PanelResult,
   SeriesIntent,
@@ -355,7 +356,52 @@ export function fixturePanel(panel: Panel, window: TimeWindow, services: string[
   };
 }
 
+const GIB = 2 ** 30;
+
+/** A mid-month org: 6.4 GB of the 10 GB allowance used, a little of it browser, some of it customer metadata. */
+export function fixtureUsage(now: number = Date.now(), overrides: Partial<ObservabilityUsage> = {}): ObservabilityUsage {
+  const d = new Date(now);
+  const start = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+  const end = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+  return {
+    periodStartMs: start,
+    periodEndMs: end,
+    measuredThroughMs: now - 40 * 60_000,
+    usedBytes: 6.4 * GIB,
+    allowanceBytes: 10 * GIB,
+    overageCents: 0,
+    projectedBytes: 12.8 * GIB,
+    projectedOverageCents: 70,
+    rateCentsPerGb: "25.0000",
+    state: "ok",
+    usageState: "ok",
+    funded: false,
+    exempt: false,
+    spendCapCents: 5000,
+    spendCapReached: false,
+    browserBytes: 0.5 * GIB,
+    browserBilledBytes: 0.5 * GIB,
+    browserCapBytes: 2 * GIB,
+    metadataBytes: 0.9 * GIB,
+    bySignal: [
+      { signal: "logs", billedBytes: 3.1 * GIB, storedBytes: 3.1 * GIB, rows: 9_100_000 },
+      { signal: "traces", billedBytes: 1.8 * GIB, storedBytes: 1.8 * GIB, rows: 2_400_000 },
+      { signal: "metrics", billedBytes: 1.5 * GIB, storedBytes: 1.5 * GIB, rows: 31_000_000 },
+      { signal: "profiles", billedBytes: 0, storedBytes: 0, rows: 0 },
+    ],
+    byService: [
+      { service: "api", signal: "logs", billedBytes: 2.2 * GIB },
+      { service: "api", signal: "traces", billedBytes: 1.8 * GIB },
+      { service: "worker", signal: "logs", billedBytes: 0.9 * GIB },
+      { service: "checkout", signal: "metrics", billedBytes: 0.9 * GIB },
+    ],
+    ...overrides,
+  };
+}
+
 export interface FixtureOptions {
+  /** Overrides on the usage fixture, to put the page in a given state. */
+  usage?: Partial<ObservabilityUsage>;
   /** Every call fails with this (FailedPrecondition is the "not set up" org). */
   failWith?: Code;
   /** An environment that has sent nothing. */
@@ -437,6 +483,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         availableProfileTypes: ["cpu", "alloc_space", "inuse_space", "goroutine"],
         truncated: false,
       })),
+    getObservabilityUsage: (orgId) => call("GetObservabilityUsage", { orgId }, () => fixtureUsage(Date.now(), options.usage)),
     getDashboards: (req) => call("GetDashboards", req, () => (options.empty ? { ...fixtureDashboards(), dashboards: [] } : fixtureDashboards())),
   };
 }

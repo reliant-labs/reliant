@@ -13,7 +13,7 @@ import type { Severity } from "@/services/controlPlane/observability/types";
 import { SEVERITIES } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 
-export const OBS_VIEWS = ["overview", "logs", "traces", "dashboards", "profiles"] as const;
+export const OBS_VIEWS = ["overview", "logs", "traces", "dashboards", "profiles", "usage"] as const;
 export type ObsView = (typeof OBS_VIEWS)[number];
 
 export const OBS_VIEW_LABELS: Record<ObsView, string> = {
@@ -22,6 +22,7 @@ export const OBS_VIEW_LABELS: Record<ObsView, string> = {
   traces: "Traces",
   dashboards: "Dashboards",
   profiles: "Profiles",
+  usage: "Usage",
 };
 
 export function viewOf(param: string | undefined): ObsView {

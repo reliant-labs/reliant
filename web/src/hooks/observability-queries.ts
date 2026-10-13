@@ -38,6 +38,7 @@ export const obsKeys = {
   trace: (scope: EnvScope | null, traceId: string) => [...obsKeys.all(scope), "trace", traceId] as const,
   panel: (scope: EnvScope | null, range: RangePreset, panel: Panel, services: string[]) =>
     [...obsKeys.all(scope), "panel", range, panel, services] as const,
+  usage: (orgId: string | null) => ["observability", orgId ?? "", "usage"] as const,
   dashboards: (scope: EnvScope | null) => [...obsKeys.all(scope), "dashboards"] as const,
   flamegraph: (scope: EnvScope | null, filters: FlamegraphFilters) => [...obsKeys.all(scope), "flamegraph", filters] as const,
 };
@@ -230,6 +231,26 @@ export function useFlamegraph(scope: EnvScope | null, filters: FlamegraphFilters
       }),
     enabled: !!scope && !!filters.service && !!filters.profileType,
     staleTime: 60_000,
+    retry: obsRetry,
+  });
+}
+
+// ── Usage and billing ────────────────────────────────────────────────────────
+
+/**
+ * The org's month-to-date usage against its allowance. Keyed by org alone (the
+ * allowance is per org, not per environment), and served from Postgres, so it
+ * works when the tenant store is unreachable. It lags real time by about an
+ * hour; polling faster would only re-read the same hour.
+ */
+export function useObservabilityUsage(orgId: string | null) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: obsKeys.usage(orgId),
+    queryFn: () => api.getObservabilityUsage(orgId as string),
+    enabled: !!orgId,
+    staleTime: 5 * 60_000,
+    refetchInterval: 15 * 60_000,
     retry: obsRetry,
   });
 }

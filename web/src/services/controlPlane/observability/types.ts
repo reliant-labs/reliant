@@ -340,3 +340,44 @@ export interface Flamegraph {
   /** The heaviest stacks were kept and the rest cut. */
   truncated: boolean;
 }
+
+// ── Usage and billing ────────────────────────────────────────────────────────
+
+/** What the gateway does with the org's telemetry right now. */
+export type QuotaState = "ok" | "over_100" | "over_150" | "unknown";
+
+export type UsageSignal = "logs" | "traces" | "metrics" | "profiles";
+
+/**
+ * The org's month-to-date observability usage against its allowance
+ * (GetObservabilityUsage). Bytes are plain numbers: the largest figure is a
+ * few TiB, far below 2^53. 1 GB = 2^30 bytes, as everywhere in billing.
+ */
+export interface ObservabilityUsage {
+  periodStartMs: number;
+  periodEndMs: number;
+  /** The end of the last fully metered hour; null before the first hour is metered. */
+  measuredThroughMs: number | null;
+  usedBytes: number;
+  allowanceBytes: number;
+  overageCents: number;
+  projectedBytes: number;
+  projectedOverageCents: number;
+  /** Cents per GB above the allowance, as the server's decimal string. */
+  rateCentsPerGb: string;
+  /** What the gateway enforces. */
+  state: QuotaState;
+  /** What usage alone implies; differs from state for an org that pays or is exempt. */
+  usageState: QuotaState;
+  funded: boolean;
+  exempt: boolean;
+  spendCapCents: number;
+  spendCapReached: boolean;
+  browserBytes: number;
+  browserBilledBytes: number;
+  browserCapBytes: number;
+  /** Customer metadata: per-workload container data. Billed, and included in usedBytes. */
+  metadataBytes: number;
+  bySignal: { signal: UsageSignal; billedBytes: number; storedBytes: number; rows: number }[];
+  byService: { service: string; signal: UsageSignal; billedBytes: number }[];
+}

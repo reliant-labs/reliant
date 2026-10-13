@@ -69,6 +69,9 @@ const (
 	// ObservabilityServiceGetDashboardsProcedure is the fully-qualified name of the
 	// ObservabilityService's GetDashboards RPC.
 	ObservabilityServiceGetDashboardsProcedure = "/controlplane.v1.ObservabilityService/GetDashboards"
+	// ObservabilityServiceGetObservabilityUsageProcedure is the fully-qualified name of the
+	// ObservabilityService's GetObservabilityUsage RPC.
+	ObservabilityServiceGetObservabilityUsageProcedure = "/controlplane.v1.ObservabilityService/GetObservabilityUsage"
 )
 
 // ObservabilityServiceClient is a client for the controlplane.v1.ObservabilityService service.
@@ -134,6 +137,13 @@ type ObservabilityServiceClient interface {
 	// a deployed environment's real spec replaces it once it reaches
 	// control-plane. Max range 30 days.
 	GetDashboards(context.Context, *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error)
+	// GetObservabilityUsage returns the org's month-to-date observability usage
+	// against its included allowance: billed bytes, projected overage, a
+	// per-signal and per-service breakdown, and the quota state the gateway is
+	// enforcing. It is a plain Postgres read of what the hourly meter wrote
+	// (nothing here queries ClickHouse), so it works when the tenant is
+	// unreachable. Membership-checked on org_id.
+	GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error)
 }
 
 // NewObservabilityServiceClient constructs a client for the controlplane.v1.ObservabilityService
@@ -219,23 +229,30 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(observabilityServiceMethods.ByName("GetDashboards")),
 			connect.WithClientOptions(opts...),
 		),
+		getObservabilityUsage: connect.NewClient[v1.GetObservabilityUsageRequest, v1.GetObservabilityUsageResponse](
+			httpClient,
+			baseURL+ObservabilityServiceGetObservabilityUsageProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("GetObservabilityUsage")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // observabilityServiceClient implements ObservabilityServiceClient.
 type observabilityServiceClient struct {
-	searchLogs          *connect.Client[v1.SearchLogsRequest, v1.SearchLogsResponse]
-	listTraces          *connect.Client[v1.ListTracesRequest, v1.ListTracesResponse]
-	getTrace            *connect.Client[v1.GetTraceRequest, v1.GetTraceResponse]
-	listMetrics         *connect.Client[v1.ListMetricsRequest, v1.ListMetricsResponse]
-	queryMetric         *connect.Client[v1.QueryMetricRequest, v1.QueryMetricResponse]
-	getServiceOverview  *connect.Client[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse]
-	getFlamegraph       *connect.Client[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse]
-	queryPanel          *connect.Client[v1.QueryPanelRequest, v1.QueryPanelResponse]
-	listAttributeValues *connect.Client[v1.ListAttributeValuesRequest, v1.ListAttributeValuesResponse]
-	listWorkloads       *connect.Client[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse]
-	getWorkload         *connect.Client[v1.GetWorkloadRequest, v1.GetWorkloadResponse]
-	getDashboards       *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
+	searchLogs            *connect.Client[v1.SearchLogsRequest, v1.SearchLogsResponse]
+	listTraces            *connect.Client[v1.ListTracesRequest, v1.ListTracesResponse]
+	getTrace              *connect.Client[v1.GetTraceRequest, v1.GetTraceResponse]
+	listMetrics           *connect.Client[v1.ListMetricsRequest, v1.ListMetricsResponse]
+	queryMetric           *connect.Client[v1.QueryMetricRequest, v1.QueryMetricResponse]
+	getServiceOverview    *connect.Client[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse]
+	getFlamegraph         *connect.Client[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse]
+	queryPanel            *connect.Client[v1.QueryPanelRequest, v1.QueryPanelResponse]
+	listAttributeValues   *connect.Client[v1.ListAttributeValuesRequest, v1.ListAttributeValuesResponse]
+	listWorkloads         *connect.Client[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse]
+	getWorkload           *connect.Client[v1.GetWorkloadRequest, v1.GetWorkloadResponse]
+	getDashboards         *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
+	getObservabilityUsage *connect.Client[v1.GetObservabilityUsageRequest, v1.GetObservabilityUsageResponse]
 }
 
 // SearchLogs calls controlplane.v1.ObservabilityService.SearchLogs.
@@ -296,6 +313,11 @@ func (c *observabilityServiceClient) GetWorkload(ctx context.Context, req *conne
 // GetDashboards calls controlplane.v1.ObservabilityService.GetDashboards.
 func (c *observabilityServiceClient) GetDashboards(ctx context.Context, req *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error) {
 	return c.getDashboards.CallUnary(ctx, req)
+}
+
+// GetObservabilityUsage calls controlplane.v1.ObservabilityService.GetObservabilityUsage.
+func (c *observabilityServiceClient) GetObservabilityUsage(ctx context.Context, req *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error) {
+	return c.getObservabilityUsage.CallUnary(ctx, req)
 }
 
 // ObservabilityServiceHandler is an implementation of the controlplane.v1.ObservabilityService
@@ -362,6 +384,13 @@ type ObservabilityServiceHandler interface {
 	// a deployed environment's real spec replaces it once it reaches
 	// control-plane. Max range 30 days.
 	GetDashboards(context.Context, *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error)
+	// GetObservabilityUsage returns the org's month-to-date observability usage
+	// against its included allowance: billed bytes, projected overage, a
+	// per-signal and per-service breakdown, and the quota state the gateway is
+	// enforcing. It is a plain Postgres read of what the hourly meter wrote
+	// (nothing here queries ClickHouse), so it works when the tenant is
+	// unreachable. Membership-checked on org_id.
+	GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error)
 }
 
 // NewObservabilityServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -443,6 +472,12 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		connect.WithSchema(observabilityServiceMethods.ByName("GetDashboards")),
 		connect.WithHandlerOptions(opts...),
 	)
+	observabilityServiceGetObservabilityUsageHandler := connect.NewUnaryHandler(
+		ObservabilityServiceGetObservabilityUsageProcedure,
+		svc.GetObservabilityUsage,
+		connect.WithSchema(observabilityServiceMethods.ByName("GetObservabilityUsage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.ObservabilityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ObservabilityServiceSearchLogsProcedure:
@@ -469,6 +504,8 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceGetWorkloadHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetDashboardsProcedure:
 			observabilityServiceGetDashboardsHandler.ServeHTTP(w, r)
+		case ObservabilityServiceGetObservabilityUsageProcedure:
+			observabilityServiceGetObservabilityUsageHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -524,4 +561,8 @@ func (UnimplementedObservabilityServiceHandler) GetWorkload(context.Context, *co
 
 func (UnimplementedObservabilityServiceHandler) GetDashboards(context.Context, *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetDashboards is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetObservabilityUsage is not implemented"))
 }
