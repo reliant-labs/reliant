@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -506,22 +507,42 @@ func (s *ChatService) DeleteChat(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to archive chat"))
 	}
 
-	// Cancel the workflow if running
-	if workflowID := chat.MainThreadID(); workflowID != "" {
-		runID := ""
-		if chat.RunID != nil {
-			runID = *chat.RunID
-		}
-		if err := s.tempClient.CancelWorkflow(ctx, workflowID, runID); err != nil {
-			logging.Error("Failed to cancel workflow for archived chat", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
-		}
-	}
+	s.cancelArchivedChatWorkflow(ctx, chat)
 
 	return connect.NewResponse(&reliantv1.DeleteChatResponse{
 		Success:            true,
 		Message:            "Chat archived successfully",
 		PermanentlyDeleted: false,
 	}), nil
+}
+
+// cancelArchivedChatWorkflow stops the run of a chat that was just archived.
+//
+// Archiving wants the run gone, so a run that is already gone is success:
+// Temporal answers NotFound both for a run that finished ("workflow execution
+// already completed") and for one it no longer has ("workflow execution not
+// found"). Archiving an idle chat — the common case — is exactly that, and
+// logging it at ERROR made every archive of a finished chat a Sentry event
+// (GO-M). Any other failure leaves a run going for a chat the user put away,
+// so it stays an ERROR.
+func (s *ChatService) cancelArchivedChatWorkflow(ctx context.Context, chat *db.Chat) {
+	workflowID := chat.MainThreadID()
+	if workflowID == "" {
+		return
+	}
+	runID := ""
+	if chat.RunID != nil {
+		runID = *chat.RunID
+	}
+	err := s.tempClient.CancelWorkflow(ctx, workflowID, runID)
+	var notFound *serviceerror.NotFound
+	if err == nil || errors.As(err, &notFound) {
+		return
+	}
+	logging.Error("Failed to cancel workflow for archived chat",
+		"error", err,
+		"chatID", chat.ID,
+		"workflowID", workflowID)
 }
 
 // SearchChats searches chats by title and message content
@@ -835,17 +856,8 @@ func (s *ChatService) UpdateChatState(
 	}
 
 	// If archiving, also cancel any running workflow
-	if workflowID := chat.MainThreadID(); newState == db.ChatStateArchived && workflowID != "" {
-		runID := ""
-		if chat.RunID != nil {
-			runID = *chat.RunID
-		}
-		if err := s.tempClient.CancelWorkflow(ctx, workflowID, runID); err != nil {
-			logging.Error("Failed to cancel workflow for archived chat",
-				"error", err,
-				"chatID", req.Msg.ChatId,
-				"workflowID", workflowID)
-		}
+	if newState == db.ChatStateArchived {
+		s.cancelArchivedChatWorkflow(ctx, chat)
 	}
 
 	return connect.NewResponse(&reliantv1.UpdateChatStateResponse{
