@@ -122,6 +122,43 @@ service ObservabilityService {
     };
   }
 
+  // ListAttributeValues returns the values a filterable attribute takes in the
+  // scope, most frequent first, optionally narrowed to a prefix: the console's
+  // filter autocomplete. The key must be on the allowlist (see QueryScope);
+  // filters on the same key are ignored so the list is not narrowed to the
+  // current selection. Bounded (max 100 values, max range 7 days) and cached
+  // for a minute.
+  rpc ListAttributeValues(ListAttributeValuesRequest) returns (ListAttributeValuesResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListWorkloads returns, per environment, workload and container: image,
+  // service.version, replicas observed, restarts in the window, the last
+  // terminated reason (OOMKilled, ...), CPU and memory against requests and
+  // limits, and the latest Kubernetes warning event. Node-derived telemetry
+  // (kubeletstats + Kubernetes events), stamped with the tenant from namespace
+  // labels by the node agent, never from payloads. Max range 7 days.
+  rpc ListWorkloads(ListWorkloadsRequest) returns (ListWorkloadsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetWorkload returns one workload's time series (CPU and memory against
+  // limits and requests, restarts), its Kubernetes events timeline and its
+  // image / service.version changes over time, per environment in scope. Max
+  // range 7 days.
+  rpc GetWorkload(GetWorkloadRequest) returns (GetWorkloadResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // GetDashboards returns the dashboards for an environment in forge's
   // dashboard-spec shape (forge.dashboards/v1). In phase 1 the spec is
   // synthesized from the services seen in the org's data in scope.time_range;
@@ -144,16 +181,63 @@ message TimeRange {
   google.protobuf.Timestamp end = 2 [(buf.validate.field).required = true];
 }
 
-// QueryScope is what every request is scoped by.
+// QueryScope is what every request is scoped by (console v2, contract K1).
+//
+// Environment is a FILTER, not a place: the console queries an organization (or
+// one project of it) and narrows by environment, service and any attribute.
+//
+//	org_id      verified against org membership on every call
+//	project_id  the forge project (deploy_environments.project) whose
+//	            environments are in scope; "" selects the project-less ones
+//	env_ids     environments in scope; every id is validated as a live
+//	            environment of org_id (and of project_id when both are set),
+//	            otherwise PermissionDenied. Empty = every environment of the org
+//	            (of the project, when project_id is set)
+//	services    service.name values (the workload name for infra telemetry)
+//	filters     attribute predicates, ANDed; keys from the allowlist below
+//
+// ATTRIBUTE KEYS (filters[].key, every group_by[] and ListAttributeValues.key).
+// Everything is parameterized, never SQL text, and a key outside this list is
+// InvalidArgument:
+//
+//	resource   service.name, service.version, service.namespace,
+//	           service.instance.id, reliant.env.id, reliant.deployment.id,
+//	           deployment.environment.name (resolved to the Reliant environment
+//	           name server-side, falling back to the emitted attribute),
+//	           k8s.namespace.name, k8s.node.name, k8s.pod.name, k8s.pod.uid,
+//	           k8s.workload.name, k8s.container.name, container.image.name,
+//	           container.image.tag
+//	traces     status (ok|error|unset), rpc.method, rpc.service, rpc.system,
+//	           http.request.method, http.method, http.route,
+//	           http.response.status_code, http.status_code, server.address,
+//	           db.system, db.operation.name, db.operation, messaging.system,
+//	           messaging.destination.name, error.type, peer.service
+//	logs       k8s.event.reason, k8s.event.type, k8s.event.count,
+//	           k8s.object.kind, k8s.object.name
+//	metrics    k8s.container.last_terminated_reason, plus the DECLARED
+//	           attributes of the metric being queried (the keys its own data
+//	           points carry, e.g. "status" on orders_created)
+//
+// Resource keys read the resource only (so a client-supplied data-point
+// attribute can never spoof identity); the rest read the signal's own
+// attributes first, then the resource's.
 message QueryScope {
+  reserved 2;
+  reserved "env_id";
   // The org whose data is read. The caller MUST be a member; this is verified
   // server-side, never assumed.
   string org_id = 1 [(buf.validate.field).string.min_len = 1];
-  // Narrow to one environment (reliant.env.id). Unset = every environment.
-  optional string env_id = 2;
   // Narrow to these services (service.name). Empty = every service.
   repeated string services = 3 [(buf.validate.field).repeated.max_items = 50];
   TimeRange time_range = 4 [(buf.validate.field).required = true];
+  // The forge project whose environments are in scope. Unset = not narrowed by
+  // project; set to "" = the project-less environments.
+  optional string project_id = 5 [(buf.validate.field).string.max_len = 128];
+  // Control-plane environment ids (deploy_environments.id, the value stamped as
+  // reliant.env.id). Empty = all of the caller's environments in the org.
+  repeated string env_ids = 6 [(buf.validate.field).repeated.max_items = 50];
+  // Generic attribute predicates, ANDed with each other and with everything else.
+  repeated AttributeFilter filters = 7 [(buf.validate.field).repeated.max_items = 20];
 }
 
 enum SortOrder {
@@ -162,17 +246,19 @@ enum SortOrder {
   SORT_ORDER_OLDEST_FIRST = 2;
 }
 
-// AttributeFilter is a structured attribute predicate (metrics group/filter
-// keys, trace filters). Logs use the query grammar instead.
+// AttributeFilter is a structured attribute predicate over an allowlisted key
+// (see QueryScope).
 message AttributeFilter {
-  // Attribute key, e.g. "http.route". Resolved against the signal's own
-  // attributes, then the resource's.
+  // Allowlisted attribute key, e.g. "k8s.workload.name" or "http.route".
   string key = 1 [
     (buf.validate.field).string.min_len = 1,
     (buf.validate.field).string.max_len = 128
   ];
   AttributeOp op = 2;
-  string value = 3;
+  // eq, neq, contains (case-insensitive substring). Ignored by in and exists.
+  string value = 3 [(buf.validate.field).string.max_len = 1024];
+  // in: the candidate values (max 50).
+  repeated string values = 4 [(buf.validate.field).repeated.max_items = 50];
 }
 
 enum AttributeOp {
@@ -180,6 +266,8 @@ enum AttributeOp {
   ATTRIBUTE_OP_EQ = 1;
   ATTRIBUTE_OP_NEQ = 2;
   ATTRIBUTE_OP_EXISTS = 3; // value ignored
+  ATTRIBUTE_OP_IN = 4; // uses values
+  ATTRIBUTE_OP_CONTAINS = 5; // case-insensitive substring of value
 }
 
 message TimePoint {
@@ -255,13 +343,19 @@ message ListTracesRequest {
   optional double min_duration_ms = 3;
   // Substring of the root span name.
   optional string root_span_name = 4 [(buf.validate.field).string.max_len = 256];
-  repeated AttributeFilter span_attributes = 5 [(buf.validate.field).repeated.max_items = 10];
+  reserved 5;
+  reserved "span_attributes";
   // Rows per page. Default 50, max 500.
   int32 page_size = 6 [
     (buf.validate.field).int32.gte = 0,
     (buf.validate.field).int32.lte = 500
   ];
   string page_token = 7;
+  // Also return the RED summary split by these allowlisted keys (max 3), valued
+  // at each trace's root span, e.g. ["reliant.env.id"] for one summary per
+  // environment. scope.filters on span-level keys keep a trace when ANY of its
+  // spans matches; on resource keys they select the spans counted.
+  repeated string group_by = 8 [(buf.validate.field).repeated.max_items = 3];
 }
 
 message ListTracesResponse {
@@ -270,6 +364,15 @@ message ListTracesResponse {
   string next_page_token = 2;
   // RED summary of the matched traces in the range (not just this page).
   TraceRedSummary red = 3;
+  // One RED summary per distinct group (request.group_by), busiest first, at
+  // most 50. Empty without group_by.
+  repeated TraceRedGroup red_groups = 4;
+}
+
+message TraceRedGroup {
+  // group_by key -> value.
+  map<string, string> group = 1;
+  TraceRedSummary red = 2;
 }
 
 message TraceSummary {
@@ -404,10 +507,13 @@ message QueryMetricRequest {
   // INCREASE/RATE (sum, histogram) use per-series deltas and handle both
   // cumulative and delta temporality, treating a decrease as a counter reset.
   MetricAggregation aggregation = 4;
-  // Data-point attribute keys to split series by; "service.name" groups by
-  // service. Max 3.
+  // Allowlisted keys to split series by (see QueryScope; for a metric, its
+  // declared data-point attributes are allowed too). "reliant.env.id" or
+  // "deployment.environment.name" compares environments, "k8s.container.name" a
+  // container. Max 3.
   repeated string group_by = 5 [(buf.validate.field).repeated.max_items = 3];
-  repeated AttributeFilter filters = 6 [(buf.validate.field).repeated.max_items = 10];
+  reserved 6;
+  reserved "filters";
   // Bucket width. 0 = chosen from the range (about 120 points). The server
   // raises it so a series never exceeds 1500 points; step_seconds in the
   // response is the width used.
@@ -436,6 +542,11 @@ message MetricSeries {
 
 message GetServiceOverviewRequest {
   QueryScope scope = 1 [(buf.validate.field).required = true];
+  // Split each service by these allowlisted keys (max 3): one ServiceOverview
+  // per (service, group). error_log_count is only filled when every key also
+  // applies to logs (resource keys do; span-level keys such as rpc.method do
+  // not, and it is 0 then).
+  repeated string group_by = 2 [(buf.validate.field).repeated.max_items = 3];
 }
 
 message GetServiceOverviewResponse {
@@ -462,15 +573,18 @@ message ServiceOverview {
   repeated TimePoint error_trend = 11;
   string source = 12;
   bool operator_data = 13;
+  // group_by key -> value for this row. Empty without group_by.
+  map<string, string> group = 14;
 }
 
 // === Profiles ===
 
 message GetFlamegraphRequest {
   QueryScope scope = 1 [(buf.validate.field).required = true];
-  // Exactly one service (scope.services is ignored here). scope.env_id is
-  // not applied either: profile aggregates are keyed by the forge environment
-  // NAME, not the Reliant environment id.
+  // Exactly one service (scope.services is ignored here). The scope's
+  // environment, project and filters are not applied either: profile aggregates
+  // are keyed by the forge environment NAME, not the Reliant environment id.
+  // (Membership of scope.org_id is still checked, and so are env_ids.)
   string service = 2 [
     (buf.validate.field).string.min_len = 1,
     (buf.validate.field).string.max_len = 256
@@ -497,6 +611,210 @@ message GetFlamegraphResponse {
   bool truncated = 6;
 }
 
+// === Attribute values (filter autocomplete) ===
+
+enum Signal {
+  SIGNAL_UNSPECIFIED = 0; // resource keys: traces, logs and metrics together
+  SIGNAL_TRACES = 1;
+  SIGNAL_LOGS = 2;
+  SIGNAL_METRICS = 3;
+}
+
+message ListAttributeValuesRequest {
+  // Max range 7 days.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // Allowlisted key (see QueryScope). Trace-only keys read traces, event keys
+  // read logs; a metric's declared attribute needs metric_name.
+  string key = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Case-insensitive prefix of the value. Unset = the most frequent values.
+  optional string prefix = 3 [(buf.validate.field).string.max_len = 128];
+  // Where to read. Unset: the key's natural signal (traces for span keys,
+  // logs for event keys, traces and metrics for resource keys).
+  optional Signal signal = 4;
+  // Required for a metric's declared attribute (signal METRICS).
+  optional string metric_name = 5 [(buf.validate.field).string.max_len = 256];
+  // Default 50, max 100.
+  int32 limit = 6 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 100
+  ];
+}
+
+message ListAttributeValuesResponse {
+  // Most frequent first.
+  repeated AttributeValue values = 1;
+  // True when more values matched than limit.
+  bool truncated = 2;
+}
+
+message AttributeValue {
+  string value = 1;
+  int64 count = 2;
+}
+
+// === Workloads (infra for customers; console v2 owner decision 4, contract K2) ===
+//
+// Built from the node agent's telemetry: kubeletstats metrics
+// (container.cpu.usage, container.memory.working_set,
+// k8s.container.{cpu,memory}_{limit,request}_utilization), k8s.container.restarts
+// and Kubernetes events (logs carrying k8s.event.*). Attribute names are K2's:
+// reliant.env.id, k8s.namespace.name, k8s.pod.name, k8s.pod.uid,
+// k8s.container.name, k8s.workload.name, container.image.name,
+// container.image.tag, service.name = the workload name,
+// k8s.container.last_terminated_reason. Replica-level figures report the WORST
+// replica: "latest" is the highest per-pod latest value, p95 is over every
+// sample of every replica in the window.
+
+message ListWorkloadsRequest {
+  // Max range 7 days. env_ids / project_id / services (= workload names) /
+  // filters narrow the list.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+}
+
+message ListWorkloadsResponse {
+  // By environment, then workload name.
+  repeated Workload workloads = 1;
+  // True when more than 500 workloads matched.
+  bool truncated = 2;
+}
+
+message Workload {
+  // reliant.env.id, and the environment's name when it is known.
+  string env_id = 1;
+  string env_name = 2;
+  // k8s.workload.name (also the service.name of its telemetry).
+  string workload = 3;
+  string namespace = 4;
+  // The latest service.version the workload's own telemetry reported in the
+  // window; empty when it reports none.
+  string service_version = 5;
+  // Distinct pods reporting in the last 5 minutes of the window.
+  int32 replicas_observed = 6;
+  // Restarts across the containers in the window.
+  int64 restarts_in_window = 7;
+  repeated WorkloadContainer containers = 8;
+  // The most recent Kubernetes event of type Warning in the window.
+  WorkloadEvent latest_warning = 9;
+}
+
+message WorkloadContainer {
+  string container = 1;
+  // container.image.name / container.image.tag, latest in the window.
+  string image_name = 2;
+  string image_tag = 3;
+  int64 restarts_in_window = 4;
+  // k8s.container.last_terminated_reason (OOMKilled, Error, Completed, ...).
+  string last_terminated_reason = 5;
+  // When the restart that produced the reason was first observed. Unset when
+  // the reason is known but no restart happened inside the window.
+  google.protobuf.Timestamp last_terminated_at = 6;
+  ResourceUsage cpu = 7;    // cores
+  ResourceUsage memory = 8; // working set, bytes
+}
+
+// ResourceUsage is a container's usage against its requests and limits. The
+// utilization fields are ratios (1.0 = exactly at the limit / request) and are
+// unset when the container has no limit / request or the agent does not report
+// the ratio.
+message ResourceUsage {
+  // Absolute usage: highest per-pod latest, and p95 over the window.
+  double latest = 1;
+  double p95 = 2;
+  optional double limit_utilization_latest = 3;
+  optional double limit_utilization_p95 = 4;
+  optional double request_utilization_latest = 5;
+  optional double request_utilization_p95 = 6;
+  // Derived from usage / utilization at the latest sample: the configured limit
+  // and request in the same unit as `latest`. Unset when not derivable.
+  optional double limit = 7;
+  optional double request = 8;
+}
+
+message WorkloadEvent {
+  google.protobuf.Timestamp time = 1;
+  string env_id = 2;
+  // k8s.event.type: Normal | Warning.
+  string type = 3;
+  // k8s.event.reason: BackOff, FailedPull, Evicted, OOMKilling, ...
+  string reason = 4;
+  string message = 5;
+  // k8s.event.count.
+  int64 count = 6;
+  // k8s.object.kind / k8s.object.name.
+  string object_kind = 7;
+  string object_name = 8;
+  string container = 9;
+}
+
+message GetWorkloadRequest {
+  // Max range 7 days. Every environment in scope is returned separately.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // k8s.workload.name.
+  string workload = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
+  // Narrow to one container. Empty = every container.
+  string container = 3 [(buf.validate.field).string.max_len = 256];
+  // Bucket width. 0 = chosen from the range (see QueryMetricRequest).
+  int32 step_seconds = 4 [(buf.validate.field).int32.gte = 0];
+}
+
+message GetWorkloadResponse {
+  // One series per (environment, container, metric).
+  repeated WorkloadSeries series = 1;
+  // Newest first, at most 500.
+  repeated WorkloadEvent events = 2;
+  // Distinct images a container ran, in order of first sight.
+  repeated ImageChange image_changes = 3;
+  // Distinct service.version values the workload reported, in order of first sight.
+  repeated VersionChange version_changes = 4;
+  int32 step_seconds = 5;
+  // True when a cap (200 series, 500 events, 200 changes) cut the result.
+  bool truncated = 6;
+}
+
+enum WorkloadMetric {
+  WORKLOAD_METRIC_UNSPECIFIED = 0;
+  WORKLOAD_METRIC_CPU_USAGE = 1; // cores, container.cpu.usage
+  WORKLOAD_METRIC_CPU_LIMIT_UTILIZATION = 2; // ratio, k8s.container.cpu_limit_utilization
+  WORKLOAD_METRIC_CPU_REQUEST_UTILIZATION = 3; // ratio, k8s.container.cpu_request_utilization
+  WORKLOAD_METRIC_MEMORY_WORKING_SET = 4; // bytes, container.memory.working_set
+  WORKLOAD_METRIC_MEMORY_LIMIT_UTILIZATION = 5; // ratio, k8s.container.memory_limit_utilization
+  WORKLOAD_METRIC_MEMORY_REQUEST_UTILIZATION = 6; // ratio, k8s.container.memory_request_utilization
+  WORKLOAD_METRIC_RESTARTS = 7; // restarts per bucket, from k8s.container.restarts
+}
+
+message WorkloadSeries {
+  string env_id = 1;
+  string container = 2;
+  WorkloadMetric metric = 3;
+  string unit = 4;
+  // Utilization and usage: the worst replica per bucket. Restarts: the sum over
+  // replicas of the growth within the bucket.
+  repeated TimePoint points = 5;
+}
+
+message ImageChange {
+  string env_id = 1;
+  string container = 2;
+  string image_name = 3;
+  string image_tag = 4;
+  google.protobuf.Timestamp first_seen = 5;
+  google.protobuf.Timestamp last_seen = 6;
+}
+
+message VersionChange {
+  string env_id = 1;
+  string service_version = 2;
+  google.protobuf.Timestamp first_seen = 3;
+  google.protobuf.Timestamp last_seen = 4;
+}
+
 // === Dashboards (mirror of forge internal/obsdash Spec, forge.dashboards/v1) ===
 //
 // Enum-like fields are plain strings with forge's values so the JSON of
@@ -504,7 +822,8 @@ message GetFlamegraphResponse {
 // as-is (protojson, camelCase names).
 
 message QueryPanelRequest {
-  // scope.env_id and scope.services apply as the dashboard's filters.
+  // The scope's environments, services and filters apply as the dashboard's
+  // filters.
   QueryScope scope = 1 [(buf.validate.field).required = true];
   Panel panel = 2 [(buf.validate.field).required = true];
   // Extra predicates ANDed to every series of the panel (the dashboard's other
@@ -514,6 +833,10 @@ message QueryPanelRequest {
   // Bucket width for line panels. 0 = chosen from the range; raised so a series
   // never exceeds 1500 points (step_seconds in the response is what was used).
   int32 step_seconds = 4 [(buf.validate.field).int32.gte = 0];
+  // When non-empty, REPLACES panel.group_by (max 3): the in-place "group by"
+  // control. Accepts the allowlisted keys of QueryScope as well as the panel
+  // field vocabulary. PanelSeriesResult.group is keyed by what was asked for.
+  repeated string group_by = 5 [(buf.validate.field).repeated.max_items = 3];
 }
 
 message QueryPanelResponse {

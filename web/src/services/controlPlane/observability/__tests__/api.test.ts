@@ -37,7 +37,7 @@ describe("request shape", () => {
     client.searchLogs.mockResolvedValue({ logs: [], nextPageToken: "" });
     await searchLogs({ ...env, window, query: "timeout", services: ["api"], severities: ["warn", "error"], limit: 200 });
     const req = client.searchLogs.mock.calls[0][0];
-    expect(req.scope).toMatchObject({ orgId: "org-1", envId: "env-1", services: ["api"] });
+    expect(req.scope).toMatchObject({ orgId: "org-1", envIds: ["env-1"], services: ["api"] });
     expect(msOf(req.scope.timeRange.start)).toBe(window.startMs);
     expect(msOf(req.scope.timeRange.end)).toBe(window.endMs);
     expect(req).toMatchObject({ query: "timeout", severities: ["WARN", "ERROR"], order: SortOrder.NEWEST_FIRST, pageSize: 200, pageToken: "" });
@@ -193,7 +193,7 @@ describe("traces and panels", () => {
     };
     const result = await queryPanel({ ...env, window, panel, services: ["api"], stepSeconds: 0 });
     const req = client.queryPanel.mock.calls[0][0];
-    expect(req.scope).toMatchObject({ orgId: "org-1", envId: "env-1", services: ["api"] });
+    expect(req.scope).toMatchObject({ orgId: "org-1", envIds: ["env-1"], services: ["api"] });
     expect(req.panel).toMatchObject({ id: "p", ratio: true, groupBy: ["service.name"], series: [{ agg: "count", where: [{ field: "span.status", op: "eq", value: "error", values: [] }] }, { label: "requests" }] });
     expect(result.series[0]).toMatchObject({ label: "ratio", group: { "service.name": "api" }, timestamps: [window.startMs / 1000], values: [0.02] });
     expect(result.rows[0]).toEqual({ group: { "span.name": "a/B" }, values: [12] });

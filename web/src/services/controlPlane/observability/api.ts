@@ -6,7 +6,8 @@
  * (./types.ts). This is the only file that knows the wire shape.
  *
  * Every request carries a QueryScope: the caller's current org (verified
- * server-side against membership), this environment's control-plane id, the
+ * server-side against membership), this environment's control-plane id as
+ * `envIds` (every id is validated server-side as one of the org's), the
  * services filter, and a time range the server caps per RPC (7 days for logs,
  * traces and the overview; 30 for metrics, profiles and dashboards). The browser sends typed requests and a
  * query STRING; it never sends SQL, and it never builds a filter out of the
@@ -81,7 +82,7 @@ export function msOf(ts: Timestamp | undefined): number {
 function scope(env: EnvScope, window: TimeWindow, services: string[] = []) {
   return {
     orgId: env.orgId,
-    envId: env.environmentId,
+    envIds: [env.environmentId],
     services,
     timeRange: { start: timestamp(window.startMs), end: timestamp(window.endMs) },
   };

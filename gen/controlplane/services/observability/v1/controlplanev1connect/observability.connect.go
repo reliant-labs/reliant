@@ -57,6 +57,15 @@ const (
 	// ObservabilityServiceQueryPanelProcedure is the fully-qualified name of the ObservabilityService's
 	// QueryPanel RPC.
 	ObservabilityServiceQueryPanelProcedure = "/controlplane.v1.ObservabilityService/QueryPanel"
+	// ObservabilityServiceListAttributeValuesProcedure is the fully-qualified name of the
+	// ObservabilityService's ListAttributeValues RPC.
+	ObservabilityServiceListAttributeValuesProcedure = "/controlplane.v1.ObservabilityService/ListAttributeValues"
+	// ObservabilityServiceListWorkloadsProcedure is the fully-qualified name of the
+	// ObservabilityService's ListWorkloads RPC.
+	ObservabilityServiceListWorkloadsProcedure = "/controlplane.v1.ObservabilityService/ListWorkloads"
+	// ObservabilityServiceGetWorkloadProcedure is the fully-qualified name of the
+	// ObservabilityService's GetWorkload RPC.
+	ObservabilityServiceGetWorkloadProcedure = "/controlplane.v1.ObservabilityService/GetWorkload"
 	// ObservabilityServiceGetDashboardsProcedure is the fully-qualified name of the
 	// ObservabilityService's GetDashboards RPC.
 	ObservabilityServiceGetDashboardsProcedure = "/controlplane.v1.ObservabilityService/GetDashboards"
@@ -100,6 +109,25 @@ type ObservabilityServiceClient interface {
 	// run here (use SearchLogs / ListTraces). Same guardrails as every other RPC.
 	// Max range 7 days for traces/logs panels, 30 days for metrics panels.
 	QueryPanel(context.Context, *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error)
+	// ListAttributeValues returns the values a filterable attribute takes in the
+	// scope, most frequent first, optionally narrowed to a prefix: the console's
+	// filter autocomplete. The key must be on the allowlist (see QueryScope);
+	// filters on the same key are ignored so the list is not narrowed to the
+	// current selection. Bounded (max 100 values, max range 7 days) and cached
+	// for a minute.
+	ListAttributeValues(context.Context, *connect.Request[v1.ListAttributeValuesRequest]) (*connect.Response[v1.ListAttributeValuesResponse], error)
+	// ListWorkloads returns, per environment, workload and container: image,
+	// service.version, replicas observed, restarts in the window, the last
+	// terminated reason (OOMKilled, ...), CPU and memory against requests and
+	// limits, and the latest Kubernetes warning event. Node-derived telemetry
+	// (kubeletstats + Kubernetes events), stamped with the tenant from namespace
+	// labels by the node agent, never from payloads. Max range 7 days.
+	ListWorkloads(context.Context, *connect.Request[v1.ListWorkloadsRequest]) (*connect.Response[v1.ListWorkloadsResponse], error)
+	// GetWorkload returns one workload's time series (CPU and memory against
+	// limits and requests, restarts), its Kubernetes events timeline and its
+	// image / service.version changes over time, per environment in scope. Max
+	// range 7 days.
+	GetWorkload(context.Context, *connect.Request[v1.GetWorkloadRequest]) (*connect.Response[v1.GetWorkloadResponse], error)
 	// GetDashboards returns the dashboards for an environment in forge's
 	// dashboard-spec shape (forge.dashboards/v1). In phase 1 the spec is
 	// synthesized from the services seen in the org's data in scope.time_range;
@@ -167,6 +195,24 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(observabilityServiceMethods.ByName("QueryPanel")),
 			connect.WithClientOptions(opts...),
 		),
+		listAttributeValues: connect.NewClient[v1.ListAttributeValuesRequest, v1.ListAttributeValuesResponse](
+			httpClient,
+			baseURL+ObservabilityServiceListAttributeValuesProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("ListAttributeValues")),
+			connect.WithClientOptions(opts...),
+		),
+		listWorkloads: connect.NewClient[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse](
+			httpClient,
+			baseURL+ObservabilityServiceListWorkloadsProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("ListWorkloads")),
+			connect.WithClientOptions(opts...),
+		),
+		getWorkload: connect.NewClient[v1.GetWorkloadRequest, v1.GetWorkloadResponse](
+			httpClient,
+			baseURL+ObservabilityServiceGetWorkloadProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("GetWorkload")),
+			connect.WithClientOptions(opts...),
+		),
 		getDashboards: connect.NewClient[v1.GetDashboardsRequest, v1.GetDashboardsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetDashboardsProcedure,
@@ -178,15 +224,18 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 
 // observabilityServiceClient implements ObservabilityServiceClient.
 type observabilityServiceClient struct {
-	searchLogs         *connect.Client[v1.SearchLogsRequest, v1.SearchLogsResponse]
-	listTraces         *connect.Client[v1.ListTracesRequest, v1.ListTracesResponse]
-	getTrace           *connect.Client[v1.GetTraceRequest, v1.GetTraceResponse]
-	listMetrics        *connect.Client[v1.ListMetricsRequest, v1.ListMetricsResponse]
-	queryMetric        *connect.Client[v1.QueryMetricRequest, v1.QueryMetricResponse]
-	getServiceOverview *connect.Client[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse]
-	getFlamegraph      *connect.Client[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse]
-	queryPanel         *connect.Client[v1.QueryPanelRequest, v1.QueryPanelResponse]
-	getDashboards      *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
+	searchLogs          *connect.Client[v1.SearchLogsRequest, v1.SearchLogsResponse]
+	listTraces          *connect.Client[v1.ListTracesRequest, v1.ListTracesResponse]
+	getTrace            *connect.Client[v1.GetTraceRequest, v1.GetTraceResponse]
+	listMetrics         *connect.Client[v1.ListMetricsRequest, v1.ListMetricsResponse]
+	queryMetric         *connect.Client[v1.QueryMetricRequest, v1.QueryMetricResponse]
+	getServiceOverview  *connect.Client[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse]
+	getFlamegraph       *connect.Client[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse]
+	queryPanel          *connect.Client[v1.QueryPanelRequest, v1.QueryPanelResponse]
+	listAttributeValues *connect.Client[v1.ListAttributeValuesRequest, v1.ListAttributeValuesResponse]
+	listWorkloads       *connect.Client[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse]
+	getWorkload         *connect.Client[v1.GetWorkloadRequest, v1.GetWorkloadResponse]
+	getDashboards       *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
 }
 
 // SearchLogs calls controlplane.v1.ObservabilityService.SearchLogs.
@@ -227,6 +276,21 @@ func (c *observabilityServiceClient) GetFlamegraph(ctx context.Context, req *con
 // QueryPanel calls controlplane.v1.ObservabilityService.QueryPanel.
 func (c *observabilityServiceClient) QueryPanel(ctx context.Context, req *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error) {
 	return c.queryPanel.CallUnary(ctx, req)
+}
+
+// ListAttributeValues calls controlplane.v1.ObservabilityService.ListAttributeValues.
+func (c *observabilityServiceClient) ListAttributeValues(ctx context.Context, req *connect.Request[v1.ListAttributeValuesRequest]) (*connect.Response[v1.ListAttributeValuesResponse], error) {
+	return c.listAttributeValues.CallUnary(ctx, req)
+}
+
+// ListWorkloads calls controlplane.v1.ObservabilityService.ListWorkloads.
+func (c *observabilityServiceClient) ListWorkloads(ctx context.Context, req *connect.Request[v1.ListWorkloadsRequest]) (*connect.Response[v1.ListWorkloadsResponse], error) {
+	return c.listWorkloads.CallUnary(ctx, req)
+}
+
+// GetWorkload calls controlplane.v1.ObservabilityService.GetWorkload.
+func (c *observabilityServiceClient) GetWorkload(ctx context.Context, req *connect.Request[v1.GetWorkloadRequest]) (*connect.Response[v1.GetWorkloadResponse], error) {
+	return c.getWorkload.CallUnary(ctx, req)
 }
 
 // GetDashboards calls controlplane.v1.ObservabilityService.GetDashboards.
@@ -273,6 +337,25 @@ type ObservabilityServiceHandler interface {
 	// run here (use SearchLogs / ListTraces). Same guardrails as every other RPC.
 	// Max range 7 days for traces/logs panels, 30 days for metrics panels.
 	QueryPanel(context.Context, *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error)
+	// ListAttributeValues returns the values a filterable attribute takes in the
+	// scope, most frequent first, optionally narrowed to a prefix: the console's
+	// filter autocomplete. The key must be on the allowlist (see QueryScope);
+	// filters on the same key are ignored so the list is not narrowed to the
+	// current selection. Bounded (max 100 values, max range 7 days) and cached
+	// for a minute.
+	ListAttributeValues(context.Context, *connect.Request[v1.ListAttributeValuesRequest]) (*connect.Response[v1.ListAttributeValuesResponse], error)
+	// ListWorkloads returns, per environment, workload and container: image,
+	// service.version, replicas observed, restarts in the window, the last
+	// terminated reason (OOMKilled, ...), CPU and memory against requests and
+	// limits, and the latest Kubernetes warning event. Node-derived telemetry
+	// (kubeletstats + Kubernetes events), stamped with the tenant from namespace
+	// labels by the node agent, never from payloads. Max range 7 days.
+	ListWorkloads(context.Context, *connect.Request[v1.ListWorkloadsRequest]) (*connect.Response[v1.ListWorkloadsResponse], error)
+	// GetWorkload returns one workload's time series (CPU and memory against
+	// limits and requests, restarts), its Kubernetes events timeline and its
+	// image / service.version changes over time, per environment in scope. Max
+	// range 7 days.
+	GetWorkload(context.Context, *connect.Request[v1.GetWorkloadRequest]) (*connect.Response[v1.GetWorkloadResponse], error)
 	// GetDashboards returns the dashboards for an environment in forge's
 	// dashboard-spec shape (forge.dashboards/v1). In phase 1 the spec is
 	// synthesized from the services seen in the org's data in scope.time_range;
@@ -336,6 +419,24 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		connect.WithSchema(observabilityServiceMethods.ByName("QueryPanel")),
 		connect.WithHandlerOptions(opts...),
 	)
+	observabilityServiceListAttributeValuesHandler := connect.NewUnaryHandler(
+		ObservabilityServiceListAttributeValuesProcedure,
+		svc.ListAttributeValues,
+		connect.WithSchema(observabilityServiceMethods.ByName("ListAttributeValues")),
+		connect.WithHandlerOptions(opts...),
+	)
+	observabilityServiceListWorkloadsHandler := connect.NewUnaryHandler(
+		ObservabilityServiceListWorkloadsProcedure,
+		svc.ListWorkloads,
+		connect.WithSchema(observabilityServiceMethods.ByName("ListWorkloads")),
+		connect.WithHandlerOptions(opts...),
+	)
+	observabilityServiceGetWorkloadHandler := connect.NewUnaryHandler(
+		ObservabilityServiceGetWorkloadProcedure,
+		svc.GetWorkload,
+		connect.WithSchema(observabilityServiceMethods.ByName("GetWorkload")),
+		connect.WithHandlerOptions(opts...),
+	)
 	observabilityServiceGetDashboardsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetDashboardsProcedure,
 		svc.GetDashboards,
@@ -360,6 +461,12 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceGetFlamegraphHandler.ServeHTTP(w, r)
 		case ObservabilityServiceQueryPanelProcedure:
 			observabilityServiceQueryPanelHandler.ServeHTTP(w, r)
+		case ObservabilityServiceListAttributeValuesProcedure:
+			observabilityServiceListAttributeValuesHandler.ServeHTTP(w, r)
+		case ObservabilityServiceListWorkloadsProcedure:
+			observabilityServiceListWorkloadsHandler.ServeHTTP(w, r)
+		case ObservabilityServiceGetWorkloadProcedure:
+			observabilityServiceGetWorkloadHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetDashboardsProcedure:
 			observabilityServiceGetDashboardsHandler.ServeHTTP(w, r)
 		default:
@@ -401,6 +508,18 @@ func (UnimplementedObservabilityServiceHandler) GetFlamegraph(context.Context, *
 
 func (UnimplementedObservabilityServiceHandler) QueryPanel(context.Context, *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.QueryPanel is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) ListAttributeValues(context.Context, *connect.Request[v1.ListAttributeValuesRequest]) (*connect.Response[v1.ListAttributeValuesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.ListAttributeValues is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) ListWorkloads(context.Context, *connect.Request[v1.ListWorkloadsRequest]) (*connect.Response[v1.ListWorkloadsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.ListWorkloads is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) GetWorkload(context.Context, *connect.Request[v1.GetWorkloadRequest]) (*connect.Response[v1.GetWorkloadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetWorkload is not implemented"))
 }
 
 func (UnimplementedObservabilityServiceHandler) GetDashboards(context.Context, *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error) {
