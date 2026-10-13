@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package connector
 
 import (
 	"context"
@@ -13,38 +13,12 @@ import (
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
-
-// ConnectorService is the JWT-authed surface for managing connector grants.
-//
-// Connector credentials themselves authenticate the MCP endpoint, never this
-// service: a connector cannot mint or widen itself, only a logged-in user can.
-type ConnectorService struct {
-	reliantv1connect.UnimplementedConnectorServiceHandler
-
-	store connectorgrant.Store
-
-	// tokens mints and revokes each grant's credential: an `rlat_` access
-	// token with mcp:connector, bound to resource connector:<grantID>,
-	// acting as the grant's user. The grant row holds the POLICY; the token
-	// authority holds the credential.
-	tokens tokenauthority.Authority
-
-	// publicURL is the externally reachable base URL, used to tell the user
-	// where to point their MCP client.
-	publicURL string
-}
-
-// NewConnectorService constructs the service.
-func NewConnectorService(store connectorgrant.Store, tokens tokenauthority.Authority, publicURL string) *ConnectorService {
-	return &ConnectorService{store: store, tokens: tokens, publicURL: publicURL}
-}
 
 // connectorResource is the binding a grant's credential carries.
 func connectorResource(grantID string) fat.Resource {
@@ -54,12 +28,12 @@ func connectorResource(grantID string) fat.Resource {
 // createGrantWithCredential stores the grant, then mints its credential bound
 // to it. The grant must exist first (the credential names it); if minting
 // fails, the grant is revoked so no credential-less grant looks usable.
-func (s *ConnectorService) createGrantWithCredential(ctx context.Context, grant *connectorgrant.Grant) (string, error) {
-	if err := s.store.CreateGrant(ctx, grant); err != nil {
+func (s *Service) createGrantWithCredential(ctx context.Context, grant *connectorgrant.Grant) (string, error) {
+	if err := s.deps.Grants.CreateGrant(ctx, grant); err != nil {
 		return "", fmt.Errorf("create connector: %w", err)
 	}
 	res := connectorResource(grant.ID)
-	minted, err := s.tokens.MintForUser(ctx, tokenauthority.MintRequest{
+	minted, err := s.deps.Tokens.MintForUser(ctx, tokenauthority.MintRequest{
 		UserID:    grant.UserID,
 		Name:      "connector: " + grant.Name,
 		Scopes:    []fat.Scope{fat.ScopeMCPConnector},
@@ -67,18 +41,18 @@ func (s *ConnectorService) createGrantWithCredential(ctx context.Context, grant 
 		ExpiresAt: grant.ExpiresAt,
 	})
 	if err != nil {
-		_, _ = s.store.RevokeGrant(ctx, grant.UserID, grant.ID)
+		_, _ = s.deps.Grants.RevokeGrant(ctx, grant.UserID, grant.ID)
 		return "", fmt.Errorf("mint connector credential: %w", err)
 	}
 	grant.TokenPrefix = minted.DisplayPrefix
-	if err := s.store.SetTokenPrefix(ctx, grant.ID, minted.DisplayPrefix); err != nil {
+	if err := s.deps.Grants.SetTokenPrefix(ctx, grant.ID, minted.DisplayPrefix); err != nil {
 		return "", err
 	}
 	return minted.Plaintext, nil
 }
 
 // CreateConnector mints a credential bound to one daemon.
-func (s *ConnectorService) CreateConnector(
+func (s *Service) CreateConnector(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateConnectorRequest],
 ) (*connect.Response[reliantv1.CreateConnectorResponse], error) {
@@ -111,7 +85,7 @@ func (s *ConnectorService) CreateConnector(
 // Validation lives here, above the store, so the user gets a specific message
 // instead of a constraint violation. The store and the DB re-check the same
 // rules; this is the layer that explains them.
-func (s *ConnectorService) buildGrant(userID string, msg *reliantv1.CreateConnectorRequest) (*connectorgrant.Grant, error) {
+func (s *Service) buildGrant(userID string, msg *reliantv1.CreateConnectorRequest) (*connectorgrant.Grant, error) {
 	daemonID := strings.TrimSpace(msg.GetDaemonId())
 	if daemonID == "" {
 		return nil, errors.New("a connector must be bound to a specific workspace")
@@ -272,7 +246,7 @@ func validateExec(
 }
 
 // ListConnectors returns the caller's connectors.
-func (s *ConnectorService) ListConnectors(
+func (s *Service) ListConnectors(
 	ctx context.Context,
 	_ *connect.Request[reliantv1.ListConnectorsRequest],
 ) (*connect.Response[reliantv1.ListConnectorsResponse], error) {
@@ -281,7 +255,7 @@ func (s *ConnectorService) ListConnectors(
 		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
 	}
 
-	grants, err := s.store.ListGrantsByUser(ctx, userID)
+	grants, err := s.deps.Grants.ListGrantsByUser(ctx, userID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list connectors: %w", err))
 	}
@@ -294,7 +268,7 @@ func (s *ConnectorService) ListConnectors(
 }
 
 // RevokeConnector revokes one of the caller's connectors.
-func (s *ConnectorService) RevokeConnector(
+func (s *Service) RevokeConnector(
 	ctx context.Context,
 	req *connect.Request[reliantv1.RevokeConnectorRequest],
 ) (*connect.Response[reliantv1.RevokeConnectorResponse], error) {
@@ -310,14 +284,14 @@ func (s *ConnectorService) RevokeConnector(
 
 	// Scoped by user in the store, so a guessed id cannot revoke someone
 	// else's connector.
-	revoked, err := s.store.RevokeGrant(ctx, userID, id)
+	revoked, err := s.deps.Grants.RevokeGrant(ctx, userID, id)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("revoke connector: %w", err))
 	}
 	// Kill the credential too, not only the policy: the grant is re-checked
 	// per call, but a revoked grant must leave no live token behind.
 	if revoked {
-		if _, err := s.tokens.RevokeResource(ctx, connectorResource(id)); err != nil {
+		if _, err := s.deps.Tokens.RevokeResource(ctx, connectorResource(id)); err != nil {
 			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("revoke connector credential: %w", err))
 		}
 	}
@@ -325,7 +299,7 @@ func (s *ConnectorService) RevokeConnector(
 }
 
 // ListConnectorActivity returns the audit log.
-func (s *ConnectorService) ListConnectorActivity(
+func (s *Service) ListConnectorActivity(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListConnectorActivityRequest],
 ) (*connect.Response[reliantv1.ListConnectorActivityResponse], error) {
@@ -341,9 +315,9 @@ func (s *ConnectorService) ListConnectorActivity(
 		err     error
 	)
 	if grantID := strings.TrimSpace(req.Msg.GetGrantId()); grantID != "" {
-		records, err = s.store.ListAuditByGrant(ctx, userID, grantID, limit)
+		records, err = s.deps.Grants.ListAuditByGrant(ctx, userID, grantID, limit)
 	} else {
-		records, err = s.store.ListAuditByUser(ctx, userID, limit)
+		records, err = s.deps.Grants.ListAuditByUser(ctx, userID, limit)
 	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list connector activity: %w", err))
@@ -370,7 +344,7 @@ func (s *ConnectorService) ListConnectorActivity(
 
 // ListAvailableTools returns the grantable catalog, so the UI never hardcodes
 // a list that drifts from the server's.
-func (s *ConnectorService) ListAvailableTools(
+func (s *Service) ListAvailableTools(
 	ctx context.Context,
 	_ *connect.Request[reliantv1.ListAvailableToolsRequest],
 ) (*connect.Response[reliantv1.ListAvailableToolsResponse], error) {
@@ -392,8 +366,8 @@ func (s *ConnectorService) ListAvailableTools(
 }
 
 // mcpURL is the endpoint the user pastes into their MCP client.
-func (s *ConnectorService) mcpURL() string {
-	base := strings.TrimSuffix(strings.TrimSpace(s.publicURL), "/")
+func (s *Service) mcpURL() string {
+	base := strings.TrimSuffix(strings.TrimSpace(s.deps.PublicURL), "/")
 	if base == "" {
 		// Without a configured public URL, return the path alone rather than
 		// inventing a hostname that would silently be wrong.

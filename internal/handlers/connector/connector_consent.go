@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package connector
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 // user never intended — invisibly. These RPCs are how the user answers.
 
 // AuthorizeClient records the consent decision.
-func (s *ConnectorService) AuthorizeClient(
+func (s *Service) AuthorizeClient(
 	ctx context.Context,
 	req *connect.Request[reliantv1.AuthorizeClientRequest],
 ) (*connect.Response[reliantv1.AuthorizeClientResponse], error) {
@@ -51,7 +51,7 @@ func (s *ConnectorService) AuthorizeClient(
 		GrantID:    grant.ID,
 		ClientName: strings.TrimSpace(req.Msg.GetClientName()),
 	}
-	if err := s.store.PutBinding(ctx, binding); err != nil {
+	if err := s.deps.Grants.PutBinding(ctx, binding); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("record consent: %w", err))
 	}
 
@@ -68,7 +68,7 @@ func (s *ConnectorService) AuthorizeClient(
 // parallel path: the consent screen and the settings editor are the same
 // decision in two places, and two validators would eventually disagree about
 // what a valid grant is.
-func (s *ConnectorService) grantForConsent(
+func (s *Service) grantForConsent(
 	ctx context.Context,
 	userID string,
 	msg *reliantv1.AuthorizeClientRequest,
@@ -84,7 +84,7 @@ func (s *ConnectorService) grantForConsent(
 	case existingID != "":
 		// Scoped by user, so a guessed id cannot bind a client to someone
 		// else's connector.
-		grant, err := s.store.GetGrant(ctx, userID, existingID)
+		grant, err := s.deps.Grants.GetGrant(ctx, userID, existingID)
 		if err != nil {
 			return nil, "", connect.NewError(connect.CodeNotFound, errors.New("connector not found"))
 		}
@@ -113,7 +113,7 @@ func (s *ConnectorService) grantForConsent(
 
 // ListAuthorizedClients returns the applications acting through the caller's
 // connectors.
-func (s *ConnectorService) ListAuthorizedClients(
+func (s *Service) ListAuthorizedClients(
 	ctx context.Context,
 	_ *connect.Request[reliantv1.ListAuthorizedClientsRequest],
 ) (*connect.Response[reliantv1.ListAuthorizedClientsResponse], error) {
@@ -122,7 +122,7 @@ func (s *ConnectorService) ListAuthorizedClients(
 		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
 	}
 
-	bindings, err := s.store.ListBindingsByUser(ctx, userID)
+	bindings, err := s.deps.Grants.ListBindingsByUser(ctx, userID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list authorized clients: %w", err))
 	}
@@ -130,7 +130,7 @@ func (s *ConnectorService) ListAuthorizedClients(
 	// Connector names are resolved so the UI can say "ChatGPT → my-project"
 	// rather than showing an opaque id pair.
 	names := map[string]string{}
-	if grants, err := s.store.ListGrantsByUser(ctx, userID); err == nil {
+	if grants, err := s.deps.Grants.ListGrantsByUser(ctx, userID); err == nil {
 		for _, g := range grants {
 			names[g.ID] = g.Name
 		}
@@ -154,7 +154,7 @@ func (s *ConnectorService) ListAuthorizedClients(
 // The connector survives: it may serve several applications, and disconnecting
 // one should not cut off the others. Revoking the connector itself is the
 // separate, broader action.
-func (s *ConnectorService) RevokeClientAuthorization(
+func (s *Service) RevokeClientAuthorization(
 	ctx context.Context,
 	req *connect.Request[reliantv1.RevokeClientAuthorizationRequest],
 ) (*connect.Response[reliantv1.RevokeClientAuthorizationResponse], error) {
@@ -168,7 +168,7 @@ func (s *ConnectorService) RevokeClientAuthorization(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("client id is required"))
 	}
 
-	revoked, err := s.store.DeleteBinding(ctx, userID, clientID)
+	revoked, err := s.deps.Grants.DeleteBinding(ctx, userID, clientID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("revoke authorization: %w", err))
 	}

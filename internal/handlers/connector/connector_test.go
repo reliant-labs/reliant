@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package connector
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
+	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
@@ -60,27 +61,9 @@ func (s *stubStore) GetGrant(context.Context, string, string) (*connectorgrant.G
 	return nil, connectorgrant.ErrNotFound
 }
 
-func (s *stubStore) GetGrantByID(context.Context, string) (*connectorgrant.Grant, error) {
-	return nil, connectorgrant.ErrNotFound
-}
-
 func (s *stubStore) RevokeGrant(_ context.Context, userID, id string) (bool, error) {
 	s.revokedUser, s.revokedID = userID, id
 	return s.revokeOK, nil
-}
-
-func (s *stubStore) TouchGrant(context.Context, string) error { return nil }
-
-func (s *stubStore) RecordAudit(_ context.Context, rec *connectorgrant.AuditRecord) error {
-	s.audit = append(s.audit, rec)
-	return nil
-}
-
-func (s *stubStore) GetBinding(_ context.Context, userID, clientID string) (*connectorgrant.ClientBinding, error) {
-	if b, ok := s.bindings[userID+"|"+clientID]; ok {
-		return b, nil
-	}
-	return nil, connectorgrant.ErrNotFound
 }
 
 func (s *stubStore) PutBinding(_ context.Context, b *connectorgrant.ClientBinding) error {
@@ -108,14 +91,18 @@ func (s *stubStore) ListBindingsByUser(_ context.Context, userID string) ([]*con
 	return out, nil
 }
 
-func (s *stubStore) CompleteAudit(context.Context, string, string, string, int) error { return nil }
-
 func (s *stubStore) ListAuditByUser(context.Context, string, int) ([]*connectorgrant.AuditRecord, error) {
 	return s.audit, nil
 }
 
 func (s *stubStore) ListAuditByGrant(context.Context, string, string, int) ([]*connectorgrant.AuditRecord, error) {
 	return s.audit, nil
+}
+
+// newConnectorService builds the service over the given store, authority and
+// public URL through the generated harness.
+func newConnectorService(t *testing.T, store GrantStore, tokens TokenAuthority, publicURL string) *Service {
+	return NewTestConnector(t, WithConnectorDeps(Deps{Grants: store, Tokens: tokens, PublicURL: publicURL}))
 }
 
 // connectorCtx returns a context authenticated as userID. Distinct from the
@@ -138,7 +125,7 @@ func validCreateRequest() *reliantv1.CreateConnectorRequest {
 func TestCreateConnectorReturnsCredentialOnce(t *testing.T) {
 	store := newStubStore()
 	authority := tokenauthority.NewMemory()
-	svc := NewConnectorService(store, authority, "https://api.example.com")
+	svc := newConnectorService(t, store, authority, "https://api.example.com")
 
 	res, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
 	require.NoError(t, err)
@@ -163,7 +150,7 @@ func TestCreateConnectorReturnsCredentialOnce(t *testing.T) {
 }
 
 func TestCreateConnectorRequiresAuth(t *testing.T) {
-	svc := NewConnectorService(newStubStore(), tokenauthority.NewMemory(), "")
+	svc := newConnectorService(t, newStubStore(), tokenauthority.NewMemory(), "")
 
 	_, err := svc.CreateConnector(context.Background(), connect.NewRequest(validCreateRequest()))
 	require.Error(t, err)
@@ -244,7 +231,7 @@ func TestCreateConnectorValidation(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			store := newStubStore()
-			svc := NewConnectorService(store, tokenauthority.NewMemory(), "")
+			svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
 
 			req := validCreateRequest()
 			tc.mutate(req)
@@ -259,7 +246,7 @@ func TestCreateConnectorValidation(t *testing.T) {
 
 func TestCreateConnectorAcceptsShellWithAllowlist(t *testing.T) {
 	store := newStubStore()
-	svc := NewConnectorService(store, tokenauthority.NewMemory(), "")
+	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
 
 	req := validCreateRequest()
 	req.AllowedTools = []string{"read_file", "run_command"}
@@ -279,7 +266,7 @@ func TestCreateConnectorAcceptsShellWithAllowlist(t *testing.T) {
 // allowlist that does not apply should not sit in the record implying it does.
 func TestCreateConnectorDropsAllowlistWhenUnused(t *testing.T) {
 	store := newStubStore()
-	svc := NewConnectorService(store, tokenauthority.NewMemory(), "")
+	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
 
 	req := validCreateRequest()
 	req.ExecMode = reliantv1.ConnectorExecMode_CONNECTOR_EXEC_MODE_DENY
@@ -292,7 +279,7 @@ func TestCreateConnectorDropsAllowlistWhenUnused(t *testing.T) {
 
 func TestUnspecifiedExecModeDeniesShell(t *testing.T) {
 	store := newStubStore()
-	svc := NewConnectorService(store, tokenauthority.NewMemory(), "")
+	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
 
 	req := validCreateRequest()
 	req.ExecMode = reliantv1.ConnectorExecMode_CONNECTOR_EXEC_MODE_UNSPECIFIED
@@ -306,7 +293,7 @@ func TestUnspecifiedExecModeDeniesShell(t *testing.T) {
 func TestRevokeConnectorIsScopedToCaller(t *testing.T) {
 	store := newStubStore()
 	store.revokeOK = true
-	svc := NewConnectorService(store, tokenauthority.NewMemory(), "")
+	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
 
 	res, err := svc.RevokeConnector(connectorCtx("user-1"),
 		connect.NewRequest(&reliantv1.RevokeConnectorRequest{Id: "grant-9"}))
@@ -325,7 +312,7 @@ func TestRevokeConnectorRevokesCredential(t *testing.T) {
 	store := newStubStore()
 	store.revokeOK = true
 	authority := tokenauthority.NewMemory()
-	svc := NewConnectorService(store, authority, "")
+	svc := newConnectorService(t, store, authority, "")
 
 	created, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
 	require.NoError(t, err)
@@ -341,7 +328,7 @@ func TestRevokeConnectorRevokesCredential(t *testing.T) {
 }
 
 func TestRevokeConnectorRequiresID(t *testing.T) {
-	svc := NewConnectorService(newStubStore(), tokenauthority.NewMemory(), "")
+	svc := newConnectorService(t, newStubStore(), tokenauthority.NewMemory(), "")
 
 	_, err := svc.RevokeConnector(connectorCtx("user-1"),
 		connect.NewRequest(&reliantv1.RevokeConnectorRequest{}))
@@ -351,7 +338,7 @@ func TestRevokeConnectorRequiresID(t *testing.T) {
 
 func TestListConnectorsExcludesCredentials(t *testing.T) {
 	store := newStubStore()
-	svc := NewConnectorService(store, tokenauthority.NewMemory(), "")
+	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
 
 	_, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
 	require.NoError(t, err)
@@ -372,7 +359,7 @@ func TestListConnectorsExcludesCredentials(t *testing.T) {
 }
 
 func TestListAvailableToolsDescribesCatalog(t *testing.T) {
-	svc := NewConnectorService(newStubStore(), tokenauthority.NewMemory(), "")
+	svc := newConnectorService(t, newStubStore(), tokenauthority.NewMemory(), "")
 
 	res, err := svc.ListAvailableTools(connectorCtx("user-1"),
 		connect.NewRequest(&reliantv1.ListAvailableToolsRequest{}))
@@ -393,7 +380,7 @@ func TestListAvailableToolsDescribesCatalog(t *testing.T) {
 // TestMCPURLWithoutPublicURL: a guessed hostname pasted into ChatGPT fails in
 // a way that is very hard to diagnose from a phone, so return the path alone.
 func TestMCPURLWithoutPublicURL(t *testing.T) {
-	svc := NewConnectorService(newStubStore(), tokenauthority.NewMemory(), "")
+	svc := newConnectorService(t, newStubStore(), tokenauthority.NewMemory(), "")
 
 	res, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
 	require.NoError(t, err)
@@ -401,9 +388,59 @@ func TestMCPURLWithoutPublicURL(t *testing.T) {
 }
 
 func TestMCPURLTrimsTrailingSlash(t *testing.T) {
-	svc := NewConnectorService(newStubStore(), tokenauthority.NewMemory(), "https://api.example.com/")
+	svc := newConnectorService(t, newStubStore(), tokenauthority.NewMemory(), "https://api.example.com/")
 
 	res, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
 	require.NoError(t, err)
 	require.Equal(t, "https://api.example.com/mcp", res.Msg.GetMcpUrl())
+}
+
+// TestAuthorizeClientUnknownConnectorIsNotFound: a guessed or someone else's
+// connector id binds nothing (the store scopes the lookup by user).
+func TestAuthorizeClientUnknownConnectorIsNotFound(t *testing.T) {
+	store := newStubStore()
+	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
+
+	_, err := svc.AuthorizeClient(connectorCtx("user-1"), connect.NewRequest(&reliantv1.AuthorizeClientRequest{
+		ClientId: "chatgpt", ConnectorId: ptr.Of("someone-elses"),
+	}))
+	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	require.Empty(t, store.bindings, "nothing is bound to an unknown connector")
+}
+
+// TestClientConsentRoundTrip: consenting through a new connector binds the
+// client to it and returns its credential once; the binding is listed and
+// revocable by its owner only.
+func TestClientConsentRoundTrip(t *testing.T) {
+	store := newStubStore()
+	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
+	owner, other := connectorCtx("user-1"), connectorCtx("user-2")
+
+	authorized, err := svc.AuthorizeClient(owner, connect.NewRequest(&reliantv1.AuthorizeClientRequest{
+		ClientId: "chatgpt", ClientName: "ChatGPT", NewConnector: validCreateRequest(),
+	}))
+	require.NoError(t, err)
+	require.NotEmpty(t, authorized.Msg.GetCredential(), "a new connector's credential is returned at consent")
+	require.Len(t, store.created, 1)
+
+	listed, err := svc.ListAuthorizedClients(owner, connect.NewRequest(&reliantv1.ListAuthorizedClientsRequest{}))
+	require.NoError(t, err)
+	require.Len(t, listed.Msg.GetClients(), 1)
+	require.Equal(t, "ChatGPT on my phone", listed.Msg.GetClients()[0].GetConnectorName())
+
+	listed, err = svc.ListAuthorizedClients(other, connect.NewRequest(&reliantv1.ListAuthorizedClientsRequest{}))
+	require.NoError(t, err)
+	require.Empty(t, listed.Msg.GetClients(), "another user sees no one else's clients")
+
+	revoked, err := svc.RevokeClientAuthorization(other, connect.NewRequest(&reliantv1.RevokeClientAuthorizationRequest{ClientId: "chatgpt"}))
+	require.NoError(t, err)
+	require.False(t, revoked.Msg.GetRevoked(), "another user cannot disconnect the client")
+
+	revoked, err = svc.RevokeClientAuthorization(owner, connect.NewRequest(&reliantv1.RevokeClientAuthorizationRequest{ClientId: "chatgpt"}))
+	require.NoError(t, err)
+	require.True(t, revoked.Msg.GetRevoked())
+
+	listed, err = svc.ListAuthorizedClients(owner, connect.NewRequest(&reliantv1.ListAuthorizedClientsRequest{}))
+	require.NoError(t, err)
+	require.Empty(t, listed.Msg.GetClients())
 }

@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
+	"github.com/reliant-labs/reliant/internal/handlers/connector"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
@@ -467,8 +468,16 @@ func NewServer(cfg *Config) (*Server, error) {
 	var connectorPath string
 	var connectorHandler http.Handler
 	if repo, ok := database.(*db.Repo); ok && repo != nil && repo.DB != nil {
-		connectorService := services.NewConnectorService(
-			connectorgrant.NewSQLStore(repo.DB.SQLDB()), authority, cfg.PublicURL)
+		connectorService, err := connector.New(connector.Deps{
+			Logger:    handlerLogger,
+			Config:    handlerConfig,
+			Grants:    connectorgrant.NewSQLStore(repo.DB.SQLDB()),
+			Tokens:    authority,
+			PublicURL: cfg.PublicURL,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("connector service: %w", err)
+		}
 		connectorPath, connectorHandler = reliantv1connect.NewConnectorServiceHandler(connectorService, opts...)
 	}
 

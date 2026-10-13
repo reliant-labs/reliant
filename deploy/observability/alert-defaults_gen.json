@@ -8,6 +8,10 @@
         "rpc_service": "reliant.v1.AccountService"
       },
       {
+        "name": "connector",
+        "rpc_service": "reliant.v1.ConnectorService"
+      },
+      {
         "name": "question",
         "rpc_service": "reliant.v1.QuestionService"
       },

@@ -7333,8 +7333,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "ConnectorExecMode"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "DaemonService",
@@ -33582,5 +33581,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "8633c14e5602bdbac667c79932965996e6316c97b1cd0050341acdb9be39bc03"
+  "source_hash": "dfcbc597a599ed4a740649bf98587f86184a7e5cc0ec19cab526b3462d885ce0"
 }
