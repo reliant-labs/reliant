@@ -106,6 +106,18 @@ export async function resizeDaemon(daemonId: string, size: DaemonSize): Promise<
   await getControlPlaneClient(DaemonService).resizeDaemon({ daemonId, size });
 }
 
+/**
+ * Grows a cloud machine's disk to `storageGib` GiB of data (control-plane
+ * docs/design/workspace-disk-resize.md). The target is absolute, not a delta,
+ * so a retry is safe. Unlike a resize this needs no stop: the cloud disk grows
+ * at once, running or suspended. A running machine USES the space only after
+ * its next restart, which is why the detail view offers to restart it.
+ */
+export async function growDaemonDisk(daemonId: string, storageGib: number): Promise<Daemon | undefined> {
+  const res = await getControlPlaneClient(DaemonService).growDaemonDisk({ daemonId, storageGib });
+  return res.daemon;
+}
+
 export async function suspendDaemon(daemonId: string): Promise<void> {
   await getControlPlaneClient(DaemonService).suspendDaemon({ daemonId });
 }

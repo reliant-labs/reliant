@@ -9,6 +9,9 @@
  * Every volume, not one "disk": a cloud machine's home volume can sit at 21%
  * while its build-cache & docker volume is at 100%, and a single number for
  * "the disk" is how the product ended up reporting the wrong one.
+ *
+ * Where the machine's plan lets its disk grow, the card also offers "Grow
+ * disk", in its header and beside "Free up space" on a volume under pressure.
  */
 
 import { useState } from "react";
@@ -32,7 +35,19 @@ function reportedAgo(ms: bigint): string {
   return hours < 48 ? `${hours} h ago` : `${Math.round(hours / 24)} days ago`;
 }
 
-export function MachineDiskCard({ daemon, machineLabel }: { daemon: DaemonInfo; machineLabel: string }) {
+export function MachineDiskCard({
+  daemon,
+  machineLabel,
+  onGrowDisk,
+  growDisabled = false,
+}: {
+  daemon: DaemonInfo;
+  machineLabel: string;
+  /** Opens Grow disk. Absent where the machine's disk cannot grow. */
+  onGrowDisk?: () => void;
+  /** True while another lifecycle action runs on the machine. */
+  growDisabled?: boolean;
+}) {
   const [freeing, setFreeing] = useState<DiskVolume | null>(null);
   const volumes = volumesFullestFirst(daemon.disk);
   if (volumes.length === 0) return null;
@@ -41,16 +56,28 @@ export function MachineDiskCard({ daemon, machineLabel }: { daemon: DaemonInfo; 
 
   return (
     <Card className="mt-6" data-testid="machine-disk-card">
-      <CardHeader>
+      <CardHeader className="flex items-center justify-between gap-3">
         <CardTitle className="inline-flex items-center gap-2">
           <HardDrive className="h-4 w-4 text-muted-foreground" /> Disk
           {ago && <span className="text-xs font-normal text-muted-foreground">· reported {ago}</span>}
         </CardTitle>
+        {onGrowDisk && (
+          <Button size="sm" variant="outline" disabled={growDisabled} onClick={onGrowDisk}>
+            Grow disk
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
         <ul className="flex flex-col divide-y divide-border">
           {volumes.map((v) => (
-            <VolumeRow key={v.label + v.paths.join()} v={v} onFree={() => setFreeing(v)} canFree={v.pressure} />
+            <VolumeRow
+              key={v.label + v.paths.join()}
+              v={v}
+              onFree={() => setFreeing(v)}
+              canFree={v.pressure}
+              onGrow={v.pressure ? onGrowDisk : undefined}
+              growDisabled={growDisabled}
+            />
           ))}
         </ul>
       </CardContent>
@@ -68,7 +95,20 @@ export function MachineDiskCard({ daemon, machineLabel }: { daemon: DaemonInfo; 
   );
 }
 
-function VolumeRow({ v, onFree, canFree }: { v: DiskVolume; onFree: () => void; canFree: boolean }) {
+function VolumeRow({
+  v,
+  onFree,
+  canFree,
+  onGrow,
+  growDisabled,
+}: {
+  v: DiskVolume;
+  onFree: () => void;
+  canFree: boolean;
+  /** Offered beside "Free up space" on a volume under pressure. */
+  onGrow?: () => void;
+  growDisabled: boolean;
+}) {
   const pct = Math.round(usedFraction(v) * 100);
   const notice = v.pressure ? diskNotice(v, Date.now()) : null;
   const groups = consumerGroups(v);
@@ -94,11 +134,18 @@ function VolumeRow({ v, onFree, canFree }: { v: DiskVolume; onFree: () => void; 
           Using it: {groups.map((g) => `${g.label} ${formatBytes(g.bytes)}`).join(" · ")}
         </p>
       )}
-      {canFree && (
-        <div>
-          <Button size="sm" variant="outline" onClick={onFree}>
-            Free up space
-          </Button>
+      {(canFree || onGrow) && (
+        <div className="flex flex-wrap gap-2">
+          {canFree && (
+            <Button size="sm" variant="outline" onClick={onFree}>
+              Free up space
+            </Button>
+          )}
+          {onGrow && (
+            <Button size="sm" variant="outline" disabled={growDisabled} onClick={onGrow}>
+              Grow disk
+            </Button>
+          )}
         </div>
       )}
     </li>

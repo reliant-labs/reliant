@@ -78,6 +78,7 @@ const ALL_REASONS = [
   "compute_budget_exhausted",
   "no_compute_subscription",
   "daemon_size_denied",
+  "daemon_storage_denied",
   "something_we_have_never_seen",
 ];
 

@@ -58,6 +58,12 @@ const REASON_COPY: Record<string, { title: string; body: string }> = {
     title: "That machine size isn't on your plan",
     body: "Your current plan doesn't include machines this large. Upgrade to unlock bigger machines, or pick a smaller size.",
   },
+  // GrowDaemonDisk's target is past the plan's max_daemon_storage_gib, or the
+  // plan offers no disk growth. The Grow disk modal shows this inline today.
+  daemon_storage_denied: {
+    title: "That disk size isn't on your plan",
+    body: "Your current plan doesn't let this machine's disk grow that large. Upgrade for a larger limit, or pick a smaller size.",
+  },
 };
 
 const GENERIC_COPY = {

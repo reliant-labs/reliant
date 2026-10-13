@@ -77,6 +77,7 @@ import {
   describeError,
   getComputeSubscription,
   getDaemon,
+  growDaemonDisk,
   listPortAccessRules,
   portAccessRulesQueryKey,
   removePortAccess,
@@ -114,6 +115,9 @@ import {
 import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { CardInset } from "@/components/forge-ui/card";
 import { MachineDiskCard } from "./MachineDiskCard";
+import { DiskGrowNotice, GrowDiskModal, type GrowStage } from "./GrowDiskModal";
+import { diskGrowStatus, isStorageDenied } from "./diskGrow";
+import { DaemonDiskState } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { CLOUD_PROJECT_ROOT, cloudPathForRepo } from "@/lib/cloudProjectPath";
 import { toast } from "@/lib/toast-manager";
 import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
@@ -1665,6 +1669,11 @@ function EnvironmentDetail({
   const [cycling, setCycling] = useState<LifecycleAction | null>(null);
   const [resizeOpen, setResizeOpen] = useState(false);
   const [resizeError, setResizeError] = useState("");
+  const [growOpen, setGrowOpen] = useState(false);
+  const [growError, setGrowError] = useState("");
+  const [growDenied, setGrowDenied] = useState(false);
+  // The grow RPC's own stage. With a restart, restartStage takes over after it.
+  const [growStage, setGrowStage] = useState<GrowStage | null>(null);
   const goToBilling = useGoToBilling();
 
   // The detail view reads BOTH halves, from the service that owns each.
@@ -1694,8 +1703,9 @@ function EnvironmentDetail({
     // 2s while a restart runs: the default 15s would leave the progress copy
     // ("Stopping…" → "Starting…") lagging the machine by up to a quarter
     // minute, which reads as a hang during the one operation that most needs
-    // to look alive.
-    refetchInterval: restartStage ? 2_000 : 15_000,
+    // to look alive. 5s while the disk grows, which takes about a minute.
+    refetchInterval: (query) =>
+      restartStage ? 2_000 : query.state.data?.daemon?.disk?.state === DaemonDiskState.EXPANDING ? 5_000 : 15_000,
     enabled: cloud,
   });
   const spec = daemonQ.data?.daemon;
@@ -1810,19 +1820,70 @@ function EnvironmentDetail({
     onSettled: () => { setRestartStage(null); setCycling(null); refetchAll(); },
   });
 
-  // Only fetched once someone opens Resize: the same server answer the
-  // create picker uses, so the two cannot disagree about what is runnable.
-  const resizeEligibilityQ = useQuery({
+  /**
+   * Grow disk. The cloud disk grows at once, running or suspended, so unlike
+   * Resize the grow itself needs no stop. A running guest keeps the disk size
+   * it booted with, though, so "Grow and restart now" grows FIRST and then
+   * runs the Restart sequence. Growing first means a refusal (the plan's
+   * limit, funding) costs nothing: the machine is never stopped for a grow
+   * that did not happen.
+   */
+  const growMut = useMutation({
+    mutationFn: async ({ targetGib, restart }: { targetGib: number; restart: boolean }) => {
+      setGrowStage("growing");
+      await growDaemonDisk(daemonId, targetGib);
+      setGrowStage(null);
+      if (!restart) return;
+      try {
+        await cycleMachine();
+      } catch (e) {
+        throw new Error(
+          `The disk is growing to ${targetGib} GiB, but the restart failed: ${describeError(e)}. ` +
+            "Restart the machine to use the space.",
+        );
+      }
+    },
+    onSuccess: (_data, { targetGib, restart }) => {
+      setGrowError("");
+      setGrowDenied(false);
+      setGrowOpen(false);
+      const name = daemon ? daemonDisplayName(daemon) : "The machine";
+      toast.success(
+        restart
+          ? `${name} restarted with a ${targetGib} GiB disk`
+          : `Growing ${name}'s disk to ${targetGib} GiB`,
+      );
+    },
+    onError: (e) => {
+      setGrowError(describeError(e, "Failed to grow the disk"));
+      setGrowDenied(isStorageDenied(e));
+    },
+    onSettled: () => { setGrowStage(null); setRestartStage(null); setCycling(null); refetchAll(); },
+  });
+
+  // The same server answer the create picker uses, so the two cannot disagree
+  // about what is runnable. Read for a managed machine up front, not only
+  // once Resize opens: its disk-growth limit decides whether "Grow disk" is
+  // offered at all, and a plan with no limit offers no growth.
+  const managedMachine = daemon ? !isExternalDaemon(daemon) : false;
+  const eligibilityQ = useQuery({
     queryKey: QK.computeEligibility,
     queryFn: () => getComputeEligibility(),
     staleTime: 30_000,
-    enabled: cloud && resizeOpen,
+    enabled: cloud && (resizeOpen || managedMachine),
   });
   const resizeAllowed = useMemo(
-    () => sizeTiersFromWire(resizeEligibilityQ.data?.allowedDaemonSizes ?? []),
-    [resizeEligibilityQ.data?.allowedDaemonSizes],
+    () => sizeTiersFromWire(eligibilityQ.data?.allowedDaemonSizes ?? []),
+    [eligibilityQ.data?.allowedDaemonSizes],
   );
-  const resizePricing = usePlans({ enabled: cloud && resizeOpen }).data?.daemonPricing;
+  const pricing = usePlans({ enabled: cloud && (resizeOpen || growOpen) }).data?.daemonPricing;
+  const disk = spec?.disk;
+  const maxDiskGib = eligibilityQ.data?.maxDaemonStorageGib ?? 0;
+  // Offered only where the plan grows disks at all. A machine already at
+  // its plan's limit still gets it: the modal says so and names what would
+  // raise the limit.
+  const canGrowDisk = cloud && managedMachine && (disk?.requestedGib ?? 0) > 0 && maxDiskGib > 0;
+  const openGrow = () => { setGrowError(""); setGrowDenied(false); setGrowOpen(true); };
 
   const status = daemon ? daemonStatus(daemon) : "pending";
   const waking = useWakingMachines();
@@ -1839,13 +1900,19 @@ function EnvironmentDetail({
     resumeMut.isPending ||
     deleteMut.isPending ||
     restartMut.isPending ||
-    resizeMut.isPending;
+    resizeMut.isPending ||
+    growMut.isPending;
   // The registry's size name first; control-plane's spec as a fallback for a
   // row whose size never reached the mirror.
   const currentSize =
     SIZE_TIERS.find((t) => t.name === daemon?.size)?.value ??
     (spec?.size ? SIZE_TIERS.find((t) => t.value === spec.size)?.value : undefined);
   const external = daemon ? isExternalDaemon(daemon) : false;
+  // Restart is offered beside a grow only where the Restart button itself
+  // would be live: not on a FAILED machine, nor one still starting.
+  const restartPlan = daemon ? lifecyclePlan(daemon, null) : null;
+  const restartable = Boolean(restartPlan?.offer.includes("restart") && restartPlan.disabledReason === null);
+  const growNotice = diskGrowStatus(disk, daemon ? daemon.status !== DaemonStatus.SUSPENDED : false);
   // The registry list is what proves the machine exists; the control-plane
   // spec is an extra half that only a cloud build has.
   const loading = listQ.isLoading || (cloud && daemonQ.isLoading);
@@ -1965,6 +2032,14 @@ function EnvironmentDetail({
               {lifecyclePlan(daemon, null).recoveryHint}
             </p>
           )}
+          {cloud && !external && growNotice && (
+            <DiskGrowNotice
+              status={growNotice}
+              machineName={daemonDisplayName(daemon)}
+              restartable={restartable && !busy}
+              onRestart={() => setRestartOpen(true)}
+            />
+          )}
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card>
@@ -1979,7 +2054,26 @@ function EnvironmentDetail({
                   ) : (
                     <>
                       <InfoRow label="Size" value={SIZE_TIERS.find((t) => t.value === currentSize)?.label ?? "Custom"} />
-                      <InfoRow label="Storage" value={spec?.storageSize} />
+                      <InfoRow
+                        label="Storage"
+                        value={
+                          (disk?.requestedGib || spec?.storageSize) && (
+                            <span className="inline-flex items-baseline gap-2">
+                              {disk?.requestedGib ? `${disk.requestedGib} GiB` : spec?.storageSize}
+                              {canGrowDisk && (
+                                <button
+                                  type="button"
+                                  onClick={openGrow}
+                                  disabled={busy}
+                                  className="font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Grow
+                                </button>
+                              )}
+                            </span>
+                          )
+                        }
+                      />
                     </>
                   )}
                   <InfoRow label="Created" value={fmtTimestamp(daemon.createdAt)} />
@@ -2011,7 +2105,12 @@ function EnvironmentDetail({
           </div>
 
           {/* Every volume the machine reports, and what fills the full one. */}
-          <MachineDiskCard daemon={daemon} machineLabel={daemonDisplayName(daemon)} />
+          <MachineDiskCard
+            daemon={daemon}
+            machineLabel={daemonDisplayName(daemon)}
+            onGrowDisk={canGrowDisk ? openGrow : undefined}
+            growDisabled={busy}
+          />
 
           {/* Which outside AI apps can reach this machine. Above port access:
               it is the broader grant — tools on the machine, not one port. */}
@@ -2048,8 +2147,8 @@ function EnvironmentDetail({
             storageSize={spec?.storageSize}
             running={daemon.status !== DaemonStatus.SUSPENDED}
             allowedSizes={resizeAllowed}
-            sizesLoading={resizeEligibilityQ.isLoading}
-            pricing={resizePricing}
+            sizesLoading={eligibilityQ.isLoading}
+            pricing={pricing}
             isPending={resizeMut.isPending}
             stage={cycling === "resize" ? restartStage : null}
             error={resizeError}
@@ -2057,6 +2156,27 @@ function EnvironmentDetail({
             onConfirm={(size) => resizeMut.mutate(size)}
             onSeePlans={goToBilling}
           />
+
+          {disk && (
+            <GrowDiskModal
+              open={growOpen}
+              machineName={daemonDisplayName(daemon)}
+              currentGib={disk.requestedGib}
+              includedGib={disk.includedGib}
+              maxGib={maxDiskGib}
+              limitLoading={eligibilityQ.isLoading}
+              running={daemon.status !== DaemonStatus.SUSPENDED}
+              restartable={restartable}
+              pricing={pricing}
+              isPending={growMut.isPending}
+              stage={growMut.isPending ? (growStage ?? restartStage) : null}
+              error={growError}
+              storageDenied={growDenied}
+              onClose={() => setGrowOpen(false)}
+              onConfirm={(targetGib, restart) => growMut.mutate({ targetGib, restart })}
+              onSeePlans={goToBilling}
+            />
+          )}
         </>
       )}
     </div>

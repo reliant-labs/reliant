@@ -51,6 +51,12 @@ export interface ComputeEligibility {
    * subscription decided such a user could run nothing at all.
    */
   allowedDaemonSizes: string[];
+  /**
+   * How large, in GiB of data, the plan lets a machine's disk grow
+   * (GrowDaemonDisk), with the platform's 1 TiB ceiling already applied.
+   * Zero means the plan offers no disk growth at all.
+   */
+  maxDaemonStorageGib: number;
 }
 
 /**
@@ -74,6 +80,7 @@ export async function getComputeEligibility(): Promise<ComputeEligibility> {
     grantedMinutesRemaining: Number(res.grantedMinutesRemaining),
     planName: res.planName,
     allowedDaemonSizes: res.allowedDaemonSizes,
+    maxDaemonStorageGib: res.maxDaemonStorageGib,
   };
 }
 
