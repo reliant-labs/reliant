@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/serverapi"
 	"github.com/reliant-labs/reliant/internal/servergateway"
 	"github.com/reliant-labs/reliant/internal/serverworker"
+	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -68,11 +69,9 @@ external Temporal, Postgres, and NATS services.
 
 Designed to run as N replicas behind a load balancer.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			base, err := loadRootConfig(cmd)
-			if err != nil {
+			if err := loadServerAPIConfig(cmd, &opts); err != nil {
 				return err
 			}
-			opts.Log = logSettings(base)
 
 			// Parse CORS origins: "*" → wildcard, otherwise comma-separated
 			corsRaw, _ := cmd.Flags().GetString("cors-origins")
@@ -80,11 +79,6 @@ Designed to run as N replicas behind a load balancer.`,
 				opts.CORSAllowedOrigins = []string{"*"}
 			} else {
 				opts.CORSAllowedOrigins = strings.Split(corsRaw, ",")
-			}
-
-			// Parse allowed email domains (empty = allow all)
-			if raw := serverEnvOrDefault("ALLOWED_EMAIL_DOMAINS", ""); raw != "" {
-				opts.AllowedEmailDomains = strings.Split(raw, ",")
 			}
 
 			return serverapi.Run(cmd.Context(), opts)
@@ -121,12 +115,30 @@ Designed to run as N replicas behind a load balancer.`,
 	cmd.Flags().StringVar(&opts.TLSKeyFile, "tls-key", serverEnvOrDefault("TLS_KEY_FILE", ""), "TLS key file path")
 	cmd.Flags().BoolVar(&opts.DisableTLS, "disable-tls", serverEnvOrDefaultBool("DISABLE_TLS", false), "Disable TLS (use plaintext HTTP)")
 
-	// JWT
-	cmd.Flags().StringVar(&opts.JWTPublicKey, "jwt-public-key", serverEnvOrDefault("JWT_PUBLIC_KEY", ""), "JWT public key PEM for token validation")
-	cmd.Flags().StringVar(&opts.JWTPublicKeyFile, "jwt-public-key-file", serverEnvOrDefault("JWT_PUBLIC_KEY_FILE", ""), "Path to JWT public key PEM file")
-	cmd.Flags().StringVar(&opts.JWKSURL, "jwks-url", serverEnvOrDefault("RELIANT_JWKS_URL", ""), "JWKS endpoint URL for JWT validation (alternative to PEM key)")
+	// JWT (--jwt-public-key, --jwt-public-key-file, --jwks-url) and the
+	// email-domain allowlist: proto/config/v1 ApiServerConfig.
+	config.RegisterApiServerConfigFlags(cmd)
 
 	return cmd
+}
+
+// loadServerAPIConfig fills opts with what `server api` reads through typed
+// config: the root config, and its own ApiServerConfig.
+func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
+	base, err := loadRootConfig(cmd)
+	if err != nil {
+		return err
+	}
+	api, err := config.LoadApiServerConfig(cmd)
+	if err != nil {
+		return err
+	}
+	opts.Log = logSettings(base)
+	opts.JWTPublicKey = api.GetJwtPublicKey()
+	opts.JWTPublicKeyFile = api.GetJwtPublicKeyFile()
+	opts.JWKSURL = api.GetJwksUrl()
+	opts.AllowedEmailDomains = api.GetAllowedEmailDomains()
+	return nil
 }
 
 func newServerWorkerCmd() *cobra.Command {

@@ -131,11 +131,8 @@ func Run(ctx context.Context, opts Options) error {
 		jwtPublicKey = os.Getenv("RELIANT_JWT_PUBLIC_KEY")
 	}
 
-	// JWKS URL: flag > env var (alternative to PEM key)
+	// JWKS URL (RELIANT_JWKS_URL / --jwks-url), the alternative to a PEM key
 	jwksURL := opts.JWKSURL
-	if jwksURL == "" {
-		jwksURL = os.Getenv("RELIANT_JWKS_URL")
-	}
 
 	// Auth mode
 	authMode := auth.GetAuthMode()

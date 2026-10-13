@@ -33655,6 +33655,74 @@
   ],
   "configs": [
     {
+      "Name": "ApiServerConfig",
+      "Fields": [
+        {
+          "Name": "jwt_public_key",
+          "GoName": "JwtPublicKey",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "JWT_PUBLIC_KEY",
+          "Flag": "jwt-public-key",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "JWT public key PEM for token validation",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/api_server_config.proto"
+        },
+        {
+          "Name": "jwt_public_key_file",
+          "GoName": "JwtPublicKeyFile",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "JWT_PUBLIC_KEY_FILE",
+          "Flag": "jwt-public-key-file",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Path to JWT public key PEM file",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/api_server_config.proto"
+        },
+        {
+          "Name": "jwks_url",
+          "GoName": "JwksUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_JWKS_URL",
+          "Flag": "jwks-url",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "JWKS endpoint URL for JWT validation (alternative to PEM key)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/api_server_config.proto"
+        },
+        {
+          "Name": "allowed_email_domains",
+          "GoName": "AllowedEmailDomains",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "ALLOWED_EMAIL_DOMAINS",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Comma-separated email domains allowed to sign in (none allows all)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/api_server_config.proto"
+        }
+      ],
+      "Binary": "reliant",
+      "Command": [
+        "server",
+        "api"
+      ],
+      "ProtoFile": "config/v1/api_server_config.proto",
+      "Line": 16
+    },
+    {
       "Name": "ReliantConfig",
       "Fields": [
         {
@@ -33713,5 +33781,5 @@
       "Line": 64
     }
   ],
-  "source_hash": "9a82a8cbd6d0823897274cfd44fac13d0d055611de8199c00ba016397c18cda0"
+  "source_hash": "22212ceedc95a9248efe44d10b16ef85d2cd8aae3663df111648744f89b54613"
 }

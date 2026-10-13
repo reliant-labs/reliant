@@ -8330,9 +8330,9 @@ reliant server api [flags]
 | `--disable-tls` | `bool` | - | Disable TLS (use plaintext HTTP) |
 | `--grpc-port` | `int` | `9090` | gRPC/ConnectRPC listen port |
 | `--health-port` | `int` | `8081` | Health/readiness HTTP endpoint port |
-| `--jwks-url` | `string` | - | JWKS endpoint URL for JWT validation (alternative to PEM key) |
-| `--jwt-public-key` | `string` | - | JWT public key PEM for token validation |
-| `--jwt-public-key-file` | `string` | - | Path to JWT public key PEM file |
+| `--jwks-url` | `string` | - | JWKS endpoint URL for JWT validation (alternative to PEM key) [env: RELIANT_JWKS_URL] |
+| `--jwt-public-key` | `string` | - | JWT public key PEM for token validation [env: JWT_PUBLIC_KEY] |
+| `--jwt-public-key-file` | `string` | - | Path to JWT public key PEM file [env: JWT_PUBLIC_KEY_FILE] |
 | `--nats-url` | `string` | - | NATS server URL (required) |
 | `--pprof-port` | `int` | `6060` | pprof debug server port |
 | `--streaming-driver` | `string` | `nats` | Streaming driver (memory or nats) |

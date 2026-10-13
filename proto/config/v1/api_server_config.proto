@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package config.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
+
+// ApiServerConfig is the `reliant server api` process's own config: the knobs
+// only the API server reads. It loads alongside the root ReliantConfig
+// (config.proto, whose header has the rules every config here follows).
+//
+// It moves onto this message a field at a time; the rest of the API server's
+// flags are still registered by hand in cmd/reliant/commands/server.go.
+message ApiServerConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    command: ["server", "api"]
+  };
+
+  // How the API server validates a caller's JWT. Any one of these is enough.
+  // A PEM given directly wins over a file; serverapi.Run falls back to the
+  // legacy RELIANT_JWT_PUBLIC_KEY when both are empty.
+  string jwt_public_key = 1 [(forge.v1.config) = {
+    env_var: "JWT_PUBLIC_KEY"
+    flag: "jwt-public-key"
+    description: "JWT public key PEM for token validation"
+  }];
+  string jwt_public_key_file = 2 [(forge.v1.config) = {
+    env_var: "JWT_PUBLIC_KEY_FILE"
+    flag: "jwt-public-key-file"
+    description: "Path to JWT public key PEM file"
+  }];
+  string jwks_url = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_JWKS_URL"
+    flag: "jwks-url"
+    description: "JWKS endpoint URL for JWT validation (alternative to PEM key)"
+  }];
+
+  // The email domains allowed to sign in, comma-separated; none allows every
+  // domain. The loader trims each element and drops blank ones, which the
+  // domain whitelist already did to every entry, so " B.com," still means
+  // b.com alone.
+  repeated string allowed_email_domains = 4 [(forge.v1.config) = {
+    env_var: "ALLOWED_EMAIL_DOMAINS"
+    description: "Comma-separated email domains allowed to sign in (none allows all)"
+  }];
+}
