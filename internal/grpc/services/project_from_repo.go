@@ -105,7 +105,7 @@ func (s *ProjectService) CreateProjectFromRepo(
 	// row. If this is going to be refused — no credential, machine failed,
 	// not the caller's daemon — it must fail with nothing persisted, rather
 	// than leaving a project the user then has to clean up by hand.
-	cloneResult, err := s.controlPlane.CloneRepoOntoDaemon(ctx, bearerToken(req.Header().Get("Authorization")),
+	cloneResult, err := s.controlPlane.CloneRepoOntoDaemon(ctx, auth.BearerToken(req.Header().Get("Authorization")),
 		controlplane.CloneRepoRequest{
 			DaemonID:  daemonID,
 			CloneURL:  cloneURL,

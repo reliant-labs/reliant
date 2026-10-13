@@ -78,13 +78,6 @@ func (s *AccountService) WithControlPlaneClient(client controlplane.Client) *Acc
 	return s
 }
 
-// bearerToken strips the "Bearer " prefix from an Authorization header,
-// yielding the raw JWT to forward to the control plane. callerIdentity has
-// already established that this is a session JWT and not an access token.
-func bearerToken(authHeader string) string {
-	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(authHeader), "Bearer "))
-}
-
 // callerIdentity extracts the caller's user id and email, and enforces the
 // session-only rule.
 //
@@ -92,7 +85,7 @@ func bearerToken(authHeader string) string {
 // able to perform the one irreversible action on its owner's data. This
 // mirrors TokenService.CreateToken, for the same reason.
 func (s *AccountService) callerIdentity(ctx context.Context, authHeader string) (userID, email string, err error) {
-	if _, isMachine := auth.MachineTokenFromContext(ctx); isMachine || auth.IsAccessTokenFormat(bearerToken(authHeader)) {
+	if _, isMachine := auth.MachineTokenFromContext(ctx); isMachine || auth.IsAccessTokenFormat(auth.BearerToken(authHeader)) {
 		return "", "", connect.NewError(connect.CodeUnauthenticated,
 			fmt.Errorf("account deletion requires an interactive session"))
 	}
@@ -130,7 +123,7 @@ func (s *AccountService) PreviewAccountDeletion(
 	var wallet *reliantv1.AccountDeletionWalletQuote
 	if s.controlPlane != nil {
 		quote, cpErr := s.controlPlane.PreviewAccountDeletionWallet(ctx,
-			bearerToken(req.Header().Get("Authorization")))
+			auth.BearerToken(req.Header().Get("Authorization")))
 		if cpErr != nil {
 			logging.Error("[AccountService] control-plane wallet quote failed", "user_id", userID, "error", cpErr)
 			return nil, connect.NewError(connect.CodeUnavailable,
@@ -192,7 +185,7 @@ func (s *AccountService) DeleteAccount(
 	resp := &reliantv1.DeleteAccountResponse{}
 	if s.controlPlane != nil {
 		result, cpErr := s.controlPlane.DeleteCurrentUserAccount(ctx,
-			bearerToken(req.Header().Get("Authorization")))
+			auth.BearerToken(req.Header().Get("Authorization")))
 		if cpErr != nil {
 			logging.Error("[AccountService] control-plane deletion failed", "user_id", userID, "error", cpErr)
 			if connect.CodeOf(cpErr) == connect.CodeUnavailable {
