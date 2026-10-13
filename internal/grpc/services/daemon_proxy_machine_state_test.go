@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -133,10 +134,10 @@ func TestTerminalProxy_MachineStatesKeepTheirCode(t *testing.T) {
 
 // The generic dispatcher picks FailedPrecondition for "no machine" too; a
 // pending machine stays Unavailable with its wait marker.
-func TestMapDaemonDispatchError_MachineStates(t *testing.T) {
+func TestDispatchConnectError_MachineStates(t *testing.T) {
 	for _, state := range machineStates {
 		t.Run(state.name, func(t *testing.T) {
-			got := mapDaemonDispatchError("pkg.list_commands", fmt.Errorf("resolving daemon for command: %w", state.err))
+			got := daemonerr.DispatchConnectError("pkg.list_commands", fmt.Errorf("resolving daemon for command: %w", state.err))
 			assert.Equal(t, state.wantCode, connect.CodeOf(got))
 			assert.Contains(t, got.Error(), "daemon command pkg.list_commands failed")
 		})

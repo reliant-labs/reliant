@@ -199,7 +199,7 @@ func ForgeRPCDeadlines() map[string]time.Duration {
 // Daemon-command errors cross the transport as PLAIN STRINGS, not wrapped Go
 // errors (SendDaemonCommand flattens every failure into one opaque error whose
 // text is the only discriminator). So substring matching is the only available
-// mechanism, exactly as daemonErrDirNotExistMarker does for pkg.*. These mirror
+// mechanism, exactly as daemonerr's dirNotExistMarker does for pkg.*. These mirror
 // the prefixes daemonruntime/cmd_forge.go emits; the two live in different
 // packages because the proxy must not import the daemon runtime, which makes
 // the error text the wire contract between them.
@@ -420,11 +420,11 @@ func (s *ForgeService) forgeDispatch(
 // and a reader files a bug against us for what is almost always a project the
 // user can fix. FailedPrecondition is gRPC's "do not retry until the system's
 // state has been fixed", which is exactly the situation, and it is the same
-// call DaemonOutdatedConnectError makes for version skew. Unavailable, the old
+// call daemonerr.OutdatedConnectError makes for version skew. Unavailable, the old
 // answer, was the worst of the three: the UI read it as "your daemon is
 // offline" and retried a failure that retrying cannot change.
 //
-// It is applied in THIS package rather than taught to mapDaemonDispatchError
+// It is applied in THIS package rather than taught to daemonerr.DispatchConnectError
 // because the markers are forge's wire contract with its own daemon commands
 // (see the constants above); the shared mapper stays ignorant of every command
 // family's prefixes. Every forge dispatch — the shared envelope and the three
@@ -462,7 +462,7 @@ func remapForgeDispatchError(commandType string, err error) error {
 // deadline, which carries no information about the cluster's actual state, is
 // eligible to be reinterpreted as "unknown". Matching is by substring because
 // SendDaemonCommand flattens its failures into opaque error text (see
-// mapDaemonDispatchError).
+// daemonerr.DispatchConnectError).
 func isForgeClusterReadTimeout(err error) bool {
 	if err == nil {
 		return false

@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -58,7 +59,7 @@ func (s *BackgroundProxyService) sendCommand(ctx context.Context, userID, comman
 		// fault: Unavailable while it is on its way, FailedPrecondition when
 		// the user has none. ListProcesses used to return the second as
 		// Internal (ELECTRON-A6).
-		if cerr, ok := machineStateConnectError("", err); ok {
+		if cerr, ok := daemonerr.MachineStateConnectError("", err); ok {
 			return cerr
 		}
 		return connect.NewError(connect.CodeInternal, err)

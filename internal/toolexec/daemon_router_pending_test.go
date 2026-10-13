@@ -48,7 +48,7 @@ func TestResolveDaemonID_NoDaemonAtAll_ReturnsHardError(t *testing.T) {
 }
 
 // Neither resolution failure may name the account UUID. These messages are
-// rendered verbatim to the end user (mapDaemonDispatchError wraps them into a
+// rendered verbatim to the end user (daemonerr.DispatchConnectError wraps them into a
 // Connect error the UI prints), and the owner hit
 // "[internal] resolving daemon for command: no daemon available for user
 // 22302879-fd98-4cde-9e12-532b12a5d3fc" in the product. The id belongs in the

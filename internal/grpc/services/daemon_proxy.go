@@ -11,6 +11,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -77,16 +78,16 @@ func (s *DaemonProxyService) StartOAuthFlow(
 //     unknown daemon command type` from a daemon that predated the handler —
 //     nothing was broken server-side, but `code: internal` said otherwise.
 //   - The command never reached a machine: the machine's state picks the code
-//     (machineStateConnectError). "No machine is connected to your account
+//     (daemonerr.MachineStateConnectError). "No machine is connected to your account
 //     yet" used to leave here as Internal (ELECTRON-B1); the settings page
 //     asks for the helper whether or not the user has connected a machine.
 //   - Anything else — the daemon ran the command and it failed, the reply
 //     timed out — is Internal.
 func oauthDaemonError(doing string, err error) *connect.Error {
-	if IsDaemonOutdatedError(err) {
-		return DaemonOutdatedConnectError(err)
+	if daemonerr.IsOutdated(err) {
+		return daemonerr.OutdatedConnectError(err)
 	}
-	if cerr, ok := machineStateConnectError(doing, err); ok {
+	if cerr, ok := daemonerr.MachineStateConnectError(doing, err); ok {
 		return cerr
 	}
 	return connect.NewError(connect.CodeInternal, fmt.Errorf("%s: %w", doing, err))

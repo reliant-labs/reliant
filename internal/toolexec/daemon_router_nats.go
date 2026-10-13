@@ -432,7 +432,7 @@ func routableDaemonID(userID string, selector *DaemonSelector, rec daemonRecord,
 	// ── The user id stays in the LOG, never in the message ───────────
 	//
 	// Both errors below are rendered VERBATIM to the end user:
-	// mapDaemonDispatchError wraps them into a Connect error whose message the
+	// daemonerr.DispatchConnectError wraps them into a Connect error whose message the
 	// UI prints. The account UUID that used to be interpolated here therefore
 	// surfaced as "[internal] resolving daemon for command: no daemon
 	// available for user 22302879-fd98-4cde-9e12-532b12a5d3fc" — an internal

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package daemonerr
 
 import (
 	"errors"
@@ -30,17 +30,17 @@ func outdatedDaemonErr() error {
 			`— update it to continue`)
 }
 
-func TestIsDaemonOutdatedError(t *testing.T) {
-	if !IsDaemonOutdatedError(outdatedDaemonErr()) {
+func TestIsOutdated(t *testing.T) {
+	if !IsOutdated(outdatedDaemonErr()) {
 		t.Error("a version-skew error was not recognised as one")
 	}
-	if IsDaemonOutdatedError(errors.New("working dir does not exist: /gone")) {
+	if IsOutdated(errors.New("working dir does not exist: /gone")) {
 		t.Error("a missing-directory error was misread as version skew")
 	}
-	if IsDaemonOutdatedError(errors.New("no daemon connected")) {
+	if IsOutdated(errors.New("no daemon connected")) {
 		t.Error("a daemon-pending error was misread as version skew")
 	}
-	if IsDaemonOutdatedError(nil) {
+	if IsOutdated(nil) {
 		t.Error("nil was misread as version skew")
 	}
 }
@@ -49,7 +49,7 @@ func TestIsDaemonOutdatedError(t *testing.T) {
 // that is not a defect; Unavailable invites a retry that cannot succeed until
 // the machine is updated.
 func TestOutdatedDaemonMapsToFailedPrecondition(t *testing.T) {
-	got := mapDaemonDispatchError("auth.open_oauth_helper", outdatedDaemonErr())
+	got := DispatchConnectError("auth.open_oauth_helper", outdatedDaemonErr())
 
 	if code := connect.CodeOf(got); code != connect.CodeFailedPrecondition {
 		t.Errorf("code = %v, want %v", code, connect.CodeFailedPrecondition)
@@ -74,13 +74,13 @@ func TestOutdatedDaemonMapsToFailedPrecondition(t *testing.T) {
 
 // Other failure classes must keep the codes they had.
 func TestNonSkewDispatchErrorsKeepTheirCodes(t *testing.T) {
-	notFound := mapDaemonDispatchError("pkg.list_commands",
+	notFound := DispatchConnectError("pkg.list_commands",
 		errors.New("working dir does not exist: /daemon/workspace/gone"))
 	if code := connect.CodeOf(notFound); code != connect.CodeNotFound {
 		t.Errorf("missing dir: code = %v, want %v", code, connect.CodeNotFound)
 	}
 
-	unavailable := mapDaemonDispatchError("pkg.list_commands", errors.New("no daemon connected"))
+	unavailable := DispatchConnectError("pkg.list_commands", errors.New("no daemon connected"))
 	if code := connect.CodeOf(unavailable); code != connect.CodeUnavailable {
 		t.Errorf("daemon pending: code = %v, want %v", code, connect.CodeUnavailable)
 	}

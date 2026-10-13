@@ -14,6 +14,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -422,7 +423,7 @@ func terminalMachineState(err error) (state string, ok bool) {
 		return "no_machine", true
 	case toolexec.IsDaemonPending(err):
 		return "starting_or_asleep", true
-	case machineUnreachable(err):
+	case daemonerr.Unreachable(err):
 		return "not_connected", true
 	default:
 		return "", false

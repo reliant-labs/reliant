@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/filepreview"
@@ -256,7 +257,7 @@ func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID string,
 //   - no machine at all is FailedPrecondition: nothing to wait for, and the
 //     file tree says "no machine" instead of an error;
 //   - connected but too busy to answer in time is DeadlineExceeded (see
-//     machineStateConnectError).
+//     daemonerr.MachineStateConnectError).
 //
 // The path the request named not being on the machine — a folder the user
 // deleted, a worktree that was removed, a checkout never cloned there — is the
@@ -269,7 +270,7 @@ func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID string,
 // on 2026-10-09 — and handed the UI a 500-class error for a machine that was
 // merely starting.
 func fsProxyDaemonError(err error) error {
-	if cerr, ok := machineStateConnectError("", err); ok {
+	if cerr, ok := daemonerr.MachineStateConnectError("", err); ok {
 		return cerr
 	}
 	if isMissingPathError(err) {

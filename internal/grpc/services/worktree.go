@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/copypath"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -1421,7 +1422,7 @@ func (s *WorktreeService) DiscoverWorktrees(
 		if isMachineWaking(err) {
 			return nil, err
 		}
-		if req.Msg.Background && machineUnreachable(err) {
+		if req.Msg.Background && daemonerr.Unreachable(err) {
 			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("your machine is not connected"))
 		}
 		logging.Warn("Failed to discover worktrees via daemon", "error", err)

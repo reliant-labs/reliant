@@ -16,6 +16,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -112,7 +113,7 @@ func (s *TerminalProxyService) ListSessions(
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "terminal.list", payload, 30000)
 	if err != nil {
-		if cerr, ok := machineStateConnectError("", err); ok {
+		if cerr, ok := daemonerr.MachineStateConnectError("", err); ok {
 			return nil, cerr
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -187,7 +188,7 @@ func (s *TerminalProxyService) CloseSession(
 				Message: "Session already closed",
 			}), nil
 		}
-		if cerr, ok := machineStateConnectError("", err); ok {
+		if cerr, ok := daemonerr.MachineStateConnectError("", err); ok {
 			return nil, cerr
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -251,7 +252,7 @@ func (s *TerminalProxyService) StreamTerminal(
 				"requested_working_dir", createReq.GetWorkingDir(), "user_id", userID, "error", err)
 			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("create terminal session: %w", err))
 		}
-		if cerr, ok := machineStateConnectError("create terminal session", err); ok {
+		if cerr, ok := daemonerr.MachineStateConnectError("create terminal session", err); ok {
 			return cerr
 		}
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("create terminal session: %w", err))

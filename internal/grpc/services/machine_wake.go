@@ -4,7 +4,6 @@ package services
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -12,6 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/nomachine"
@@ -90,7 +90,7 @@ type wakeTarget struct {
 // machine and returns a *machineWakingError naming it. Otherwise it returns err
 // unchanged.
 func (w machineWake) afterFailure(ctx context.Context, userID string, target wakeTarget, err error) error {
-	if err == nil || !machineUnreachable(err) {
+	if err == nil || !daemonerr.Unreachable(err) {
 		return err
 	}
 	daemonID, woke := w.wake(ctx, userID, target)
@@ -160,20 +160,6 @@ func (w machineWake) ownedBy(ctx context.Context, userID, daemonID string) bool 
 		return false
 	}
 	return true
-}
-
-// machineUnreachable reports whether err says the request never reached its
-// machine because the machine is not connected: resolution found it suspended
-// or not yet attached (toolexec.ErrDaemonPending), or NATS had no responder on
-// its subject (the "no daemon connected" Unavailable from the router). Either
-// way nothing ran, so waking the machine and asking again is safe even for a
-// write.
-func machineUnreachable(err error) bool {
-	if toolexec.IsDaemonPending(err) {
-		return true
-	}
-	return connect.CodeOf(err) == connect.CodeUnavailable &&
-		strings.Contains(err.Error(), "no daemon connected")
 }
 
 // machineWakingError is a request that did not run because its machine was
