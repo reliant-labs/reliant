@@ -1,10 +1,3 @@
-// Package serverclient is the MCP client for server processes (api-server,
-// worker). It speaks streamable HTTP only and cannot express a command, so a
-// stdio server can not be constructed here.
-//
-// This package must not depend on os/exec, directly or transitively; a test
-// enforces it. That rules out the MCP SDK (its CommandTransport imports
-// os/exec) and internal/config, so the wire protocol is implemented here.
 package serverclient
 
 import (
@@ -52,8 +45,8 @@ type Tool struct {
 	InputSchema json.RawMessage
 }
 
-// Client is a streamable-HTTP MCP client bound to one catalog entry.
-type Client struct {
+// client is a streamable-HTTP MCP client bound to one catalog entry.
+type client struct {
 	entry Entry
 	creds Creds
 	http  *http.Client
@@ -64,16 +57,9 @@ type Client struct {
 	ready     bool
 }
 
-// NewServerClient validates the entry and returns an uninitialised client.
-func NewServerClient(entry Entry, creds Creds) (*Client, error) {
-	return NewServerClientWithGuard(entry, creds, netguard.New())
-}
-
-// NewServerClientWithGuard is NewServerClient with an explicit dial guard. The
-// guard refuses any connection to a non-public address AFTER DNS resolution,
-// which the URL checks above cannot see (a hostname may resolve to 10.x or the
-// metadata address).
-func NewServerClientWithGuard(entry Entry, creds Creds, guard *netguard.Guard) (*Client, error) {
+// New validates deps.Entry and returns an uninitialised client.
+func New(deps Deps) (Service, error) {
+	entry := deps.Entry
 	u, err := url.Parse(entry.URL)
 	if err != nil || u.Host == "" {
 		return nil, fmt.Errorf("catalog entry %q: invalid URL %q", entry.Name, entry.URL)
@@ -84,7 +70,11 @@ func NewServerClientWithGuard(entry Entry, creds Creds, guard *netguard.Guard) (
 	if !hostAllowed(entry, u.Hostname()) {
 		return nil, fmt.Errorf("catalog entry %q: host %q is not allowed", entry.Name, u.Hostname())
 	}
-	return &Client{entry: entry, creds: creds, http: &http.Client{Timeout: 60 * time.Second, Transport: guard.Transport()}}, nil
+	var guard DialGuard = netguard.New()
+	if deps.Guard != nil {
+		guard = deps.Guard
+	}
+	return &client{entry: entry, creds: deps.Creds, http: &http.Client{Timeout: 60 * time.Second, Transport: guard.Transport()}}, nil
 }
 
 func hostAllowed(entry Entry, host string) bool {
@@ -106,8 +96,8 @@ func hostAllowed(entry Entry, host string) bool {
 	return false
 }
 
-// Initialize performs the MCP handshake.
-func (c *Client) Initialize(ctx context.Context) error {
+// Initialize implements Service.
+func (c *client) Initialize(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.ready {
@@ -127,8 +117,8 @@ func (c *Client) Initialize(ctx context.Context) error {
 	return nil
 }
 
-// ListTools returns the server's tools.
-func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
+// ListTools implements Service.
+func (c *client) ListTools(ctx context.Context) ([]Tool, error) {
 	raw, err := c.call(ctx, "tools/list", map[string]any{})
 	if err != nil {
 		return nil, err
@@ -150,13 +140,13 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 	return out, nil
 }
 
-// CallTool invokes a tool and returns the raw result object.
-func (c *Client) CallTool(ctx context.Context, name string, args map[string]any) (json.RawMessage, error) {
+// CallTool implements Service.
+func (c *client) CallTool(ctx context.Context, name string, args map[string]any) (json.RawMessage, error) {
 	return c.call(ctx, "tools/call", map[string]any{"name": name, "arguments": args})
 }
 
-// Close ends the session, best effort.
-func (c *Client) Close() error {
+// Close implements Service.
+func (c *client) Close() error {
 	c.mu.Lock()
 	sid := c.sessionID
 	c.sessionID, c.ready = "", false
@@ -176,14 +166,14 @@ func (c *Client) Close() error {
 	return resp.Body.Close()
 }
 
-func (c *Client) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (c *client) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	if err := c.Initialize(ctx); err != nil {
 		return nil, err
 	}
 	return c.rpc(ctx, method, params)
 }
 
-func (c *Client) decorate(req *http.Request, sessionID string) {
+func (c *client) decorate(req *http.Request, sessionID string) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	if sessionID != "" {
@@ -198,7 +188,7 @@ func (c *Client) decorate(req *http.Request, sessionID string) {
 	}
 }
 
-func (c *Client) notify(ctx context.Context, method string) error {
+func (c *client) notify(ctx context.Context, method string) error {
 	body, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "method": method})
 	resp, err := c.post(ctx, body)
 	if err != nil {
@@ -212,7 +202,7 @@ func (c *Client) notify(ctx context.Context, method string) error {
 	return nil
 }
 
-func (c *Client) post(ctx context.Context, body []byte) (*http.Response, error) {
+func (c *client) post(ctx context.Context, body []byte) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.entry.URL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -230,7 +220,7 @@ type rpcResponse struct {
 	} `json:"error"`
 }
 
-func (c *Client) rpc(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (c *client) rpc(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	id := c.nextID.Add(1)
 	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params})
 	if err != nil {

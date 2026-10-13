@@ -38,10 +38,10 @@ func TestNewServerClientRejectsUnsafeEntries(t *testing.T) {
 		"empty":       {Name: "e"},
 		"not allowed": {Name: "f", URL: "https://example.com/mcp", AllowedHosts: []string{"other.com"}},
 	} {
-		_, err := NewServerClient(entry, Creds{})
+		_, err := New(Deps{Entry: entry})
 		assert.Error(t, err, name)
 	}
-	_, err := NewServerClient(Entry{Name: "ok", URL: "https://example.com/mcp"}, Creds{})
+	_, err := New(Deps{Entry: Entry{Name: "ok", URL: "https://example.com/mcp"}})
 	assert.NoError(t, err)
 }
 
@@ -50,14 +50,14 @@ func TestNewServerClientRejectsUnsafeEntries(t *testing.T) {
 func TestHostnameResolvingToPrivateIPIsRefused(t *testing.T) {
 	guard := netguard.New()
 	guard.Resolve = func(context.Context, string) ([]net.IP, error) { return []net.IP{net.ParseIP("10.9.9.9")}, nil }
-	c, err := NewServerClientWithGuard(Entry{Name: "x", URL: "https://innocent.example.com/mcp"}, Creds{}, guard)
+	c, err := New(Deps{Entry: Entry{Name: "x", URL: "https://innocent.example.com/mcp"}, Guard: guard})
 	require.NoError(t, err, "the URL string alone looks fine")
 	err = c.Initialize(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "blocked")
 
 	guard.Resolve = func(context.Context, string) ([]net.IP, error) { return []net.IP{net.ParseIP("169.254.169.254")}, nil }
-	c, err = NewServerClientWithGuard(Entry{Name: "x", URL: "https://innocent.example.com/mcp"}, Creds{}, guard)
+	c, err = New(Deps{Entry: Entry{Name: "x", URL: "https://innocent.example.com/mcp"}, Guard: guard})
 	require.NoError(t, err)
 	_, err = c.ListTools(context.Background())
 	require.Error(t, err)
@@ -65,9 +65,9 @@ func TestHostnameResolvingToPrivateIPIsRefused(t *testing.T) {
 }
 
 func TestDefaultClientUsesTheGuard(t *testing.T) {
-	c, err := NewServerClient(Entry{Name: "ok", URL: "https://example.com/mcp"}, Creds{})
+	c, err := New(Deps{Entry: Entry{Name: "ok", URL: "https://example.com/mcp"}})
 	require.NoError(t, err)
-	tr, ok := c.http.Transport.(*http.Transport)
+	tr, ok := c.(*client).http.Transport.(*http.Transport)
 	require.True(t, ok)
 	require.NotNil(t, tr.DialContext, "the default client must dial through netguard")
 }
@@ -106,12 +106,12 @@ func TestClientSpeaksStreamableHTTP(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c, err := NewServerClient(Entry{Name: "x", URL: srv.URL, AllowedHosts: []string{"127.0.0.1"}}, Creds{BearerToken: "tok"})
+	c, err := New(Deps{Entry: Entry{Name: "x", URL: srv.URL, AllowedHosts: []string{"127.0.0.1"}}, Creds: Creds{BearerToken: "tok"}})
 	require.Error(t, err, "loopback is refused even when allowlisted")
 	require.Nil(t, c)
 
 	// httptest binds loopback, so bypass host validation to exercise the wire.
-	c = &Client{entry: Entry{Name: "x", URL: srv.URL}, creds: Creds{BearerToken: "tok"}, http: srv.Client()}
+	c = &client{entry: Entry{Name: "x", URL: srv.URL}, creds: Creds{BearerToken: "tok"}, http: srv.Client()}
 	tools, err := c.ListTools(context.Background())
 	require.NoError(t, err)
 	require.Len(t, tools, 1)
