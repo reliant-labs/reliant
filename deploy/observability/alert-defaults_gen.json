@@ -64,6 +64,10 @@
         "rpc_service": "reliant.v1.SystemService"
       },
       {
+        "name": "terminal",
+        "rpc_service": "reliant.v1.TerminalService"
+      },
+      {
         "name": "token",
         "rpc_service": "reliant.v1.TokenService"
       },

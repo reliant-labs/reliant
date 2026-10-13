@@ -51,6 +51,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
+	"github.com/reliant-labs/reliant/internal/handlers/terminal"
 	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/handlers/tool_call"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
@@ -513,7 +514,14 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 		backgroundPath, backgroundHandler = reliantv1connect.NewBackgroundServiceHandler(bgProxy, opts...)
 
-		termProxy := services.NewTerminalProxyService(router)
+		termProxy, err := terminal.New(terminal.Deps{
+			Logger: handlerLogger,
+			Config: handlerConfig,
+			Router: router,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("terminal service: %w", err)
+		}
 		terminalPath, terminalHandler = reliantv1connect.NewTerminalServiceHandler(termProxy, opts...)
 
 		// WebSocket terminal handler (browser bidi terminal I/O)
@@ -533,7 +541,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		// A terminal websocket lives as long as the browser tab: bound to the
 		// drain so it ends with a reconnect close code when Stop begins.
 		mux.Handle("/api/v2/terminal/ws", streams.Handler(
-			services.TerminalWSHandler(router, wsValidator, services.WithTerminalCheckouts(database))))
+			terminal.TerminalWSHandler(router, wsValidator, terminal.WithTerminalCheckouts(database))))
 	}
 
 	// DaemonRegistryService: browser-driven list/get/resolve/resume. The

@@ -1,4 +1,4 @@
-package services
+package terminal
 
 import (
 	"context"
@@ -161,12 +161,12 @@ func TestTerminalWS_ClosesDaemonSessionOnCleanClientClose(t *testing.T) {
 	requireSingleClose(t, router)
 }
 
-// startStreamTerminal serves TerminalProxyService over h2c (bidi streaming
+// startStreamTerminal serves the terminal Service over h2c (bidi streaming
 // needs HTTP/2) with the test user injected, and opens a stream on it that
 // has already received "created".
 func startStreamTerminal(t *testing.T, router *terminalCommandRouter) *connect.BidiStreamForClient[reliantv1.TerminalStreamInput, reliantv1.TerminalStreamOutput] {
 	t.Helper()
-	path, handler := reliantv1connect.NewTerminalServiceHandler(NewTerminalProxyService(router))
+	path, handler := reliantv1connect.NewTerminalServiceHandler(NewTestTerminal(t, WithTerminalDeps(Deps{Router: router})))
 	mux := http.NewServeMux()
 	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, terminalTestUserID)
@@ -227,7 +227,7 @@ func (*sessionGoneRouter) SendDaemonCommand(_ context.Context, _ string, command
 // second close finds nothing, which is the outcome close asks for — not an
 // INTERNAL error reported to Sentry from both server and browser.
 func TestCloseSession_AlreadyClosedIsSuccess(t *testing.T) {
-	svc := NewTerminalProxyService(&sessionGoneRouter{})
+	svc := NewTestTerminal(t, WithTerminalDeps(Deps{Router: &sessionGoneRouter{}}))
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, terminalTestUserID)
 
 	resp, err := svc.CloseSession(ctx, connect.NewRequest(&reliantv1.CloseTerminalSessionRequest{
@@ -241,7 +241,7 @@ func TestCloseSession_AlreadyClosedIsSuccess(t *testing.T) {
 // Any other close failure is still a failure.
 func TestCloseSession_OtherDaemonFailureIsStillAnError(t *testing.T) {
 	router := &closeFailsRouter{err: errors.New(`daemon command "terminal.close" failed: terminal manager not initialized`)}
-	svc := NewTerminalProxyService(router)
+	svc := NewTestTerminal(t, WithTerminalDeps(Deps{Router: router}))
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, terminalTestUserID)
 
 	_, err := svc.CloseSession(ctx, connect.NewRequest(&reliantv1.CloseTerminalSessionRequest{SessionId: "s1"}))

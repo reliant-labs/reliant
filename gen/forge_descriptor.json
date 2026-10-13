@@ -27566,8 +27566,7 @@
         "reliant.v1.TerminalSessionCreated": "reliant/v1/terminal.proto",
         "reliant.v1.TerminalStreamInput": "reliant/v1/terminal.proto",
         "reliant.v1.TerminalStreamOutput": "reliant/v1/terminal.proto"
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "TokenService",
@@ -33655,5 +33654,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "7b6eae1c5340576b09d96ffb69af81b34a6667227280fccead233ac672e46eb2"
+  "source_hash": "8712c5acd9d405df8d48abe720f0dac0fe8e6520737f14fe8e0dc13b9cb386a9"
 }

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package terminal
 
 import (
 	"context"
@@ -14,27 +14,17 @@ import (
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/terminal"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-// TerminalProxyService implements TerminalServiceHandler by forwarding
-// requests to the user's daemon via DaemonCommand (request/response).
-type TerminalProxyService struct {
-	reliantv1connect.UnimplementedTerminalServiceHandler
-	router toolexec.DaemonRouter
-}
+// Every rpc forwards its request to the caller's daemon through Deps.Router:
+// a DaemonCommand (request/response), or for StreamTerminal the session's
+// input, resize and output.
 
-// NewTerminalProxyService creates a new TerminalProxyService.
-func NewTerminalProxyService(router toolexec.DaemonRouter) *TerminalProxyService {
-	return &TerminalProxyService{router: router}
-}
-
-func (s *TerminalProxyService) getUserID(ctx context.Context) (string, error) {
+func (s *Service) getUserID(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return "", fmt.Errorf("user ID not found in context")
@@ -65,7 +55,7 @@ const terminalCloseTimeout = 10 * time.Second
 // best-effort: the session is often already gone (the shell exited, or the
 // client closed it through CloseSession first), and the daemon's session cap
 // is the backstop when the close cannot be delivered at all.
-func closeDaemonTerminalSession(ctx context.Context, router toolexec.DaemonRouter, userID, sessionID string) {
+func closeDaemonTerminalSession(ctx context.Context, router SessionRouter, userID, sessionID string) {
 	if sessionID == "" {
 		return
 	}
@@ -97,7 +87,7 @@ func isTerminalSessionNotFound(err error) bool {
 }
 
 // ListSessions returns all active terminal sessions.
-func (s *TerminalProxyService) ListSessions(
+func (s *Service) ListSessions(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListTerminalSessionsRequest],
 ) (*connect.Response[reliantv1.ListTerminalSessionsResponse], error) {
@@ -111,7 +101,7 @@ func (s *TerminalProxyService) ListSessions(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
 	}
 
-	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "terminal.list", payload, 30000)
+	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "terminal.list", payload, 30000)
 	if err != nil {
 		if cerr, ok := daemonerr.MachineStateConnectError("", err); ok {
 			return nil, cerr
@@ -154,7 +144,7 @@ func (s *TerminalProxyService) ListSessions(
 }
 
 // CloseSession closes a specific terminal session.
-func (s *TerminalProxyService) CloseSession(
+func (s *Service) CloseSession(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CloseTerminalSessionRequest],
 ) (*connect.Response[reliantv1.CloseTerminalSessionResponse], error) {
@@ -175,7 +165,7 @@ func (s *TerminalProxyService) CloseSession(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
 	}
 
-	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "terminal.close", payload, 30000)
+	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "terminal.close", payload, 30000)
 	if err != nil {
 		// Closing a session that is already gone has achieved what close
 		// asks for. The race is built in: the terminal connection's deferred
@@ -214,7 +204,7 @@ func (s *TerminalProxyService) CloseSession(
 
 // StreamTerminal implements bidi streaming terminal I/O by forwarding data
 // between the browser stream and the daemon's terminal session via the router.
-func (s *TerminalProxyService) StreamTerminal(
+func (s *Service) StreamTerminal(
 	ctx context.Context,
 	stream *connect.BidiStream[reliantv1.TerminalStreamInput, reliantv1.TerminalStreamOutput],
 ) error {
@@ -243,7 +233,7 @@ func (s *TerminalProxyService) StreamTerminal(
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal create request: %w", err))
 	}
 
-	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "terminal.create", payload, 30000)
+	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "terminal.create", payload, 30000)
 	if err != nil {
 		// The daemon refused the directory (see terminal.resolveWorkingDir).
 		// It is the caller's to fix or wait for, not a server fault.
@@ -279,7 +269,7 @@ func (s *TerminalProxyService) StreamTerminal(
 	)
 	// This stream owns the session, so it closes it however the stream ends:
 	// an explicit CloseSession, a client hangup, or an early return below.
-	defer closeDaemonTerminalSession(ctx, s.router, userID, sessionID)
+	defer closeDaemonTerminalSession(ctx, s.deps.Router, userID, sessionID)
 
 	// Send the Created response to the client.
 	if err := stream.Send(&reliantv1.TerminalStreamOutput{
@@ -294,7 +284,7 @@ func (s *TerminalProxyService) StreamTerminal(
 	}
 
 	// Subscribe to terminal output from the daemon.
-	outputCh, unsub, err := s.router.SubscribeTerminalOutput(ctx, userID, sessionID)
+	outputCh, unsub, err := s.deps.Router.SubscribeTerminalOutput(ctx, userID, sessionID)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("subscribe terminal output: %w", err))
 	}
@@ -388,12 +378,12 @@ func (s *TerminalProxyService) StreamTerminal(
 
 			switch input := msg.GetInput().(type) {
 			case *reliantv1.TerminalStreamInput_Data:
-				if err := s.router.SendTerminalInput(pumpCtx, userID, sessionID, input.Data.GetData()); err != nil {
+				if err := s.deps.Router.SendTerminalInput(pumpCtx, userID, sessionID, input.Data.GetData()); err != nil {
 					setPumpErr(fmt.Errorf("send terminal input: %w", err))
 					return
 				}
 			case *reliantv1.TerminalStreamInput_Resize:
-				if err := s.router.SendTerminalResize(pumpCtx, userID, sessionID, input.Resize.GetCols(), input.Resize.GetRows()); err != nil {
+				if err := s.deps.Router.SendTerminalResize(pumpCtx, userID, sessionID, input.Resize.GetCols(), input.Resize.GetRows()); err != nil {
 					setPumpErr(fmt.Errorf("send terminal resize: %w", err))
 					return
 				}

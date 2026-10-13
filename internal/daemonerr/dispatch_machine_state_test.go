@@ -1,8 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package daemonerr
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -10,24 +9,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/toolexec"
-	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
-
-// failingCommandRouter fails every daemon command with err, wrapped the way
-// NATSDaemonRouter.SendDaemonCommand wraps a resolution failure.
-type failingCommandRouter struct {
-	toolexectest.Stub
-	err error
-}
-
-func (r *failingCommandRouter) SendDaemonCommand(context.Context, string, string, []byte, int32) ([]byte, error) {
-	return nil, fmt.Errorf("resolving daemon for command: %w", r.err)
-}
 
 // Each machine state the router reports, as it reports it.
 var machineStates = []struct {
@@ -53,28 +37,12 @@ var machineStates = []struct {
 	},
 }
 
-// The terminal list and close RPCs answer a machine state by its code too.
-func TestTerminalProxy_MachineStatesKeepTheirCode(t *testing.T) {
-	for _, state := range machineStates {
-		t.Run(state.name, func(t *testing.T) {
-			svc := NewTerminalProxyService(&failingCommandRouter{err: state.err})
-			_, err := svc.ListSessions(authedCtx(), connect.NewRequest(&reliantv1.ListTerminalSessionsRequest{}))
-			require.Error(t, err)
-			assert.Equal(t, state.wantCode, connect.CodeOf(err))
-
-			_, err = svc.CloseSession(authedCtx(), connect.NewRequest(&reliantv1.CloseTerminalSessionRequest{SessionId: "s1"}))
-			require.Error(t, err)
-			assert.Equal(t, state.wantCode, connect.CodeOf(err))
-		})
-	}
-}
-
 // The generic dispatcher picks FailedPrecondition for "no machine" too; a
 // pending machine stays Unavailable with its wait marker.
 func TestDispatchConnectError_MachineStates(t *testing.T) {
 	for _, state := range machineStates {
 		t.Run(state.name, func(t *testing.T) {
-			got := daemonerr.DispatchConnectError("pkg.list_commands", fmt.Errorf("resolving daemon for command: %w", state.err))
+			got := DispatchConnectError("pkg.list_commands", fmt.Errorf("resolving daemon for command: %w", state.err))
 			assert.Equal(t, state.wantCode, connect.CodeOf(got))
 			assert.Contains(t, got.Error(), "daemon command pkg.list_commands failed")
 		})

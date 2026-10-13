@@ -1,4 +1,4 @@
-package services
+package terminal
 
 import (
 	"bufio"
@@ -178,11 +178,11 @@ func TestTerminalWS_MissingWorkingDirIsReportedAsWorkingDirUnavailable(t *testin
 	require.Equal(t, projectWorkingDir, record["requested_working_dir"])
 }
 
-// openStreamTerminalAt serves TerminalProxyService over h2c and opens a
+// openStreamTerminalAt serves the terminal Service over h2c and opens a
 // stream asking for workingDir, returning the stream's first receive.
 func openStreamTerminalAt(t *testing.T, router toolexec.DaemonRouter, workingDir string) (*reliantv1.TerminalStreamOutput, error) {
 	t.Helper()
-	path, handler := reliantv1connect.NewTerminalServiceHandler(NewTerminalProxyService(router))
+	path, handler := reliantv1connect.NewTerminalServiceHandler(NewTestTerminal(t, WithTerminalDeps(Deps{Router: router})))
 	mux := http.NewServeMux()
 	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, terminalTestUserID)

@@ -1,7 +1,7 @@
 {
   "files": {
-    "deploy/observability/alert-defaults_gen.json": "dd7cf47c9a0ccb65d925972deb8080e12076a78c47bc227fe745cd00a231d291",
-    "deploy/observability/dashboard-spec_gen.json": "823a5b7ca5efdf7c53858f23f51d5b942a7f87eb48366ae75986e1c4693f0925",
+    "deploy/observability/alert-defaults_gen.json": "b07439f85b3222d314303f6a680d38fce2dcf6729a2ab27502b755a4b4a22977",
+    "deploy/observability/dashboard-spec_gen.json": "edde98d4cb6cc068f422062339e371b814de24745c91814e897d074dd63c1fc6",
     "deploy/observability/dashboards/reliant-overview_gen.json": "c1a1634901a1a05ca86863cf51e59d2863ea2e30ff614480b5e2331511519b01",
     "deploy/observability/dashboards/reliant-service-account_gen.json": "7f32c3dde4d4b084c79a423e2c5fb5acde40c58e1dda661ec6c365cca64e0766",
     "deploy/observability/dashboards/reliant-service-attachment_gen.json": "00d257c0643ff2e8d91fd02dc178a65cde734df9723b0e1124ec1b0e1faa3e6f",
@@ -18,9 +18,10 @@
     "deploy/observability/dashboards/reliant-service-run_gen.json": "e7c92191db42c5016d63797b5fdee1397a3372b4e97fb28dcac5734c6f1f6f33",
     "deploy/observability/dashboards/reliant-service-streaming_gen.json": "ced230bfeeecbf3552c9d642452de98d28a02a69f790c1401144cf11b877b8d4",
     "deploy/observability/dashboards/reliant-service-system_gen.json": "fd294ffb8fba42f74d5da9bd7d366b32c4f1a14565777d81239d738bf45cfb11",
+    "deploy/observability/dashboards/reliant-service-terminal_gen.json": "0daad3122cf73a579d014982c6cc28f0339181b2d735eae5ba393cd9b273be05",
     "deploy/observability/dashboards/reliant-service-token_gen.json": "e8a535425fe4a4023dd5b626941938d74d62671b989d293c22d6ca19eff2a9b5",
     "deploy/observability/dashboards/reliant-service-tool_call_gen.json": "bd6f37529ddb9ee3e2c4ac40ee76cf72b62c730cea05d50208b622ee8e9e7ab7",
     "deploy/observability/dashboards/reliant-service-tools_daemon_gen.json": "2896c05983c3b49483709ad07d30ea0000f1f4121096c1971d98fb76ca58a862",
-    "deploy/observability/dashboards/saved-searches_gen.ndjson": "ce428ec71e7237b3d08c80f9388268ae27ede42119994ee9ca5baeab5f27ead5"
+    "deploy/observability/dashboards/saved-searches_gen.ndjson": "fd9503ca3387d6a7d42ef0a0a125e8e88152414bf7c6150cbb1e635060666ea2"
   }
 }
