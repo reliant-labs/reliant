@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -180,7 +181,7 @@ expect:
 	const scenarioID = "project:tail-flow:drafts"
 
 	list, err := service.ListScenarios(ctx, connect.NewRequest(&reliantv1.ListScenariosRequest{
-		ProjectId: projectID, WorkflowSlug: "tail-flow",
+		ProjectId: proto.String(projectID), WorkflowSlug: "tail-flow",
 	}))
 	require.NoError(t, err)
 	var ids []string

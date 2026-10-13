@@ -113,7 +113,7 @@ message Scenario {
 
 // ListScenarios
 message ListScenariosRequest {
-  string project_id = 1;
+  optional string project_id = 1;
   string workflow_slug = 2;  // Workflow to list scenarios for
 }
 

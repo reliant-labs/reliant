@@ -22344,7 +22344,7 @@
           {
             "Name": "project_id",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           },
           {
             "Name": "workflow_slug",
@@ -22571,7 +22571,8 @@
         "reliant.v1.ListScenariosRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           },
           {
             "name": "workflow_slug",
@@ -33581,5 +33582,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "4201a3557a76608e4e5b2c5ca400f070608731899612c969309c877f9ec804fb"
+  "source_hash": "7d6251c34b5c0afbf551936a78bbb73efb2a6dd91c8f425963dcd4cbe0d2f416"
 }

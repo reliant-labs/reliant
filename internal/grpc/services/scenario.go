@@ -105,11 +105,11 @@ func (s *ScenarioService) ListScenarios(
 	// Check if we have a project for loading stored scenarios
 	var hasProject bool
 	var projectID string
-	if req.Msg.ProjectId != "" {
-		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if req.Msg.GetProjectId() != "" {
+		if err := s.projectBelongsToUser(ctx, req.Msg.GetProjectId(), userID); err != nil {
 			return nil, err
 		}
-		project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
+		project, err := s.database.GetProject(ctx, req.Msg.GetProjectId())
 		if err == nil && project != nil {
 			hasProject = true
 			projectID = project.ID

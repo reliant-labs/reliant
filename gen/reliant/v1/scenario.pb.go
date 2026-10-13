@@ -600,7 +600,7 @@ func (x *Scenario) GetPath() string {
 // ListScenarios
 type ListScenariosRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	ProjectId     *string                `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	WorkflowSlug  string                 `protobuf:"bytes,2,opt,name=workflow_slug,json=workflowSlug,proto3" json:"workflow_slug,omitempty"` // Workflow to list scenarios for
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -637,8 +637,8 @@ func (*ListScenariosRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListScenariosRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
+	if x != nil && x.ProjectId != nil {
+		return *x.ProjectId
 	}
 	return ""
 }
@@ -1378,11 +1378,12 @@ const file_reliant_v1_scenario_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\v \x01(\tR\tupdatedAt\x12\x16\n" +
 	"\x06source\x18\f \x01(\tR\x06source\x12\x12\n" +
-	"\x04path\x18\r \x01(\tR\x04path\"Z\n" +
-	"\x14ListScenariosRequest\x12\x1d\n" +
+	"\x04path\x18\r \x01(\tR\x04path\"n\n" +
+	"\x14ListScenariosRequest\x12\"\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12#\n" +
-	"\rworkflow_slug\x18\x02 \x01(\tR\fworkflowSlug\"p\n" +
+	"project_id\x18\x01 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12#\n" +
+	"\rworkflow_slug\x18\x02 \x01(\tR\fworkflowSlugB\r\n" +
+	"\v_project_id\"p\n" +
 	"\x15ListScenariosResponse\x122\n" +
 	"\tscenarios\x18\x01 \x03(\v2\x14.reliant.v1.ScenarioR\tscenarios\x12#\n" +
 	"\rscenarios_dir\x18\x02 \x01(\tR\fscenariosDir\"\xe2\x01\n" +
@@ -1517,6 +1518,7 @@ func file_reliant_v1_scenario_proto_init() {
 	if File_reliant_v1_scenario_proto != nil {
 		return
 	}
+	file_reliant_v1_scenario_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
