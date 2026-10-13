@@ -158,6 +158,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
 | [`reliant forge observe alerts`](#reliant-forge-observe-alerts) | Alert rules declared for an environment |
 | [`reliant forge observe alerts check`](#reliant-forge-observe-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
+| [`reliant forge observe dashboards`](#reliant-forge-observe-dashboards) | Work with the dashboards a release carries |
+| [`reliant forge observe dashboards check`](#reliant-forge-observe-dashboards-check) | Validate the dashboards a release bundle would carry |
 | [`reliant forge observe metrics`](#reliant-forge-observe-metrics) | Print the metrics a service declares: name, type, unit, attributes, stability |
 | [`reliant forge observe profile`](#reliant-forge-observe-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`reliant forge package`](#reliant-forge-package) | Manage internal packages |
@@ -2418,6 +2420,15 @@ inserted values are kept byte for byte.
 The baseline is reproducible: its header names the squashed migrations (how
 many, first and last version), never a time or a path, so squashing the same
 history with the same --image writes the same bytes.
+
+The header declares the history it replaces ("-- forge:adopts forge <every
+squashed version>") and that the baseline is backward-compatible. So a
+database those migrations built ADOPTS the baseline on its next migrate up or
+AutoMigrate: the migrator checks it applied every listed version, records the
+baseline as applied, runs none of its SQL, and applies what follows. Move the
+squashed files out of the directory, and give the baseline a version ABOVE
+them (--to <version>_baseline) so the release before the squash can still roll
+back onto an adopted database; a --to inside the history is refused.
 
 This is the canonical "N migrations → one baseline" workflow used when
 pulling a long-lived schema into a new project, or when collapsing
@@ -4822,6 +4833,17 @@ Without forge.yaml, falls back to directory convention scanning:
   proto/api/       - API messages
   proto/db/        - Database models (protoc-gen-forge)
 
+Hooks:
+  Generate hooks are the commands forge.yaml declares under generate.hooks
+  (sqlc, a project's own codegen). generate runs every one, in order, after
+  its own code generation and before validation, and prints each hook it ran.
+  Nothing skips them: a skipped hook leaves its output stale while validation
+  still passes. A run narrowed with --steps or --templates-only does not run
+  them, and says so.
+  FORGE_NO_GIT_HOOKS=1 is about GIT hooks, not these: it stops forge setting
+  core.hooksPath=.githooks and its merge driver in your clone. FORGE_NO_HOOKS=1
+  is its older name and means the same.
+
 Examples:
   forge generate            # Generate all code
   forge generate --watch    # Watch mode for development
@@ -5418,6 +5440,7 @@ reliant forge observe
 | Command | Description |
 |---------|-------------|
 | [`alerts`](#reliant-forge-observe-alerts) | Alert rules declared for an environment |
+| [`dashboards`](#reliant-forge-observe-dashboards) | Work with the dashboards a release carries |
 | [`metrics`](#reliant-forge-observe-metrics) | Print the metrics a service declares: name, type, unit, attributes, stability |
 | [`profile`](#reliant-forge-observe-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 
@@ -5475,6 +5498,50 @@ reliant forge observe alerts check [flags]
 | `--rule` | `string` | - | evaluate only this alert name |
 | `--sql` | `bool` | - | print each rule's expr instead of running it |
 | `--timeout` | `duration` | `20s` | per-rule query timeout |
+
+---
+
+#### reliant forge observe dashboards
+
+Work with the dashboards a release carries
+
+```
+reliant forge observe dashboards
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`check`](#reliant-forge-observe-dashboards-check) | Validate the dashboards a release bundle would carry |
+
+---
+
+#### reliant forge observe dashboards check
+
+Validate the dashboards a release bundle would carry
+
+Validate every dashboard the next release bundle would carry, exactly as a release
+cut does, and print what would ship.
+
+Generated dashboards come from deploy/observability/dashboard-spec_gen.json (and the
+Custom metrics dashboard, when bin/observability/metrics-schema.json exists). A file
+you own in deploy/observability/dashboards/ is a renderer-neutral dashboard object
+(the objects of the spec's "dashboards" array, with a "panels" array); one named like a
+generated dashboard (shop-overview.json for shop-overview_gen.json) replaces it. A
+HyperDX-format file (with "tiles") is for the local HyperDX only and is not shipped.
+
+Errors carry the file, line and column of the offending value.
+
+```
+reliant forge observe dashboards check [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--output`, `-o` | `string` | `bin` | build output directory holding observability/metrics-schema.json |
 
 ---
 
@@ -5954,8 +6021,10 @@ Print the resolved feature graph (on/off, why, dependencies)
 
 Print every forge feature for this project: whether it is enabled,
 WHY (what in the repo made it on or off), and the features / shape
-preconditions it depends on. Nothing here is configured: every feature is
-derived from what exists in the repository.
+preconditions it depends on. Every feature is derived from what exists in
+the repository, unless forge.yaml's features: block pins it on or off
+(features: {observability: false}). The ORM has no key: //forge:no-orm in
+internal/db switches it off.
 
 The dependency graph is validated at config-load time — a feature
 enabled with a dependency off is a load error. This command shows the
@@ -6279,7 +6348,9 @@ Pick a project kind with --kind:
   --kind library            Pure Go module: pkg/<name>/ skeleton, no cmd/,
                             no CI workflows by default.
 
-Use --disable to turn off features at creation time:
+Use --disable to turn features off at creation time. Each is pinned off in
+forge.yaml's features: block, so a later change to the tree does not turn it
+back on (orm has no key; --disable orm only leaves db/migrations out):
   forge project new my-project --mod ... --disable ci,deploy
   forge project new my-project --mod ... --disable orm --disable migrations
 
@@ -6328,7 +6399,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 |------|------|---------|-------------|
 | `--binary` | `string` | `per-service` | Binary packaging: 'per-service' (default — canonical cmd/server.go cobra root, one Application per service) or 'shared' (one Go binary, cobra subcommand per service, KCL MultiServiceApplication for deploy) |
 | `--buf-plugins` | `string` | `local` | Default proto plugin source: 'local' (resolved from PATH; no BSR auth needed) or 'remote' (BSR-hosted, requires login under load) |
-| `--disable` | `stringSlice` | `[]` | Features to leave out of the scaffold (comma-separated): orm, codegen, migrations, ci, build, deploy, contracts, frontend, observability, hot_reload. Not persisted: features derive from the tree that gets written. |
+| `--disable` | `stringSlice` | `[]` | Features to leave out of the scaffold (comma-separated): orm, codegen, migrations, ci, build, deploy, contracts, frontend, observability, hot_reload. Each is pinned off in forge.yaml's features: block (orm, which has no key, only steers this scaffold). |
 | `--force` | `bool` | - | With --in-place: scaffold over an existing forge.yaml, and REPLACE every pre-existing file the scaffold writes (README.md, go.mod, Taskfile.yml, …) with forge's version. Without it, existing files are kept and listed. .gitignore is always merged, never replaced |
 | `--frontend` | `stringSlice` | `[]` | Name(s) of Next.js frontends (can be repeated or comma-separated) |
 | `--frontend-workspaces` | `bool` | - | Opt into pnpm-workspaces layout: emit packages/api + packages/hooks + packages/ui-web shared across all frontends. Off by default; recommended once you have 2+ frontends (web + mobile). |
