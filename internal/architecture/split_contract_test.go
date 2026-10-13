@@ -109,6 +109,7 @@ var serverSidePackages = []string{
 	"internal/daemoncmd", // P3a: extracted from grpc/services
 	// Helpers extracted from grpc/services keep its ban (P3a,
 	// research/forge-migration/05-p3a-handler-map.md).
+	"internal/checkoutstate",
 	"internal/daemonerr",
 	"internal/connectionrpc",
 	"internal/machinewake",

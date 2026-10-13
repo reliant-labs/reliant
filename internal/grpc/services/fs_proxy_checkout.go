@@ -9,7 +9,7 @@ import (
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/checkoutstate"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -98,7 +98,7 @@ func (s *FileSystemProxyService) checkoutMissingError(
 		logging.Warn("[FSProxy] Could not read clone records for a missing project directory",
 			"error", lerr, "projectID", projectID)
 	} else {
-		detail.State, detail.InstallError = checkoutStateOn(rows, detail.DaemonId)
+		detail.State, detail.InstallError = checkoutstate.On(rows, detail.DaemonId)
 	}
 
 	cerr := connect.NewError(connect.CodeNotFound,
@@ -107,28 +107,4 @@ func (s *FileSystemProxyService) checkoutMissingError(
 		cerr.AddDetail(d)
 	}
 	return cerr
-}
-
-// checkoutStateOn reads one machine's clone record for a project. With no
-// machine to match (the router could not say), only an in-flight clone counts:
-// claiming CLONE_FAILED from some other machine's record would be wrong, and
-// CLONING is the one state that resolves itself.
-func checkoutStateOn(rows []*core.ProjectDaemon, daemonID string) (reliantv1.ProjectCheckoutState, string) {
-	for _, row := range rows {
-		if row == nil {
-			continue
-		}
-		if daemonID != "" && row.DaemonID != daemonID {
-			continue
-		}
-		switch row.InstallState {
-		case core.ProjectInstallInstalling:
-			return reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONING, ""
-		case core.ProjectInstallFailed:
-			if daemonID != "" {
-				return reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONE_FAILED, row.InstallError
-			}
-		}
-	}
-	return reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT, ""
 }

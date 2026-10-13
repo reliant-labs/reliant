@@ -14,6 +14,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/checkoutstate"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -131,7 +132,7 @@ func (c terminalWSConfig) workingDirMayAppear(ctx context.Context, router toolex
 		return true
 	}
 	daemonID, _ := router.ResolveDaemonID(ctx, userID)
-	state, _ := checkoutStateOn(rows, daemonID)
+	state, _ := checkoutstate.On(rows, daemonID)
 	return state == reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONING
 }
 
