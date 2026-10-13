@@ -6,14 +6,13 @@ package services
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/connectionrpc"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -29,14 +28,6 @@ type ConnectionService struct {
 // NewConnectionService builds the handler.
 func NewConnectionService(svc *connections.Service) *ConnectionService {
 	return &ConnectionService{svc: svc}
-}
-
-func connectionCaller(ctx context.Context) (string, error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok || userID == "" {
-		return "", connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
-	}
-	return userID, nil
 }
 
 // connectionError maps a domain error onto a Connect code. NotFound stays
@@ -77,22 +68,6 @@ func connectionError(err error) error {
 	}
 }
 
-func connectionAuthKindToProto(k string) reliantv1.ConnectionAuthKind {
-	switch k {
-	case core.ConnectionAuthOAuth2:
-		return reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_OAUTH2
-	case connections.MethodDelegated:
-		return reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_DELEGATED
-	case core.ConnectionAuthAPIKey:
-		return reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_API_KEY
-	case core.ConnectionAuthBasic:
-		return reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_BASIC
-	case core.ConnectionAuthNone:
-		return reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_NONE
-	}
-	return reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_UNSPECIFIED
-}
-
 func connectionStatusToProto(s string) reliantv1.ConnectionStatus {
 	switch s {
 	case core.ConnectionStatusActive:
@@ -125,7 +100,7 @@ func connectionToProto(c *core.Connection) *reliantv1.Connection {
 		scopes = []string{}
 	}
 	return &reliantv1.Connection{
-		Id: c.ID, IntegrationId: c.IntegrationID, AuthKind: connectionAuthKindToProto(c.AuthKind),
+		Id: c.ID, IntegrationId: c.IntegrationID, AuthKind: connectionrpc.AuthKind(c.AuthKind),
 		Name: c.Name, AccountLabel: derefStr(c.AccountLabel), ExternalAccountId: derefStr(c.ExternalAccountID),
 		Scopes: scopes, Status: connectionStatusToProto(c.Status), StatusReason: derefStr(c.StatusReason),
 		IsDefault: c.IsDefault, AccessExpiresAt: rfc3339Ptr(c.AccessExpiresAt), LastUsedAt: rfc3339Ptr(c.LastUsedAt),
@@ -135,7 +110,7 @@ func connectionToProto(c *core.Connection) *reliantv1.Connection {
 }
 
 func (s *ConnectionService) ListIntegrations(ctx context.Context, _ *connect.Request[reliantv1.ListIntegrationsRequest]) (*connect.Response[reliantv1.ListIntegrationsResponse], error) {
-	if _, err := connectionCaller(ctx); err != nil {
+	if _, err := connectionrpc.Caller(ctx); err != nil {
 		return nil, err
 	}
 	out := []*reliantv1.Integration{}
@@ -143,7 +118,7 @@ func (s *ConnectionService) ListIntegrations(ctx context.Context, _ *connect.Req
 		in := &reliantv1.Integration{Id: i.ID, DisplayName: i.DisplayName}
 		for _, m := range i.Methods {
 			in.Methods = append(in.Methods, &reliantv1.IntegrationAuthMethod{
-				Kind: connectionAuthKindToProto(m.Kind), Available: m.Available,
+				Kind: connectionrpc.AuthKind(m.Kind), Available: m.Available,
 				UnavailableReason: m.Reason, FieldLabels: m.FieldLabels,
 			})
 		}
@@ -159,7 +134,7 @@ func (s *ConnectionService) ListIntegrations(ctx context.Context, _ *connect.Req
 }
 
 func (s *ConnectionService) ListConnections(ctx context.Context, req *connect.Request[reliantv1.ListConnectionsRequest]) (*connect.Response[reliantv1.ListConnectionsResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +150,7 @@ func (s *ConnectionService) ListConnections(ctx context.Context, req *connect.Re
 }
 
 func (s *ConnectionService) GetConnection(ctx context.Context, req *connect.Request[reliantv1.GetConnectionRequest]) (*connect.Response[reliantv1.GetConnectionResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +162,7 @@ func (s *ConnectionService) GetConnection(ctx context.Context, req *connect.Requ
 }
 
 func (s *ConnectionService) CreateApiKeyConnection(ctx context.Context, req *connect.Request[reliantv1.CreateApiKeyConnectionRequest]) (*connect.Response[reliantv1.CreateApiKeyConnectionResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +184,7 @@ func (s *ConnectionService) CreateApiKeyConnection(ctx context.Context, req *con
 }
 
 func (s *ConnectionService) StartOAuth(ctx context.Context, req *connect.Request[reliantv1.StartOAuthRequest]) (*connect.Response[reliantv1.StartOAuthResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +204,7 @@ func (s *ConnectionService) StartOAuth(ctx context.Context, req *connect.Request
 }
 
 func (s *ConnectionService) CompleteOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteOAuthRequest]) (*connect.Response[reliantv1.CompleteOAuthResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +218,7 @@ func (s *ConnectionService) CompleteOAuth(ctx context.Context, req *connect.Requ
 }
 
 func (s *ConnectionService) TestConnection(ctx context.Context, req *connect.Request[reliantv1.TestConnectionRequest]) (*connect.Response[reliantv1.TestConnectionResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +232,7 @@ func (s *ConnectionService) TestConnection(ctx context.Context, req *connect.Req
 }
 
 func (s *ConnectionService) RenameConnection(ctx context.Context, req *connect.Request[reliantv1.RenameConnectionRequest]) (*connect.Response[reliantv1.RenameConnectionResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +244,7 @@ func (s *ConnectionService) RenameConnection(ctx context.Context, req *connect.R
 }
 
 func (s *ConnectionService) SetDefaultConnection(ctx context.Context, req *connect.Request[reliantv1.SetDefaultConnectionRequest]) (*connect.Response[reliantv1.SetDefaultConnectionResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +256,7 @@ func (s *ConnectionService) SetDefaultConnection(ctx context.Context, req *conne
 }
 
 func (s *ConnectionService) DeleteConnection(ctx context.Context, req *connect.Request[reliantv1.DeleteConnectionRequest]) (*connect.Response[reliantv1.DeleteConnectionResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +267,7 @@ func (s *ConnectionService) DeleteConnection(ctx context.Context, req *connect.R
 }
 
 func (s *ConnectionService) ListConnectionEvents(ctx context.Context, req *connect.Request[reliantv1.ListConnectionEventsRequest]) (*connect.Response[reliantv1.ListConnectionEventsResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}

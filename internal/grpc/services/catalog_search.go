@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/connectionrpc"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 )
@@ -58,7 +59,7 @@ func IntegrationMethodsFrom(svc *connections.Service) func(string) (connections.
 }
 
 func (s *CatalogService) SearchCatalog(ctx context.Context, req *connect.Request[reliantv1.SearchCatalogRequest]) (*connect.Response[reliantv1.SearchCatalogResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +100,7 @@ func (s *CatalogService) SearchCatalog(ctx context.Context, req *connect.Request
 }
 
 func (s *CatalogService) GetCatalogEntry(ctx context.Context, req *connect.Request[reliantv1.GetCatalogEntryRequest]) (*connect.Response[reliantv1.GetCatalogEntryResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +129,7 @@ func (s *CatalogService) GetCatalogEntry(ctx context.Context, req *connect.Reque
 }
 
 func (s *CatalogService) ListCatalogIntegrations(ctx context.Context, req *connect.Request[reliantv1.ListCatalogIntegrationsRequest]) (*connect.Response[reliantv1.ListCatalogIntegrationsResponse], error) {
-	userID, err := connectionCaller(ctx)
+	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +209,7 @@ func CatalogEntrySummaryToProto(e *catalogindex.Entry, connected bool) *reliantv
 	m := e.Manifest
 	authKinds := make([]reliantv1.ConnectionAuthKind, 0, len(e.AuthKinds))
 	for _, k := range e.AuthKinds {
-		authKinds = append(authKinds, connectionAuthKindToProto(k))
+		authKinds = append(authKinds, connectionrpc.AuthKind(k))
 	}
 	return &reliantv1.CatalogEntrySummary{
 		Ref: e.Ref, Kind: catalogKindToProto(e.Kind), Id: e.ID,
@@ -265,13 +266,13 @@ func catalogConnectionToProto(e *catalogindex.Entry, methods *connections.Integr
 	if methods != nil {
 		for _, m := range methods.Methods {
 			out.Methods = append(out.Methods, &reliantv1.IntegrationAuthMethod{
-				Kind: connectionAuthKindToProto(m.Kind), Available: m.Available,
+				Kind: connectionrpc.AuthKind(m.Kind), Available: m.Available,
 				UnavailableReason: m.Reason, FieldLabels: m.FieldLabels,
 			})
 		}
 	} else {
 		for _, k := range e.AuthKinds {
-			out.Methods = append(out.Methods, &reliantv1.IntegrationAuthMethod{Kind: connectionAuthKindToProto(k), Available: true})
+			out.Methods = append(out.Methods, &reliantv1.IntegrationAuthMethod{Kind: connectionrpc.AuthKind(k), Available: true})
 		}
 	}
 	for _, p := range e.ConnectionSpec().GetConnectionParams() {
