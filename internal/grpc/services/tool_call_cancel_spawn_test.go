@@ -9,41 +9,17 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"go.temporal.io/sdk/client"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/temporal/signaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/stretchr/testify/require"
 )
-
-// spawnCancelTemporalClient records signals. Embeds client.Client so any other
-// SDK call panics rather than silently succeeding — the previous version of
-// this fix called TerminateWorkflow, which can never work for a spawn, and
-// tests that passed a nil client could not catch it.
-type spawnCancelTemporalClient struct {
-	client.Client
-
-	signals   []recordedSignal
-	signalErr error
-}
-
-type recordedSignal struct {
-	workflowID string
-	name       string
-	arg        interface{}
-}
-
-func (c *spawnCancelTemporalClient) SignalWorkflow(
-	_ context.Context, workflowID, _ string, signalName string, arg interface{},
-) error {
-	c.signals = append(c.signals, recordedSignal{workflowID: workflowID, name: signalName, arg: arg})
-	return c.signalErr
-}
 
 // seedCancellableSpawn creates a spawn tool call whose child workflow is
 // running — the state a user is in when they click cancel on a spawn card.
@@ -118,7 +94,7 @@ func TestCancelToolCall_SignalsParentToCancelSpawn(t *testing.T) {
 
 	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
-	tc := &spawnCancelTemporalClient{}
+	tc := &signaltest.Recorder{}
 	svc := NewToolCallService(repo, tc, &toolexectest.Recorder{})
 
 	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
@@ -127,10 +103,10 @@ func TestCancelToolCall_SignalsParentToCancelSpawn(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	require.Len(t, tc.signals, 1, "cancelling a spawn must reach the parent that is running it")
-	require.Equal(t, v2.CancelThreadSignalName, tc.signals[0].name)
+	require.Len(t, tc.Signals, 1, "cancelling a spawn must reach the parent that is running it")
+	require.Equal(t, v2.CancelThreadSignalName, tc.Signals[0].Name)
 
-	sig, ok := tc.signals[0].arg.(v2.CancelThreadSignal)
+	sig, ok := tc.Signals[0].Arg.(v2.CancelThreadSignal)
 	require.True(t, ok, "signal payload must be a CancelThreadSignal")
 	require.Equal(t, childThreadID, sig.Thread)
 	require.Equal(t, toolCallID, sig.ToolCallID,
@@ -146,7 +122,7 @@ func TestCancelToolCall_SignalFails_DoesNotClaimCancelled(t *testing.T) {
 
 	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
-	tc := &spawnCancelTemporalClient{signalErr: errors.New("workflow not found")}
+	tc := &signaltest.Recorder{SignalErr: errors.New("workflow not found")}
 	svc := NewToolCallService(repo, tc, &toolexectest.Recorder{})
 
 	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
@@ -170,7 +146,7 @@ func TestCancelToolCall_ReconcilesSpawnWorkflowRow(t *testing.T) {
 
 	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
-	svc := NewToolCallService(repo, &spawnCancelTemporalClient{}, &toolexectest.Recorder{})
+	svc := NewToolCallService(repo, &signaltest.Recorder{}, &toolexectest.Recorder{})
 	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
 	}))
@@ -281,13 +257,13 @@ func TestCancelToolCall_ResumedSpawn_SignalsOriginalThreadAndReconcilesWorkflowR
 
 	// Cancel by the resumption's call. It has no content block, so go through
 	// the helper directly rather than the RPC, which resolves chat via a block.
-	tc := &spawnCancelTemporalClient{}
+	tc := &signaltest.Recorder{}
 	svc := NewToolCallService(repo, tc, &toolexectest.Recorder{})
 	require.NoError(t, svc.cancelChildWorkflowForToolCall(ctx, resumeToolCallID))
 	_ = toolCallID
 
-	require.Len(t, tc.signals, 1)
-	sig, ok := tc.signals[0].arg.(v2.CancelThreadSignal)
+	require.Len(t, tc.Signals, 1)
+	sig, ok := tc.Signals[0].Arg.(v2.CancelThreadSignal)
 	require.True(t, ok)
 	require.Equal(t, originalThreadID, sig.Thread,
 		"the signal must name the original thread, read from the workflow row — not child_workflow_id")

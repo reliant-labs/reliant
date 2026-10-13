@@ -115,7 +115,7 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 
 	var names []string
 	for _, s := range temporal.signals {
-		names = append(names, s.name)
+		names = append(names, s.Name)
 	}
 	assert.Contains(t, names, "update_workflow_state", "the params still reach the run")
 	assert.Contains(t, names, v2.ThreadWakeSignalName, "the thread is still woken")

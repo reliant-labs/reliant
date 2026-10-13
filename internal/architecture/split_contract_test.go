@@ -132,6 +132,7 @@ var serverSidePackages = []string{
 	"internal/workflow/workflowcatalog",
 
 	"internal/config",
+	"internal/temporal/signaltest", // P3a: test double extracted from grpc/services
 }
 
 func TestServerSide_NoDirectFilesystemAccess(t *testing.T) {

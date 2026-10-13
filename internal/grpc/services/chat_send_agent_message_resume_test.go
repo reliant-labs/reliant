@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/temporal/signaltest"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,7 +42,7 @@ func TestSendAgentMessage_ResumesSubAgentThatStoppedOnAFailure(t *testing.T) {
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	stopSubAgent(t, repo, ctx, fx, db.ThreadStatusFailed, db.Failed())
 
-	tc := &spawnCancelTemporalClient{}
+	tc := &signaltest.Recorder{}
 	service := &ChatService{database: repo, tempClient: tc, runs: runs.NewService(repo, tc, nil)}
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
@@ -59,10 +60,10 @@ func TestSendAgentMessage_ResumesSubAgentThatStoppedOnAFailure(t *testing.T) {
 
 	// The doorbell is what resumes it: the run hears the agent has input and
 	// relaunches it, and its first CallLLM drains the row.
-	require.Len(t, tc.signals, 1)
-	assert.Equal(t, v2.ThreadWakeSignalName, tc.signals[0].name)
-	assert.Equal(t, fx.chatID, tc.signals[0].workflowID)
-	sig, ok := tc.signals[0].arg.(v2.ThreadWakeSignal)
+	require.Len(t, tc.Signals, 1)
+	assert.Equal(t, v2.ThreadWakeSignalName, tc.Signals[0].Name)
+	assert.Equal(t, fx.chatID, tc.Signals[0].WorkflowID)
+	sig, ok := tc.Signals[0].Arg.(v2.ThreadWakeSignal)
 	require.True(t, ok)
 	assert.Equal(t, fx.childThreadID, sig.Thread)
 }
@@ -75,7 +76,7 @@ func TestSendAgentMessage_SubAgentStoppedByTheUserStaysFinished(t *testing.T) {
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	stopSubAgent(t, repo, ctx, fx, db.ThreadStatusCancelled, db.Cancelled())
 
-	tc := &spawnCancelTemporalClient{}
+	tc := &signaltest.Recorder{}
 	service := &ChatService{database: repo, tempClient: tc, runs: runs.NewService(repo, tc, nil)}
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "keep going",
@@ -84,7 +85,7 @@ func TestSendAgentMessage_SubAgentStoppedByTheUserStaysFinished(t *testing.T) {
 	assert.False(t, resp.Msg.Success)
 	assert.Contains(t, resp.Msg.Message, "already finished")
 	assert.Equal(t, 0, countAgentMessageRows(t, rawDB, ctx, fx.childThreadID))
-	assert.Empty(t, tc.signals, "nothing was queued, so nothing is woken")
+	assert.Empty(t, tc.Signals, "nothing was queued, so nothing is woken")
 }
 
 // A failed sub-agent whose chat run has since ended has no run to resume in.
@@ -97,7 +98,7 @@ func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunIsRefusedWithGuidance(t *te
 	stopSubAgent(t, repo, ctx, fx, db.ThreadStatusFailed, db.Failed())
 	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Completed()))
 
-	tc := &spawnCancelTemporalClient{}
+	tc := &signaltest.Recorder{}
 	service := &ChatService{database: repo, tempClient: tc, runs: runs.NewService(repo, tc, nil)}
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "are you there?",
@@ -120,7 +121,7 @@ func TestSendAgentMessage_StoppedSubAgentThatCannotBeWokenIsNotLeftQueued(t *tes
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	stopSubAgent(t, repo, ctx, fx, db.ThreadStatusFailed, db.Failed())
 
-	tc := &spawnCancelTemporalClient{signalErr: errors.New("workflow execution already completed")}
+	tc := &signaltest.Recorder{SignalErr: errors.New("workflow execution already completed")}
 	service := &ChatService{database: repo, tempClient: tc, runs: runs.NewService(repo, tc, nil)}
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "resume please",

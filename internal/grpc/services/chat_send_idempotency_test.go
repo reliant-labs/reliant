@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/temporal/signaltest"
 )
 
 // A send the client named is idempotent. The first attempt may have committed
@@ -95,7 +96,7 @@ func seedAssistantTurn(t *testing.T, ctx context.Context, repo *db.Repo, fx abso
 }
 
 func newSendAgentMessageService(repo *db.Repo) *ChatService {
-	tc := &spawnCancelTemporalClient{}
+	tc := &signaltest.Recorder{}
 	return &ChatService{database: repo, tempClient: tc, runs: runs.NewService(repo, tc, nil)}
 }
 

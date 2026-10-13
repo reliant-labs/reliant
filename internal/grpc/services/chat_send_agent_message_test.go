@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/temporal/signaltest"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -164,7 +165,7 @@ func TestSendAgentMessage_RingsMailboxDoorbell(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
-	tc := &spawnCancelTemporalClient{}
+	tc := &signaltest.Recorder{}
 	service := &ChatService{database: repo, tempClient: tc, runs: runs.NewService(repo, tc, nil)}
 
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
@@ -175,13 +176,13 @@ func TestSendAgentMessage_RingsMailboxDoorbell(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	require.Len(t, tc.signals, 1,
+	require.Len(t, tc.Signals, 1,
 		"queuing a message must wake the workflow; without this it waits for a child to finish")
-	assert.Equal(t, v2.ThreadWakeSignalName, tc.signals[0].name)
-	assert.Equal(t, fx.chatID, tc.signals[0].workflowID,
+	assert.Equal(t, v2.ThreadWakeSignalName, tc.Signals[0].Name)
+	assert.Equal(t, fx.chatID, tc.Signals[0].WorkflowID,
 		"a spawn has no execution of its own — the chat's workflow drives every thread")
 
-	sig, ok := tc.signals[0].arg.(v2.ThreadWakeSignal)
+	sig, ok := tc.Signals[0].Arg.(v2.ThreadWakeSignal)
 	require.True(t, ok, "signal payload must be an ThreadWakeSignal")
 	assert.Equal(t, fx.childThreadID, sig.Thread,
 		"the payload names which thread's gate should wake")
@@ -196,7 +197,7 @@ func TestSendAgentMessage_SignalFailureStillQueues(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
-	tc := &spawnCancelTemporalClient{signalErr: errors.New("workflow not found")}
+	tc := &signaltest.Recorder{SignalErr: errors.New("workflow not found")}
 	service := &ChatService{database: repo, tempClient: tc, runs: runs.NewService(repo, tc, nil)}
 
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{

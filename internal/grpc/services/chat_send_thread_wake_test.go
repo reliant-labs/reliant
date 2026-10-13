@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/temporal/signaltest"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 	"github.com/stretchr/testify/assert"
@@ -24,13 +25,13 @@ import (
 // behavior and adds signal recording.
 type wakeTestTemporalClient struct {
 	absorbTestTemporalClient
-	signals []recordedSignal
+	signals []signaltest.Signal
 }
 
 func (c *wakeTestTemporalClient) SignalWorkflow(
 	_ context.Context, workflowID, _ string, signalName string, arg interface{},
 ) error {
-	c.signals = append(c.signals, recordedSignal{workflowID: workflowID, name: signalName, arg: arg})
+	c.signals = append(c.signals, signaltest.Signal{WorkflowID: workflowID, Name: signalName, Arg: arg})
 	return nil
 }
 
@@ -70,10 +71,10 @@ func (succeedingPauseController) SignalWithRecovery(_ context.Context, _, _ stri
 
 // threadWakeSignals returns just the thread-wake signals, ignoring unrelated
 // ones (update_workflow_state) the send path may also emit.
-func threadWakeSignals(signals []recordedSignal) []recordedSignal {
-	var out []recordedSignal
+func threadWakeSignals(signals []signaltest.Signal) []signaltest.Signal {
+	var out []signaltest.Signal
 	for _, s := range signals {
-		if s.name == v2.ThreadWakeSignalName {
+		if s.Name == v2.ThreadWakeSignalName {
 			out = append(out, s)
 		}
 	}
@@ -118,10 +119,10 @@ func TestSendMessage_RunningWorkflowWakesTargetThread(t *testing.T) {
 	require.Len(t, wakes, 1,
 		"a user message to a live thread must ring the wake doorbell; without it a thread "+
 			"parked on its sub-agents never takes another turn and never sees the message")
-	assert.Equal(t, fx.chatID, wakes[0].workflowID,
+	assert.Equal(t, fx.chatID, wakes[0].WorkflowID,
 		"a spawn has no execution of its own — the chat's workflow drives every thread")
 
-	sig, ok := wakes[0].arg.(v2.ThreadWakeSignal)
+	sig, ok := wakes[0].Arg.(v2.ThreadWakeSignal)
 	require.True(t, ok, "signal payload must be a ThreadWakeSignal")
 	assert.Equal(t, fx.rootThreadID, sig.Thread,
 		"the payload names which thread's gate should wake")
@@ -157,7 +158,7 @@ func TestSendMessage_PausedWorkflowWakesTargetThreadOnResume(t *testing.T) {
 	require.Len(t, wakes, 1,
 		"resuming a paused run does not release a thread parked on its sub-agents — "+
 			"that is a different Await, and it needs its own wake")
-	sig, ok := wakes[0].arg.(v2.ThreadWakeSignal)
+	sig, ok := wakes[0].Arg.(v2.ThreadWakeSignal)
 	require.True(t, ok, "signal payload must be a ThreadWakeSignal")
 	assert.Equal(t, fx.rootThreadID, sig.Thread)
 	assert.Equal(t, threadwake.ReasonUserMessage, sig.Reason)

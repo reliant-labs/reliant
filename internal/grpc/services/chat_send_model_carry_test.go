@@ -21,6 +21,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/temporal/signaltest"
 	"github.com/reliant-labs/reliant/internal/workflow"
 )
 
@@ -118,11 +119,11 @@ func sendContinue(chatID string, params map[string]*structpb.Value) *connect.Req
 // modelUpdateBeforeResume returns the model id the run was sent in an input
 // update ahead of its resume, failing the test if there was none or it came
 // after the resume.
-func modelUpdateBeforeResume(t *testing.T, signals []recordedSignal) string {
+func modelUpdateBeforeResume(t *testing.T, signals []signaltest.Signal) string {
 	t.Helper()
 	update, resume := -1, -1
 	for i, sig := range signals {
-		switch sig.name {
+		switch sig.Name {
 		case workflow.SignalUpdateWorkflowState:
 			if update == -1 {
 				update = i
@@ -137,8 +138,8 @@ func modelUpdateBeforeResume(t *testing.T, signals []recordedSignal) string {
 	require.NotEqual(t, -1, update, "the run must be sent an input update; signals: %v", signalNames(signals))
 	require.Less(t, update, resume,
 		"the update must reach the run before its resume: the woken step re-dispatches from its live inputs")
-	inputs, ok := signals[update].arg.(map[string]interface{})
-	require.True(t, ok, "update payload %T", signals[update].arg)
+	inputs, ok := signals[update].Arg.(map[string]interface{})
+	require.True(t, ok, "update payload %T", signals[update].Arg)
 	return modelID(t, inputs["model"])
 }
 
@@ -153,10 +154,10 @@ func modelID(t *testing.T, value interface{}) string {
 	return selector.ID
 }
 
-func signalNames(signals []recordedSignal) []string {
+func signalNames(signals []signaltest.Signal) []string {
 	names := make([]string, len(signals))
 	for i, sig := range signals {
-		names[i] = sig.name
+		names[i] = sig.Name
 	}
 	return names
 }
