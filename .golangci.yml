@@ -71,8 +71,32 @@ linters:
       - path: _test\.go
         linters:
           - gosec
+      # The generated config loader is the one package allowed to read the
+      # environment; the typed-config guardrail does not flag it.
+      - path: ^pkg/config/
+        linters:
+          - forbidigo
 
   settings:
+    forbidigo:
+      # Typed-config guardrail (forge.yaml: config.enforce_typed_access: warn).
+      # ADVISORY: forbidigo is deliberately ABSENT from `linters.enable`
+      # above, so `golangci-lint run` never fails on these findings; `forge
+      # lint` runs it as a separate, non-failing step so they stay visible
+      # while P4 moves each read onto proto/config (pkg/config). Enabling
+      # forbidigo above is what would make them gate.
+      forbid:
+        - pattern: 'os\.Getenv'
+          msg: &typed-config >-
+            Read configuration from the typed config (pkg/config) instead:
+            declare the setting in proto/config/v1/*.proto with a
+            (forge.v1.config) annotation and run `forge generate`. A read
+            that is not configuration (an ambient OS variable such as HOME)
+            takes //nolint:forbidigo with the reason.
+        - pattern: 'os\.LookupEnv'
+          msg: *typed-config
+        - pattern: 'os\.Environ'
+          msg: *typed-config
     errcheck:
       # Exclude common deferred close patterns and best-effort operations
       # Note: Internal package methods use //nolint comments instead (exclude-functions doesn't match them reliably)
