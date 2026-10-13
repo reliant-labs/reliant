@@ -669,7 +669,7 @@ func (s *CatalogService) ListNodes(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListNodesRequest],
 ) (*connect.Response[reliantv1.ListNodesResponse], error) {
-	category := req.Msg.Category
+	category := req.Msg.GetCategory()
 
 	// Get only nodes visible in the workflow builder
 	// Uses reflection-based schema - activities must implement ActivityWithMetadata

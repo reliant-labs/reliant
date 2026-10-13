@@ -1450,9 +1450,9 @@ func (x *NodeCategory) GetCount() int32 {
 type ListNodesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Optional category filter
-	Category string `protobuf:"bytes,1,opt,name=category,proto3" json:"category,omitempty"`
+	Category *string `protobuf:"bytes,1,opt,name=category,proto3,oneof" json:"category,omitempty"`
 	// Whether to include internal nodes (default: false)
-	IncludeInternal bool `protobuf:"varint,2,opt,name=include_internal,json=includeInternal,proto3" json:"include_internal,omitempty"`
+	IncludeInternal *bool `protobuf:"varint,2,opt,name=include_internal,json=includeInternal,proto3,oneof" json:"include_internal,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1488,15 +1488,15 @@ func (*ListNodesRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListNodesRequest) GetCategory() string {
-	if x != nil {
-		return x.Category
+	if x != nil && x.Category != nil {
+		return *x.Category
 	}
 	return ""
 }
 
 func (x *ListNodesRequest) GetIncludeInternal() bool {
-	if x != nil {
-		return x.IncludeInternal
+	if x != nil && x.IncludeInternal != nil {
+		return *x.IncludeInternal
 	}
 	return false
 }
@@ -2462,9 +2462,9 @@ type ListCatalogIntegrationsRequest struct {
 	// Kinds keeps only integrations with at least one entry of these kinds,
 	// and counts only those entries. Empty means every kind.
 	Kinds []CatalogEntryKind `protobuf:"varint,1,rep,packed,name=kinds,proto3,enum=reliant.v1.CatalogEntryKind" json:"kinds,omitempty"`
-	// Category keeps only integrations in this category. Empty means every
-	// category.
-	Category string `protobuf:"bytes,2,opt,name=category,proto3" json:"category,omitempty"`
+	// Category keeps only integrations in this category. Unset (or empty)
+	// means every category.
+	Category *string `protobuf:"bytes,2,opt,name=category,proto3,oneof" json:"category,omitempty"`
 	// PageSize defaults to 20; larger values are capped at 100.
 	PageSize int32 `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// PageToken is a previous response's next_page_token. It is only valid for
@@ -2512,8 +2512,8 @@ func (x *ListCatalogIntegrationsRequest) GetKinds() []CatalogEntryKind {
 }
 
 func (x *ListCatalogIntegrationsRequest) GetCategory() string {
-	if x != nil {
-		return x.Category
+	if x != nil && x.Category != nil {
+		return *x.Category
 	}
 	return ""
 }
@@ -3052,10 +3052,12 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\fNodeCategory\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x14\n" +
-	"\x05count\x18\x03 \x01(\x05R\x05count\"Y\n" +
-	"\x10ListNodesRequest\x12\x1a\n" +
-	"\bcategory\x18\x01 \x01(\tR\bcategory\x12)\n" +
-	"\x10include_internal\x18\x02 \x01(\bR\x0fincludeInternal\"y\n" +
+	"\x05count\x18\x03 \x01(\x05R\x05count\"\x85\x01\n" +
+	"\x10ListNodesRequest\x12\x1f\n" +
+	"\bcategory\x18\x01 \x01(\tH\x00R\bcategory\x88\x01\x01\x12.\n" +
+	"\x10include_internal\x18\x02 \x01(\bH\x01R\x0fincludeInternal\x88\x01\x01B\v\n" +
+	"\t_categoryB\x13\n" +
+	"\x11_include_internal\"y\n" +
 	"\x11ListNodesResponse\x12*\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x14.reliant.v1.NodeInfoR\x05nodes\x128\n" +
 	"\n" +
@@ -3132,13 +3134,14 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x1d\n" +
 	"\n" +
 	"total_size\x18\x03 \x01(\x05R\ttotalSize\x12A\n" +
-	"\x0fcategory_facets\x18\x04 \x03(\v2\x18.reliant.v1.CatalogFacetR\x0ecategoryFacets\"\xac\x01\n" +
+	"\x0fcategory_facets\x18\x04 \x03(\v2\x18.reliant.v1.CatalogFacetR\x0ecategoryFacets\"\xbe\x01\n" +
 	"\x1eListCatalogIntegrationsRequest\x122\n" +
-	"\x05kinds\x18\x01 \x03(\x0e2\x1c.reliant.v1.CatalogEntryKindR\x05kinds\x12\x1a\n" +
-	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x1b\n" +
+	"\x05kinds\x18\x01 \x03(\x0e2\x1c.reliant.v1.CatalogEntryKindR\x05kinds\x12\x1f\n" +
+	"\bcategory\x18\x02 \x01(\tH\x00R\bcategory\x88\x01\x01\x12\x1b\n" +
 	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x04 \x01(\tR\tpageToken\"\x9c\x01\n" +
+	"page_token\x18\x04 \x01(\tR\tpageTokenB\v\n" +
+	"\t_category\"\x9c\x01\n" +
 	"\x19CatalogIntegrationListing\x12@\n" +
 	"\vintegration\x18\x01 \x01(\v2\x1e.reliant.v1.CatalogIntegrationR\vintegration\x12\x1f\n" +
 	"\ventry_count\x18\x02 \x01(\x05R\n" +
@@ -3315,6 +3318,8 @@ func file_reliant_v1_catalog_proto_init() {
 	}
 	file_reliant_v1_connection_proto_init()
 	file_reliant_v1_catalog_proto_msgTypes[13].OneofWrappers = []any{}
+	file_reliant_v1_catalog_proto_msgTypes[17].OneofWrappers = []any{}
+	file_reliant_v1_catalog_proto_msgTypes[31].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -2443,7 +2443,7 @@
           {
             "Name": "category",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           },
           {
             "Name": "page_size",
@@ -2519,12 +2519,12 @@
           {
             "Name": "category",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           },
           {
             "Name": "include_internal",
             "ProtoType": "bool",
-            "IsOptional": false
+            "IsOptional": true
           }
         ],
         "ListNodesResponse": [
@@ -3026,7 +3026,8 @@
           },
           {
             "name": "category",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           },
           {
             "name": "page_size",
@@ -3095,11 +3096,13 @@
         "reliant.v1.ListNodesRequest": [
           {
             "name": "category",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           },
           {
             "name": "include_internal",
-            "kind": "bool"
+            "kind": "bool",
+            "optional": true
           }
         ],
         "reliant.v1.ListNodesResponse": [
@@ -33568,5 +33571,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "171dcbc15b6363a2ef761c63f4866e4c18a287e8d6b8ce72a5a256583d4aace6"
+  "source_hash": "7c040981bb3fc25f0fd9a3632623477a5ff87d99f8e80adcefa5815abb1e9f41"
 }

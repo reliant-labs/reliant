@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -252,7 +253,7 @@ func TestListCatalogIntegrations_ListsIntegrationsConnectedFirst(t *testing.T) {
 	assert.Equal(t, []string{"acme", "web"}, ids(alice))
 	assert.True(t, alice.GetIntegrations()[0].GetConnected())
 
-	core := listing("bob", &reliantv1.ListCatalogIntegrationsRequest{Category: "core"})
+	core := listing("bob", &reliantv1.ListCatalogIntegrationsRequest{Category: proto.String("core")})
 	assert.Equal(t, []string{"web"}, ids(core))
 	assert.ElementsMatch(t, []string{"core", "crm"}, func() []string {
 		var out []string

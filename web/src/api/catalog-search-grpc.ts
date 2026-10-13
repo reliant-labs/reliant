@@ -204,7 +204,7 @@ export const catalogSearchGrpc = {
     const response = await grpcClient.catalog().listCatalogIntegrations(
       create(ListCatalogIntegrationsRequestSchema, {
         kinds: (q.kinds ?? []).map(kindToProto),
-        category: q.category ?? "",
+        category: q.category,
         pageSize: q.pageSize ?? 20,
         pageToken: q.pageToken ?? "",
       }),

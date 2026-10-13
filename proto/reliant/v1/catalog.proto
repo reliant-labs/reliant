@@ -305,9 +305,9 @@ message NodeCategory {
 // ListNodesRequest is the request for ListNodes
 message ListNodesRequest {
   // Optional category filter
-  string category = 1;
+  optional string category = 1;
   // Whether to include internal nodes (default: false)
-  bool include_internal = 2;
+  optional bool include_internal = 2;
 }
 
 // ListNodesResponse is the response for ListNodes
@@ -471,9 +471,9 @@ message ListCatalogIntegrationsRequest {
   // Kinds keeps only integrations with at least one entry of these kinds,
   // and counts only those entries. Empty means every kind.
   repeated CatalogEntryKind kinds = 1;
-  // Category keeps only integrations in this category. Empty means every
-  // category.
-  string category = 2;
+  // Category keeps only integrations in this category. Unset (or empty)
+  // means every category.
+  optional string category = 2;
   // PageSize defaults to 20; larger values are capped at 100.
   int32 page_size = 3;
   // PageToken is a previous response's next_page_token. It is only valid for
