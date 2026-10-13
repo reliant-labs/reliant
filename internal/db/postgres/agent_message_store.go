@@ -4,6 +4,7 @@
 // in internal/runs/contract.go). A contract.go here would be one wide
 // interface over every query, which no caller consumes.
 //
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: sqlc store layer, replaced by the forge ORM in P5b (research/forge-migration/PLAN.md)
 //forge:exclude-contract: postgres implementations of db/core's store interfaces over sqlc-generated queries
 package postgres
 
