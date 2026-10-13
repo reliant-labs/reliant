@@ -8,6 +8,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/drain"
 )
 
 // Close must ACTIVELY end every open daemon stream with Unavailable.
@@ -68,6 +70,17 @@ func TestDrainingErrorIsRecoverableForDaemons(t *testing.T) {
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(errGatewayDraining))
 	require.NotEqual(t, connect.CodeAborted, connect.CodeOf(errGatewayDraining),
 		"Aborted is the supersede signal and is terminal — a draining gateway must not use it")
+}
+
+// The gateway's drain status is the shared drain sentinel, which the server's
+// logging interceptor declares expected (internal/grpc newInterceptors). Every
+// held daemon stream ends with it on every rollout; matched by anything else,
+// each one was a "stream failed" record at ERROR and a Sentry event.
+func TestDrainingErrorIsTheServerDrainingSentinel(t *testing.T) {
+	require.True(t, drain.IsServerDraining(errGatewayDraining),
+		"errGatewayDraining must match drain.ErrServerDraining, or every rollout pages once per connected daemon")
+	require.Contains(t, errGatewayDraining.Error(), "gateway draining",
+		"the daemon prints this message; it must still say what happened")
 }
 
 // Close with no connections must not panic or block; the gateway shuts down

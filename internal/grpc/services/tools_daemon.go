@@ -26,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -274,7 +275,12 @@ func (s *ToolsDaemonService) SetStatePublisher(p *daemonstate.Publisher) {
 // all: Shutdown waits for active requests to finish and a bidi stream never
 // finishes on its own, so the gateway burned its entire shutdown budget and
 // then exited, cutting every daemon's TCP connection with no status at all.
-var errGatewayDraining = connect.NewError(connect.CodeUnavailable, fmt.Errorf(
+//
+// It matches drain.ErrServerDraining, which the server's logging interceptor
+// declares an expected outcome: every held stream ends this way on every
+// rollout, and logging each one as a failed stream at ERROR paged on a
+// rollout that went exactly as designed.
+var errGatewayDraining = connect.NewError(connect.CodeUnavailable, drain.DrainingError(
 	"gateway draining: this daemon-gateway replica is shutting down; reconnect to reach a live replica"))
 
 // Close ends every daemon stream this service is holding, with a status the

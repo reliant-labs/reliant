@@ -31,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
@@ -68,6 +69,11 @@ type Server struct {
 	// worktreeSweeper settles archived worktrees' directories through their
 	// daemons. Nil when the server has no daemon router.
 	worktreeSweeper *worktreesweep.Sweeper
+
+	// streams ends every long-lived stream (streaming RPCs, the terminal
+	// websocket, MCP event streams) when the server starts shutting down.
+	// See Stop.
+	streams *drain.Streams
 }
 
 // Config holds gRPC server configuration
@@ -189,6 +195,10 @@ func NewServer(cfg *Config) (*Server, error) {
 	// the slog bridge (internal/logging), grouped per procedure and code.
 	timeouts := interceptors.NewTimeoutInterceptor().WithMethodTimeouts(services.ForgeRPCDeadlines())
 	opts := newHandlerOptions(true, timeouts.Interceptor(), authInterceptor, domainWhitelistInterceptor)
+	// Innermost: every streaming handler's context ends when Stop begins, so
+	// Shutdown is never left waiting on a stream that cannot finish by itself.
+	streams := drain.NewStreams()
+	opts = append(opts, connect.WithInterceptors(interceptors.NewStreamDrainInterceptor(streams)))
 
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.
 	// The api-server itself never accepts daemon bidi streams — daemons connect to
@@ -385,7 +395,10 @@ func NewServer(cfg *Config) (*Server, error) {
 				wsValidator, _ = auth.LoadJWKS(context.Background(), cfg.JWKSURL)
 			}
 		}
-		mux.HandleFunc("/api/v2/terminal/ws", services.TerminalWSHandler(router, wsValidator, services.WithTerminalCheckouts(database)))
+		// A terminal websocket lives as long as the browser tab: bound to the
+		// drain so it ends with a reconnect close code when Stop begins.
+		mux.Handle("/api/v2/terminal/ws", streams.Handler(
+			services.TerminalWSHandler(router, wsValidator, services.WithTerminalCheckouts(database))))
 	} else {
 		// No daemon router available: use DB-backed FileSystem and provider-backed Background.
 		// These provide read-only / limited functionality without a connected daemon.
@@ -513,7 +526,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// outside the interceptor chain. Confinement is enforced daemon-side at
 	// command dispatch (internal/daemonpolicy); this route resolves the grant
 	// and terminates the protocol.
-	mountConnectorMCP(mux, database, router, cfg.PublicURL, cfg.OAuthIssuers, connectorTokenValidator(cfg),
+	mountConnectorMCP(mux, streams, database, router, cfg.PublicURL, cfg.OAuthIssuers, connectorTokenValidator(cfg),
 		accesstokenclient.NewCachedIntrospector(authority))
 
 	// CLI login discovery (RFC 8414): names the control plane that issues this
@@ -576,6 +589,8 @@ func NewServer(cfg *Config) (*Server, error) {
 		WriteTimeout:      0,
 		IdleTimeout:       transport.ServerIdleTimeout,
 	}
+	// Shutdown runs this at its start, whoever calls it. See Stop.
+	srv.RegisterOnShutdown(streams.End)
 
 	return &Server{
 		server:          srv,
@@ -586,6 +601,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		chatService:     chatService,
 		router:          router,
 		worktreeSweeper: worktreeSweeper,
+		streams:         streams,
 	}, nil
 }
 
@@ -723,7 +739,24 @@ func (s *Server) IsTLS() bool {
 	return s.tlsCertFile != "" && s.tlsKeyFile != ""
 }
 
-// Stop gracefully stops the gRPC server
+// Stop gracefully stops the gRPC server: it stops accepting connections,
+// ends every long-lived stream, and waits — bounded by ctx — for the unary
+// requests in flight to finish.
+//
+// Ending the streams is what lets it return. http.Server.Shutdown waits for
+// every active request, and a long-lived stream (StreamUserUpdates holds one
+// per open browser tab) never finishes on its own, so Shutdown used to wait
+// out the whole SHUTDOWN_TIMEOUT and fail with context.DeadlineExceeded on
+// every rollout — then the process exited and cut those streams with no
+// status at all. Now Shutdown's first act (the RegisterOnShutdown hook
+// installed by NewServer) is s.streams.End: streaming RPCs end with OK, the
+// end of a watch their clients resume from; the terminal websocket closes
+// with 1012 (service restart), which the browser reconnects on; MCP event
+// streams end and their clients re-open them.
+//
+// Callers must have flipped readiness and waited out the pre-stop delay
+// first (see drain.Drainer), so those reconnects reach a replica that is
+// still serving rather than this one.
 func (s *Server) Stop(ctx context.Context) error {
 	logging.Info("Stopping Connect/gRPC server")
 	return s.server.Shutdown(ctx)
@@ -789,7 +822,31 @@ func newInterceptors(trustRemoteTrace bool, timeoutInterceptor connect.Intercept
 		// classifier (internal/logging) to it. Without the same one here, a
 		// failure Temporal carries as Benign — nobody has to act — logged at
 		// ERROR, error_class=server, and counted as a dead-end error.
-		LogOptions: []observe.LogOption{observe.WithErrorClassifier(errclass.Library)},
+		LogOptions: []observe.LogOption{
+			observe.WithErrorClassifier(errclass.Library),
+			// A stream this server ended because it is shutting down (the
+			// daemon-gateway's "gateway draining") is how a rollout is
+			// supposed to go, not a failed call: logged like a success,
+			// never at ERROR.
+			observe.WithExpectedErrors(drain.ErrServerDraining),
+		},
+	})
+}
+
+// bindEventStreams binds MCP's server-to-client event streams to the drain:
+// the streamable-HTTP transport's standalone GET stream and the legacy /sse
+// stream are GETs that stay open for as long as the client is connected, so
+// http.Server.Shutdown would wait on them forever. Ending them at Stop lets the
+// client re-open the stream against a live replica. POSTs carry one call each
+// and are drained like any other request.
+func bindEventStreams(streams *drain.Streams, next http.Handler) http.Handler {
+	bound := streams.Handler(next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			bound.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 
@@ -817,6 +874,7 @@ func isNilInterceptor(i connect.Interceptor) bool {
 // The reason is logged so a misconfigured deployment is diagnosable.
 func mountConnectorMCP(
 	mux *http.ServeMux,
+	streams *drain.Streams,
 	database db.Repository,
 	router toolexec.DaemonRouter,
 	publicURL string,
@@ -888,6 +946,7 @@ func mountConnectorMCP(
 	// from a phone.
 	// The handler owns routing for both transports (streamable-HTTP at /mcp,
 	// legacy SSE at /sse), so every path it serves is registered here.
+	handler = bindEventStreams(streams, handler)
 	mux.Handle(mcpserver.MountPath, handler)
 	mux.Handle(mcpserver.MountPath+"/", handler)
 	mux.Handle(mcpserver.SSEMountPath, handler)

@@ -268,12 +268,18 @@ func (r *Repo) sessionPool() *sql.DB {
 	return r.DB.SQLDB()
 }
 
+// Close closes the repository's pools. A connection the database end had
+// already dropped is not a close failure: see withoutPeerClosedErrors.
 func (r *Repo) Close() error {
 	err := r.DB.Close()
 	if r.session != nil {
 		err = errors.Join(err, r.session.Close())
 	}
-	return err
+	kept := withoutPeerClosedErrors(err)
+	if err != nil && kept == nil {
+		logging.Debug("Database connections were already closed by the server end", "error", err)
+	}
+	return kept
 }
 
 func (r *Repo) Ping(ctx context.Context) error {

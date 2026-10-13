@@ -140,7 +140,9 @@ func ConnectWithConfig(cfg DatabaseConfig) (*sql.DB, error) {
 func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 	logging.Info("Opening Postgres database")
 
-	db, err := sql.Open("pgx", cfg.URL)
+	// cfg.URL is PgBouncer in a deployment: openPostgres retries what a
+	// draining pooler refused instead of failing the caller.
+	db, err := openPostgres(cfg.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open postgres database: %w", err)
 	}

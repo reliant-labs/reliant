@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -27,6 +28,9 @@ const (
 	wsPingInterval = 30 * time.Second
 	// wsPongTimeout is how long the server waits for a pong before closing.
 	wsPongTimeout = 45 * time.Second
+	// wsDrainCloseGrace bounds how long a connection the server is closing
+	// for shutdown waits for the browser's answering close frame.
+	wsDrainCloseGrace = 2 * time.Second
 )
 
 var wsUpgrader = websocket.Upgrader{
@@ -191,6 +195,24 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		ctx, cancel := context.WithCancel(r.Context())
 		defer cancel()
 
+		// The server is shutting down (r's context is bound to its
+		// drain.Streams): close with 1012, service restart, which the browser
+		// reconnects on — not 1000, which it reads as "the shell exited". The
+		// alternative was the process exit dropping the TCP connection, with
+		// closeDaemonTerminalSession below never running and the daemon's PTY
+		// leaked. The read deadline bounds the wait for the browser's
+		// answering close frame, which is what returns the input pump's read.
+		go func() {
+			<-ctx.Done()
+			if !drain.Ended(ctx) {
+				return
+			}
+			deadline := time.Now().Add(wsDrainCloseGrace)
+			_ = conn.WriteControl(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseServiceRestart, "server restarting"), deadline)
+			_ = conn.SetReadDeadline(deadline)
+		}()
+
 		// --- Create terminal session via daemon ---
 		createReq := map[string]any{
 			"working_dir": workingDir,
@@ -273,6 +295,11 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		// Set initial pong deadline; each pong resets it.
 		_ = conn.SetReadDeadline(time.Now().Add(wsPongTimeout))
 		conn.SetPongHandler(func(string) error {
+			// Once the connection is ending, a late pong must not push back
+			// the drain's close deadline.
+			if ctx.Err() != nil {
+				return nil
+			}
 			_ = conn.SetReadDeadline(time.Now().Add(wsPongTimeout))
 			return nil
 		})

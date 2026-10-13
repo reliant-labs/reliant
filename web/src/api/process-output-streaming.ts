@@ -18,6 +18,12 @@ import { OutputStreamType, BackgroundProcessStatus } from "../gen/reliant/v1/com
 
 const LOG_PREFIX = "[📡 ProcessOutput]";
 
+// A connection must stay up at least this long before a reconnect starts from
+// a fresh backoff. Resetting on the first event instead would let a server
+// that answers and then immediately ends the stream drive a reconnect every
+// second, forever, now that a stream ending without "complete" reconnects.
+const SHORT_LIVED_CONNECTION_MS = 10_000;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -93,6 +99,10 @@ export class ProcessOutputStreamingService {
   private lastSequence = 0;
   private isConnected_ = false;
   private newOnly = false;
+  // Whether the server has said the process finished. Only then is a stream
+  // that ends cleanly the end of the output.
+  private completed = false;
+  private connectedAt = 0;
 
   constructor(processId: string, callbacks: ProcessOutputCallbacks) {
     this.processId = processId;
@@ -146,8 +156,8 @@ export class ProcessOutputStreamingService {
         // On first event, mark as connected
         if (!this.isConnected_) {
           this.isConnected_ = true;
+          this.connectedAt = Date.now();
           this.callbacks.onStatusChange("connected");
-          this.reconnectAttempts = 0;
         }
 
         this.handleEvent(event);
@@ -156,13 +166,21 @@ export class ProcessOutputStreamingService {
       // Stream ended normally (process completed or server closed)
       logger.info(`${LOG_PREFIX} Stream ended normally`, {
         processId: this.processId.slice(0, 8),
+        completed: this.completed,
       });
-      this.isConnected_ = false;
+      this.endConnection();
       this.callbacks.onStatusChange("disconnected");
 
-      // Don't reconnect on normal end - process is complete
+      // The process finished: there is no more output to wait for. A stream
+      // that ends WITHOUT the complete event was ended by the server while
+      // the process is still running — an API replica shutting down ends
+      // every stream it holds so the rollout is not held up by them — so
+      // pick the output up again from a live replica.
+      if (!this.completed && !this.isIntentionallyClosed) {
+        this.attemptReconnect();
+      }
     } catch (error) {
-      this.isConnected_ = false;
+      this.endConnection();
 
       if (this.abortController?.signal.aborted) {
         // Intentionally closed
@@ -245,6 +263,7 @@ export class ProcessOutputStreamingService {
           exitCode: complete.exitCode,
         });
 
+        this.completed = true;
         this.callbacks.onComplete(
           complete.status,
           complete.exitCode,
@@ -259,6 +278,14 @@ export class ProcessOutputStreamingService {
           case: event.event.case,
         });
     }
+  }
+
+  /** Marks the current connection over, crediting the backoff if it lasted. */
+  private endConnection(): void {
+    if (this.isConnected_ && Date.now() - this.connectedAt >= SHORT_LIVED_CONNECTION_MS) {
+      this.reconnectAttempts = 0;
+    }
+    this.isConnected_ = false;
   }
 
   private attemptReconnect(): void {
