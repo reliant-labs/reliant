@@ -24,7 +24,6 @@ import (
 
 // Log prefixes
 const (
-	LOG_PREFIX_STREAM      = "[📡 Stream]"
 	LOG_PREFIX_STREAM_CHAT = "[📡 ChatStream]"
 	LOG_PREFIX_STREAM_USER = "[📡 UserStream]"
 )

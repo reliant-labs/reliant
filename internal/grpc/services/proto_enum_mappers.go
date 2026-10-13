@@ -2,8 +2,6 @@
 package services
 
 import (
-	"strings"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
 )
@@ -173,49 +171,3 @@ func worktreeStatusFromInt32(v int32) reliantv1.WorktreeStatus {
 // UserUpdateType and EntityType are now proto enum integers (stored as INTEGER in DB).
 // No string conversion needed — the db layer scans integers and the streaming layer
 // passes proto enums directly. See internal/db/models.go for type aliases.
-
-// --- ChatUpdateType (from string for streaming_delta and other hardcoded uses) ---
-
-func chatUpdateTypeFromString(s string) reliantv1.ChatUpdateType {
-	normalized := strings.TrimSpace(strings.ToLower(s))
-	normalized = strings.TrimPrefix(normalized, "chat_update_type_")
-
-	switch normalized {
-	case "message":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE
-	case "approval":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_APPROVAL
-	case "thread":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD
-	case "tool_call":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL
-	case "workflow_status":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_STATUS
-	case "error":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_ERROR
-	case "chat":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_CHAT
-	case "run_output":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_RUN_OUTPUT
-	case "node_execution":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_NODE_EXECUTION
-	case "execution_log":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_EXECUTION_LOG
-	case "workflow_execution":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION
-	case "info":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_INFO
-	case "warning":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WARNING
-	case "refetch":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_REFETCH
-	case "streaming_delta":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAMING_DELTA
-	case "skill_invocation":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_SKILL_INVOCATION
-	case "question":
-		return reliantv1.ChatUpdateType(18) // CHAT_UPDATE_TYPE_QUESTION (proto codegen pending)
-	default:
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_UNSPECIFIED
-	}
-}
