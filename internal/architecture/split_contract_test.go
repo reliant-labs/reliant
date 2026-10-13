@@ -118,6 +118,7 @@ var serverSidePackages = []string{
 	"internal/planproto",
 	"internal/workflow/runtime/activities",
 	"internal/workflow/runtime/activities/handlers",
+	"internal/db/dbtest", // P3a: test fixtures extracted from grpc/services
 	// Extracted from grpc/services, so it keeps that package's ban (P3a,
 	// research/forge-migration/05-p3a-handler-map.md).
 	"internal/processproto",

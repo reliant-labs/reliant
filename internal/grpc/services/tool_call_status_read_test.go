@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,13 +26,13 @@ func TestGetMessage_PopulatesDurableToolCallStatus(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-	f := setupToolCallDurableFixture(t, ctx, repo, `{"command":"sleep 600"}`)
+	f := dbtest.SeedToolCall(t, ctx, repo, `{"command":"sleep 600"}`)
 
 	require.NoError(t, repo.UpsertToolCall(ctx, &core.ToolCall{
-		ID:          f.toolCallID,
-		ChatID:      f.chatID,
-		MessageID:   &f.messageID,
-		ThreadID:    &f.threadID,
+		ID:          f.ToolCallID,
+		ChatID:      f.ChatID,
+		MessageID:   &f.MessageID,
+		ThreadID:    &f.ThreadID,
 		ToolName:    "bash",
 		Status:      core.ToolCallStatusExecuting,
 		RequestedAt: time.Now().UTC(),
@@ -41,7 +42,7 @@ func TestGetMessage_PopulatesDurableToolCallStatus(t *testing.T) {
 
 	svc := NewMessageService(repo)
 	resp, err := svc.GetMessage(ctx, connect.NewRequest(&reliantv1.GetMessageRequest{
-		MessageId: f.messageID,
+		MessageId: f.MessageID,
 	}))
 	require.NoError(t, err)
 
@@ -56,14 +57,14 @@ func TestListMessages_PopulatesDurableToolCallStatus(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-	f := setupToolCallDurableFixture(t, ctx, repo, `{"command":"npm run dev"}`)
+	f := dbtest.SeedToolCall(t, ctx, repo, `{"command":"npm run dev"}`)
 
 	completedAt := time.Now().UTC()
 	require.NoError(t, repo.UpsertToolCall(ctx, &core.ToolCall{
-		ID:          f.toolCallID,
-		ChatID:      f.chatID,
-		MessageID:   &f.messageID,
-		ThreadID:    &f.threadID,
+		ID:          f.ToolCallID,
+		ChatID:      f.ChatID,
+		MessageID:   &f.MessageID,
+		ThreadID:    &f.ThreadID,
 		ToolName:    "bash",
 		Status:      core.ToolCallStatusCompleted,
 		CompletedAt: &completedAt,
@@ -74,14 +75,14 @@ func TestListMessages_PopulatesDurableToolCallStatus(t *testing.T) {
 
 	svc := &ChatService{database: repo}
 	resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
-		ChatId: f.chatID,
+		ChatId: f.ChatID,
 	}))
 	require.NoError(t, err)
 
 	var block *reliantv1.ContentBlock
 	for _, msg := range resp.Msg.Messages {
 		for _, b := range msg.ContentBlocks {
-			if b.ToolCallId != nil && *b.ToolCallId == f.toolCallID {
+			if b.ToolCallId != nil && *b.ToolCallId == f.ToolCallID {
 				block = b
 			}
 		}

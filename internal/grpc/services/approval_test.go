@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	workflowpkg "github.com/reliant-labs/reliant/internal/workflow"
 )
 
@@ -308,24 +309,24 @@ func TestApprovalService_DenyRetiredToolApprovalWritesNoDenialMessage(t *testing
 	} {
 		t.Run(name, func(t *testing.T) {
 			service, repo, mockClient := setupTestApprovalServiceWithMockClient(t)
-			f := setupToolCallDurableFixture(t, ctx, repo, `{"channel":"#general","text":"Ship it"}`)
+			f := dbtest.SeedToolCall(t, ctx, repo, `{"channel":"#general","text":"Ship it"}`)
 			workflowID := uuid.NewString()
-			require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{ID: workflowID, ChatID: f.chatID, WorkflowName: "agent", Thread: f.threadID, Status: db.Active()}))
+			require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{ID: workflowID, ChatID: f.ChatID, WorkflowName: "agent", Thread: f.ThreadID, Status: db.Active()}))
 
-			retired := createRetiredToolApproval(t, repo, f.chatID, workflowID)
-			before, err := repo.ListMessages(ctx, f.chatID, db.MessageListOptions{})
+			retired := createRetiredToolApproval(t, repo, f.ChatID, workflowID)
+			before, err := repo.ListMessages(ctx, f.ChatID, db.MessageListOptions{})
 			require.NoError(t, err)
 			require.NoError(t, deny(service, retired))
-			after, err := repo.ListMessages(ctx, f.chatID, db.MessageListOptions{})
+			after, err := repo.ListMessages(ctx, f.ChatID, db.MessageListOptions{})
 			require.NoError(t, err)
 			assert.Len(t, after, len(before), "the run answers the call; no denial message")
 			signal, ok := mockClient.signalArg.(map[string]interface{})
 			require.True(t, ok)
 			assert.Equal(t, "denied", signal["status"], "the waiting run is still told")
 
-			step := createTestApproval(t, repo, f.chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
+			step := createTestApproval(t, repo, f.ChatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
 			require.NoError(t, deny(service, step))
-			afterStep, err := repo.ListMessages(ctx, f.chatID, db.MessageListOptions{})
+			afterStep, err := repo.ListMessages(ctx, f.ChatID, db.MessageListOptions{})
 			require.NoError(t, err)
 			assert.Len(t, afterStep, len(after)+1, "a step approval's denial still writes its message")
 		})

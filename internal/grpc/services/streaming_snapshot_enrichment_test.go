@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/stretchr/testify/require"
 )
@@ -191,11 +192,11 @@ func TestChatSnapshot_ToolCallUpdateUsesDurableStatus(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-	fixture := setupToolCallDurableFixture(t, ctx, repo, `{"command":"sleep 600"}`)
+	fixture := dbtest.SeedToolCall(t, ctx, repo, `{"command":"sleep 600"}`)
 
 	completedAt := time.Now().UTC()
 	require.NoError(t, repo.UpsertToolCall(ctx, &db.ToolCall{
-		ID: fixture.toolCallID, ChatID: fixture.chatID, ThreadID: &fixture.threadID, MessageID: &fixture.messageID,
+		ID: fixture.ToolCallID, ChatID: fixture.ChatID, ThreadID: &fixture.ThreadID, MessageID: &fixture.MessageID,
 		ToolName: "bash", Status: core.ToolCallStatusCompleted, CompletedAt: &completedAt,
 		RequestedAt: completedAt.Add(-time.Minute), StartedAt: ptr.Of(completedAt.Add(-30 * time.Second)),
 		CreatedAt: completedAt.Add(-time.Minute), UpdatedAt: completedAt,
@@ -204,19 +205,19 @@ func TestChatSnapshot_ToolCallUpdateUsesDurableStatus(t *testing.T) {
 	// The persisted event stream can lag the durable row after cancellation or a
 	// worker restart. A fresh snapshot must not replay the stale executing event
 	// after the completed message block and make the tool look live again.
-	require.NoError(t, repo.EmitToolCallUpdate(ctx, fixture.chatID, db.ToolCallUpdate{
-		ToolCallID: fixture.toolCallID,
+	require.NoError(t, repo.EmitToolCallUpdate(ctx, fixture.ChatID, db.ToolCallUpdate{
+		ToolCallID: fixture.ToolCallID,
 		ToolName:   "bash",
 		Status:     db.ToolCallStatusExecuting,
 	}))
 
-	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, fixture.chatID)
+	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, fixture.ChatID)
 	require.NoError(t, err)
 
 	var block *reliantv1.ContentBlock
 	for _, message := range snapshot.Messages {
 		for _, candidate := range message.ContentBlocks {
-			if candidate.ToolCallId != nil && *candidate.ToolCallId == fixture.toolCallID {
+			if candidate.ToolCallId != nil && *candidate.ToolCallId == fixture.ToolCallID {
 				block = candidate
 			}
 		}
@@ -232,7 +233,7 @@ func TestChatSnapshot_ToolCallUpdateUsesDurableStatus(t *testing.T) {
 		}
 		var candidate map[string]any
 		require.NoError(t, json.Unmarshal([]byte(update.DataJson), &candidate))
-		if candidate["tool_call_id"] == fixture.toolCallID {
+		if candidate["tool_call_id"] == fixture.ToolCallID {
 			payload = candidate
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/stretchr/testify/require"
 )
@@ -46,12 +47,12 @@ func TestChatSnapshot_ToolCallsAreBoundedToWindowAndLive(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-	fixture := setupToolCallDurableFixture(t, ctx, repo, `{"command":"ls"}`)
+	fixture := dbtest.SeedToolCall(t, ctx, repo, `{"command":"ls"}`)
 
 	now := time.Now().UTC()
 	upsert := func(id string, status core.ToolCallStatus, messageID *string) {
 		call := &db.ToolCall{
-			ID: id, ChatID: fixture.chatID, ThreadID: &fixture.threadID, MessageID: messageID,
+			ID: id, ChatID: fixture.ChatID, ThreadID: &fixture.ThreadID, MessageID: messageID,
 			ToolName: "bash", Status: status, RequestedAt: now, CreatedAt: now, UpdatedAt: now,
 		}
 		if status.IsTerminal() {
@@ -59,12 +60,12 @@ func TestChatSnapshot_ToolCallsAreBoundedToWindowAndLive(t *testing.T) {
 		}
 		require.NoError(t, repo.UpsertToolCall(ctx, call))
 		// Stale history for every call: the old read would have replayed this.
-		require.NoError(t, repo.EmitToolCallUpdate(ctx, fixture.chatID, db.ToolCallUpdate{
+		require.NoError(t, repo.EmitToolCallUpdate(ctx, fixture.ChatID, db.ToolCallUpdate{
 			ToolCallID: id, ToolName: "bash", Status: db.ToolCallStatusPending,
 		}))
 	}
 	// In-window (its block is in the fixture's only message): terminal.
-	upsert(fixture.toolCallID, core.ToolCallStatusCompleted, &fixture.messageID)
+	upsert(fixture.ToolCallID, core.ToolCallStatusCompleted, &fixture.MessageID)
 	// Out of window (no block anywhere): terminal must be absent, live must be present.
 	upsert("toolu_old_done", core.ToolCallStatusCompleted, nil)
 	upsert("toolu_old_failed", core.ToolCallStatusFailed, nil)
@@ -72,11 +73,11 @@ func TestChatSnapshot_ToolCallsAreBoundedToWindowAndLive(t *testing.T) {
 	upsert("toolu_old_backgrounded", core.ToolCallStatusBackgrounded, nil)
 	upsert("toolu_old_pending", core.ToolCallStatusPending, nil)
 
-	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, fixture.chatID)
+	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, fixture.ChatID)
 	require.NoError(t, err)
 
 	require.Equal(t, map[string]string{
-		fixture.toolCallID:       string(db.ToolCallStatusCompleted), // durable row beats the stale pending update
+		fixture.ToolCallID:       string(db.ToolCallStatusCompleted), // durable row beats the stale pending update
 		"toolu_old_executing":    string(db.ToolCallStatusExecuting),
 		"toolu_old_backgrounded": string(db.ToolCallStatusBackgrounded),
 		"toolu_old_pending":      string(db.ToolCallStatusPending),
@@ -88,39 +89,39 @@ func TestChatSnapshot_InWindowInheritedInFlightCallIsCancelledLikeItsBlock(t *te
 	defer cleanup()
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-	fixture := setupToolCallDurableFixture(t, ctx, repo, `{"command":"ls"}`)
+	fixture := dbtest.SeedToolCall(t, ctx, repo, `{"command":"ls"}`)
 
 	// The viewing thread is the chat's root workflow id; without one the
 	// inherited-call rule has nothing to compare against.
-	chat, err := repo.GetChat(ctx, fixture.chatID)
+	chat, err := repo.GetChat(ctx, fixture.ChatID)
 	require.NoError(t, err)
-	chat.WorkflowID = &fixture.threadID
+	chat.WorkflowID = &fixture.ThreadID
 	require.NoError(t, repo.UpdateChat(ctx, chat))
 
 	// Executing in a thread other than the one being viewed: the block path
 	// reports CANCELLED to this viewer, and the synthesized update must agree.
 	now := time.Now().UTC()
 	otherThread := uuid.New().String()
-	_, err = repo.CreateThread(ctx, &db.Thread{ID: otherThread, ChatID: fixture.chatID, CreatedAt: now})
+	_, err = repo.CreateThread(ctx, &db.Thread{ID: otherThread, ChatID: fixture.ChatID, CreatedAt: now})
 	require.NoError(t, err)
 	require.NoError(t, repo.UpsertToolCall(ctx, &db.ToolCall{
-		ID: fixture.toolCallID, ChatID: fixture.chatID, ThreadID: &otherThread, MessageID: &fixture.messageID,
+		ID: fixture.ToolCallID, ChatID: fixture.ChatID, ThreadID: &otherThread, MessageID: &fixture.MessageID,
 		ToolName: "bash", Status: core.ToolCallStatusExecuting, StartedAt: ptr.Of(now),
 		RequestedAt: now, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, fixture.chatID)
+	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, fixture.ChatID)
 	require.NoError(t, err)
 
 	var blockStatus *reliantv1.ToolCallStatus
 	for _, m := range snapshot.Messages {
 		for _, b := range m.ContentBlocks {
-			if b.ToolCallId != nil && *b.ToolCallId == fixture.toolCallID {
+			if b.ToolCallId != nil && *b.ToolCallId == fixture.ToolCallID {
 				blockStatus = b.ToolCallStatus
 			}
 		}
 	}
 	require.NotNil(t, blockStatus)
 	require.Equal(t, reliantv1.ToolCallStatus_TOOL_CALL_STATUS_CANCELLED, *blockStatus)
-	require.Equal(t, string(db.ToolCallStatusCancelled), snapshotToolCallStatuses(t, snapshot)[fixture.toolCallID])
+	require.Equal(t, string(db.ToolCallStatusCancelled), snapshotToolCallStatuses(t, snapshot)[fixture.ToolCallID])
 }
