@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package system
 
 import (
 	"context"
@@ -13,34 +13,12 @@ import (
 	"go.temporal.io/sdk/client"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/version"
 )
 
-// SystemService implements the SystemService RPC handlers
-type SystemService struct {
-	reliantv1connect.UnimplementedSystemServiceHandler
-	db             db.Repository
-	temporalClient client.Client
-	natsChecker    func() bool // returns true if NATS is connected; nil means NATS not in use
-	streamingHub   streaming.StreamingHub
-}
-
-// NewSystemService creates a new SystemService
-func NewSystemService(database db.Repository, temporalClient client.Client, natsChecker func() bool, streamingHub streaming.StreamingHub) *SystemService {
-	return &SystemService{
-		db:             database,
-		temporalClient: temporalClient,
-		natsChecker:    natsChecker,
-		streamingHub:   streamingHub,
-	}
-}
-
 // Health returns the health status of the service
-func (s *SystemService) Health(
+func (s *Service) Health(
 	ctx context.Context,
 	req *connect.Request[reliantv1.HealthRequest],
 ) (*connect.Response[reliantv1.HealthResponse], error) {
@@ -52,34 +30,34 @@ func (s *SystemService) Health(
 }
 
 // Ready returns the readiness status of the service
-func (s *SystemService) Ready(
+func (s *Service) Ready(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ReadyRequest],
 ) (*connect.Response[reliantv1.ReadyResponse], error) {
 	var failures []string
 
 	// Check database connectivity
-	if s.db != nil {
-		if err := s.db.Ping(ctx); err != nil {
+	if s.deps.Repo != nil {
+		if err := s.deps.Repo.Ping(ctx); err != nil {
 			failures = append(failures, "db: "+err.Error())
 		}
 	}
 
 	// Check Temporal connectivity
-	if s.temporalClient != nil {
-		_, err := s.temporalClient.CheckHealth(ctx, &client.CheckHealthRequest{})
+	if s.deps.Temporal != nil {
+		_, err := s.deps.Temporal.CheckHealth(ctx, &client.CheckHealthRequest{})
 		if err != nil {
 			failures = append(failures, "temporal: "+err.Error())
 		}
 	}
 
 	// Check NATS connectivity
-	if s.natsChecker != nil && !s.natsChecker() {
+	if s.deps.NATSConnected != nil && !s.deps.NATSConnected() {
 		failures = append(failures, "nats: disconnected")
 	}
 
 	// Check streaming hub connectivity
-	if s.streamingHub != nil && !s.streamingHub.IsConnected() {
+	if s.deps.StreamingHub != nil && !s.deps.StreamingHub.IsConnected() {
 		failures = append(failures, "nats-streaming: disconnected")
 	}
 
@@ -96,7 +74,7 @@ func (s *SystemService) Ready(
 }
 
 // Info returns general API information including version, build info, and worktree
-func (s *SystemService) Info(
+func (s *Service) Info(
 	ctx context.Context,
 	req *connect.Request[reliantv1.InfoRequest],
 ) (*connect.Response[reliantv1.InfoResponse], error) {
@@ -122,7 +100,7 @@ func (s *SystemService) Info(
 }
 
 // Version returns detailed version information
-func (s *SystemService) Version(
+func (s *Service) Version(
 	ctx context.Context,
 	req *connect.Request[reliantv1.VersionRequest],
 ) (*connect.Response[reliantv1.VersionResponse], error) {
@@ -138,7 +116,7 @@ func (s *SystemService) Version(
 }
 
 // StartOAuthSignIn completes the Electron-local OAuth sign-in flow for any provider.
-func (s *SystemService) StartOAuthSignIn(
+func (s *Service) StartOAuthSignIn(
 	ctx context.Context,
 	req *connect.Request[reliantv1.StartOAuthSignInRequest],
 ) (*connect.Response[reliantv1.StartOAuthSignInResponse], error) {
@@ -166,7 +144,7 @@ func (s *SystemService) StartOAuthSignIn(
 // ============================================
 
 // DevAuthLoad loads the global auth session (development only)
-func (s *SystemService) DevAuthLoad(
+func (s *Service) DevAuthLoad(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DevAuthLoadRequest],
 ) (*connect.Response[reliantv1.DevAuthLoadResponse], error) {
@@ -174,7 +152,7 @@ func (s *SystemService) DevAuthLoad(
 }
 
 // DevAuthSave saves the global auth session (development only)
-func (s *SystemService) DevAuthSave(
+func (s *Service) DevAuthSave(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DevAuthSaveRequest],
 ) (*connect.Response[reliantv1.DevAuthSaveResponse], error) {
@@ -182,7 +160,7 @@ func (s *SystemService) DevAuthSave(
 }
 
 // DevAuthClear clears the global auth session (development only)
-func (s *SystemService) DevAuthClear(
+func (s *Service) DevAuthClear(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DevAuthClearRequest],
 ) (*connect.Response[reliantv1.DevAuthClearResponse], error) {

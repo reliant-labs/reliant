@@ -39,6 +39,17 @@ func GetUserJWT(userID string) (string, bool) {
 	return token, ok
 }
 
+// WithUser returns ctx carrying the authenticated caller under the keys the
+// Get*FromContext readers use. The API auth interceptor installs every
+// verified caller through it, and pkg/middleware.ContextWithClaims (the seam
+// forge's generated handler tests authenticate through) does the same, so a
+// handler test sees exactly the context a real request does.
+func WithUser(ctx context.Context, userID, role, email string) context.Context {
+	ctx = context.WithValue(ctx, UserIDContextKey, userID)
+	ctx = context.WithValue(ctx, UserRoleContextKey, role)
+	return context.WithValue(ctx, UserEmailContextKey, email)
+}
+
 // GetUserIDFromContext extracts the user ID from the context
 func GetUserIDFromContext(ctx context.Context) (string, bool) {
 	userID, ok := ctx.Value(UserIDContextKey).(string)

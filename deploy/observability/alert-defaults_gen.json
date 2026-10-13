@@ -1,0 +1,87 @@
+{
+  "version": "forge.alert-defaults/v1",
+  "input": {
+    "project": "reliant",
+    "services": [
+      {
+        "name": "system",
+        "rpc_service": "reliant.v1.SystemService"
+      }
+    ]
+  },
+  "defaults": [
+    {
+      "id": "error-rate",
+      "alert": "ServiceErrorRateHigh",
+      "title": "Service error rate above 5%",
+      "severity": "critical",
+      "for": "5m",
+      "interval": "1m",
+      "signal": "metrics",
+      "params": [
+        {
+          "name": "threshold",
+          "default": 0.05,
+          "doc": "error ratio (0..1) that fires"
+        },
+        {
+          "name": "window_minutes",
+          "default": 5,
+          "doc": "minutes the ratio is computed over"
+        },
+        {
+          "name": "min_requests",
+          "default": 20,
+          "doc": "fewer requests than this in the window never fire (a ratio of 1 call is noise)"
+        }
+      ]
+    },
+    {
+      "id": "p95-latency",
+      "alert": "ServiceLatencyP95High",
+      "title": "Service p95 latency above 1s",
+      "severity": "warning",
+      "for": "10m",
+      "interval": "1m",
+      "signal": "metrics",
+      "params": [
+        {
+          "name": "threshold_seconds",
+          "default": 1,
+          "doc": "p95 latency in seconds that fires"
+        },
+        {
+          "name": "window_minutes",
+          "default": 5,
+          "doc": "minutes the percentile is computed over"
+        },
+        {
+          "name": "min_requests",
+          "default": 20,
+          "doc": "fewer requests than this in the window never fire"
+        }
+      ]
+    },
+    {
+      "id": "service-silent",
+      "alert": "ServiceSilent",
+      "title": "A service with steady traffic went quiet",
+      "severity": "warning",
+      "for": "0s",
+      "interval": "1m",
+      "signal": "metrics",
+      "params": [
+        {
+          "name": "silent_minutes",
+          "default": 10,
+          "doc": "minutes without a request before it fires"
+        },
+        {
+          "name": "min_active_hours",
+          "default": 18,
+          "doc": "of the previous 24h, the hours the service must have served requests in to count as steady (a quiet staging service never pages)"
+        }
+      ]
+    }
+  ]
+}

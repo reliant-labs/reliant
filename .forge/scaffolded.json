@@ -14,6 +14,30 @@
     },
     ".github/workflows/proto-breaking.yml": {
       "scaffolded_at": "2026-10-12T05:30:41Z"
+    },
+    "internal/handlers/system/handlers_scaffold_dev_auth_clear_test.go": {
+      "scaffolded_at": "2026-10-13T06:58:06Z"
+    },
+    "internal/handlers/system/handlers_scaffold_dev_auth_load_test.go": {
+      "scaffolded_at": "2026-10-13T06:58:06Z"
+    },
+    "internal/handlers/system/handlers_scaffold_dev_auth_save_test.go": {
+      "scaffolded_at": "2026-10-13T06:58:06Z"
+    },
+    "internal/handlers/system/handlers_scaffold_health_test.go": {
+      "scaffolded_at": "2026-10-13T06:58:06Z"
+    },
+    "internal/handlers/system/handlers_scaffold_info_test.go": {
+      "scaffolded_at": "2026-10-13T06:58:06Z"
+    },
+    "internal/handlers/system/handlers_scaffold_ready_test.go": {
+      "scaffolded_at": "2026-10-13T06:58:06Z"
+    },
+    "internal/handlers/system/handlers_scaffold_start_o_auth_sign_in_test.go": {
+      "scaffolded_at": "2026-10-13T06:58:06Z"
+    },
+    "internal/handlers/system/handlers_scaffold_version_test.go": {
+      "scaffolded_at": "2026-10-13T06:58:06Z"
     }
   },
   "absent_reported": [

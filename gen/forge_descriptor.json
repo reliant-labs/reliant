@@ -27171,8 +27171,7 @@
         "reliant.v1.StartOAuthSignInResponse": "reliant/v1/system.proto",
         "reliant.v1.VersionRequest": "reliant/v1/system.proto",
         "reliant.v1.VersionResponse": "reliant/v1/system.proto"
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "TerminalService",
@@ -33585,5 +33584,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "b78c42d4d31626367ccb3a24f7ec9f8d6920dc75ce7e3cadac2fd6d0d24d2e5d"
+  "source_hash": "d496646ae4439c1034edb2452a7aa943e7ba5fa13d28a7056ec28fcdd303e37f"
 }

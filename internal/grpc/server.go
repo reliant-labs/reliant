@@ -36,6 +36,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -48,6 +49,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
+	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/middleware"
 )
 
@@ -193,7 +195,23 @@ func NewServer(cfg *Config) (*Server, error) {
 	router := cfg.DaemonRouter
 
 	// Create services
-	systemService := services.NewSystemService(database, cfg.TemporalClient, cfg.NATSChecker, cfg.StreamingHub)
+	//
+	// The services already on forge's handler model (internal/handlers/<svc>,
+	// research/forge-migration/PLAN.md P3b) take a logger and the typed
+	// config. reliant has no typed config yet (P4), so they share an empty one.
+	handlerLogger := slog.Default()
+	handlerConfig := &config.Config{}
+	systemService, err := system.New(system.Deps{
+		Logger:        handlerLogger,
+		Config:        handlerConfig,
+		Repo:          database,
+		Temporal:      cfg.TemporalClient,
+		NATSConnected: cfg.NATSChecker,
+		StreamingHub:  cfg.StreamingHub,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("system service: %w", err)
+	}
 	planService := services.NewPlanService(database)
 	taskService := services.NewTaskService(database)
 	catalogService := services.NewCatalogService(cfg.ToolsFactory).WithTagPrefs(database)

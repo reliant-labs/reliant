@@ -7,9 +7,6 @@ import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // SystemService provides system-level operations like health checks and version info
 //
 // Every rpc here is reachable without credentials (auth_required: false):

@@ -136,10 +136,46 @@ var serverSidePackages = []string{
 	"internal/temporal/signaltest", // P3a: test double extracted from grpc/services
 }
 
+// serverSideTrees lists directories every package under which is
+// server-side. internal/handlers holds the Connect services that moved off
+// internal/grpc/services onto forge's handler model (P3b,
+// research/forge-migration/PLAN.md), one package per service, so each keeps
+// that package's ban without being listed one by one.
+var serverSideTrees = []string{
+	"internal/handlers",
+}
+
+// serverSidePackageDirs returns serverSidePackages plus every package
+// directory under serverSideTrees.
+func serverSidePackageDirs(t *testing.T, repoRoot string) []string {
+	t.Helper()
+	pkgs := append([]string(nil), serverSidePackages...)
+	for _, tree := range serverSideTrees {
+		err := filepath.WalkDir(filepath.Join(repoRoot, tree), func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() {
+				return nil
+			}
+			rel, err := filepath.Rel(repoRoot, path)
+			if err != nil {
+				return err
+			}
+			pkgs = append(pkgs, rel)
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", tree, err)
+		}
+	}
+	return pkgs
+}
+
 func TestServerSide_NoDirectFilesystemAccess(t *testing.T) {
 	repoRoot := root(t)
 
-	for _, pkg := range serverSidePackages {
+	for _, pkg := range serverSidePackageDirs(t, repoRoot) {
 		pkg := pkg
 		t.Run(pkg, func(t *testing.T) {
 			pkgDir := filepath.Join(repoRoot, pkg)

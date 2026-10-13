@@ -184,10 +184,7 @@ func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospect
 		}
 
 		// Add claims to context
-		ctx := r.Context()
-		ctx = context.WithValue(ctx, UserIDContextKey, claims.Sub)
-		ctx = context.WithValue(ctx, UserRoleContextKey, claims.Role)
-		ctx = context.WithValue(ctx, UserEmailContextKey, claims.Email)
+		ctx := WithUser(r.Context(), claims.Sub, claims.Role, claims.Email)
 		if principal != nil {
 			ctx = WithMachineToken(ctx, principal)
 		}
@@ -291,10 +288,7 @@ func (m *Middleware) OptionalAuth(next http.Handler) http.Handler {
 		}
 
 		// Add claims to context
-		ctx := r.Context()
-		ctx = context.WithValue(ctx, UserIDContextKey, claims.Sub)
-		ctx = context.WithValue(ctx, UserRoleContextKey, claims.Role)
-		ctx = context.WithValue(ctx, UserEmailContextKey, claims.Email)
+		ctx := WithUser(r.Context(), claims.Sub, claims.Role, claims.Email)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

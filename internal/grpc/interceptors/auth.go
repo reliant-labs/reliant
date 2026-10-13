@@ -230,9 +230,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	}
 
 	// Add claims to context
-	ctx = context.WithValue(ctx, auth.UserIDContextKey, claims.Sub)
-	ctx = context.WithValue(ctx, auth.UserRoleContextKey, claims.Role)
-	ctx = context.WithValue(ctx, auth.UserEmailContextKey, claims.Email)
+	ctx = auth.WithUser(ctx, claims.Sub, claims.Role, claims.Email)
 	if principal != nil {
 		ctx = auth.WithMachineToken(ctx, principal)
 	}
