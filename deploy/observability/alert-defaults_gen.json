@@ -132,6 +132,10 @@
         "rpc_service": "reliant.v1.TriggerService"
       },
       {
+        "name": "workflow",
+        "rpc_service": "reliant.v1.WorkflowService"
+      },
+      {
         "name": "worktree",
         "rpc_service": "reliant.v1.WorktreeService"
       }

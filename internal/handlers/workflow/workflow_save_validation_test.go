@@ -1,4 +1,4 @@
-package services
+package workflow
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 // blocks becoming (or staying) complete, not every save. Validity itself is
 // never stored — it is computed on read.
 
-func saveTestSetup(t *testing.T) (context.Context, db.Repository, *WorkflowService, string) {
+func saveTestSetup(t *testing.T) (context.Context, db.Repository, *Service, string) {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
@@ -35,7 +35,7 @@ func saveTestSetup(t *testing.T) (context.Context, db.Repository, *WorkflowServi
 		ID: projectID, UserID: "test-user", Name: "Save Validation Project",
 		Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	return ctx, repo, &WorkflowService{database: repo}, projectID
+	return ctx, repo, NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo})), projectID
 }
 
 func mustParse(t *testing.T, src string) *reliantv1.Workflow {
@@ -103,7 +103,7 @@ func assertHasNodeOrderingError(t *testing.T, errs []*reliantv1.ValidationError)
 	t.Fatalf("the unguarded router-skip read must be reported as a structured node_ordering error: %v", errs)
 }
 
-func saveWorkflow(t *testing.T, ctx context.Context, svc *WorkflowService, projectID, src string, status reliantv1.WorkflowDraftStatus) *reliantv1.SaveWorkflowResponse {
+func saveWorkflow(t *testing.T, ctx context.Context, svc *Service, projectID, src string, status reliantv1.WorkflowDraftStatus) *reliantv1.SaveWorkflowResponse {
 	t.Helper()
 	resp, err := svc.SaveWorkflow(ctx, connect.NewRequest(&reliantv1.SaveWorkflowRequest{
 		ProjectId: projectID,

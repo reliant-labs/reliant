@@ -1,4 +1,4 @@
-package services
+package workflow
 
 import (
 	"context"
@@ -48,7 +48,7 @@ func TestGetWorkflow_AgreesWithRunResolution(t *testing.T) {
 	run, err := workflowsource.Resolve(ctx, repo, workflowsource.Options{UserID: "test-user", ProjectID: projectID}, "shared-flow")
 	require.NoError(t, err)
 
-	svc := &WorkflowService{database: repo}
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
 	got, err := svc.GetWorkflow(ctx, connect.NewRequest(&reliantv1.GetWorkflowRequest{Name: "shared-flow", ProjectId: projectID}))
 	require.NoError(t, err)
 	require.Equal(t, string(run.Source), got.Msg.Source)

@@ -67,6 +67,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/handlers/tool_call"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
+	workflowhandler "github.com/reliant-labs/reliant/internal/handlers/workflow"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
@@ -378,7 +379,15 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("mcp service: %w", err)
 	}
-	workflowService := services.NewWorkflowService(database, router)
+	workflowService, err := workflowhandler.New(workflowhandler.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+		Router: router,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("workflow service: %w", err)
+	}
 	scenarioService, err := scenario.New(scenario.Deps{
 		Logger: handlerLogger,
 		Config: handlerConfig,

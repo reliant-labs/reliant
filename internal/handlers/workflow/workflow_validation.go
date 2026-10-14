@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package workflow
 
 import (
 	"context"
@@ -152,9 +152,9 @@ func (c workflowCheck) summary() string {
 // a draft would fail at run start). The workflow being validated resolves to
 // itself, so a workflow that spawns itself can be validated — and marked
 // complete — while it is still a draft.
-func (s *WorkflowService) validateWorkflowDefinition(ctx context.Context, userID string, definition []byte) workflowCheck {
+func (s *Service) validateWorkflowDefinition(ctx context.Context, userID string, definition []byte) workflowCheck {
 	return validateWorkflowDefinitionWith(definition, func(self *reliantv1.Workflow) v2.WorkflowLoader {
-		return workflowsource.DraftLoader(ctx, s.database, userID, self)
+		return workflowsource.DraftLoader(ctx, s.deps.Repo, userID, self)
 	})
 }
 

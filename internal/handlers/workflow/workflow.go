@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package workflow
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -24,7 +23,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ptr"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowcatalog"
@@ -33,31 +31,16 @@ import (
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
-// WorkflowService implements the WorkflowService RPC handlers
-type WorkflowService struct {
-	reliantv1connect.UnimplementedWorkflowServiceHandler
-	database     db.Repository
-	daemonRouter toolexec.DaemonRouter
-}
-
-// NewWorkflowService creates a new WorkflowService
-func NewWorkflowService(database db.Repository, daemonRouter toolexec.DaemonRouter) *WorkflowService {
-	return &WorkflowService{
-		database:     database,
-		daemonRouter: daemonRouter,
-	}
-}
-
 // projectBelongsToUser verifies the authenticated user owns the given project,
 // returning a Connect error if not (or if the project doesn't exist).
-func (s *WorkflowService) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
+func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
 	_, err := s.ownedProject(ctx, projectID, userID)
 	return err
 }
 
 // ownedProject is projectBelongsToUser returning the project it read.
-func (s *WorkflowService) ownedProject(ctx context.Context, projectID string, userID string) (*db.Project, error) {
-	project, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+func (s *Service) ownedProject(ctx context.Context, projectID string, userID string) (*db.Project, error) {
+	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
@@ -79,7 +62,7 @@ func (s *WorkflowService) ownedProject(ctx context.Context, projectID string, us
 // 2. Project workflows (.reliant/workflows/*.yaml files) - read-only, team-shared
 // 3. User workflows (stored in database) - highest priority, editable
 // User workflows override project workflows with the same slug.
-func (s *WorkflowService) ListWorkflows(
+func (s *Service) ListWorkflows(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListWorkflowsRequest],
 ) (*connect.Response[reliantv1.ListWorkflowsResponse], error) {
@@ -109,15 +92,15 @@ func (s *WorkflowService) ListWorkflows(
 	reads.Add(3)
 	go func() {
 		defer reads.Done()
-		catalog = workflowcatalog.Load(ctx, s.database, userID, project.ID)
+		catalog = workflowcatalog.Load(ctx, s.deps.Repo, userID, project.ID)
 	}()
 	go func() {
 		defer reads.Done()
-		wfOverrides, overridesErr = s.database.ListVisibilityOverrides(ctx, userID, workflowItemType)
+		wfOverrides, overridesErr = s.deps.Repo.ListVisibilityOverrides(ctx, userID, workflowItemType)
 	}()
 	go func() {
 		defer reads.Done()
-		wfHiddenDefaults, hiddenErr = s.database.ListHiddenItemDefaults(ctx, workflowItemType)
+		wfHiddenDefaults, hiddenErr = s.deps.Repo.ListHiddenItemDefaults(ctx, workflowItemType)
 	}()
 	reads.Wait()
 
@@ -410,7 +393,7 @@ func generateSlug(name string) string {
 }
 
 // SaveWorkflow creates or updates a workflow in the database
-func (s *WorkflowService) SaveWorkflow(
+func (s *Service) SaveWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SaveWorkflowRequest],
 ) (*connect.Response[reliantv1.SaveWorkflowResponse], error) {
@@ -448,7 +431,7 @@ func (s *WorkflowService) SaveWorkflow(
 
 	if req.Msg.DraftId != nil && *req.Msg.DraftId != "" {
 		// Look up by draft ID first - this allows renames to work correctly
-		draft, err := s.database.GetWorkflowDraft(ctx, *req.Msg.DraftId)
+		draft, err := s.deps.Repo.GetWorkflowDraft(ctx, *req.Msg.DraftId)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get workflow draft by ID: %w", err))
 		}
@@ -459,7 +442,7 @@ func (s *WorkflowService) SaveWorkflow(
 
 			// If slug is changing (rename), check that the new slug doesn't conflict with another workflow
 			if isRename {
-				conflicting, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slug)
+				conflicting, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 				if err != nil {
 					return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check slug conflict: %w", err))
 				}
@@ -473,7 +456,7 @@ func (s *WorkflowService) SaveWorkflow(
 
 	// Fall back to slug-based lookup if draft_id not provided or not found
 	if existingUserWorkflow == nil {
-		draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slug)
+		draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow: %w", err))
 		}
@@ -500,7 +483,7 @@ func (s *WorkflowService) SaveWorkflow(
 		}
 
 		// Check against project workflows - project not found is ok, just skip check
-		projectWf, _, err := launch.LoadProjectWorkflowBySlugFromDB(s.database, ctx, req.Msg.ProjectId, slug)
+		projectWf, _, err := launch.LoadProjectWorkflowBySlugFromDB(s.deps.Repo, ctx, req.Msg.ProjectId, slug)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load project workflow: %w", err))
 		}
@@ -511,7 +494,7 @@ func (s *WorkflowService) SaveWorkflow(
 
 		// Check for duplicate names among user's workflows
 		// Since !isUpdate means no existing workflow by this slug, any name match is a duplicate
-		existingByName, err := s.database.GetWorkflowDraftByName(ctx, userID, protoWf.Name)
+		existingByName, err := s.deps.Repo.GetWorkflowDraftByName(ctx, userID, protoWf.Name)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow name: %w", err))
 		}
@@ -557,7 +540,7 @@ func (s *WorkflowService) SaveWorkflow(
 			return rejected("Workflow not saved: project workflows run straight from the file, so they must pass validation — " + check.summary()), nil
 		}
 		// Validate that the source path is within the project's .reliant/workflows directory
-		project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
+		project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get project: %w", err))
 		}
@@ -582,12 +565,15 @@ func (s *WorkflowService) SaveWorkflow(
 		}
 
 		// Write the YAML to the file via daemon
+		if s.deps.Router == nil {
+			return nil, connect.NewError(connect.CodeUnavailable, errors.New("no daemon router: this server cannot write to the project's machine"))
+		}
 		userID := auth.MustGetUserID(ctx)
 		writePayload, _ := json.Marshal(map[string]interface{}{
 			"path":    sourcePath,
 			"content": string(definitionYAML),
 		})
-		if _, err := s.daemonRouter.SendDaemonCommand(ctx, userID, "fs.write_file", writePayload, 15000); err != nil {
+		if _, err := s.deps.Router.SendDaemonCommand(ctx, userID, "fs.write_file", writePayload, 15000); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to write workflow to file via daemon: %w", err))
 		}
 
@@ -662,20 +648,20 @@ func (s *WorkflowService) SaveWorkflow(
 	var saved *db.WorkflowDraft
 	if isRename {
 		// Rename case: update by ID to change the slug
-		if err := s.database.UpdateWorkflowDraft(ctx, draft); err != nil {
+		if err := s.deps.Repo.UpdateWorkflowDraft(ctx, draft); err != nil {
 			if errors.Is(err, db.ErrWorkflowSlugTaken) {
 				return nil, connect.NewError(connect.CodeAlreadyExists, err)
 			}
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow: %w", err))
 		}
 		// Fetch the updated draft to get the new version
-		saved, err = s.database.GetWorkflowDraft(ctx, draftID)
+		saved, err = s.deps.Repo.GetWorkflowDraft(ctx, draftID)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get updated workflow: %w", err))
 		}
 	} else {
 		// Normal case: upsert by (user_id, slug)
-		saved, err = s.database.UpsertWorkflowDraft(ctx, draft)
+		saved, err = s.deps.Repo.UpsertWorkflowDraft(ctx, draft)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save workflow: %w", err))
 		}
@@ -715,7 +701,7 @@ func (s *WorkflowService) SaveWorkflow(
 }
 
 // SetWorkflowVisibility updates the visibility status of a workflow (hidden/visible)
-func (s *WorkflowService) SetWorkflowVisibility(
+func (s *Service) SetWorkflowVisibility(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SetWorkflowVisibilityRequest],
 ) (*connect.Response[reliantv1.SetWorkflowVisibilityResponse], error) {
@@ -729,7 +715,7 @@ func (s *WorkflowService) SetWorkflowVisibility(
 	userID := auth.MustGetUserID(ctx)
 
 	// Get the workflow draft by slug
-	draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, req.Msg.Slug)
+	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.Slug)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get workflow: %w", err))
 	}
@@ -738,7 +724,7 @@ func (s *WorkflowService) SetWorkflowVisibility(
 	}
 
 	// Update hidden status
-	updatedDraft, err := s.database.SetWorkflowDraftHidden(ctx, draft.ID, req.Msg.IsHidden)
+	updatedDraft, err := s.deps.Repo.SetWorkflowDraftHidden(ctx, draft.ID, req.Msg.IsHidden)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow visibility: %w", err))
 	}
@@ -756,7 +742,7 @@ func (s *WorkflowService) SetWorkflowVisibility(
 }
 
 // CopyWorkflow creates a copy of an existing workflow with a new unique name
-func (s *WorkflowService) CopyWorkflow(
+func (s *Service) CopyWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CopyWorkflowRequest],
 ) (*connect.Response[reliantv1.CopyWorkflowResponse], error) {
@@ -812,7 +798,7 @@ func (s *WorkflowService) CopyWorkflow(
 	if saveResp.Msg.Id != "" {
 		// Record where this workflow was forked from
 		forkedFrom := fmt.Sprintf("%s:%s", getResp.Msg.Source, req.Msg.SourceSlug)
-		_, err := s.database.UpdateWorkflowForkedFrom(ctx, saveResp.Msg.Id, forkedFrom)
+		_, err := s.deps.Repo.UpdateWorkflowForkedFrom(ctx, saveResp.Msg.Id, forkedFrom)
 		if err != nil {
 			logging.Warn("Failed to set forked_from on copied workflow", "error", err)
 			// Don't fail the copy operation for this
@@ -831,7 +817,7 @@ func (s *WorkflowService) CopyWorkflow(
 // CreateWorkflowDraft creates a new draft for the workflow builder: blank, or
 // a copy of a built-in when the request names one as its template. It is
 // called once per "Create" in the New workflow dialog, never on page load.
-func (s *WorkflowService) CreateWorkflowDraft(
+func (s *Service) CreateWorkflowDraft(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateWorkflowDraftRequest],
 ) (*connect.Response[reliantv1.CreateWorkflowDraftResponse], error) {
@@ -878,7 +864,7 @@ func (s *WorkflowService) CreateWorkflowDraft(
 		UpdatedAt:  now,
 	}
 
-	if err := s.database.CreateWorkflowDraft(ctx, draft); err != nil {
+	if err := s.deps.Repo.CreateWorkflowDraft(ctx, draft); err != nil {
 		if errors.Is(err, db.ErrWorkflowSlugTaken) {
 			return nil, connect.NewError(connect.CodeAlreadyExists, err)
 		}
@@ -912,7 +898,7 @@ const untitledWorkflowTitle = "Untitled workflow"
 // (by slug and by name), the built-ins, and the project's workflow files.
 // When the slug needs a number, the title gets the same one ("Triage" →
 // "Triage 2" / triage-2), so two workflows never share a title by default.
-func (s *WorkflowService) uniqueNewWorkflowSlug(ctx context.Context, userID, projectID, requestedTitle string) (slug, title string, err error) {
+func (s *Service) uniqueNewWorkflowSlug(ctx context.Context, userID, projectID, requestedTitle string) (slug, title string, err error) {
 	title = strings.TrimSpace(requestedTitle)
 	if title == "" {
 		title = untitledWorkflowTitle
@@ -945,25 +931,25 @@ func (s *WorkflowService) uniqueNewWorkflowSlug(ctx context.Context, userID, pro
 
 // workflowSlugTaken reports whether a new workflow could not be saved under
 // slug (see SaveWorkflow's naming-conflict checks, which this mirrors).
-func (s *WorkflowService) workflowSlugTaken(ctx context.Context, userID, projectID, slug string) (bool, error) {
+func (s *Service) workflowSlugTaken(ctx context.Context, userID, projectID, slug string) (bool, error) {
 	if _, err := builtin.BuiltinWorkflowsFS.ReadFile(slug + ".yaml"); err == nil {
 		return true, nil
 	}
-	bySlug, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slug)
+	bySlug, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
 		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow: %w", err))
 	}
 	if bySlug != nil {
 		return true, nil
 	}
-	byName, err := s.database.GetWorkflowDraftByName(ctx, userID, slug)
+	byName, err := s.deps.Repo.GetWorkflowDraftByName(ctx, userID, slug)
 	if err != nil {
 		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow name: %w", err))
 	}
 	if byName != nil {
 		return true, nil
 	}
-	projectWf, _, err := launch.LoadProjectWorkflowBySlugFromDB(s.database, ctx, projectID, slug)
+	projectWf, _, err := launch.LoadProjectWorkflowBySlugFromDB(s.deps.Repo, ctx, projectID, slug)
 	if err != nil {
 		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load project workflow: %w", err))
 	}
@@ -1006,7 +992,7 @@ func newWorkflowDefinition(name, title, template string) ([]byte, error) {
 // and is rejected with the errors when it is invalid. Moving to draft always
 // succeeds — it is how a user takes a complete workflow back to make edits
 // that are invalid along the way.
-func (s *WorkflowService) SetWorkflowStatus(
+func (s *Service) SetWorkflowStatus(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SetWorkflowStatusRequest],
 ) (*connect.Response[reliantv1.SetWorkflowStatusResponse], error) {
@@ -1031,7 +1017,7 @@ func (s *WorkflowService) SetWorkflowStatus(
 		return nil, err
 	}
 
-	draft, err := s.database.GetWorkflowDraft(ctx, req.Msg.DraftId)
+	draft, err := s.deps.Repo.GetWorkflowDraft(ctx, req.Msg.DraftId)
 	if err != nil || draft == nil || draft.UserID != userID {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found"))
 	}
@@ -1054,7 +1040,7 @@ func (s *WorkflowService) SetWorkflowStatus(
 
 	updated := draft
 	if draft.Status != target {
-		updated, err = s.database.SetWorkflowDraftStatus(ctx, draft.ID, target)
+		updated, err = s.deps.Repo.SetWorkflowDraftStatus(ctx, draft.ID, target)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow status: %w", err))
 		}
@@ -1078,7 +1064,7 @@ func (s *WorkflowService) SetWorkflowStatus(
 // If draft_id is provided, it takes priority over name-based lookup.
 // Otherwise the resolution order is a run's (workflowsource): builtin://, then
 // the caller's own workflows, then the project's.
-func (s *WorkflowService) GetWorkflow(
+func (s *Service) GetWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetWorkflowRequest],
 ) (*connect.Response[reliantv1.GetWorkflowResponse], error) {
@@ -1086,7 +1072,7 @@ func (s *WorkflowService) GetWorkflow(
 
 	// Draft ID lookup takes priority
 	if draftID := req.Msg.GetDraftId(); draftID != "" {
-		draft, err := s.database.GetWorkflowDraft(ctx, draftID)
+		draft, err := s.deps.Repo.GetWorkflowDraft(ctx, draftID)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load draft: %w", err))
 		}
@@ -1148,7 +1134,7 @@ func (s *WorkflowService) GetWorkflow(
 			return nil, err
 		}
 	}
-	resolved, resolveErr := workflowsource.Resolve(ctx, s.database, workflowsource.Options{
+	resolved, resolveErr := workflowsource.Resolve(ctx, s.deps.Repo, workflowsource.Options{
 		UserID: userID, ProjectID: req.Msg.ProjectId,
 	}, workflowName)
 	if resolveErr == nil && resolved.Source == workflowref.SourceProject {
@@ -1164,7 +1150,7 @@ func (s *WorkflowService) GetWorkflow(
 	// draft or an unparseable definition is shown (with its errors), not
 	// replaced by a project workflow of the same name.
 	// Look up user's workflow by slug
-	draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slug)
+	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to look up workflow: %w", err))
 	}
@@ -1205,7 +1191,7 @@ func (s *WorkflowService) GetWorkflow(
 }
 
 // DeleteWorkflow deletes a workflow from the database
-func (s *WorkflowService) DeleteWorkflow(
+func (s *Service) DeleteWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DeleteWorkflowRequest],
 ) (*connect.Response[reliantv1.DeleteWorkflowResponse], error) {
@@ -1223,7 +1209,7 @@ func (s *WorkflowService) DeleteWorkflow(
 	slug := generateSlug(name)
 
 	// Check if workflow exists
-	existing, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slug)
+	existing, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check workflow: %w", err))
 	}
@@ -1232,7 +1218,7 @@ func (s *WorkflowService) DeleteWorkflow(
 	}
 
 	// Delete from database
-	if err := s.database.DeleteWorkflowDraftBySlug(ctx, userID, slug); err != nil {
+	if err := s.deps.Repo.DeleteWorkflowDraftBySlug(ctx, userID, slug); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete workflow: %w", err))
 	}
 
@@ -1245,7 +1231,7 @@ func (s *WorkflowService) DeleteWorkflow(
 }
 
 // ImportWorkflow imports a workflow from YAML into the database
-func (s *WorkflowService) ImportWorkflow(
+func (s *Service) ImportWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ImportWorkflowRequest],
 ) (*connect.Response[reliantv1.ImportWorkflowResponse], error) {
@@ -1276,7 +1262,7 @@ func (s *WorkflowService) ImportWorkflow(
 	userID := auth.MustGetUserID(ctx)
 
 	// Check for existing workflow with same slug (user-owned)
-	existing, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slug)
+	existing, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow: %w", err))
 	}
@@ -1336,7 +1322,7 @@ func (s *WorkflowService) ImportWorkflow(
 	}
 
 	// Upsert to database
-	saved, err := s.database.UpsertWorkflowDraft(ctx, draft)
+	saved, err := s.deps.Repo.UpsertWorkflowDraft(ctx, draft)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save workflow: %w", err))
 	}
@@ -1370,7 +1356,7 @@ func (s *WorkflowService) ImportWorkflow(
 }
 
 // ExportWorkflow exports a workflow from the database as YAML
-func (s *WorkflowService) ExportWorkflow(
+func (s *Service) ExportWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ExportWorkflowRequest],
 ) (*connect.Response[reliantv1.ExportWorkflowResponse], error) {
@@ -1404,7 +1390,7 @@ func (s *WorkflowService) ExportWorkflow(
 
 	// Look up user's workflow in database
 	userID := auth.MustGetUserID(ctx)
-	draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, req.Msg.Slug)
+	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.Slug)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to look up workflow: %w", err))
 	}
@@ -1444,7 +1430,7 @@ func (s *WorkflowService) ExportWorkflow(
 // A built-in is read-only and cannot be shadowed by a user workflow (saves
 // reject a built-in's slug), so a built-in is validated from its embedded
 // file.
-func (s *WorkflowService) ValidateWorkflow(
+func (s *Service) ValidateWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ValidateWorkflowRequest],
 ) (*connect.Response[reliantv1.ValidateWorkflowResponse], error) {

@@ -73,14 +73,17 @@ const (
 // WorkflowServiceClient is a client for the reliant.v1.WorkflowService service.
 type WorkflowServiceClient interface {
 	// ListWorkflows returns all available workflows from DB + builtins
+	// forge:custom — merges builtin, project and the caller's own workflow definitions for one project
 	ListWorkflows(context.Context, *connect.Request[v1.ListWorkflowsRequest]) (*connect.Response[v1.ListWorkflowsResponse], error)
 	// SaveWorkflow creates or updates a workflow in the database.
 	// A draft is stored as-is (validation findings are returned, not enforced);
 	// a complete workflow must pass validation or nothing is stored.
 	SaveWorkflow(context.Context, *connect.Request[v1.SaveWorkflowRequest]) (*connect.Response[v1.SaveWorkflowResponse], error)
 	// GetWorkflow returns a specific workflow by slug
+	// forge:custom — resolves a workflow definition by slug across builtin, project and user sources
 	GetWorkflow(context.Context, *connect.Request[v1.GetWorkflowRequest]) (*connect.Response[v1.GetWorkflowResponse], error)
 	// DeleteWorkflow deletes a workflow from the database
+	// forge:custom — deletes the caller's workflow draft by the slug of its name
 	DeleteWorkflow(context.Context, *connect.Request[v1.DeleteWorkflowRequest]) (*connect.Response[v1.DeleteWorkflowResponse], error)
 	// ValidateWorkflow validates a workflow without saving it
 	ValidateWorkflow(context.Context, *connect.Request[v1.ValidateWorkflowRequest]) (*connect.Response[v1.ValidateWorkflowResponse], error)
@@ -255,14 +258,17 @@ func (c *workflowServiceClient) SetWorkflowStatus(ctx context.Context, req *conn
 // WorkflowServiceHandler is an implementation of the reliant.v1.WorkflowService service.
 type WorkflowServiceHandler interface {
 	// ListWorkflows returns all available workflows from DB + builtins
+	// forge:custom — merges builtin, project and the caller's own workflow definitions for one project
 	ListWorkflows(context.Context, *connect.Request[v1.ListWorkflowsRequest]) (*connect.Response[v1.ListWorkflowsResponse], error)
 	// SaveWorkflow creates or updates a workflow in the database.
 	// A draft is stored as-is (validation findings are returned, not enforced);
 	// a complete workflow must pass validation or nothing is stored.
 	SaveWorkflow(context.Context, *connect.Request[v1.SaveWorkflowRequest]) (*connect.Response[v1.SaveWorkflowResponse], error)
 	// GetWorkflow returns a specific workflow by slug
+	// forge:custom — resolves a workflow definition by slug across builtin, project and user sources
 	GetWorkflow(context.Context, *connect.Request[v1.GetWorkflowRequest]) (*connect.Response[v1.GetWorkflowResponse], error)
 	// DeleteWorkflow deletes a workflow from the database
+	// forge:custom — deletes the caller's workflow draft by the slug of its name
 	DeleteWorkflow(context.Context, *connect.Request[v1.DeleteWorkflowRequest]) (*connect.Response[v1.DeleteWorkflowResponse], error)
 	// ValidateWorkflow validates a workflow without saving it
 	ValidateWorkflow(context.Context, *connect.Request[v1.ValidateWorkflowRequest]) (*connect.Response[v1.ValidateWorkflowResponse], error)

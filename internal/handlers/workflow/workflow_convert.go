@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package workflow
 
 import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"

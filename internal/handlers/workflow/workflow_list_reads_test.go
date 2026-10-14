@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package workflow
 
 import (
 	"testing"
@@ -22,7 +22,7 @@ import (
 // 5–10s at p90. Every distinct read is now made once per listing.
 func TestListWorkflows_ReadsEachSourceOncePerListing(t *testing.T) {
 	ctx, repo := workflowlisttest.NewFixture(t, 12)
-	svc := NewWorkflowService(repo, nil)
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
 
 	resp, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
 		ProjectId: repo.Project.ID, IncludeHidden: proto.Bool(true),
@@ -52,7 +52,7 @@ func TestListWorkflows_ReadsEachSourceOncePerListing(t *testing.T) {
 // read, a listing must cost a handful of round trips, not one per ref.
 func TestListWorkflows_LatencyDoesNotScaleWithRefs(t *testing.T) {
 	ctx, repo := workflowlisttest.NewFixture(t, 12)
-	svc := NewWorkflowService(repo, nil)
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
 	req := connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: repo.Project.ID, IncludeHidden: proto.Bool(true)})
 	// Warm the process-wide caches (parsed builtins, tool registry) so what
 	// is measured is the listing's round trips, not first-use CPU.

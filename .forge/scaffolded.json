@@ -774,6 +774,39 @@
     "internal/handlers/trigger/handlers_scaffold_update_trigger_test.go": {
       "scaffolded_at": "2026-10-14T19:47:45Z"
     },
+    "internal/handlers/workflow/handlers_scaffold_copy_workflow_test.go": {
+      "scaffolded_at": "2026-10-14T19:16:15Z"
+    },
+    "internal/handlers/workflow/handlers_scaffold_create_workflow_draft_test.go": {
+      "scaffolded_at": "2026-10-14T19:16:15Z"
+    },
+    "internal/handlers/workflow/handlers_scaffold_delete_workflow_test.go": {
+      "scaffolded_at": "2026-10-14T19:16:15Z"
+    },
+    "internal/handlers/workflow/handlers_scaffold_export_workflow_test.go": {
+      "scaffolded_at": "2026-10-14T19:16:15Z"
+    },
+    "internal/handlers/workflow/handlers_scaffold_get_workflow_test.go": {
+      "scaffolded_at": "2026-10-14T19:16:15Z"
+    },
+    "internal/handlers/workflow/handlers_scaffold_import_workflow_test.go": {
+      "scaffolded_at": "2026-10-14T19:16:15Z"
+    },
+    "internal/handlers/workflow/handlers_scaffold_list_workflows_test.go": {
+      "scaffolded_at": "2026-10-14T19:16:15Z"
+    },
+    "internal/handlers/workflow/handlers_scaffold_save_workflow_test.go": {
+      "scaffolded_at": "2026-10-14T19:16:15Z"
+    },
+    "internal/handlers/workflow/handlers_scaffold_set_workflow_status_test.go": {
+      "scaffolded_at": "2026-10-14T19:16:15Z"
+    },
+    "internal/handlers/workflow/handlers_scaffold_set_workflow_visibility_test.go": {
+      "scaffolded_at": "2026-10-14T19:16:15Z"
+    },
+    "internal/handlers/workflow/handlers_scaffold_validate_workflow_test.go": {
+      "scaffolded_at": "2026-10-14T19:16:15Z"
+    },
     "internal/handlers/worktree/handlers_scaffold_archive_worktree_test.go": {
       "scaffolded_at": "2026-10-14T18:43:31Z"
     },
@@ -950,6 +983,13 @@
     "internal/handlers/trigger/handlers_scaffold_rotate_webhook_token_test.go",
     "internal/handlers/trigger/handlers_scaffold_set_trigger_enabled_test.go",
     "internal/handlers/trigger/handlers_scaffold_update_trigger_test.go",
+    "internal/handlers/workflow/handlers_scaffold_create_workflow_draft_test.go",
+    "internal/handlers/workflow/handlers_scaffold_get_workflow_test.go",
+    "internal/handlers/workflow/handlers_scaffold_import_workflow_test.go",
+    "internal/handlers/workflow/handlers_scaffold_list_workflows_test.go",
+    "internal/handlers/workflow/handlers_scaffold_save_workflow_test.go",
+    "internal/handlers/workflow/handlers_scaffold_set_workflow_status_test.go",
+    "internal/handlers/workflow/handlers_scaffold_validate_workflow_test.go",
     "internal/handlers/worktree/handlers_scaffold_create_worktree_test.go",
     "internal/handlers/worktree/handlers_scaffold_delete_worktree_test.go",
     "internal/handlers/worktree/handlers_scaffold_discover_worktrees_test.go",

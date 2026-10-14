@@ -1367,6 +1367,7 @@ export const WorkflowDraftStatusSchema: GenEnum<WorkflowDraftStatus> = /*@__PURE
 export const WorkflowService: GenService<{
   /**
    * ListWorkflows returns all available workflows from DB + builtins
+   * forge:custom — merges builtin, project and the caller's own workflow definitions for one project
    *
    * @generated from rpc reliant.v1.WorkflowService.ListWorkflows
    */
@@ -1389,6 +1390,7 @@ export const WorkflowService: GenService<{
   },
   /**
    * GetWorkflow returns a specific workflow by slug
+   * forge:custom — resolves a workflow definition by slug across builtin, project and user sources
    *
    * @generated from rpc reliant.v1.WorkflowService.GetWorkflow
    */
@@ -1399,6 +1401,7 @@ export const WorkflowService: GenService<{
   },
   /**
    * DeleteWorkflow deletes a workflow from the database
+   * forge:custom — deletes the caller's workflow draft by the slug of its name
    *
    * @generated from rpc reliant.v1.WorkflowService.DeleteWorkflow
    */

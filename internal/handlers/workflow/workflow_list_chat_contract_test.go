@@ -1,4 +1,4 @@
-package services
+package workflow
 
 import (
 	"context"
@@ -93,7 +93,7 @@ nodes:
 		Version:    1,
 	}))
 
-	workflowService := &WorkflowService{database: repo}
+	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
 	// StartChat resolves a chat's workflow through the launcher: this is the
 	// one the chat service builds over the same store.
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), nil, nil, "")
@@ -196,7 +196,7 @@ nodes:
 		}))
 	}
 
-	workflowService := &WorkflowService{database: repo}
+	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
 	// StartChat resolves a chat's workflow through the launcher: this is the
 	// one the chat service builds over the same store.
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), nil, nil, "")

@@ -28604,6 +28604,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListWorkflowsRequest",
           "OutputTypeFQ": "reliant.v1.ListWorkflowsResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
@@ -28630,6 +28631,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.GetWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.GetWorkflowResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
@@ -28643,6 +28645,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.DeleteWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.DeleteWorkflowResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
@@ -32067,8 +32070,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "WorkflowDraftStatus"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "WorktreeService",
@@ -34435,5 +34437,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "64bce29505181e12cb78fbebbf6816596e95fef75b2dc9a4133c9ecfcdbe6a07"
+  "source_hash": "2cc62ec0c5068bc792f53644fa92dbbc3ab523fca1c62c8676dcc8e71393d09c"
 }
