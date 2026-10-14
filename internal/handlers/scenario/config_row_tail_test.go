@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package scenario
 
 import (
 	"context"
@@ -62,7 +62,7 @@ func bigSkillsJSON() *string {
 func TestScenarioRPCs_ReadOnlyTheScenariosColumn(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	spy := &wholeConfigRowReads{Repo: repo}
-	service := NewScenarioService(spy, nil)
+	service := NewTestScenario(t, WithScenarioDeps(Deps{Repo: spy}))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()

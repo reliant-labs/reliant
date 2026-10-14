@@ -234,6 +234,24 @@
     "internal/handlers/run/handlers_scaffold_start_run_test.go": {
       "scaffolded_at": "2026-10-13T12:25:31Z"
     },
+    "internal/handlers/scenario/handlers_scaffold_create_scenario_test.go": {
+      "scaffolded_at": "2026-10-14T13:27:36Z"
+    },
+    "internal/handlers/scenario/handlers_scaffold_delete_scenario_test.go": {
+      "scaffolded_at": "2026-10-14T13:27:36Z"
+    },
+    "internal/handlers/scenario/handlers_scaffold_export_scenario_test.go": {
+      "scaffolded_at": "2026-10-14T13:27:36Z"
+    },
+    "internal/handlers/scenario/handlers_scaffold_list_scenarios_test.go": {
+      "scaffolded_at": "2026-10-14T13:27:36Z"
+    },
+    "internal/handlers/scenario/handlers_scaffold_run_scenario_test.go": {
+      "scaffolded_at": "2026-10-14T13:27:36Z"
+    },
+    "internal/handlers/scenario/handlers_scaffold_upload_scenario_test.go": {
+      "scaffolded_at": "2026-10-14T13:27:36Z"
+    },
     "internal/handlers/settings/handlers_scaffold_batch_upsert_settings_test.go": {
       "scaffolded_at": "2026-10-14T05:33:36Z"
     },
@@ -451,6 +469,7 @@
     "internal/handlers/preset/handlers_scaffold_list_presets_for_workflow_test.go",
     "internal/handlers/preset/handlers_scaffold_list_presets_test.go",
     "internal/handlers/preset/handlers_scaffold_update_preset_test.go",
+    "internal/handlers/scenario/handlers_scaffold_run_scenario_test.go",
     "internal/handlers/settings/handlers_scaffold_batch_upsert_settings_test.go",
     "internal/handlers/settings/handlers_scaffold_complete_claude_o_auth_test.go",
     "internal/handlers/settings/handlers_scaffold_delete_global_skill_test.go",

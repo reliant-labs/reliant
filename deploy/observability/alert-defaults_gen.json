@@ -64,6 +64,10 @@
         "rpc_service": "reliant.v1.RunService"
       },
       {
+        "name": "scenario",
+        "rpc_service": "reliant.v1.ScenarioService"
+      },
+      {
         "name": "settings",
         "rpc_service": "reliant.v1.SettingsService"
       },

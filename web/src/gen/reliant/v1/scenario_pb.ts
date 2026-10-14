@@ -752,6 +752,7 @@ export const ExportScenarioResponseSchema: GenMessage<ExportScenarioResponse> = 
 export const ScenarioService: GenService<{
   /**
    * ListScenarios returns all scenarios for a workflow
+   * forge:custom — merges the caller's saved scenarios with the project's synced ones, by workflow slug
    *
    * @generated from rpc reliant.v1.ScenarioService.ListScenarios
    */
@@ -762,6 +763,7 @@ export const ScenarioService: GenService<{
   },
   /**
    * CreateScenario creates a new scenario and optionally runs it
+   * forge:custom — validates the scenario against its workflow and may run it before answering
    *
    * @generated from rpc reliant.v1.ScenarioService.CreateScenario
    */
@@ -782,6 +784,7 @@ export const ScenarioService: GenService<{
   },
   /**
    * DeleteScenario deletes a scenario
+   * forge:custom — only the scenario's owner may delete it
    *
    * @generated from rpc reliant.v1.ScenarioService.DeleteScenario
    */

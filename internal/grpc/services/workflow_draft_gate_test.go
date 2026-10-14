@@ -16,8 +16,9 @@ import (
 
 // A draft is never runnable (specs/workflow-draft-lifecycle.md). The request-
 // side resolvers that start runs refuse a draft by slug with an actionable
-// "is a draft" message: StartChat, the scenario runner's workflow loader, and
-// preset resolution (internal/handlers/preset/preset_draft_gate_test.go).
+// "is a draft" message: StartChat, the scenario runner's workflow loader
+// (internal/handlers/scenario/scenario_draft_gate_test.go), and preset
+// resolution (internal/handlers/preset/preset_draft_gate_test.go).
 // (ref/spawn/router resolution at run time is ActivityLoadWorkflow; see
 // load_workflow_draft_gate_test.go.)
 func TestDraftWorkflowIsNeverRunnable(t *testing.T) {
@@ -56,11 +57,5 @@ nodes:
 		chats, listErr := repo.ListChats(ctx, db.ChatFilters{ProjectID: &projectID})
 		require.NoError(t, listErr)
 		assert.Empty(t, chats, "no chat is created for a draft workflow")
-	})
-
-	t.Run("scenario workflow loader", func(t *testing.T) {
-		_, err := createScenarioWorkflowLoader(repo, ctx, "test-user", projectID)("gate-draft")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "is a draft")
 	})
 }

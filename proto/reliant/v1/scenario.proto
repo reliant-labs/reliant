@@ -11,21 +11,21 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // Workflow Scenarios - Test workflows with mocked events
 // ============================================
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // ScenarioService handles workflow scenario testing
 service ScenarioService {
   // ListScenarios returns all scenarios for a workflow
+  // forge:custom — merges the caller's saved scenarios with the project's synced ones, by workflow slug
   rpc ListScenarios(ListScenariosRequest) returns (ListScenariosResponse) {}
 
   // CreateScenario creates a new scenario and optionally runs it
+  // forge:custom — validates the scenario against its workflow and may run it before answering
   rpc CreateScenario(CreateScenarioRequest) returns (CreateScenarioResponse) {}
 
   // RunScenario runs a scenario against a workflow
   rpc RunScenario(RunScenarioRequest) returns (RunScenarioResponse) {}
 
   // DeleteScenario deletes a scenario
+  // forge:custom — only the scenario's owner may delete it
   rpc DeleteScenario(DeleteScenarioRequest) returns (DeleteScenarioResponse) {}
 
   // UploadScenario saves a scenario YAML file to the project directory

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package scenario
 
 import (
 	"context"
@@ -16,32 +16,15 @@ import (
 	"gopkg.in/yaml.v3"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
-
-// ScenarioService implements the ScenarioService RPC handlers
-type ScenarioService struct {
-	reliantv1connect.UnimplementedScenarioServiceHandler
-	database     db.Repository
-	daemonRouter toolexec.DaemonRouter
-}
-
-// NewScenarioService creates a new ScenarioService
-func NewScenarioService(database db.Repository, daemonRouter toolexec.DaemonRouter) *ScenarioService {
-	return &ScenarioService{
-		database:     database,
-		daemonRouter: daemonRouter,
-	}
-}
 
 // projectScenariosReader reads the synced project scenarios column of a
 // project's config record, and nothing else from it
@@ -60,7 +43,7 @@ var _ projectScenariosReader = (*db.Repo)(nil)
 // It reads the one column the scenario RPCs need. The whole config record
 // carries every skill body and repo memory the daemon indexed — 18 MB in
 // prod — for a column that is empty or a few KB.
-func storedProjectScenarios(ctx context.Context, repo db.Repository, projectID string) ([]cfg.StoredScenario, error) {
+func storedProjectScenarios(ctx context.Context, repo Repository, projectID string) ([]cfg.StoredScenario, error) {
 	// The method lives on *db.Repo, not on db.Repository; every production
 	// wiring passes a *db.Repo. A repository that cannot answer is a wiring
 	// fault, reported rather than papered over with the full-record read.
@@ -80,8 +63,8 @@ func storedProjectScenarios(ctx context.Context, repo db.Repository, projectID s
 }
 
 // projectBelongsToUser verifies the authenticated user owns the given project.
-func (s *ScenarioService) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
-	_, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
+	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
 			return connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
@@ -93,7 +76,7 @@ func (s *ScenarioService) projectBelongsToUser(ctx context.Context, projectID st
 
 // ListScenarios returns all scenarios for a workflow from both DB and files.
 // DB scenarios (source="user") take precedence over file scenarios (source="project").
-func (s *ScenarioService) ListScenarios(
+func (s *Service) ListScenarios(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListScenariosRequest],
 ) (*connect.Response[reliantv1.ListScenariosResponse], error) {
@@ -109,7 +92,7 @@ func (s *ScenarioService) ListScenarios(
 		if err := s.projectBelongsToUser(ctx, req.Msg.GetProjectId(), userID); err != nil {
 			return nil, err
 		}
-		project, err := s.database.GetProject(ctx, req.Msg.GetProjectId())
+		project, err := s.deps.Repo.GetProject(ctx, req.Msg.GetProjectId())
 		if err == nil && project != nil {
 			hasProject = true
 			projectID = project.ID
@@ -120,7 +103,7 @@ func (s *ScenarioService) ListScenarios(
 	dbScenarioNames := make(map[string]bool)
 
 	// Get the workflow draft ID from the slug
-	draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
+	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
 	if err != nil {
 		// For project workflows that don't have a draft, we can still load stored scenarios
 		if !hasProject {
@@ -132,7 +115,7 @@ func (s *ScenarioService) ListScenarios(
 
 	// List DB scenarios for this draft (if draft exists)
 	if draft != nil {
-		scenarios, err := s.database.ListWorkflowScenariosByDraft(ctx, draft.ID)
+		scenarios, err := s.deps.Repo.ListWorkflowScenariosByDraft(ctx, draft.ID)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list scenarios: %w", err))
 		}
@@ -150,7 +133,7 @@ func (s *ScenarioService) ListScenarios(
 
 	// Discover stored project scenarios from DB
 	if hasProject {
-		storedScenarios, err := discoverProjectScenariosFromDB(s.database, ctx, projectID, req.Msg.WorkflowSlug)
+		storedScenarios, err := discoverProjectScenariosFromDB(s.deps.Repo, ctx, projectID, req.Msg.WorkflowSlug)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to discover project scenarios: %w", err))
 		}
@@ -169,7 +152,7 @@ func (s *ScenarioService) ListScenarios(
 }
 
 // CreateScenario creates a new scenario and optionally runs it
-func (s *ScenarioService) CreateScenario(
+func (s *Service) CreateScenario(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateScenarioRequest],
 ) (*connect.Response[reliantv1.CreateScenarioResponse], error) {
@@ -195,7 +178,7 @@ func (s *ScenarioService) CreateScenario(
 	if req.Msg.WorkflowYaml != "" {
 		workflowYAML = req.Msg.WorkflowYaml
 	} else if req.Msg.WorkflowSlug != "" {
-		draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
+		draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %s", req.Msg.WorkflowSlug))
 		}
@@ -216,7 +199,7 @@ func (s *ScenarioService) CreateScenario(
 
 	var result *wfscenario.ScenarioResult
 	if req.Msg.Run {
-		workflowLoader := createScenarioWorkflowLoader(s.database, ctx, userID, req.Msg.ProjectId)
+		workflowLoader := createScenarioWorkflowLoader(s.deps.Repo, ctx, userID, req.Msg.ProjectId)
 		result = runner.New(wf, runner.Options{Loader: workflowLoader}).RunContext(ctx, simScenario)
 	}
 
@@ -250,7 +233,7 @@ func (s *ScenarioService) CreateScenario(
 			dbScenario.LastRunResult = sql.NullString{String: resultJSON, Valid: true}
 		}
 
-		if err := s.database.CreateWorkflowScenario(ctx, dbScenario); err != nil {
+		if err := s.deps.Repo.CreateWorkflowScenario(ctx, dbScenario); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save scenario: %w", err))
 		}
 
@@ -274,7 +257,7 @@ func (s *ScenarioService) CreateScenario(
 }
 
 // RunScenario runs a scenario against a workflow
-func (s *ScenarioService) RunScenario(
+func (s *Service) RunScenario(
 	ctx context.Context,
 	req *connect.Request[reliantv1.RunScenarioRequest],
 ) (*connect.Response[reliantv1.RunScenarioResponse], error) {
@@ -312,14 +295,14 @@ func (s *ScenarioService) RunScenario(
 				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id required for project scenarios"))
 			}
 
-			project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
+			project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 			if err != nil || project == nil || project.Path == "" {
 				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found: %s", req.Msg.ProjectId))
 			}
 			projectID = project.ID
 
 			// Load the scenario from stored config
-			allScenarios, err := storedProjectScenarios(ctx, s.database, project.ID)
+			allScenarios, err := storedProjectScenarios(ctx, s.deps.Repo, project.ID)
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project config not found: %s", project.ID))
 			}
@@ -346,12 +329,12 @@ func (s *ScenarioService) RunScenario(
 			simScenario = parsed
 
 			// Get the workflow - try DB first, then stored project config
-			draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, workflowSlug)
+			draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, workflowSlug)
 			if err == nil && draft != nil {
 				workflowYAML = draft.Definition
 			} else {
 				// Try to load from stored project workflows (synced by daemon)
-				wf, yamlContent, loadErr := launch.LoadProjectWorkflowBySlugFromDB(s.database, ctx, project.ID, workflowSlug)
+				wf, yamlContent, loadErr := launch.LoadProjectWorkflowBySlugFromDB(s.deps.Repo, ctx, project.ID, workflowSlug)
 				if loadErr != nil || wf == nil {
 					return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %s", workflowSlug))
 				}
@@ -359,7 +342,7 @@ func (s *ScenarioService) RunScenario(
 			}
 		} else {
 			// Run a saved DB scenario
-			dbScenario, err := s.database.GetWorkflowScenario(ctx, req.Msg.ScenarioId)
+			dbScenario, err := s.deps.Repo.GetWorkflowScenario(ctx, req.Msg.ScenarioId)
 			if err != nil || dbScenario == nil {
 				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("scenario not found: %s", req.Msg.ScenarioId))
 			}
@@ -371,7 +354,7 @@ func (s *ScenarioService) RunScenario(
 
 			// Get the workflow
 			if dbScenario.WorkflowDraftID.Valid {
-				draft, err := s.database.GetWorkflowDraft(ctx, dbScenario.WorkflowDraftID.String)
+				draft, err := s.deps.Repo.GetWorkflowDraft(ctx, dbScenario.WorkflowDraftID.String)
 				if err != nil {
 					return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found"))
 				}
@@ -384,7 +367,7 @@ func (s *ScenarioService) RunScenario(
 		}
 	} else if req.Msg.Scenario != nil && req.Msg.WorkflowSlug != "" {
 		// Run an ad-hoc scenario
-		draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
+		draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %s", req.Msg.WorkflowSlug))
 		}
@@ -400,7 +383,7 @@ func (s *ScenarioService) RunScenario(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to parse workflow: %w", err))
 	}
 
-	workflowLoader := createScenarioWorkflowLoader(s.database, ctx, userID, projectID)
+	workflowLoader := createScenarioWorkflowLoader(s.deps.Repo, ctx, userID, projectID)
 	result := runner.New(wf, runner.Options{Loader: workflowLoader}).RunContext(ctx, simScenario)
 
 	// Update last run result if this was a saved DB scenario (not project scenarios)
@@ -409,7 +392,7 @@ func (s *ScenarioService) RunScenario(
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal result: %w", err))
 		}
-		if err := s.database.UpdateWorkflowScenarioResult(ctx, req.Msg.ScenarioId, string(result.Status), resultJSON); err != nil {
+		if err := s.deps.Repo.UpdateWorkflowScenarioResult(ctx, req.Msg.ScenarioId, string(result.Status), resultJSON); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update scenario result: %w", err))
 		}
 	}
@@ -420,7 +403,7 @@ func (s *ScenarioService) RunScenario(
 }
 
 // DeleteScenario deletes a scenario
-func (s *ScenarioService) DeleteScenario(
+func (s *Service) DeleteScenario(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DeleteScenarioRequest],
 ) (*connect.Response[reliantv1.DeleteScenarioResponse], error) {
@@ -430,7 +413,7 @@ func (s *ScenarioService) DeleteScenario(
 	}
 
 	// Verify the scenario belongs to the user
-	scenario, err := s.database.GetWorkflowScenario(ctx, req.Msg.ScenarioId)
+	scenario, err := s.deps.Repo.GetWorkflowScenario(ctx, req.Msg.ScenarioId)
 	if err != nil || scenario == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("scenario not found"))
 	}
@@ -438,7 +421,7 @@ func (s *ScenarioService) DeleteScenario(
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("not authorized to delete this scenario"))
 	}
 
-	if err := s.database.DeleteWorkflowScenario(ctx, req.Msg.ScenarioId); err != nil {
+	if err := s.deps.Repo.DeleteWorkflowScenario(ctx, req.Msg.ScenarioId); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete scenario: %w", err))
 	}
 
@@ -449,7 +432,7 @@ func (s *ScenarioService) DeleteScenario(
 }
 
 // UploadScenario saves a scenario YAML file to the project directory
-func (s *ScenarioService) UploadScenario(
+func (s *Service) UploadScenario(
 	ctx context.Context,
 	req *connect.Request[reliantv1.UploadScenarioRequest],
 ) (*connect.Response[reliantv1.UploadScenarioResponse], error) {
@@ -494,7 +477,7 @@ func (s *ScenarioService) UploadScenario(
 	}
 
 	// Get the project path
-	project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil || project == nil || project.Path == "" {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found: %s", req.Msg.ProjectId))
 	}
@@ -504,12 +487,15 @@ func (s *ScenarioService) UploadScenario(
 	filePath := filepath.Join(project.Path, filepath.FromSlash(workflowref.Dir), filepath.FromSlash(workflowref.ScenarioPath(req.Msg.WorkflowSlug, filename)))
 
 	// Write the file via daemon (fs.write_file auto-creates parent directories)
+	if s.deps.Router == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("no daemon router: this server cannot write to the project's machine"))
+	}
 	userID = auth.MustGetUserID(ctx)
 	writePayload, _ := json.Marshal(map[string]interface{}{
 		"path":    filePath,
 		"content": req.Msg.YamlContent,
 	})
-	if _, err := s.daemonRouter.SendDaemonCommand(ctx, userID, "fs.write_file", writePayload, 15000); err != nil {
+	if _, err := s.deps.Router.SendDaemonCommand(ctx, userID, "fs.write_file", writePayload, 15000); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to write scenario file via daemon: %w", err))
 	}
 
@@ -531,7 +517,7 @@ func (s *ScenarioService) UploadScenario(
 }
 
 // ExportScenario exports a scenario to YAML format
-func (s *ScenarioService) ExportScenario(
+func (s *Service) ExportScenario(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ExportScenarioRequest],
 ) (*connect.Response[reliantv1.ExportScenarioResponse], error) {
@@ -563,13 +549,13 @@ func (s *ScenarioService) ExportScenario(
 			return nil, err
 		}
 
-		project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
+		project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 		if err != nil || project == nil {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 		}
 
 		// Load from stored config
-		allScenarios, err := storedProjectScenarios(ctx, s.database, project.ID)
+		allScenarios, err := storedProjectScenarios(ctx, s.deps.Repo, project.ID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project config not found"))
 		}
@@ -596,7 +582,7 @@ func (s *ScenarioService) ExportScenario(
 	}
 
 	// Get the DB scenario
-	dbScenario, err := s.database.GetWorkflowScenario(ctx, req.Msg.ScenarioId)
+	dbScenario, err := s.deps.Repo.GetWorkflowScenario(ctx, req.Msg.ScenarioId)
 	if err != nil || dbScenario == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("scenario not found: %s", req.Msg.ScenarioId))
 	}
@@ -817,7 +803,7 @@ func scenarioResultToProto(r *wfscenario.ScenarioResult) *reliantv1.ScenarioResu
 
 // discoverProjectScenariosFromDB loads project scenarios from the stored config record in the DB.
 // Returns scenarios with source="project".
-func discoverProjectScenariosFromDB(repo db.Repository, ctx context.Context, projectID string, workflowSlug string) ([]*reliantv1.Scenario, error) {
+func discoverProjectScenariosFromDB(repo Repository, ctx context.Context, projectID string, workflowSlug string) ([]*reliantv1.Scenario, error) {
 	if projectID == "" || workflowSlug == "" {
 		return nil, nil
 	}

@@ -22265,6 +22265,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListScenariosRequest",
           "OutputTypeFQ": "reliant.v1.ListScenariosResponse",
           "InputProtoFile": "reliant/v1/scenario.proto",
@@ -22278,6 +22279,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.CreateScenarioRequest",
           "OutputTypeFQ": "reliant.v1.CreateScenarioResponse",
           "InputProtoFile": "reliant/v1/scenario.proto",
@@ -22304,6 +22306,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.DeleteScenarioRequest",
           "OutputTypeFQ": "reliant.v1.DeleteScenarioResponse",
           "InputProtoFile": "reliant/v1/scenario.proto",
@@ -22924,8 +22927,7 @@
         "reliant.v1.SimulatedEvent": "reliant/v1/scenario.proto",
         "reliant.v1.UploadScenarioRequest": "reliant/v1/scenario.proto",
         "reliant.v1.UploadScenarioResponse": "reliant/v1/scenario.proto"
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "SettingsService",
@@ -34017,5 +34019,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "ded0849c9c1799029357c0da0720e85b2af58fa889a510e9f9ae51c6a8ffab10"
+  "source_hash": "836583ac782d77b43a9b9d6d8eaa751e5e87ad960237052c56ea743c41b7f5bb"
 }

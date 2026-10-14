@@ -58,12 +58,15 @@ const (
 // ScenarioServiceClient is a client for the reliant.v1.ScenarioService service.
 type ScenarioServiceClient interface {
 	// ListScenarios returns all scenarios for a workflow
+	// forge:custom — merges the caller's saved scenarios with the project's synced ones, by workflow slug
 	ListScenarios(context.Context, *connect.Request[v1.ListScenariosRequest]) (*connect.Response[v1.ListScenariosResponse], error)
 	// CreateScenario creates a new scenario and optionally runs it
+	// forge:custom — validates the scenario against its workflow and may run it before answering
 	CreateScenario(context.Context, *connect.Request[v1.CreateScenarioRequest]) (*connect.Response[v1.CreateScenarioResponse], error)
 	// RunScenario runs a scenario against a workflow
 	RunScenario(context.Context, *connect.Request[v1.RunScenarioRequest]) (*connect.Response[v1.RunScenarioResponse], error)
 	// DeleteScenario deletes a scenario
+	// forge:custom — only the scenario's owner may delete it
 	DeleteScenario(context.Context, *connect.Request[v1.DeleteScenarioRequest]) (*connect.Response[v1.DeleteScenarioResponse], error)
 	// UploadScenario saves a scenario YAML file to the project directory
 	UploadScenario(context.Context, *connect.Request[v1.UploadScenarioRequest]) (*connect.Response[v1.UploadScenarioResponse], error)
@@ -164,12 +167,15 @@ func (c *scenarioServiceClient) ExportScenario(ctx context.Context, req *connect
 // ScenarioServiceHandler is an implementation of the reliant.v1.ScenarioService service.
 type ScenarioServiceHandler interface {
 	// ListScenarios returns all scenarios for a workflow
+	// forge:custom — merges the caller's saved scenarios with the project's synced ones, by workflow slug
 	ListScenarios(context.Context, *connect.Request[v1.ListScenariosRequest]) (*connect.Response[v1.ListScenariosResponse], error)
 	// CreateScenario creates a new scenario and optionally runs it
+	// forge:custom — validates the scenario against its workflow and may run it before answering
 	CreateScenario(context.Context, *connect.Request[v1.CreateScenarioRequest]) (*connect.Response[v1.CreateScenarioResponse], error)
 	// RunScenario runs a scenario against a workflow
 	RunScenario(context.Context, *connect.Request[v1.RunScenarioRequest]) (*connect.Response[v1.RunScenarioResponse], error)
 	// DeleteScenario deletes a scenario
+	// forge:custom — only the scenario's owner may delete it
 	DeleteScenario(context.Context, *connect.Request[v1.DeleteScenarioRequest]) (*connect.Response[v1.DeleteScenarioResponse], error)
 	// UploadScenario saves a scenario YAML file to the project directory
 	UploadScenario(context.Context, *connect.Request[v1.UploadScenarioRequest]) (*connect.Response[v1.UploadScenarioResponse], error)

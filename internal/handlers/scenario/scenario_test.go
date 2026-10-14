@@ -1,4 +1,4 @@
-package services
+package scenario
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-func setupTestScenarioService(t *testing.T) (*ScenarioService, *db.Repo, string, string, context.Context) {
+func setupTestScenarioService(t *testing.T) (*Service, *db.Repo, string, string, context.Context) {
 	t.Helper()
 
 	repo := db.NewTestRepo(t)
@@ -36,7 +36,7 @@ func setupTestScenarioService(t *testing.T) (*ScenarioService, *db.Repo, string,
 		LastActive: now,
 	}))
 
-	return NewScenarioService(repo, nil), repo, userID, projectID, ctx
+	return NewTestScenario(t, WithScenarioDeps(Deps{Repo: repo})), repo, userID, projectID, ctx
 }
 
 func TestScenarioService_RunScenario_LoadsReferencedProjectWorkflowInternals(t *testing.T) {

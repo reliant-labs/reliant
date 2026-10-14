@@ -51,6 +51,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
+	"github.com/reliant-labs/reliant/internal/handlers/scenario"
 	"github.com/reliant-labs/reliant/internal/handlers/settings"
 	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
@@ -309,7 +310,15 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 	mcpService := services.NewMCPService(database, router)
 	workflowService := services.NewWorkflowService(database, router)
-	scenarioService := services.NewScenarioService(database, router)
+	scenarioService, err := scenario.New(scenario.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+		Router: router,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scenario service: %w", err)
+	}
 	// PackageCommands is a browser-facing workspace service: its command
 	// discovery must run on the daemon's filesystem (run against the
 	// api-server's, it silently returned an empty command list), so it is
