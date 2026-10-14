@@ -158,3 +158,31 @@ func TestFilterMatchRoot(t *testing.T) {
 	var fe *FilterError
 	require.ErrorAs(t, err, &fe)
 }
+
+func TestUnclosedTemplatesAreErrorsNotLiterals(t *testing.T) {
+	errs := CompileInputs(map[string]string{"a": "{{ trigger.payload.x", "b": "ok {{ trigger.payload.y }}"})
+	require.Len(t, errs, 1)
+	assert.Equal(t, "a", errs[0].Input)
+	assert.Contains(t, errs[0].Reason, `no closing "}}"`)
+
+	err := CompilePrompt("Triage {{ trigger.payload.data.issue.number")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "line 1, column 8")
+
+	_, err = EvaluateInputs(map[string]string{"a": "{{ trigger.payload.x"}, map[string]any{"payload": map[string]any{"x": 1}})
+	require.Error(t, err)
+
+	_, err = RenderPrompt("p {{ trigger.kind", map[string]any{"kind": "k"})
+	require.Error(t, err)
+}
+
+func TestBracesInStringLiteralsAreEvaluatedInInputs(t *testing.T) {
+	root := map[string]any{"payload": map[string]any{"body": "{\"a\":1}"}}
+	out, err := EvaluateInputs(map[string]string{
+		"is_json": "{{ trigger.payload.body.startsWith('{') }}",
+		"folded":  "{{ trigger.payload.body\n  + '}' }}",
+	}, root)
+	require.NoError(t, err)
+	assert.Equal(t, true, out["is_json"])
+	assert.Equal(t, "{\"a\":1}}", out["folded"])
+}

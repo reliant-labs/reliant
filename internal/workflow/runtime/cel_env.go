@@ -144,8 +144,12 @@ func (b *CELContextBuilder) EvalString(expr string) (interface{}, error) {
 		return nil, err
 	}
 
-	// Find all {{...}} template expressions
-	matches := extractTemplateExpressions(expr)
+	// Find all {{...}} template expressions. A {{ that does not close is an
+	// error: it must never be sent on as literal text.
+	matches, err := wfcel.ScanTemplate(expr)
+	if err != nil {
+		return nil, err
+	}
 
 	// No template expressions — return literal string as-is
 	if len(matches) == 0 {
@@ -154,7 +158,7 @@ func (b *CELContextBuilder) EvalString(expr string) (interface{}, error) {
 
 	// Pure expression (entire string is {{expr}} with optional whitespace)
 	if len(matches) == 1 && isPureExpressionWithWhitespace(expr, matches[0]) {
-		result, err := b.evalSingleCEL(matches[0].expr, env, evalCtx)
+		result, err := b.evalSingleCEL(matches[0].Expr, env, evalCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -165,8 +169,8 @@ func (b *CELContextBuilder) EvalString(expr string) (interface{}, error) {
 	var result strings.Builder
 	lastEnd := 0
 	for _, match := range matches {
-		result.WriteString(expr[lastEnd:match.start])
-		value, err := b.evalSingleCEL(match.expr, env, evalCtx)
+		result.WriteString(expr[lastEnd:match.Start])
+		value, err := b.evalSingleCEL(match.Expr, env, evalCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -175,7 +179,7 @@ func (b *CELContextBuilder) EvalString(expr string) (interface{}, error) {
 		} else {
 			result.WriteString("NULL_VALUE")
 		}
-		lastEnd = match.end
+		lastEnd = match.End
 	}
 	result.WriteString(expr[lastEnd:])
 	return result.String(), nil

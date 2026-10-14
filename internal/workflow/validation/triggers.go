@@ -155,7 +155,9 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 			result.AddErrorWithSuggestion(CategoryTrigger, path, "prompt", strings.TrimPrefix(err.Error(), "prompt: "),
 				"a prompt reads only `trigger` (e.g. Triage #{{ trigger.payload.data.issue.number }}); the run's inputs and nodes do not exist yet")
 		} else if shape != nil {
-			for _, expr := range triggerspec.InputExpressions(wt.GetPrompt()) {
+			// A prompt that does not scan was reported by CompilePrompt above.
+			exprs, _ := triggerspec.InputExpressions(wt.GetPrompt())
+			for _, expr := range exprs {
 				shape.report(result, path, "prompt", expr, shape.CheckExpr(expr))
 			}
 		}
@@ -433,7 +435,9 @@ func validateTriggerInputs(inputs map[string]string, declared map[string]*relian
 		if _, ok := declared[name]; !ok || failed[name] {
 			continue
 		}
-		for _, expr := range triggerspec.InputExpressions(inputs[name]) {
+		// A value that does not scan was reported by CompileInputs above.
+		exprs, _ := triggerspec.InputExpressions(inputs[name])
+		for _, expr := range exprs {
 			shape.report(result, path, "inputs."+name, expr, shape.CheckExpr(expr))
 		}
 	}

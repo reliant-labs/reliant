@@ -16,61 +16,6 @@ import (
 // Template evaluation uses the CEL context defined in cel_env.go.
 // Data from triggering nodes is accessed via nodes.<node_id>.* namespace
 
-// templateMatch represents a matched template expression
-type templateMatch struct {
-	full  string // The full match including {{}}
-	expr  string // The extracted expression
-	start int    // Start position in the input string
-	end   int    // End position in the input string
-}
-
-// extractTemplateExpressions finds all {{...}} template expressions using a balanced brace parser.
-// This correctly handles nested braces in CEL expressions like: {{ items.map(x, {id: x.id}) }}
-func extractTemplateExpressions(input string) []templateMatch {
-	var matches []templateMatch
-	i := 0
-
-	for i < len(input)-1 {
-		// Find {{
-		if input[i] == '{' && input[i+1] == '{' {
-			start := i
-			exprStart := i + 2
-
-			// Count braces to find matching }}
-			braceCount := 2
-			j := exprStart
-			for j < len(input) && braceCount > 0 {
-				switch input[j] {
-				case '{':
-					braceCount++
-				case '}':
-					braceCount--
-				}
-				j++
-			}
-
-			if braceCount == 0 {
-				// Found matching }}
-				expr := input[exprStart : j-2]
-				matches = append(matches, templateMatch{
-					full:  input[start:j],
-					expr:  strings.TrimSpace(expr),
-					start: start,
-					end:   j,
-				})
-				i = j
-			} else {
-				// Unmatched {{, skip it
-				i++
-			}
-		} else {
-			i++
-		}
-	}
-
-	return matches
-}
-
 // isPureExpressionWithWhitespace checks if the input string contains only a single
 // template expression surrounded by optional whitespace. This handles YAML literal
 // blocks (|) that add trailing newlines.
@@ -85,18 +30,18 @@ func extractTemplateExpressions(input string) []templateMatch {
 //   - "prefix {{expr}}"    - non-whitespace before
 //   - "{{expr}} suffix"    - non-whitespace after
 //   - "{{a}} {{b}}"        - multiple expressions (handled by caller)
-func isPureExpressionWithWhitespace(input string, match templateMatch) bool {
+func isPureExpressionWithWhitespace(input string, match wfcel.TemplateMatch) bool {
 	// Check that any text BEFORE the expression is only whitespace
-	if match.start > 0 {
-		before := input[:match.start]
+	if match.Start > 0 {
+		before := input[:match.Start]
 		if strings.TrimSpace(before) != "" {
 			return false
 		}
 	}
 
 	// Check that any text AFTER the expression is only whitespace
-	if match.end < len(input) {
-		after := input[match.end:]
+	if match.End < len(input) {
+		after := input[match.End:]
 		if strings.TrimSpace(after) != "" {
 			return false
 		}

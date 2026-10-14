@@ -28,26 +28,30 @@ type NamespaceRefs struct {
 // TemplateExpressions returns the CEL expressions inside a {{...}} template.
 // A string with no template delimiters is treated as one raw CEL expression
 // when rawCEL is true (save_message.condition is written that way), and as a
-// literal with no expressions otherwise.
-func TemplateExpressions(s string, rawCEL bool) []string {
+// literal with no expressions otherwise. A {{ that does not close is an error
+// (*TemplateSyntaxError), never an empty result.
+func TemplateExpressions(s string, rawCEL bool) ([]string, error) {
 	trimmed := strings.TrimSpace(s)
 	if trimmed == "" {
-		return nil
+		return nil, nil
 	}
-	matches := extractTemplates(trimmed)
+	matches, err := ScanTemplate(trimmed)
+	if err != nil {
+		return nil, err
+	}
 	if len(matches) == 0 {
 		if rawCEL {
-			return []string{trimmed}
+			return []string{trimmed}, nil
 		}
-		return nil
+		return nil, nil
 	}
 	exprs := make([]string, 0, len(matches))
 	for _, m := range matches {
-		if m.expr != "" {
-			exprs = append(exprs, m.expr)
+		if m.Expr != "" {
+			exprs = append(exprs, m.Expr)
 		}
 	}
-	return exprs
+	return exprs, nil
 }
 
 // ReferencesOf parses each expression and reports how it reads namespace.

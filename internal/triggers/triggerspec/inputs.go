@@ -33,8 +33,9 @@ type InputsError struct {
 
 func (e *InputsError) Error() string { return fmt.Sprintf("inputs.%s: %s", e.Input, e.Reason) }
 
-// InputExpressions returns the CEL expressions inside one inputs value.
-func InputExpressions(value string) []string { return wfcel.TemplateExpressions(value, false) }
+// InputExpressions returns the CEL expressions inside one inputs value. A {{
+// that does not close is an error, not an empty list.
+func InputExpressions(value string) ([]string, error) { return wfcel.TemplateExpressions(value, false) }
 
 // CompileInputs checks that every value's expressions compile over the
 // `trigger` root. It reports the first problem per input, in input order.
@@ -48,7 +49,12 @@ func CompileInputs(inputs map[string]string) []*InputsError {
 	}
 	var errs []*InputsError
 	for _, name := range sortedKeys(inputs) {
-		for _, expr := range InputExpressions(inputs[name]) {
+		exprs, err := InputExpressions(inputs[name])
+		if err != nil {
+			errs = append(errs, &InputsError{Input: name, Reason: err.Error()})
+			continue
+		}
+		for _, expr := range exprs {
 			if _, issues := env.Compile(expr); issues != nil && issues.Err() != nil {
 				errs = append(errs, &InputsError{Input: name, Reason: fmt.Sprintf("{{ %s }}: %v", expr, issues.Err())})
 				break
@@ -63,7 +69,7 @@ func CompileInputs(inputs map[string]string) []*InputsError {
 // would be passed to the workflow as the literal text "trigger.payload.x".
 func LooksLikeBareExpression(value string) bool {
 	v := strings.TrimSpace(value)
-	return len(InputExpressions(v)) == 0 && strings.HasPrefix(v, string(wfcel.CELTrigger)+".")
+	return !wfcel.ContainsTemplate(v) && strings.HasPrefix(v, string(wfcel.CELTrigger)+".")
 }
 
 // EvaluateInputs resolves an inputs mapping against a `trigger` root

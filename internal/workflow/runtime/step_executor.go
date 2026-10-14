@@ -1262,7 +1262,11 @@ func (e *StepExecutor) saveMessageRequest(node *reliantv1.Node) *types.SaveMessa
 // a template that works workflow-side into a "no such key" in the worker).
 func (e *StepExecutor) saveMessageIter(node *reliantv1.Node) *model.IterContext {
 	iter := iterContextFromMap(e.iterContext())
-	refs, err := wfcel.ReferencesOf(saveMessageExpressions(node.GetSaveMessage()), wfcel.CELIter)
+	exprs, err := saveMessageExpressions(node.GetSaveMessage())
+	if err != nil {
+		return iter
+	}
+	refs, err := wfcel.ReferencesOf(exprs, wfcel.CELIter)
 	if err == nil && !refs.Referenced {
 		iter.Item = nil
 	}
@@ -1298,7 +1302,11 @@ func (e *StepExecutor) saveMessageInputRefs(node *reliantv1.Node) wfcel.Namespac
 	if refs, ok := e.saveInputRefs[node.GetId()]; ok {
 		return refs
 	}
-	refs, err := wfcel.ReferencesOf(saveMessageExpressions(node.GetSaveMessage()), wfcel.CELInputs)
+	var refs wfcel.NamespaceRefs
+	exprs, err := saveMessageExpressions(node.GetSaveMessage())
+	if err == nil {
+		refs, err = wfcel.ReferencesOf(exprs, wfcel.CELInputs)
+	}
 	if err != nil {
 		e.logger.Warn("[StepExecutor] Could not analyze save_message input references; sending all inputs",
 			"stepID", node.GetId(), "error", err)
@@ -1313,19 +1321,23 @@ func (e *StepExecutor) saveMessageInputRefs(node *reliantv1.Node) wfcel.Namespac
 
 // saveMessageExpressions lists every CEL expression in a save_message: the
 // {{...}} expressions of its templated fields and its raw-CEL condition.
-func saveMessageExpressions(config *reliantv1.SaveMessageConfig) []string {
+func saveMessageExpressions(config *reliantv1.SaveMessageConfig) ([]string, error) {
 	if config == nil {
-		return nil
+		return nil, nil
 	}
 	var exprs []string
 	for _, field := range []*reliantv1.CelString{
 		config.GetRole(), config.GetContent(), config.GetToolCalls(),
 		config.GetToolResults(), config.GetAttachments(), config.GetDisplayStyle(),
 	} {
-		exprs = append(exprs, wfcel.TemplateExpressions(model.CelStringRaw(field), false)...)
+		fieldExprs, err := wfcel.TemplateExpressions(model.CelStringRaw(field), false)
+		if err != nil {
+			return nil, err
+		}
+		exprs = append(exprs, fieldExprs...)
 	}
 	if cond := model.DirectCelExpr(config.GetCondition()); cond != "" {
 		exprs = append(exprs, cond)
 	}
-	return exprs
+	return exprs, nil
 }

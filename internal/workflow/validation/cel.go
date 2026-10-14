@@ -455,64 +455,18 @@ var (
 	responseDataFieldRegex = regexp.MustCompile(`response_data\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)`)
 )
 
-// templateMatch represents a matched template expression
-type templateMatch struct {
-	full  string // The full match including {{}}
-	expr  string // The extracted expression
-	start int    // Start position in the input string
-	end   int    // End position in the input string
-}
-
-// extractTemplateExpressions finds all {{...}} template expressions using a balanced brace parser.
-// This correctly handles nested braces in CEL expressions like: {{ items.map(x, {id: x.id}) }}
-func extractTemplateExpressions(input string) []templateMatch {
-	var matches []templateMatch
-	i := 0
-
-	for i < len(input)-1 {
-		// Find {{
-		if input[i] == '{' && input[i+1] == '{' {
-			start := i
-			exprStart := i + 2
-
-			// Count braces to find matching }}
-			braceCount := 2
-			j := exprStart
-			for j < len(input) && braceCount > 0 {
-				switch input[j] {
-				case '{':
-					braceCount++
-				case '}':
-					braceCount--
-				}
-				j++
-			}
-
-			if braceCount == 0 {
-				// Found matching }}
-				expr := input[exprStart : j-2]
-				matches = append(matches, templateMatch{
-					full:  input[start:j],
-					expr:  strings.TrimSpace(expr),
-					start: start,
-					end:   j,
-				})
-				i = j
-			} else {
-				// Unmatched {{, skip it
-				i++
-			}
-		} else {
-			i++
-		}
+// extractTemplateExpressions returns the well-formed {{ }} holes of input.
+// A {{ that does not close yields none here: validateTemplateSyntax has already
+// reported it, with its position, before any semantic check runs.
+func extractTemplateExpressions(input string) []wfcel.TemplateMatch {
+	matches, err := wfcel.ScanTemplate(input)
+	if err != nil {
+		return nil
 	}
-
 	return matches
 }
 
-func containsTemplate(s string) bool {
-	return strings.Contains(s, "{{") && strings.Contains(s, "}}")
-}
+func containsTemplate(s string) bool { return wfcel.ContainsTemplate(s) }
 
 func suggestSimilar(target string, candidates []string) string {
 	if len(candidates) == 0 {
@@ -1281,7 +1235,8 @@ func rejectSaveMessageNodesRefs(fields map[string]string, condition string, base
 		})
 	}
 	for fieldName, value := range fields {
-		check(fieldName, wfcel.TemplateExpressions(value, false))
+		exprs, _ := wfcel.TemplateExpressions(value, false)
+		check(fieldName, exprs)
 	}
 	if condition != "" && len(extractTemplateExpressions(condition)) == 0 {
 		// A {{ }}-wrapped condition is reported by validateSaveMessageCondition.
@@ -1303,9 +1258,9 @@ func rejectTemplateDelimitersInRawCEL(expr string, path []string, result *Result
 	}
 	message := "conditions are raw CEL; remove the {{ }}"
 	suggestion := "write the expression without {{ }}"
-	if trimmed := strings.TrimSpace(expr); len(matches) == 1 && matches[0].full == trimmed && matches[0].expr != "" {
-		message += ": " + matches[0].expr
-		suggestion = "use: " + matches[0].expr
+	if trimmed := strings.TrimSpace(expr); len(matches) == 1 && matches[0].Full == trimmed && matches[0].Expr != "" {
+		message += ": " + matches[0].Expr
+		suggestion = "use: " + matches[0].Expr
 	}
 	result.Add(&Error{
 		Severity:   SeverityError,
@@ -1356,10 +1311,10 @@ func validateSaveMessageFieldReturnType(fieldName, value string, path []string, 
 	// If the value is a single CEL expression (entire field is just {{expr}}), validate its return type.
 	// If it has multiple expressions or mixed text, individual expressions will be converted to strings,
 	// so we only validate type compatibility for single-expression fields.
-	isSingleExpression := len(matches) == 1 && value == matches[0].full
+	isSingleExpression := len(matches) == 1 && value == matches[0].Full
 
 	for _, match := range matches {
-		expr := match.expr
+		expr := match.Expr
 		if expr == "" {
 			continue
 		}
@@ -1565,6 +1520,9 @@ func validateCELExpressionWithCompilationAndSchema(origExpr, rewrittenExpr strin
 	// Report ALL CEL compilation errors with suggestions
 	if issues != nil && issues.Err() != nil {
 		for _, issue := range issues.Errors() {
+			if isCELSyntaxIssue(issue.Message) {
+				continue // reported, with its position, by validateTemplateSyntax
+			}
 			suggestion := suggestForCELCompilationError(issue.Message, typeCtx)
 			result.Add(&Error{
 				Severity:   SeverityError,
@@ -2746,6 +2704,9 @@ func (tc *SchemaTypeChecker) CheckCELExpressionWithSchema(expr string, celAst *c
 // by compiling it in the environment the runtime evaluates it in (see
 // cel_sites.go), then running the guard analysis (guarded_access.go).
 func ValidateCELWithCompilation(wf *reliantv1.Workflow, result *Result, loader WorkflowLoader) {
+	// The compile pass below drops syntax errors; this is where they are
+	// reported, with a position. Run it first and unconditionally.
+	validateTemplateSyntax(wf, result)
 	typeCtx := BuildWorkflowTypeContext(wf, loader)
 	if typeCtx == nil {
 		return

@@ -27,7 +27,10 @@ func (e *PromptError) Error() string { return "prompt: " + e.Reason }
 // CompilePrompt checks that every expression in prompt compiles over the
 // `trigger` root. A prompt with no {{ }} is plain text and always compiles.
 func CompilePrompt(prompt string) error {
-	exprs := InputExpressions(prompt)
+	exprs, err := InputExpressions(prompt)
+	if err != nil {
+		return &PromptError{Reason: err.Error()}
+	}
 	if len(exprs) == 0 {
 		return nil
 	}
@@ -49,7 +52,7 @@ func CompilePrompt(prompt string) error {
 // run seeded with half a sentence is worse than recording why it did not
 // start.
 func RenderPrompt(prompt string, root map[string]any) (string, error) {
-	if len(InputExpressions(prompt)) == 0 {
+	if !wfcel.ContainsTemplate(prompt) {
 		return prompt, nil
 	}
 	value, err := wfcel.EvaluateTemplate(prompt, &triggerEvalContext{root: root})

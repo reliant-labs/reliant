@@ -392,10 +392,10 @@ func (s *workflowScope) validateTemplate(input string, path []string, site celSi
 		return
 	}
 	for _, match := range extractTemplateExpressions(input) {
-		if match.expr == "" {
+		if match.Expr == "" {
 			continue
 		}
-		s.validateExpression(match.expr, path, env, typeCtx, scope, result)
+		s.validateExpression(match.Expr, path, env, typeCtx, scope, result)
 	}
 }
 
@@ -500,10 +500,10 @@ func (s *workflowScope) validateSaveMessage(node *reliantv1.Node, sm *reliantv1.
 		fieldPath := append(append([]string{}, basePath...), fieldName)
 		if containsTemplate(value) {
 			for _, match := range extractTemplateExpressions(value) {
-				if match.expr == "" || referencesNodes(match.expr) {
+				if match.Expr == "" || referencesNodes(match.Expr) {
 					continue // reported by rejectSaveMessageNodesRefs
 				}
-				s.validateExpression(match.expr, fieldPath, env, typeCtx, fieldScope, result)
+				s.validateExpression(match.Expr, fieldPath, env, typeCtx, fieldScope, result)
 			}
 			validateSaveMessageFieldReturnType(fieldName, value, fieldPath, env, s.nodeIDs, result)
 		} else if isSaveMessageListField(fieldName) {

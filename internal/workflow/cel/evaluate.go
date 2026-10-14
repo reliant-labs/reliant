@@ -50,8 +50,11 @@ func EvaluateTemplate(expr string, ctx CELEvalContext) (interface{}, error) {
 		return "", nil
 	}
 
-	// Find all template expressions using balanced brace parsing.
-	matches := extractTemplates(trimmed)
+	// A {{ that does not close is an error, never literal text.
+	matches, err := ScanTemplate(trimmed)
+	if err != nil {
+		return nil, err
+	}
 
 	// No template expressions — return trimmed string as-is.
 	if len(matches) == 0 {
@@ -60,8 +63,8 @@ func EvaluateTemplate(expr string, ctx CELEvalContext) (interface{}, error) {
 
 	// Pure expression: entire trimmed string is a single {{expr}}.
 	// Return the expression's native type, not a string.
-	if len(matches) == 1 && matches[0].start == 0 && matches[0].end == len(trimmed) {
-		return evaluateRaw(matches[0].expr, ctx)
+	if len(matches) == 1 && matches[0].Start == 0 && matches[0].End == len(trimmed) {
+		return evaluateRaw(matches[0].Expr, ctx)
 	}
 
 	// Mixed string with embedded expressions — interpolate to string.
@@ -69,18 +72,18 @@ func EvaluateTemplate(expr string, ctx CELEvalContext) (interface{}, error) {
 	lastEnd := 0
 
 	for _, match := range matches {
-		result.WriteString(trimmed[lastEnd:match.start])
+		result.WriteString(trimmed[lastEnd:match.Start])
 
-		value, err := evaluateRaw(match.expr, ctx)
+		value, err := evaluateRaw(match.Expr, ctx)
 		if err != nil {
-			return nil, fmt.Errorf("template expression '{{%s}}': %w", match.expr, err)
+			return nil, fmt.Errorf("template expression '{{%s}}': %w", match.Expr, err)
 		}
 
 		if value != nil {
 			result.WriteString(valueToString(value))
 		}
 
-		lastEnd = match.end
+		lastEnd = match.End
 	}
 
 	result.WriteString(trimmed[lastEnd:])
@@ -126,60 +129,6 @@ func evaluateRaw(expr string, ctx CELEvalContext) (interface{}, error) {
 	}
 
 	return ConvertToNative(out.Value()), nil
-}
-
-// =============================================================================
-// TEMPLATE PARSING
-// =============================================================================
-
-// templateExpr represents a matched {{...}} template expression.
-type templateExpr struct {
-	expr  string // The extracted expression (trimmed)
-	start int    // Start position in the input string
-	end   int    // End position in the input string
-}
-
-// extractTemplates finds all {{...}} template expressions using balanced brace parsing.
-// Correctly handles nested braces in CEL expressions like: {{ items.map(x, {id: x.id}) }}
-func extractTemplates(input string) []templateExpr {
-	var matches []templateExpr
-	i := 0
-
-	for i < len(input)-1 {
-		if input[i] == '{' && input[i+1] == '{' {
-			start := i
-			exprStart := i + 2
-
-			// Count braces to find matching }}
-			braceCount := 2
-			j := exprStart
-			for j < len(input) && braceCount > 0 {
-				switch input[j] {
-				case '{':
-					braceCount++
-				case '}':
-					braceCount--
-				}
-				j++
-			}
-
-			if braceCount == 0 {
-				expr := input[exprStart : j-2]
-				matches = append(matches, templateExpr{
-					expr:  strings.TrimSpace(expr),
-					start: start,
-					end:   j,
-				})
-				i = j
-			} else {
-				i++
-			}
-		} else {
-			i++
-		}
-	}
-
-	return matches
 }
 
 // =============================================================================

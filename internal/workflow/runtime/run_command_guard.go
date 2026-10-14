@@ -9,6 +9,7 @@ import (
 	"github.com/google/cel-go/common/operators"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -33,7 +34,10 @@ func requireRunCommandValues(node *reliantv1.Node, builder *CELContextBuilder) e
 		return nil
 	}
 	raw := model.CelStringRaw(run.GetCommand())
-	matches := extractTemplateExpressions(raw)
+	matches, err := wfcel.ScanTemplate(raw)
+	if err != nil {
+		return fmt.Errorf("run node %q: command: %w", node.GetId(), err)
+	}
 	if len(matches) == 0 {
 		return nil
 	}
@@ -42,7 +46,7 @@ func requireRunCommandValues(node *reliantv1.Node, builder *CELContextBuilder) e
 		return err
 	}
 	for _, match := range matches {
-		expr := strings.TrimSpace(match.expr)
+		expr := match.Expr
 		checked, issues := env.Compile(expr)
 		if issues != nil && issues.Err() != nil {
 			// Resolution already ran and would have reported this.
