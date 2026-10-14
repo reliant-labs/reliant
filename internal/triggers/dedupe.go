@@ -2,6 +2,7 @@
 package triggers
 
 import (
+	"context"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -24,7 +25,7 @@ import (
 // (a missing field, an empty result). That last case degrades to the default
 // rather than dropping or merging events, and is logged so the author hears
 // about a key that does not fit the payload.
-func (in *Intake) declaredDedupeKey(trigger *core.Trigger, decl *Declaration, ev InboundEvent, occurredAt time.Time) string {
+func (in *Intake) declaredDedupeKey(ctx context.Context, trigger *core.Trigger, decl *Declaration, ev InboundEvent, occurredAt time.Time) string {
 	if decl == nil || decl.DedupeKey == "" || ev.Kind != core.TriggerEventKindWebhook {
 		return ev.DedupeKey
 	}
@@ -34,7 +35,7 @@ func (in *Intake) declaredDedupeKey(trigger *core.Trigger, decl *Declaration, ev
 		return ev.DedupeKey
 	}
 	root := FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, OccurredAt: occurredAt, Payload: ev.Payload, Sender: ev.Sender}.Root()
-	rendered, err := triggerspec.RenderDedupeKey(decl.DedupeKey, root)
+	rendered, err := triggerspec.RenderDedupeKey(decl.DedupeKey, ActivationScope(ctx, in.repo, trigger, decl, root))
 	if err != nil {
 		logging.Warn("trigger dedupe_key did not render for a delivery; using the receiver's dedupe key",
 			"trigger_id", trigger.ID, "error", err)

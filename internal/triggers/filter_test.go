@@ -228,7 +228,7 @@ func TestWontfixFilterOverARecordedGitHubIssue(t *testing.T) {
 // runtime puts on it must be declared there, or validation would reject a
 // filter that runs.
 func TestFilterRootMatchesTheDeclaredShape(t *testing.T) {
-	shape, err := triggerspec.NewShape()
+	shape, err := triggerspec.NewShape(nil)
 	require.NoError(t, err)
 	root := FilterInput{
 		Kind: "integration", TriggerID: "t", EventID: "e", OccurredAt: time.Now(),

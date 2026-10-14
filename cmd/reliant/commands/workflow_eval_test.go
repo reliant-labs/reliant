@@ -117,7 +117,7 @@ func TestWorkflowValidate_TriggerPayloadDryRunsDeclaredTriggers(t *testing.T) {
 	dir := writeWorkflowsDir(t, map[string]string{"triage.yaml": triggerDryRunWorkflow})
 	file := filepath.Join(dir, "triage.yaml")
 
-	sample, err := triggerSampleFromFlags(`{"data":{"issue":{"number":7,"labels":["bug"]}}}`, "")
+	sample, err := triggerSampleFromFlags(`{"data":{"issue":{"number":7,"labels":["bug"]}}}`, "", "", "")
 	require.NoError(t, err)
 	layout, err := readWorkflowLayout(dir)
 	require.NoError(t, err)
@@ -128,7 +128,7 @@ func TestWorkflowValidate_TriggerPayloadDryRunsDeclaredTriggers(t *testing.T) {
 
 	// A filter that does not match is a note, not an error.
 	res = validateWorkflowFileIn(file, dir, layout)
-	sample, _ = triggerSampleFromFlags(`{"data":{"issue":{"number":7,"labels":["wontfix"]}}}`, "")
+	sample, _ = triggerSampleFromFlags(`{"data":{"issue":{"number":7,"labels":["wontfix"]}}}`, "", "", "")
 	dryRunTriggers(&res, file, sample)
 	assert.True(t, res.Valid, "%v", res.Errors)
 	assert.Contains(t, res.Warnings[len(res.Warnings)-1], "does not match this sample event")
@@ -153,15 +153,15 @@ nodes:
 	require.NoError(t, err)
 	file2 := filepath.Join(dir2, "bad.yaml")
 	res = validateWorkflowFileIn(file2, dir2, layout2)
-	sample, _ = triggerSampleFromFlags(`{"data":{"issue":{"labels":["bug"]}}}`, "")
+	sample, _ = triggerSampleFromFlags(`{"data":{"issue":{"labels":["bug"]}}}`, "", "", "")
 	dryRunTriggers(&res, file2, sample)
 	assert.False(t, res.Valid, "a filter that cannot work on a real event fails the dry run")
 }
 
 func TestWorkflowValidate_TriggerSenderNeedsAPayload(t *testing.T) {
-	_, err := triggerSampleFromFlags("", `{"id":"1"}`)
+	_, err := triggerSampleFromFlags("", `{"id":"1"}`, "", "")
 	require.Error(t, err)
-	s, err := triggerSampleFromFlags("", "")
+	s, err := triggerSampleFromFlags("", "", "", "")
 	require.NoError(t, err)
 	assert.Nil(t, s)
 }

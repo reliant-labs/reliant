@@ -178,6 +178,32 @@ func TestActivationParamsForUnmappedInputs(t *testing.T) {
 	assert.Equal(t, "deep", got.GetParams()["mode"].GetStringValue())
 }
 
+// Params are what a declaration's filter, inputs and prompt read as
+// trigger.activation.params, so one that names no input, or has the wrong type, is
+// refused when the activation is written rather than matching nothing on
+// every event.
+func TestActivationParamsAreCheckedAgainstTheWorkflowsInputs(t *testing.T) {
+	env := setupTriggerTest(t)
+	env.saveWorkflow(t, "triage", declaringWorkflowYAML)
+
+	for name, tc := range map[string]struct {
+		params map[string]*structpb.Value
+		want   string
+	}{
+		"a misspelt param": {map[string]*structpb.Value{"mdoe": structpb.NewStringValue("deep")}, `"mdoe" is not an input of this workflow; did you mean 'mode'?`},
+		"the wrong type":   {map[string]*structpb.Value{"mode": structpb.NewNumberValue(3)}, "input 'mode' expects string"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+				Trigger: env.activation("nightly", func(d *reliantv1.TriggerDefinition) { d.Params = tc.params }),
+			}))
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), err.Error())
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+}
+
 // Editing the workflow changes what every activation does. Removing or
 // renaming the declaration leaves the activation BROKEN — reported, not
 // dropped, and not fired.

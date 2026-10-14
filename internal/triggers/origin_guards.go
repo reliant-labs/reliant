@@ -2,6 +2,7 @@
 package triggers
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -22,7 +23,7 @@ import (
 //
 // A skip names its reason, with the run when it is the owner's own, so the
 // Automations history explains every one.
-func (in *Intake) applyOriginGuards(trigger *core.Trigger, decl *Declaration, ev InboundEvent, origin *core.TriggerOrigin, occurredAt time.Time) (core.TriggerEventOutcome, string) {
+func (in *Intake) applyOriginGuards(ctx context.Context, trigger *core.Trigger, decl *Declaration, ev InboundEvent, origin *core.TriggerOrigin, occurredAt time.Time) (core.TriggerEventOutcome, string) {
 	if origin != nil && origin.CausedByReliant {
 		chain := lineage.FromCore(origin.Lineage)
 		for len(chain) < origin.LineageDepth() {
@@ -44,7 +45,7 @@ func (in *Intake) applyOriginGuards(trigger *core.Trigger, decl *Declaration, ev
 	root := FilterInput{
 		Kind: string(ev.Kind), TriggerID: trigger.ID, OccurredAt: occurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: origin,
 	}.Root()
-	allowed, err := filter.Allow(root)
+	allowed, err := filter.Allow(ActivationScope(ctx, in.repo, trigger, decl, root))
 	if err != nil {
 		return core.TriggerEventFailed, fmt.Sprintf(
 			"the trigger's origin_filter could not evaluate this event (%v); trigger.origin always has every key, so check the rest of the expression", err)

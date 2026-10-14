@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/lineage"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 )
 
 // chatIDNamespace seeds the deterministic chat id a workflow-event launch goes
@@ -55,6 +56,9 @@ type Spec struct {
 	// Inputs maps workflow inputs to templates over `trigger`; set for an
 	// activation of a declared trigger.
 	Inputs map[string]string
+	// Declaration is the declared trigger an activation fires from; nil for
+	// an ad hoc trigger. It types activation.params.
+	Declaration *triggers.Declaration
 }
 
 // SpecOf reads a stored trigger's workflow_event spec: Source from its config,
@@ -112,7 +116,7 @@ func (d *Dispatcher) specOf(ctx context.Context, t *core.Trigger) (Spec, error) 
 	if err := json.Unmarshal(decl.Source.Config, &src); err != nil {
 		return Spec{}, fmt.Errorf("trigger %s: declared workflow_event config: %w", t.ID, err)
 	}
-	return Spec{Source: src, Filter: decl.Filter, Inputs: decl.Inputs}, nil
+	return Spec{Source: src, Filter: decl.Filter, Inputs: decl.Inputs, Declaration: decl}, nil
 }
 
 // Result is one trigger's verdict on one run event.
@@ -210,8 +214,10 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 	next := chain.Extend(trigger.ID, ev.ChatID)
 	launchEv := d.buildEvent(trigger, ev, next)
 
-	// The filter sees exactly what the launched run would see as `trigger`.
-	pass, err := d.filter(spec.Filter, triggerRoot(launchEv))
+	// The filter sees exactly what the launched run would see as `trigger`,
+	// and the activation it fires for.
+	scope := triggers.ActivationScope(ctx, d.repo, trigger, spec.Declaration, triggerRoot(launchEv))
+	pass, err := d.filter(spec.Filter, scope)
 	if err != nil {
 		return d.record(ctx, trigger, ev, chain, core.TriggerEventFailed, "filter error: "+err.Error())
 	}
@@ -219,7 +225,7 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, "filter did not match")
 	}
 
-	launchSpec, err := d.buildSpec(trigger, ev, launchEv, spec.Inputs)
+	launchSpec, err := d.buildSpec(trigger, ev, launchEv, spec, scope)
 	if err != nil {
 		return d.record(ctx, trigger, ev, chain, core.TriggerEventFailed, err.Error())
 	}
@@ -295,9 +301,9 @@ func triggerRoot(ev launch.Event) map[string]any {
 // buildSpec is what a workflow-event run is: owned by the trigger's user,
 // unattended, seeded with the trigger's prompt plus a hidden note saying what
 // started it.
-func (d *Dispatcher) buildSpec(trigger *core.Trigger, ev *core.RunEvent, launchEv launch.Event, inputs map[string]string) (launch.Spec, error) {
+func (d *Dispatcher) buildSpec(trigger *core.Trigger, ev *core.RunEvent, launchEv launch.Event, spec Spec, scope triggerspec.Scope) (launch.Spec, error) {
 	dedupe := launchEv.DedupeKey
-	values, err := triggers.MergeDeclaredInputs(trigger.Params, inputs, triggerRoot(launchEv))
+	values, err := triggers.MergeDeclaredInputs(trigger.Params, spec.Inputs, scope)
 	if err != nil {
 		return launch.Spec{}, fmt.Errorf("the declared trigger's inputs could not be read from this event: %w", err)
 	}

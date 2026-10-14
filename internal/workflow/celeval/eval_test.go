@@ -230,9 +230,9 @@ nodes:
     type: save_message
     args: {role: assistant, content: x}
 `)
-	run := DryRunTrigger(wf.GetTriggers()[0], map[string]any{
+	run := DryRunTrigger(wf.GetTriggers()[0], wf.GetInputs(), map[string]any{
 		"data": map[string]any{"issue": map[string]any{"number": 101, "title": "  boom  ", "labels": []any{"bug"}}},
-	}, nil)
+	}, nil, nil)
 	assert.Empty(t, run.Errors(), "%+v", run)
 	require.NotNil(t, run.Matched)
 	assert.True(t, *run.Matched)
@@ -241,9 +241,9 @@ nodes:
 	assert.Equal(t, "Triage #101:   boom  ", run.Prompt)
 	assert.Contains(t, run.Source, "generated from the payload github declares for issues.opened")
 
-	run = DryRunTrigger(wf.GetTriggers()[0], map[string]any{
+	run = DryRunTrigger(wf.GetTriggers()[0], wf.GetInputs(), map[string]any{
 		"data": map[string]any{"issue": map[string]any{"number": 101, "labels": []any{"wontfix"}}},
-	}, nil)
+	}, nil, nil)
 	require.NotNil(t, run.Matched)
 	assert.False(t, *run.Matched, "a filter that does not match is a result, not an error")
 	assert.Empty(t, run.Errors())
@@ -267,7 +267,7 @@ nodes:
     type: save_message
     args: {role: assistant, content: x}
 `)
-	run := DryRunTrigger(wf.GetTriggers()[0], map[string]any{"body": map[string]any{"status": "firing"}}, nil)
+	run := DryRunTrigger(wf.GetTriggers()[0], wf.GetInputs(), map[string]any{"body": map[string]any{"status": "firing"}}, nil, nil)
 	errs := run.Errors()
 	require.NotEmpty(t, errs)
 	joined := strings.Join(errs, "\n")
@@ -298,11 +298,122 @@ nodes:
     type: save_message
     args: {role: assistant, content: x}
 `)
-	run := DryRunTrigger(wf.GetTriggers()[0], map[string]any{"body": map[string]any{"groupKey": "g1", "status": "firing"}}, nil)
+	run := DryRunTrigger(wf.GetTriggers()[0], wf.GetInputs(), map[string]any{"body": map[string]any{"groupKey": "g1", "status": "firing"}}, nil, nil)
 	assert.Empty(t, run.Errors())
 	assert.Equal(t, "g1:firing", run.DedupeKey)
 
-	run = DryRunTrigger(wf.GetTriggers()[0], map[string]any{"body": map[string]any{"status": "firing"}}, nil)
+	run = DryRunTrigger(wf.GetTriggers()[0], wf.GetInputs(), map[string]any{"body": map[string]any{"status": "firing"}}, nil, nil)
 	require.NotEmpty(t, run.Errors())
 	assert.Contains(t, run.Errors()[0], "dedupe_key")
+}
+
+// A declared trigger that reads trigger.activation.params is dry-run with the params a
+// sample activation sets; the rest read as the workflow's defaults.
+func TestDryRunTrigger_ReadsActivationParams(t *testing.T) {
+	wf := mustParse(t, `
+name: dry3
+inputs:
+  repos: {type: array, default: []}
+  team: {type: string, default: platform}
+  number: {type: integer, default: 0}
+triggers:
+  - name: new-issue
+    integration:
+      integration: github
+      events: [issues.opened]
+    filter: "trigger.payload.attributes.repository in trigger.activation.params.repos"
+    inputs:
+      number: "{{ trigger.payload.data.issue.number }}"
+    prompt: "{{ trigger.activation.params.team }} triages #{{ trigger.payload.data.issue.number }}"
+entry: [a]
+nodes:
+  - id: a
+    type: save_message
+    args: {role: assistant, content: x}
+`)
+	wt := wf.GetTriggers()[0]
+	sample := map[string]any{"attributes": map[string]any{"repository": "acme/web"}, "data": map[string]any{"issue": map[string]any{"number": 7}}}
+
+	in := DryRunTrigger(wt, wf.GetInputs(), sample, nil, &ActivationSample{Params: map[string]any{"repos": []any{"acme/web", "acme/docs"}, "team": "frontend"}})
+	assert.Empty(t, in.Errors(), "%+v", in)
+	require.NotNil(t, in.Matched)
+	assert.True(t, *in.Matched, "acme/web is in this activation's repos")
+	assert.Equal(t, "frontend triages #7", in.Prompt)
+
+	out := DryRunTrigger(wt, wf.GetInputs(), sample, nil, &ActivationSample{Params: map[string]any{"repos": []any{"acme/api"}}})
+	require.NotNil(t, out.Matched)
+	assert.False(t, *out.Matched, "acme/web is not in the other activation's repos")
+	assert.Equal(t, "platform triages #7", out.Prompt, "a param nobody set reads the workflow's default")
+
+	unset := DryRunTrigger(wt, wf.GetInputs(), sample, nil, nil)
+	require.NotNil(t, unset.Matched)
+	assert.False(t, *unset.Matched, "an unset list is empty, so nothing matches")
+	assert.Empty(t, unset.Errors())
+}
+
+func TestEvaluate_ScopeTriggerReadsActivationParams(t *testing.T) {
+	res := Evaluate(Request{
+		Expression: "trigger.payload.attributes.repository in trigger.activation.params.repos",
+		Kind:       KindExpression, Scope: ScopeTrigger,
+		TriggerPayload:   map[string]any{"attributes": map[string]any{"repository": "acme/web"}},
+		ActivationParams: map[string]any{"repos": []any{"acme/web"}},
+	})
+	require.Nil(t, res.Error, "%+v", res.Error)
+	assert.Equal(t, true, res.Value)
+
+	// With no workflow named there are no input defaults, so a param nobody
+	// supplied is the "no such key" a real run would hit without one.
+	res = Evaluate(Request{
+		Expression: "trigger.activation.params.repos.size()", Kind: KindExpression, Scope: ScopeTrigger,
+		TriggerPayload: map[string]any{"x": 1},
+	})
+	require.NotNil(t, res.Error)
+	assert.Contains(t, res.Error.Message, "no such key: repos")
+
+	res = Evaluate(Request{
+		Expression: "size(trigger.activation.params)", Kind: KindExpression, Scope: ScopeTrigger,
+		TriggerPayload: map[string]any{"x": 1},
+	})
+	require.Nil(t, res.Error, "trigger.activation.params itself always exists: %+v", res.Error)
+	assert.EqualValues(t, 0, res.Value)
+}
+
+// A node cannot read `activation`: it is not part of a run's scope.
+func TestEvaluate_RunScopeHasNoActivation(t *testing.T) {
+	res := Evaluate(Request{Expression: "trigger.activation.params.repos", Kind: KindExpression, TriggerPayload: map[string]any{"x": 1}})
+	require.NotNil(t, res.Error)
+}
+
+func TestDryRunTrigger_ReadsTheActivationOwner(t *testing.T) {
+	wf := mustParse(t, `
+name: dry4
+inputs:
+  trusted_ids: {type: array, default: []}
+triggers:
+  - name: new-issue
+    integration:
+      integration: github
+      events: [issues.opened]
+    filter: "trigger.sender.verified && (trigger.sender.id == trigger.activation.owner.github_id || trigger.sender.id in trigger.activation.params.trusted_ids)"
+entry: [a]
+nodes:
+  - id: a
+    type: save_message
+    args: {role: assistant, content: x}
+`)
+	wt := wf.GetTriggers()[0]
+	sender := map[string]any{"kind": "github", "id": "583231", "verified": true}
+
+	me := DryRunTrigger(wt, wf.GetInputs(), map[string]any{}, sender, &ActivationSample{OwnerGitHubID: "583231"})
+	assert.Empty(t, me.Errors(), "%+v", me)
+	require.NotNil(t, me.Matched)
+	assert.True(t, *me.Matched)
+
+	other := DryRunTrigger(wt, wf.GetInputs(), map[string]any{}, sender, &ActivationSample{OwnerGitHubID: "1"})
+	require.NotNil(t, other.Matched)
+	assert.False(t, *other.Matched)
+
+	trusted := DryRunTrigger(wt, wf.GetInputs(), map[string]any{}, sender, &ActivationSample{Params: map[string]any{"trusted_ids": []any{"583231"}}})
+	require.NotNil(t, trusted.Matched)
+	assert.True(t, *trusted.Matched, "a trusted id by string")
 }

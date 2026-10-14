@@ -22,8 +22,9 @@ import (
 //   - a mixed string ("PR #{{ trigger.payload.data.number }}"), which yields
 //     the interpolated string.
 //
-// Like a filter, it sees only `trigger`: it is evaluated when the event
-// launches a run, before that run has inputs, nodes or a workflow context.
+// Like a filter, it sees only `trigger` (with `trigger.activation` under it):
+// it is evaluated when the event launches a run, before that run has inputs,
+// nodes or a workflow context.
 
 // InputsError reports an inputs mapping that cannot run.
 type InputsError struct {
@@ -38,7 +39,7 @@ func (e *InputsError) Error() string { return fmt.Sprintf("inputs.%s: %s", e.Inp
 func InputExpressions(value string) ([]string, error) { return wfcel.TemplateExpressions(value, false) }
 
 // CompileInputs checks that every value's expressions compile over the
-// `trigger` root. It reports the first problem per input, in input order.
+// `trigger` root, activation included. It reports the first problem per input, in input order.
 func CompileInputs(inputs map[string]string) []*InputsError {
 	if len(inputs) == 0 {
 		return nil
@@ -72,15 +73,15 @@ func LooksLikeBareExpression(value string) bool {
 	return !wfcel.ContainsTemplate(v) && strings.HasPrefix(v, string(wfcel.CELTrigger)+".")
 }
 
-// EvaluateInputs resolves an inputs mapping against a `trigger` root
-// (runtime.TriggerInfo.CELValue's shape). An evaluation error — a key the
-// payload lacks — fails the whole mapping: launching with an input silently
-// missing is worse than recording why it could not launch.
-func EvaluateInputs(inputs map[string]string, root map[string]any) (map[string]any, error) {
+// EvaluateInputs resolves an inputs mapping against an event and its
+// activation. An evaluation error — a key the payload lacks — fails the
+// whole mapping: launching with an input silently missing is worse than
+// recording why it could not launch.
+func EvaluateInputs(inputs map[string]string, scope Scope) (map[string]any, error) {
 	if len(inputs) == 0 {
 		return nil, nil
 	}
-	ctx := &triggerEvalContext{root: root}
+	ctx := &triggerEvalContext{scope: scope}
 	out := make(map[string]any, len(inputs))
 	for _, name := range sortedKeys(inputs) {
 		value, err := wfcel.EvaluateTemplate(inputs[name], ctx)
@@ -94,10 +95,10 @@ func EvaluateInputs(inputs map[string]string, root map[string]any) (map[string]a
 
 // triggerEvalContext is the CEL evaluation context with only the `trigger`
 // namespace.
-type triggerEvalContext struct{ root map[string]any }
+type triggerEvalContext struct{ scope Scope }
 
 func (c *triggerEvalContext) Activation() map[string]any {
-	return wfcel.EnsureNamespaceDefaults(map[string]any{string(wfcel.CELTrigger): c.root}, c.Namespaces())
+	return wfcel.EnsureNamespaceDefaults(c.scope.Vars(), c.Namespaces())
 }
 
 func (c *triggerEvalContext) Namespaces() []wfcel.CELNamespace {

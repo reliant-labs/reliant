@@ -134,14 +134,14 @@ func TestEvaluateInputs(t *testing.T) {
 		"summary":      "#{{ trigger.payload.data.issue.number }}: {{ trigger.payload.data.issue.title }}",
 		"branch":       "main",
 		"source":       "{{ trigger.kind }}",
-	}, root)
+	}, Scope{Trigger: root})
 	require.NoError(t, err)
 	assert.Equal(t, int64(42), got["issue_number"], "a pure expression keeps its native type")
 	assert.Equal(t, "#42: Crash", got["summary"])
 	assert.Equal(t, "main", got["branch"])
 	assert.Equal(t, "integration", got["source"])
 
-	_, err = EvaluateInputs(map[string]string{"missing": "{{ trigger.payload.data.pull_request.number }}"}, root)
+	_, err = EvaluateInputs(map[string]string{"missing": "{{ trigger.payload.data.pull_request.number }}"}, Scope{Trigger: root})
 	var inErr *InputsError
 	require.ErrorAs(t, err, &inErr)
 	assert.Equal(t, "missing", inErr.Input)
@@ -150,7 +150,7 @@ func TestEvaluateInputs(t *testing.T) {
 func TestFilterMatchRoot(t *testing.T) {
 	f, err := CompileFilter("trigger.payload.action == 'opened'")
 	require.NoError(t, err)
-	hit, err := f.MatchRoot(map[string]any{"payload": map[string]any{"action": "opened"}})
+	hit, err := f.MatchScope(Scope{Trigger: map[string]any{"payload": map[string]any{"action": "opened"}}})
 	require.NoError(t, err)
 	assert.True(t, hit)
 
@@ -169,10 +169,10 @@ func TestUnclosedTemplatesAreErrorsNotLiterals(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "line 1, column 8")
 
-	_, err = EvaluateInputs(map[string]string{"a": "{{ trigger.payload.x"}, map[string]any{"payload": map[string]any{"x": 1}})
+	_, err = EvaluateInputs(map[string]string{"a": "{{ trigger.payload.x"}, Scope{Trigger: map[string]any{"payload": map[string]any{"x": 1}}})
 	require.Error(t, err)
 
-	_, err = RenderPrompt("p {{ trigger.kind", map[string]any{"kind": "k"})
+	_, err = RenderPrompt("p {{ trigger.kind", Scope{Trigger: map[string]any{"kind": "k"}})
 	require.Error(t, err)
 }
 
@@ -181,7 +181,7 @@ func TestBracesInStringLiteralsAreEvaluatedInInputs(t *testing.T) {
 	out, err := EvaluateInputs(map[string]string{
 		"is_json": "{{ trigger.payload.body.startsWith('{') }}",
 		"folded":  "{{ trigger.payload.body\n  + '}' }}",
-	}, root)
+	}, Scope{Trigger: root})
 	require.NoError(t, err)
 	assert.Equal(t, true, out["is_json"])
 	assert.Equal(t, "{\"a\":1}}", out["folded"])

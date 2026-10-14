@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"github.com/reliant-labs/reliant/internal/workflow/validation"
 )
 
 // defaultTriggerEventLimit bounds ListTriggerEvents when the caller asks for
@@ -797,6 +798,12 @@ func (s *TriggerService) resolveActivation(ctx context.Context, userID string, d
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 				"params.%s: the declared trigger %q sets this input from each event; remove it from params", input, name))
 		}
+	}
+	// Params are what filters, inputs and prompts read as activation.params,
+	// so a misspelt or mistyped one would match nothing on every event.
+	if problems := validation.ValidateParams(wf.GetInputs(), triggers.ParamsFromProto(def.Params)); len(problems) > 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"params: %s", strings.Join(problems, "; ")))
 	}
 	return decl, nil
 }

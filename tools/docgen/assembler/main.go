@@ -377,6 +377,13 @@ over the activation's params (activation refuses a param it would override).
 ` + bt + `inputs` + bt + `. Write it so activating needs no prompt: an activation's own ` + bt + `message` + bt + ` overrides it, and with
 neither, activation is refused. The event is still attached after it as untrusted data.
 
+**` + bt + `trigger.activation` + bt + `** is the activation the event fires for, readable in a ` + bt + `filter` + bt + `, ` + bt + `inputs` + bt + `, ` + bt + `prompt` + bt + ` and ` + bt + `dedupe_key` + bt + ` (not in nodes, which read ` + bt + `inputs` + bt + `):
+` + bt + `trigger.activation.params.<input>` + bt + `, ` + bt + `.id` + bt + `, ` + bt + `.owner.user_id` + bt + `, and ` + bt + `.owner.github_id` + bt + ` (the GitHub user id of the connection it listens through, a string; empty without one). Use it so one declaration serves many activations instead of pasting
+a repo list into the filter: declare ` + bt + `repos: {type: array, default: []}` + bt + ` as an input and write ` + bt + `filter: "trigger.payload.attributes.repository in trigger.activation.params.repos"` + bt + `; each activation sets its own
+` + bt + `params: {repos: [...]}` + bt + `. ` + bt + `params` + bt + ` holds the workflow's inputs except those this trigger's ` + bt + `inputs` + bt + ` map from the event, with defaults applied and declared types, so an unset list is ` + bt + `[]` + bt + `.
+Validation types it from the workflow's inputs: ` + bt + `trigger.activation.params.repo` + bt + ` for a ` + bt + `repos` + bt + ` input is an error when you save. Trust is a filter, not a table: ids are strings, so
+` + bt + `trigger.sender.verified && (trigger.sender.id == trigger.activation.owner.github_id || trigger.sender.id in trigger.activation.params.trusted_ids)` + bt + ` admits you and the quoted ids in a ` + bt + `trusted_ids` + bt + ` array input.
+
 **` + bt + `dedupe_key` + bt + `** (webhook triggers only) is a ` + bt + `{{ }}` + bt + ` template over ` + bt + `trigger` + bt + ` that names the event a delivery is about. Use
 it for a sender with no idempotency header, such as Alertmanager, which re-sends a group with a changed body: the
 default key (an idempotency header, else the body hash within one minute) would make every repeat a new run. Deliveries
@@ -387,10 +394,10 @@ suppressed, not a sliding guarantee. A key that cannot render for a delivery fal
 
 **Test a trigger before handing it over.** ` + bt + `cel_eval` + bt + ` with ` + bt + `integration` + bt + ` + ` + bt + `event` + bt + ` generates ` + bt + `trigger.payload` + bt + ` from the payload that
 event declares (add ` + bt + `trigger_payload` + bt + ` to override only the fields your expression reads), and ` + bt + `scope: trigger` + bt + ` gives a
-filter's, inputs mapping's or prompt's view (only ` + bt + `trigger` + bt + `). It returns the value and its type, or the error with its
+filter's, inputs mapping's or prompt's view (only ` + bt + `trigger` + bt + `, activation included; give it ` + bt + `activation_params` + bt + ` and ` + bt + `owner_github_id` + bt + `). It returns the value and its type, or the error with its
 phase and position, plus ` + bt + `findings` + bt + ` for reads the declared payload rules out. Do this instead of waiting for a real
 event: you cannot enable the trigger, so a real event never comes from you. ` + bt + `reliant workflow eval` + bt + ` is the same on the command line, and ` + bt + `reliant workflow validate --trigger-payload` + bt + `
-dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a sample event.
+dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a sample event, with ` + bt + `--activation-params` + bt + ` and ` + bt + `--owner-github-id` + bt + ` for the sample activation.
 
 **Chat is a trigger too, on by default.** Set top-level ` + bt + `automation_only: true` + bt + ` for a workflow only its
 ` + bt + `triggers:` + bt + ` should start: chat pickers stop offering it and starting it from a chat is refused

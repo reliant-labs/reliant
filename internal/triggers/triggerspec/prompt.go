@@ -25,7 +25,7 @@ type PromptError struct{ Reason string }
 func (e *PromptError) Error() string { return "prompt: " + e.Reason }
 
 // CompilePrompt checks that every expression in prompt compiles over the
-// `trigger` root. A prompt with no {{ }} is plain text and always compiles.
+// `trigger` root, activation included. A prompt with no {{ }} is plain text and always compiles.
 func CompilePrompt(prompt string) error {
 	exprs, err := InputExpressions(prompt)
 	if err != nil {
@@ -46,16 +46,16 @@ func CompilePrompt(prompt string) error {
 	return nil
 }
 
-// RenderPrompt resolves prompt against a `trigger` root. A value an
+// RenderPrompt resolves prompt against an event and its activation (both under `trigger`). A value an
 // expression yields that is not a string (a number, a list) is written as
 // JSON. An evaluation error — a key the payload lacks — fails the render: a
 // run seeded with half a sentence is worse than recording why it did not
 // start.
-func RenderPrompt(prompt string, root map[string]any) (string, error) {
+func RenderPrompt(prompt string, scope Scope) (string, error) {
 	if !wfcel.ContainsTemplate(prompt) {
 		return prompt, nil
 	}
-	value, err := wfcel.EvaluateTemplate(prompt, &triggerEvalContext{root: root})
+	value, err := wfcel.EvaluateTemplate(prompt, &triggerEvalContext{scope: scope})
 	if err != nil {
 		return "", &PromptError{Reason: err.Error() + "; guard optional fields with has() or a ternary"}
 	}

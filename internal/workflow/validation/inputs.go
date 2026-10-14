@@ -615,3 +615,44 @@ func validateProtoGroupInput(groupName string, groupInput *reliantv1.Input, inpu
 		}
 	}
 }
+
+// ValidateParams checks values someone supplies for a workflow's inputs ahead
+// of a run (an activation's params): each must name a declared input and fit
+// its type and constraints. Unlike ValidateInputs it does not require the
+// inputs nobody supplied, because the rest come from the event, defaults or
+// presets when the run starts. Group inputs are left to the launch, which
+// sees them nested. It returns one message per problem, in name order.
+func ValidateParams(declared map[string]*reliantv1.Input, params map[string]any) []string {
+	names := make([]string, 0, len(params))
+	for name := range params {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var valid []string
+	for name, input := range declared {
+		if input != nil && !model.IsGroupInput(input) {
+			valid = append(valid, name)
+		}
+	}
+	sort.Strings(valid)
+
+	var problems []string
+	for _, name := range names {
+		input := declared[name]
+		switch {
+		case input == nil:
+			msg := fmt.Sprintf("%q is not an input of this workflow", name)
+			if hint := suggestSimilar(name, valid); hint != "" {
+				msg += "; " + hint
+			}
+			problems = append(problems, msg)
+		case model.IsGroupInput(input) || params[name] == nil:
+		default:
+			if err := validateProtoInputType(name, params[name], input); err != nil {
+				problems = append(problems, err.Error())
+			}
+		}
+	}
+	return problems
+}

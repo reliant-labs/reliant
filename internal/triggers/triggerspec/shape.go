@@ -57,20 +57,22 @@ type TypeError struct {
 
 func (e *TypeError) Error() string { return e.Reason }
 
-// Shape is the declared type of the `trigger` root for a trigger whose
-// payload has a schema.
+// Shape is the declared type of the `trigger` root, `trigger.activation`
+// included, for a trigger whose payload and params have schemas.
 type Shape struct {
 	env  *cel.Env
 	root *shapeNode
 }
 
 // NewShape types `trigger` for a source whose events deliver payloads with
-// these JSON Schemas (trigger.payload, envelope included). Several schemas —
-// a trigger on more than one event — are their union: a field any event
-// declares may be read, and a field the events declare with different types
-// is dyn. With no schema the payload is dyn; the rest of the root is still
+// these JSON Schemas (trigger.payload, envelope included), and
+// `activation.params` with params' JSON Schema (ParamsSchema). Several
+// payload schemas — a trigger on more than one event — are their union: a
+// field any event declares may be read, and a field the events declare with
+// different types is dyn. With no payload schema the payload is dyn, and
+// with nil params so is activation.params; the rest of both roots is still
 // typed.
-func NewShape(payloadSchemas ...map[string]any) (*Shape, error) {
+func NewShape(params map[string]any, payloadSchemas ...map[string]any) (*Shape, error) {
 	var payload map[string]any
 	for _, s := range payloadSchemas {
 		payload = mergeSchemas(payload, s)
@@ -79,7 +81,7 @@ func NewShape(payloadSchemas ...map[string]any) (*Shape, error) {
 		payload = map[string]any{}
 	}
 	b := &shapeBuilder{objects: map[string]*shapeNode{}}
-	root := b.build(string(wfcel.CELTrigger), rootSchema(payload))
+	root := b.build(string(wfcel.CELTrigger), rootSchema(payload, activationSchema(params)))
 
 	// The filter environment without its dynamic `trigger`, which is
 	// declared below with the shape's type.
@@ -98,11 +100,35 @@ func NewShape(payloadSchemas ...map[string]any) (*Shape, error) {
 	return &Shape{env: env, root: root}, nil
 }
 
+// activationSchema is `trigger.activation` as ActivationRoot builds it. It is
+// closed, like the trigger root: ActivationRoot sets exactly these keys.
+func activationSchema(params map[string]any) map[string]any {
+	if params == nil {
+		params = map[string]any{"type": "object"}
+	}
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"id": map[string]any{"type": "string", "description": "The activation's id."},
+			"owner": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"user_id":   map[string]any{"type": "string", "description": "The user the activation's runs execute as."},
+					"github_id": map[string]any{"type": "string", "description": "The GitHub user id of the connection the activation listens through, as trigger.sender.id names a GitHub sender; empty when it has none."},
+				},
+			},
+			"params": params,
+		},
+	}
+}
+
 // rootSchema is `trigger` as runtime.TriggerInfo.CELValue builds it, with
 // payload's schema in place. It is closed: CELValue sets exactly these keys,
 // so any other is a misspelling. TestFilterRootMatchesTheDeclaredShape (in
 // package triggers) keeps the two in step.
-func rootSchema(payload map[string]any) map[string]any {
+func rootSchema(payload, activation map[string]any) map[string]any {
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 	return map[string]any{
 		"type":                 "object",
@@ -115,6 +141,7 @@ func rootSchema(payload map[string]any) map[string]any {
 			"scheduled_for": str("The slot a schedule fired for; otherwise occurred_at."),
 			"name":          str("The trigger's name."),
 			"payload":       payload,
+			"activation":    activation,
 			"sender": map[string]any{
 				"type":                 "object",
 				"additionalProperties": false,

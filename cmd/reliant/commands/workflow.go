@@ -72,6 +72,8 @@ func newWorkflowValidateCmd() *cobra.Command {
 		includeBuiltins bool
 		triggerPayload  string
 		triggerSender   string
+		activationParam string
+		ownerGitHubID   string
 	)
 
 	cmd := &cobra.Command{
@@ -90,11 +92,14 @@ real firing would, and anything that fails (or that the integration's declared
 payload rules out) is reported as an error. For an integration trigger the
 payload is merged over a sample generated from the event's declared payload, so
 give only the fields your expressions read. The JSON may be a file: @event.json.
+--activation-params supplies trigger.activation.params, as an activation of the workflow
+would set them (params it leaves out read as the workflow's input defaults), and
+--owner-github-id trigger.activation.owner.github_id.
 
 Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sample, err := triggerSampleFromFlags(triggerPayload, triggerSender)
+			sample, err := triggerSampleFromFlags(triggerPayload, triggerSender, activationParam, ownerGitHubID)
 			if err != nil {
 				return err
 			}
@@ -103,6 +108,8 @@ Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 	}
 	cmd.Flags().StringVar(&triggerPayload, "trigger-payload", "", "Sample trigger.payload (JSON or @file.json): also run each declared trigger's filter, inputs and prompt against it")
 	cmd.Flags().StringVar(&triggerSender, "trigger-sender", "", "Sample trigger.sender (JSON: kind, id, display_name, verified), used with --trigger-payload")
+	cmd.Flags().StringVar(&activationParam, "activation-params", "", "Sample trigger.activation.params (JSON or @file.json), used with --trigger-payload")
+	cmd.Flags().StringVar(&ownerGitHubID, "owner-github-id", "", "Sample trigger.activation.owner.github_id (a string), used with --trigger-payload")
 
 	cmd.Flags().StringVar(&workflowDir, "dir", ".reliant/workflows", "Directory containing workflow YAML files")
 	cmd.Flags().BoolVarP(&verboseValidate, "verbose", "V", false, "Show detailed output for each workflow")

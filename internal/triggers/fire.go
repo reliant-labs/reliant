@@ -141,7 +141,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		return nil, nonRetryable(detail, err)
 	}
 
-	spec, err := f.buildSpec(trigger, sched, req, decl)
+	spec, err := f.buildSpec(ctx, trigger, sched, req, decl)
 	if err != nil {
 		return f.failPermanently(ctx, trigger, req, err.Error(), err)
 	}
@@ -257,26 +257,26 @@ func (f *Firer) previousRunBlocks(ctx context.Context, triggerID string) (string
 // buildSpec is what a scheduled run is: owned by the trigger's user,
 // unattended, and seeded with the trigger's prompt. decl is the declaration
 // an activation fires from, nil for an ad hoc trigger.
-func (f *Firer) buildSpec(trigger *core.Trigger, sched *Schedule, req FireRequest, decl *Declaration) (launch.Spec, error) {
+func (f *Firer) buildSpec(ctx context.Context, trigger *core.Trigger, sched *Schedule, req FireRequest, decl *Declaration) (launch.Spec, error) {
 	local := req.ScheduledAt.In(sched.Location)
 	title := fmt.Sprintf("%s · %s", trigger.Name, local.Format("2006-01-02 15:04 MST"))
 
 	// The same root the run will see as `trigger`: what a schedule's inputs
 	// and prompt can read is its slot (trigger.scheduled_for) and name.
 	ev := f.buildEvent(trigger, req)
-	root := FilterInput{
+	scope := ActivationScope(ctx, f.repo, trigger, decl, FilterInput{
 		Kind: string(core.TriggerEventKindSchedule), TriggerID: trigger.ID,
 		OccurredAt: req.ScheduledAt, Payload: ev.Payload, Sender: ev.Sender,
-	}.Root()
+	}.Root())
 	values := trigger.Params
 	if decl != nil && len(decl.Inputs) > 0 {
-		merged, err := MergeDeclaredInputs(trigger.Params, decl.Inputs, root)
+		merged, err := MergeDeclaredInputs(trigger.Params, decl.Inputs, scope)
 		if err != nil {
 			return launch.Spec{}, fmt.Errorf("the declared trigger's inputs could not be evaluated: %w", err)
 		}
 		values = merged
 	}
-	prompt, err := SeedPrompt(trigger, decl, root)
+	prompt, err := SeedPrompt(trigger, decl, scope)
 	if err != nil {
 		return launch.Spec{}, err
 	}

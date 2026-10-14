@@ -142,7 +142,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		}
 		return nil, err
 	}
-	spec, err := f.buildSpec(trigger, ev, decl)
+	spec, err := f.buildSpec(ctx, trigger, ev, decl)
 	if err != nil {
 		return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
 	}
@@ -205,17 +205,17 @@ func (f *EventFirer) settle(ctx context.Context, ev *core.TriggerEvent, outcome 
 // buildSpec is what an event-launched run is: owned by the trigger's user,
 // unattended, seeded with the trigger's prompt followed by the event as
 // labelled, untrusted data.
-func (f *EventFirer) buildSpec(trigger *core.Trigger, ev *core.TriggerEvent, decl *Declaration) (launch.Spec, error) {
+func (f *EventFirer) buildSpec(ctx context.Context, trigger *core.Trigger, ev *core.TriggerEvent, decl *Declaration) (launch.Spec, error) {
 	values := trigger.Params
-	root := FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root()
+	scope := ActivationScope(ctx, f.repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
 	if decl != nil {
-		merged, err := MergeDeclaredInputs(trigger.Params, decl.Inputs, root)
+		merged, err := MergeDeclaredInputs(trigger.Params, decl.Inputs, scope)
 		if err != nil {
 			return launch.Spec{}, fmt.Errorf("the declared trigger's inputs could not be read from this event: %w", err)
 		}
 		values = merged
 	}
-	prompt, err := SeedPrompt(trigger, decl, root)
+	prompt, err := SeedPrompt(trigger, decl, scope)
 	if err != nil {
 		return launch.Spec{}, err
 	}

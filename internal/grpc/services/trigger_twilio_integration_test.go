@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	"github.com/reliant-labs/reliant/internal/vault"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 )
@@ -237,7 +238,7 @@ func assertRunSees(t *testing.T, repo *db.Repo, chatID, condition string) {
 	require.NotNil(t, info)
 	f, err := triggers.CompileFilter(condition)
 	require.NoError(t, err)
-	ok, err := f.MatchRoot(info.CELValue())
+	ok, err := f.MatchScope(triggerspec.Scope{Trigger: info.CELValue()})
 	require.NoError(t, err, "evaluating %s", condition)
 	raw, _ := json.Marshal(info.Payload)
 	assert.True(t, ok, "the run sees %s; payload: %s", condition, raw)

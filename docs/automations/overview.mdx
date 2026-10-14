@@ -71,6 +71,69 @@ Inside templates and filters, `trigger.payload` is the event's data and `trigger
 
 For an integration trigger, validation also checks the filter, inputs and prompt against the payload the integration declares for its events, so a read that payload can never satisfy is an error before the trigger fires. For example, GitHub's `issue.labels` is a list of label names: write `!('wontfix' in trigger.payload.data.issue.labels)`, not `l.name`.
 
+### One declaration, many activations: `trigger.activation`
+
+A filter, an `inputs` mapping and a `prompt` can also read the activation they fire for, so each activation carries its own settings and the declaration does not need them pasted in:
+
+| Expression | Is |
+|------------|----|
+| `trigger.activation.params.<input>` | A value the activation sets for one of the workflow's declared inputs |
+| `trigger.activation.id` | The activation's id |
+| `trigger.activation.owner.user_id` | The user the activation's runs execute as |
+| `trigger.activation.owner.github_id` | The GitHub user id of the connection the activation listens through, as a string; empty when it has none |
+
+A pack that watches a list of repositories declares an input for it and filters on that input. Each activation then names its own repositories:
+
+```yaml
+name: issue-triage
+inputs:
+  repos:
+    type: array
+    default: []
+  team:
+    type: string
+    default: platform
+  issue_number:
+    type: integer
+    default: 0
+triggers:
+  - name: new-issue
+    integration:
+      integration: github
+      events: [issues.opened]
+    filter: "trigger.payload.attributes.repository in trigger.activation.params.repos"
+    inputs:
+      issue_number: "{{ trigger.payload.data.issue.number }}"
+    prompt: "{{ trigger.activation.params.team }} is triaging #{{ trigger.payload.data.issue.number }}"
+```
+
+Activate it once with `params: {repos: [acme/web, acme/docs], team: frontend}` and again with `params: {repos: [acme/api]}`; an issue in `acme/api` fires only the second. An event that no activation's list admits is recorded as skipped on each, with the filter in the reason.
+
+- `trigger.activation.params` holds the workflow's declared inputs **except the ones the trigger's `inputs` mapping sets from the event** (the event's value always wins, so an activation may not set them).
+- It is what the run will receive: the input's default is applied when the activation does not set it, and each value has its declared type. An unset list with no default is `[]`, so a filter on it matches nothing instead of failing.
+- Validation types it from the workflow's inputs. `trigger.activation.params.repo` for a `repos` input, or a read of a field of a string param, is an error when the workflow is saved.
+- Creating an activation checks its params the same way: a param that names no input (with a "did you mean"), or has the wrong type, is refused.
+- It exists only in a trigger's `filter`, `inputs`, `prompt` and `dedupe_key`. A run's own nodes read `inputs.*`, where the same values arrive, and the rest of `trigger.*`.
+- Try it before activating: `reliant workflow validate --trigger-payload '{...}' --activation-params '{"repos": ["acme/web"]}'` runs every declared trigger against a sample event and sample params, and the `cel_eval` tool and `reliant workflow eval --scope trigger` take `activation_params` too. `--owner-github-id` supplies `trigger.activation.owner.github_id`.
+
+#### Who may start a run
+
+Trust is a CEL filter over data the trigger already has; there is no table of trusted people to maintain. `trigger.sender` is who the source says sent the event, and `trigger.activation.owner.github_id` is you, by the GitHub connection the activation listens through. Both are strings, so a list of trusted ids is an array of strings (`"583231"`, quoted: CEL does not match the number `583231` against the string).
+
+```yaml
+inputs:
+  trusted_ids: {type: array, default: []}
+triggers:
+  - name: new-issue
+    integration: {integration: github, events: [issues.opened]}
+    filter: >-
+      trigger.sender.verified &&
+      (trigger.sender.id == trigger.activation.owner.github_id ||
+       trigger.sender.id in trigger.activation.params.trusted_ids)
+```
+
+With no `trusted_ids` set, only you can start it. An activation with no GitHub connection has an empty `github_id`, which never equals a verified sender's id, so only its `trusted_ids` admit anyone. Comparing a sender id with a number is an error when the workflow is saved.
+
 ## Telling your own writes apart
 
 An automation that writes to the thing it watches hears itself. A reviewer posts a review on a pull request and the review comes back as an `issue_comment.created`; a responder pushes a fix and the push comes back as `pull_request.synchronize`. Without a guard, a workflow that reacts to either would run forever.

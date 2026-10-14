@@ -58,7 +58,7 @@ func ParseDedupeWindow(s string) (time.Duration, error) {
 func DedupeKeyExpressions(key string) ([]string, error) { return InputExpressions(key) }
 
 // CompileDedupe checks a dedupe_key template (every {{ }} compiles over
-// `trigger`) and its window.
+// `trigger`, activation included) and its window.
 func CompileDedupe(key, window string) error {
 	if strings.TrimSpace(key) == "" {
 		if strings.TrimSpace(window) != "" {
@@ -88,11 +88,11 @@ func CompileDedupe(key, window string) error {
 	return nil
 }
 
-// RenderDedupeKey renders the template against a `trigger` root. The result is
-// the text the author's expressions produced, trimmed; empty is an error,
-// because a blank key would make every delivery one event.
-func RenderDedupeKey(key string, root map[string]any) (string, error) {
-	rendered, err := RenderPrompt(key, root)
+// RenderDedupeKey renders the template against the event and its activation.
+// The result is the text the author's expressions produced, trimmed; empty is
+// an error, because a blank key would make every delivery one event.
+func RenderDedupeKey(key string, scope Scope) (string, error) {
+	rendered, err := RenderPrompt(key, scope)
 	if err != nil {
 		return "", &DedupeError{Reason: strings.TrimPrefix(err.Error(), "prompt: ")}
 	}

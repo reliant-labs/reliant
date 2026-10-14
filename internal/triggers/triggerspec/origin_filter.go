@@ -49,14 +49,14 @@ func (o *OriginFilter) Expr() string {
 	return o.f.Expr()
 }
 
-// Allow evaluates the filter against a `trigger` root (runtime.TriggerInfo's
-// CELValue): true means the event is wanted. An evaluation error (a non-bool
+// Allow evaluates the filter against an event and its activation: true means
+// the event is wanted. An evaluation error (a non-bool
 // result, a read of something absent) is returned, not folded into either
 // answer: the owner's expression is wrong for this event, which is something to
 // see rather than to guess about.
-func (o *OriginFilter) Allow(root map[string]any) (bool, error) {
+func (o *OriginFilter) Allow(scope Scope) (bool, error) {
 	if o == nil || o.f == nil {
 		return true, nil
 	}
-	return o.f.MatchRoot(root)
+	return o.f.MatchScope(scope)
 }

@@ -263,6 +263,13 @@ over the activation's params (activation refuses a param it would override).
 `inputs`. Write it so activating needs no prompt: an activation's own `message` overrides it, and with
 neither, activation is refused. The event is still attached after it as untrusted data.
 
+**`trigger.activation`** is the activation the event fires for, readable in a `filter`, `inputs`, `prompt` and `dedupe_key` (not in nodes, which read `inputs`):
+`trigger.activation.params.<input>`, `.id`, `.owner.user_id`, and `.owner.github_id` (the GitHub user id of the connection it listens through, a string; empty without one). Use it so one declaration serves many activations instead of pasting
+a repo list into the filter: declare `repos: {type: array, default: []}` as an input and write `filter: "trigger.payload.attributes.repository in trigger.activation.params.repos"`; each activation sets its own
+`params: {repos: [...]}`. `params` holds the workflow's inputs except those this trigger's `inputs` map from the event, with defaults applied and declared types, so an unset list is `[]`.
+Validation types it from the workflow's inputs: `trigger.activation.params.repo` for a `repos` input is an error when you save. Trust is a filter, not a table: ids are strings, so
+`trigger.sender.verified && (trigger.sender.id == trigger.activation.owner.github_id || trigger.sender.id in trigger.activation.params.trusted_ids)` admits you and the quoted ids in a `trusted_ids` array input.
+
 **`dedupe_key`** (webhook triggers only) is a `{{ }}` template over `trigger` that names the event a delivery is about. Use
 it for a sender with no idempotency header, such as Alertmanager, which re-sends a group with a changed body: the
 default key (an idempotency header, else the body hash within one minute) would make every repeat a new run. Deliveries
@@ -273,10 +280,10 @@ suppressed, not a sliding guarantee. A key that cannot render for a delivery fal
 
 **Test a trigger before handing it over.** `cel_eval` with `integration` + `event` generates `trigger.payload` from the payload that
 event declares (add `trigger_payload` to override only the fields your expression reads), and `scope: trigger` gives a
-filter's, inputs mapping's or prompt's view (only `trigger`). It returns the value and its type, or the error with its
+filter's, inputs mapping's or prompt's view (only `trigger`, activation included; give it `activation_params` and `owner_github_id`). It returns the value and its type, or the error with its
 phase and position, plus `findings` for reads the declared payload rules out. Do this instead of waiting for a real
 event: you cannot enable the trigger, so a real event never comes from you. `reliant workflow eval` is the same on the command line, and `reliant workflow validate --trigger-payload`
-dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a sample event.
+dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a sample event, with `--activation-params` and `--owner-github-id` for the sample activation.
 
 **Chat is a trigger too, on by default.** Set top-level `automation_only: true` for a workflow only its
 `triggers:` should start: chat pickers stop offering it and starting it from a chat is refused
@@ -437,7 +444,7 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 | `output.*` | Current activity output (for save_message context) | workflow-specific |
 | `outputs.*` | Loop iteration outputs for while condition evaluation | workflow-specific |
 | `thread.*` | Current thread context (token_count, message_count) | workflow-specific |
-| `trigger.*` | The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>, trigger.sender.{kind,id,display_name,verified}, trigger.origin.{caused_by_reliant,confidence,run_id,workflow,trigger_name,same_workflow,actor,lineage_depth}). Interactive chats have kind chat.start | workflow-specific |
+| `trigger.*` | The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>, trigger.sender.{kind,id,display_name,verified}, trigger.origin.{caused_by_reliant,confidence,run_id,workflow,trigger_name,same_workflow,actor,lineage_depth}). Interactive chats have kind chat.start. A trigger's filter, inputs and prompt can also read trigger.activation.params.<input>, trigger.activation.id and trigger.activation.owner.{user_id,github_id}; nodes cannot | workflow-specific |
 | `workflow.*` | Workflow execution context (id, name, path, etc.) | `id`, `name`, `run_id`, `path`, `worktree_path`, `branch`, `mode` |
 
 #### `iter` fields

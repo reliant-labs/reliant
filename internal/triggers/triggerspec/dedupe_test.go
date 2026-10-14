@@ -45,14 +45,14 @@ func TestCompileDedupe(t *testing.T) {
 func TestRenderDedupeKey(t *testing.T) {
 	root := map[string]any{"payload": map[string]any{"body": map[string]any{"groupKey": `{}:{alertname="X"}`, "status": "firing"}}}
 
-	got, err := RenderDedupeKey("{{ trigger.payload.body.groupKey }}:{{ trigger.payload.body.status }}", root)
+	got, err := RenderDedupeKey("{{ trigger.payload.body.groupKey }}:{{ trigger.payload.body.status }}", Scope{Trigger: root})
 	require.NoError(t, err)
 	assert.Equal(t, `{}:{alertname="X"}:firing`, got, "braces in the payload are data")
 
-	_, err = RenderDedupeKey("{{ trigger.payload.body.missing }}", root)
+	_, err = RenderDedupeKey("{{ trigger.payload.body.missing }}", Scope{Trigger: root})
 	require.Error(t, err, "a key the payload lacks is an error, not an empty key")
 
-	_, err = RenderDedupeKey("{{ '' }}", root)
+	_, err = RenderDedupeKey("{{ '' }}", Scope{Trigger: root})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "rendered empty")
 }

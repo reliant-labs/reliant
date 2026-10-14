@@ -17,13 +17,14 @@ import (
 
 func newWorkflowEvalCmd() *cobra.Command {
 	var (
-		kind, scope                   string
-		integration, event            string
-		triggerKind                   string
-		triggerPayload, triggerSender string
-		inputs, nodes                 string
-		inputKV, nodeKV               []string
-		jsonOut                       bool
+		kind, scope                     string
+		integration, event              string
+		triggerKind                     string
+		triggerPayload, triggerSender   string
+		activationParams, ownerGitHubID string
+		inputs, nodes                   string
+		inputKV, nodeKV                 []string
+		jsonOut                         bool
 	)
 	cmd := &cobra.Command{
 		Use:   "eval [expression]",
@@ -45,13 +46,16 @@ Context:
                                                give only what the expression reads
                                                (a JSON string, or @file.json)
   --trigger-sender '{"id":"583231","verified":true}'
+  --activation-params '{"repos":["acme/web"]}' trigger.activation.params (scope trigger)
+  --owner-github-id 583231                     trigger.activation.owner.github_id
   --inputs '{"n":1}', --input k=v              inputs.*
   --nodes '{"start":{"stdout":"{}"}}'          nodes.<id>.*
 
 With no expression, prints the trigger the event delivers.
 
 Scope: --scope trigger (a trigger's filter, inputs mapping, prompt) sees only
-trigger; the default, run, is a node's field and also sees inputs and nodes.
+trigger and activation; the default, run, is a node's field and also sees inputs
+and nodes.
 
 Examples:
   reliant workflow eval --integration github --event issues.opened \
@@ -92,6 +96,10 @@ Exit code 0 when it evaluated, 1 when it did not.`,
 			if req.TriggerSender, err = jsonObjectFlag("--trigger-sender", triggerSender); err != nil {
 				return err
 			}
+			if req.ActivationParams, err = jsonObjectFlag("--activation-params", activationParams); err != nil {
+				return err
+			}
+			req.OwnerGitHubID = strings.TrimSpace(ownerGitHubID)
 			if req.Inputs, err = jsonObjectFlag("--inputs", inputs); err != nil {
 				return err
 			}
@@ -129,6 +137,8 @@ Exit code 0 when it evaluated, 1 when it did not.`,
 	cmd.Flags().StringVar(&triggerKind, "trigger-kind", "", "trigger.kind: webhook, integration, schedule or workflow_event")
 	cmd.Flags().StringVar(&triggerPayload, "trigger-payload", "", "trigger.payload as JSON, or @file.json; merged over the generated sample")
 	cmd.Flags().StringVar(&triggerSender, "trigger-sender", "", "trigger.sender as JSON: kind, id, display_name, verified")
+	cmd.Flags().StringVar(&activationParams, "activation-params", "", "trigger.activation.params as JSON, or @file.json (scope trigger)")
+	cmd.Flags().StringVar(&ownerGitHubID, "owner-github-id", "", "trigger.activation.owner.github_id (scope trigger); a string, like trigger.sender.id")
 	cmd.Flags().StringVar(&inputs, "inputs", "", "inputs.* as JSON, or @file.json")
 	cmd.Flags().StringArrayVar(&inputKV, "input", nil, "One input as key=value (repeatable; the value is JSON when it parses, else a string)")
 	cmd.Flags().StringVar(&nodes, "nodes", "", "nodes.<id>.* as JSON keyed by node id, or @file.json")
@@ -209,14 +219,19 @@ func mergeKV(base map[string]any, kvs []string) (map[string]any, error) {
 }
 
 // triggerSample is a sample event for `workflow validate --trigger-payload`.
+// activation is the sample activation (--activation-params, --owner-github-id).
 type triggerSample struct {
 	payload, sender map[string]any
+	activation      *celeval.ActivationSample
 }
 
-func triggerSampleFromFlags(payload, sender string) (*triggerSample, error) {
+func triggerSampleFromFlags(payload, sender, params, ownerGitHubID string) (*triggerSample, error) {
 	if strings.TrimSpace(payload) == "" {
 		if strings.TrimSpace(sender) != "" {
 			return nil, fmt.Errorf("--trigger-sender needs --trigger-payload")
+		}
+		if strings.TrimSpace(params) != "" || strings.TrimSpace(ownerGitHubID) != "" {
+			return nil, fmt.Errorf("--activation-params and --owner-github-id need --trigger-payload")
 		}
 		return nil, nil
 	}
@@ -228,7 +243,12 @@ func triggerSampleFromFlags(payload, sender string) (*triggerSample, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &triggerSample{payload: p, sender: s}, nil
+	a, err := jsonObjectFlag("--activation-params", params)
+	if err != nil {
+		return nil, err
+	}
+	return &triggerSample{payload: p, sender: s,
+		activation: &celeval.ActivationSample{Params: a, OwnerGitHubID: strings.TrimSpace(ownerGitHubID)}}, nil
 }
 
 // dryRunTriggers runs every trigger a workflow declares against the sample and
@@ -247,7 +267,7 @@ func dryRunTriggers(result *validateResult, path string, sample *triggerSample) 
 		return
 	}
 	for _, wt := range wf.GetTriggers() {
-		run := celeval.DryRunTrigger(wt, sample.payload, sample.sender)
+		run := celeval.DryRunTrigger(wt, wf.GetInputs(), sample.payload, sample.sender, sample.activation)
 		result.Errors = append(result.Errors, run.Errors()...)
 		if run.Matched != nil && !*run.Matched {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("trigger %q: its filter does not match this sample event", run.Trigger))

@@ -45,7 +45,7 @@ func issuePayload(extra map[string]any) map[string]any {
 
 func mustShape(t *testing.T, schemas ...map[string]any) *Shape {
 	t.Helper()
-	s, err := NewShape(schemas...)
+	s, err := NewShape(nil, schemas...)
 	require.NoError(t, err)
 	return s
 }

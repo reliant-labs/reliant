@@ -36,9 +36,10 @@ type Filter struct {
 }
 
 // triggerEnv is the environment for everything evaluated BEFORE a run
-// exists — filters and the inputs mapping: only `trigger`. inputs, nodes and
-// workflow would be empty there, and accepting them would let an expression
-// compile that can only ever see blanks.
+// exists — filters, the inputs mapping and the prompt: only `trigger` (the
+// event, with `trigger.activation` under it). inputs, nodes and workflow
+// would be empty there, and accepting them would let an expression compile
+// that can only ever see blanks.
 func triggerEnv() (*cel.Env, error) {
 	return wfcel.NewEnv(triggerEnvConfig(wfcel.CELTrigger))
 }
@@ -94,16 +95,15 @@ func (f *Filter) Expr() string {
 	return f.expr
 }
 
-// MatchRoot evaluates the filter against a `trigger` root
-// (runtime.TriggerInfo.CELValue's shape). An evaluation error — a key the
-// payload lacks, a non-bool result — is returned, not folded into false:
-// "this event is not for me" and "my filter no longer fits the payload" must
-// be told apart on the recorded firing.
-func (f *Filter) MatchRoot(root map[string]any) (bool, error) {
+// MatchScope evaluates the filter against an event and its activation. An
+// evaluation error — a key the payload lacks, a non-bool result — is
+// returned, not folded into false: "this event is not for me" and "my filter
+// no longer fits the payload" must be told apart on the recorded firing.
+func (f *Filter) MatchScope(scope Scope) (bool, error) {
 	if f == nil || f.program == nil {
 		return true, nil
 	}
-	out, _, err := f.program.Eval(map[string]any{string(wfcel.CELTrigger): root})
+	out, _, err := f.program.Eval(scope.Vars())
 	if err != nil {
 		return false, &FilterError{Expr: f.expr, Reason: err.Error()}
 	}

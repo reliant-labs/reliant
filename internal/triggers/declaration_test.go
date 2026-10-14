@@ -12,6 +12,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
@@ -179,13 +180,13 @@ func TestDeclaredInputsMergeOverParams(t *testing.T) {
 	params, err := MergeDeclaredInputs(
 		map[string]any{"issue_number": 1, "mode": "triage"},
 		map[string]string{"issue_number": "{{ trigger.payload.data.issue.number }}"},
-		root,
+		triggerspec.Scope{Trigger: root},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, int64(7), params["issue_number"], "the event's value wins over a stored param")
 	assert.Equal(t, "triage", params["mode"], "params the declaration does not map pass through")
 
-	_, err = MergeDeclaredInputs(nil, map[string]string{"issue_number": "{{ trigger.payload.data.pr.number }}"}, root)
+	_, err = MergeDeclaredInputs(nil, map[string]string{"issue_number": "{{ trigger.payload.data.pr.number }}"}, triggerspec.Scope{Trigger: root})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "issue_number")
 }

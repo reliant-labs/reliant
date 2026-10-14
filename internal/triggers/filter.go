@@ -31,6 +31,9 @@ type FilterInput struct {
 	// Origin is trigger.origin: whether Reliant caused the event. nil reads as
 	// not caused by Reliant.
 	Origin *core.TriggerOrigin
+	// Activation is `trigger.activation` (ActivationScope builds it); nil
+	// reads as an activation with no id, owner or params.
+	Activation map[string]any
 }
 
 // Root is the `trigger` CEL value for this event: what a filter and an
@@ -48,6 +51,12 @@ func (in FilterInput) Root() map[string]any {
 		info.OccurredAt = in.OccurredAt.UTC().Format(time.RFC3339)
 	}
 	return info.CELValue()
+}
+
+// Scope is what a filter reads: this event's `trigger` root and its
+// activation.
+func (in FilterInput) Scope() triggerspec.Scope {
+	return triggerspec.Scope{Trigger: in.Root(), Activation: in.Activation}
 }
 
 // Filter is a compiled filter. The zero value (from an empty expression)
@@ -72,14 +81,14 @@ func (f *Filter) Match(in FilterInput) (bool, error) {
 	if f == nil {
 		return true, nil
 	}
-	return f.MatchRoot(in.Root())
+	return f.MatchScope(in.Scope())
 }
 
-// MatchRoot evaluates the filter against an already-built `trigger` root, for
-// a caller that has built the root the launched run will see.
-func (f *Filter) MatchRoot(root map[string]any) (bool, error) {
+// MatchScope evaluates the filter against an already-built scope, for a
+// caller that has built the roots the launched run will see.
+func (f *Filter) MatchScope(scope triggerspec.Scope) (bool, error) {
 	if f == nil {
 		return true, nil
 	}
-	return f.Filter.MatchRoot(root)
+	return f.Filter.MatchScope(scope)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
+	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
 // A workflow declares WHEN it runs in its `triggers:` block; a trigger row
@@ -65,6 +66,9 @@ type Declaration struct {
 	// OriginFilter is the declared origin_filter, "" for the default
 	// (triggerspec.DefaultOriginFilter). It is evaluated before Filter.
 	OriginFilter string
+	// WorkflowInputs are the inputs the workflow declares: the types and
+	// defaults activation.params is read through (see ActivationScope).
+	WorkflowInputs map[string]*reliantv1.Input
 }
 
 // WorkflowResolver loads the workflow a run of a ref executes, as run start
@@ -176,18 +180,71 @@ func DeclarationIn(wf *reliantv1.Workflow, t *core.Trigger) (*Declaration, error
 			return nil, broken(fmt.Sprintf("it now listens to %s, and this activation's connection is for %s; activate it again", src.Integration, prev.Integration))
 		}
 	}
-	return &Declaration{Name: name, Source: src, Filter: filter, Inputs: wt.GetInputs(), Prompt: prompt, DedupeKey: dedupeKey, DedupeWindow: dedupeWindow, OriginFilter: originFilter}, nil
+	return &Declaration{Name: name, Source: src, Filter: filter, Inputs: wt.GetInputs(), Prompt: prompt,
+		DedupeKey: dedupeKey, DedupeWindow: dedupeWindow, OriginFilter: originFilter, WorkflowInputs: wf.GetInputs()}, nil
+}
+
+// ActivationScope is everything a trigger expression of t reads: the event's
+// `trigger` root, with `trigger.activation` set under it. Both the intake filter and every
+// fire path build it here, so a filter and an inputs mapping that name the
+// same param read the same value.
+//
+// activation.params is what the activation's params will be when the run
+// starts, as far as the trigger can know: the workflow's input defaults
+// applied, every value coerced to its input's declared type, and an input
+// the trigger maps from the event left out (the event sets it). An input
+// with neither a param nor a default reads as its type's zero ([] for a
+// list), so a filter on an unset list matches nothing rather than failing.
+// An ad hoc trigger (decl nil) has no declared inputs; its params are as
+// stored.
+func ActivationScope(ctx context.Context, repo any, t *core.Trigger, decl *Declaration, root map[string]any) triggerspec.Scope {
+	params := t.Params
+	if decl != nil {
+		params = decl.activationParams(t.Params)
+	}
+	return triggerspec.Scope{Trigger: root, Activation: triggerspec.ActivationRoot(t.ID, ownerOf(ctx, repo, t), params)}
+}
+
+// connectionReader is what reading an activation's owner needs of the store.
+// Every repository the fire and intake paths run on (*db.Repo) has it; a
+// narrower fake that does not simply yields an owner with no GitHub id.
+type connectionReader interface {
+	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
+}
+
+// ownerOf is who t's runs are for, as trigger.activation.owner. github_id is
+// the sender id of the GitHub connection t listens through, the same id a
+// GitHub event names its sender by (trigger.sender.id), so a filter can say
+// "only me" by comparing the two. It is empty when the activation has no
+// connection, the connection is not GitHub's, or it cannot be read: a failure
+// to find the owner's id must never widen who a filter admits.
+func ownerOf(ctx context.Context, repo any, t *core.Trigger) triggerspec.Owner {
+	owner := triggerspec.Owner{UserID: t.UserID}
+	reader, ok := repo.(connectionReader)
+	if !ok || t.ConnectionID == nil || *t.ConnectionID == "" {
+		return owner
+	}
+	conn, err := reader.GetConnection(ctx, t.UserID, *t.ConnectionID)
+	if err != nil || conn == nil || conn.UserID != t.UserID || conn.IntegrationID != "github" || conn.SenderID == nil {
+		return owner
+	}
+	owner.GitHubID = *conn.SenderID
+	return owner
+}
+
+func (d *Declaration) activationParams(stored map[string]any) map[string]any {
+	return v2.ActivationParams(d.WorkflowInputs, d.Inputs, stored)
 }
 
 // SeedPrompt is the prompt a run t launches starts from: the activation's own
 // message when it has one (an override), otherwise its declaration's prompt
 // template rendered against the `trigger` root. An ad hoc trigger (decl nil)
 // always has its own.
-func SeedPrompt(t *core.Trigger, decl *Declaration, root map[string]any) (string, error) {
+func SeedPrompt(t *core.Trigger, decl *Declaration, scope triggerspec.Scope) (string, error) {
 	if own := strings.TrimSpace(t.Message); own != "" || decl == nil || decl.Prompt == "" {
 		return t.Message, nil
 	}
-	rendered, err := triggerspec.RenderPrompt(decl.Prompt, root)
+	rendered, err := triggerspec.RenderPrompt(decl.Prompt, scope)
 	if err != nil {
 		return "", fmt.Errorf("the declared trigger's %w", err)
 	}
@@ -218,17 +275,17 @@ func (d *Declaration) Projection() core.TriggerProjection {
 	return core.TriggerProjection{Config: d.Source.Config, Filter: d.Filter}
 }
 
-// MergeDeclaredInputs evaluates a declaration's inputs against the `trigger`
-// root and merges them over the activation's params. A declared input WINS
+// MergeDeclaredInputs evaluates a declaration's inputs against the event and
+// its activation and merges them over the activation's params. A declared input WINS
 // over a param of the same name: the declaration says where that input comes
 // from, and a stored param silently overriding the event would make the
 // mapping a lie. (Activation refuses such a collision up front; this rule
 // also covers params stored before an edit added the mapping.)
-func MergeDeclaredInputs(params map[string]any, inputs map[string]string, root map[string]any) (map[string]any, error) {
+func MergeDeclaredInputs(params map[string]any, inputs map[string]string, scope triggerspec.Scope) (map[string]any, error) {
 	if len(inputs) == 0 {
 		return params, nil
 	}
-	evaluated, err := triggerspec.EvaluateInputs(inputs, root)
+	evaluated, err := triggerspec.EvaluateInputs(inputs, scope)
 	if err != nil {
 		return nil, err
 	}

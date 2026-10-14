@@ -33,7 +33,7 @@ func TestTheDefaultIgnoresOnlyAConfidentOwnEcho(t *testing.T) {
 		{"another workflow, exact", false, "exact", true},
 		{"nobody's", false, "none", true},
 	} {
-		got, err := f.Allow(originRoot(tc.sameWorkflow, tc.confidence, ""))
+		got, err := f.Allow(Scope{Trigger: originRoot(tc.sameWorkflow, tc.confidence, "")})
 		require.NoError(t, err, tc.name)
 		assert.Equal(t, tc.allowed, got, tc.name)
 	}
@@ -42,7 +42,7 @@ func TestTheDefaultIgnoresOnlyAConfidentOwnEcho(t *testing.T) {
 func TestTrueReceivesEverything(t *testing.T) {
 	f, err := CompileOriginFilter("true")
 	require.NoError(t, err)
-	got, err := f.Allow(originRoot(true, "exact", ""))
+	got, err := f.Allow(Scope{Trigger: originRoot(true, "exact", "")})
 	require.NoError(t, err)
 	assert.True(t, got)
 }
@@ -59,7 +59,7 @@ func TestACustomExpressionAllowsOneDeliberateRetrigger(t *testing.T) {
 		{true, "other", false},
 		{false, "other", true},
 	} {
-		got, err := f.Allow(originRoot(tc.same, "exact", tc.trigger))
+		got, err := f.Allow(Scope{Trigger: originRoot(tc.same, "exact", tc.trigger)})
 		require.NoError(t, err)
 		assert.Equal(t, tc.allowed, got, "same=%v trigger=%s", tc.same, tc.trigger)
 	}

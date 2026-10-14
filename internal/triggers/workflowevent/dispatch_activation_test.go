@@ -54,13 +54,20 @@ func (f *fixture) saveDeclaringWorkflow(slug, yaml string) {
 // with the projection activation would have written.
 func (f *fixture) addActivation(workflow, declared string, src Source) *core.Trigger {
 	f.t.Helper()
+	return f.addNamedActivation("my "+declared, workflow, declared, src, nil)
+}
+
+// addNamedActivation is addActivation for a second activation of the same
+// declaration: names are unique per user and project.
+func (f *fixture) addNamedActivation(name, workflow, declared string, src Source, params map[string]any) *core.Trigger {
+	f.t.Helper()
 	config, err := json.Marshal(src)
 	require.NoError(f.t, err)
 	now := time.Now().UTC()
 	tr := &core.Trigger{
-		ID: uuid.NewString(), UserID: f.userID, ProjectID: f.projectID, Name: "my " + declared,
+		ID: uuid.NewString(), UserID: f.userID, ProjectID: f.projectID, Name: name,
 		Kind: core.TriggerKindWorkflowEvent, Enabled: true, Workflow: workflow, WorkflowTrigger: &declared,
-		Message: "react to the failure", DaemonID: f.daemonID, Config: config,
+		Message: "react to the failure", DaemonID: f.daemonID, Config: config, Params: params,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	require.NoError(f.t, f.repo.CreateTrigger(context.Background(), tr))
@@ -126,4 +133,61 @@ func TestDispatch_BrokenActivationIsRecordedNotFired(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "the broken activation's verdict is recorded")
+}
+
+// A workflow_event declaration may read its activation's params in the
+// filter and the inputs mapping: two activations of one declaration each
+// react only to the workflows in their own list.
+const scopedReactorYAML = `name: scoped-reactor
+inputs:
+  watch:
+    type: array
+    default: []
+  failed_chat:
+    type: string
+    default: ""
+  label:
+    type: string
+    default: ""
+triggers:
+  - name: on-failure
+    workflow_event: {outcomes: [failed]}
+    filter: "trigger.payload.workflow_name in trigger.activation.params.watch"
+    inputs:
+      failed_chat: "{{ trigger.payload.chat_id }}"
+      label: "{{ trigger.activation.id }}"
+entry: [echo]
+nodes:
+  - id: echo
+    type: run
+    command: "echo hi"
+`
+
+func TestDispatch_ActivationFilterAndInputsReadItsParams(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.dispatcher.WithWorkflows(triggers.LaunchWorkflows{Repo: f.repo})
+	f.saveDeclaringWorkflow("scoped-reactor", scopedReactorYAML)
+
+	failed := Source{Outcomes: []string{"failed"}}
+	reviews := f.addNamedActivation("reviews", "scoped-reactor", "on-failure", failed, map[string]any{"watch": []any{"code-review"}})
+	builds := f.addNamedActivation("builds", "scoped-reactor", "on-failure", failed, map[string]any{"watch": []any{"nightly-build"}})
+
+	source := f.humanRun("code-review")
+	results, err := f.dispatcher.Dispatch(ctx, f.finish(source, core.RunEventFailed))
+	require.NoError(t, err)
+
+	byTrigger := map[string]core.TriggerEventOutcome{}
+	for _, r := range results {
+		byTrigger[r.TriggerID] = r.Outcome
+	}
+	assert.Equal(t, core.TriggerEventLaunched, byTrigger[reviews.ID], "code-review is in this activation's own list")
+	assert.Equal(t, core.TriggerEventSkipped, byTrigger[builds.ID], "and not in the other's")
+
+	launchEv, err := f.repo.GetTriggerEventByChatID(ctx, launchedChat(t, results, reviews.ID))
+	require.NoError(t, err)
+	start, _ := launchEv.Payload["start"].(map[string]any)
+	params, _ := start["params"].(map[string]any)
+	assert.Equal(t, reviews.ID, params["label"], "an inputs mapping reads trigger.activation.id")
+	assert.Equal(t, source, params["failed_chat"])
 }

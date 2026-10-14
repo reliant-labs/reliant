@@ -6,6 +6,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
 // TriggerRun is what one declared trigger does with one sample event: whether
@@ -60,7 +61,15 @@ func (r TriggerRun) Errors() []string {
 // integration trigger the payload is merged over the sample generated from the
 // declared payload of the event (payload["event"], else the trigger's first
 // exact event), so a partial sample is enough.
-func DryRunTrigger(wt *reliantv1.WorkflowTrigger, payload, sender map[string]any) TriggerRun {
+//
+// activation says who the sample activation belongs to and what it sets; nil
+// is an activation with no params and no GitHub connection.
+//
+// workflowInputs are the inputs of the workflow that declares the trigger, and
+// the sample's Params what the activation sets for them: together they make
+// trigger.activation.params, as an activation of it would have. Params nobody sets
+// read as the workflow's defaults.
+func DryRunTrigger(wt *reliantv1.WorkflowTrigger, workflowInputs map[string]*reliantv1.Input, payload, sender map[string]any, activation *ActivationSample) TriggerRun {
 	run := TriggerRun{Trigger: wt.GetName()}
 	req := Request{TriggerPayload: payload, TriggerSender: sender}
 	switch {
@@ -93,12 +102,18 @@ func DryRunTrigger(wt *reliantv1.WorkflowTrigger, payload, sender map[string]any
 	if trigger == nil {
 		trigger = map[string]any{}
 	}
+	scope := triggerspec.Scope{
+		Trigger: trigger,
+		Activation: triggerspec.ActivationRoot("sample-activation",
+			triggerspec.Owner{UserID: "sample-owner", GitHubID: activation.ownerGitHubID()},
+			runtime.ActivationParams(workflowInputs, wt.GetInputs(), normalizeNumbers(activation.params()))),
+	}
 
 	if filter := strings.TrimSpace(wt.GetFilter()); filter != "" {
 		compiled, cerr := triggerspec.CompileFilter(filter)
 		if cerr != nil {
 			run.FilterError = cerr.Error()
-		} else if hit, merr := compiled.MatchRoot(trigger); merr != nil {
+		} else if hit, merr := compiled.MatchScope(scope); merr != nil {
 			run.FilterError = merr.Error()
 		} else {
 			run.Matched = &hit
@@ -112,7 +127,7 @@ func DryRunTrigger(wt *reliantv1.WorkflowTrigger, payload, sender map[string]any
 	}
 
 	if len(wt.GetInputs()) > 0 {
-		inputs, ierr := triggerspec.EvaluateInputs(wt.GetInputs(), trigger)
+		inputs, ierr := triggerspec.EvaluateInputs(wt.GetInputs(), scope)
 		if ierr != nil {
 			run.InputErrors = append(run.InputErrors, ierr.Error())
 		} else {
@@ -122,14 +137,14 @@ func DryRunTrigger(wt *reliantv1.WorkflowTrigger, payload, sender map[string]any
 	if key := wt.GetDedupeKey(); key != "" {
 		if cerr := triggerspec.CompileDedupe(key, wt.GetDedupeWindow()); cerr != nil {
 			run.DedupeError = cerr.Error()
-		} else if rendered, rerr := triggerspec.RenderDedupeKey(key, trigger); rerr != nil {
+		} else if rendered, rerr := triggerspec.RenderDedupeKey(key, scope); rerr != nil {
 			run.DedupeError = rerr.Error()
 		} else {
 			run.DedupeKey = rendered
 		}
 	}
 	if prompt := wt.GetPrompt(); prompt != "" {
-		rendered, perr := triggerspec.RenderPrompt(prompt, trigger)
+		rendered, perr := triggerspec.RenderPrompt(prompt, scope)
 		if perr != nil {
 			run.PromptError = perr.Error()
 		} else {
@@ -152,4 +167,26 @@ func sampleEvent(src *reliantv1.IntegrationSource, payload map[string]any) strin
 		}
 	}
 	return ""
+}
+
+// ActivationSample is the activation a dry run stands in for.
+type ActivationSample struct {
+	// Params are what it sets for the workflow's inputs.
+	Params map[string]any
+	// OwnerGitHubID is trigger.activation.owner.github_id.
+	OwnerGitHubID string
+}
+
+func (a *ActivationSample) params() map[string]any {
+	if a == nil {
+		return nil
+	}
+	return a.Params
+}
+
+func (a *ActivationSample) ownerGitHubID() string {
+	if a == nil {
+		return ""
+	}
+	return a.OwnerGitHubID
 }

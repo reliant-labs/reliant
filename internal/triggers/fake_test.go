@@ -26,7 +26,8 @@ type fakeRepo struct {
 
 	getTriggerErr error
 	// daemons are the daemon ids that exist; GetDaemon misses on the rest.
-	daemons map[string]bool
+	daemons     map[string]bool
+	connections map[string]*core.Connection
 }
 
 func newFakeRepo() *fakeRepo {
@@ -34,6 +35,8 @@ func newFakeRepo() *fakeRepo {
 		triggers: map[string]*core.Trigger{},
 		statuses: map[string]core.WorkflowStatus{},
 		daemons:  map[string]bool{testDaemonID: true},
+
+		connections: map[string]*core.Connection{},
 	}
 }
 
@@ -258,4 +261,15 @@ func testTrigger(t *testing.T, mutate func(*core.Trigger, *core.ScheduleConfig))
 	}
 	trigger.Config = raw
 	return trigger
+}
+
+// connections are the connections GetConnection finds, by id; a connection
+// belongs to the user it names.
+func (r *fakeRepo) GetConnection(_ context.Context, userID, id string) (*core.Connection, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if c, ok := r.connections[id]; ok && c.UserID == userID {
+		return c, nil
+	}
+	return nil, core.ErrConnectionNotFound
 }

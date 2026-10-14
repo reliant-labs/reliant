@@ -125,13 +125,16 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 			addTriggerSourceError(result, path, wt, err)
 		}
 
-		// The declared type of `trigger` for this source, when its events'
-		// payload is declared; nil leaves the payload dynamic.
-		var shape *payloadShape
+		// The declared types of `trigger`, `trigger.activation` included, for this
+		// trigger: the payload its source's events declare (dynamic when
+		// there is none), and the workflow inputs an activation sets.
+		var payloads []map[string]any
+		declaredBy := ""
 		if src != nil && wt.GetIntegration() != nil {
 			validateTriggerIntegration(wt.GetIntegration(), path, integrations, result)
-			shape = integrationPayloadShape(wt.GetIntegration(), integrations)
+			payloads, declaredBy = integrationPayloads(wt.GetIntegration(), integrations)
 		}
+		shape := newPayloadShape(triggerspec.ParamsSchema(triggerspec.ParamsInputs(declaredInputs, wt.GetInputs())), payloads, declaredBy)
 
 		if filter := strings.TrimSpace(wt.GetFilter()); filter != "" {
 			if wt.GetSchedule() != nil {
@@ -140,7 +143,7 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 					"remove the filter, or branch on the schedule inside the workflow")
 			} else if _, err := triggerspec.CompileFilter(filter); err != nil {
 				result.AddErrorWithSuggestion(CategoryTrigger, path, "filter", strings.TrimPrefix(err.Error(), "filter: "),
-					"a filter is a raw CEL bool over `trigger` (e.g. trigger.payload.data.action == 'opened'); guard optional fields with has()")
+					"a filter is a raw CEL bool over `trigger` (e.g. trigger.payload.data.action == 'opened' or trigger.payload.attributes.repository in trigger.activation.params.repos); guard optional fields with has()")
 			} else if shape != nil {
 				shape.report(result, path, "filter", "", shape.CheckFilter(filter))
 			}
@@ -167,23 +170,38 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 	}
 }
 
-// payloadShape is a trigger's typed `trigger` root, with what it was
-// declared by for the findings it produces.
+// payloadShape is a trigger's typed `trigger` root, with
+// what the payload was declared by for the findings it produces.
 type payloadShape struct {
 	*triggerspec.Shape
 	// declaredBy names where the payload type comes from, e.g. "checked
-	// against the payload github declares for issues.opened".
+	// against the payload github declares for issues.opened"; empty when the
+	// payload is dynamic.
 	declaredBy string
 }
 
-// integrationPayloadShape types `trigger` for an integration source: the
-// union of the payloads the catalog declares for the events it listens to.
-// nil when none of them is declared.
-func integrationPayloadShape(src *reliantv1.IntegrationSource, integrations IntegrationIndex) *payloadShape {
+// newPayloadShape types the roots. params is trigger.activation.params' schema and
+// payloads the schemas of trigger.payload (none leaves it dynamic). nil when
+// the environment cannot be built.
+func newPayloadShape(params map[string]any, payloads []map[string]any, declaredBy string) *payloadShape {
+	shape, err := triggerspec.NewShape(params, payloads...)
+	if err != nil {
+		// The environment is built from the catalog and the workflow's own
+		// input declarations, not from anything an author wrote here: a
+		// failure is a bug, and the untyped checks still ran.
+		return nil
+	}
+	return &payloadShape{Shape: shape, declaredBy: declaredBy}
+}
+
+// integrationPayloads are the payload schemas an integration source's events
+// declare: the union over the events it listens to, and the patterns as
+// written that named a declared payload. none when no event declares one.
+func integrationPayloads(src *reliantv1.IntegrationSource, integrations IntegrationIndex) ([]map[string]any, string) {
 	id := strings.TrimSpace(src.GetIntegration())
 	types, _, ok := integrations.TriggerTypes(id)
 	if !ok || len(types) == 0 {
-		return nil
+		return nil, ""
 	}
 	var schemas []map[string]any
 	var typed []string // the patterns as written that named a declared payload
@@ -206,22 +224,26 @@ func integrationPayloadShape(src *reliantv1.IntegrationSource, integrations Inte
 		}
 	}
 	if len(schemas) == 0 {
-		return nil
+		return nil, ""
 	}
-	shape, err := triggerspec.NewShape(schemas...)
-	if err != nil {
-		// The environment is built from the catalog, not the workflow: a
-		// failure is a bug here, and the untyped checks still ran.
-		return nil
-	}
-	return &payloadShape{Shape: shape, declaredBy: fmt.Sprintf("checked against the payload %s declares for %s", id, strings.Join(typed, ", "))}
+	return schemas, fmt.Sprintf("checked against the payload %s declares for %s", id, strings.Join(typed, ", "))
 }
+
+// activationParamsNote says where trigger.activation.params' fields come from, for a
+// finding about one.
+const activationParamsNote = "trigger.activation.params holds the workflow's declared inputs that this trigger does not map from the event"
 
 // report adds a type error for each finding under field. expr, when set, is
 // the template expression the findings are about.
 func (s *payloadShape) report(result *Result, path []string, field, expr string, errs []*triggerspec.TypeError) {
 	for _, e := range errs {
-		msg := e.Reason + " (" + s.declaredBy + ")"
+		msg := e.Reason
+		switch {
+		case strings.Contains(e.Reason, "trigger.activation."):
+			msg += " (" + activationParamsNote + ")"
+		case s.declaredBy != "":
+			msg += " (" + s.declaredBy + ")"
+		}
 		if expr != "" {
 			msg = fmt.Sprintf("{{ %s }}: %s", expr, msg)
 		}

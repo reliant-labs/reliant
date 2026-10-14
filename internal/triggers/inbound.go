@@ -153,17 +153,17 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	case err != nil:
 		return nil, fmt.Errorf("resolve trigger %s's declaration: %w", trigger.ID, err)
 	case !opts.Manual:
-		outcome, detail = in.applyOriginGuards(trigger, decl, ev, origin, occurredAt)
+		outcome, detail = in.applyOriginGuards(ctx, trigger, decl, ev, origin, occurredAt)
 		if outcome == core.TriggerEventPending {
 			filter := trigger.Filter
 			if decl != nil {
 				filter = decl.Filter
 			}
-			outcome, detail = in.applyFilter(filter, trigger, ev, origin, occurredAt)
+			outcome, detail = in.applyFilter(ctx, filter, trigger, decl, ev, origin, occurredAt)
 		}
 	}
 
-	dedupeKey := in.declaredDedupeKey(trigger, decl, ev, occurredAt)
+	dedupeKey := in.declaredDedupeKey(ctx, trigger, decl, ev, occurredAt)
 	row := &core.TriggerEvent{
 		ID:            uuid.NewString(),
 		TriggerID:     &trigger.ID,
@@ -208,7 +208,7 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	return res, nil
 }
 
-func (in *Intake) applyFilter(expr string, trigger *core.Trigger, ev InboundEvent, origin *core.TriggerOrigin, occurredAt time.Time) (core.TriggerEventOutcome, string) {
+func (in *Intake) applyFilter(ctx context.Context, expr string, trigger *core.Trigger, decl *Declaration, ev InboundEvent, origin *core.TriggerOrigin, occurredAt time.Time) (core.TriggerEventOutcome, string) {
 	if strings.TrimSpace(expr) == "" {
 		return core.TriggerEventPending, ""
 	}
@@ -218,9 +218,10 @@ func (in *Intake) applyFilter(expr string, trigger *core.Trigger, ev InboundEven
 		// tightened. Record it; never fall back to firing.
 		return core.TriggerEventFailed, "the trigger's filter does not compile: " + err.Error()
 	}
-	hit, err := filter.Match(FilterInput{
+	event := FilterInput{
 		Kind: string(ev.Kind), TriggerID: trigger.ID, OccurredAt: occurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: origin,
-	})
+	}
+	hit, err := filter.MatchScope(ActivationScope(ctx, in.repo, trigger, decl, event.Root()))
 	if err != nil {
 		return core.TriggerEventFailed, fmt.Sprintf(
 			"the trigger's filter could not evaluate this event (%v); guard optional fields with has()", err)

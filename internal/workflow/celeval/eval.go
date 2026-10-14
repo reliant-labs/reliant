@@ -40,7 +40,8 @@ const (
 	// ScopeRun is a node's scope: inputs, trigger, nodes, workflow, iter.
 	ScopeRun Scope = ""
 	// ScopeTrigger is a trigger filter's, inputs mapping's and prompt's: only
-	// `trigger`. The run does not exist yet, so inputs and nodes do not either.
+	// `trigger`, with `trigger.activation` under it. The run does not exist
+	// yet, so inputs and nodes do not either.
 	ScopeTrigger Scope = "trigger"
 )
 
@@ -64,6 +65,13 @@ type Request struct {
 	TriggerPayload map[string]any
 	// TriggerSender is trigger.sender (kind, id, display_name, verified).
 	TriggerSender map[string]any
+	// OwnerGitHubID is trigger.activation.owner.github_id, in scope trigger.
+	OwnerGitHubID string
+	// ActivationParams is trigger.activation.params, in scope trigger: what the
+	// activation sets for the workflow's inputs. Nothing is defaulted here,
+	// because no workflow is named; read a declared trigger through
+	// DryRunTrigger for that.
+	ActivationParams map[string]any
 
 	Inputs map[string]any
 	// Nodes maps node id to that node's output map.
@@ -145,7 +153,10 @@ func Evaluate(req Request) Result {
 				Hint: "drop inputs/nodes, or use the default scope to test a node's expression"}
 			return res
 		}
-		ctx = &triggerContext{root: trigger}
+		ctx = &triggerContext{scope: triggerspec.Scope{
+			Trigger:    trigger,
+			Activation: triggerspec.ActivationRoot("sample-activation", triggerspec.Owner{UserID: "sample-owner", GitHubID: req.OwnerGitHubID}, normalizeNumbers(req.ActivationParams)),
+		}}
 	default:
 		in := map[string]any{}
 		for k, v := range inputs {
@@ -335,7 +346,7 @@ func shapeFindings(req Request, kind Kind) []string {
 	if err != nil {
 		return nil
 	}
-	shape, err := triggerspec.NewShape(schema)
+	shape, err := triggerspec.NewShape(nil, schema)
 	if err != nil {
 		return nil
 	}
@@ -358,13 +369,14 @@ func shapeFindings(req Request, kind Kind) []string {
 	return out
 }
 
-// triggerContext is a CEL context with only the `trigger` namespace.
-type triggerContext struct{ root map[string]any }
+// triggerContext is a CEL context with only the `trigger` namespace, the
+// activation under it, as a trigger's filter, inputs and prompt see it.
+type triggerContext struct{ scope triggerspec.Scope }
 
 func (c *triggerContext) Namespaces() []wfcel.CELNamespace {
 	return []wfcel.CELNamespace{wfcel.CELTrigger}
 }
 
 func (c *triggerContext) Activation() map[string]any {
-	return wfcel.EnsureNamespaceDefaults(map[string]any{string(wfcel.CELTrigger): c.root}, c.Namespaces())
+	return wfcel.EnsureNamespaceDefaults(c.scope.Vars(), c.Namespaces())
 }

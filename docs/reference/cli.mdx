@@ -8725,13 +8725,16 @@ Context:
                                                give only what the expression reads
                                                (a JSON string, or @file.json)
   --trigger-sender '`{"id":"583231","verified":true}`'
+  --activation-params '`{"repos":["acme/web"]}`' trigger.activation.params (scope trigger)
+  --owner-github-id 583231                     trigger.activation.owner.github_id
   --inputs '`{"n":1}`', --input k=v              inputs.*
   --nodes '\{"start":\{"stdout":"`{}`"\}\}'          nodes.`<id>`.*
 
 With no expression, prints the trigger the event delivers.
 
 Scope: --scope trigger (a trigger's filter, inputs mapping, prompt) sees only
-trigger; the default, run, is a node's field and also sees inputs and nodes.
+trigger and activation; the default, run, is a node's field and also sees inputs
+and nodes.
 
 Examples:
   reliant workflow eval --integration github --event issues.opened \
@@ -8749,6 +8752,7 @@ reliant workflow eval [expression] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--activation-params` | `string` | - | trigger.activation.params as JSON, or @file.json (scope trigger) |
 | `--event` | `string` | - | The integration event to generate trigger.payload for, e.g. issues.opened |
 | `--input` | `stringArray` | `[]` | One input as key=value (repeatable; the value is JSON when it parses, else a string) |
 | `--inputs` | `string` | - | inputs.* as JSON, or @file.json |
@@ -8756,6 +8760,7 @@ reliant workflow eval [expression] [flags]
 | `--json` | `bool` | - | Print the result as JSON |
 | `--kind` | `string` | - | How to read the expression: expression (raw CEL) or template (\{`{ }`\}); default: template when it has a \{\{ outside a string literal |
 | `--nodes` | `string` | - | nodes.`<id>`.* as JSON keyed by node id, or @file.json |
+| `--owner-github-id` | `string` | - | trigger.activation.owner.github_id (scope trigger); a string, like trigger.sender.id |
 | `--scope` | `string` | - | What it can see: run (default; a node's field) or trigger (a trigger's filter, inputs mapping or prompt) |
 | `--trigger-kind` | `string` | - | trigger.kind: webhook, integration, schedule or workflow_event |
 | `--trigger-payload` | `string` | - | trigger.payload as JSON, or @file.json; merged over the generated sample |
@@ -9103,6 +9108,9 @@ real firing would, and anything that fails (or that the integration's declared
 payload rules out) is reported as an error. For an integration trigger the
 payload is merged over a sample generated from the event's declared payload, so
 give only the fields your expressions read. The JSON may be a file: @event.json.
+--activation-params supplies trigger.activation.params, as an activation of the workflow
+would set them (params it leaves out read as the workflow's input defaults), and
+--owner-github-id trigger.activation.owner.github_id.
 
 Exit code 0 if all workflows are valid, 1 if any errors are found.
 
@@ -9114,10 +9122,12 @@ reliant workflow validate [path] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--activation-params` | `string` | - | Sample trigger.activation.params (JSON or @file.json), used with --trigger-payload |
 | `--dir` | `string` | `.reliant/workflows` | Directory containing workflow YAML files |
 | `--fail-fast` | `bool` | - | Stop on first validation error |
 | `--include-builtins` | `bool` | - | Also validate builtin workflows |
 | `--json` | `bool` | - | Output in JSON format (for CI) |
+| `--owner-github-id` | `string` | - | Sample trigger.activation.owner.github_id (a string), used with --trigger-payload |
 | `--trigger-payload` | `string` | - | Sample trigger.payload (JSON or @file.json): also run each declared trigger's filter, inputs and prompt against it |
 | `--trigger-sender` | `string` | - | Sample trigger.sender (JSON: kind, id, display_name, verified), used with --trigger-payload |
 | `--verbose`, `-V` | `bool` | - | Show detailed output for each workflow |
