@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"strconv"
@@ -132,7 +133,15 @@ func setupTestRepo(t *testing.T) (*Repo, *sql.DB, func()) {
 		t.Fatalf("failed to prepare test template database: %v", err)
 	}
 
-	dsn, name, err := cloneTemplateDB(baseDSN)
+	return setupTestRepoFrom(t, baseDSN, templateName)
+}
+
+// setupTestRepoFrom is setupTestRepo over a copy of the named template, which
+// must already exist.
+func setupTestRepoFrom(t *testing.T, baseDSN, template string) (*Repo, *sql.DB, func()) {
+	t.Helper()
+
+	dsn, name, err := cloneTemplateDB(baseDSN, template)
 	if err != nil {
 		t.Fatalf("failed to create per-test database: %v", err)
 	}
@@ -164,14 +173,14 @@ func setupTestRepo(t *testing.T) (*Repo, *sql.DB, func()) {
 	return repo, db, cleanup
 }
 
-// cloneTemplateDB copies the migrated template into a fresh database dedicated
-// to one test, and returns its DSN and name.
+// cloneTemplateDB copies a template into a fresh database dedicated to one
+// test, and returns its DSN and name.
 //
 // The name carries the pid and a per-process counter rather than t.Name():
 // subtests, table-driven cases and helpers that call SetupTestDB more than once
 // would all collide on a name derived from the test alone, and a name is not
 // allowed to be longer than 63 bytes anyway.
-func cloneTemplateDB(baseDSN string) (dsn string, name string, err error) {
+func cloneTemplateDB(baseDSN, template string) (dsn string, name string, err error) {
 	u, err := url.Parse(baseDSN)
 	if err != nil {
 		return "", "", fmt.Errorf("parse DATABASE_URL: %w", err)
@@ -180,7 +189,7 @@ func cloneTemplateDB(baseDSN string) (dsn string, name string, err error) {
 	name = fmt.Sprintf("%st%d_%d", testDBPrefix, os.Getpid(), testDBSeq.Add(1))
 
 	//nolint:gosec // G701: both identifiers are locally derived and quoted.
-	stmt := fmt.Sprintf(`CREATE DATABASE %s TEMPLATE %s`, quoteIdent(name), quoteIdent(templateName))
+	stmt := fmt.Sprintf(`CREATE DATABASE %s TEMPLATE %s`, quoteIdent(name), quoteIdent(template))
 	if _, err := adminDB.Exec(stmt); err != nil {
 		return "", "", fmt.Errorf("copy template database: %w", err)
 	}
@@ -372,14 +381,14 @@ func createTemplateDB(baseDSN string) error {
 	templateDSN = tplURL.String()
 
 	// Migrate and seed the template ONCE. Everything below is inherited by
-	// every per-test copy, which is what makes the copies cheap.
+	// every per-test copy, which is what makes the copies cheap. Migrate
+	// opens and closes its own connections, the same path a server boots on.
+	if _, err := Migrate(context.Background(), templateDSN, slog.New(slog.DiscardHandler)); err != nil {
+		return fmt.Errorf("migrate template database: %w", err)
+	}
 	tplDB, err := sql.Open("pgx", templateDSN)
 	if err != nil {
 		return fmt.Errorf("open template database: %w", err)
-	}
-	if err := RunMigrations(tplDB); err != nil {
-		tplDB.Close()
-		return fmt.Errorf("migrate template database: %w", err)
 	}
 	// Seed the shared "test-project" that many tests reference by ID to satisfy
 	// the projects FK on chats. Its path is a unique sentinel (not the common

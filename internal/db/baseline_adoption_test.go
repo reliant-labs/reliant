@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -42,7 +41,10 @@ func TestBaselineAdoptsExactlyTheGooseHistory(t *testing.T) {
 		t.Fatalf("the first migration, %s, must declare the goose history it replaces (%s goose …)", baseline.Name, compat.AdoptsDirective)
 	}
 
-	goose := gooseFileVersions(t)
+	goose, err := gooseFileVersions()
+	if err != nil {
+		t.Fatal(err)
+	}
 	declared := baseline.Adopts.Versions
 	var missing, extra []int64
 	for _, v := range goose {
@@ -88,30 +90,6 @@ func TestGooseHistoryIsFrozen(t *testing.T) {
 			"goose's history is frozen: the baseline and every database adopted or caught up from goose rely on these exact files. "+
 			"Revert the change and write a forge migration instead (`forge db migration new <name>`)", got, frozenGooseDigest)
 	}
-}
-
-// gooseFileVersions returns the version of every embedded goose migration,
-// ascending.
-func gooseFileVersions(t *testing.T) []int64 {
-	t.Helper()
-	entries, err := fs.ReadDir(FS, migrationsDir)
-	if err != nil {
-		t.Fatalf("read goose migrations: %v", err)
-	}
-	var versions []int64
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
-			continue
-		}
-		prefix, _, _ := strings.Cut(e.Name(), "_")
-		v, err := strconv.ParseInt(prefix, 10, 64)
-		if err != nil {
-			t.Fatalf("goose migration %s: version %q is not a number", e.Name(), prefix)
-		}
-		versions = append(versions, v)
-	}
-	slices.Sort(versions)
-	return versions
 }
 
 // gooseHistoryDigest is a sha256 over every embedded goose file, in name

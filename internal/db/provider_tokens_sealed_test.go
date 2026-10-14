@@ -280,7 +280,7 @@ func TestCompareAndSwapConcurrentRotationHasOneWinner(t *testing.T) {
 // wrote them, and runs the real migration: the rows must be gone and the
 // plaintext columns with them.
 func TestSealProviderTokensMigrationDeletesPlaintextRows(t *testing.T) {
-	_, raw, cleanup := SetupTestDBWithRawDB(t)
+	_, raw, cleanup := setupGooseTestDBWithRawDB(t)
 	defer cleanup()
 
 	unsealProviderTokenTables(t, raw)

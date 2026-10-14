@@ -309,7 +309,8 @@ const releaseBindingsMigrationVersion int64 = 20261010020219
 // one live worktree owner and 13 project installs). The migration releases
 // exactly those, and nothing bound to a machine that still exists.
 func TestReleaseBindingsMigration_HealsRowsLeftByEarlierRemovals(t *testing.T) {
-	repo, rawDB := registryTestRepo(t)
+	repo, rawDB, cleanup := setupGooseTestDBWithRawDB(t)
+	t.Cleanup(cleanup)
 	ctx := context.Background()
 	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: "kept-2", UserID: "test-user", DaemonType: "managed"}); err != nil {
 		t.Fatalf("seed: %v", err)

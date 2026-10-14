@@ -449,20 +449,27 @@ migration:
 		exit 1; \
 	fi
 	@echo "$(YELLOW)Creating migration: $(NAME)$(NC)"
-	@# A UNIX-epoch-times-a-million version produced a filename that
-	@# TestNewMigrationsCarryARealTimestamp rejects: it wants the
-	@# YYYYMMDDHHMMSS form goose itself generates, because that is what
-	@# sorts and reads as a date. So delegate to goose rather than
-	@# re-deriving a version here and disagreeing with the test.
+	@# Migrations are forge migrations (db/migrations/<YYYYMMDDHHMMSS>_<name>.up.sql,
+	@# forward only), created by the forge go.mod pins so the version
+	@# allocator is the one the migrator was built with. forge allocates the
+	@# version so it sorts after every existing one; never hand-type it.
+	@# goose's internal/db/migrations/postgres is frozen history: a file added
+	@# there never runs, and TestGooseHistoryIsFrozen fails.
 	@#
-	@# goose scaffolds a `-- +goose Down` section; this project never writes
-	@# down migrations (we roll forward), so it is stripped immediately.
-	@goose -dir internal/db/migrations/postgres create $(NAME) sql > /dev/null
-	@FILE=$$(ls -t internal/db/migrations/postgres/*_$(NAME).sql | head -1); \
-	printf -- '-- +goose Up\n\n' > "$$FILE"; \
+	@# The file starts declared backward-compatible, with a placeholder reason
+	@# TestForgeMigrationsDeclareCompatibility refuses until it is written:
+	@# rolling back is redeploying the previous release (the last goose
+	@# release, until one ships after the cutover) onto this schema.
+	@GOWORK=off go run github.com/reliant-labs/forge/cmd/forge db migration new $(NAME)
+	@FILE=$$(ls -t db/migrations/*_$(NAME).up.sql | head -1); \
+	{ printf -- '-- forge:backward-compatible — <why the previous release still works on this schema>\n'; \
+	  printf -- '--   (or, deliberately, "-- reliant:breaks-rollback" and the reason; see research/forge-migration/04-p5a-cutover-runbook.md)\n'; \
+	  cat "$$FILE"; } > "$$FILE.tmp" && mv "$$FILE.tmp" "$$FILE"; \
 	echo "$(GREEN)✅ Migration created: $$FILE$(NC)"
 	@echo "$(YELLOW)Next steps:$(NC)"
-	@echo "  1. Edit the migration file"
+	@echo "  1. Write the SQL, and replace the <why ...> placeholder: can the previous release run on this schema?"
+	@echo "     Additive (a column, table or index old code ignores): keep -- forge:backward-compatible."
+	@echo "     Otherwise expand now and contract in a later release, or declare -- reliant:breaks-rollback <why>."
 	@echo "  2. Run: make db-regenerate"
 	@echo "  3. Write your Go code using the new types"
 

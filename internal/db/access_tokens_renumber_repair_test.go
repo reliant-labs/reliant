@@ -134,15 +134,16 @@ func versionApplied(t *testing.T, raw *sql.DB, version int64) bool {
 // TestRenumberWindowDatabaseMigratesOnPlainStartup is the whole promise: a
 // window database converges with no manual SQL, just by starting api-server.
 //
-// It runs the real startup path (RunMigrations), not a hand-picked subset, so
-// it fails the same way the running server does.
+// It runs the real startup path (Migrate: the goose bridge catches the window
+// database up with goose, then forge's migrator adopts it), not a hand-picked
+// subset, so it fails the same way the running server does.
 func TestRenumberWindowDatabaseMigratesOnPlainStartup(t *testing.T) {
-	_, raw, cleanup := SetupTestDBWithRawDB(t)
+	_, raw, cleanup := setupGooseTestDBWithRawDB(t)
 	defer cleanup()
 
 	rewindToRenumberWindow(t, raw)
 
-	require.NoError(t, RunMigrations(raw),
+	require.NoError(t, startUp(t, raw),
 		"a database that ran main inside the #293/#294 renumber window must migrate on plain startup")
 
 	assert.True(t, tableExistsInDB(t, raw, "access_tokens"),
@@ -162,7 +163,7 @@ func TestRenumberWindowDatabaseMigratesOnPlainStartup(t *testing.T) {
 // IF NOT EXISTS is only safe if it also does not re-run the destructive
 // statements against live data.
 func TestRenumberWindowRepairPreservesAccessTokens(t *testing.T) {
-	_, raw, cleanup := SetupTestDBWithRawDB(t)
+	_, raw, cleanup := setupGooseTestDBWithRawDB(t)
 	defer cleanup()
 
 	rewindToRenumberWindow(t, raw)
@@ -171,7 +172,7 @@ func TestRenumberWindowRepairPreservesAccessTokens(t *testing.T) {
 		VALUES ('tok-window', 'org-window', 'minted before the repair', 'hash-window', 'rlat_win', ARRAY['reliant:api'])`)
 	require.NoError(t, err)
 
-	require.NoError(t, RunMigrations(raw))
+	require.NoError(t, startUp(t, raw))
 
 	var name string
 	require.NoError(t, raw.QueryRow(`SELECT name FROM access_tokens WHERE id = 'tok-window'`).Scan(&name),
@@ -196,7 +197,7 @@ func TestRenumberWindowRepairPreservesAccessTokens(t *testing.T) {
 // CREATE OR REPLACE keeps the frozen column list. So the window database is
 // missing it in BOTH places, and the generated queries read it from the view.
 func TestAprilRenumberWindowRestoresActiveDaemonID(t *testing.T) {
-	_, raw, cleanup := SetupTestDBWithRawDB(t)
+	_, raw, cleanup := setupGooseTestDBWithRawDB(t)
 	defer cleanup()
 
 	_, err := raw.Exec(`DROP VIEW IF EXISTS chats_with_activity`)
@@ -218,7 +219,7 @@ func TestAprilRenumberWindowRestoresActiveDaemonID(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	require.NoError(t, RunMigrations(raw),
+	require.NoError(t, startUp(t, raw),
 		"a database from the April 20260321000000 collision must migrate on plain startup")
 
 	var onTable bool
@@ -243,7 +244,7 @@ func TestAprilRenumberWindowRestoresActiveDaemonID(t *testing.T) {
 // and the restore migration must be inert there. The template is such a
 // database, so running the startup path against it unchanged is the check.
 func TestPayloadBlobsRestoreIsANoOpOnAHealthyDatabase(t *testing.T) {
-	_, raw, cleanup := SetupTestDBWithRawDB(t)
+	_, raw, cleanup := setupGooseTestDBWithRawDB(t)
 	defer cleanup()
 
 	require.NoError(t, RunMigrations(raw))

@@ -75,7 +75,7 @@ func ownerOf(t *testing.T, raw *sql.DB, runID string) sql.NullString {
 // exists gets that chat's user, and a run whose chat is gone keeps NULL
 // rather than blocking the migration or being handed an invented owner.
 func TestOwnerMigration_BackfillsFromChatAndLeavesOrphansNull(t *testing.T) {
-	_, raw, cleanup := SetupTestDBWithRawDB(t)
+	_, raw, cleanup := setupGooseTestDBWithRawDB(t)
 	defer cleanup()
 
 	rewindOwnerMigration(t, raw)
@@ -104,7 +104,7 @@ func TestOwnerMigration_BackfillsFromChatAndLeavesOrphansNull(t *testing.T) {
 // INVALID index (what a failed CREATE INDEX CONCURRENTLY leaves behind) rather
 // than accept it as done.
 func TestOwnerMigration_ResumesAfterACrashMidway(t *testing.T) {
-	_, raw, cleanup := SetupTestDBWithRawDB(t)
+	_, raw, cleanup := setupGooseTestDBWithRawDB(t)
 	defer cleanup()
 
 	rewindOwnerMigration(t, raw)
@@ -154,7 +154,7 @@ func TestOwnerMigration_ResumesAfterACrashMidway(t *testing.T) {
 // records, for every UPDATE the backfill issues, whether the migrating session
 // still holds an AccessExclusiveLock on the table at that moment.
 func TestOwnerMigration_BackfillDoesNotHoldTheTableLock(t *testing.T) {
-	_, raw, cleanup := SetupTestDBWithRawDB(t)
+	_, raw, cleanup := setupGooseTestDBWithRawDB(t)
 	defer cleanup()
 
 	rewindOwnerMigration(t, raw)

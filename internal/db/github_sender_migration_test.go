@@ -22,7 +22,7 @@ const githubSenderNumericIDVersion = 20261007012023
 // senders by login is switched off (its "Only from" clause removed), so none
 // is left enabled and silently matching nobody.
 func TestGitHubSenderMigrationReplacesLogins(t *testing.T) {
-	_, raw, cleanup := SetupTestDBWithRawDB(t)
+	_, raw, cleanup := setupGooseTestDBWithRawDB(t)
 	defer cleanup()
 
 	exec := func(stmt string, args ...any) {

@@ -3,7 +3,10 @@ sql:
   # PostgreSQL configuration
   - engine: "postgresql"
     queries: "internal/db/postgres/queries"
-    schema: "internal/db/postgres/schema.sql"
+    # The forge migrations themselves (sqlc reads *.up.sql in order), so the
+    # schema sqlc checks queries against is the one the migrator builds.
+    # Until P5b replaces sqlc with the forge ORM.
+    schema: "db/migrations"
     gen:
       go:
         package: "pgdb"

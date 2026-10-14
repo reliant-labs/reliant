@@ -5,61 +5,52 @@ import (
 	"database/sql"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/migratekit"
 )
 
 // The single-migrator rule (see MigrationPolicy) is only safe because the
 // non-migrating processes wait for a schema that is actually current. These
-// tests cover what "current" means: every embedded migration recorded applied,
-// not merely the newest one.
+// tests cover what "current" means: a clean recorded version at or past the
+// newest embedded migration.
 
-func TestMissingMigrationVersions_FullyMigratedDBHasNone(t *testing.T) {
-	_, rawDB, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
-
-	want, err := embeddedMigrationVersions()
-	if err != nil {
-		t.Fatalf("embeddedMigrationVersions: %v", err)
-	}
-	if len(want) == 0 {
-		t.Fatal("expected embedded migrations, got none")
-	}
-
-	missing, err := missingMigrationVersions(rawDB, want)
-	if err != nil {
-		t.Fatalf("missingMigrationVersions: %v", err)
-	}
-	if len(missing) != 0 {
-		t.Fatalf("test DB is migrated, expected no missing versions, got %v", missing)
+func TestPendingVersions(t *testing.T) {
+	want := []int64{10, 20, 30}
+	for _, tc := range []struct {
+		name  string
+		state migratekit.State
+		want  []int64
+	}{
+		{"nothing recorded: everything is pending", migratekit.State{}, []int64{10, 20, 30}},
+		{"at the newest: current", migratekit.State{Version: 30, Applied: true}, nil},
+		{"behind: the later versions", migratekit.State{Version: 10, Applied: true}, []int64{20, 30}},
+		// golang-migrate marks a version dirty while it runs it, so a waiter
+		// sees this on every healthy migration and must keep waiting.
+		{"dirty: the version being applied is pending", migratekit.State{Version: 30, Dirty: true, Applied: true}, []int64{30}},
+		{"ahead of this binary (an older release mid-deploy): current", migratekit.State{Version: 40, Applied: true}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := pendingVersions(tc.state, want); !slices.Equal(got, tc.want) {
+				t.Fatalf("pendingVersions(%+v) = %v, want %v", tc.state, got, tc.want)
+			}
+		})
 	}
 }
 
-// A migration this binary embeds but the DB has never applied must be reported
-// missing even though it sorts *below* the newest applied version — that is the
-// case a max(version_id) comparison gets wrong, and goose.WithAllowMissing()
-// makes it reachable in practice when branches land out of order.
-func TestMissingMigrationVersions_DetectsOlderUnappliedVersion(t *testing.T) {
+func TestPendingMigrations_FullyMigratedDBHasNone(t *testing.T) {
 	_, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	want, err := embeddedMigrationVersions()
+	pending, err := PendingMigrations(rawDB)
 	if err != nil {
-		t.Fatalf("embeddedMigrationVersions: %v", err)
+		t.Fatalf("PendingMigrations: %v", err)
 	}
-
-	// Sorts below every real migration, so it can only be found by set
-	// membership, never by comparing against the highest applied version.
-	const unapplied int64 = 1
-	augmented := append([]int64{unapplied}, want...)
-
-	missing, err := missingMigrationVersions(rawDB, augmented)
-	if err != nil {
-		t.Fatalf("missingMigrationVersions: %v", err)
-	}
-	if len(missing) != 1 || missing[0] != unapplied {
-		t.Fatalf("expected exactly [%d] missing, got %v", unapplied, missing)
+	if len(pending) != 0 {
+		t.Fatalf("test DB is migrated, expected no pending versions, got %v", pending)
 	}
 }
 
@@ -80,7 +71,7 @@ func TestWaitForSchema_ReturnsImmediatelyWhenCurrent(t *testing.T) {
 
 // A waiter pointed at a database no migrator has touched must fail with a
 // message naming the owner, rather than proceeding onto a schema that isn't
-// there. Restricting search_path to pg_temp hides goose's bookkeeping table
+// there. Restricting search_path to pg_temp hides the migrator's version table
 // from to_regclass, putting the connection in the same state as a database
 // nobody has migrated — without needing to create and drop one.
 func TestWaitForSchema_TimesOutWhenNoMigratorRuns(t *testing.T) {
@@ -95,11 +86,11 @@ func TestWaitForSchema_TimesOutWhenNoMigratorRuns(t *testing.T) {
 	// Confirm the setup actually hides the table; otherwise this test would
 	// pass for the wrong reason if it stopped taking effect.
 	var visible bool
-	if err := blind.QueryRow(`SELECT to_regclass('goose_db_version') IS NOT NULL`).Scan(&visible); err != nil {
-		t.Fatalf("probe goose table visibility: %v", err)
+	if err := blind.QueryRow(`SELECT to_regclass('schema_migrations') IS NOT NULL`).Scan(&visible); err != nil {
+		t.Fatalf("probe version table visibility: %v", err)
 	}
 	if visible {
-		t.Fatal("expected goose_db_version to be hidden by the restricted search_path")
+		t.Fatal("expected schema_migrations to be hidden by the restricted search_path")
 	}
 
 	t.Setenv("RELIANT_DB_SCHEMA_WAIT_SECONDS", "1")

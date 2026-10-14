@@ -2,8 +2,13 @@
 package commands
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
+	"strconv"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
 	"github.com/spf13/cobra"
@@ -23,10 +28,11 @@ import (
 // waiting on the api-server. Nothing in the cycle can move.
 //
 // `db migrate up` breaks it by letting a one-shot Job hold MigrateApply ahead
-// of every workload that waits on the schema. It is the SAME goose run over
-// the SAME embedded migrations the api-server would do, so the single-migrator
-// rule is preserved — the owner moved, it did not multiply. Do not run it
-// concurrently with a live api-server for the same database.
+// of every workload that waits on the schema. It is the SAME db.Migrate call
+// over the SAME embedded migrations the api-server makes, so the
+// single-migrator rule is preserved — the owner moved, it did not multiply.
+// Running it beside a live api-server is safe (the migrators' locks make them
+// take turns) but pointless.
 func newDBCmd() *cobra.Command {
 	dbCmd := &cobra.Command{
 		Use:   "db",
@@ -35,7 +41,9 @@ func newDBCmd() *cobra.Command {
 
 DATABASE_URL (required) and DATABASE_DRIVER are read from the environment —
 the same variables the servers read, so a migration Job and the api-server
-cannot disagree about which database they mean.`,
+cannot disagree about which database they mean. Migrations run on
+DATABASE_DIRECT_URL instead when it is set: the migrator holds session-level
+locks, which a transaction-pooling PgBouncer on DATABASE_URL cannot keep.`,
 	}
 
 	migrateCmd := &cobra.Command{
@@ -50,7 +58,13 @@ cannot disagree about which database they mean.`,
 recorded applied, then exit.
 
 Exits 0 when the schema is already current, so it is safe to run on every
-deploy and safe to re-run after a failure.`,
+deploy and safe to re-run after a failure.
+
+A database the goose releases migrated is adopted on its first run: the
+baseline migration is recorded as applied without running its SQL. One an
+older goose release migrated is first brought to goose's frozen head by goose
+itself, then adopted. A goose history the baseline does not describe is
+refused with nothing applied. ` + "`db migrate status`" + ` previews which.`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -59,43 +73,64 @@ deploy and safe to re-run after a failure.`,
 				return err
 			}
 
-			// MigrateApply is what ConnectWithConfig does by default: open,
-			// then run goose to completion. Reusing it rather than calling
-			// RunMigrations against a hand-rolled connection keeps this on the
-			// identical code path the api-server takes.
-			cfg.Migrate = db.MigrateApply
-
-			sqlDB, err := db.ConnectWithConfig(cfg)
+			out := cmd.OutOrStdout()
+			// The goose bridge logs its progress while it runs (goose prints
+			// a line per file); the migrator's report follows, one fact per
+			// line.
+			res, err := db.Migrate(cmd.Context(), cfg.MigrationURL(), slog.New(slog.NewTextHandler(out, nil)))
 			if err != nil {
 				return err
 			}
-			defer func() { _ = sqlDB.Close() }()
+			for _, line := range res.Lines() {
+				fmt.Fprintln(out, line)
+			}
 
-			pending, err := db.PendingMigrations(sqlDB)
+			// Belt-and-braces: the migrator reported success, so a schema
+			// short of the newest embedded version means it applied a
+			// different set than this binary embeds — a mismatch worth failing
+			// the Job over, because every waiter is about to block on exactly
+			// this set.
+			sqlDB, err := sql.Open("pgx", cfg.MigrationURL())
 			if err != nil {
 				return fmt.Errorf("verify schema after migrate: %w", err)
 			}
-			// Belt-and-braces: goose reported success, so a non-empty set here
-			// means the migrations it applied are not the ones this binary
-			// embeds — a mismatch worth failing the Job over, because every
-			// waiter is about to block on exactly this set.
-			if len(pending) > 0 {
-				return fmt.Errorf("migrate up reported success but %d migration(s) are still unapplied (oldest: %d)", len(pending), pending[0])
+			defer func() { _ = sqlDB.Close() }()
+			state, err := db.ReadMigrationState(sqlDB)
+			if err != nil {
+				return fmt.Errorf("verify schema after migrate: %w", err)
 			}
-
-			fmt.Fprintln(cmd.OutOrStdout(), "schema is current")
+			embedded, err := db.EmbeddedMigrationVersions()
+			if err != nil {
+				return fmt.Errorf("verify schema after migrate: %w", err)
+			}
+			latest := embedded[len(embedded)-1]
+			if !state.Applied || state.Dirty || int64(state.Version) < latest {
+				return fmt.Errorf("migrate up reported success but the schema is at version %s (dirty %t), short of this binary's newest migration %d",
+					versionLabel(state.Applied, state.Version), state.Dirty, latest)
+			}
+			if int64(state.Version) > latest {
+				fmt.Fprintf(out, "schema is AHEAD of this binary (version %d, this binary embeds up to %d); nothing was applied\n", state.Version, latest)
+				return nil
+			}
+			fmt.Fprintf(out, "schema is current (version %d)\n", state.Version)
 			return nil
 		},
 	})
 
 	migrateCmd.AddCommand(&cobra.Command{
 		Use:   "status",
-		Short: "Print which embedded migrations the database is missing",
-		Long: `Report how many of this binary's embedded migrations the database has
-applied, and list any it has not.
+		Short: "Preview what `db migrate up` would do, changing nothing",
+		Long: `Read the database's migration state and print what ` + "`db migrate up`" + ` from
+this binary would do to it: nothing (up to date), apply pending migrations,
+build a fresh database, adopt a database the goose releases migrated, catch an
+older goose database up with goose and then adopt it, or refuse — and why.
 
-Opens the database WITHOUT migrating and WITHOUT waiting, so it stays usable
-to diagnose the very deadlock the wait produces.`,
+The first line is the verdict. Exits non-zero when ` + "`up`" + ` would refuse.
+
+Every read runs in one READ ONLY transaction, so Postgres itself rejects any
+write: it creates nothing, takes no lock, and does not wait for a migrator.
+It is the pre-flight for a database we keep, and stays usable to diagnose the
+very deadlock the schema wait produces.`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -105,40 +140,96 @@ to diagnose the very deadlock the wait produces.`,
 			}
 
 			// Deliberately NOT ConnectWithConfig: both of its policies act on
-			// the schema (apply or block until current), and a status command
-			// that blocked would be useless exactly when it is needed.
-			sqlDB, err := sql.Open("pgx", cfg.URL)
+			// the schema (apply, or block until current).
+			sqlDB, err := sql.Open("pgx", cfg.MigrationURL())
 			if err != nil {
 				return fmt.Errorf("open database: %w", err)
 			}
 			defer func() { _ = sqlDB.Close() }()
 
-			if err := sqlDB.Ping(); err != nil {
-				return fmt.Errorf("connect to database: %w", err)
-			}
-
-			embedded, err := db.EmbeddedMigrationVersions()
+			plan, err := readOnlyPlan(cmd.Context(), sqlDB)
 			if err != nil {
 				return err
 			}
-			pending, err := db.PendingMigrations(sqlDB)
+			if printPlan(cmd.OutOrStdout(), plan) {
+				return errors.New("`db migrate up` would refuse this database; nothing was changed")
+			}
+			return nil
+		},
+	})
+
+	migrateCmd.AddCommand(&cobra.Command{
+		Use:   "force <version>",
+		Short: "Clear a dirty migration state by recording a version without running SQL",
+		Long: `Record <version> as the schema's version and clear the dirty flag, WITHOUT
+running any SQL — the way out when a migration failed partway and ` + "`up`" + `
+refuses the dirty schema.
+
+Forcing asserts a fact; it does not verify one. Inspect the database and
+finish or undo the partial migration FIRST, then force the version the schema
+now truly reflects and run ` + "`up`" + `. The versions it asserts are recorded as
+this binary's own embedded migrations, so run the release that failed. -1
+means no version applied. Never force the baseline onto a database: that
+records it without checking that the schema is the one it builds.`,
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			version, err := strconv.Atoi(args[0])
+			if err != nil || version < -1 {
+				return fmt.Errorf("force: %q is not a migration version (an integer, or -1 for none)", args[0])
+			}
+			cfg, err := db.ResolveDatabaseConfig("")
 			if err != nil {
 				return err
 			}
-
-			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "applied %d of %d embedded migrations\n", len(embedded)-len(pending), len(embedded))
-			if len(pending) == 0 {
-				return nil
+			if err := db.Force(cfg.MigrationURL(), version); err != nil {
+				return err
 			}
-			fmt.Fprintf(out, "pending:\n")
-			for _, v := range pending {
-				fmt.Fprintf(out, "  %d\n", v)
-			}
+			fmt.Fprintf(cmd.OutOrStdout(), "forced version %d: the dirty flag is cleared and no SQL was run; `%s up` applies the rest\n",
+				version, cmd.Parent().CommandPath())
 			return nil
 		},
 	})
 
 	dbCmd.AddCommand(migrateCmd)
 	return dbCmd
+}
+
+// readOnlyPlan runs db.PlanMigration inside one READ ONLY, REPEATABLE READ
+// transaction: one consistent snapshot, and any write refused by Postgres.
+func readOnlyPlan(ctx context.Context, sqlDB *sql.DB) (db.MigrationPlan, error) {
+	tx, err := sqlDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
+	if err != nil {
+		return db.MigrationPlan{}, fmt.Errorf("connect to database: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	return db.PlanMigration(ctx, tx)
+}
+
+// printPlan writes the plan, verdict first, and reports whether `up` would
+// refuse.
+func printPlan(out io.Writer, p db.MigrationPlan) (refuses bool) {
+	verdict, refuses := p.Verdict()
+	fmt.Fprintf(out, "verdict: %s\n", verdict)
+	fmt.Fprintf(out, "forge:   schema_migrations version %s (dirty %t); this binary embeds %d migration(s), %s through %d\n",
+		versionLabel(p.State.Applied, p.State.Version), p.State.Dirty, len(p.Embedded), p.Baseline.Name, p.Latest())
+	switch g := p.Goose; {
+	case g != nil:
+		fmt.Fprintf(out, "goose:   goose_db_version holds %d applied version(s); goose's frozen history, which %s adopts, is %d through %d; missing %d, not in it %d, recorded rolled back %d\n",
+			g.Applied, p.Baseline.Name, len(g.Declared), g.Declared[len(g.Declared)-1], len(g.Missing), len(g.Unexpected), len(g.RolledBack))
+	case p.State.Applied || p.State.Dirty:
+		fmt.Fprintln(out, "goose:   not read: forge's migrator has a record, so goose_db_version is never read again")
+	default:
+		fmt.Fprintln(out, "goose:   no goose_db_version")
+	}
+	return refuses
+}
+
+// versionLabel renders a schema version, or "none" for a database with no
+// migration recorded.
+func versionLabel(applied bool, version uint) string {
+	if !applied {
+		return "none"
+	}
+	return fmt.Sprint(version)
 }

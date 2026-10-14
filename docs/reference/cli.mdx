@@ -36,7 +36,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant daemon stop`](#reliant-daemon-stop) | Stop the tools daemon |
 | [`reliant db`](#reliant-db) | Database schema commands |
 | [`reliant db migrate`](#reliant-db-migrate) | Manage database migrations |
-| [`reliant db migrate status`](#reliant-db-migrate-status) | Print which embedded migrations the database is missing |
+| [`reliant db migrate force`](#reliant-db-migrate-force) | Clear a dirty migration state by recording a version without running SQL |
+| [`reliant db migrate status`](#reliant-db-migrate-status) | Preview what `db migrate up` would do, changing nothing |
 | [`reliant db migrate up`](#reliant-db-migrate-up) | Apply every pending migration |
 | [`reliant forge`](#reliant-forge) | Connect RPC development framework for LLM-optimized applications |
 | [`reliant forge api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
@@ -695,7 +696,9 @@ Apply or inspect the migrations embedded in this binary.
 
 DATABASE_URL (required) and DATABASE_DRIVER are read from the environment —
 the same variables the servers read, so a migration Job and the api-server
-cannot disagree about which database they mean.
+cannot disagree about which database they mean. Migrations run on
+DATABASE_DIRECT_URL instead when it is set: the migrator holds session-level
+locks, which a transaction-pooling PgBouncer on DATABASE_URL cannot keep.
 
 ```
 reliant db
@@ -721,20 +724,48 @@ reliant db migrate
 
 | Command | Description |
 |---------|-------------|
-| [`status`](#reliant-db-migrate-status) | Print which embedded migrations the database is missing |
+| [`force`](#reliant-db-migrate-force) | Clear a dirty migration state by recording a version without running SQL |
+| [`status`](#reliant-db-migrate-status) | Preview what `db migrate up` would do, changing nothing |
 | [`up`](#reliant-db-migrate-up) | Apply every pending migration |
+
+---
+
+#### reliant db migrate force
+
+Clear a dirty migration state by recording a version without running SQL
+
+Record `<version>` as the schema's version and clear the dirty flag, WITHOUT
+running any SQL — the way out when a migration failed partway and `up`
+refuses the dirty schema.
+
+Forcing asserts a fact; it does not verify one. Inspect the database and
+finish or undo the partial migration FIRST, then force the version the schema
+now truly reflects and run `up`. The versions it asserts are recorded as
+this binary's own embedded migrations, so run the release that failed. -1
+means no version applied. Never force the baseline onto a database: that
+records it without checking that the schema is the one it builds.
+
+```
+reliant db migrate force <version>
+```
 
 ---
 
 #### reliant db migrate status
 
-Print which embedded migrations the database is missing
+Preview what `db migrate up` would do, changing nothing
 
-Report how many of this binary's embedded migrations the database has
-applied, and list any it has not.
+Read the database's migration state and print what `db migrate up` from
+this binary would do to it: nothing (up to date), apply pending migrations,
+build a fresh database, adopt a database the goose releases migrated, catch an
+older goose database up with goose and then adopt it, or refuse — and why.
 
-Opens the database WITHOUT migrating and WITHOUT waiting, so it stays usable
-to diagnose the very deadlock the wait produces.
+The first line is the verdict. Exits non-zero when `up` would refuse.
+
+Every read runs in one READ ONLY transaction, so Postgres itself rejects any
+write: it creates nothing, takes no lock, and does not wait for a migrator.
+It is the pre-flight for a database we keep, and stays usable to diagnose the
+very deadlock the schema wait produces.
 
 ```
 reliant db migrate status
@@ -751,6 +782,12 @@ recorded applied, then exit.
 
 Exits 0 when the schema is already current, so it is safe to run on every
 deploy and safe to re-run after a failure.
+
+A database the goose releases migrated is adopted on its first run: the
+baseline migration is recorded as applied without running its SQL. One an
+older goose release migrated is first brought to goose's frozen head by goose
+itself, then adopted. A goose history the baseline does not describe is
+refused with nothing applied. `db migrate status` previews which.
 
 ```
 reliant db migrate up
