@@ -41,6 +41,7 @@ func newWorkflowCmd() *cobra.Command {
 
 	cmd.AddCommand(newWorkflowValidateCmd())
 	cmd.AddCommand(newWorkflowValidateTreeCmd())
+	cmd.AddCommand(newWorkflowEvalCmd())
 	cmd.AddCommand(newWorkflowListCmd())
 	cmd.AddCommand(newWorkflowRunCmd())
 	cmd.AddCommand(newWorkflowFollowCmd())
@@ -69,6 +70,8 @@ func newWorkflowValidateCmd() *cobra.Command {
 		failFast        bool
 		jsonOutput      bool
 		includeBuiltins bool
+		triggerPayload  string
+		triggerSender   string
 	)
 
 	cmd := &cobra.Command{
@@ -81,12 +84,25 @@ input/output type verification, and cross-workflow contract validation.
 If a specific file path is given, validates that file only. Otherwise,
 validates all *.yaml files in the workflow directory.
 
+With --trigger-payload, each declared trigger is also run against that sample
+event: its filter, its inputs mapping and its prompt are evaluated the way a
+real firing would, and anything that fails (or that the integration's declared
+payload rules out) is reported as an error. For an integration trigger the
+payload is merged over a sample generated from the event's declared payload, so
+give only the fields your expressions read. The JSON may be a file: @event.json.
+
 Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runWorkflowValidate(cmd, args, workflowDir, verboseValidate, failFast, jsonOutput, includeBuiltins)
+			sample, err := triggerSampleFromFlags(triggerPayload, triggerSender)
+			if err != nil {
+				return err
+			}
+			return runWorkflowValidate(cmd, args, workflowDir, verboseValidate, failFast, jsonOutput, includeBuiltins, sample)
 		},
 	}
+	cmd.Flags().StringVar(&triggerPayload, "trigger-payload", "", "Sample trigger.payload (JSON or @file.json): also run each declared trigger's filter, inputs and prompt against it")
+	cmd.Flags().StringVar(&triggerSender, "trigger-sender", "", "Sample trigger.sender (JSON: kind, id, display_name, verified), used with --trigger-payload")
 
 	cmd.Flags().StringVar(&workflowDir, "dir", ".reliant/workflows", "Directory containing workflow YAML files")
 	cmd.Flags().BoolVarP(&verboseValidate, "verbose", "V", false, "Show detailed output for each workflow")
@@ -464,7 +480,7 @@ type validateResult struct {
 	Edges    int      `json:"edges,omitempty"`
 }
 
-func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, failFast, jsonOut, includeBuiltins bool) error {
+func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, failFast, jsonOut, includeBuiltins bool, sample *triggerSample) error {
 	var files []string
 
 	// Single file or directory from positional arg
@@ -536,6 +552,7 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 
 	for _, file := range files {
 		result := validateWorkflowFileIn(file, dir, layout)
+		dryRunTriggers(&result, file, sample)
 		results = append(results, result)
 
 		if !jsonOut {

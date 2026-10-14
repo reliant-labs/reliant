@@ -106,6 +106,7 @@ const (
 	ToolGetPreset              = "get_preset"
 	ToolGetSchema              = "get_schema"
 	ToolGetCELRef              = "get_cel_reference"
+	ToolCELEval                = "cel_eval"
 
 	// Integration discovery tools
 	ToolSearchIntegrations   = "search_integrations"
@@ -151,7 +152,7 @@ var AllToolNames = []string{
 	// Workflow editing
 	ToolCreateWorkflow, ToolEditWorkflow, ToolWriteWorkflow,
 	// Workflow discovery
-	ToolListWorkflows, ToolGetWorkflow, ToolGetWorkflowSuggestions, ToolListPresets, ToolGetPreset, ToolGetSchema, ToolGetCELRef,
+	ToolListWorkflows, ToolGetWorkflow, ToolGetWorkflowSuggestions, ToolListPresets, ToolGetPreset, ToolGetSchema, ToolGetCELRef, ToolCELEval,
 	// Integration discovery
 	ToolSearchIntegrations, ToolGetIntegrationSchema,
 	// Integration manifests: every exposed action in internal/integrations/catalog.

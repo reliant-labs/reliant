@@ -43,30 +43,38 @@ func EvaluateValue(expr string, ctx CELEvalContext) (interface{}, error) {
 // Handles YAML multi-line strings (| operator) by trimming leading/trailing whitespace
 // before checking for pure expressions.
 func EvaluateTemplate(expr string, ctx CELEvalContext) (interface{}, error) {
+	v, _, err := EvaluateTemplateTyped(expr, ctx)
+	return v, err
+}
+
+// EvaluateTemplateTyped is EvaluateTemplate that also reports the CEL type of
+// the result: the expression's own type for a pure {{ expr }}, "string" for
+// text with holes in it or none ("null_type" for an expression yielding null).
+func EvaluateTemplateTyped(expr string, ctx CELEvalContext) (interface{}, string, error) {
 	if expr == "" {
-		return "", nil
+		return "", "string", nil
 	}
 
 	trimmed := strings.TrimSpace(expr)
 	if trimmed == "" {
-		return "", nil
+		return "", "string", nil
 	}
 
 	// A {{ that does not close is an error, never literal text.
 	matches, err := ScanTemplate(trimmed)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// No template expressions — return trimmed string as-is.
 	if len(matches) == 0 {
-		return trimmed, nil
+		return trimmed, "string", nil
 	}
 
 	// Pure expression: entire trimmed string is a single {{expr}}.
 	// Return the expression's native type, not a string.
 	if len(matches) == 1 && matches[0].Start == 0 && matches[0].End == len(trimmed) {
-		return evaluateRaw(matches[0].Expr, ctx)
+		return evaluateRawTyped(matches[0].Expr, ctx)
 	}
 
 	// Mixed string with embedded expressions — interpolate to string.
@@ -76,9 +84,9 @@ func EvaluateTemplate(expr string, ctx CELEvalContext) (interface{}, error) {
 	for _, match := range matches {
 		result.WriteString(trimmed[lastEnd:match.Start])
 
-		value, err := evaluateRaw(match.Expr, ctx)
+		value, _, err := evaluateRawTyped(match.Expr, ctx)
 		if err != nil {
-			return nil, fmt.Errorf("template expression '{{%s}}': %w", match.Expr, err)
+			return nil, "", fmt.Errorf("template expression '{{%s}}': %w", match.Expr, err)
 		}
 
 		if value != nil {
@@ -89,16 +97,67 @@ func EvaluateTemplate(expr string, ctx CELEvalContext) (interface{}, error) {
 	}
 
 	result.WriteString(trimmed[lastEnd:])
-	return result.String(), nil
+	return result.String(), "string", nil
+}
+
+// EvaluateValueTyped is EvaluateValue that also reports the CEL type name of
+// the result ("int", "string", "list", "map", "bool", "double", "null_type",
+// "google.protobuf.Timestamp", ...).
+func EvaluateValueTyped(expr string, ctx CELEvalContext) (interface{}, string, error) {
+	return evaluateRawTyped(expr, ctx)
 }
 
 // =============================================================================
 // INTERNAL EVALUATION
 // =============================================================================
 
+// EvalPhase says which step of evaluating an expression failed.
+type EvalPhase string
+
+const (
+	// PhaseSyntax: the text is not CEL.
+	PhaseSyntax EvalPhase = "syntax"
+	// PhaseCompile: it parses but does not type-check (an unknown name, a
+	// function called with the wrong types).
+	PhaseCompile EvalPhase = "compile"
+	// PhaseEval: it compiled and failed on this data (a missing key, a
+	// division by zero, the cost limit).
+	PhaseEval EvalPhase = "eval"
+)
+
+// EvalIssue is one located problem in an expression. Line and Column are
+// 1-based within the expression text.
+type EvalIssue struct {
+	Line, Column int
+	Message      string
+}
+
+// EvalError is a failed evaluation of one CEL expression, with the phase it
+// failed in and, for a syntax or compile failure, where.
+type EvalError struct {
+	Phase  EvalPhase
+	Expr   string
+	Issues []EvalIssue
+	Err    error
+}
+
+func (e *EvalError) Error() string {
+	if e.Phase == PhaseEval {
+		return "CEL evaluation error: " + e.Err.Error()
+	}
+	return "CEL compilation error: " + e.Err.Error()
+}
+
+func (e *EvalError) Unwrap() error { return e.Err }
+
 // evaluateRaw compiles and evaluates a CEL expression against a typed context.
 // Returns the native Go value with all CEL internal types converted.
 func evaluateRaw(expr string, ctx CELEvalContext) (interface{}, error) {
+	v, _, err := evaluateRawTyped(expr, ctx)
+	return v, err
+}
+
+func evaluateRawTyped(expr string, ctx CELEvalContext) (interface{}, string, error) {
 	// Build the CEL environment from the context's namespaces.
 	config := CELEnvConfig{
 		Namespaces:             ctx.Namespaces(),
@@ -108,29 +167,40 @@ func evaluateRaw(expr string, ctx CELEvalContext) (interface{}, error) {
 
 	env, err := NewEnv(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CEL environment: %w", err)
+		return nil, "", fmt.Errorf("failed to create CEL environment: %w", err)
 	}
 
 	ast, issues := env.Compile(expr)
 	if issues != nil && issues.Err() != nil {
-		return nil, fmt.Errorf("CEL compilation error: %w", issues.Err())
+		evalErr := &EvalError{Phase: PhaseCompile, Expr: expr, Err: issues.Err()}
+		for _, issue := range issues.Errors() {
+			if strings.Contains(issue.Message, "Syntax error") {
+				evalErr.Phase = PhaseSyntax
+			}
+			evalErr.Issues = append(evalErr.Issues, EvalIssue{
+				Line:    issue.Location.Line(),
+				Column:  issue.Location.Column() + 1,
+				Message: strings.SplitN(issue.Message, "\n", 2)[0],
+			})
+		}
+		return nil, "", evalErr
 	}
 
 	prg, err := env.Program(ast, ProgramOptions()...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CEL program: %w", err)
+		return nil, "", fmt.Errorf("failed to create CEL program: %w", err)
 	}
 
 	activation := ctx.Activation()
 	if err := CheckWorkflowPathReference(env, ast, activation); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	out, _, err := prg.Eval(activation)
 	if err != nil {
-		return nil, fmt.Errorf("CEL evaluation error: %w", ExplainEvalError(err))
+		return nil, "", &EvalError{Phase: PhaseEval, Expr: expr, Err: ExplainEvalError(err)}
 	}
 
-	return ConvertToNative(out.Value()), nil
+	return ConvertToNative(out.Value()), out.Type().TypeName(), nil
 }
 
 // =============================================================================

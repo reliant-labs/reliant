@@ -468,6 +468,10 @@ func (f *ToolsFactory) GetCELReference() Tool {
 	return NewGetCELReferenceTool()
 }
 
+func (f *ToolsFactory) CELEval() Tool {
+	return NewCELEvalTool()
+}
+
 func (f *ToolsFactory) ListWorkflows() Tool {
 	return NewListWorkflowsTool(f.opts.Repo)
 }

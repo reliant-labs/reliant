@@ -90,7 +90,7 @@ var serverSafeTools = map[string]struct{}{
 	ToolStartRun: {}, ToolListRuns: {}, ToolGetRun: {}, ToolControlRun: {}, ToolSendToRun: {},
 	ToolSkill: {}, ToolLoadTool: {}, ToolAskUser: {},
 	ToolCreateWorkflow: {}, ToolEditWorkflow: {}, ToolWriteWorkflow: {},
-	ToolGetSchema: {}, ToolGetCELReference: {}, ToolListWorkflows: {}, ToolGetWorkflow: {},
+	ToolGetSchema: {}, ToolGetCELReference: {}, ToolCELEval: {}, ToolListWorkflows: {}, ToolGetWorkflow: {},
 	ToolGetWorkflowSuggestions: {}, ToolListPresets: {}, ToolGetPreset: {},
 	ToolListScenarios: {}, ToolViewScenario: {}, ToolEditScenario: {}, ToolWriteScenario: {},
 	ToolDeleteScenario: {}, ToolRunScenario: {},

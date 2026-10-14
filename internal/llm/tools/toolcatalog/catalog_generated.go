@@ -46,6 +46,21 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"cel_eval": {
+		Bindable: map[string]struct{}{
+			"event":           {},
+			"expression":      {},
+			"inputs":          {},
+			"integration":     {},
+			"kind":            {},
+			"nodes":           {},
+			"scope":           {},
+			"trigger_kind":    {},
+			"trigger_payload": {},
+			"trigger_sender":  {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"code_context": {
 		Bindable: map[string]struct{}{
 			"depth":          {},

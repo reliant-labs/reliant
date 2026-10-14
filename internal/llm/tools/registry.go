@@ -109,6 +109,7 @@ const (
 	// Workflow discovery tools
 	ToolGetSchema              = "get_schema"
 	ToolGetCELReference        = "get_cel_reference"
+	ToolCELEval                = "cel_eval"
 	ToolListWorkflows          = "list_workflows"
 	ToolGetWorkflow            = "get_workflow"
 	ToolGetWorkflowSuggestions = "get_workflow_suggestions"
@@ -726,6 +727,7 @@ func GetToolRegistry() []ToolDefinition {
 		// Workflow discovery tools
 		{ToolGetSchema, (*ToolsFactory).GetSchema, []ToolTag{TagWorkflow, TagReadOnly}, PlacementAny, false},
 		{ToolGetCELReference, (*ToolsFactory).GetCELReference, []ToolTag{TagWorkflow, TagReadOnly}, PlacementAny, false},
+		{ToolCELEval, (*ToolsFactory).CELEval, []ToolTag{TagWorkflow, TagReadOnly}, PlacementAny, false},
 		{ToolListWorkflows, (*ToolsFactory).ListWorkflows, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer, false},
 		{ToolGetWorkflow, (*ToolsFactory).GetWorkflow, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer, false},
 		{ToolGetWorkflowSuggestions, (*ToolsFactory).GetWorkflowSuggestions, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer, false},
