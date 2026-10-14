@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 import (
 	"context"
@@ -170,7 +170,7 @@ func seedMultiRepoProject(t *testing.T, repo db.Repository, userID string, relPa
 	return projectID
 }
 
-func createWorkspace(t *testing.T, svc *WorktreeService, userID, projectID, name string) (context.Context, string) {
+func createWorkspace(t *testing.T, svc *Service, userID, projectID, name string) (context.Context, string) {
 	t.Helper()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
@@ -187,7 +187,7 @@ func TestCreateWorktreeChecksOutSiblingReposConcurrently(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	router := newConcurrentCreateRouter(t)
 	router.rendezvous = 3
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := seedMultiRepoProject(t, repo, userID, "control-plane", "forge", "reliant")
@@ -210,7 +210,7 @@ func TestCreateWorktreeChecksOutSiblingReposConcurrently(t *testing.T) {
 func TestCreateWorktreeChecksOutContainerBeforeNestedRepo(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	router := newConcurrentCreateRouter(t)
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	// "" is the project root, which contains both nested repos.
@@ -239,7 +239,7 @@ func TestCreateWorktreeFailureTearsDownEverySiblingCheckout(t *testing.T) {
 	router.rendezvous = 3
 	router.failSubPath = stringPtr("forge")
 	router.successDelay = 300 * time.Millisecond
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := seedMultiRepoProject(t, repo, userID, "control-plane", "forge", "reliant")

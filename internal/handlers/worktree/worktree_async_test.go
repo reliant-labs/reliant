@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 import (
 	"context"
@@ -118,7 +118,7 @@ func seedWorktreeProject(t *testing.T, repo db.Repository, userID string) string
 func TestCreateWorktreeReturnsBeforeDaemonWorkFinishes(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{release: make(chan struct{})}
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
@@ -157,7 +157,7 @@ func TestCreateWorktreeReturnsBeforeDaemonWorkFinishes(t *testing.T) {
 func TestCreateWorktreeSurvivesClientDisconnect(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{release: make(chan struct{})}
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
@@ -191,7 +191,7 @@ func TestCreateWorktreeSurvivesClientDisconnect(t *testing.T) {
 func TestCreateWorktreeMarksFailedRatherThanVanishing(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{failCreate: true}
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
@@ -224,7 +224,7 @@ func TestCreateWorktreeFailureReasonReachesTheClient(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := db.NewTestRepo(t)
 			router := &blockingWorktreeDaemonRouter{failCreate: true, undiagnosed: tc.undiagnosed}
-			svc := NewWorktreeService(repo, nil, router)
+			svc := newWorktreeService(t, repo, router)
 
 			userID := uuid.New().String()
 			projectID := seedWorktreeProject(t, repo, userID)
@@ -262,7 +262,7 @@ func TestCreateWorktreeFailureReasonReachesTheClient(t *testing.T) {
 func TestCreateWorktreeRefusesAnInvalidBranchNameUpFront(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{}
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
@@ -292,7 +292,7 @@ func TestCreateWorktreeRefusesAnInvalidBranchNameUpFront(t *testing.T) {
 func TestCreateWorktreeIdempotencyKeyPreventsDuplicates(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{}
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
@@ -328,7 +328,7 @@ func TestCreateWorktreeIdempotencyKeyPreventsDuplicates(t *testing.T) {
 func TestCreateWorktreeWithoutIdempotencyKeyStillCreates(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{}
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)

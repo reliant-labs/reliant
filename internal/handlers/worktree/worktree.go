@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 import (
 	"context"
@@ -14,10 +14,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"go.temporal.io/sdk/client"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/copypath"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
@@ -43,33 +41,12 @@ const worktreeDaemonCommandTimeoutMs int32 = 120_000
 // next poll retry.
 const worktreeReadCommandTimeoutMs int32 = 30_000
 
-// WorktreeService implements the WorktreeService RPC handlers
-type WorktreeService struct {
-	reliantv1connect.UnimplementedWorktreeServiceHandler
-	database     db.Repository
-	tempClient   client.Client
-	daemonRouter toolexec.DaemonRouter
-	wake         machinewake.Service
-	// settler removes an archived worktree's directory when it is provably
-	// safe. Nil in tests that do not exercise it.
-	settler worktreeSettler
-}
-
-// worktreeSettler is what archiving needs from the sweep: one immediate
-// attempt to settle the directory of a worktree that was just archived.
-type worktreeSettler interface {
-	Settle(ctx context.Context, userID string, cand *core.ReclaimCandidate)
-	SettleBlocking(ctx context.Context, userID string, cand *core.ReclaimCandidate) *core.CleanupMetadata
-}
-
-// NewWorktreeService creates a new WorktreeService
-func NewWorktreeService(database db.Repository, tempClient client.Client, daemonRouter toolexec.DaemonRouter) *WorktreeService {
-	return &WorktreeService{
-		database:     database,
-		tempClient:   tempClient,
-		daemonRouter: daemonRouter,
-		wake:         machinewake.New(machinewake.Deps{Resumer: machinewake.ResumerOf(daemonRouter), Owners: database}),
-	}
+// wake is the step a command takes after failing to reach its machine. The
+// router resumes an asleep machine when it can (machinewake.ResumerOf's rule:
+// only a router that is also a machinewake.Resumer wakes anything).
+func (s *Service) wake() machinewake.Service {
+	resumer, _ := s.deps.Router.(machinewake.Resumer)
+	return machinewake.New(machinewake.Deps{Resumer: resumer, Owners: s.deps.Repo})
 }
 
 // relockActive tells the owning daemon to lock this worktree's checkouts as
@@ -85,7 +62,7 @@ func NewWorktreeService(database db.Repository, tempClient client.Client, daemon
 //     no verified lock.
 //
 // It returns true only when the machine answered "locked".
-func (s *WorktreeService) relockActive(ctx context.Context, userID string, worktree *db.Worktree) (bool, error) {
+func (s *Service) relockActive(ctx context.Context, userID string, worktree *db.Worktree) (bool, error) {
 	if worktree.Path == "" || worktree.DaemonID == nil || *worktree.DaemonID == "" {
 		return true, nil
 	}
@@ -118,7 +95,7 @@ func (s *WorktreeService) relockActive(ctx context.Context, userID string, workt
 	case "locked":
 		return true, nil
 	case "gone":
-		_ = s.database.MergeWorktreeCleanupMetadata(ctx, worktree.ID, func(m *db.CleanupMetadata, _ bool) bool {
+		_ = s.deps.Repo.MergeWorktreeCleanupMetadata(ctx, worktree.ID, func(m *db.CleanupMetadata, _ bool) bool {
 			m.DirectoryDeleted = true
 			return true
 		})
@@ -131,29 +108,23 @@ func (s *WorktreeService) relockActive(ctx context.Context, userID string, workt
 	return false, fmt.Errorf("could not restore: the machine answered %q", res.Outcome)
 }
 
-// WithSettler enables settling an archived worktree's directory immediately.
-func (s *WorktreeService) WithSettler(settler worktreeSettler) *WorktreeService {
-	s.settler = settler
-	return s
-}
-
 // settleArchived asks the owning daemon to remove an archived worktree's
 // directory if that is safe, on a context detached from the request: archiving
 // has already succeeded, and a client that disconnects must not abandon a
 // half-finished removal. The directory is the daemon's to judge; whatever it
 // declines is recorded and offered in the storage inbox item.
-func (s *WorktreeService) settleArchived(ctx context.Context, userID string, worktree *db.Worktree, projectPath string) {
-	if s.settler == nil || worktree.Path == "" {
+func (s *Service) settleArchived(ctx context.Context, userID string, worktree *db.Worktree, projectPath string) {
+	if s.deps.Settler == nil || worktree.Path == "" {
 		return
 	}
-	archived, err := s.database.GetWorktree(ctx, worktree.ID)
+	archived, err := s.deps.Repo.GetWorktree(ctx, worktree.ID)
 	if err != nil || archived == nil {
 		return
 	}
 	bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 	go func() {
 		defer cancel()
-		s.settler.Settle(bg, userID, &core.ReclaimCandidate{Worktree: archived, OwnerUserID: userID, ProjectPath: projectPath})
+		s.deps.Settler.Settle(bg, userID, &core.ReclaimCandidate{Worktree: archived, OwnerUserID: userID, ProjectPath: projectPath})
 	}()
 }
 
@@ -164,33 +135,36 @@ func (s *WorktreeService) settleArchived(ctx context.Context, userID string, wor
 // Pass the daemon explicitly. Worktree creation issues one command per nested
 // repo, and all of them — plus the id recorded on the row — must name the same
 // machine, so it resolves the daemon once and passes it to every send.
-func (s *WorktreeService) sendWorktreeDaemonCommand(ctx context.Context, userID, daemonID, commandType string, payload interface{}, resp interface{}) error {
+func (s *Service) sendWorktreeDaemonCommand(ctx context.Context, userID, daemonID, commandType string, payload interface{}, resp interface{}) error {
 	return s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonID, commandType, payload, resp, worktreeDaemonCommandTimeoutMs)
 }
 
 // sendWorktreeDaemonCommandTimeout is sendWorktreeDaemonCommand with an
 // explicit timeout — use worktreeReadCommandTimeoutMs for the polled read
 // paths so a slow daemon can't pin connections for the full mutation budget.
-func (s *WorktreeService) sendWorktreeDaemonCommandTimeout(ctx context.Context, userID, daemonID, commandType string, payload interface{}, resp interface{}, timeoutMs int32) error {
+func (s *Service) sendWorktreeDaemonCommandTimeout(ctx context.Context, userID, daemonID, commandType string, payload interface{}, resp interface{}, timeoutMs int32) error {
 	return s.sendToMachine(ctx, userID, machinewake.Target{DaemonID: daemonID}, commandType, payload, resp, timeoutMs)
 }
 
 // sendToMachine sends a command to the target machine. Every worktree command
 // goes through here, so a machine found asleep is woken (machinewake) and the
 // request fails as waking, for the client to retry once it is up.
-func (s *WorktreeService) sendToMachine(ctx context.Context, userID string, target machinewake.Target, commandType string, payload interface{}, resp interface{}, timeoutMs int32) error {
+func (s *Service) sendToMachine(ctx context.Context, userID string, target machinewake.Target, commandType string, payload interface{}, resp interface{}, timeoutMs int32) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
+	if s.deps.Router == nil {
+		return fmt.Errorf("daemon command %s: no daemon router", commandType)
+	}
 	var respBytes []byte
 	if target.DaemonID == "" {
-		respBytes, err = s.daemonRouter.SendDaemonCommand(ctx, userID, commandType, payloadBytes, timeoutMs)
+		respBytes, err = s.deps.Router.SendDaemonCommand(ctx, userID, commandType, payloadBytes, timeoutMs)
 	} else {
-		respBytes, err = s.daemonRouter.SendDaemonCommandToDaemon(ctx, userID, target.DaemonID, commandType, payloadBytes, timeoutMs)
+		respBytes, err = s.deps.Router.SendDaemonCommandToDaemon(ctx, userID, target.DaemonID, commandType, payloadBytes, timeoutMs)
 	}
 	if err != nil {
-		err = s.wake.AfterFailure(ctx, userID, target, err)
+		err = s.wake().AfterFailure(ctx, userID, target, err)
 		return fmt.Errorf("daemon command %s: %w", commandType, err)
 	}
 	if resp != nil {
@@ -206,13 +180,13 @@ func (s *WorktreeService) sendToMachine(ctx context.Context, userID string, targ
 // =============================================================================
 
 // worktreeBelongsToUser checks if a worktree belongs to a user via its project
-func (s *WorktreeService) worktreeBelongsToUser(ctx context.Context, worktreeID string, userID string) error {
-	worktree, err := s.database.GetWorktree(ctx, worktreeID)
+func (s *Service) worktreeBelongsToUser(ctx context.Context, worktreeID string, userID string) error {
+	worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
 	if err != nil || worktree == nil {
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
-	if _, err := s.database.GetProjectWithUserCheck(ctx, worktree.ProjectID, userID); err != nil {
+	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, worktree.ProjectID, userID); err != nil {
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -220,8 +194,8 @@ func (s *WorktreeService) worktreeBelongsToUser(ctx context.Context, worktreeID 
 }
 
 // projectBelongsToUser checks if a project belongs to a user
-func (s *WorktreeService) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
-	if _, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID); err != nil {
+func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
+	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID); err != nil {
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
@@ -241,7 +215,7 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 		Branch:     w.Branch,
 		BaseBranch: w.BaseBranch,
 		ProjectId:  w.ProjectID,
-		Status:     worktreeStatusFromInt32(w.Status),
+		Status:     reliantv1.WorktreeStatus(w.Status), // the DB stores the enum's number
 		IsMain:     w.IsMain,
 		CreatedAt:  w.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:  w.UpdatedAt.Format(time.RFC3339),
@@ -277,16 +251,16 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 // listProjectRepos returns the project's nested repos, rejecting projects with
 // none. Empty list is a precondition failure rather than success-with-zero so
 // callers can rely on at least one fan-out target.
-func (s *WorktreeService) listProjectRepos(ctx context.Context, project *db.Project) ([]*core.Repo, error) {
-	repos, err := s.database.ListReposByProject(ctx, project.ID)
+func (s *Service) listProjectRepos(ctx context.Context, project *db.Project) ([]*core.Repo, error) {
+	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
 	}
-	if len(repos) == 0 {
+	if len(repos) == 0 && s.deps.Router != nil {
 		// The registry trails the filesystem when a repo was created outside
 		// the tracked flows (e.g. `git init` in the workspace terminal), so
 		// ask the daemon what actually exists and adopt it before refusing.
-		repos = repopkg.AdoptFromDaemon(ctx, s.database, s.daemonRouter, project)
+		repos = repopkg.AdoptFromDaemon(ctx, s.deps.Repo, s.deps.Router, project)
 	}
 	if len(repos) == 0 {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
@@ -310,8 +284,8 @@ func (s *WorktreeService) listProjectRepos(ctx context.Context, project *db.Proj
 //
 // Returns the resolved absolute path and the resolved repo (nil when falling
 // through to legacy single-repo behavior with no Repo rows).
-func (s *WorktreeService) resolveRepoPath(ctx context.Context, worktree *db.Worktree, repoID string) (string, *core.Repo, error) {
-	repos, err := s.database.ListReposByProject(ctx, worktree.ProjectID)
+func (s *Service) resolveRepoPath(ctx context.Context, worktree *db.Worktree, repoID string) (string, *core.Repo, error) {
+	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
 	if err != nil {
 		return "", nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
 	}
@@ -353,7 +327,7 @@ func (s *WorktreeService) resolveRepoPath(ctx context.Context, worktree *db.Work
 //
 // repo may be nil when the project has no Repo rows registered (legacy
 // pre-migration shape); we fall through to the legacy single value.
-func (s *WorktreeService) resolveRepoBaseBranch(worktree *db.Worktree, repo *core.Repo) string {
+func (s *Service) resolveRepoBaseBranch(worktree *db.Worktree, repo *core.Repo) string {
 	if repo != nil {
 		if b, ok := worktree.BaseBranches[repo.ID]; ok && b != "" {
 			return b
@@ -363,7 +337,7 @@ func (s *WorktreeService) resolveRepoBaseBranch(worktree *db.Worktree, repo *cor
 }
 
 // validateWorktreeForGitOps validates that a worktree is suitable for git operations
-func (s *WorktreeService) validateWorktreeForGitOps(ctx context.Context, userID string, worktree *db.Worktree) error {
+func (s *Service) validateWorktreeForGitOps(ctx context.Context, userID string, worktree *db.Worktree) error {
 	if worktree.DeletedAt != nil {
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("worktree is archived; unarchive it before performing git operations"))
 	}
@@ -393,7 +367,7 @@ func (s *WorktreeService) validateWorktreeForGitOps(ctx context.Context, userID 
 //
 // Only a wake is returned. Any other failure of the probe is left for the
 // operation itself to meet, as before.
-func (s *WorktreeService) wakeIfAsleep(ctx context.Context, userID string, target machinewake.Target, path string) error {
+func (s *Service) wakeIfAsleep(ctx context.Context, userID string, target machinewake.Target, path string) error {
 	var resp struct {
 		Exists bool `json:"exists"`
 	}
@@ -418,7 +392,7 @@ func (s *WorktreeService) wakeIfAsleep(ctx context.Context, userID string, targe
 //     workspace root and return it.
 //  4. On partial failure, best-effort rollback (delete created git worktrees)
 //     and return an error.
-func (s *WorktreeService) CreateWorktree(
+func (s *Service) CreateWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateWorktreeRequest],
 ) (*connect.Response[reliantv1.CreateWorktreeResponse], error) {
@@ -445,7 +419,7 @@ func (s *WorktreeService) CreateWorktree(
 		return nil, err
 	}
 
-	project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
@@ -469,7 +443,7 @@ func (s *WorktreeService) CreateWorktree(
 		if err := s.worktreeBelongsToUser(ctx, *req.Msg.SourceWorktreeId, userID); err != nil {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("source worktree not found"))
 		}
-		sourceWorktree, err = s.database.GetWorktree(ctx, *req.Msg.SourceWorktreeId)
+		sourceWorktree, err = s.deps.Repo.GetWorktree(ctx, *req.Msg.SourceWorktreeId)
 		if err != nil {
 			logging.Warn("Source worktree not found, falling back to project paths",
 				"sourceWorktreeId", *req.Msg.SourceWorktreeId, "error", err)
@@ -505,7 +479,7 @@ func (s *WorktreeService) CreateWorktree(
 	// "succeeded, reply dropped" — without this the natural retry produces a
 	// second workspace with a second on-disk checkout.
 	if req.Msg.IdempotencyKey != nil && *req.Msg.IdempotencyKey != "" {
-		existing, err := s.database.GetWorktreeByIdempotencyKey(ctx, project.ID, *req.Msg.IdempotencyKey)
+		existing, err := s.deps.Repo.GetWorktreeByIdempotencyKey(ctx, project.ID, *req.Msg.IdempotencyKey)
 		if err != nil {
 			logging.Error("Failed to check worktree idempotency key", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
@@ -548,7 +522,7 @@ func (s *WorktreeService) CreateWorktree(
 		OwnerDaemonID:  ownerDaemonID,
 		IdempotencyKey: idempotencyKey,
 	}
-	worktree, err := workspacecreate.Insert(ctx, s.database, createReq)
+	worktree, err := workspacecreate.Insert(ctx, s.deps.Repo, createReq)
 	if err != nil {
 		return nil, insertWorktreeError(err, req.Msg.Name)
 	}
@@ -598,15 +572,15 @@ const worktreeCreateBudget = 10 * time.Minute
 // the row to ACTIVE or FAILED, then tells clients. It runs on a context
 // detached from the client request; nothing here may assume a caller is still
 // listening.
-func (s *WorktreeService) finishWorktreeCreate(ctx context.Context, userID string, req workspacecreate.Request, worktree *db.Worktree) {
-	_ = workspacecreate.Finish(ctx, s.database, worktreeMachine{s: s, userID: userID, daemonID: req.OwnerDaemonID}, req, worktree)
+func (s *Service) finishWorktreeCreate(ctx context.Context, userID string, req workspacecreate.Request, worktree *db.Worktree) {
+	_ = workspacecreate.Finish(ctx, s.deps.Repo, worktreeMachine{s: s, userID: userID, daemonID: req.OwnerDaemonID}, req, worktree)
 	s.emitWorktreeChanged(ctx, userID, req.Project.ID, worktree.ID)
 }
 
 // worktreeMachine adapts the service's daemon send (which wakes a sleeping
 // machine on failure) to workspacecreate.Machine, bound to one owner daemon.
 type worktreeMachine struct {
-	s        *WorktreeService
+	s        *Service
 	userID   string
 	daemonID string
 }
@@ -621,8 +595,8 @@ func (m worktreeMachine) Send(ctx context.Context, commandType string, payload, 
 // reconnect via `sinceSeq` — not a fire-and-forget signal. That is what makes
 // asynchronous creation safe on a phone: an app backgrounded through the whole
 // 30-120s create reconnects and receives the completion it slept through.
-func (s *WorktreeService) emitWorktreeChanged(ctx context.Context, userID, projectID, worktreeID string) {
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{
+func (s *Service) emitWorktreeChanged(ctx context.Context, userID, projectID, worktreeID string) {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{
 		ProjectID:  &projectID,
 		WorktreeID: &worktreeID,
 	}); err != nil {
@@ -631,7 +605,7 @@ func (s *WorktreeService) emitWorktreeChanged(ctx context.Context, userID, proje
 }
 
 // ListWorktrees lists worktrees for a project
-func (s *WorktreeService) ListWorktrees(
+func (s *Service) ListWorktrees(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListWorktreesRequest],
 ) (*connect.Response[reliantv1.ListWorktreesResponse], error) {
@@ -661,7 +635,7 @@ func (s *WorktreeService) ListWorktrees(
 		filters.Limit = int(req.Msg.Limit)
 	}
 
-	worktrees, err := s.database.ListWorktrees(ctx, filters)
+	worktrees, err := s.deps.Repo.ListWorktrees(ctx, filters)
 	if err != nil {
 		logging.Error("Failed to list worktrees", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list worktrees"))
@@ -670,7 +644,7 @@ func (s *WorktreeService) ListWorktrees(
 	// Self-heal invariant: every project should have a main worktree.
 	// This also repairs older projects created while Postgres parity bugs existed.
 	if len(worktrees) == 0 {
-		project, err := s.database.GetProjectWithUserCheck(ctx, req.Msg.ProjectId, userID)
+		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, req.Msg.ProjectId, userID)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 		}
@@ -695,10 +669,10 @@ func (s *WorktreeService) ListWorktrees(
 			LastActive: now,
 		}
 
-		if err := s.database.CreateWorktree(ctx, mainWorktree); err != nil {
+		if err := s.deps.Repo.CreateWorktree(ctx, mainWorktree); err != nil {
 			logging.Warn("Failed to auto-create main worktree during ListWorktrees", "error", err, "projectID", project.ID)
 			// Re-fetch in case another request created it concurrently.
-			worktrees, err = s.database.ListWorktrees(ctx, filters)
+			worktrees, err = s.deps.Repo.ListWorktrees(ctx, filters)
 			if err != nil || len(worktrees) == 0 {
 				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to ensure main worktree"))
 			}
@@ -719,7 +693,7 @@ func (s *WorktreeService) ListWorktrees(
 }
 
 // GetWorktree retrieves a worktree by ID
-func (s *WorktreeService) GetWorktree(
+func (s *Service) GetWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetWorktreeRequest],
 ) (*connect.Response[reliantv1.GetWorktreeResponse], error) {
@@ -733,7 +707,7 @@ func (s *WorktreeService) GetWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -745,7 +719,7 @@ func (s *WorktreeService) GetWorktree(
 }
 
 // UpdateWorktree updates a worktree
-func (s *WorktreeService) UpdateWorktree(
+func (s *Service) UpdateWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.UpdateWorktreeRequest],
 ) (*connect.Response[reliantv1.UpdateWorktreeResponse], error) {
@@ -759,7 +733,7 @@ func (s *WorktreeService) UpdateWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -778,7 +752,7 @@ func (s *WorktreeService) UpdateWorktree(
 	worktree.UpdatedAt = now
 	worktree.LastActive = now
 
-	if err := s.database.UpdateWorktree(ctx, worktree); err != nil {
+	if err := s.deps.Repo.UpdateWorktree(ctx, worktree); err != nil {
 		logging.Error("Failed to update worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update worktree"))
 	}
@@ -789,7 +763,7 @@ func (s *WorktreeService) UpdateWorktree(
 }
 
 // DeleteWorktree deletes or archives a worktree based on its current state
-func (s *WorktreeService) DeleteWorktree(
+func (s *Service) DeleteWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DeleteWorktreeRequest],
 ) (*connect.Response[reliantv1.DeleteWorktreeResponse], error) {
@@ -803,7 +777,7 @@ func (s *WorktreeService) DeleteWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -814,7 +788,7 @@ func (s *WorktreeService) DeleteWorktree(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("cannot delete the main project worktree"))
 	}
 
-	project, err := s.database.GetProject(ctx, worktree.ProjectID)
+	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
 	if err != nil {
 		logging.Warn("Failed to get project for worktree cleanup", "error", err)
 	}
@@ -839,8 +813,8 @@ func (s *WorktreeService) DeleteWorktree(
 		// again, so it may only go once the machine has removed the directory
 		// (or it never existed). Otherwise the directory stays locked with
 		// reliant's reason forever and nothing will ever clean it up.
-		if worktree.Path != "" && project != nil && s.settler != nil {
-			meta := s.settler.SettleBlocking(ctx, userID, &core.ReclaimCandidate{Worktree: worktree, OwnerUserID: userID, ProjectPath: project.Path})
+		if worktree.Path != "" && project != nil && s.deps.Settler != nil {
+			meta := s.deps.Settler.SettleBlocking(ctx, userID, &core.ReclaimCandidate{Worktree: worktree, OwnerUserID: userID, ProjectPath: project.Path})
 			if meta == nil || !meta.DirectoryDeleted {
 				reason := "the machine has not removed its directory yet"
 				if meta != nil && meta.HeldReason != "" {
@@ -853,7 +827,7 @@ func (s *WorktreeService) DeleteWorktree(
 		if req.Msg.DeleteGitBranch && project != nil && worktree.Branch != "" {
 			deletedBranch = s.cleanupWorktreeBranch(ctx, userID, daemonplacement.WorktreeOwner(worktree), project.Path, worktree.Branch)
 		}
-		if err := s.database.DeleteWorktree(ctx, req.Msg.WorktreeId); err != nil {
+		if err := s.deps.Repo.DeleteWorktree(ctx, req.Msg.WorktreeId); err != nil {
 			logging.Error("Failed to permanently delete worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to permanently delete worktree"))
 		}
@@ -868,7 +842,7 @@ func (s *WorktreeService) DeleteWorktree(
 	s.storeCleanupMetadata(ctx, req.Msg.WorktreeId, req.Msg.DeleteGitBranch)
 
 	// Archive the worktree
-	if err := s.database.ArchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
+	if err := s.deps.Repo.ArchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
 		logging.Error("Failed to archive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to archive worktree"))
 	}
@@ -886,7 +860,7 @@ func (s *WorktreeService) DeleteWorktree(
 }
 
 // ArchiveWorktree archives a worktree (dedicated endpoint)
-func (s *WorktreeService) ArchiveWorktree(
+func (s *Service) ArchiveWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ArchiveWorktreeRequest],
 ) (*connect.Response[reliantv1.ArchiveWorktreeResponse], error) {
@@ -900,7 +874,7 @@ func (s *WorktreeService) ArchiveWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -914,7 +888,7 @@ func (s *WorktreeService) ArchiveWorktree(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("worktree is already archived; use delete to permanently remove"))
 	}
 
-	project, err := s.database.GetProject(ctx, worktree.ProjectID)
+	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
 	if err != nil {
 		logging.Warn("Failed to get project for worktree cleanup", "error", err)
 	}
@@ -925,7 +899,7 @@ func (s *WorktreeService) ArchiveWorktree(
 	s.storeCleanupMetadata(ctx, req.Msg.WorktreeId, req.Msg.DeleteGitBranch)
 
 	// Archive the worktree
-	if err := s.database.ArchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
+	if err := s.deps.Repo.ArchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
 		logging.Error("Failed to archive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to archive worktree"))
 	}
@@ -942,7 +916,7 @@ func (s *WorktreeService) ArchiveWorktree(
 }
 
 // UnarchiveWorktree restores an archived worktree
-func (s *WorktreeService) UnarchiveWorktree(
+func (s *Service) UnarchiveWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.UnarchiveWorktreeRequest],
 ) (*connect.Response[reliantv1.UnarchiveWorktreeResponse], error) {
@@ -956,7 +930,7 @@ func (s *WorktreeService) UnarchiveWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -975,7 +949,7 @@ func (s *WorktreeService) UnarchiveWorktree(
 	// Refuse a name collision before the machine is touched: re-locking the
 	// checkouts for a row that then cannot be restored would leave them locked
 	// as live under an archived row.
-	if holder, err := s.database.GetLiveWorktreeByName(ctx, worktree.ProjectID, worktree.Name); err == nil && holder != nil {
+	if holder, err := s.deps.Repo.GetLiveWorktreeByName(ctx, worktree.ProjectID, worktree.Name); err == nil && holder != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"cannot unarchive '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name))
 	}
@@ -992,7 +966,7 @@ func (s *WorktreeService) UnarchiveWorktree(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this workspace's files were removed; restore it with recreate"))
 	}
 
-	if err := s.database.UnarchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
+	if err := s.deps.Repo.UnarchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
 		if errors.Is(err, core.ErrWorktreeNameTaken) {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 				"cannot unarchive '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name))
@@ -1015,7 +989,7 @@ func (s *WorktreeService) UnarchiveWorktree(
 
 // cleanupWorktreeBranch deletes the worktree's branch from the project clone on
 // daemonID — the owner's clone, which is where creating the worktree made it.
-func (s *WorktreeService) cleanupWorktreeBranch(ctx context.Context, userID, daemonID, projectPath, branch string) bool {
+func (s *Service) cleanupWorktreeBranch(ctx context.Context, userID, daemonID, projectPath, branch string) bool {
 	var resp struct {
 		Deleted bool `json:"deleted"`
 	}
@@ -1033,11 +1007,11 @@ func (s *WorktreeService) cleanupWorktreeBranch(ctx context.Context, userID, dae
 // directory is gone. Whether the directory went is the daemon's to report, so it
 // is never set here, and what is already stored (held reason, snapshot refs) is
 // kept.
-func (s *WorktreeService) storeCleanupMetadata(ctx context.Context, worktreeID string, deleteBranch bool) {
+func (s *Service) storeCleanupMetadata(ctx context.Context, worktreeID string, deleteBranch bool) {
 	if !deleteBranch {
 		return
 	}
-	err := s.database.MergeWorktreeCleanupMetadata(ctx, worktreeID, func(m *db.CleanupMetadata, _ bool) bool {
+	err := s.deps.Repo.MergeWorktreeCleanupMetadata(ctx, worktreeID, func(m *db.CleanupMetadata, _ bool) bool {
 		m.DeleteBranch = true
 		return true
 	})
@@ -1046,8 +1020,8 @@ func (s *WorktreeService) storeCleanupMetadata(ctx context.Context, worktreeID s
 	}
 }
 
-func (s *WorktreeService) archiveWorktreeChats(ctx context.Context, userID string, worktree *db.Worktree) {
-	chats, err := s.database.ListChats(ctx, db.ChatFilters{
+func (s *Service) archiveWorktreeChats(ctx context.Context, userID string, worktree *db.Worktree) {
+	chats, err := s.deps.Repo.ListChats(ctx, db.ChatFilters{
 		UserID:          userID,
 		ProjectID:       &worktree.ProjectID,
 		ExcludeArchived: true,
@@ -1061,19 +1035,19 @@ func (s *WorktreeService) archiveWorktreeChats(ctx context.Context, userID strin
 	for _, chat := range chats {
 		if chat.WorktreeID != nil && *chat.WorktreeID == worktree.ID {
 			// Cancel workflow if running (best-effort)
-			if workflowID := chat.MainThreadID(); workflowID != "" {
-				_ = s.tempClient.CancelWorkflow(ctx, workflowID, "")
+			if workflowID := chat.MainThreadID(); workflowID != "" && s.deps.Temporal != nil {
+				_ = s.deps.Temporal.CancelWorkflow(ctx, workflowID, "")
 			}
-			if err := s.database.UpdateChatState(ctx, chat.ID, db.ChatStateArchived, "worktree_archived"); err != nil {
+			if err := s.deps.Repo.UpdateChatState(ctx, chat.ID, db.ChatStateArchived, "worktree_archived"); err != nil {
 				logging.Warn("Failed to archive chat", "error", err, "chatID", chat.ID)
 			}
 		}
 	}
 }
 
-func (s *WorktreeService) unarchiveWorktreeChats(ctx context.Context, userID string, worktree *db.Worktree) {
+func (s *Service) unarchiveWorktreeChats(ctx context.Context, userID string, worktree *db.Worktree) {
 	archivedState := db.ChatStateArchived
-	chats, err := s.database.ListChats(ctx, db.ChatFilters{
+	chats, err := s.deps.Repo.ListChats(ctx, db.ChatFilters{
 		UserID:    userID,
 		ProjectID: &worktree.ProjectID,
 		State:     &archivedState,
@@ -1086,7 +1060,7 @@ func (s *WorktreeService) unarchiveWorktreeChats(ctx context.Context, userID str
 
 	for _, chat := range chats {
 		if chat.WorktreeID != nil && *chat.WorktreeID == worktree.ID {
-			if err := s.database.UpdateChatState(ctx, chat.ID, db.ChatStateIdle, "worktree_unarchived"); err != nil {
+			if err := s.deps.Repo.UpdateChatState(ctx, chat.ID, db.ChatStateIdle, "worktree_unarchived"); err != nil {
 				logging.Warn("Failed to unarchive chat", "error", err, "chatID", chat.ID)
 			}
 		}
@@ -1110,7 +1084,7 @@ func (s *WorktreeService) unarchiveWorktreeChats(ctx context.Context, userID str
 //     branch, exactly like a UI-made workspace. It needs confirm_move. If any
 //     step after the move fails the checkout is moved back (see
 //     workspacecreate.ExistingCheckout) and the row ends FAILED.
-func (s *WorktreeService) ImportWorktree(
+func (s *Service) ImportWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ImportWorktreeRequest],
 ) (*connect.Response[reliantv1.ImportWorktreeResponse], error) {
@@ -1125,7 +1099,7 @@ func (s *WorktreeService) ImportWorktree(
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 		return nil, err
 	}
-	project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
@@ -1212,7 +1186,7 @@ func (s *WorktreeService) ImportWorktree(
 	if moves {
 		createReq.WorkspaceID = worktreepath.WorkspaceDirName(project.Name, name)
 	}
-	worktree, err := workspacecreate.Insert(ctx, s.database, createReq)
+	worktree, err := workspacecreate.Insert(ctx, s.deps.Repo, createReq)
 	if err != nil {
 		return nil, insertWorktreeError(err, name)
 	}
@@ -1226,7 +1200,7 @@ func (s *WorktreeService) ImportWorktree(
 		createReq.Existing = map[string]workspacecreate.ExistingCheckout{
 			repo.ID: {Path: entry.Path, Base: def.DefaultBranch},
 		}
-		if err := workspacecreate.Finish(ctx, s.database, machine, createReq, worktree); err != nil {
+		if err := workspacecreate.Finish(ctx, s.deps.Repo, machine, createReq, worktree); err != nil {
 			s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
 			// Finish logged it.
 			return nil, importWorktreeError("import worktree", err, "")
@@ -1254,7 +1228,7 @@ func (s *WorktreeService) ImportWorktree(
 		worktree.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 		worktree.Path = ""
 		worktree.UpdatedAt = time.Now().UTC()
-		if err := s.database.UpdateWorktree(ctx, worktree); err != nil {
+		if err := s.deps.Repo.UpdateWorktree(ctx, worktree); err != nil {
 			logging.Error("Failed to mark adopted worktree failed", "error", err, "worktreeID", worktree.ID)
 		}
 		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
@@ -1339,8 +1313,8 @@ func importMoves(repos map[string]*core.Repo) bool {
 // trackedWorktreePaths lists every path a row of the project holds, archived
 // rows included: an archived row's directory may still exist, and its
 // checkout is not "outside Reliant".
-func (s *WorktreeService) trackedWorktreePaths(ctx context.Context, projectID string) ([]string, error) {
-	tracked, err := s.database.ListWorktrees(ctx, db.WorktreeFilters{
+func (s *Service) trackedWorktreePaths(ctx context.Context, projectID string) ([]string, error) {
+	tracked, err := s.deps.Repo.ListWorktrees(ctx, db.WorktreeFilters{
 		ProjectID: &projectID, IncludeArchived: true, Limit: 100000,
 	})
 	if err != nil {
@@ -1369,8 +1343,8 @@ type discoveredEntry struct {
 
 // projectRepoRefs lists the project's repos with their checkout paths on the
 // daemon. A repo with relative path "" or "." is the project root itself.
-func (s *WorktreeService) projectRepoRefs(ctx context.Context, project *db.Project) ([]discoverRepoRef, map[string]*core.Repo, error) {
-	repos, err := s.database.ListReposByProject(ctx, project.ID)
+func (s *Service) projectRepoRefs(ctx context.Context, project *db.Project) ([]discoverRepoRef, map[string]*core.Repo, error) {
+	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		return nil, nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
 	}
@@ -1394,7 +1368,7 @@ func staleToProto(e discoveredEntry, byID map[string]*core.Repo) *reliantv1.Stal
 // DiscoverWorktrees lists the git worktrees of each of the project's repos
 // that Reliant does not track, and git's stale records separately. It is
 // read-only.
-func (s *WorktreeService) DiscoverWorktrees(
+func (s *Service) DiscoverWorktrees(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DiscoverWorktreesRequest],
 ) (*connect.Response[reliantv1.DiscoverWorktreesResponse], error) {
@@ -1406,7 +1380,7 @@ func (s *WorktreeService) DiscoverWorktrees(
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 		return nil, err
 	}
-	project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
@@ -1475,7 +1449,7 @@ func (s *WorktreeService) DiscoverWorktrees(
 
 // PruneWorktrees removes git's records of the project's worktrees whose
 // directories no longer exist. Only an explicit request does this.
-func (s *WorktreeService) PruneWorktrees(
+func (s *Service) PruneWorktrees(
 	ctx context.Context,
 	req *connect.Request[reliantv1.PruneWorktreesRequest],
 ) (*connect.Response[reliantv1.PruneWorktreesResponse], error) {
@@ -1487,7 +1461,7 @@ func (s *WorktreeService) PruneWorktrees(
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 		return nil, err
 	}
-	project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
@@ -1527,7 +1501,7 @@ func (s *WorktreeService) PruneWorktrees(
 // archived worktree is restored (and unarchived); an active one whose
 // directory went missing from disk is re-materialized in place, which is the
 // user's way out of a chat stuck on "working directory does not exist".
-func (s *WorktreeService) RecreateWorktree(
+func (s *Service) RecreateWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.RecreateWorktreeRequest],
 ) (*connect.Response[reliantv1.RecreateWorktreeResponse], error) {
@@ -1542,14 +1516,14 @@ func (s *WorktreeService) RecreateWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
 	// Get project for git operations
-	project, err := s.database.GetProject(ctx, worktree.ProjectID)
+	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
 	if err != nil {
 		logging.Error("Failed to get project", "error", err, "projectID", worktree.ProjectID)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
@@ -1561,7 +1535,7 @@ func (s *WorktreeService) RecreateWorktree(
 
 	// Restoring an archived worktree unarchives the row, so refuse before
 	// touching the machine when its name has been taken since.
-	if holder, err := s.database.GetLiveWorktreeByName(ctx, worktree.ProjectID, worktree.Name); err == nil && holder != nil {
+	if holder, err := s.deps.Repo.GetLiveWorktreeByName(ctx, worktree.ProjectID, worktree.Name); err == nil && holder != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"cannot recreate '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name))
 	}
@@ -1569,7 +1543,7 @@ func (s *WorktreeService) RecreateWorktree(
 	// Recreate EVERY repo of the workspace. A multi-repo project's root is not a
 	// git repository, so rebuilding it means one `git worktree add` per nested
 	// repo, each in its own repository, under <workspace>/<relative path>.
-	repos, err := s.database.ListReposByProject(ctx, worktree.ProjectID)
+	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
 	}
@@ -1636,12 +1610,12 @@ func (s *WorktreeService) RecreateWorktree(
 	if len(keep.SnapshotRefs) == 0 {
 		keep = nil
 	}
-	if err := s.database.UpdateWorktreeCleanupMetadata(ctx, req.Msg.WorktreeId, keep); err != nil {
+	if err := s.deps.Repo.UpdateWorktreeCleanupMetadata(ctx, req.Msg.WorktreeId, keep); err != nil {
 		logging.Warn("Failed to update cleanup metadata", "error", err)
 	}
 
 	// Unarchive the worktree
-	if err := s.database.UnarchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
+	if err := s.deps.Repo.UnarchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
 		logging.Error("Failed to unarchive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to unarchive worktree"))
 	}
@@ -1676,14 +1650,14 @@ func (s *WorktreeService) RecreateWorktree(
 // It never moves the chat: a repair that is not possible is reported with the
 // machine's reason, and where the chat runs instead is the user's call ("Move
 // to main checkout", which is UpdateChat).
-func (s *WorktreeService) repairActiveWorktree(ctx context.Context, userID string, worktree *db.Worktree, project *db.Project) (*connect.Response[reliantv1.RecreateWorktreeResponse], error) {
+func (s *Service) repairActiveWorktree(ctx context.Context, userID string, worktree *db.Worktree, project *db.Project) (*connect.Response[reliantv1.RecreateWorktreeResponse], error) {
 	if worktree.IsMain {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the project's main checkout is not a workspace reliant can recreate"))
 	}
 	if worktree.Path == "" {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this workspace was never created on disk; create a new one instead"))
 	}
-	repos, err := s.database.ListReposByProject(ctx, worktree.ProjectID)
+	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
 	}
@@ -1722,7 +1696,7 @@ func (s *WorktreeService) repairActiveWorktree(ctx context.Context, userID strin
 // =============================================================================
 
 // GetWorktreeChanges gets file changes for a worktree
-func (s *WorktreeService) GetWorktreeChanges(
+func (s *Service) GetWorktreeChanges(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetWorktreeChangesRequest],
 ) (*connect.Response[reliantv1.GetWorktreeChangesResponse], error) {
@@ -1736,7 +1710,7 @@ func (s *WorktreeService) GetWorktreeChanges(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -1814,7 +1788,7 @@ func (s *WorktreeService) GetWorktreeChanges(
 }
 
 // GetWorktreeGitStatus gets the overall git status for a worktree
-func (s *WorktreeService) GetWorktreeGitStatus(
+func (s *Service) GetWorktreeGitStatus(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetWorktreeGitStatusRequest],
 ) (*connect.Response[reliantv1.GetWorktreeGitStatusResponse], error) {
@@ -1828,7 +1802,7 @@ func (s *WorktreeService) GetWorktreeGitStatus(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -1877,7 +1851,7 @@ func (s *WorktreeService) GetWorktreeGitStatus(
 }
 
 // GetWorktreeCommits gets commit history for a worktree
-func (s *WorktreeService) GetWorktreeCommits(
+func (s *Service) GetWorktreeCommits(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetWorktreeCommitsRequest],
 ) (*connect.Response[reliantv1.GetWorktreeCommitsResponse], error) {
@@ -1891,7 +1865,7 @@ func (s *WorktreeService) GetWorktreeCommits(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -1984,7 +1958,7 @@ func (s *WorktreeService) GetWorktreeCommits(
 // =============================================================================
 
 // StageFiles stages files in a worktree
-func (s *WorktreeService) StageFiles(
+func (s *Service) StageFiles(
 	ctx context.Context,
 	req *connect.Request[reliantv1.StageFilesRequest],
 ) (*connect.Response[reliantv1.StageFilesResponse], error) {
@@ -1998,7 +1972,7 @@ func (s *WorktreeService) StageFiles(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -2039,7 +2013,7 @@ func (s *WorktreeService) StageFiles(
 }
 
 // UnstageFiles unstages files in a worktree
-func (s *WorktreeService) UnstageFiles(
+func (s *Service) UnstageFiles(
 	ctx context.Context,
 	req *connect.Request[reliantv1.UnstageFilesRequest],
 ) (*connect.Response[reliantv1.UnstageFilesResponse], error) {
@@ -2053,7 +2027,7 @@ func (s *WorktreeService) UnstageFiles(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -2094,7 +2068,7 @@ func (s *WorktreeService) UnstageFiles(
 }
 
 // CommitWorktree commits staged changes in a worktree via daemon
-func (s *WorktreeService) CommitWorktree(
+func (s *Service) CommitWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CommitWorktreeRequest],
 ) (*connect.Response[reliantv1.CommitWorktreeResponse], error) {
@@ -2112,7 +2086,7 @@ func (s *WorktreeService) CommitWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -2145,7 +2119,7 @@ func (s *WorktreeService) CommitWorktree(
 }
 
 // PushWorktree pushes changes from a worktree to remote
-func (s *WorktreeService) PushWorktree(
+func (s *Service) PushWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.PushWorktreeRequest],
 ) (*connect.Response[reliantv1.PushWorktreeResponse], error) {
@@ -2159,7 +2133,7 @@ func (s *WorktreeService) PushWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -2190,7 +2164,7 @@ func (s *WorktreeService) PushWorktree(
 }
 
 // PullWorktree pulls changes from remote
-func (s *WorktreeService) PullWorktree(
+func (s *Service) PullWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.PullWorktreeRequest],
 ) (*connect.Response[reliantv1.PullWorktreeResponse], error) {
@@ -2204,7 +2178,7 @@ func (s *WorktreeService) PullWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -2233,7 +2207,7 @@ func (s *WorktreeService) PullWorktree(
 }
 
 // GetWorktreePR checks if a PR already exists for the worktree's branch
-func (s *WorktreeService) GetWorktreePR(
+func (s *Service) GetWorktreePR(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetWorktreePRRequest],
 ) (*connect.Response[reliantv1.GetWorktreePRResponse], error) {
@@ -2247,7 +2221,7 @@ func (s *WorktreeService) GetWorktreePR(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -2302,7 +2276,7 @@ func (s *WorktreeService) GetWorktreePR(
 
 // CreateWorktreePR creates a pull request for a worktree
 // It automatically stages, commits, and pushes changes if needed for a seamless PR experience
-func (s *WorktreeService) CreateWorktreePR(
+func (s *Service) CreateWorktreePR(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateWorktreePRRequest],
 ) (*connect.Response[reliantv1.CreateWorktreePRResponse], error) {
@@ -2320,7 +2294,7 @@ func (s *WorktreeService) CreateWorktreePR(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -2394,7 +2368,7 @@ func (s *WorktreeService) CreateWorktreePR(
 }
 
 // RevertFiles reverts/discards file changes via daemon
-func (s *WorktreeService) RevertFiles(
+func (s *Service) RevertFiles(
 	ctx context.Context,
 	req *connect.Request[reliantv1.RevertFilesRequest],
 ) (*connect.Response[reliantv1.RevertFilesResponse], error) {
@@ -2412,7 +2386,7 @@ func (s *WorktreeService) RevertFiles(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -2481,7 +2455,7 @@ func (s *WorktreeService) RevertFiles(
 // root. Per-repo failures don't abort the response; the row carries an
 // error string so the UI can render "couldn't read this one." Single-repo
 // and zero-repo projects collapse to a single-element (or empty) response.
-func (s *WorktreeService) ListWorktreeRepoStatuses(
+func (s *Service) ListWorktreeRepoStatuses(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListWorktreeRepoStatusesRequest],
 ) (*connect.Response[reliantv1.ListWorktreeRepoStatusesResponse], error) {
@@ -2495,7 +2469,7 @@ func (s *WorktreeService) ListWorktreeRepoStatuses(
 		return nil, err
 	}
 
-	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
@@ -2505,7 +2479,7 @@ func (s *WorktreeService) ListWorktreeRepoStatuses(
 		return nil, err
 	}
 
-	repos, err := s.database.ListReposByProject(ctx, worktree.ProjectID)
+	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
 	}

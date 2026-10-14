@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 import (
 	"context"
@@ -153,14 +153,14 @@ type asleepFixture struct {
 	*placementFixture
 	router *asleepRouter
 	fs     *file_system.Service
-	wt     *WorktreeService
+	wt     *Service
 }
 
 const asleepMachineB = "daemon-b"
 
 // newFileSystemService builds the FileSystem handler these fixtures drive
-// next to a WorktreeService. Its package is internal/handlers/file_system;
-// the tests stay here because the fixtures build a WorktreeService
+// next to a worktree Service. The tests live with Worktree, the second of the
+// two services to move, and build FileSystem through its exported New
 // (research/forge-migration/06-p3b-recipe.md, §3.7).
 func newFileSystemService(t *testing.T, router file_system.Router, repo db.Repository) *file_system.Service {
 	t.Helper()
@@ -185,7 +185,7 @@ func newAsleepFixture(t *testing.T, asleep ...string) *asleepFixture {
 		placementFixture: pf,
 		router:           router,
 		fs:               newFileSystemService(t, router, pf.repo),
-		wt:               NewWorktreeService(pf.repo, nil, router),
+		wt:               newWorktreeService(t, pf.repo, router),
 	}
 }
 

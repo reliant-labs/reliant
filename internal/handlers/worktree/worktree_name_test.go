@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-func createNamed(ctx context.Context, svc *WorktreeService, projectID, name, branch string, force bool) (*connect.Response[reliantv1.CreateWorktreeResponse], error) {
+func createNamed(ctx context.Context, svc *Service, projectID, name, branch string, force bool) (*connect.Response[reliantv1.CreateWorktreeResponse], error) {
 	return svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
 		ProjectId: projectID, Name: name, Branch: branch, Force: force,
 	}))
@@ -23,7 +23,7 @@ func createNamed(ctx context.Context, svc *WorktreeService, projectID, name, bra
 
 func TestCreateWorktree_NameRule(t *testing.T) {
 	repo := db.NewTestRepo(t)
-	svc := NewWorktreeService(repo, nil, &blockingWorktreeDaemonRouter{})
+	svc := newWorktreeService(t, repo, &blockingWorktreeDaemonRouter{})
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
@@ -53,7 +53,7 @@ func TestCreateWorktree_NameRule(t *testing.T) {
 
 func TestUnarchiveWorktree_RefusesWhenTheNameIsTaken(t *testing.T) {
 	repo := db.NewTestRepo(t)
-	svc := NewWorktreeService(repo, nil, &blockingWorktreeDaemonRouter{})
+	svc := newWorktreeService(t, repo, &blockingWorktreeDaemonRouter{})
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 import (
 	"context"
@@ -24,17 +24,17 @@ import (
 // machine B onto machine A the moment it branched into a new workspace.
 //
 // verb names the operation in the no-daemon error ("create", "import").
-func (s *WorktreeService) placeNewWorktree(ctx context.Context, userID, projectID string, chatID *string, source *db.Worktree, verb string) (machinewake.Target, error) {
+func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string, chatID *string, source *db.Worktree, verb string) (machinewake.Target, error) {
 	noMachine := false
 	if chatID != nil && *chatID != "" {
-		chat, err := s.database.GetChat(ctx, *chatID)
+		chat, err := s.deps.Repo.GetChat(ctx, *chatID)
 		if err != nil || chat == nil || chat.UserID != userID {
 			return machinewake.Target{}, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 		}
 		if chat.ProjectID != projectID {
 			return machinewake.Target{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat belongs to a different project"))
 		}
-		daemonID, err := daemonplacement.ChatDaemonID(ctx, s.database, chat)
+		daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
 		if err != nil {
 			logging.Error("Failed to resolve the chat's machine for worktree "+verb, "error", err, "chatID", chat.ID)
 			return machinewake.Target{}, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve the chat's machine"))
@@ -49,9 +49,12 @@ func (s *WorktreeService) placeNewWorktree(ctx context.Context, userID, projectI
 		return machinewake.Target{DaemonID: owner, NoMachine: noMachine}, nil
 	}
 
-	daemonID, err := s.daemonRouter.ResolveDaemonID(ctx, userID)
+	if s.deps.Router == nil {
+		return machinewake.Target{}, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon available to %s worktree: no daemon router", verb))
+	}
+	daemonID, err := s.deps.Router.ResolveDaemonID(ctx, userID)
 	if err != nil {
-		err = s.wake.AfterFailure(ctx, userID, machinewake.Target{NoMachine: noMachine}, err)
+		err = s.wake().AfterFailure(ctx, userID, machinewake.Target{NoMachine: noMachine}, err)
 		logging.Error("Failed to resolve daemon for worktree "+verb, "error", err, "userID", userID)
 		return machinewake.Target{}, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon available to %s worktree: %w", verb, err))
 	}

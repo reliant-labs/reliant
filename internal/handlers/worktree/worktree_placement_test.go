@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 import (
 	"context"
@@ -101,7 +101,7 @@ func (r *placementRouter) daemonsFor(commandType string) []string {
 type placementFixture struct {
 	repo      *db.Repo
 	router    *placementRouter
-	svc       *WorktreeService
+	svc       *Service
 	userID    string
 	projectID string
 	ctx       context.Context
@@ -114,7 +114,7 @@ func newPlacementFixture(t *testing.T) *placementFixture {
 	f := &placementFixture{
 		repo:      repo,
 		router:    router,
-		svc:       NewWorktreeService(repo, nil, router),
+		svc:       newWorktreeService(t, repo, router),
 		userID:    uuid.NewString(),
 		projectID: uuid.NewString(),
 	}

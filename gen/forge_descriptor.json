@@ -32074,6 +32074,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.CreateWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.CreateWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
@@ -32087,6 +32088,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListWorktreesRequest",
           "OutputTypeFQ": "reliant.v1.ListWorktreesResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
@@ -32100,6 +32102,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.GetWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.GetWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
@@ -32113,6 +32116,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.UpdateWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.UpdateWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
@@ -32126,6 +32130,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.DeleteWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.DeleteWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
@@ -34133,8 +34138,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "WorktreeStatus"
         }
-      },
-      "Unmanaged": true
+      }
     }
   ],
   "configs": [
@@ -34421,5 +34425,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "3b4f15aea55a20d58615b959e2905bf0d1ce746b7920b1ad105294d04f08d014"
+  "source_hash": "3d441b572b16ea0a4eb8b355a271d6d7d6e9b3b3da40bf28043de5447d695710"
 }

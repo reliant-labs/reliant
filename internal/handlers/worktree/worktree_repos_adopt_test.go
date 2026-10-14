@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 import (
 	"context"
@@ -65,7 +65,7 @@ func TestListProjectReposAdoptsUnregisteredRepos(t *testing.T) {
 	router := &adoptTestDaemonRouter{
 		discovered: []map[string]any{{"relative_path": "", "name": "adopt-test"}},
 	}
-	s := NewWorktreeService(repo, nil, router)
+	s := newWorktreeService(t, repo, router)
 
 	repos, err := s.listProjectRepos(ctx, project)
 	require.NoError(t, err)
@@ -96,7 +96,7 @@ func TestListProjectReposStillFailsWhenNothingOnDisk(t *testing.T) {
 
 	project := newAdoptTestProject(t, repo)
 	router := &adoptTestDaemonRouter{discovered: nil}
-	s := NewWorktreeService(repo, nil, router)
+	s := newWorktreeService(t, repo, router)
 
 	_, err := s.listProjectRepos(ctx, project)
 	require.Error(t, err)

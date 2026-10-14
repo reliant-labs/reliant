@@ -27,9 +27,6 @@ enum WorktreeStatus {
   WORKTREE_STATUS_FAILED = 6;
 }
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // WorktreeService handles worktree-related operations
 service WorktreeService {
   // CRUD Operations
@@ -38,10 +35,15 @@ service WorktreeService {
   // git-worktree creations into <workspace_dir>/<repo.relative_path>/. The
   // returned Worktree row spans the whole workspace; tools scope to a nested
   // repo via the per-call `repo` param, not via per-repo worktree rows.
+  // forge:custom — places the workspace on a machine and creates its checkouts there after it returns
   rpc CreateWorktree(CreateWorktreeRequest) returns (CreateWorktreeResponse) {}
+  // forge:custom — authorizes through the project, and creates its main worktree when none exists
   rpc ListWorktrees(ListWorktreesRequest) returns (ListWorktreesResponse) {}
+  // forge:custom — authorizes through the worktree's project before it reads
   rpc GetWorktree(GetWorktreeRequest) returns (GetWorktreeResponse) {}
+  // forge:custom — a partial update authorized through the worktree's project
   rpc UpdateWorktree(UpdateWorktreeRequest) returns (UpdateWorktreeResponse) {}
+  // forge:custom — archives a live worktree, and deletes an archived one only once its machine removed the directory
   rpc DeleteWorktree(DeleteWorktreeRequest) returns (DeleteWorktreeResponse) {}
   rpc ArchiveWorktree(ArchiveWorktreeRequest) returns (ArchiveWorktreeResponse) {}
   rpc UnarchiveWorktree(UnarchiveWorktreeRequest) returns (UnarchiveWorktreeResponse) {}

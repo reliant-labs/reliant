@@ -63,6 +63,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/terminal"
 	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/handlers/tool_call"
+	"github.com/reliant-labs/reliant/internal/handlers/worktree"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
@@ -269,11 +270,24 @@ func NewServer(cfg *Config) (*Server, error) {
 	if cfg.ControlPlane.Hosted() {
 		projectService.WithControlPlaneClient(controlplane.NewClient(cfg.ControlPlane.URL))
 	}
-	worktreeService := services.NewWorktreeService(database, cfg.TemporalClient, router)
 	var worktreeSweeper *worktreesweep.Sweeper
+	// worktreeSettler stays a nil interface without a router: a nil *Sweeper
+	// stored in it would pass the handler's nil checks.
+	var worktreeSettler worktree.Settler
 	if router != nil {
 		worktreeSweeper = worktreesweep.New(database, router).WithKeepFiles(worktreesweep.KeepSetting{R: database})
-		worktreeService.WithSettler(worktreeSweeper)
+		worktreeSettler = worktreeSweeper
+	}
+	worktreeService, err := worktree.New(worktree.Deps{
+		Logger:   handlerLogger,
+		Config:   handlerConfig,
+		Repo:     database,
+		Router:   router,
+		Temporal: cfg.TemporalClient,
+		Settler:  worktreeSettler,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("worktree service: %w", err)
 	}
 	repoService, err := repo.New(repo.Deps{
 		Logger: handlerLogger,

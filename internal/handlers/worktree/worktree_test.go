@@ -1,9 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,9 +20,24 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// newWorktreeService builds the Service these tests drive, as server.go
+// does but without Temporal. A settler, when given, settles archived
+// directories (worktreesweep); without one archiving leaves them.
+func newWorktreeService(t testing.TB, repo db.Repository, router Router, settler ...Settler) *Service {
+	t.Helper()
+	deps := Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo, Router: router}
+	if len(settler) > 0 {
+		deps.Settler = settler[0]
+	}
+	svc, err := New(deps)
+	require.NoError(t, err)
+	return svc
+}
 
 type recordingWorktreeDaemonRouter struct {
 	toolexectest.Stub
@@ -134,7 +150,7 @@ func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
 	repo := db.NewTestRepo(t)
 
 	router := &recordingWorktreeDaemonRouter{}
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := uuid.New().String()
@@ -183,7 +199,7 @@ func TestCreateWorktreePersistsOwningDaemon(t *testing.T) {
 	repo := db.NewTestRepo(t)
 
 	router := &recordingWorktreeDaemonRouter{}
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := uuid.New().String()
@@ -224,11 +240,11 @@ func TestCreateWorktreePersistsOwningDaemon(t *testing.T) {
 	assert.Equal(t, "test-daemon-id", *stored.DaemonID)
 }
 
-func setupTestWorktreeServiceForRevert(t *testing.T) (*WorktreeService, string, string) {
+func setupTestWorktreeServiceForRevert(t *testing.T) (*Service, string, string) {
 	t.Helper()
 
 	repo := db.NewTestRepo(t)
-	svc := NewWorktreeService(repo, nil, &toolexectest.Stub{})
+	svc := newWorktreeService(t, repo, &toolexectest.Stub{})
 
 	userID := uuid.New().String()
 	projectID := uuid.New().String()
@@ -272,7 +288,7 @@ func TestRevertFiles_DeletesNestedUntrackedFile(t *testing.T) {
 
 	nestedRelPath := filepath.Join("tmp-untracked", "nested", "file.txt")
 	nestedAbsPath := filepath.Join((func() string {
-		worktree, err := svc.database.GetWorktree(context.Background(), worktreeID)
+		worktree, err := svc.deps.Repo.GetWorktree(context.Background(), worktreeID)
 		require.NoError(t, err)
 		return worktree.Path
 	})(), nestedRelPath)

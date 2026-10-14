@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 import (
 	"context"
@@ -60,7 +60,7 @@ func (r *discoverRouter) SendDaemonCommandToDaemon(_ context.Context, _, daemonI
 type discoverFixture struct {
 	repo      *db.Repo
 	router    *discoverRouter
-	svc       *WorktreeService
+	svc       *Service
 	ctx       context.Context
 	userID    string
 	projectID string
@@ -71,7 +71,7 @@ func newDiscoverTestFixture(t *testing.T, relPaths ...string) *discoverFixture {
 	t.Helper()
 	repo := db.NewTestRepo(t)
 	router := &discoverRouter{}
-	f := &discoverFixture{repo: repo, router: router, svc: NewWorktreeService(repo, nil, router),
+	f := &discoverFixture{repo: repo, router: router, svc: newWorktreeService(t, repo, router),
 		userID: uuid.NewString(), projectID: uuid.NewString()}
 	f.ctx = context.WithValue(context.Background(), auth.UserIDContextKey, f.userID)
 	now := time.Now().UTC()

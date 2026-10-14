@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 // This file contains WorktreeService git operations routed through daemon commands.
 // These were extracted from worktree.go to route all filesystem/exec operations through the daemon.
@@ -11,7 +11,7 @@ import (
 
 // commitViaDaemon commits staged changes via daemon. daemonID is the
 // worktree's owner (see daemonplacement.WorktreeOwner), as for every helper here.
-func (s *WorktreeService) commitViaDaemon(ctx context.Context, userID, daemonID, worktreePath, message string) (string, error) {
+func (s *Service) commitViaDaemon(ctx context.Context, userID, daemonID, worktreePath, message string) (string, error) {
 	var resp struct {
 		Success bool   `json:"success"`
 		Output  string `json:"output,omitempty"`
@@ -33,7 +33,7 @@ func (s *WorktreeService) commitViaDaemon(ctx context.Context, userID, daemonID,
 // The service no longer passes a branch — the daemon's worktree.push reads
 // HEAD on the resolved checkout dir, ensuring writes target whatever the user
 // has actually checked out (which can diverge per-repo from worktree.Branch).
-func (s *WorktreeService) pushViaDaemon(ctx context.Context, userID, daemonID, worktreePath string) (string, error) {
+func (s *Service) pushViaDaemon(ctx context.Context, userID, daemonID, worktreePath string) (string, error) {
 	var resp struct {
 		Success bool   `json:"success"`
 		Output  string `json:"output,omitempty"`
@@ -52,7 +52,7 @@ func (s *WorktreeService) pushViaDaemon(ctx context.Context, userID, daemonID, w
 
 // pullViaDaemon pulls the current branch (resolved by the daemon from HEAD).
 // See pushViaDaemon for rationale.
-func (s *WorktreeService) pullViaDaemon(ctx context.Context, userID, daemonID, worktreePath string) (string, error) {
+func (s *Service) pullViaDaemon(ctx context.Context, userID, daemonID, worktreePath string) (string, error) {
 	var resp struct {
 		Success bool   `json:"success"`
 		Output  string `json:"output,omitempty"`

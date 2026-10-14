@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 import (
 	"context"
@@ -55,7 +55,7 @@ func gitIn(t *testing.T, dir string, args ...string) string {
 }
 
 type reclaimEnv struct {
-	svc     *WorktreeService
+	svc     *Service
 	sweeper *worktreesweep.Sweeper
 	repo    *db.Repo
 	router  *realDaemonRouter
@@ -97,7 +97,7 @@ func newReclaimEnv(t *testing.T) *reclaimEnv {
 	require.NoError(t, repo.UpsertDaemonAttachment(e.ctx, &db.DaemonAttachment{DaemonID: e.daemon, UserID: userID, Source: db.DaemonAttachmentSourceInbound}))
 
 	e.sweeper = worktreesweep.New(repo, e.router)
-	e.svc = NewWorktreeService(repo, nil, e.router).WithSettler(e.sweeper)
+	e.svc = newWorktreeService(t, repo, e.router, e.sweeper)
 	return e
 }
 
@@ -408,7 +408,7 @@ func TestUnarchive_UnreachableMachineLeavesTheRowArchived(t *testing.T) {
 	e := newReclaimEnv(t)
 	wt, _ := e.worktree(t, "offlinerestore")
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
-	e.svc = NewWorktreeService(e.repo, nil, &failingRouter{}).WithSettler(e.sweeper)
+	e.svc = newWorktreeService(t, e.repo, &failingRouter{}, e.sweeper)
 	_, err := e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
 	require.Error(t, err)
 	got, _ := e.repo.GetWorktree(e.ctx, wt.ID)

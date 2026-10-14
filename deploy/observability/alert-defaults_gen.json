@@ -114,6 +114,10 @@
       {
         "name": "tools_daemon",
         "rpc_service": "reliant.v1.ToolsDaemonService"
+      },
+      {
+        "name": "worktree",
+        "rpc_service": "reliant.v1.WorktreeService"
       }
     ]
   },

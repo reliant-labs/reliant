@@ -590,6 +590,75 @@
     },
     "internal/handlers/tools_daemon/handlers_scaffold_who_am_i_test.go": {
       "scaffolded_at": "2026-10-13T16:47:15Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_archive_worktree_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_commit_worktree_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_create_worktree_pr_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_create_worktree_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_delete_worktree_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_discover_worktrees_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_get_worktree_changes_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_get_worktree_commits_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_get_worktree_git_status_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_get_worktree_pr_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_get_worktree_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_import_worktree_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_list_worktree_repo_statuses_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_list_worktrees_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_prune_worktrees_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_pull_worktree_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_push_worktree_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_recreate_worktree_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_revert_files_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_stage_files_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_unarchive_worktree_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_unstage_files_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/handlers/worktree/handlers_scaffold_update_worktree_test.go": {
+      "scaffolded_at": "2026-10-14T18:43:31Z"
     }
   },
   "absent_reported": [
@@ -663,6 +732,16 @@
     "internal/handlers/token/handlers_scaffold_revoke_token_test.go",
     "internal/handlers/token/handlers_scaffold_update_token_test.go",
     "internal/handlers/tools_daemon/handlers_scaffold_connect_daemon_test.go",
-    "internal/handlers/tools_daemon/handlers_scaffold_who_am_i_test.go"
+    "internal/handlers/tools_daemon/handlers_scaffold_who_am_i_test.go",
+    "internal/handlers/worktree/handlers_scaffold_create_worktree_test.go",
+    "internal/handlers/worktree/handlers_scaffold_delete_worktree_test.go",
+    "internal/handlers/worktree/handlers_scaffold_discover_worktrees_test.go",
+    "internal/handlers/worktree/handlers_scaffold_get_worktree_git_status_test.go",
+    "internal/handlers/worktree/handlers_scaffold_import_worktree_test.go",
+    "internal/handlers/worktree/handlers_scaffold_list_worktrees_test.go",
+    "internal/handlers/worktree/handlers_scaffold_prune_worktrees_test.go",
+    "internal/handlers/worktree/handlers_scaffold_recreate_worktree_test.go",
+    "internal/handlers/worktree/handlers_scaffold_revert_files_test.go",
+    "internal/handlers/worktree/handlers_scaffold_unarchive_worktree_test.go"
   ]
 }

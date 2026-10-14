@@ -39,12 +39,6 @@ func fileChangeStatusFromString(s string) reliantv1.FileChangeStatus {
 	}
 }
 
-// --- WorktreeStatus ---
-
-func worktreeStatusFromInt32(v int32) reliantv1.WorktreeStatus {
-	return reliantv1.WorktreeStatus(v)
-}
-
 // UserUpdateType and EntityType are now proto enum integers (stored as INTEGER in DB).
 // No string conversion needed — the db layer scans integers and the streaming layer
 // passes proto enums directly. See internal/db/models.go for type aliases.

@@ -1891,6 +1891,7 @@ export const WorktreeService: GenService<{
    * git-worktree creations into <workspace_dir>/<repo.relative_path>/. The
    * returned Worktree row spans the whole workspace; tools scope to a nested
    * repo via the per-call `repo` param, not via per-repo worktree rows.
+   * forge:custom — places the workspace on a machine and creates its checkouts there after it returns
    *
    * @generated from rpc reliant.v1.WorktreeService.CreateWorktree
    */
@@ -1900,6 +1901,8 @@ export const WorktreeService: GenService<{
     output: typeof CreateWorktreeResponseSchema;
   },
   /**
+   * forge:custom — authorizes through the project, and creates its main worktree when none exists
+   *
    * @generated from rpc reliant.v1.WorktreeService.ListWorktrees
    */
   listWorktrees: {
@@ -1908,6 +1911,8 @@ export const WorktreeService: GenService<{
     output: typeof ListWorktreesResponseSchema;
   },
   /**
+   * forge:custom — authorizes through the worktree's project before it reads
+   *
    * @generated from rpc reliant.v1.WorktreeService.GetWorktree
    */
   getWorktree: {
@@ -1916,6 +1921,8 @@ export const WorktreeService: GenService<{
     output: typeof GetWorktreeResponseSchema;
   },
   /**
+   * forge:custom — a partial update authorized through the worktree's project
+   *
    * @generated from rpc reliant.v1.WorktreeService.UpdateWorktree
    */
   updateWorktree: {
@@ -1924,6 +1931,8 @@ export const WorktreeService: GenService<{
     output: typeof UpdateWorktreeResponseSchema;
   },
   /**
+   * forge:custom — archives a live worktree, and deletes an archived one only once its machine removed the directory
+   *
    * @generated from rpc reliant.v1.WorktreeService.DeleteWorktree
    */
   deleteWorktree: {

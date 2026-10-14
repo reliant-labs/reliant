@@ -114,10 +114,15 @@ type WorktreeServiceClient interface {
 	// git-worktree creations into <workspace_dir>/<repo.relative_path>/. The
 	// returned Worktree row spans the whole workspace; tools scope to a nested
 	// repo via the per-call `repo` param, not via per-repo worktree rows.
+	// forge:custom — places the workspace on a machine and creates its checkouts there after it returns
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
+	// forge:custom — authorizes through the project, and creates its main worktree when none exists
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
+	// forge:custom — authorizes through the worktree's project before it reads
 	GetWorktree(context.Context, *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error)
+	// forge:custom — a partial update authorized through the worktree's project
 	UpdateWorktree(context.Context, *connect.Request[v1.UpdateWorktreeRequest]) (*connect.Response[v1.UpdateWorktreeResponse], error)
+	// forge:custom — archives a live worktree, and deletes an archived one only once its machine removed the directory
 	DeleteWorktree(context.Context, *connect.Request[v1.DeleteWorktreeRequest]) (*connect.Response[v1.DeleteWorktreeResponse], error)
 	ArchiveWorktree(context.Context, *connect.Request[v1.ArchiveWorktreeRequest]) (*connect.Response[v1.ArchiveWorktreeResponse], error)
 	UnarchiveWorktree(context.Context, *connect.Request[v1.UnarchiveWorktreeRequest]) (*connect.Response[v1.UnarchiveWorktreeResponse], error)
@@ -451,10 +456,15 @@ type WorktreeServiceHandler interface {
 	// git-worktree creations into <workspace_dir>/<repo.relative_path>/. The
 	// returned Worktree row spans the whole workspace; tools scope to a nested
 	// repo via the per-call `repo` param, not via per-repo worktree rows.
+	// forge:custom — places the workspace on a machine and creates its checkouts there after it returns
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
+	// forge:custom — authorizes through the project, and creates its main worktree when none exists
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
+	// forge:custom — authorizes through the worktree's project before it reads
 	GetWorktree(context.Context, *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error)
+	// forge:custom — a partial update authorized through the worktree's project
 	UpdateWorktree(context.Context, *connect.Request[v1.UpdateWorktreeRequest]) (*connect.Response[v1.UpdateWorktreeResponse], error)
+	// forge:custom — archives a live worktree, and deletes an archived one only once its machine removed the directory
 	DeleteWorktree(context.Context, *connect.Request[v1.DeleteWorktreeRequest]) (*connect.Response[v1.DeleteWorktreeResponse], error)
 	ArchiveWorktree(context.Context, *connect.Request[v1.ArchiveWorktreeRequest]) (*connect.Response[v1.ArchiveWorktreeResponse], error)
 	UnarchiveWorktree(context.Context, *connect.Request[v1.UnarchiveWorktreeRequest]) (*connect.Response[v1.UnarchiveWorktreeResponse], error)

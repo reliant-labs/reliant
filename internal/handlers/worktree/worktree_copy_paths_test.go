@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package worktree
 
 import (
 	"context"
@@ -73,7 +73,7 @@ func (r *copyPathsRecordingRouter) SendDaemonCommand(ctx context.Context, userID
 func TestCreateWorktreeCopiesPathsOnceFromProjectRoot(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	router := &copyPathsRecordingRouter{home: t.TempDir()}
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := seedMultiRepoProject(t, repo, userID, "control-plane", "forge", "reliant")
@@ -108,7 +108,7 @@ func TestCreateWorktreeCopiesPathsOnceFromProjectRoot(t *testing.T) {
 func TestCreateWorktreeWithoutCopyFilesSendsNoCopy(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	router := &copyPathsRecordingRouter{home: t.TempDir()}
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := seedMultiRepoProject(t, repo, userID, "")
@@ -129,7 +129,7 @@ func TestCreateWorktreeWithoutCopyFilesSendsNoCopy(t *testing.T) {
 func TestCreateWorktreeRejectsInvalidCopyPath(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	router := &copyPathsRecordingRouter{home: t.TempDir()}
-	svc := NewWorktreeService(repo, nil, router)
+	svc := newWorktreeService(t, repo, router)
 
 	userID := uuid.New().String()
 	projectID := seedMultiRepoProject(t, repo, userID, "")
