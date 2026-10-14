@@ -6,11 +6,13 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 )
 
 func TestParseTriggerPresets(t *testing.T) {
@@ -251,4 +253,24 @@ func TestResolveTriggerDaemon(t *testing.T) {
 
 	_, err = resolveTriggerDaemon(ctx, lister, "nope")
 	assert.ErrorContains(t, err, "no daemon with id or hostname")
+}
+
+// An agent's shell runs as the user with the user's CLI login, so the commands
+// that start an automation running refuse to run from it: enabling is done in
+// the app. Pausing stays open.
+func TestTriggerCommandsThatEnableRefuseFromAnAgentShell(t *testing.T) {
+	t.Setenv(daemonpolicy.AgentShellEnv, "1")
+
+	for _, cmd := range []*cobra.Command{newTriggerCreateCmd(), newTriggerUpdateCmd(), newTriggerEnableCmd()} {
+		require.NotNil(t, cmd.PreRunE, cmd.Name())
+		err := cmd.PreRunE(cmd, nil)
+		require.ErrorIs(t, err, errAgentCannotEnable, cmd.Name())
+		assert.Contains(t, err.Error(), "turn it on in the app")
+	}
+	for _, cmd := range []*cobra.Command{newTriggerDisableCmd(), newTriggerListCmd(), newTriggerGetCmd(), newTriggerDeleteCmd()} {
+		assert.Nil(t, cmd.PreRunE, "%s stays available to an agent", cmd.Name())
+	}
+
+	t.Setenv(daemonpolicy.AgentShellEnv, "")
+	assert.NoError(t, newTriggerCreateCmd().PreRunE(nil, nil), "a person's terminal is unaffected")
 }

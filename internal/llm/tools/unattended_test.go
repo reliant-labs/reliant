@@ -60,16 +60,15 @@ func TestUnattendedWithholding_Categories(t *testing.T) {
 	t.Parallel()
 
 	withheld := map[string]string{
-		ToolCreateWorkflow:  "workflows",
-		ToolEditWorkflow:    "workflows",
-		ToolWriteWorkflow:   "workflows",
-		ToolWriteScenario:   "workflows",
-		ToolEditScenario:    "workflows",
-		ToolDeleteScenario:  "workflows",
-		ToolActivateTrigger: "activate triggers",
-		ToolStartRun:        "other runs",
-		ToolSendToRun:       "other runs",
-		ToolControlRun:      "other runs",
+		ToolCreateWorkflow: "workflows",
+		ToolEditWorkflow:   "workflows",
+		ToolWriteWorkflow:  "workflows",
+		ToolWriteScenario:  "workflows",
+		ToolEditScenario:   "workflows",
+		ToolDeleteScenario: "workflows",
+		ToolStartRun:       "other runs",
+		ToolSendToRun:      "other runs",
+		ToolControlRun:     "other runs",
 	}
 	for name, reason := range withheld {
 		assert.Contains(t, UnattendedWithholding(name), reason, name)
@@ -162,7 +161,7 @@ func TestResolveCapabilities_UnattendedOrchestratorIsWithheldStandingWork(t *tes
 	t.Parallel()
 
 	caps := unattendedCaps(PermissionOrchestrator, []string{"tag:workflow", "tag:runs"}, nil, true)
-	for _, name := range []string{ToolActivateTrigger, ToolStartRun, ToolSendToRun, ToolControlRun} {
+	for _, name := range []string{ToolStartRun, ToolSendToRun, ToolControlRun} {
 		assert.False(t, caps.Offers(name), name)
 		assert.Contains(t, caps.Explain(name), "unattended runs can't", name)
 	}
@@ -170,7 +169,6 @@ func TestResolveCapabilities_UnattendedOrchestratorIsWithheldStandingWork(t *tes
 	assert.True(t, caps.Offers(ToolListTriggers))
 
 	attended := unattendedCaps(PermissionOrchestrator, []string{"tag:workflow", "tag:runs"}, nil, false)
-	assert.True(t, attended.Offers(ToolActivateTrigger))
 	assert.True(t, attended.Offers(ToolStartRun))
 }
 
@@ -245,9 +243,9 @@ func TestResolveCapabilities_ExplicitlyNamedToolsSurviveUnattended(t *testing.T)
 
 	t.Run("a name is still capped by the tier", func(t *testing.T) {
 		t.Parallel()
-		caps := unattendedCaps(PermissionMutating, []string{ToolActivateTrigger}, nil, true)
-		assert.False(t, caps.Offers(ToolActivateTrigger))
-		assert.Contains(t, caps.Explain(ToolActivateTrigger), "requires 'orchestrator' permission")
+		caps := unattendedCaps(PermissionMutating, []string{ToolStartRun}, nil, true)
+		assert.False(t, caps.Offers(ToolStartRun))
+		assert.Contains(t, caps.Explain(ToolStartRun), "requires 'orchestrator' permission")
 	})
 }
 

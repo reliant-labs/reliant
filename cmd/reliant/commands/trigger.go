@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"text/tabwriter"
 
@@ -15,7 +16,22 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 )
+
+// errAgentCannotEnable is what create, update and enable say when an agent's
+// shell runs them. Enabling an automation is the user's act, done in the app.
+var errAgentCannotEnable = fmt.Errorf("an agent cannot create or enable automations: ask the user to turn it on in the app (Workflows, open the workflow, Enable)")
+
+// refuseFromAgentShell is the PreRunE of the commands that start something
+// running on its own. See daemonpolicy.AgentShellEnv for why this is a
+// guardrail and not a boundary.
+func refuseFromAgentShell(*cobra.Command, []string) error {
+	if os.Getenv(daemonpolicy.AgentShellEnv) != "" {
+		return errAgentCannotEnable
+	}
+	return nil
+}
 
 // `reliant trigger` manages standing instructions that start runs without a
 // human typing. See research/TRIGGERS.md.
@@ -216,8 +232,9 @@ func (f *triggerDefinitionFlags) resolveProjectID(
 func newTriggerCreateCmd() *cobra.Command {
 	var flags triggerDefinitionFlags
 	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create a schedule trigger",
+		Use:     "create",
+		PreRunE: refuseFromAgentShell,
+		Short:   "Create a schedule trigger",
 		Example: `  # Every weekday at 9am, in the project in the working directory
   reliant trigger create --name "morning audit" --cron "0 9 * * 1-5" \
     --message "Review yesterday's CI failures and open issues for anything actionable."
@@ -251,8 +268,9 @@ func newTriggerCreateCmd() *cobra.Command {
 func newTriggerUpdateCmd() *cobra.Command {
 	var flags triggerDefinitionFlags
 	cmd := &cobra.Command{
-		Use:   "update <id-or-name>",
-		Short: "Replace a trigger's definition",
+		Use:     "update <id-or-name>",
+		PreRunE: refuseFromAgentShell,
+		Short:   "Replace a trigger's definition",
 		Long: `Replace a trigger's definition.
 
 This is a full replacement, not a patch: every field is written as given, so
@@ -360,7 +378,7 @@ func newTriggerDisableCmd() *cobra.Command {
 }
 
 func newTriggerSetEnabledCmd(verb, short string, enabled bool) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   verb + " <id-or-name>",
 		Short: short,
 		Long: short + `.
@@ -387,6 +405,12 @@ definition and firing history survive and re-enabling needs no re-derivation.`,
 			return nil
 		},
 	}
+	// Pausing is the safe direction and stays open to an agent; resuming is
+	// enabling.
+	if enabled {
+		cmd.PreRunE = refuseFromAgentShell
+	}
+	return cmd
 }
 
 func newTriggerDeleteCmd() *cobra.Command {

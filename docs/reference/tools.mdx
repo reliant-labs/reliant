@@ -42,7 +42,7 @@ Tools are organized by tags for filtering:
 - [Planning & Task Management](#planning--task-management) (10 tools)
 - [File Operations](#file-operations) (8 tools)
 - [Information Retrieval](#information-retrieval) (6 tools)
-- [Workflow Management](#workflow-management) (21 tools)
+- [Workflow Management](#workflow-management) (20 tools)
 - [System & Execution](#system--execution) (4 tools)
 - [Other Tools](#other-tools) (66 tools)
 
@@ -1340,7 +1340,6 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`activate_trigger`](#activate_trigger) | workflow | Activate a trigger a workflow declares, for the user you are working for, so the workflow starts ... |
 | [`cel_eval`](#cel_eval) | workflow, readonly | Evaluates a CEL expression or \{`{ }`\} template against a context you supply, exactly as a workflow ... |
 | [`create_workflow`](#create_workflow) | workflow | Create a new workflow. |
 | [`delete_scenario`](#delete_scenario) | workflow | Delete a test scenario. |
@@ -1361,24 +1360,6 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`view_scenario`](#view_scenario) | workflow, readonly | View a specific test scenario's full definition. |
 | [`write_scenario`](#write_scenario) | workflow | Create or update a test scenario with YAML content. |
 | [`write_workflow`](#write_workflow) | workflow | Replace an existing workflow draft with YAML content. |
-
-### activate_trigger
-
-**Tags:** `workflow`
-
-Activate a trigger a workflow declares, for the user you are working for, so the workflow starts running on it.
-
-A workflow's YAML says WHEN it runs, in its triggers: block (a schedule, a webhook, an integration event, or another workflow's run finishing/failing/blocking). Declaring one fires nothing. Activating it says AS WHOM and WHERE: the user, a project, the daemon whose tools the runs use, and for an integration trigger the connection it listens through.
-
-The declaration stays the source of truth: its source, filter and inputs are re-read from the workflow every time it fires, so editing the workflow's triggers: block changes this activation too. If the declaration is removed or renamed, the activation reports BROKEN health (see list_triggers) and fires nothing until it is restored.
-
-Runs it starts are unattended: nobody answers questions or approvals.
-
-RETURNS the trigger id; for a webhook trigger, its URL and token (the token is shown ONCE — give it to the user now).
-
-Before activating, check the workflow validates (get_workflow) and, for an integration trigger, that the user has a connection for it.
-
----
 
 ### cel_eval
 
@@ -1691,7 +1672,7 @@ create_workflow or list_workflows.
 
 List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's health.
 
-Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; fix the workflow or activate it again).
+Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; fix the workflow, then the user re-enables it in the app).
 
 ---
 

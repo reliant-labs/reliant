@@ -41,12 +41,6 @@ var unattendedWithheld = []struct {
 		reason: "unattended runs can't create or change workflows or their test scenarios",
 	},
 	{
-		// An activation creates standing work that starts unattended runs on
-		// its own, long after this one has ended.
-		withholds: toolNamed(ToolActivateTrigger),
-		reason:    "unattended runs can't activate triggers",
-	},
-	{
 		// start_run's run is attended (agent.start_run), so it would be handed
 		// everything withheld here. send_to_run instructs a run that may hold
 		// those tools, and control_run stops or resumes the user's own work.

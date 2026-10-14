@@ -53,3 +53,18 @@ func TestChildEnv_FirstPartyOmitsDaemonConnectionSettings(t *testing.T) {
 		t.Error("first-party children must still inherit the rest of the daemon's environment")
 	}
 }
+
+// Every process an agent's shell starts carries the marker the `reliant` CLI
+// reads to refuse enabling automations, whether the caller is first-party or
+// confined, and a request cannot clear it.
+func TestChildEnv_MarksAgentShells(t *testing.T) {
+	confined := NewContext(context.Background(), &Policy{GrantID: "grant-1"})
+	for name, ctx := range map[string]context.Context{"first-party": context.Background(), "confined": confined} {
+		if !slices.Contains(ChildEnv(ctx, nil), AgentShellEnv+"=1") {
+			t.Errorf("%s: child env lacks %s", name, AgentShellEnv)
+		}
+		if !slices.Contains(ChildEnv(ctx, map[string]string{AgentShellEnv: ""}), AgentShellEnv+"=1") {
+			t.Errorf("%s: a request cleared %s", name, AgentShellEnv)
+		}
+	}
+}

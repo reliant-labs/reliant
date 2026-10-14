@@ -337,12 +337,11 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("integration pollers: %w", err)
 	}
 
-	// activate_trigger / list_triggers act as the calling chat's owner
-	// through the same TriggerService the api-server serves, so an agent's
-	// activation is checked exactly like the user's own. Its inbound half
-	// needs the provider registry (which integrations deliver events here)
-	// and the vault (signed webhooks). PUBLIC_URL is read when the worker
-	// has it; without it a webhook's URL is reported as a bare path.
+	// list_triggers reads as the calling chat's owner through the same
+	// TriggerService the api-server serves. Its inbound half needs the
+	// provider registry (which integrations deliver events here) and the
+	// vault (signed webhooks). PUBLIC_URL is read when the worker has it;
+	// without it a webhook's URL is reported as a bare path.
 	triggerService := services.NewTriggerServiceFor(repo, temporalClient, v2workflow.SharedTaskQueue).
 		WithInbound(services.InboundOptions{
 			PublicURL: strings.TrimSpace(os.Getenv("PUBLIC_URL")),
@@ -381,8 +380,8 @@ func Run(ctx context.Context, opts Options) error {
 		RunStarter:   agentRuns,
 		RunLifecycle: agentRuns,
 		RunMessenger: agentRuns,
-		// activate_trigger / list_triggers execute here too.
-		TriggerActivator: triggertools.New(triggerService),
+		// list_triggers executes here too.
+		TriggerLister: triggertools.New(triggerService),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens

@@ -94,10 +94,10 @@ var serverSafeTools = map[string]struct{}{
 	ToolGetWorkflowSuggestions: {}, ToolListPresets: {}, ToolGetPreset: {},
 	ToolListScenarios: {}, ToolViewScenario: {}, ToolEditScenario: {}, ToolWriteScenario: {},
 	ToolDeleteScenario: {}, ToolRunScenario: {},
-	// Catalog search and trigger activation: database and embedded-catalog
-	// reads and writes only.
+	// Catalog search and trigger listing: database and embedded-catalog
+	// reads only.
 	ToolSearchIntegrations: {}, ToolGetIntegrationSchema: {},
-	ToolActivateTrigger: {}, ToolListTriggers: {},
+	ToolListTriggers: {},
 	// Returns a fixed text; the offer is the rendered call itself.
 	ToolRequestMachine: {},
 	// Database reads and a Sentry event.

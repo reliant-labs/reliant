@@ -31,7 +31,7 @@ const (
 	PermissionMutating = "mutating"
 
 	// PermissionOrchestrator additionally allows creating standing work
-	// (start_run, control_run, send_to_run, activate_trigger). Spawning
+	// (start_run, control_run, send_to_run). Spawning
 	// sub-agents is NOT gated here — see MinimumPermissionForTool.
 	PermissionOrchestrator = "orchestrator"
 )
@@ -158,11 +158,10 @@ func MinimumPermissionForTool(toolName string) string {
 	// access would let a low-privilege agent steer a higher-privilege one.
 	// list_runs and get_run only read, and sit at the base tier.
 	//
-	// activate_trigger is orchestrator-tier for the same reason as start_run,
-	// and more so: it creates standing work that starts unattended runs on its
-	// own, long after the calling agent is gone. list_triggers only reads.
+	// No tool creates or enables a trigger: that is the user's act, in the
+	// app. list_triggers only reads.
 	switch toolName {
-	case ToolStartRun, ToolControlRun, ToolSendToRun, ToolActivateTrigger:
+	case ToolStartRun, ToolControlRun, ToolSendToRun:
 		return PermissionOrchestrator
 	}
 

@@ -1,17 +1,16 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// Package triggertools lets an agent activate and list the triggers of the
-// user it works for. It is the implementation behind the activate_trigger and
-// list_triggers tools, which declare the narrow interface this package
-// satisfies (internal/llm/tools cannot import the trigger service: it depends
-// on that package).
+// Package triggertools lets an agent list the triggers of the user it works
+// for. It is the implementation behind the list_triggers tool, which declares
+// the narrow interface this package satisfies (internal/llm/tools cannot
+// import the trigger service: it depends on that package).
 //
-// It adds no trigger logic of its own. Every call goes through TriggerService
-// as the user, so ownership, declaration resolution, connection and daemon
-// checks are exactly the API's — the agent cannot do anything the user could
-// not do from the app.
+// It is read-only on purpose. Enabling a workflow's triggers is the user's act,
+// done in the app, so TriggerAPI has no write method for an agent to reach.
+// Every call goes through TriggerService as the user, so ownership is exactly
+// the API's.
 //
-//forge:exclude-contract: adapter that satisfies the consumer-declared TriggerActivator interface in internal/llm/tools; wiring, not a service
+//forge:exclude-contract: adapter that satisfies the consumer-declared TriggerLister interface in internal/llm/tools; wiring, not a service
 package triggertools
 
 import (
@@ -21,75 +20,29 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
-	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
-// TriggerAPI is the slice of the trigger service the tools use. It is
+// TriggerAPI is the slice of the trigger service the tool reads. It is
 // satisfied by *services.TriggerService, whose handlers authorize the caller
 // from the request context.
 type TriggerAPI interface {
-	CreateTrigger(context.Context, *connect.Request[reliantv1.CreateTriggerRequest]) (*connect.Response[reliantv1.CreateTriggerResponse], error)
 	ListTriggers(context.Context, *connect.Request[reliantv1.ListTriggersRequest]) (*connect.Response[reliantv1.ListTriggersResponse], error)
 }
 
-// Triggers implements tools.TriggerActivator.
+// Triggers implements tools.TriggerLister.
 type Triggers struct{ api TriggerAPI }
 
-var _ tools.TriggerActivator = (*Triggers)(nil)
+var _ tools.TriggerLister = (*Triggers)(nil)
 
 // New builds the adapter.
 func New(api TriggerAPI) *Triggers { return &Triggers{api: api} }
 
 func asOwner(ctx context.Context, userID string) context.Context {
 	return context.WithValue(ctx, auth.UserIDContextKey, userID)
-}
-
-// ActivateTrigger creates the activation through CreateTrigger.
-func (t *Triggers) ActivateTrigger(ctx context.Context, req tools.ActivateTriggerRequest) (tools.ActivatedTrigger, error) {
-	if t.api == nil {
-		return tools.ActivatedTrigger{}, errors.New("no trigger service is configured")
-	}
-	if req.OwnerUserID == "" {
-		return tools.ActivatedTrigger{}, errors.New("no owner")
-	}
-	params, err := toParams(req.Params)
-	if err != nil {
-		return tools.ActivatedTrigger{}, fmt.Errorf("params: %w", err)
-	}
-	enabled := !req.Disabled
-	def := &reliantv1.TriggerDefinition{
-		Name:             req.Name,
-		ProjectId:        req.ProjectID,
-		Workflow:         req.Workflow,
-		Presets:          req.Presets,
-		Params:           params,
-		Message:          req.Message,
-		DaemonId:         req.DaemonID,
-		NoMachine:        req.NoMachine,
-		NotifyOnComplete: req.NotifyOnSuccess,
-		Enabled:          &enabled,
-		Source:           &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: req.WorkflowTrigger},
-	}
-	if req.WorktreeID != "" {
-		def.WorktreeId = &req.WorktreeID
-	}
-	if req.ConnectionID != "" {
-		def.ConnectionId = &req.ConnectionID
-	}
-	resp, err := t.api.CreateTrigger(asOwner(ctx, req.OwnerUserID), connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: def}))
-	if err != nil {
-		return tools.ActivatedTrigger{}, unwrapConnect(err)
-	}
-	out := tools.ActivatedTrigger{Summary: summarize(resp.Msg.GetTrigger())}
-	if hook := resp.Msg.GetWebhook(); hook != nil {
-		out.WebhookToken = hook.GetToken()
-		out.WebhookURLWithToken = hook.GetUrl()
-	}
-	return out, nil
 }
 
 // ListTriggers lists the user's triggers, narrowed by project (server-side)
@@ -205,19 +158,4 @@ func unwrapConnect(err error) error {
 		return errors.New(ce.Message())
 	}
 	return err
-}
-
-func toParams(values map[string]any) (map[string]*structpb.Value, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make(map[string]*structpb.Value, len(values))
-	for name, value := range values {
-		v, err := structpb.NewValue(value)
-		if err != nil {
-			return nil, fmt.Errorf("%q: %w", name, err)
-		}
-		out[name] = v
-	}
-	return out, nil
 }

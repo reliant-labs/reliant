@@ -82,6 +82,15 @@ var inheritableEnvPrefixes = []string{
 	"LC_",
 }
 
+// AgentShellEnv marks a process an agent's shell tool started. The `reliant`
+// CLI reads it to refuse commands that enable automations: an agent's shell
+// runs as the user, with the user's CLI login, so without the marker
+// `reliant trigger create` would be a way around the rule that only the user
+// enables a workflow's triggers (in the app). It is a guardrail against an
+// agent doing it by habit, not a security boundary: a process can unset its
+// own environment.
+const AgentShellEnv = "RELIANT_AGENT_SHELL"
+
 // ChildEnv returns the environment for a process spawned on behalf of the
 // caller in ctx.
 //
@@ -95,6 +104,7 @@ var inheritableEnvPrefixes = []string{
 // Policy.checkExec), and it is not filtered again here.
 func ChildEnv(ctx context.Context, extra map[string]string) []string {
 	base := os.Environ()
+	extra = withAgentShellMarker(extra)
 
 	if FromContext(ctx) == nil {
 		// First-party: the daemon's environment, minus the daemon's own
@@ -113,6 +123,17 @@ func ChildEnv(ctx context.Context, extra map[string]string) []string {
 		}
 	}
 	return appendExtra(filtered, extra)
+}
+
+// withAgentShellMarker returns extra with AgentShellEnv set, overriding any
+// value the request supplied.
+func withAgentShellMarker(extra map[string]string) map[string]string {
+	out := make(map[string]string, len(extra)+1)
+	for k, v := range extra {
+		out[k] = v
+	}
+	out[AgentShellEnv] = "1"
+	return out
 }
 
 // daemonConnectionEnvVars are the daemon's OWN connection settings: which

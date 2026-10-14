@@ -105,7 +105,7 @@ A run that launched and then failed counts as a failure, not just a launch that 
 
 ## From the command line
 
-`reliant trigger` manages **schedule** automations: `create`, `list`, `get`, `update`, `enable`, `disable`, `fire`, `events` and `delete`. Webhook, integration and workflow-event automations are activated from the app (or by an agent with the `activate_trigger` tool). See [Schedules](/automations/schedules) for the commands.
+`reliant trigger` manages **schedule** automations: `create`, `list`, `get`, `update`, `enable`, `disable`, `fire`, `events` and `delete`. Webhook, integration and workflow-event automations are enabled from the app. An agent can write and test a workflow but cannot enable one, so `create`, `update` and `enable` refuse to run from an agent's shell; only you turn an automation on. See [Schedules](/automations/schedules) for the commands.
 
 ## Related topics
 

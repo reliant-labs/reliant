@@ -333,9 +333,10 @@ func generateTriggers() string {
 	return `## Triggers: when a workflow runs
 
 A workflow says WHEN it runs in a top-level ` + bt + `triggers:` + bt + ` list. Declaring a trigger fires nothing.
-A user ACTIVATES it — ` + bt + `activate_trigger` + bt + `, or Activate in the app — which says AS WHOM and WHERE: their
-project, the daemon whose tools the runs use, and for an integration trigger which of their
-connections it listens through. One declaration can have many activations (one per user or project).
+The USER enables it in the app — never you: you have no tool that creates, enables or re-points an activation,
+and you must not try to get one by other means (the CLI, an HTTP call, a script). Enabling says AS WHOM and WHERE:
+their project, the machine whose tools the runs use, and for an integration trigger which of their connected
+accounts it listens through. One declaration can have many activations (one per user or project).
 
 ` + "```yaml" + `
 name: triage-new-issues
@@ -384,11 +385,11 @@ duplicates). The window is a fixed UTC-aligned clock bucket, default 1h, at most
 suppressed, not a sliding guarantee. A key that cannot render for a delivery falls back to the default key. It needs a
 ` + bt + `{{ }}` + bt + `, and ` + bt + `dedupe_window` + bt + ` needs a ` + bt + `dedupe_key` + bt + `.
 
-**Test a trigger before activating it.** ` + bt + `cel_eval` + bt + ` with ` + bt + `integration` + bt + ` + ` + bt + `event` + bt + ` generates ` + bt + `trigger.payload` + bt + ` from the payload that
+**Test a trigger before handing it over.** ` + bt + `cel_eval` + bt + ` with ` + bt + `integration` + bt + ` + ` + bt + `event` + bt + ` generates ` + bt + `trigger.payload` + bt + ` from the payload that
 event declares (add ` + bt + `trigger_payload` + bt + ` to override only the fields your expression reads), and ` + bt + `scope: trigger` + bt + ` gives a
 filter's, inputs mapping's or prompt's view (only ` + bt + `trigger` + bt + `). It returns the value and its type, or the error with its
-phase and position, plus ` + bt + `findings` + bt + ` for reads the declared payload rules out. Do this instead of activating and waiting
-for an event. ` + bt + `reliant workflow eval` + bt + ` is the same on the command line, and ` + bt + `reliant workflow validate --trigger-payload` + bt + `
+phase and position, plus ` + bt + `findings` + bt + ` for reads the declared payload rules out. Do this instead of waiting for a real
+event: you cannot enable the trigger, so a real event never comes from you. ` + bt + `reliant workflow eval` + bt + ` is the same on the command line, and ` + bt + `reliant workflow validate --trigger-payload` + bt + `
 dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a sample event.
 
 **Chat is a trigger too, on by default.** Set top-level ` + bt + `automation_only: true` + bt + ` for a workflow only its
@@ -429,13 +430,20 @@ certain people start runs, filter on it and require ` + bt + `verified` + bt + `
 **The loop for an integration trigger:** ` + bt + `search_integrations(kind: trigger)` + bt + ` → ` + bt + `get_integration_schema` + bt + `
 (its events, the ` + bt + `match` + bt + ` attributes, the payload schema, and a ready ` + bt + `triggers:` + bt + ` block) → write it with
 ` + bt + `edit_workflow` + bt + ` (validation reports bad cron, filters, inputs, events and match keys like any other error) →
-` + bt + `activate_trigger` + bt + ` → ` + bt + `list_triggers` + bt + ` to confirm it is HEALTHY or UNKNOWN (not fired yet).
+test its filter and inputs with ` + bt + `cel_eval` + bt + ` and its graph with ` + bt + `run_scenario` + bt + ` → tell the user the workflow is ready (below).
+
+**When the workflow is ready, hand it over; do not enable it.** Say that it is saved and validated, and give the
+user the path: **Workflows → Library → open the workflow → Enable**. One dialog turns on all of its declared
+triggers at once, and asks the user for the project, machine and connected accounts. Name the triggers it will
+turn on and anything they need first (a connection to GitHub, a webhook sender to configure). Never say, imply or
+log that you enabled, activated or turned on anything: until the user does, nothing fires. Once they say they
+have, ` + bt + `list_triggers` + bt + ` shows each activation's health (HEALTHY, or UNKNOWN until it first fires).
 
 **Editing the YAML changes every activation.** An activation reads its declaration from the workflow
 each time it fires, so a new cron, filter or input mapping applies on the next event. Renaming or
 removing a declaration, or changing its source kind or integration, leaves its activations BROKEN:
 they fire nothing, report why in ` + bt + `list_triggers` + bt + `, and recover when the declaration is restored (or are
-activated again). Runs a trigger starts are unattended — nobody answers questions or approvals.`
+enabled again by the user). Runs a trigger starts are unattended — nobody answers questions or approvals.`
 }
 
 func generateGotchas() string {
@@ -490,8 +498,7 @@ the discovery/reference tools (` + "`list_workflows`" + `, ` + "`list_presets`" 
 | ` + "`cel_eval`" + ` | Evaluate a CEL expression or template against a sample trigger (generated from an integration event's declared payload), inputs and node outputs: value and type, or a precise error. Test a filter in one call |
 | ` + "`search_integrations`" + ` | Find an integration action ref (GitHub, Slack, HTTP, ...) for a ` + "`type: action`" + ` node's ` + "`uses:`" + ` |
 | ` + "`get_integration_schema`" + ` | Read one integration action's params (` + "`with:`" + `) and output (` + "`nodes.<id>.data`" + `) schemas |
-| ` + "`activate_trigger`" + ` | Activate a trigger the workflow declares, for the user (project, daemon, connection); returns its id, and a webhook's URL and one-time token |
-| ` + "`list_triggers`" + ` | List the user's triggers (optionally one workflow's) with health; BROKEN means the declaration it activates is gone or changed |
+| ` + "`list_triggers`" + ` | List the triggers the user has enabled (optionally one workflow's) with health; read-only. BROKEN means the declaration it activates is gone or changed |
 | ` + "`list_workflows`" + ` | Browse existing workflows for examples and patterns |
 | ` + "`list_presets`" + ` | Discover available agent presets |
 | ` + "`get_preset`" + ` | View a preset's full configuration |

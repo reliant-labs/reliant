@@ -153,7 +153,7 @@ func TestRetiredReadOnlyWorkflowStillClearsItsGates(t *testing.T) {
 func TestMinimumPermissionForTool_OrchestratorTools(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, PermissionOrchestrator, MinimumPermissionForTool(ToolAgent))
-	for _, name := range []string{ToolStartRun, ToolControlRun, ToolSendToRun, ToolActivateTrigger} {
+	for _, name := range []string{ToolStartRun, ToolControlRun, ToolSendToRun} {
 		assert.Equal(t, PermissionOrchestrator, MinimumPermissionForTool(name), name)
 	}
 }

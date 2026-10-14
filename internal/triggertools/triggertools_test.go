@@ -4,18 +4,20 @@ package triggertools_test
 import (
 	"context"
 	"encoding/json"
+	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/automationcred"
-	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
@@ -80,25 +82,9 @@ type fakeCatalog struct{}
 
 func (fakeCatalog) HasInboundSource(string) bool { return true }
 
-// mintingControlPlane records daemon:resume mints. No other control-plane call
-// is reachable from these tests, so the embedded interface stays nil.
-type mintingControlPlane struct {
-	controlplane.Client
-	mu    sync.Mutex
-	mints []string // daemon ids
-}
-
-func (c *mintingControlPlane) MintDaemonResumeToken(_ context.Context, _, daemonID, _ string) (controlplane.DaemonResumeToken, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.mints = append(c.mints, daemonID)
-	return controlplane.DaemonResumeToken{Plaintext: "rlat_resume_" + daemonID}, nil
-}
-
 type env struct {
 	repo      *db.Repo
 	svc       *services.TriggerService
-	activate  tools.Tool
 	list      tools.Tool
 	backend   *fakeBackend
 	userID    string
@@ -129,9 +115,7 @@ func setup(t *testing.T, publicURL string) *env {
 		PublicURL: publicURL, Catalog: fakeCatalog{}, Intake: fakeIntake{},
 	})
 	e.svc = svc
-	activator := triggertools.New(svc)
-	e.activate = tools.NewActivateTriggerTool(repo, activator)
-	e.list = tools.NewListTriggersTool(repo, activator)
+	e.list = tools.NewListTriggersTool(repo, triggertools.New(svc))
 	return e
 }
 
@@ -146,172 +130,38 @@ func (e *env) call(t *testing.T, tool tools.Tool, params any) tools.ToolResponse
 	return resp
 }
 
-func TestActivateTriggerSchedule(t *testing.T) {
-	e := setup(t, "https://api.example.com")
-	resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "nightly", Message: "Summarize."})
-	require.False(t, resp.IsError, resp.Content)
-
-	var meta tools.ActivateTriggerResponseMetadata
-	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
-	require.NotEmpty(t, meta.TriggerID)
-	assert.Equal(t, "schedule", meta.Kind)
-	assert.Empty(t, meta.WebhookToken)
-	assert.Contains(t, resp.Content, `Activated "nightly" of workflow triage`)
-	assert.Contains(t, resp.Content, "cron 0 9 * * 1-5 (America/New_York)")
-	assert.Contains(t, resp.Content, "Next fire: 2026-01-05T14:00:00Z")
-
-	stored, err := e.repo.GetTrigger(context.Background(), meta.TriggerID)
+// activate is the user enabling a declared trigger in the app: the same
+// CreateTrigger call the UI makes. No agent tool can do this, which is the
+// point of TestNoAgentToolActivates; the list tests need activations to list.
+func (e *env) activate(t *testing.T, declared string) string {
+	t.Helper()
+	enabled := true
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, e.userID)
+	resp, err := e.svc.CreateTrigger(ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
+		Name: "triage / " + declared, ProjectId: e.projectID, Workflow: "triage", DaemonId: e.daemonID,
+		Message: "go", Enabled: &enabled,
+		Source: &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: declared},
+	}}))
 	require.NoError(t, err)
-	assert.Equal(t, e.userID, stored.UserID, "the owner is the calling chat's user")
-	assert.Equal(t, e.projectID, stored.ProjectID, "project defaults to the caller's")
-	assert.Equal(t, e.daemonID, stored.DaemonID, "daemon defaults to the caller's")
-	assert.Equal(t, "triage / nightly", stored.Name)
-	require.NotNil(t, stored.WorkflowTrigger)
-	assert.Equal(t, "nightly", *stored.WorkflowTrigger)
-	assert.Equal(t, []string{meta.TriggerID}, e.backend.synced)
-}
-
-// activate_trigger is how an agent (or a workflow's declared trigger) becomes a
-// stored automation, and it goes through CreateTrigger like the app does, so a
-// trigger of any kind — not only a schedule — holds the delegated token its
-// unattended runs wake their machine with.
-func TestActivateTriggerMintsTheAutomationTokenForEveryKind(t *testing.T) {
-	for _, declared := range []string{"nightly", "hook"} {
-		t.Run(declared, func(t *testing.T) {
-			e := setup(t, "https://api.example.com")
-			cp := &mintingControlPlane{}
-			e.svc.WithControlPlaneClient(cp)
-			auth.SetUserJWT(e.userID, "jwt-1")
-			t.Cleanup(func() { auth.SetUserJWT(e.userID, "") })
-
-			resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: declared, Message: "Go."})
-			require.False(t, resp.IsError, resp.Content)
-
-			assert.Equal(t, []string{e.daemonID}, cp.mints, "the token is minted for the trigger's daemon")
-			token, err := e.repo.GetProviderAPIKey(context.Background(), e.userID, automationcred.Provider(e.daemonID))
-			require.NoError(t, err)
-			assert.Equal(t, "rlat_resume_"+e.daemonID, token)
-		})
-	}
-}
-
-// A chat with no machine activates a no-machine trigger, as start_run starts a
-// no-machine run. Before, the tool sent the caller's (absent) daemon, so
-// CreateTrigger refused it with "daemon_id is required" — safe, but it left a
-// no-machine agent unable to set up any automation at all.
-func TestActivateTriggerFromANoMachineChatCreatesANoMachineTrigger(t *testing.T) {
-	e := setup(t, "https://api.example.com")
-	ctx := context.Background()
-	now := time.Now().UTC()
-	wf := "builtin://agent"
-	noMachineChat := uuid.NewString()
-	require.NoError(t, e.repo.CreateChat(ctx, &db.Chat{ID: noMachineChat, UserID: e.userID, ProjectID: e.projectID,
-		Title: "no machine", WorkflowName: &wf, NoMachine: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
-	e.chatID = noMachineChat
-
-	resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "nightly", Message: "Summarize."})
-	require.False(t, resp.IsError, resp.Content)
-
-	var meta tools.ActivateTriggerResponseMetadata
-	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
-	stored, err := e.repo.GetTrigger(ctx, meta.TriggerID)
-	require.NoError(t, err)
-	assert.True(t, stored.NoMachine, "a no-machine caller activates a no-machine trigger")
-	assert.Empty(t, stored.DaemonID, "and pins no daemon")
-}
-
-// Inheriting no-machine never weakens the check: a workflow that needs a
-// machine is still refused at activation, with nothing stored.
-func TestActivateTriggerFromANoMachineChatRefusesAMachineWorkflow(t *testing.T) {
-	e := setup(t, "https://api.example.com")
-	ctx := context.Background()
-	now := time.Now().UTC()
-	require.NoError(t, e.repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{ID: uuid.NewString(), UserID: e.userID,
-		Name: "shelly", Slug: "shelly", Definition: `name: shelly
-triggers:
-  - name: nightly
-    schedule: {cron: "0 9 * * 1-5"}
-entry: [w]
-nodes:
-  - id: w
-    type: create_worktree
-    args: {branch: x}
-`, Status: db.WorkflowDraftStatusComplete, CreatedAt: now, UpdatedAt: now}))
-	wf := "builtin://agent"
-	noMachineChat := uuid.NewString()
-	require.NoError(t, e.repo.CreateChat(ctx, &db.Chat{ID: noMachineChat, UserID: e.userID, ProjectID: e.projectID,
-		Title: "no machine", WorkflowName: &wf, NoMachine: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
-	e.chatID = noMachineChat
-
-	resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "shelly", Trigger: "nightly", Message: "Go."})
-	require.True(t, resp.IsError, "a machine-only workflow must not become a no-machine automation: %s", resp.Content)
-	assert.Contains(t, resp.Content, "this workflow needs a machine", "refused by the no-machine check, not incidentally")
-	assert.Empty(t, e.backend.synced, "nothing was created")
-}
-
-func TestActivateTriggerWebhookReturnsURLAndTokenOnce(t *testing.T) {
-	e := setup(t, "https://api.example.com/")
-	resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "hook", Message: "Deploy.", Name: "ci hook"})
-	require.False(t, resp.IsError, resp.Content)
-
-	var meta tools.ActivateTriggerResponseMetadata
-	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
-	assert.Equal(t, "webhook", meta.Kind)
-	require.True(t, strings.HasPrefix(meta.WebhookToken, "whk_"), meta.WebhookToken)
-	assert.Equal(t, "https://api.example.com/hooks/"+meta.TriggerID, meta.WebhookURL)
-	assert.Contains(t, resp.Content, "shown ONCE")
-	assert.Contains(t, resp.Content, meta.WebhookToken)
-	assert.Contains(t, resp.Content, "https://api.example.com/hooks/"+meta.TriggerID+"/"+meta.WebhookToken)
-	assert.Contains(t, resp.Content, "Filter: trigger.payload.body.ok == true")
-}
-
-// Without PUBLIC_URL (a worker that was not given it) the URL is a bare path,
-// and the response says so rather than inventing a host.
-func TestActivateTriggerWebhookWithoutPublicURL(t *testing.T) {
-	e := setup(t, "")
-	resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "hook", Message: "Deploy."})
-	require.False(t, resp.IsError, resp.Content)
-	assert.Contains(t, resp.Content, "does not know its public URL")
-}
-
-// The service's verdicts reach the agent verbatim.
-func TestActivateTriggerErrors(t *testing.T) {
-	e := setup(t, "https://api.example.com")
-	resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "nope", Message: "x"})
-	assert.True(t, resp.IsError)
-	assert.Contains(t, resp.Content, `does not declare a trigger named "nope" (it declares: nightly, hook, templated)`)
-
-	resp = e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "hook", Message: "x",
-		Params: map[string]any{"issue_number": 3}})
-	assert.True(t, resp.IsError)
-	assert.Contains(t, resp.Content, "params.issue_number")
-
-	resp = e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "nightly"})
-	assert.True(t, resp.IsError)
-	assert.Contains(t, resp.Content, "message is required")
-}
-
-// A declared trigger with a prompt template needs no message from whoever
-// activates it: the author already said what each run is for.
-func TestActivateTriggerUsesTheDeclarationsPrompt(t *testing.T) {
-	e := setup(t, "https://api.example.com")
-	resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "templated"})
-	require.False(t, resp.IsError, resp.Content)
+	return resp.Msg.GetTrigger().GetId()
 }
 
 func TestListTriggersScopedToAWorkflowShowsBrokenHealth(t *testing.T) {
 	e := setup(t, "https://api.example.com")
-	require.False(t, e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "nightly", Message: "x"}).IsError)
-	require.False(t, e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "hook", Message: "x"}).IsError)
+	e.activate(t, "nightly")
+	e.activate(t, "hook")
 
 	resp := e.call(t, e.list, tools.ListTriggersParams{Workflow: "triage"})
 	require.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, "2 trigger(s)")
 	assert.Contains(t, resp.Content, `activates "nightly" declared by triage`)
 	assert.Contains(t, resp.Content, "fires on: a POST to its webhook URL")
+	assert.Contains(t, resp.Content, "webhook: https://api.example.com/hooks/")
+	assert.NotContains(t, resp.Content, "whk_", "a webhook token is never shown to an agent")
 
 	resp = e.call(t, e.list, tools.ListTriggersParams{Workflow: "other"})
-	assert.Contains(t, resp.Content, "No triggers launch other")
+	assert.Contains(t, resp.Content, "Nothing runs other on its own")
+	assert.Contains(t, resp.Content, "Workflows -> the workflow -> Enable", "the agent is told where the user enables it")
 
 	// The workflow drops the webhook declaration: its activation is BROKEN.
 	draft, err := e.repo.GetWorkflowDraftBySlug(context.Background(), e.userID, "triage")
@@ -327,4 +177,28 @@ func TestListTriggersScopedToAWorkflowShowsBrokenHealth(t *testing.T) {
 	var listed []tools.TriggerSummary
 	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &listed))
 	require.Len(t, listed, 2)
+}
+
+// No registered tool creates, enables, re-points or deletes an activation, and
+// no tool offered to an agent is named for one. This is what "the agent can
+// create but not enable workflows" means in the registry: the only trigger
+// tool is the read-only list.
+func TestNoAgentToolActivates(t *testing.T) {
+	var triggerTools []string
+	for _, def := range tools.GetToolRegistry() {
+		lower := strings.ToLower(def.Name)
+		if strings.Contains(lower, "trigger") || strings.Contains(lower, "activat") {
+			triggerTools = append(triggerTools, def.Name)
+			assert.True(t, slices.Contains(def.Tags, tools.TagReadOnly), "%s must be read-only", def.Name)
+		}
+	}
+	assert.Equal(t, []string{tools.ToolListTriggers}, triggerTools)
+}
+
+// triggertools is read-only by construction: its API interface has no write
+// method, so the adapter cannot create or change a trigger.
+func TestTriggerAPIHasNoWriteMethod(t *testing.T) {
+	typ := reflect.TypeOf((*triggertools.TriggerAPI)(nil)).Elem()
+	require.Equal(t, 1, typ.NumMethod())
+	assert.Equal(t, "ListTriggers", typ.Method(0).Name)
 }

@@ -331,7 +331,8 @@ func TestLoadTool_TagWorkflow_LoadsAll(t *testing.T) {
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 	want := workflowTagToolNames()
-	require.Len(t, want, 21)
+	require.Len(t, want, 20)
+	assert.NotContains(t, want, "activate_trigger", "no agent tool activates a trigger")
 	// Integration discovery rides with the workflow tools: an agent writing an
 	// action node needs to find its ref and schema.
 	assert.Contains(t, want, ToolSearchIntegrations)
@@ -347,7 +348,7 @@ func TestLoadTool_TagWorkflow_LoadsAll(t *testing.T) {
 		Offered: sortedUnique(append([]string{ToolLoadTool}, want...))})
 	again, err := tool.Execute(nextTurn, LoadToolParams{Name: "tag:workflow"})
 	require.NoError(t, err)
-	assert.Contains(t, again.Content, "21 already loaded")
+	assert.Contains(t, again.Content, "20 already loaded")
 	assert.Empty(t, grantsOf(t, again))
 }
 
@@ -361,7 +362,7 @@ func TestLoadTool_TagWorkflow_RestrictedLoadableReportsRefused(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, "2 loaded")
-	assert.Contains(t, resp.Content, "19 refused")
+	assert.Contains(t, resp.Content, "18 refused")
 	assert.Contains(t, resp.Content, "not loadable")
 
 	assert.ElementsMatch(t, []string{ToolGetWorkflow, ToolListWorkflows}, grantsOf(t, resp))
