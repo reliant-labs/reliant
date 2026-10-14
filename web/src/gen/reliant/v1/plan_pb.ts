@@ -446,6 +446,7 @@ export const PlanComplexitySchema: GenEnum<PlanComplexity> = /*@__PURE__*/
 export const PlanService: GenService<{
   /**
    * CreatePlan creates a new plan
+   * forge:custom — authorizes the caller through the chat and stores it as the plan's thread
    *
    * @generated from rpc reliant.v1.PlanService.CreatePlan
    */
@@ -456,6 +457,7 @@ export const PlanService: GenService<{
   },
   /**
    * GetPlan retrieves a plan by ID
+   * forge:custom — authorizes through the plan's thread and chat, and resolves chat_id from them
    *
    * @generated from rpc reliant.v1.PlanService.GetPlan
    */
@@ -476,6 +478,7 @@ export const PlanService: GenService<{
   },
   /**
    * UpdatePlan updates an existing plan
+   * forge:custom — a partial update authorized through the plan's chat, which it notifies to refetch
    *
    * @generated from rpc reliant.v1.PlanService.UpdatePlan
    */
@@ -486,6 +489,7 @@ export const PlanService: GenService<{
   },
   /**
    * DeletePlan deletes a plan
+   * forge:custom — authorized through the plan's chat, which it notifies to refetch
    *
    * @generated from rpc reliant.v1.PlanService.DeletePlan
    */

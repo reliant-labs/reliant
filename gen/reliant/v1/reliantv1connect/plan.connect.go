@@ -57,14 +57,18 @@ const (
 // PlanServiceClient is a client for the reliant.v1.PlanService service.
 type PlanServiceClient interface {
 	// CreatePlan creates a new plan
+	// forge:custom — authorizes the caller through the chat and stores it as the plan's thread
 	CreatePlan(context.Context, *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error)
 	// GetPlan retrieves a plan by ID
+	// forge:custom — authorizes through the plan's thread and chat, and resolves chat_id from them
 	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
 	// GetPlanByChatId retrieves a plan by chat ID
 	GetPlanByChatId(context.Context, *connect.Request[v1.GetPlanByChatIdRequest]) (*connect.Response[v1.GetPlanByChatIdResponse], error)
 	// UpdatePlan updates an existing plan
+	// forge:custom — a partial update authorized through the plan's chat, which it notifies to refetch
 	UpdatePlan(context.Context, *connect.Request[v1.UpdatePlanRequest]) (*connect.Response[v1.UpdatePlanResponse], error)
 	// DeletePlan deletes a plan
+	// forge:custom — authorized through the plan's chat, which it notifies to refetch
 	DeletePlan(context.Context, *connect.Request[v1.DeletePlanRequest]) (*connect.Response[v1.DeletePlanResponse], error)
 	// ListPlanTasks lists all tasks for a plan
 	ListPlanTasks(context.Context, *connect.Request[v1.ListPlanTasksRequest]) (*connect.Response[v1.ListPlanTasksResponse], error)
@@ -177,14 +181,18 @@ func (c *planServiceClient) ListPlansByProject(ctx context.Context, req *connect
 // PlanServiceHandler is an implementation of the reliant.v1.PlanService service.
 type PlanServiceHandler interface {
 	// CreatePlan creates a new plan
+	// forge:custom — authorizes the caller through the chat and stores it as the plan's thread
 	CreatePlan(context.Context, *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error)
 	// GetPlan retrieves a plan by ID
+	// forge:custom — authorizes through the plan's thread and chat, and resolves chat_id from them
 	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
 	// GetPlanByChatId retrieves a plan by chat ID
 	GetPlanByChatId(context.Context, *connect.Request[v1.GetPlanByChatIdRequest]) (*connect.Response[v1.GetPlanByChatIdResponse], error)
 	// UpdatePlan updates an existing plan
+	// forge:custom — a partial update authorized through the plan's chat, which it notifies to refetch
 	UpdatePlan(context.Context, *connect.Request[v1.UpdatePlanRequest]) (*connect.Response[v1.UpdatePlanResponse], error)
 	// DeletePlan deletes a plan
+	// forge:custom — authorized through the plan's chat, which it notifies to refetch
 	DeletePlan(context.Context, *connect.Request[v1.DeletePlanRequest]) (*connect.Response[v1.DeletePlanResponse], error)
 	// ListPlanTasks lists all tasks for a plan
 	ListPlanTasks(context.Context, *connect.Request[v1.ListPlanTasksRequest]) (*connect.Response[v1.ListPlanTasksResponse], error)

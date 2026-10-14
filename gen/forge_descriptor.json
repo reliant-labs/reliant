@@ -18473,6 +18473,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.CreatePlanRequest",
           "OutputTypeFQ": "reliant.v1.CreatePlanResponse",
           "InputProtoFile": "reliant/v1/plan.proto",
@@ -18486,6 +18487,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.GetPlanRequest",
           "OutputTypeFQ": "reliant.v1.GetPlanResponse",
           "InputProtoFile": "reliant/v1/plan.proto",
@@ -18512,6 +18514,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.UpdatePlanRequest",
           "OutputTypeFQ": "reliant.v1.UpdatePlanResponse",
           "InputProtoFile": "reliant/v1/plan.proto",
@@ -18525,6 +18528,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.DeletePlanRequest",
           "OutputTypeFQ": "reliant.v1.DeletePlanResponse",
           "InputProtoFile": "reliant/v1/plan.proto",
@@ -19097,8 +19101,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "TaskStatus"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "PresetService",
@@ -33952,5 +33955,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "f7813947e213279f1abcced9db3d16d9d5332a633c9421f3e499df1c1b9097b4"
+  "source_hash": "54d40f6151be9b522d94bfc974a51ac2783e2f62b2a4386387abb22d21a678e5"
 }

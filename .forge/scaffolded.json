@@ -153,6 +153,27 @@
     "internal/handlers/package_commands/handlers_scaffold_set_command_favorite_test.go": {
       "scaffolded_at": "2026-10-13T17:02:28Z"
     },
+    "internal/handlers/plan/handlers_scaffold_create_plan_test.go": {
+      "scaffolded_at": "2026-10-14T04:37:16Z"
+    },
+    "internal/handlers/plan/handlers_scaffold_delete_plan_test.go": {
+      "scaffolded_at": "2026-10-14T04:37:16Z"
+    },
+    "internal/handlers/plan/handlers_scaffold_get_plan_by_chat_id_test.go": {
+      "scaffolded_at": "2026-10-14T04:37:16Z"
+    },
+    "internal/handlers/plan/handlers_scaffold_get_plan_test.go": {
+      "scaffolded_at": "2026-10-14T04:37:16Z"
+    },
+    "internal/handlers/plan/handlers_scaffold_list_plan_tasks_test.go": {
+      "scaffolded_at": "2026-10-14T04:37:16Z"
+    },
+    "internal/handlers/plan/handlers_scaffold_list_plans_by_project_test.go": {
+      "scaffolded_at": "2026-10-14T04:37:16Z"
+    },
+    "internal/handlers/plan/handlers_scaffold_update_plan_test.go": {
+      "scaffolded_at": "2026-10-14T04:37:16Z"
+    },
     "internal/handlers/preset/handlers_scaffold_create_preset_test.go": {
       "scaffolded_at": "2026-10-13T13:50:35Z"
     },

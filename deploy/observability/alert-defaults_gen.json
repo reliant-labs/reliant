@@ -48,6 +48,10 @@
         "rpc_service": "reliant.v1.PackageCommandsService"
       },
       {
+        "name": "plan",
+        "rpc_service": "reliant.v1.PlanService"
+      },
+      {
         "name": "preset",
         "rpc_service": "reliant.v1.PresetService"
       },

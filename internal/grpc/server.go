@@ -47,6 +47,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
+	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
@@ -235,7 +236,14 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("system service: %w", err)
 	}
-	planService := services.NewPlanService(database)
+	planService, err := plan.New(plan.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("plan service: %w", err)
+	}
 	taskService := services.NewTaskService(database)
 	catalogService := services.NewCatalogService(cfg.ToolsFactory).WithTagPrefs(database)
 	if cfg.CatalogSearch != nil {

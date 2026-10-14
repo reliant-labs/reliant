@@ -17,24 +17,25 @@ enum PlanComplexity {
   PLAN_COMPLEXITY_COMPLEX = 3;
 }
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // PlanService handles plan-related operations
 service PlanService {
   // CreatePlan creates a new plan
+  // forge:custom — authorizes the caller through the chat and stores it as the plan's thread
   rpc CreatePlan(CreatePlanRequest) returns (CreatePlanResponse) {}
   
   // GetPlan retrieves a plan by ID
+  // forge:custom — authorizes through the plan's thread and chat, and resolves chat_id from them
   rpc GetPlan(GetPlanRequest) returns (GetPlanResponse) {}
   
   // GetPlanByChatId retrieves a plan by chat ID
   rpc GetPlanByChatId(GetPlanByChatIdRequest) returns (GetPlanByChatIdResponse) {}
   
   // UpdatePlan updates an existing plan
+  // forge:custom — a partial update authorized through the plan's chat, which it notifies to refetch
   rpc UpdatePlan(UpdatePlanRequest) returns (UpdatePlanResponse) {}
   
   // DeletePlan deletes a plan
+  // forge:custom — authorized through the plan's chat, which it notifies to refetch
   rpc DeletePlan(DeletePlanRequest) returns (DeletePlanResponse) {}
   
   // ListPlanTasks lists all tasks for a plan

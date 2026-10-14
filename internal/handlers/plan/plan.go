@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package plan
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -16,20 +15,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
-// PlanService implements the PlanService RPC handlers
-type PlanService struct {
-	reliantv1connect.UnimplementedPlanServiceHandler
-	database db.Repository
-}
-
-// NewPlanService creates a new PlanService
-func NewPlanService(database db.Repository) *PlanService {
-	return &PlanService{database: database}
-}
-
 // getChatIDForPlan looks up the chat (conversation) ID for a plan by resolving its thread.
-func (s *PlanService) getChatIDForPlan(ctx context.Context, plan *db.Plan) (string, error) {
-	thread, err := s.database.GetThread(ctx, plan.ThreadID)
+func (s *Service) getChatIDForPlan(ctx context.Context, plan *db.Plan) (string, error) {
+	thread, err := s.deps.Repo.GetThread(ctx, plan.ThreadID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get thread for plan: %w", err)
 	}
@@ -37,8 +25,8 @@ func (s *PlanService) getChatIDForPlan(ctx context.Context, plan *db.Plan) (stri
 }
 
 // planBelongsToUser checks if a plan belongs to a user via the thread's chat
-func (s *PlanService) planBelongsToUser(ctx context.Context, planID string, userID string) error {
-	plan, err := s.database.GetPlan(ctx, planID)
+func (s *Service) planBelongsToUser(ctx context.Context, planID string, userID string) error {
+	plan, err := s.deps.Repo.GetPlan(ctx, planID)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("plan not found"))
 	}
@@ -48,7 +36,7 @@ func (s *PlanService) planBelongsToUser(ctx context.Context, planID string, user
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
-	chat, err := s.database.GetChat(ctx, chatID)
+	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
@@ -61,14 +49,14 @@ func (s *PlanService) planBelongsToUser(ctx context.Context, planID string, user
 }
 
 // CreatePlan creates a new plan
-func (s *PlanService) CreatePlan(
+func (s *Service) CreatePlan(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreatePlanRequest],
 ) (*connect.Response[reliantv1.CreatePlanResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Verify user owns the chat
-	chat, err := s.database.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
@@ -98,12 +86,12 @@ func (s *PlanService) CreatePlan(
 		Complexity:  planproto.PlanComplexityToInt32Ptr(&req.Msg.Complexity),
 	}
 
-	if err := s.database.CreatePlan(ctx, plan); err != nil {
+	if err := s.deps.Repo.CreatePlan(ctx, plan); err != nil {
 		logging.Error("Failed to create plan", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create plan"))
 	}
 
-	if err := s.database.EmitChatRefetch(ctx, req.Msg.ChatId, db.RefetchPlanTasks); err != nil {
+	if err := s.deps.Repo.EmitChatRefetch(ctx, req.Msg.ChatId, db.RefetchPlanTasks); err != nil {
 		logging.Warn("[PlanService] Failed to emit plan_tasks refetch", "error", err)
 	}
 
@@ -128,7 +116,7 @@ func (s *PlanService) CreatePlan(
 }
 
 // GetPlan retrieves a plan by ID
-func (s *PlanService) GetPlan(
+func (s *Service) GetPlan(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetPlanRequest],
 ) (*connect.Response[reliantv1.GetPlanResponse], error) {
@@ -138,7 +126,7 @@ func (s *PlanService) GetPlan(
 		return nil, err
 	}
 
-	plan, err := s.database.GetPlan(ctx, req.Msg.PlanId)
+	plan, err := s.deps.Repo.GetPlan(ctx, req.Msg.PlanId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("plan not found"))
 	}
@@ -166,14 +154,14 @@ func (s *PlanService) GetPlan(
 }
 
 // GetPlanByChatId retrieves a plan by chat ID
-func (s *PlanService) GetPlanByChatId(
+func (s *Service) GetPlanByChatId(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetPlanByChatIdRequest],
 ) (*connect.Response[reliantv1.GetPlanByChatIdResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Verify the chat belongs to the user
-	chat, err := s.database.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
@@ -183,7 +171,7 @@ func (s *PlanService) GetPlanByChatId(
 	}
 
 	// Get plans for this chat (via thread join)
-	plans, err := s.database.ListPlansByChatID(ctx, req.Msg.ChatId)
+	plans, err := s.deps.Repo.ListPlansByChatID(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get plan: %w", err))
 	}
@@ -216,7 +204,7 @@ func (s *PlanService) GetPlanByChatId(
 }
 
 // UpdatePlan updates an existing plan
-func (s *PlanService) UpdatePlan(
+func (s *Service) UpdatePlan(
 	ctx context.Context,
 	req *connect.Request[reliantv1.UpdatePlanRequest],
 ) (*connect.Response[reliantv1.UpdatePlanResponse], error) {
@@ -226,7 +214,7 @@ func (s *PlanService) UpdatePlan(
 		return nil, err
 	}
 
-	plan, err := s.database.GetPlan(ctx, req.Msg.PlanId)
+	plan, err := s.deps.Repo.GetPlan(ctx, req.Msg.PlanId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("plan not found"))
 	}
@@ -247,12 +235,12 @@ func (s *PlanService) UpdatePlan(
 		plan.Complexity = planproto.PlanComplexityToInt32Ptr(req.Msg.Complexity)
 	}
 
-	if err := s.database.UpdatePlan(ctx, plan); err != nil {
+	if err := s.deps.Repo.UpdatePlan(ctx, plan); err != nil {
 		logging.Error("Failed to update plan", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update plan"))
 	}
 
-	if err := s.database.EmitChatRefetch(ctx, chatID, db.RefetchPlanTasks); err != nil {
+	if err := s.deps.Repo.EmitChatRefetch(ctx, chatID, db.RefetchPlanTasks); err != nil {
 		logging.Warn("[PlanService] Failed to emit plan_tasks refetch", "error", err)
 	}
 
@@ -277,7 +265,7 @@ func (s *PlanService) UpdatePlan(
 }
 
 // DeletePlan deletes a plan
-func (s *PlanService) DeletePlan(
+func (s *Service) DeletePlan(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DeletePlanRequest],
 ) (*connect.Response[reliantv1.DeletePlanResponse], error) {
@@ -288,19 +276,19 @@ func (s *PlanService) DeletePlan(
 	}
 
 	// Get chatID before deleting
-	plan, err := s.database.GetPlan(ctx, req.Msg.PlanId)
+	plan, err := s.deps.Repo.GetPlan(ctx, req.Msg.PlanId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("plan not found"))
 	}
 
 	chatID, _ := s.getChatIDForPlan(ctx, plan)
 
-	if err := s.database.DeletePlan(ctx, req.Msg.PlanId); err != nil {
+	if err := s.deps.Repo.DeletePlan(ctx, req.Msg.PlanId); err != nil {
 		logging.Error("Failed to delete plan", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete plan"))
 	}
 
-	if err := s.database.EmitChatRefetch(ctx, chatID, db.RefetchPlanTasks); err != nil {
+	if err := s.deps.Repo.EmitChatRefetch(ctx, chatID, db.RefetchPlanTasks); err != nil {
 		logging.Warn("[PlanService] Failed to emit plan_tasks refetch", "error", err)
 	}
 
@@ -308,7 +296,7 @@ func (s *PlanService) DeletePlan(
 }
 
 // ListPlanTasks lists all tasks for a plan
-func (s *PlanService) ListPlanTasks(
+func (s *Service) ListPlanTasks(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListPlanTasksRequest],
 ) (*connect.Response[reliantv1.ListPlanTasksResponse], error) {
@@ -318,7 +306,7 @@ func (s *PlanService) ListPlanTasks(
 		return nil, err
 	}
 
-	tasks, err := s.database.ListTasksByPlan(ctx, req.Msg.PlanId)
+	tasks, err := s.deps.Repo.ListTasksByPlan(ctx, req.Msg.PlanId)
 	if err != nil {
 		logging.Error("Failed to list tasks", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list tasks"))
