@@ -76,6 +76,7 @@ func (p *GitHubProvider) Parse(_ context.Context, req *Request) (*Delivery, erro
 			Attributes:  ev.Attributes,
 			Data:        ev.Data,
 			Sender:      ev.Sender,
+			Echo:        ev.Echo,
 		})
 	}
 	return out, nil

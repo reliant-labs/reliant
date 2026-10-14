@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/provenance"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -53,6 +54,10 @@ type InboundEvent struct {
 	// source authenticated (core.TriggerSender). Required: an event nobody
 	// sent cannot be filtered by who sent it.
 	Sender *core.TriggerSender
+	// Echo is what the event says about itself, for attributing it to a write
+	// Reliant made (see Enricher). Evidence only: it is never recorded and never
+	// reaches a filter. nil for a source that has none.
+	Echo *provenance.Echo
 }
 
 // AcceptOptions modify Accept.

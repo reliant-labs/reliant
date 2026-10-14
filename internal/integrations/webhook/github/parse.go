@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/provenance"
 )
 
 const (
@@ -65,6 +66,10 @@ type Event struct {
 	// Sender is trigger.sender: the delivery's `sender`, the account that
 	// caused the event (see Sender).
 	Sender *core.TriggerSender
+	// Echo is what the delivery says about itself, computed from the raw body,
+	// for attributing it to a write Reliant made. It is not part of the
+	// recorded payload.
+	Echo *provenance.Echo
 }
 
 // Parsed is what one delivery carries.
@@ -243,6 +248,7 @@ func events(event string, body *payload, receivedAt time.Time) []Event {
 		Attributes:  attrs,
 		Data:        capData(data),
 		Sender:      sender(body),
+		Echo:        echoOf(typ, body.raw, body),
 	}}
 }
 

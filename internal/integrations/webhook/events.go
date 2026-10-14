@@ -391,6 +391,7 @@ func toInbound(providerID string, trigger *core.Trigger, ev Event) triggers.Inbo
 		OccurredAt: ev.OccurredAt,
 		Payload:    inboundPayload(providerID, ev, attrs),
 		Sender:     ev.Sender,
+		Echo:       ev.Echo,
 	}
 }
 

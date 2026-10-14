@@ -29,6 +29,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/integrations/provenance"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -188,6 +190,11 @@ type Event struct {
 	// when an attested one exists. Required: an event without one is
 	// dropped.
 	Sender *core.TriggerSender
+	// Echo is what the provider's own delivery says about itself, kept out of
+	// Data on purpose: Data is recorded, filtered and shown to an agent, while
+	// this is only evidence for attributing the event to a write Reliant made
+	// (see triggers.InboundEvent.Echo). Optional.
+	Echo *provenance.Echo
 }
 
 // ErrUnauthorized marks a request that failed verification.
