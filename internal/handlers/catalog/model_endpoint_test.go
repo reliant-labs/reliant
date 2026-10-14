@@ -12,12 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
-	"github.com/reliant-labs/reliant/internal/netguard"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -27,10 +27,10 @@ import (
 func newModelEndpoint(t *testing.T, repo db.Repository, controlPlaneURL string) *model_endpoint.Service {
 	t.Helper()
 	svc, err := model_endpoint.New(model_endpoint.Deps{
-		Logger: slog.New(slog.DiscardHandler),
-		Config: &typedconfig.Config{},
-		Repo:   repo,
-		Policy: netguard.ForDeployment(controlPlaneURL),
+		Logger:       slog.New(slog.DiscardHandler),
+		Config:       &typedconfig.Config{},
+		Repo:         repo,
+		ControlPlane: &configv1.ControlPlaneConfig{Url: controlPlaneURL},
 	})
 	require.NoError(t, err)
 	return svc

@@ -19,7 +19,7 @@ import (
 func TestCreateModelEndpoint_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := model_endpoint.NewTestModelEndpoint(t)
+	svc := model_endpoint.NewTestModelEndpoint(t, model_endpoint.WithPlaceholderDeps())
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CreateModelEndpointRequest, pb.CreateModelEndpointResponse]{
 		{
 			Name:    "unauthenticated caller is rejected",

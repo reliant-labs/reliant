@@ -26,7 +26,7 @@ func TestListModelEndpoints_Generated(t *testing.T) {
 		Repo: &model_endpoint.StubRepo{
 			ListModelEndpointsFunc: func(context.Context, string) ([]*db.ModelEndpoint, error) { return nil, nil },
 		},
-	}))
+	}), model_endpoint.WithPlaceholderDeps())
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListModelEndpointsRequest, pb.ListModelEndpointsResponse]{
 		{
 			Name:    "unauthenticated caller is rejected",

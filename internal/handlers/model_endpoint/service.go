@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/modelendpoints"
@@ -35,11 +36,13 @@ type Deps struct {
 	// unavailable.
 	// forge:optional-dep
 	Credentials modelendpoints.EndpointCredentials
-	// Policy is which addresses a user-supplied endpoint URL may resolve to:
-	// netguard.ForDeployment of the control plane hosting this deployment
-	// (hosted: no private targets; self-hosted: the user's own network). The
-	// zero Policy refuses private targets, so an unset one fails closed.
-	Policy netguard.Policy
+	// ControlPlane is the control plane hosting this deployment. Its URL
+	// picks which addresses a user-supplied endpoint URL may resolve to
+	// (netguard.ForDeployment): a URL is hosted, so no private targets; none
+	// is self-hosted, so the user's own network. Required, and an empty
+	// block (not nil) is self-hosted, so a forgotten wire fails New instead
+	// of silently choosing a policy.
+	ControlPlane *configv1.ControlPlaneConfig
 }
 
 // Router is the slice of toolexec.DaemonRouter a VIA_DAEMON endpoint
@@ -61,6 +64,9 @@ func (d Deps) validateDeps() error {
 	if d.Repo == nil {
 		return fmt.Errorf("model_endpoint: Deps.Repo is required")
 	}
+	if d.ControlPlane == nil {
+		return fmt.Errorf("model_endpoint: Deps.ControlPlane is required (an empty ControlPlaneConfig is self-hosted)")
+	}
 	return nil
 }
 
@@ -73,7 +79,8 @@ type Service struct {
 
 // New creates a new model_endpoint service instance with the supplied Deps.
 // Returns an error when validateDeps rejects a nil required field. The
-// network policy for endpoint targets is Deps.Policy, fixed at construction.
+// network policy for endpoint targets is derived from Deps.ControlPlane and
+// fixed at construction.
 func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
@@ -81,7 +88,7 @@ func New(deps Deps) (*Service, error) {
 	cfg := modelendpoints.Config{
 		Store:       deps.Repo,
 		Credentials: deps.Credentials,
-		Policy:      deps.Policy,
+		Policy:      netguard.ForDeployment(deps.ControlPlane.GetUrl()),
 	}
 	if deps.Router != nil {
 		cfg.Daemons = routerDaemonControl{router: deps.Router}

@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -114,7 +115,7 @@ func TestModelEndpointE2E(t *testing.T) {
 		Repo:   repo,
 		Router: router,
 		// No control plane: self-hosted, so loopback is a legitimate DIRECT target.
-		Policy: netguard.ForDeployment(""),
+		ControlPlane: &configv1.ControlPlaneConfig{},
 	})
 	require.NoError(t, err)
 
@@ -243,11 +244,11 @@ func TestModelEndpointE2E(t *testing.T) {
 
 	t.Run("f_hosted_policy_refuses_the_same_direct_endpoint", func(t *testing.T) {
 		hosted, err := model_endpoint.New(model_endpoint.Deps{
-			Logger: slog.Default(),
-			Config: &typedconfig.Config{},
-			Repo:   repo,
-			Router: router,
-			Policy: netguard.ForDeployment("http://admin.cluster.local:8090"),
+			Logger:       slog.Default(),
+			Config:       &typedconfig.Config{},
+			Repo:         repo,
+			Router:       router,
+			ControlPlane: &configv1.ControlPlaneConfig{Url: "http://admin.cluster.local:8090"},
 		})
 		require.NoError(t, err)
 		_, err = hosted.CreateModelEndpoint(epCtx(e2eUserA), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{

@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"golang.org/x/net/http2"
 
+	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -77,7 +78,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
-	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -482,7 +482,13 @@ func NewServer(cfg *Config) (*Server, error) {
 		Config: handlerConfig,
 		Repo:   database,
 		Router: router,
-		Policy: netguard.ForDeployment(cfg.ControlPlane.URL),
+		// The control-plane block in its config shape (cmd/reliant's
+		// controlPlaneEndpoint, inverted); its URL picks the dial policy for
+		// endpoint targets.
+		ControlPlane: &configv1.ControlPlaneConfig{
+			Url:                   cfg.ControlPlane.URL,
+			InternalServiceSecret: cfg.ControlPlane.InternalServiceSecret,
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("model_endpoint service: %w", err)

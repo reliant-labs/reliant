@@ -19,7 +19,7 @@ import (
 func TestDeleteModelEndpoint_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := model_endpoint.NewTestModelEndpoint(t, model_endpoint.WithModelEndpointDeps(model_endpoint.Deps{Repo: unknownEndpointStore{}}))
+	svc := model_endpoint.NewTestModelEndpoint(t, model_endpoint.WithModelEndpointDeps(model_endpoint.Deps{Repo: unknownEndpointStore{}}), model_endpoint.WithPlaceholderDeps())
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteModelEndpointRequest, pb.DeleteModelEndpointResponse]{
 		{
 			Name:    "unauthenticated caller is rejected",
