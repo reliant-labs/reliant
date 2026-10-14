@@ -77,12 +77,11 @@ func TestManagedDaemonIsNeverInteractive(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.daemonType != "" {
-				t.Setenv(daemonruntime.DaemonTypeEnvVar, tc.daemonType)
-			}
-			if tc.envFlag != "" {
-				t.Setenv("RELIANT_DAEMON_NON_INTERACTIVE", tc.envFlag)
-			}
+			// Always set both, empty included: a case that says "no daemon
+			// type" must mean it even when the host (a workspace pod) exports
+			// RELIANT_DAEMON_TYPE=managed.
+			t.Setenv(daemonruntime.DaemonTypeEnvVar, tc.daemonType)
+			t.Setenv("RELIANT_DAEMON_NON_INTERACTIVE", tc.envFlag)
 
 			got := daemonNonInteractiveDefault()
 			if got != tc.want {

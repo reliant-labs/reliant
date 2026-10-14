@@ -3,6 +3,7 @@ package runtime
 import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 // TriggerInfo is the event that launched a chat, as the engine sees it. It is
@@ -68,14 +69,14 @@ func OriginCELValue(o *core.TriggerOrigin) map[string]interface{} {
 		actor = core.OriginActorUnknown
 	}
 	return map[string]interface{}{
-		"caused_by_reliant": o.CausedByReliant,
-		"confidence":        confidence,
-		"run_id":            o.RunID,
-		"workflow":          o.Workflow,
-		"trigger_name":      o.TriggerName,
-		"same_workflow":     o.SameWorkflow,
-		"actor":             actor,
-		"lineage_depth":     int64(o.LineageDepth()),
+		"caused_by_reliant":    o.CausedByReliant,
+		"confidence":           confidence,
+		"run_id":               o.RunID,
+		model.NodeTypeWorkflow: o.Workflow,
+		"trigger_name":         o.TriggerName,
+		"same_workflow":        o.SameWorkflow,
+		"actor":                actor,
+		"lineage_depth":        int64(o.LineageDepth()),
 	}
 }
 
