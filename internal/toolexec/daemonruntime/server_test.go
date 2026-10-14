@@ -4,6 +4,7 @@ package daemonruntime
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -94,55 +95,26 @@ func TestDaemonServer_CustomPortConfig(t *testing.T) {
 func TestDaemonServer_HandleServerMessage_Heartbeat(t *testing.T) {
 	d := newTestDaemonClient("d-hb", "u-1")
 
-	// Set up sendCh so that handleServerMessage doesn't panic.
-	d.sendCh = make(chan *reliantv1.DaemonMessage, 256)
-	d.sendDone = make(chan struct{})
-	d.sessionDone = make(chan struct{})
-	// Drain sendCh in the background, stopping when sessionDone closes.
-	go func() {
-		defer close(d.sendDone)
-		for {
-			select {
-			case <-d.sendCh:
-			case <-d.sessionDone:
-				return
-			}
-		}
-	}()
-	defer func() {
-		close(d.sessionDone)
-		<-d.sendDone
-	}()
+	// A session to send on, so handleServerMessage has somewhere to reply.
+	sess := useTestSession(d, 256)
+	go sess.runSender(senderFunc(func(*reliantv1.DaemonMessage) error { return nil }))
+	defer sess.drain(time.Second)
 
 	msg := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_Heartbeat{
 			Heartbeat: &reliantv1.ServerHeartbeat{},
 		},
 	}
-	err := d.handleServerMessage(context.Background(), msg)
+	err := d.handleServerMessage(context.Background(), nil, msg)
 	assert.NoError(t, err, "heartbeat should be handled without error")
 }
 
 func TestDaemonServer_HandleServerMessage_ToolRequest(t *testing.T) {
 	d := newTestDaemonClient("d-tool", "u-1")
 
-	d.sendCh = make(chan *reliantv1.DaemonMessage, 256)
-	d.sendDone = make(chan struct{})
-	d.sessionDone = make(chan struct{})
-	go func() {
-		defer close(d.sendDone)
-		for {
-			select {
-			case <-d.sendCh:
-			case <-d.sessionDone:
-				return
-			}
-		}
-	}()
-	defer func() {
-		close(d.sessionDone)
-		<-d.sendDone
-	}()
+	sess := useTestSession(d, 256)
+	go sess.runSender(senderFunc(func(*reliantv1.DaemonMessage) error { return nil }))
+	defer sess.drain(time.Second)
 
 	msg := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_ToolRequest{
@@ -153,60 +125,32 @@ func TestDaemonServer_HandleServerMessage_ToolRequest(t *testing.T) {
 			},
 		},
 	}
-	err := d.handleServerMessage(context.Background(), msg)
+	err := d.handleServerMessage(context.Background(), nil, msg)
 	assert.NoError(t, err, "tool request should be dispatched without error")
 }
 
 func TestDaemonServer_HandleServerMessage_NilToolRequest(t *testing.T) {
 	d := newTestDaemonClient("d-nil", "u-1")
 
-	d.sendCh = make(chan *reliantv1.DaemonMessage, 256)
-	d.sendDone = make(chan struct{})
-	d.sessionDone = make(chan struct{})
-	go func() {
-		defer close(d.sendDone)
-		for {
-			select {
-			case <-d.sendCh:
-			case <-d.sessionDone:
-				return
-			}
-		}
-	}()
-	defer func() {
-		close(d.sessionDone)
-		<-d.sendDone
-	}()
+	sess := useTestSession(d, 256)
+	go sess.runSender(senderFunc(func(*reliantv1.DaemonMessage) error { return nil }))
+	defer sess.drain(time.Second)
 
 	msg := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_ToolRequest{
 			ToolRequest: nil,
 		},
 	}
-	err := d.handleServerMessage(context.Background(), msg)
+	err := d.handleServerMessage(context.Background(), nil, msg)
 	assert.NoError(t, err, "nil tool request should be handled gracefully")
 }
 
 func TestDaemonServer_HandleServerMessage_RegistrationAck(t *testing.T) {
 	d := newTestDaemonClient("d-ack", "u-1")
 
-	d.sendCh = make(chan *reliantv1.DaemonMessage, 256)
-	d.sendDone = make(chan struct{})
-	d.sessionDone = make(chan struct{})
-	go func() {
-		defer close(d.sendDone)
-		for {
-			select {
-			case <-d.sendCh:
-			case <-d.sessionDone:
-				return
-			}
-		}
-	}()
-	defer func() {
-		close(d.sessionDone)
-		<-d.sendDone
-	}()
+	sess := useTestSession(d, 256)
+	go sess.runSender(senderFunc(func(*reliantv1.DaemonMessage) error { return nil }))
+	defer sess.drain(time.Second)
 
 	msg := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_RegistrationAck{
@@ -215,30 +159,16 @@ func TestDaemonServer_HandleServerMessage_RegistrationAck(t *testing.T) {
 			},
 		},
 	}
-	err := d.handleServerMessage(context.Background(), msg)
+	err := d.handleServerMessage(context.Background(), nil, msg)
 	assert.NoError(t, err, "registration ack should be handled without error")
 }
 
 func TestDaemonServer_HandleServerMessage_ToolCancel(t *testing.T) {
 	d := newTestDaemonClient("d-cancel", "u-1")
 
-	d.sendCh = make(chan *reliantv1.DaemonMessage, 256)
-	d.sendDone = make(chan struct{})
-	d.sessionDone = make(chan struct{})
-	go func() {
-		defer close(d.sendDone)
-		for {
-			select {
-			case <-d.sendCh:
-			case <-d.sessionDone:
-				return
-			}
-		}
-	}()
-	defer func() {
-		close(d.sessionDone)
-		<-d.sendDone
-	}()
+	sess := useTestSession(d, 256)
+	go sess.runSender(senderFunc(func(*reliantv1.DaemonMessage) error { return nil }))
+	defer sess.drain(time.Second)
 
 	msg := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_ToolCancel{
@@ -247,6 +177,6 @@ func TestDaemonServer_HandleServerMessage_ToolCancel(t *testing.T) {
 			},
 		},
 	}
-	err := d.handleServerMessage(context.Background(), msg)
+	err := d.handleServerMessage(context.Background(), nil, msg)
 	assert.NoError(t, err, "tool cancel for unknown request should be handled gracefully")
 }

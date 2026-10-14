@@ -220,9 +220,18 @@ message DaemonRegister {
   // first-ever registration and pre-update daemons (which fall back to
   // hostname-based resolution server-side).
   string daemon_id = 11;
+  // moves_on_drain says the daemon acts on GatewayDrain: it opens a stream
+  // to another replica and moves its work there, and it holds tool results
+  // until ToolResultAck. A draining replica waits for such a daemon to move;
+  // a daemon without it is ended at once, so it redials straight away rather
+  // than sitting unreachable until the drain deadline.
+  bool moves_on_drain = 12;
 }
 
-// ToolResponse contains the result of tool execution
+// ToolResponse contains the result of tool execution. The daemon keeps it until
+// the gateway acknowledges it (ToolResultAck) and sends it again on every new
+// stream until then, so a gateway may receive the same response more than
+// once, and on a stream other than the one the request came in on.
 message ToolResponse {
   string request_id = 1; // Request ID from ToolRequest
   bool success = 2; // Whether execution succeeded
@@ -254,6 +263,11 @@ message DaemonHeartbeat {
   // The filesystems builds and tools write to, as the daemon last sampled
   // them (internal/diskwatch). Unset for daemons that cannot statfs.
   DiskReport disk = 6;
+  // Tool calls executing on this daemon right now, whichever stream they
+  // arrived on. A call outlives the stream it came in on when a gateway
+  // replica drains, and the replica the daemon moved to has no record of it;
+  // this count is how that replica keeps the machine awake for it.
+  uint32 tool_calls_in_flight = 7;
 }
 
 // DiskReport is a machine's view of the filesystems that matter to the work
@@ -384,11 +398,44 @@ message ServerMessage {
     LocalModelHTTPRequest local_model_http_request = 17;
     LocalModelHTTPCancel local_model_http_cancel = 18;
     LocalModelRefresh local_model_refresh = 19;
+
+    // This gateway replica is shutting down. See GatewayDrain.
+    GatewayDrain drain = 20;
+
+    // The gateway has routed a ToolResponse to its caller. See ToolResultAck.
+    ToolResultAck tool_result_ack = 21;
   }
 }
 
 // GatewayHello is an intentionally-empty marker. See ServerMessage.hello.
 message GatewayHello {}
+
+// GatewayDrain tells a daemon that the replica serving this stream is shutting
+// down (a rollout), so it should move: open a new stream at once, which the
+// load balancer routes to a replica that is still serving, and send new work
+// there once it is registered. This stream stays open meanwhile, and the
+// replies to requests already in flight on it are sent on it, until they are
+// all answered or deadline_unix_ms passes and the gateway ends it.
+//
+// Make-before-break: the daemon is never without a stream that can take a new
+// request, and nothing in flight is cut when the old replica goes. A request
+// that outlives the deadline is not lost either: its result is held by the
+// daemon until a gateway acknowledges it (ToolResultAck) and is delivered over
+// whichever stream the daemon has then.
+message GatewayDrain {
+  // When this stream will be ended, unix milliseconds.
+  int64 deadline_unix_ms = 1;
+}
+
+// ToolResultAck confirms that the gateway has routed the ToolResponse for
+// request_id: handed it to the request's waiter, or published it to the
+// request's result subject. Until it arrives the daemon keeps the result and
+// sends it again over each new stream, so a result produced while the daemon
+// was between gateways still reaches the caller. Acks are idempotent: one for a
+// request the daemon no longer holds is ignored.
+message ToolResultAck {
+  string request_id = 1;
+}
 
 // ToolRequest is sent when a tool needs to be executed
 message ToolRequest {

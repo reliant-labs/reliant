@@ -17,10 +17,9 @@ func newDispatchTestClient(t *testing.T) (*daemonClient, chan *reliantv1.DaemonM
 	d := newTestDaemonClient("d-hol", "u-hol")
 	d.bootCfg.DataDir = t.TempDir()
 	d.fsWatchersByPr = make(map[string]context.CancelFunc)
-	d.sendCh = make(chan *reliantv1.DaemonMessage, 256)
-	d.sessionDone = make(chan struct{})
-	t.Cleanup(func() { close(d.sessionDone) })
-	return d, d.sendCh
+	useTestSession(d, 256)
+	t.Cleanup(d.session.Load().end)
+	return d, d.testSendCh()
 }
 
 func codePresenceCommand(t *testing.T, requestID, dir string) *reliantv1.ServerMessage {
@@ -77,10 +76,10 @@ func TestSlowDaemonCommandDoesNotDelayFastCommand(t *testing.T) {
 	slow := &reliantv1.ServerMessage{Message: &reliantv1.ServerMessage_DaemonCommand{
 		DaemonCommand: &reliantv1.DaemonCommandRequest{RequestId: "slow-1", CommandType: "test.hol_slow", TimeoutMs: 30000},
 	}}
-	if err := d.handleServerMessage(ctx, slow); err != nil {
+	if err := d.handleServerMessage(ctx, nil, slow); err != nil {
 		t.Fatalf("dispatch slow: %v", err)
 	}
-	if err := d.handleServerMessage(ctx, codePresenceCommand(t, "fast-1", t.TempDir())); err != nil {
+	if err := d.handleServerMessage(ctx, nil, codePresenceCommand(t, "fast-1", t.TempDir())); err != nil {
 		t.Fatalf("dispatch fast: %v", err)
 	}
 
@@ -121,7 +120,7 @@ func TestRegistrationAckDoesNotBlockCommandDispatch(t *testing.T) {
 
 	handled := make(chan struct{})
 	go func() {
-		_ = d.handleServerMessage(ctx, ack)
+		_ = d.handleServerMessage(ctx, nil, ack)
 		close(handled)
 	}()
 	select {
@@ -138,7 +137,7 @@ func TestRegistrationAckDoesNotBlockCommandDispatch(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("the registration ack never requested a project snapshot")
 	}
-	if err := d.handleServerMessage(ctx, codePresenceCommand(t, "after-ack", t.TempDir())); err != nil {
+	if err := d.handleServerMessage(ctx, nil, codePresenceCommand(t, "after-ack", t.TempDir())); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 	awaitCommandReply(t, out, "after-ack", time.Second,

@@ -91,8 +91,7 @@ func newGuardedClient(t *testing.T, home string, managed bool, spy *guardSpy) *d
 	d := newTestDaemonClient("daemon-guard", "user-guard")
 	d.localExecutor = localExec
 	d.backgroundByReq = make(map[string]string)
-	d.sendCh = make(chan *reliantv1.DaemonMessage, 8)
-	d.sessionDone = make(chan struct{})
+	useTestSession(d, 8)
 
 	guard, err := newWorkspaceGuard(home, managed, rootwatch.Options{})
 	require.NoError(t, err)
@@ -128,7 +127,7 @@ func shellRequest(t *testing.T, requestID, worktree string) *reliantv1.ToolReque
 func toolResponse(t *testing.T, d *daemonClient) *reliantv1.ToolResponse {
 	t.Helper()
 	select {
-	case msg := <-d.sendCh:
+	case msg := <-d.testSendCh():
 		resp := msg.GetToolResponse()
 		require.NotNil(t, resp, "expected a tool response")
 		return resp
@@ -150,13 +149,13 @@ func TestExecuteTool_LostWorkspaceVolume_SaysSo(t *testing.T) {
 	d := newGuardedClient(t, ws.home, true, spy)
 
 	// Healthy: the call runs, and its worktree is recorded.
-	d.executeTool(shellRequest(t, "req-before", ws.worktree))
+	d.executeTool(nil, shellRequest(t, "req-before", ws.worktree))
 	before := toolResponse(t, d)
 	require.True(t, before.Success, "precondition: the shell call works before the detach: %s %s", before.Content, before.ErrorMessage)
 
 	ws.detach(t)
 
-	d.executeTool(shellRequest(t, "req-after", ws.worktree))
+	d.executeTool(nil, shellRequest(t, "req-after", ws.worktree))
 	resp := toolResponse(t, d)
 
 	assert.False(t, resp.Success)

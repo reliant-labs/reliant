@@ -22,18 +22,17 @@ import (
 func newPolicyGateClient(t *testing.T) *daemonClient {
 	t.Helper()
 	d := newTestDaemonClient("daemon-policy", "user-policy")
-	d.sendCh = make(chan *reliantv1.DaemonMessage, 4)
-	d.sessionDone = make(chan struct{})
+	useTestSession(d, 4)
 	return d
 }
 
 // runCommand dispatches req and returns the response the daemon sent back.
 func runCommand(t *testing.T, d *daemonClient, req *reliantv1.DaemonCommandRequest) *reliantv1.DaemonCommandResponse {
 	t.Helper()
-	d.handleDaemonCommand(req)
+	d.handleDaemonCommand(nil, req)
 
 	select {
-	case msg := <-d.sendCh:
+	case msg := <-d.testSendCh():
 		resp := msg.GetDaemonCommandResponse()
 		require.NotNil(t, resp, "expected a daemon command response")
 		return resp

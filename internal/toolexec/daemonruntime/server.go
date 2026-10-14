@@ -63,18 +63,22 @@ func (s *daemonServer) ConnectGateway(
 	d.recordStream(daemonstate.StreamConnected, "")
 	defer d.recordStream(daemonstate.StreamListening, "gateway stream ended")
 
-	// Set up the send channel and sender goroutine (same pattern as client mode).
-	d.sendCh = make(chan *reliantv1.DaemonMessage, 256)
-	d.sendDone = make(chan struct{})
-	d.sessionDone = make(chan struct{})
-	go d.runServerSender(stream)
+	// Set up the session and its sender goroutine (same pattern as client
+	// mode). There is no RegistrationAck here, so the session takes over the
+	// daemon's work at once, along with every result still waiting for a
+	// gateway. A drain notice is not acted on: the gateway dials this daemon,
+	// so it is the gateway's side that moves.
+	sess := newGatewaySession()
+	go sess.runSender(stream)
+	d.activateSession(sess)
 	defer func() {
-		close(d.sessionDone) // signal send() and runServerSender to stop
-		<-d.sendDone
+		sess.end() // signal send() and the sender to stop
+		<-sess.sendDone
+		d.sessionEnded(sess)
 		d.stopAllStreams()
 	}()
 
-	if err := d.sendProjectDiscovery(); err != nil {
+	if err := d.sendProjectDiscovery(sess); err != nil {
 		logging.Warn(serverLogPrefix+" Failed to send project discovery", "error", err)
 	}
 
@@ -82,7 +86,7 @@ func (s *daemonServer) ConnectGateway(
 	defer cancelHeartbeat()
 	// No session liveness here: the gateway dialed this stream and owns
 	// noticing its death (its stale-connection sweeper).
-	go d.runHeartbeats(heartbeatCtx, nil)
+	go d.runHeartbeats(heartbeatCtx, sess, nil)
 
 	// Receive loop — same as runSession but reading from the server-side stream.
 	for {
@@ -94,27 +98,8 @@ func (s *daemonServer) ConnectGateway(
 		if msg == nil {
 			continue
 		}
-		if err := d.handleServerMessage(ctx, msg); err != nil {
+		if err := d.handleServerMessage(ctx, sess, msg); err != nil {
 			logging.Warn(serverLogPrefix+" Failed handling server message", "error", err)
-		}
-	}
-}
-
-// runServerSender drains sendCh and writes to the server-side bidi stream.
-func (d *daemonClient) runServerSender(stream *connect.BidiStream[reliantv1.ServerMessage, reliantv1.DaemonMessage]) {
-	defer close(d.sendDone)
-	for {
-		select {
-		case msg := <-d.sendCh:
-			if msg == nil {
-				return
-			}
-			if err := stream.Send(msg); err != nil {
-				logging.Warn(serverLogPrefix+" runServerSender: stream.Send failed", "error", err)
-				return
-			}
-		case <-d.sessionDone:
-			return
 		}
 	}
 }

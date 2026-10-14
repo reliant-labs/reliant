@@ -34,7 +34,11 @@ type NATSToolBridge struct {
 
 	// Per-daemon cancel functions for output-forwarder goroutines, keyed by daemonKey.
 	daemonCancels map[string]context.CancelFunc
-	cancelsMu     sync.Mutex
+	// Per-daemon cancel functions for the pending-command poller alone, so a
+	// drain can stop it while the forwarders run on. Keyed by daemonKey;
+	// guarded by cancelsMu.
+	pollCancels map[string]context.CancelFunc
+	cancelsMu   sync.Mutex
 
 	// ctx and cancel control the lifetime of the entire bridge.
 	ctx    context.Context
@@ -77,6 +81,7 @@ func NewNATSToolBridge(nc *nats.Conn, js jetstream.JetStream, mgr DaemonConnecti
 		mgr:           mgr,
 		daemonSubs:    make(map[string][]*nats.Subscription),
 		daemonCancels: make(map[string]context.CancelFunc),
+		pollCancels:   make(map[string]context.CancelFunc),
 		ctx:           ctx,
 		cancel:        cancel,
 		inFlight:      make(chan struct{}, maxInFlightRequests),
@@ -451,7 +456,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		// that fits is returned untouched by the first call.
 		msg, ok := b.assembleRequest("daemon.command", chunk, func(errMsg string) {
 			errResp, _ := json.Marshal(map[string]interface{}{
-				"success": false, "error_message": errMsg,
+				"success": false, "error_message": errMsg, "error_code": ErrorCodeDaemonRoundTrip,
 			})
 			_ = chunk.Respond(errResp)
 		})
@@ -487,7 +492,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		// round-trip. See handleAsync.
 		b.handleAsync("daemon.command", msg, func() {
 			span.End()
-			_ = msg.Respond([]byte(`{"success":false,"error_message":"daemon gateway overloaded: in-flight request budget exhausted"}`))
+			_ = msg.Respond([]byte(`{"success":false,"error_message":"daemon gateway overloaded: in-flight request budget exhausted","error_code":"` + ErrorCodeDaemonRoundTrip + `"}`))
 		}, func() {
 			defer span.End()
 			b.respondDaemonCommand(ctx, msg, userID, daemonID, &req)
@@ -573,14 +578,13 @@ func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg
 
 	resp, err := b.mgr.SendDaemonCommandToDaemon(ctx, userID, daemonID, protoReq)
 	if err != nil {
-		reply := map[string]interface{}{
+		// Coded, so the requester can tell the gateway failing the round
+		// trip from the daemon refusing the command.
+		errResp, _ := json.Marshal(map[string]interface{}{
 			"success":       false,
 			"error_message": err.Error(),
-		}
-		if errors.Is(err, ErrDaemonConnectionInterrupted) {
-			reply["error_code"] = ErrorCodeDaemonInterrupted
-		}
-		errResp, _ := json.Marshal(reply)
+			"error_code":    transportErrorCode(err),
+		})
 		_ = msg.Respond(errResp)
 		return
 	}
@@ -699,6 +703,17 @@ func (b *NATSToolBridge) finishDaemonConnected(daemonCtx context.Context, userID
 	b.daemonSubs[daemonKey(userID, daemonID)] = subs
 	b.subsMu.Unlock()
 
+	// Live at the server before the gateway acknowledges the daemon's
+	// registration (this runs first): a daemon moving off a draining replica
+	// sends its work here from the ack on, and a request published before
+	// the server has the subscriptions finds no responder.
+	if b.nc != nil {
+		if err := b.nc.FlushTimeout(drainFlushTimeout); err != nil {
+			logging.Warn("[NATSToolBridge] Could not confirm a daemon's subscriptions",
+				"userID", userID, "daemonID", daemonID, "error", err)
+		}
+	}
+
 	logging.Info("[NATSToolBridge] Subscribing to daemon subjects",
 		"userID", userID, "daemonID", daemonID, "count", len(subs))
 
@@ -710,7 +725,69 @@ func (b *NATSToolBridge) finishDaemonConnected(daemonCtx context.Context, userID
 	// one-shot drain at connect would miss anything enqueued after this
 	// daemon was already connected and stranded it until the daemon's next
 	// reconnect. See pollPendingCommands.
-	go b.pollPendingCommands(daemonCtx, userID, daemonID)
+	pollCtx, stopPolling := context.WithCancel(daemonCtx)
+	b.cancelsMu.Lock()
+	b.pollCancels[daemonKey(userID, daemonID)] = stopPolling
+	b.cancelsMu.Unlock()
+	go b.pollPendingCommands(pollCtx, userID, daemonID)
+}
+
+// drainFlushTimeout bounds the flush that confirms the NATS server has
+// processed a draining daemon's unsubscribes.
+const drainFlushTimeout = 2 * time.Second
+
+// OnDaemonDraining is called when this gateway replica starts draining (a
+// rollout) while it holds daemonID's stream. It stops this replica being
+// chosen for the daemon's NEW work, before the daemon is told to move:
+//
+//   - every request subject is unsubscribed, so the next request for the
+//     daemon goes to the replica it moves to — or, in the moment before it
+//     gets there, finds no responder and waits for it (rideOutDisconnect).
+//     Both replicas subscribed at once would deliver one request to both, and
+//     the daemon would run it twice;
+//   - the pending-command poller stops; the next replica's takes over.
+//
+// tools.cancel and tools.background stay subscribed until the stream ends:
+// they reach executions already running, which may have arrived on this
+// stream, and are harmless to deliver twice. Output forwarders stay too, for
+// output still arriving on this stream.
+//
+// The flush is what makes the order hold: the server has dropped this
+// replica's interest before the daemon can register anywhere else.
+func (b *NATSToolBridge) OnDaemonDraining(userID, daemonID string) {
+	key := daemonKey(userID, daemonID)
+	b.cancelsMu.Lock()
+	if stop, ok := b.pollCancels[key]; ok {
+		stop()
+		delete(b.pollCancels, key)
+	}
+	b.cancelsMu.Unlock()
+
+	keepCancel := daemonSubject(toolCancelSubject, userID, daemonID)
+	keepBackground := daemonSubject(toolBackgroundSubj, userID, daemonID)
+	b.subsMu.Lock()
+	var kept, dropped []*nats.Subscription
+	for _, sub := range b.daemonSubs[key] {
+		if sub.Subject == keepCancel || sub.Subject == keepBackground {
+			kept = append(kept, sub)
+			continue
+		}
+		dropped = append(dropped, sub)
+	}
+	if _, ok := b.daemonSubs[key]; ok {
+		b.daemonSubs[key] = kept
+	}
+	b.subsMu.Unlock()
+
+	for _, sub := range dropped {
+		_ = sub.Unsubscribe()
+	}
+	if err := b.nc.FlushTimeout(drainFlushTimeout); err != nil {
+		logging.Warn("[NATSToolBridge] Could not confirm a draining daemon's unsubscribes",
+			"userID", userID, "daemonID", daemonID, "error", err)
+	}
+	logging.Info("[NATSToolBridge] Stopped routing new requests to a draining daemon stream",
+		"userID", userID, "daemonID", daemonID, "unsubscribed", len(dropped), "kept", len(kept))
 }
 
 // OnDaemonDisconnected implements DaemonConnectionListener. It unsubscribes
@@ -723,6 +800,7 @@ func (b *NATSToolBridge) OnDaemonDisconnected(userID, daemonID string) {
 		cancel()
 		delete(b.daemonCancels, key)
 	}
+	delete(b.pollCancels, key) // ended with daemonCtx above
 	b.cancelsMu.Unlock()
 
 	// Unsubscribe all NATS subscriptions for this daemon.

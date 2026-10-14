@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 
 	"golang.org/x/net/http2"
 
@@ -170,27 +171,54 @@ func (s *DaemonServer) IsTLS() bool {
 	return s.tlsCertFile != "" && s.tlsKeyFile != ""
 }
 
-// Stop gracefully stops the daemon server.
+// drainReserve is the part of Stop's budget kept back from the drain for what
+// follows it: ending the streams still open, and http.Server.Shutdown.
+const drainReserve = 5 * time.Second
+
+// defaultDrainWindow is the drain window when Stop's ctx carries no deadline.
+const defaultDrainWindow = 25 * time.Second
+
+// Stop gracefully stops the daemon server, make-before-break:
 //
-// ORDER IS LOAD-BEARING. ToolsDaemonService.Close runs FIRST because it ends
-// every held daemon stream with Unavailable("gateway draining"), which is what
-// lets http.Server.Shutdown then return promptly.
+//  1. ToolsDaemonService.BeginDrain refuses new streams, stops routing each
+//     held daemon's new requests here, and tells each daemon to move
+//     (GatewayDrain). The daemon opens a stream to another replica and keeps
+//     this one open for the replies to what is in flight on it.
+//  2. AwaitDrained waits for the daemons to close their old streams, which
+//     each does once it is registered elsewhere and has nothing left in
+//     flight here — or for the drain window, ctx's budget less drainReserve.
+//  3. ToolsDaemonService.Close ends whatever is left with
+//     Unavailable("gateway draining"). A call cut off there is not lost: its
+//     daemon delivers the result through the replica it moved to (see
+//     internal/toolexec/tool_result_redelivery.go).
+//  4. http.Server.Shutdown, which returns promptly because no stream is left.
 //
-// Shutdown alone cannot do this: it stops accepting new connections and waits
-// for active requests to complete, and a daemon bidi stream is an active
-// request that never completes on its own. So Shutdown blocked for the entire
-// ctx deadline, returned DeadlineExceeded, and the process exited — cutting
-// every daemon's TCP connection with no status at all. That was dead time for
-// the full budget on every gateway rollout, plus a hard disconnect that the
-// daemons only recovered from via client-side reconnect and the stale
-// connection sweeper.
+// ORDER IS LOAD-BEARING. Shutdown alone cannot end a daemon stream: it waits
+// for active requests to complete, and a bidi stream never completes on its
+// own, so it used to burn the entire budget and then the process exited with
+// every daemon's TCP connection cut and no status at all.
 //
 // Callers must have completed the readiness flip and pre-stop pause before
-// this runs, so that the daemons redialing on Unavailable reach a replica that
-// is already serving rather than this one.
+// this runs, so that the daemons redialing on the drain notice reach a replica
+// that is already serving rather than this one.
 func (s *DaemonServer) Stop(ctx context.Context) error {
 	logging.Info("Stopping dedicated daemon Connect/gRPC server")
 	if s.toolsDaemonService != nil {
+		window := defaultDrainWindow
+		if deadline, ok := ctx.Deadline(); ok {
+			window = max(time.Until(deadline)-drainReserve, 0)
+		}
+		drainCtx, cancel := context.WithTimeout(ctx, window)
+		deadline, _ := drainCtx.Deadline()
+		if moved := s.toolsDaemonService.BeginDrain(deadline); moved > 0 {
+			start := time.Now()
+			drained := s.toolsDaemonService.AwaitDrained(drainCtx)
+			logging.Info("Daemon streams drained",
+				"streams", moved, "all_moved", drained,
+				"still_open", s.toolsDaemonService.GetActiveConnections(),
+				"waited", time.Since(start).Round(time.Millisecond))
+		}
+		cancel()
 		s.toolsDaemonService.Close()
 	}
 	return s.server.Shutdown(ctx)

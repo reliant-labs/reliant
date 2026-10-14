@@ -216,6 +216,10 @@ var backgroundCommands = map[string]bool{
 	"skills.read_file":         true,
 	"skills.read_skill_assets": true,
 
+	// The worker asking what became of a tool call whose stream dropped
+	// (toolexec.ToolStatusCommand); the call itself keeps the machine awake.
+	"tool.status": true,
+
 	// A terminal is created and re-created by an open tab reconnecting;
 	// only typing into it is activity.
 	"terminal.close":  true,

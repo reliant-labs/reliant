@@ -99,6 +99,10 @@ type reconnectingDaemon struct {
 	// interrupted. It comes back after the given delay; zero leaves it gone.
 	interruptNext time.Duration
 	interrupting  bool
+	// finishInterrupted, when set, is the result the daemon delivers for an
+	// interrupted call after it reconnects (see toolStatus).
+	finishInterrupted string
+	statusQuestions   int
 }
 
 func newReconnectingDaemon(t *testing.T, nc *nats.Conn, records *lastSeenRecords) *reconnectingDaemon {
@@ -176,6 +180,45 @@ func (d *reconnectingDaemon) interruption() bool {
 	return true
 }
 
+// finishInterruptedWith makes the daemon finish an interrupted tool call after
+// all, and deliver content as its result through the gateway it reconnected
+// to — what the real daemon's result outbox does.
+func (d *reconnectingDaemon) finishInterruptedWith(content string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.finishInterrupted = content
+}
+
+// toolStatus answers ToolStatusCommand. By default the daemon has no record
+// of the request, as one that restarted has none; with finishInterruptedWith
+// it is still running, and its result follows shortly through the gateway.
+func (d *reconnectingDaemon) toolStatus(req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	var q ToolStatusRequest
+	if err := json.Unmarshal(req.Payload, &q); err != nil {
+		return nil, err
+	}
+	d.mu.Lock()
+	d.statusQuestions++
+	content := d.finishInterrupted
+	d.mu.Unlock()
+	state := ToolRequestUnknown
+	if content != "" {
+		state = ToolRequestRunning
+		d.pending.Add(1)
+		go func() {
+			defer d.pending.Done()
+			time.Sleep(50 * time.Millisecond)
+			assert.NoError(d.t, NewToolResultPublisher(d.nc).PublishToolResult(context.Background(), reconnectUser, reconnectDaemon,
+				&ToolExecutionResponse{RequestID: q.RequestID, Success: true, Content: content}))
+		}()
+	}
+	payload, err := json.Marshal(ToolStatusResponse{State: state})
+	if err != nil {
+		return nil, err
+	}
+	return &reliantv1.DaemonCommandResponse{RequestId: req.RequestId, CommandType: req.CommandType, Success: true, Payload: payload}, nil
+}
+
 func (d *reconnectingDaemon) interruptNextRequest(comeBackAfter time.Duration) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -200,6 +243,9 @@ func (m *reconnectingDaemonMgr) SendToolRequestSync(_ context.Context, _, _ stri
 }
 
 func (m *reconnectingDaemonMgr) SendDaemonCommandToDaemon(_ context.Context, _, _ string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	if req.CommandType == ToolStatusCommand {
+		return m.d.toolStatus(req)
+	}
 	m.d.mu.Lock()
 	m.d.commands = append(m.d.commands, req)
 	m.d.mu.Unlock()
@@ -425,6 +471,59 @@ func TestToolRequest_InterruptedCommandIsNotSentAgain(t *testing.T) {
 			assert.Len(t, daemon.toolRequests(), 1, "sent exactly once")
 		})
 	}
+}
+
+// What a gateway rollout used to destroy: a command in flight when the
+// daemon's stream dropped. The daemon keeps running it, reconnects, and
+// delivers the result through the gateway it reconnected to; the call gets
+// that result, and the command ran exactly once.
+func TestToolRequest_InterruptedCallGetsItsResultAfterTheReconnect(t *testing.T) {
+	router, daemon := reconnectTestRouter(t, reconnectRecords(time.Now(), nil))
+	daemon.connect()
+	daemon.interruptNextRequest(100 * time.Millisecond)
+	daemon.finishInterruptedWith("PASS ok github.com/acme/app 41.2s")
+
+	resp, err := router.SendToolRequestSync(context.Background(), reconnectUser,
+		shellRequest(tools.ShellToolName, `{"command":"go test ./..."}`))
+	require.NoError(t, err)
+	assert.Empty(t, resp.ErrorCode, "a dropped stream must not fail the call: %s", resp.ErrorMessage)
+	assert.Equal(t, "PASS ok github.com/acme/app 41.2s", resp.Content)
+	assert.Len(t, daemon.toolRequests(), 1, "the command ran once; its result was delivered, not re-requested")
+}
+
+// A daemon that comes back without the request — it restarted, and the call
+// died with it — fails the call at once, saying so, rather than leaving it to
+// wait out its ten-minute timeout.
+func TestToolRequest_InterruptedCallFailsCleanlyWhenTheDaemonRestarted(t *testing.T) {
+	router, daemon := reconnectTestRouter(t, reconnectRecords(time.Now(), nil))
+	daemon.connect()
+	daemon.interruptNextRequest(100 * time.Millisecond)
+
+	start := time.Now()
+	resp, err := router.SendToolRequestSync(context.Background(), reconnectUser,
+		shellRequest(tools.ShellToolName, `{"command":"go test ./..."}`))
+	require.NoError(t, err)
+	assert.Equal(t, ErrorCodeDaemonInterrupted, resp.ErrorCode)
+	assert.Contains(t, resp.ErrorMessage, "no longer knows the request")
+	assert.Less(t, time.Since(start), 5*time.Second, "a lost call is reported promptly")
+	daemon.mu.Lock()
+	assert.Equal(t, 1, daemon.statusQuestions, "the daemon is asked once")
+	daemon.mu.Unlock()
+}
+
+// A daemon that does not come back leaves the call to its own deadline: the
+// wait for a redelivered result is bounded like any request.
+func TestToolRequest_InterruptedCallWaitIsBoundedByTheCallersDeadline(t *testing.T) {
+	router, daemon := reconnectTestRouter(t, reconnectRecords(time.Now(), nil))
+	daemon.connect()
+	daemon.interruptNextRequest(0) // gone for good
+	ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := router.SendToolRequestSync(ctx, reconnectUser, shellRequest(tools.ShellToolName, `{"command":"ls"}`))
+	require.Error(t, err)
+	assert.Less(t, time.Since(start), 3*time.Second)
 }
 
 // The worker-side tools (view, and the rest that read the user's files

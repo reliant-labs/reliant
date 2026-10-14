@@ -3,13 +3,18 @@ package tools_daemon
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/drain"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // Close must ACTIVELY end every open daemon stream with Unavailable.
@@ -112,4 +117,213 @@ func TestCloseIsIdempotent(t *testing.T) {
 
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(conn.closedReason()),
 		"the first Close's reason must survive the second")
+}
+
+// drainRecorder is a connection listener that hears the drain, and notes
+// whether the daemon had already been told to move when it did.
+type drainRecorder struct {
+	conn       *daemonConnection
+	drained    []string
+	noticeSent []bool
+}
+
+func (r *drainRecorder) OnDaemonConnected(string, string)    {}
+func (r *drainRecorder) OnDaemonDisconnected(string, string) {}
+func (r *drainRecorder) OnDaemonDraining(userID, daemonID string) {
+	r.drained = append(r.drained, userID+"/"+daemonID)
+	r.noticeSent = append(r.noticeSent, len(r.conn.sendCh) > 0)
+}
+
+// BeginDrain stops this replica being chosen for the daemon's new requests
+// BEFORE it tells the daemon to move: told first, the daemon could register
+// on another replica while this one still took its requests, and one request
+// would reach it twice.
+func TestBeginDrainStopsRoutingBeforeTellingTheDaemonToMove(t *testing.T) {
+	svc := newTestService(nil)
+	conn := newTestConn("user-1", "daemon-1", newParkedStream())
+	conn.movesOnDrain = true
+	rec := &drainRecorder{conn: conn}
+	svc.AddConnectionListener(rec)
+	svc.mu.Lock()
+	registerTestConn(svc, conn)
+	svc.mu.Unlock()
+
+	deadline := time.Now().Add(20 * time.Second)
+	require.Equal(t, 1, svc.BeginDrain(deadline))
+
+	require.Equal(t, []string{"user-1/daemon-1"}, rec.drained)
+	require.Equal(t, []bool{false}, rec.noticeSent, "listeners must hear the drain before the daemon is told to move")
+
+	msg := <-conn.sendCh
+	require.NotNil(t, msg.GetDrain(), "the daemon must be told this replica is draining")
+	require.Equal(t, deadline.UnixMilli(), msg.GetDrain().GetDeadlineUnixMs())
+	require.True(t, conn.drainNoticeSent.Load())
+
+	select {
+	case <-conn.done:
+		t.Fatal("the stream must stay open: replies to requests in flight on it still come here")
+	default:
+	}
+}
+
+// A daemon that cannot move — an older build, or one the gateway dialed — is
+// ended at once, as before: kept open it would only be unreachable until the
+// deadline, because this replica no longer routes its requests.
+func TestBeginDrainEndsAtOnceTheStreamsOfDaemonsThatCannotMove(t *testing.T) {
+	svc := newTestService(nil)
+	old := newTestConn("user-1", "daemon-old", newParkedStream())
+	current := newTestConn("user-1", "daemon-new", newParkedStream())
+	current.movesOnDrain = true
+	svc.mu.Lock()
+	registerTestConn(svc, old)
+	registerTestConn(svc, current)
+	svc.mu.Unlock()
+
+	require.Equal(t, 1, svc.BeginDrain(time.Now().Add(20*time.Second)), "only the daemon that can move is told to")
+	select {
+	case <-old.done:
+		require.Equal(t, connect.CodeUnavailable, connect.CodeOf(old.closedReason()))
+	default:
+		t.Fatal("a daemon that cannot move must be ended at once, so it redials straight away")
+	}
+	require.False(t, old.drainNoticeSent.Load())
+	require.NotNil(t, (<-current.sendCh).GetDrain())
+}
+
+// A draining replica takes no new daemon, in either direction: the daemon
+// must land on a replica that will still be serving it a minute from now.
+func TestDrainingReplicaRefusesNewDaemonStreams(t *testing.T) {
+	svc := newTestService(nil)
+	svc.BeginDrain(time.Now().Add(time.Second))
+
+	err := svc.ConnectDaemon(context.Background(), nil)
+	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "Unavailable keeps the daemon on its reconnect path")
+	require.True(t, drain.IsServerDraining(err))
+
+	_, err = svc.RegisterOutboundConnection(context.Background(), "user-1", "daemon-1", "10.0.0.1", 9190, &reliantv1.DaemonRegister{}, nil)
+	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+}
+
+// Once told to move, the daemon closes its old stream itself when it is done
+// with it. That is the drain working, and it must end like one.
+func TestStreamTheDaemonClosesAfterTheDrainNoticeEndsAsADrain(t *testing.T) {
+	svc := newTestService(nil)
+	stream := newParkedStream()
+	conn := newTestConn("user-1", "daemon-1", stream)
+	conn.drainNoticeSent.Store(true)
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- svc.handleIncoming(context.Background(), conn) }()
+	close(stream.recv)
+
+	select {
+	case err := <-errCh:
+		require.True(t, drain.IsServerDraining(err), "got %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("handleIncoming did not return when the daemon closed its stream")
+	}
+}
+
+// AwaitDrained returns as soon as the daemons have moved, and reports a
+// window that closed with streams still open.
+func TestAwaitDrainedWaitsForTheDaemonsToMove(t *testing.T) {
+	svc := newTestService(nil)
+	conn := newTestConn("user-1", "daemon-1", newParkedStream())
+	svc.mu.Lock()
+	registerTestConn(svc, conn)
+	svc.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	require.False(t, svc.AwaitDrained(ctx), "the stream is still open")
+
+	done := make(chan bool, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		done <- svc.AwaitDrained(ctx)
+	}()
+	svc.teardownConnection(conn, "daemon moved")
+	require.True(t, <-done)
+}
+
+// fakeResultPublisher records the results a gateway publishes for waiters
+// elsewhere.
+type fakeResultPublisher struct {
+	mu        sync.Mutex
+	published []*toolexec.ToolExecutionResponse
+	err       error
+}
+
+func (p *fakeResultPublisher) PublishToolResult(_ context.Context, userID, daemonID string, resp *toolexec.ToolExecutionResponse) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.err != nil {
+		return p.err
+	}
+	p.published = append(p.published, resp)
+	return nil
+}
+
+func ackFor(t *testing.T, conn *daemonConnection, within time.Duration) string {
+	t.Helper()
+	timeout := time.After(within)
+	for {
+		select {
+		case msg := <-conn.sendCh:
+			if ack := msg.GetToolResultAck(); ack != nil {
+				return ack.RequestId
+			}
+		case <-timeout:
+			return ""
+		}
+	}
+}
+
+// The usual case: the waiter is on this stream. The result goes to it and is
+// acknowledged, so the daemon can forget it.
+func TestToolResultIsAcknowledgedOnceHandedToItsWaiter(t *testing.T) {
+	svc := newTestService(nil)
+	conn := newTestConn("user-1", "daemon-1", newParkedStream())
+	waiter := make(chan *toolexec.ToolExecutionResponse, 1)
+	conn.pendingToolRequests["req-1"] = waiter
+
+	svc.routeToolResponse(conn, &reliantv1.ToolResponse{RequestId: "req-1", Success: true, Content: "ok"})
+
+	got := <-waiter
+	require.Equal(t, "ok", got.Content)
+	require.Equal(t, "daemon-1", got.DaemonID, "which machine ran it is the gateway's to say")
+	require.Equal(t, "req-1", ackFor(t, conn, time.Second))
+}
+
+// Redelivery: a result whose request came in over another stream has no
+// waiter here. It is published to the request's result subject, and
+// acknowledged only after that — a result that could not be published stays
+// with the daemon, which sends it again.
+func TestToolResultWithNoWaiterIsPublishedThenAcknowledged(t *testing.T) {
+	svc := newTestService(nil)
+	pub := &fakeResultPublisher{}
+	svc.deps.ResultPublisher = pub
+	conn := newTestConn("user-1", "daemon-1", newParkedStream())
+
+	svc.routeToolResponse(conn, &reliantv1.ToolResponse{RequestId: "req-2", Success: true, Content: "late"})
+	require.Equal(t, "req-2", ackFor(t, conn, 5*time.Second))
+	pub.mu.Lock()
+	require.Len(t, pub.published, 1)
+	require.Equal(t, "late", pub.published[0].Content)
+	require.Equal(t, "daemon-1", pub.published[0].DaemonID)
+	pub.mu.Unlock()
+
+	pub.err = errors.New("nats unavailable")
+	svc.routeToolResponse(conn, &reliantv1.ToolResponse{RequestId: "req-3", Success: true})
+	require.Empty(t, ackFor(t, conn, 200*time.Millisecond), "an unpublished result must not be acknowledged")
+}
+
+// A call that outlived a drained replica's stream is still running, and this
+// replica never sent it; the daemon's own count keeps the machine awake.
+func TestDaemonReportedToolCallsKeepTheMachineAwake(t *testing.T) {
+	svc, conn, _, rec := newActivityFixture(t)
+	conn.daemonToolCallsInFlight.Store(1)
+	svc.reassertInFlightActivity(conn)
+	require.Equal(t, daemonactivity.ReasonToolCallInFlight, rec.waitFor(t).Reason)
 }

@@ -242,6 +242,11 @@ func Run(ctx context.Context, opts Options) error {
 		Repo:           repo,
 		UserUpdateHub:  userUpdateHub,
 		StatePublisher: statePublisher,
+		// Delivers a tool result whose request reached the daemon through
+		// another replica (or an earlier stream) to the worker waiting on
+		// the request's result subject. This is what lets a call survive a
+		// gateway rollout.
+		ResultPublisher: toolexec.NewToolResultPublisher(nc),
 	})
 	if err != nil {
 		_ = userUpdateHub.Close()
@@ -458,13 +463,16 @@ func Run(ctx context.Context, opts Options) error {
 	// the connector does not redial a daemon this process is about to drop.
 	connector.CloseAll()
 
-	// Stop the daemon server. Its Stop ends every held daemon stream with
-	// Unavailable("gateway draining") FIRST and only then runs
-	// http.Server.Shutdown — necessary because Shutdown alone waits for
-	// active requests to finish and a bidi stream never finishes on its own,
-	// so it used to burn the entire budget and then cut the connections
-	// anyway. Ending them explicitly, after the pre-stop pause, means each
-	// daemon redials at once and lands on a replica that is already serving.
+	// Stop the daemon server, make-before-break: every held daemon is told
+	// to move (GatewayDrain) and opens a stream to a replica that is already
+	// serving — this one stopped being ready a pre-stop pause ago — while
+	// its stream here stays open for the replies to what is in flight on it.
+	// Streams still open when the drain window closes are ended with
+	// Unavailable("gateway draining"), and only then does
+	// http.Server.Shutdown run: alone, it waits for active requests to
+	// finish, and a bidi stream never finishes on its own. A tool call cut
+	// off at the deadline is not lost; its result arrives through the
+	// replica the daemon moved to. See grpcserver.DaemonServer.Stop.
 	logging.Info("Stopping daemon gRPC server")
 	if err := daemonSrv.Stop(shutdownCtx); err != nil {
 		logging.Error("Error stopping daemon gRPC server", "error", err)

@@ -83,13 +83,16 @@ type daemonClient struct {
 	// via a registration label so the model can be told about runtime limits.
 	runtimeType string
 
-	// sendCh decouples message producers from the stream I/O.
-	// All goroutines push messages here; a single runSender goroutine
-	// drains the channel and calls stream.Send(). This prevents work
-	// goroutines from blocking on the stream write mutex/I/O.
-	sendCh      chan *reliantv1.DaemonMessage
-	sendDone    chan struct{} // closed when runSender exits
-	sessionDone chan struct{} // closed when session is ending, before sendCh is closed
+	// session is the gateway stream new work goes on: the newest one the
+	// gateway has registered. Nil until the first registers. While the daemon
+	// moves off a draining replica the old stream stays open beside it
+	// (drainingSessions); see gateway_session.go.
+	session          atomic.Pointer[gatewaySession]
+	drainingMu       sync.Mutex
+	drainingSessions map[*gatewaySession]struct{}
+	// results holds each tool result until a gateway acknowledges it, so a
+	// result finished while the daemon was between streams still arrives.
+	results resultOutbox
 
 	cancelMu    sync.Mutex
 	cancelByReq map[string]context.CancelFunc
@@ -687,8 +690,16 @@ func (d *daemonClient) run(ctx context.Context) error {
 		}
 
 		sessionStart := time.Now()
-		d.recordStream(daemonstate.StreamConnecting, "")
+		if !d.holdsOpenSession() {
+			d.recordStream(daemonstate.StreamConnecting, "")
+		}
 		err := d.runSession(ctx)
+		if errors.Is(err, errGatewayMoving) {
+			// Make before break: the draining replica's stream is still
+			// open and serving, so dial its successor now, with no backoff.
+			delay = transport.ReconnectMinDelay
+			continue
+		}
 		if err != nil && !errors.Is(err, context.Canceled) {
 			if d.setAsideForeignDaemonID(err) {
 				// Redial at once: nothing on the gateway has to change, this
@@ -719,7 +730,12 @@ func (d *daemonClient) run(ctx context.Context) error {
 				}
 				return fmt.Errorf("daemon connection failed (not retrying): %w", err)
 			}
-			d.recordStream(daemonstate.StreamDisconnected, err.Error())
+			// A failed attempt to move off a draining replica leaves the
+			// daemon connected through that replica's stream until its
+			// deadline: it is not disconnected yet.
+			if !d.holdsOpenSession() {
+				d.recordStream(daemonstate.StreamDisconnected, err.Error())
+			}
 			if connect.CodeOf(err) == connect.CodeUnauthenticated {
 				// Credentials the gateway would not accept. This USED to be
 				// fatal, and that is what cost a full working day.
@@ -839,10 +855,9 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	// both shapes: a 4.54s exit-0 when the transport eventually noticed, and
 	// a 10.005s exit-1 when it did not.
 	//
-	// Scoped to this session: the goroutine exits with runSession, so a
-	// reconnecting daemon does not accumulate one per session.
+	// Scoped to this session: the goroutine exits when the session ends, so
+	// a reconnecting daemon does not accumulate one per session.
 	sessionOver := make(chan struct{})
-	defer close(sessionOver)
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -875,20 +890,28 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			// survives restarts and hostname changes instead of being re-derived
 			// from the (volatile) hostname.
 			DaemonId: d.daemonID,
+			// This daemon moves to another replica when its gateway drains,
+			// and holds tool results until they are acknowledged
+			// (gateway_session.go).
+			MovesOnDrain: true,
 		}},
 	}
 	if err := sendRegistration(stream, register); err != nil {
+		close(sessionOver)
 		return fmt.Errorf("sending daemon registration to %s: %w", baseURL, err)
 	}
 
 	// --- Start the send channel + single writer goroutine ---
-	d.sendCh = make(chan *reliantv1.DaemonMessage, 256)
-	d.sendDone = make(chan struct{})
-	d.sessionDone = make(chan struct{})
-	go d.runSender(stream)
-	defer d.drainSender(senderDrainTimeout)
+	// The session becomes the daemon's current one only when the gateway
+	// acknowledges the registration (activateSession): until then, a
+	// draining predecessor keeps carrying the daemon's work.
+	s := newGatewaySession()
+	// Retiring a drained session is the same close the cancellation path
+	// uses: it unparks Receive without touching the send half.
+	s.retire = func() { _ = stream.CloseResponse() }
+	go s.runSender(stream)
 
-	if err := d.sendProjectDiscovery(); err != nil {
+	if err := d.sendProjectDiscovery(s); err != nil {
 		logSendFailure(logPrefix+" Failed to send project discovery", err)
 	}
 
@@ -919,10 +942,48 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	}()
 
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
-	defer cancelHeartbeat()
-	go d.runHeartbeats(heartbeatCtx, liveness)
-	go d.localModelMgr().run(heartbeatCtx, d.send)
+	go d.runHeartbeats(heartbeatCtx, s, liveness)
+	localModelCtx, stopLocalModels := context.WithCancel(heartbeatCtx)
+	go d.localModelMgr().run(localModelCtx, d.send)
 
+	end := func() {
+		stopLocalModels()
+		cancelHeartbeat()
+		close(sessionOver)
+		s.drain(senderDrainTimeout)
+		d.sessionEnded(s)
+	}
+	err := d.receiveSession(ctx, s, stream, liveness, &deadStream)
+	if !errors.Is(err, errGatewayMoving) {
+		end()
+		return err
+	}
+	// Make before break (gateway_session.go): this stream stays open, read
+	// in the background, until it is retired or the replica ends it, while
+	// run() dials its successor now. The successor publishes the local-model
+	// inventory once it registers.
+	stopLocalModels()
+	go func() {
+		defer end()
+		if err := d.receiveSession(ctx, s, stream, liveness, &deadStream); err != nil && ctx.Err() == nil {
+			logging.Debug(logPrefix+" Drained gateway stream ended", "error", err)
+		}
+	}()
+	return err
+}
+
+// receiveSession reads one session's stream and dispatches what arrives, until
+// the stream ends — or, the first time only, until the gateway says the
+// replica serving it is draining (errGatewayMoving).
+func (d *daemonClient) receiveSession(
+	ctx context.Context,
+	s *gatewaySession,
+	stream interface {
+		Receive() (*reliantv1.ServerMessage, error)
+	},
+	liveness *sessionLiveness,
+	deadStream *atomic.Pointer[error],
+) error {
 	for {
 		msg, err := stream.Receive()
 		if err != nil {
@@ -948,19 +1009,39 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			continue
 		}
 		liveness.received(msg, time.Now())
-		if err := d.handleServerMessage(ctx, msg); err != nil {
+		if notice := msg.GetDrain(); notice != nil {
+			if d.beginSessionDrain(s, notice) {
+				return errGatewayMoving
+			}
+			continue
+		}
+		if err := d.handleServerMessage(ctx, s, msg); err != nil {
 			logging.Warn(logPrefix+" Failed handling server message", "error", err)
 		}
 	}
 }
 
-func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.ServerMessage) error {
+// handleServerMessage dispatches one message that arrived on session s. A
+// request's reply goes back on s while s is open (see reply).
+func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySession, msg *reliantv1.ServerMessage) error {
 	switch m := msg.Message.(type) {
 	case *reliantv1.ServerMessage_ToolRequest:
 		if m.ToolRequest == nil {
 			return nil
 		}
-		go d.executeTool(m.ToolRequest)
+		// Recorded before the goroutine starts, so a status question that
+		// arrives right behind the request already finds it running.
+		d.results.start(m.ToolRequest.RequestId)
+		if s != nil && m.ToolRequest.RequestId != "" {
+			s.inFlight.Add(1) // until a gateway acknowledges the result
+		}
+		go d.executeTool(s, m.ToolRequest)
+		return nil
+
+	case *reliantv1.ServerMessage_ToolResultAck:
+		if m.ToolResultAck != nil {
+			d.handleToolResultAck(m.ToolResultAck.RequestId)
+		}
 		return nil
 
 	case *reliantv1.ServerMessage_ToolCancel:
@@ -989,6 +1070,13 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 			// the daemon gets: the gateway sends it after it has accepted the
 			// registration and bound the connection. Record it — a successful
 			// local Send() proves nothing about the far end.
+			//
+			// It is also when this stream takes over the daemon's work from
+			// any predecessor, and receives every result still waiting for
+			// a gateway.
+			if s != nil {
+				d.activateSession(s)
+			}
 			d.recordStream(daemonstate.StreamConnected, "")
 			d.rejections.reset()
 			if failures, outage := d.reconnects.recovered(); failures > 0 {
@@ -1091,7 +1179,10 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 		if m.DaemonCommand == nil {
 			return nil
 		}
-		go d.handleDaemonCommand(m.DaemonCommand)
+		if s != nil {
+			s.inFlight.Add(1) // until its response is queued
+		}
+		go d.handleDaemonCommand(s, m.DaemonCommand)
 		return nil
 
 	case *reliantv1.ServerMessage_TerminalInput:
@@ -1175,7 +1266,12 @@ func (d *daemonClient) handleKillProcess(req *reliantv1.DaemonKillProcessRequest
 	}
 }
 
-func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) {
+// handleDaemonCommand runs one command that arrived on session s and answers
+// it there (see reply).
+func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.DaemonCommandRequest) {
+	// After the response is queued (the deferred sends below run first):
+	// a draining stream is held open until then.
+	defer d.requestDone(s)
 	ctx, cancel := context.WithCancel(context.Background())
 	if req.TimeoutMs > 0 {
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutMs)*time.Millisecond)
@@ -1199,10 +1295,31 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 			"command_type", req.CommandType, "request_id", req.RequestId,
 			"elapsed_ms", 0, "outcome", "denied",
 			"grantID", policy.GrantIDForLog(), "error", err)
-		d.sendCommandFailure(req, err)
+		d.sendCommandFailure(s, req, err)
 		return
 	}
 	ctx = daemonpolicy.NewContext(ctx, policy)
+
+	// What became of a tool call is the daemon's own bookkeeping, not the
+	// disk's, so it is answered even while the guard below refuses work.
+	if req.CommandType == toolexec.ToolStatusCommand {
+		payload, err := d.handleToolStatus(req.Payload)
+		if err != nil {
+			d.sendCommandFailure(s, req, err)
+			return
+		}
+		if sendErr := d.reply(s, &reliantv1.DaemonMessage{
+			Message: &reliantv1.DaemonMessage_DaemonCommandResponse{DaemonCommandResponse: &reliantv1.DaemonCommandResponse{
+				RequestId:   req.RequestId,
+				CommandType: req.CommandType,
+				Success:     true,
+				Payload:     payload,
+			}},
+		}); sendErr != nil {
+			logSendFailure(logPrefix+" Failed to send tool status", sendErr, "request_id", req.RequestId)
+		}
+		return
+	}
 
 	// Refuse everything while $HOME is not the directory the daemon started
 	// with: whatever the command touches would be the wrong disk.
@@ -1210,7 +1327,7 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 		logging.Warn(logPrefix+" daemon command handled",
 			"command_type", req.CommandType, "request_id", req.RequestId,
 			"elapsed_ms", 0, "outcome", "refused: workspace directory changed", "error", refusal)
-		d.sendCommandFailure(req, refusal)
+		d.sendCommandFailure(s, req, refusal)
 		return
 	}
 
@@ -1254,7 +1371,7 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 	if err != nil {
 		resp.GetDaemonCommandResponse().ErrorMessage = withNoSpaceExplanation(d.diskWatcher, err.Error())
 	}
-	if sendErr := d.send(resp); sendErr != nil {
+	if sendErr := d.reply(s, resp); sendErr != nil {
 		logSendFailure(logPrefix+" Failed to send daemon command response", sendErr, "request_id", req.RequestId, "command_type", req.CommandType)
 	}
 
@@ -1299,11 +1416,6 @@ func logDaemonCommandHandled(req *reliantv1.DaemonCommandRequest, elapsed time.D
 		args = append(args, "error", err)
 	}
 	logging.Log(daemonCommandLogLevel(elapsed, err != nil), logPrefix+" daemon command handled", args...)
-}
-
-// sendBacklog reports how many messages are waiting for the stream writer.
-func (d *daemonClient) sendBacklog() int {
-	return len(d.sendCh)
 }
 
 // filesystemMutatingCommands are daemon commands that create or remove a
@@ -1400,7 +1512,7 @@ func (d *daemonClient) announceCommandFailure(requestID, commandType string, cmd
 // sendCommandFailure reports a command that never ran. Refusals must still
 // answer on the stream: the caller is blocked on a reply, and dropping it
 // would surface as a timeout rather than as the denial it is.
-func (d *daemonClient) sendCommandFailure(req *reliantv1.DaemonCommandRequest, cause error) {
+func (d *daemonClient) sendCommandFailure(s *gatewaySession, req *reliantv1.DaemonCommandRequest, cause error) {
 	resp := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_DaemonCommandResponse{
 			DaemonCommandResponse: &reliantv1.DaemonCommandResponse{
@@ -1411,15 +1523,17 @@ func (d *daemonClient) sendCommandFailure(req *reliantv1.DaemonCommandRequest, c
 			},
 		},
 	}
-	if sendErr := d.send(resp); sendErr != nil {
+	if sendErr := d.reply(s, resp); sendErr != nil {
 		logSendFailure(logPrefix+" Failed to send daemon command failure", sendErr, "request_id", req.RequestId, "command_type", req.CommandType)
 	}
 }
 
-// runHeartbeats sends the daemon's keepalive until ctx ends. liveness, when
-// non-nil, is told about each heartbeat sent so the session can tell whether
-// the gateway acknowledges them.
-func (d *daemonClient) runHeartbeats(ctx context.Context, liveness *sessionLiveness) {
+// runHeartbeats sends the daemon's keepalive on session s until ctx ends.
+// Every open stream heartbeats, a draining one included, so neither end reaps
+// it as dead while it still carries replies. liveness, when non-nil, is told
+// about each heartbeat sent so the session can tell whether the gateway
+// acknowledges them.
+func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liveness *sessionLiveness) {
 	ticker := time.NewTicker(d.timing.withDefaults().heartbeatInterval)
 	defer ticker.Stop()
 
@@ -1443,7 +1557,8 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, liveness *sessionLiven
 		if rep, ok := d.diskWatcher.Report(); ok {
 			hb.Disk = rep
 		}
-		if err := d.send(&reliantv1.DaemonMessage{
+		hb.ToolCallsInFlight = uint32(d.results.runningCount())
+		if err := s.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: hb},
 		}); err != nil {
 			return err
@@ -1489,7 +1604,9 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, liveness *sessionLiven
 	}
 }
 
-func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
+// executeTool runs one tool request that arrived on session s, and hands its
+// result to sendToolResult, which holds it until a gateway acknowledges it.
+func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest) {
 	if req == nil {
 		return
 	}
@@ -1535,7 +1652,7 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 	// only a $HOME fault refuses.
 	workspaceRoot := resolveProjectPathFromContext(contextMap, "", "")
 	if refused := d.guard.preflight(workspaceRoot); refused != nil {
-		d.sendToolResult(req.RequestId, refused)
+		d.sendToolResult(s, req.RequestId, refused)
 		return
 	}
 
@@ -1604,11 +1721,11 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 	}
 
 	logToolFinished(req.ToolName, result, time.Since(toolStart))
-	d.sendToolResult(req.RequestId, result)
+	d.sendToolResult(s, req.RequestId, result)
 }
 
-// sendToolResult replies to a tool request.
-func (d *daemonClient) sendToolResult(requestID string, result *toolexec.ExecutionResult) {
+// toolResponse is the wire reply to a tool request.
+func (d *daemonClient) toolResponse(requestID string, result *toolexec.ExecutionResult) *reliantv1.DaemonMessage {
 	// Sanitize all string fields to valid UTF-8 before protobuf serialization.
 	// Protobuf3 string fields reject invalid UTF-8, which would silently drop
 	// the response and leave the server-side poller waiting until timeout.
@@ -1626,7 +1743,7 @@ func (d *daemonClient) sendToolResult(requestID string, result *toolexec.Executi
 		}
 	}
 
-	resp := &reliantv1.DaemonMessage{
+	return &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_ToolResponse{ToolResponse: &reliantv1.ToolResponse{
 			RequestId:    requestID,
 			Success:      result.Success,
@@ -1637,20 +1754,6 @@ func (d *daemonClient) sendToolResult(requestID string, result *toolexec.Executi
 			ErrorCode:    result.ErrorCode,
 			Backgrounded: result.Backgrounded,
 		}},
-	}
-	if err := d.send(resp); err != nil {
-		logSendFailure(logPrefix+" Failed to send tool response via stream", err, "request_id", requestID)
-	}
-}
-
-// send enqueues a message for the single runSender goroutine to write.
-// It returns an error only if the session is shutting down.
-func (d *daemonClient) send(msg *reliantv1.DaemonMessage) error {
-	select {
-	case d.sendCh <- msg:
-		return nil
-	case <-d.sessionDone:
-		return errSessionEnded
 	}
 }
 
@@ -1688,55 +1791,6 @@ func sendRegistration(stream registrationStream, register *reliantv1.DaemonMessa
 // the condition that makes an unbounded drain wedge the whole process.
 type messageSender interface {
 	Send(*reliantv1.DaemonMessage) error
-}
-
-// runSender is the single goroutine that drains sendCh and writes to the
-// bidi stream. This serialises writes (required — stream.Send is not
-// thread-safe) without blocking producers on I/O.
-func (d *daemonClient) runSender(stream messageSender) {
-	defer close(d.sendDone)
-	for {
-		select {
-		case msg := <-d.sendCh:
-			if msg == nil {
-				return
-			}
-			if err := stream.Send(msg); err != nil {
-				logging.Warn(logPrefix+" runSender: stream.Send failed", "error", err)
-				return
-			}
-		case <-d.sessionDone:
-			return
-		}
-	}
-}
-
-// senderDrainTimeout bounds how long session teardown waits for runSender.
-const senderDrainTimeout = 3 * time.Second
-
-// drainSender ends the session and waits — with a deadline — for runSender to
-// stop. It reports whether the sender actually stopped.
-//
-// The deadline is the point. stream.Send writes into an io.Pipe that feeds the
-// HTTP/2 request body, so it blocks whenever the peer stops reading: a gateway
-// that has evicted this connection, or one whose flow-control window is full.
-// runSender is then inside Send and cannot reach its `case <-sessionDone`, so
-// an unbounded wait here never returns — and it sits between SIGTERM and
-// process exit, which is how a daemon takes SIGTERM, prints "Shutting down",
-// and then lives forever.
-//
-// Abandoning the goroutine is safe: the session is over, its stream is being
-// discarded, and the process is on its way out.
-func (d *daemonClient) drainSender(timeout time.Duration) bool {
-	close(d.sessionDone) // signal send() and runSender to stop
-	select {
-	case <-d.sendDone:
-		return true
-	case <-time.After(timeout):
-		logging.Warn(logPrefix+" sender did not stop within the drain deadline; abandoning it",
-			"timeout", timeout.String())
-		return false
-	}
 }
 
 func (d *daemonClient) registerCancel(requestID string, cancel context.CancelFunc) {
@@ -1847,7 +1901,9 @@ func (d *daemonClient) cancelAllRequests() {
 	}
 }
 
-func (d *daemonClient) sendProjectDiscovery() error {
+// sendProjectDiscovery announces the project under the daemon's working
+// directory on session s, as part of opening it.
+func (d *daemonClient) sendProjectDiscovery(s *gatewaySession) error {
 	projectPath := strings.TrimSpace(os.Getenv("PROJECT_PATH"))
 	if projectPath == "" {
 		projectPath = d.cwd
@@ -1879,7 +1935,7 @@ func (d *daemonClient) sendProjectDiscovery() error {
 			}},
 		}},
 	}
-	return d.send(msg)
+	return s.send(msg)
 }
 
 func pathLooksLikeGitRepo(projectPath string) bool {

@@ -17,13 +17,13 @@ import (
 // channel, so a test can read what the daemon would have written to the
 // gateway without standing up a stream.
 func newAnnounceTestClient() *daemonClient {
-	return &daemonClient{
-		sendCh:      make(chan *reliantv1.DaemonMessage, 8),
-		sessionDone: make(chan struct{}),
+	d := &daemonClient{
 		// handleDaemonCommand registers a cancel func for every request; a nil
 		// map panics on assignment.
 		cancelByReq: make(map[string]context.CancelFunc),
 	}
+	useTestSession(d, 8)
+	return d
 }
 
 // drainFileSystemChanged returns the first FileSystemChanged message queued,
@@ -31,7 +31,7 @@ func newAnnounceTestClient() *daemonClient {
 func drainFileSystemChanged(d *daemonClient) *reliantv1.FileSystemChanged {
 	for {
 		select {
-		case msg := <-d.sendCh:
+		case msg := <-d.testSendCh():
 			if fsc := msg.GetFileSystemChanged(); fsc != nil {
 				return fsc
 			}
@@ -46,7 +46,7 @@ func drainFileSystemChanged(d *daemonClient) *reliantv1.FileSystemChanged {
 func drainCommandFailed(d *daemonClient) *reliantv1.DaemonCommandFailed {
 	for {
 		select {
-		case msg := <-d.sendCh:
+		case msg := <-d.testSendCh():
 			if f := msg.GetDaemonCommandFailed(); f != nil {
 				return f
 			}
@@ -164,7 +164,7 @@ func TestHandleDaemonCommandAnnouncesClone(t *testing.T) {
 	t.Cleanup(func() { delete(filesystemMutatingCommands, "test.fake_clone") })
 
 	d := newAnnounceTestClient()
-	d.handleDaemonCommand(&reliantv1.DaemonCommandRequest{
+	d.handleDaemonCommand(nil, &reliantv1.DaemonCommandRequest{
 		RequestId:   "req-1",
 		CommandType: "test.fake_clone",
 	})
@@ -173,7 +173,7 @@ func TestHandleDaemonCommandAnnouncesClone(t *testing.T) {
 	var announced *reliantv1.FileSystemChanged
 	for {
 		select {
-		case msg := <-d.sendCh:
+		case msg := <-d.testSendCh():
 			if msg.GetDaemonCommandResponse() != nil {
 				sawResponse = true
 			}
@@ -205,7 +205,7 @@ func TestHandleDaemonCommandAnnouncesCloneFailure(t *testing.T) {
 	t.Cleanup(func() { delete(filesystemMutatingCommands, "test.fake_clone_fail") })
 
 	d := newAnnounceTestClient()
-	d.handleDaemonCommand(&reliantv1.DaemonCommandRequest{
+	d.handleDaemonCommand(nil, &reliantv1.DaemonCommandRequest{
 		RequestId:   "req-2",
 		CommandType: "test.fake_clone_fail",
 	})
@@ -215,7 +215,7 @@ func TestHandleDaemonCommandAnnouncesCloneFailure(t *testing.T) {
 	var announced *reliantv1.DaemonCommandFailed
 	for {
 		select {
-		case msg := <-d.sendCh:
+		case msg := <-d.testSendCh():
 			if resp := msg.GetDaemonCommandResponse(); resp != nil {
 				sawResponse = true
 				responseSuccess = resp.Success

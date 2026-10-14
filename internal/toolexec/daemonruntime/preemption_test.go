@@ -33,8 +33,7 @@ func newWaitingClient(t *testing.T) (*daemonClient, string) {
 	d := newTestDaemonClient("daemon-preempt", "user-preempt")
 	d.localExecutor = localExec
 	d.backgroundByReq = make(map[string]string)
-	d.sendCh = make(chan *reliantv1.DaemonMessage, 8)
-	d.sessionDone = make(chan struct{})
+	useTestSession(d, 8)
 
 	processID, err := local.StartBackground(context.Background(), &daemon.RunCommandRequest{
 		Command:    "exec sleep 30",
@@ -57,7 +56,7 @@ func startWait(t *testing.T, d *daemonClient, callID, processID string) {
 	})
 	require.NoError(t, err)
 
-	go d.executeTool(&reliantv1.ToolRequest{
+	go d.executeTool(nil, &reliantv1.ToolRequest{
 		RequestId:   callID,
 		ToolCallId:  callID,
 		ToolName:    tools.ToolShellWait,
@@ -74,7 +73,7 @@ func startWait(t *testing.T, d *daemonClient, callID, processID string) {
 
 func cancelWith(t *testing.T, d *daemonClient, callID, reason string) {
 	t.Helper()
-	require.NoError(t, d.handleServerMessage(context.Background(), &reliantv1.ServerMessage{
+	require.NoError(t, d.handleServerMessage(context.Background(), nil, &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_ToolCancel{
 			ToolCancel: &reliantv1.ToolExecutionCancel{RequestId: callID, Reason: reason},
 		},

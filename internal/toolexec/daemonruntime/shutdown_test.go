@@ -35,27 +35,27 @@ func (f senderFunc) Send(msg *reliantv1.DaemonMessage) error { return f(msg) }
 // an unbounded drain in session teardown wedges the process: SIGTERM lands, the
 // daemon prints "Shutting down", and it never exits. Teardown must give up.
 func TestDrainSenderIsBoundedWhenTheStreamWriteBlocks(t *testing.T) {
-	d := &daemonClient{
-		sendCh:      make(chan *reliantv1.DaemonMessage, 1),
-		sendDone:    make(chan struct{}),
-		sessionDone: make(chan struct{}),
+	s := &gatewaySession{
+		sendCh:   make(chan *reliantv1.DaemonMessage, 1),
+		done:     make(chan struct{}),
+		sendDone: make(chan struct{}),
 	}
 
 	inSend := make(chan struct{})
 	release := make(chan struct{})
 	defer close(release)
 
-	go d.runSender(senderFunc(func(*reliantv1.DaemonMessage) error {
+	go s.runSender(senderFunc(func(*reliantv1.DaemonMessage) error {
 		close(inSend)
 		<-release // a peer that never reads
 		return nil
 	}))
 
-	d.sendCh <- &reliantv1.DaemonMessage{}
-	<-inSend // runSender is now inside Send and cannot observe sessionDone
+	s.sendCh <- &reliantv1.DaemonMessage{}
+	<-inSend // runSender is now inside Send and cannot observe done
 
 	start := time.Now()
-	stopped := d.drainSender(200 * time.Millisecond)
+	stopped := s.drain(200 * time.Millisecond)
 	elapsed := time.Since(start)
 
 	require.False(t, stopped, "the sender is wedged — teardown must report that, not wait it out")
@@ -65,16 +65,16 @@ func TestDrainSenderIsBoundedWhenTheStreamWriteBlocks(t *testing.T) {
 // The ordinary case still waits for the sender, so a session that ends cleanly
 // does not abandon queued writes.
 func TestDrainSenderWaitsForACooperativeSender(t *testing.T) {
-	d := &daemonClient{
-		sendCh:      make(chan *reliantv1.DaemonMessage, 1),
-		sendDone:    make(chan struct{}),
-		sessionDone: make(chan struct{}),
+	s := &gatewaySession{
+		sendCh:   make(chan *reliantv1.DaemonMessage, 1),
+		done:     make(chan struct{}),
+		sendDone: make(chan struct{}),
 	}
-	go d.runSender(senderFunc(func(*reliantv1.DaemonMessage) error { return nil }))
+	go s.runSender(senderFunc(func(*reliantv1.DaemonMessage) error { return nil }))
 
-	require.True(t, d.drainSender(5*time.Second))
+	require.True(t, s.drain(5*time.Second))
 	select {
-	case <-d.sendDone:
+	case <-s.sendDone:
 	default:
 		t.Fatal("sender must have exited")
 	}

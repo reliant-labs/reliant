@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
@@ -42,6 +43,29 @@ type Deps struct {
 	// they are not emitted.
 	// forge:optional-dep
 	StatePublisher LifecyclePublisher
+	// ResultPublisher delivers a tool result that arrives with no waiter in
+	// this process — its request was forwarded by another replica, or over
+	// an earlier stream that has since dropped — to the worker waiting on
+	// the request's result subject. Without it such a result is dropped and
+	// left unacknowledged, so the daemon keeps it for the next stream.
+	// forge:optional-dep
+	ResultPublisher ToolResultPublisher
+}
+
+// ToolResultPublisher publishes a tool result to the worker waiting for it.
+// *toolexec.ToolResultPublisher implements it. It returns only once the
+// result is safely on its way: the daemon forgets a result as soon as it is
+// acknowledged, and the acknowledgement follows this call.
+type ToolResultPublisher interface {
+	PublishToolResult(ctx context.Context, userID, daemonID string, resp *toolexec.ToolExecutionResponse) error
+}
+
+// DaemonDrainListener is told, per held daemon stream, that this replica has
+// started draining, before the daemon is told to move. Optional on a
+// connection listener; *toolexec.NATSToolBridge implements it, to stop routing
+// the daemon's new requests here.
+type DaemonDrainListener interface {
+	OnDaemonDraining(userID, daemonID string)
 }
 
 // UserUpdatePublisher publishes one ephemeral user update.
@@ -94,6 +118,11 @@ type Service struct {
 	// time.Now (UTC). Used by the stale-connection sweeper so tests can
 	// jump the clock without sleeping.
 	now func() time.Time
+
+	// draining is set once BeginDrain has run: this replica is shutting
+	// down and refuses new daemon streams, so a daemon moving off it (or one
+	// the load balancer has not yet stopped sending) goes to a live replica.
+	draining atomic.Bool
 }
 
 // New creates a new tools_daemon service instance with the supplied Deps.

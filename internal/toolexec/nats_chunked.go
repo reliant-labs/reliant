@@ -2,6 +2,7 @@
 package toolexec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -145,27 +146,74 @@ func requestWithChunkedReply(nc *nats.Conn, reqMsg *nats.Msg, timeout time.Durat
 		return nil, nats.ErrTimeout
 	}
 
-	inbox := nc.NewRespInbox()
-	sub, err := nc.SubscribeSync(inbox)
+	inbox, err := openReplyInbox(nc, nc.NewRespInbox())
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = sub.Unsubscribe() }()
-	// A large chunked reply can burst faster than we append; default pending
-	// limits (64MB) sit right at the reassembly cap, so lift them — memory is
-	// already bounded by maxChunkedReplyBytes below.
-	_ = sub.SetPendingLimits(-1, -1)
+	defer inbox.close()
 
-	reqMsg.Reply = inbox
+	reqMsg.Reply = inbox.subject
 	if _, err := publishChunkedRequest(nc, reqMsg); err != nil {
 		return nil, err
 	}
 
 	deadline := time.Now().Add(timeout)
-	first, err := sub.NextMsg(timeout)
+	first, err := inbox.sub.NextMsg(timeout)
 	if err != nil {
 		return nil, err
 	}
+	return inbox.reassemble(first, deadline)
+}
+
+// replyInbox is the subscription a request's replies arrive on — a private
+// inbox, or a tool request's result subject (toolResultSubject) — read one
+// complete reply at a time, chunked or not.
+type replyInbox struct {
+	subject string
+	sub     *nats.Subscription
+}
+
+// openReplyInbox subscribes to subject. Subscribe BEFORE publishing the
+// request, or a fast reply can arrive before anyone is listening.
+func openReplyInbox(nc *nats.Conn, subject string) (*replyInbox, error) {
+	sub, err := nc.SubscribeSync(subject)
+	if err != nil {
+		return nil, err
+	}
+	// A large chunked reply can burst faster than we append; default pending
+	// limits (64MB) sit right at the reassembly cap, so lift them — memory is
+	// already bounded by maxChunkedReplyBytes in reassemble.
+	_ = sub.SetPendingLimits(-1, -1)
+	return &replyInbox{subject: subject, sub: sub}, nil
+}
+
+func (in *replyInbox) close() { _ = in.sub.Unsubscribe() }
+
+// next returns the next complete reply, waiting until deadline. A deadline
+// that passes is nats.ErrTimeout, ctx ending is ctx's error, and the server's
+// no-responders status is nats.ErrNoResponders, as with a plain request.
+//
+// Only the wait for a reply's FIRST message follows ctx. Once a chunked reply
+// has started, its remaining chunks are read regardless (each within
+// chunkReassemblyTimeout, all before deadline): abandoning one half-read would
+// lose the reply, not merely postpone it.
+func (in *replyInbox) next(ctx context.Context, deadline time.Time) (*nats.Msg, error) {
+	waitCtx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	first, err := in.sub.NextMsgWithContext(waitCtx)
+	if err != nil {
+		if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+			return nil, nats.ErrTimeout
+		}
+		return nil, err
+	}
+	return in.reassemble(first, deadline)
+}
+
+// reassemble returns first as the whole reply, or, when it opens a chunked
+// stream, reads the rest of the stream and returns the joined payload.
+func (in *replyInbox) reassemble(first *nats.Msg, deadline time.Time) (*nats.Msg, error) {
+	sub := in.sub
 	id := first.Header.Get(chunkHeaderID)
 	if id == "" {
 		// Single-message fast path — the common case.

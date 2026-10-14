@@ -148,6 +148,19 @@ type daemonConnection struct {
 	// return a distinguishable error instead of a bare EOF.
 	closeReason atomic.Pointer[error]
 
+	// movesOnDrain is the daemon's DaemonRegister.moves_on_drain: it acts on
+	// a drain notice and holds its results until acknowledged. Set once, at
+	// registration.
+	movesOnDrain bool
+	// drainNoticeSent is set once this replica has told the daemon it is
+	// draining (BeginDrain). From then on the daemon may end the stream
+	// itself once it has moved, which is the drain working, not a fault.
+	drainNoticeSent atomic.Bool
+	// daemonToolCallsInFlight is the daemon's own count of executing tool
+	// calls, from its newest heartbeat. It covers calls that arrived over a
+	// stream to another replica, which pendingToolRequests never saw.
+	daemonToolCallsInFlight atomic.Uint32
+
 	// pendingCommands tracks in-flight DaemonCommandRequests awaiting responses.
 	// Key is request_id, value is a channel that receives the response.
 	pendingCommandsMu sync.Mutex
@@ -874,6 +887,13 @@ func (s *Service) ConnectDaemon(
 	ctx context.Context,
 	stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage],
 ) error {
+	// A draining replica takes no new daemon: one moving off it, or one the
+	// load balancer has not stopped sending yet, redials and lands on a
+	// replica that is still serving. Unavailable keeps it on that path.
+	if s.draining.Load() {
+		return errGatewayDraining
+	}
+
 	// Wait for registration message
 	msg, err := stream.Receive()
 	if err != nil {
@@ -978,6 +998,7 @@ func (s *Service) ConnectDaemon(
 		attachedAt:          now,
 		stream:              &inboundStream{stream: stream},
 		attachSource:        db.DaemonAttachmentSourceInbound,
+		movesOnDrain:        reg.GetMovesOnDrain(),
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
 		done:                make(chan struct{}),
 		pendingCommands:     make(map[string]chan *reliantv1.DaemonCommandResponse),
@@ -1085,6 +1106,9 @@ func (s *Service) RegisterOutboundConnection(
 ) (*OutboundConn, error) {
 	if daemonID == "" || userID == "" {
 		return nil, fmt.Errorf("missing daemonID or userID")
+	}
+	if s.draining.Load() {
+		return nil, errGatewayDraining
 	}
 
 	now := leaseTime(time.Now())
@@ -1283,6 +1307,11 @@ func (s *Service) handleIncoming(ctx context.Context, conn *daemonConnection) er
 			return conn.closedReason()
 		case r := <-received:
 			if r.err != nil {
+				if conn.drainNoticeSent.Load() {
+					// The daemon moved off this draining replica and
+					// closed the old stream: the drain's expected end.
+					return errGatewayDraining
+				}
 				return r.err
 			}
 			msg = r.msg
@@ -1309,12 +1338,17 @@ func (s *Service) handleIncoming(ctx context.Context, conn *daemonConnection) er
 			// here, at the read, because what they vouch for is that this
 			// loop is consuming the stream.
 			conn.recordDaemonHeartbeat(hb.Heartbeat.GetTimestamp())
+			conn.daemonToolCallsInFlight.Store(hb.Heartbeat.GetToolCallsInFlight())
 			select {
 			case leaseRenew <- struct{}{}:
 			default: // a renewal is already pending; it covers this one
 			}
 		}
 
+		if tr := msg.GetToolResponse(); tr != nil {
+			s.routeToolResponse(conn, tr)
+			continue
+		}
 		if conn.routeInboundReply(msg) {
 			continue
 		}
@@ -1546,34 +1580,11 @@ func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection,
 // flight — a command or tool response, a chunk of streamed output — and
 // reports whether msg was one. It never touches the database, which is what
 // lets the receive loop run it inline without making a reply wait on a write.
+//
+// Tool responses are not routed here: they may answer a request this stream
+// never carried (see Service.routeToolResponse).
 func (c *daemonConnection) routeInboundReply(msg *reliantv1.DaemonMessage) bool {
 	switch m := msg.Message.(type) {
-	case *reliantv1.DaemonMessage_ToolResponse:
-		if resp := m.ToolResponse; resp != nil {
-			c.pendingToolRequestsMu.Lock()
-			ch, ok := c.pendingToolRequests[resp.RequestId]
-			if ok {
-				delete(c.pendingToolRequests, resp.RequestId)
-			}
-			c.pendingToolRequestsMu.Unlock()
-			if ok {
-				ch <- &toolexec.ToolExecutionResponse{
-					RequestID:    resp.RequestId,
-					Success:      resp.Success,
-					IsError:      resp.IsError,
-					Content:      resp.Content,
-					Metadata:     resp.Metadata,
-					ErrorMessage: resp.ErrorMessage,
-					ErrorCode:    resp.ErrorCode,
-					Backgrounded: resp.Backgrounded,
-					// The connection's identity is gateway-assigned, never
-					// asserted by the daemon, so it is the trustworthy
-					// answer to "which machine ran this".
-					DaemonID: c.daemonID,
-				}
-			}
-		}
-
 	case *reliantv1.DaemonMessage_DaemonCommandResponse:
 		if resp := m.DaemonCommandResponse; resp != nil {
 			c.pendingCommandsMu.Lock()
@@ -2442,11 +2453,15 @@ func (s *Service) runSender(conn *daemonConnection) {
 // sent; a test suite or build that outlasts the idle timeout would otherwise
 // be suspended mid-run. Called on every gateway heartbeat, so the re-assertion
 // costs no timer of its own and stops the moment the call returns.
+//
+// The daemon's own count matters as much as this stream's waiters: a call
+// that outlived a drained replica's stream is still running here, and this
+// replica never sent it.
 func (s *Service) reassertInFlightActivity(conn *daemonConnection) {
 	conn.pendingToolRequestsMu.Lock()
 	inFlight := len(conn.pendingToolRequests)
 	conn.pendingToolRequestsMu.Unlock()
-	if inFlight > 0 && s.deps.StatePublisher != nil {
+	if (inFlight > 0 || conn.daemonToolCallsInFlight.Load() > 0) && s.deps.StatePublisher != nil {
 		s.deps.StatePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType, daemonactivity.ReasonToolCallInFlight)
 	}
 }

@@ -1179,13 +1179,29 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 		return nil, fmt.Errorf("unmarshal daemon command response: %w", err)
 	}
 	if !resp.Success {
-		if resp.ErrorCode == ErrorCodeDaemonInterrupted {
+		switch resp.ErrorCode {
+		case ErrorCodeDaemonInterrupted:
 			return nil, fmt.Errorf("daemon command %q failed: %w", commandType, interruption(resp.ErrorMessage))
+		case ErrorCodeDaemonRoundTrip:
+			// The gateway could not complete the round trip; the daemon
+			// said nothing.
+			return nil, fmt.Errorf("daemon command %q failed: %s", commandType, resp.ErrorMessage)
 		}
-		return nil, fmt.Errorf("daemon command %q failed: %s", commandType, resp.ErrorMessage)
+		return nil, fmt.Errorf("daemon command %q failed: %w", commandType, daemonReportedFailure(resp.ErrorMessage))
 	}
 	return resp.Payload, nil
 }
+
+// errDaemonReportedFailure matches a daemon command the daemon itself answered
+// with a failure, as opposed to one whose round trip failed (the gateway codes
+// those ErrorCodeDaemonRoundTrip or ErrorCodeDaemonInterrupted).
+var errDaemonReportedFailure = errors.New("daemon reported failure")
+
+// daemonReportedFailure is a command's failure in the daemon's own words.
+type daemonReportedFailure string
+
+func (e daemonReportedFailure) Error() string        { return string(e) }
+func (e daemonReportedFailure) Is(target error) bool { return target == errDaemonReportedFailure }
 
 func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error) {
 	return r.sendToolRequestSync(ctx, userID, request, nil, "tools.request.sync", "resolving daemon for sync request")
@@ -1225,14 +1241,9 @@ func (r *NATSDaemonRouter) sendToolRequestSync(ctx context.Context, userID strin
 		if err != nil {
 			return r.startingDaemonID(ctx, userID, selector, err), dispatchUndelivered, fmt.Errorf("%s: %w", resolveOp, err)
 		}
-		resp, err = r.toolRequestRoundTrip(ctx, userID, daemonID, attempt, metric)
-		if err != nil {
-			return daemonID, classifyDispatchErr(err), err
-		}
-		if resp.ErrorCode == ErrorCodeDaemonInterrupted {
-			return daemonID, dispatchInterrupted, nil
-		}
-		return daemonID, dispatchFinal, nil
+		var outcome dispatchOutcome
+		resp, outcome, err = r.toolRequestRoundTrip(ctx, userID, daemonID, attempt, metric)
+		return daemonID, outcome, err
 	})
 	if err != nil {
 		return nil, withWaitNote(err, waited)
@@ -1259,11 +1270,18 @@ func marshalToolRequest(request *ToolExecutionRequest, metric string) ([]byte, e
 	return payload, nil
 }
 
-// toolRequestRoundTrip is one tools.request.sync round trip to daemonID.
-func (r *NATSDaemonRouter) toolRequestRoundTrip(ctx context.Context, userID, daemonID string, request *ToolExecutionRequest, metric string) (*ToolExecutionResponse, error) {
+// toolRequestRoundTrip is one tools.request.sync round trip to daemonID, and
+// how it ended for rideOutDisconnect.
+//
+// The reply subject is the request's result subject (toolResultSubject), not
+// a private inbox: when the daemon's stream drops under the request, the
+// result is still delivered there, by whichever gateway the daemon reaches
+// next, and a reply reporting the drop starts the wait for it
+// (awaitRedelivery) instead of ending the call.
+func (r *NATSDaemonRouter) toolRequestRoundTrip(ctx context.Context, userID, daemonID string, request *ToolExecutionRequest, metric string) (*ToolExecutionResponse, dispatchOutcome, error) {
 	payload, err := marshalToolRequest(request, metric)
 	if err != nil {
-		return nil, err
+		return nil, dispatchFinal, err
 	}
 
 	timeout := 10 * time.Minute
@@ -1275,44 +1293,53 @@ func (r *NATSDaemonRouter) toolRequestRoundTrip(ctx context.Context, userID, dae
 			timeout = remaining
 		}
 	}
-
-	type natsResult struct {
-		msg *nats.Msg
-		err error
+	if timeout <= 0 {
+		return nil, dispatchFinal, fmt.Errorf("tool request via NATS failed: %w", context.DeadlineExceeded)
 	}
-	subject := daemonSubject(toolRequestSyncSubject, userID, daemonID)
-	reqMsg := observability.NATSPublishMsg(ctx, subject, payload)
-	resultCh := make(chan natsResult, 1)
+	deadline := time.Now().Add(timeout)
+
+	inbox, err := openReplyInbox(r.nc, toolResultSubject(userID, daemonID, request.RequestID))
+	if err != nil {
+		observability.NATSErrorsTotal.WithLabelValues(metric, "request").Inc()
+		return nil, dispatchFinal, daemonRequestError("tool request", err)
+	}
+	defer inbox.close()
+
+	reqMsg := observability.NATSPublishMsg(ctx, daemonSubject(toolRequestSyncSubject, userID, daemonID), payload)
+	reqMsg.Reply = inbox.subject
 	start := time.Now()
 	forget := r.inflight.record(userID, daemonID, request.RequestID, request.ToolCallID)
-	go func() {
-		// Chunk-aware request: transparently reassembles oversize replies
-		msg, err := requestWithChunkedReply(r.nc, reqMsg, timeout)
-		resultCh <- natsResult{msg, err}
-	}()
+	if _, err := publishChunkedRequest(r.nc, reqMsg); err != nil {
+		observability.NATSErrorsTotal.WithLabelValues(metric, "request").Inc()
+		err = daemonRequestError("tool request", err)
+		return nil, classifyDispatchErr(err), err
+	}
 
-	var msg *nats.Msg
-	select {
-	case res := <-resultCh:
-		if res.err == nil {
+	msg, err := inbox.next(ctx, deadline)
+	observability.NATSRequestDuration.WithLabelValues(metric).Observe(time.Since(start).Seconds())
+	if err != nil {
+		if ctx.Err() != nil {
+			observability.NATSErrorsTotal.WithLabelValues(metric, "timeout").Inc()
+			return nil, dispatchFinal, fmt.Errorf("tool request via NATS failed: %w", ctx.Err())
+		}
+		observability.NATSErrorsTotal.WithLabelValues(metric, "request").Inc()
+		err = daemonRequestError("tool request", err)
+		return nil, classifyDispatchErr(err), err
+	}
+	resp, err := decodeToolReply(msg)
+	if err != nil {
+		forget()
+		return nil, dispatchFinal, err
+	}
+	if resp.ErrorCode == ErrorCodeDaemonInterrupted {
+		resp, outcome, err := r.awaitRedelivery(ctx, inbox, userID, daemonID, request, resp, deadline)
+		if resp != nil {
 			forget()
 		}
-		observability.NATSRequestDuration.WithLabelValues(metric).Observe(time.Since(start).Seconds())
-		if res.err != nil {
-			observability.NATSErrorsTotal.WithLabelValues(metric, "request").Inc()
-			return nil, daemonRequestError("tool request", res.err)
-		}
-		msg = res.msg
-	case <-ctx.Done():
-		observability.NATSErrorsTotal.WithLabelValues(metric, "timeout").Inc()
-		return nil, fmt.Errorf("tool request via NATS failed: %w", ctx.Err())
+		return resp, outcome, err
 	}
-
-	var resp ToolExecutionResponse
-	if err := json.Unmarshal(msg.Data, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal tool response: %w", err)
-	}
-	return &resp, nil
+	forget()
+	return resp, dispatchFinal, nil
 }
 
 func (r *NATSDaemonRouter) SendToolRequestSyncWithSelector(ctx context.Context, userID string, request *ToolExecutionRequest, selector *DaemonSelector) (*ToolExecutionResponse, error) {
