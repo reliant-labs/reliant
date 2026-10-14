@@ -16,7 +16,7 @@ import (
 // Three production paths insert messages with their own MAX()-based
 // allocation rather than going through SaveMessage:
 //
-//	internal/grpc/services/chat_branch.go   branch-point tool repair
+//	internal/handlers/chat/chat_branch.go   branch-point tool repair
 //	internal/grpc/services/approval.go      tool-denial message
 //	internal/workflow/.../cleanup.go        orphaned tool-call repair
 //

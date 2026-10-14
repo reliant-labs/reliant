@@ -34,6 +34,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
+	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -145,7 +146,7 @@ type Harness struct {
 
 	LLM *ScriptedLLM
 
-	ChatSvc     *services.ChatService
+	ChatSvc     *chat.Service
 	QuestionSvc *question.Service
 	ApprovalSvc *approval.Service
 	// TriggerSvc is the production TriggerService over the story's Temporal:
@@ -276,10 +277,17 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// (worker.Run racing worker.Stop during startup trips the race detector).
 	waitForWorkerPollers(t, s.Temporal, workersetup.TaskQueueName(taskQueueSuffix))
 
-	// nil daemonRouter: these stories run without a daemon, and the router is
-	// only used for the greenfield code-presence probe, which skips itself when
-	// it is nil.
-	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub, nil)
+	// No Router: these stories run without a daemon, so there is no tool to
+	// cancel on interrupt and no machine to wake for an attended turn.
+	chatSvc, err := chat.New(chat.Deps{
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      s.Repo,
+		Temporal:  s.Temporal,
+		Pause:     pause,
+		TaskQueue: workersetup.TaskQueueName(taskQueueSuffix),
+	})
+	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
 		Logger:  slog.Default(),
 		Config:  &typedconfig.Config{},
@@ -612,9 +620,9 @@ func TextOf(m MessageWithBlocks) string {
 // Chat fetches the chat row.
 func (h *Harness) Chat(chatID string) *db.Chat {
 	h.T.Helper()
-	chat, err := h.Stack.Repo.GetChat(h.Ctx, chatID)
+	row, err := h.Stack.Repo.GetChat(h.Ctx, chatID)
 	require.NoError(h.T, err, "get chat")
-	return chat
+	return row
 }
 
 // ---------------------------------------------------------------------------

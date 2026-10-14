@@ -3603,6 +3603,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListChatsRequest",
           "OutputTypeFQ": "reliant.v1.ListChatsResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
@@ -3616,6 +3617,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.GetChatRequest",
           "OutputTypeFQ": "reliant.v1.GetChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
@@ -3629,6 +3631,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.UpdateChatRequest",
           "OutputTypeFQ": "reliant.v1.UpdateChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
@@ -3642,6 +3645,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.DeleteChatRequest",
           "OutputTypeFQ": "reliant.v1.DeleteChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
@@ -3746,6 +3750,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListMessagesRequest",
           "OutputTypeFQ": "reliant.v1.ListMessagesResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
@@ -3928,6 +3933,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListStepExecutionsRequest",
           "OutputTypeFQ": "reliant.v1.ListStepExecutionsResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
@@ -6740,8 +6746,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "WorkflowStopReason"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "ConnectorService",
@@ -13695,6 +13700,32 @@
           "OutputProtoFile": "reliant/v1/trigger.proto"
         },
         {
+          "Name": "EnableWorkflow",
+          "InputType": "EnableWorkflowRequest",
+          "OutputType": "EnableWorkflowResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.EnableWorkflowRequest",
+          "OutputTypeFQ": "reliant.v1.EnableWorkflowResponse",
+          "InputProtoFile": "reliant/v1/trigger.proto",
+          "OutputProtoFile": "reliant/v1/trigger.proto"
+        },
+        {
+          "Name": "DisableWorkflow",
+          "InputType": "DisableWorkflowRequest",
+          "OutputType": "DisableWorkflowResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.DisableWorkflowRequest",
+          "OutputTypeFQ": "reliant.v1.DisableWorkflowResponse",
+          "InputProtoFile": "reliant/v1/trigger.proto",
+          "OutputProtoFile": "reliant/v1/trigger.proto"
+        },
+        {
           "Name": "ResolveTriggerSenders",
           "InputType": "ResolveTriggerSendersRequest",
           "OutputType": "ResolveTriggerSendersResponse",
@@ -13741,6 +13772,108 @@
           }
         ],
         "DeleteTriggerResponse": null,
+        "DisableWorkflowRequest": [
+          {
+            "Name": "workflow",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          }
+        ],
+        "DisableWorkflowResponse": [
+          {
+            "Name": "paused",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.Trigger"
+          },
+          {
+            "Name": "failed",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.TriggerFailure"
+          }
+        ],
+        "EnableWorkflowRequest": [
+          {
+            "Name": "workflow",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "no_machine",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "connection_ids",
+            "ProtoType": "message",
+            "IsOptional": false
+          },
+          {
+            "Name": "params",
+            "ProtoType": "message",
+            "IsOptional": false
+          },
+          {
+            "Name": "presets",
+            "ProtoType": "message",
+            "IsOptional": false
+          },
+          {
+            "Name": "notify_on_complete",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "name_prefix",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "overrides",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.WorkflowTriggerOverride"
+          }
+        ],
+        "EnableWorkflowResponse": [
+          {
+            "Name": "enabled",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "results",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.WorkflowTriggerResult"
+          }
+        ],
         "FireTriggerRequest": [
           {
             "Name": "id",
@@ -13950,6 +14083,103 @@
           }
         ],
         "reliant.v1.DeleteTriggerResponse": [],
+        "reliant.v1.DisableWorkflowRequest": [
+          {
+            "name": "workflow",
+            "kind": "string"
+          },
+          {
+            "name": "project_id",
+            "kind": "string",
+            "optional": true
+          }
+        ],
+        "reliant.v1.DisableWorkflowResponse": [
+          {
+            "name": "paused",
+            "kind": "message",
+            "type_name": "reliant.v1.Trigger",
+            "repeated": true
+          },
+          {
+            "name": "failed",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerFailure",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.EnableWorkflowRequest": [
+          {
+            "name": "workflow",
+            "kind": "string"
+          },
+          {
+            "name": "project_id",
+            "kind": "string"
+          },
+          {
+            "name": "worktree_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          },
+          {
+            "name": "no_machine",
+            "kind": "bool"
+          },
+          {
+            "name": "connection_ids",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          },
+          {
+            "name": "params",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "message",
+            "map_value_type_name": "google.protobuf.Value"
+          },
+          {
+            "name": "presets",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          },
+          {
+            "name": "notify_on_complete",
+            "kind": "bool"
+          },
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "name_prefix",
+            "kind": "string"
+          },
+          {
+            "name": "overrides",
+            "kind": "message",
+            "type_name": "reliant.v1.WorkflowTriggerOverride",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.EnableWorkflowResponse": [
+          {
+            "name": "enabled",
+            "kind": "bool"
+          },
+          {
+            "name": "results",
+            "kind": "message",
+            "type_name": "reliant.v1.WorkflowTriggerResult",
+            "repeated": true
+          }
+        ],
         "reliant.v1.FireTriggerRequest": [
           {
             "name": "id",
@@ -14459,6 +14689,20 @@
             "type_name": "reliant.v1.WorkflowStopReason"
           }
         ],
+        "reliant.v1.TriggerFailure": [
+          {
+            "name": "trigger_id",
+            "kind": "string"
+          },
+          {
+            "name": "name",
+            "kind": "string"
+          },
+          {
+            "name": "message",
+            "kind": "string"
+          }
+        ],
         "reliant.v1.TriggerHealth": [
           {
             "name": "status",
@@ -14560,6 +14804,69 @@
             "kind": "string",
             "repeated": true
           }
+        ],
+        "reliant.v1.WorkflowTriggerOverride": [
+          {
+            "name": "trigger",
+            "kind": "string"
+          },
+          {
+            "name": "name",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "no_machine",
+            "kind": "bool",
+            "optional": true
+          },
+          {
+            "name": "connection_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "message",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "params",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "message",
+            "map_value_type_name": "google.protobuf.Value"
+          }
+        ],
+        "reliant.v1.WorkflowTriggerResult": [
+          {
+            "name": "trigger",
+            "kind": "string"
+          },
+          {
+            "name": "outcome",
+            "kind": "enum",
+            "type_name": "reliant.v1.WorkflowTriggerOutcome"
+          },
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "activation",
+            "kind": "message",
+            "type_name": "reliant.v1.Trigger"
+          },
+          {
+            "name": "webhook",
+            "kind": "message",
+            "type_name": "reliant.v1.WebhookCredential"
+          }
         ]
       },
       "SchemaFiles": {
@@ -14567,6 +14874,10 @@
         "reliant.v1.CreateTriggerResponse": "reliant/v1/trigger.proto",
         "reliant.v1.DeleteTriggerRequest": "reliant/v1/trigger.proto",
         "reliant.v1.DeleteTriggerResponse": "reliant/v1/trigger.proto",
+        "reliant.v1.DisableWorkflowRequest": "reliant/v1/trigger.proto",
+        "reliant.v1.DisableWorkflowResponse": "reliant/v1/trigger.proto",
+        "reliant.v1.EnableWorkflowRequest": "reliant/v1/trigger.proto",
+        "reliant.v1.EnableWorkflowResponse": "reliant/v1/trigger.proto",
         "reliant.v1.FireTriggerRequest": "reliant/v1/trigger.proto",
         "reliant.v1.FireTriggerResponse": "reliant/v1/trigger.proto",
         "reliant.v1.GetLaunchEventRequest": "reliant/v1/trigger.proto",
@@ -14590,6 +14901,7 @@
         "reliant.v1.TriggerDefinition": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerEvent": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
+        "reliant.v1.TriggerFailure": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerSender": "reliant/v1/trigger.proto",
         "reliant.v1.UpdateTriggerRequest": "reliant/v1/trigger.proto",
@@ -14597,7 +14909,9 @@
         "reliant.v1.WebhookCredential": "reliant/v1/trigger.proto",
         "reliant.v1.WebhookHmac": "reliant/v1/trigger.proto",
         "reliant.v1.WebhookSource": "reliant/v1/trigger.proto",
-        "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto"
+        "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
+        "reliant.v1.WorkflowTriggerOverride": "reliant/v1/trigger.proto",
+        "reliant.v1.WorkflowTriggerResult": "reliant/v1/trigger.proto"
       },
       "Enums": {
         "reliant.v1.RunDisplayState": [
@@ -14653,6 +14967,15 @@
           "WORKFLOW_STOP_REASON_FAILED",
           "WORKFLOW_STOP_REASON_PAUSED",
           "WORKFLOW_STOP_REASON_CANCELLED"
+        ],
+        "reliant.v1.WorkflowTriggerOutcome": [
+          "WORKFLOW_TRIGGER_OUTCOME_UNSPECIFIED",
+          "WORKFLOW_TRIGGER_OUTCOME_ENABLED",
+          "WORKFLOW_TRIGGER_OUTCOME_RESUMED",
+          "WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED",
+          "WORKFLOW_TRIGGER_OUTCOME_FAILED",
+          "WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED",
+          "WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED"
         ]
       },
       "EnumNumbers": {
@@ -14709,6 +15032,15 @@
           2,
           3,
           4
+        ],
+        "reliant.v1.WorkflowTriggerOutcome": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
         ]
       },
       "EnumGoRefs": {
@@ -14739,6 +15071,10 @@
         "reliant.v1.WorkflowStopReason": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "WorkflowStopReason"
+        },
+        "reliant.v1.WorkflowTriggerOutcome": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "WorkflowTriggerOutcome"
         }
       },
       "Unmanaged": true
@@ -30532,6 +30868,10 @@
             "name": "log_file",
             "kind": "message",
             "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "credentials",
+            "kind": "string"
           }
         ],
         "reliant.v1.SaveMessageConfig": [
@@ -34026,5 +34366,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "17d5edf15794066c46e3c752ebbc09e30e3b681a00b458547f4cc3098868ec95"
+  "source_hash": "3157ff2cf53185912b7a0aa882b63229a846008a2ac5e9312fb02156bb85ab50"
 }

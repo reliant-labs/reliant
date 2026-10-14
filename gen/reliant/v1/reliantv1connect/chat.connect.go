@@ -138,12 +138,16 @@ type ChatServiceClient interface {
 	// Idempotent; owner-only.
 	UnadoptChat(context.Context, *connect.Request[v1.UnadoptChatRequest]) (*connect.Response[v1.UnadoptChatResponse], error)
 	// ListChats lists all non-archived chats for a project
+	// forge:custom — the caller's non-archived chats in one project, with the user update sequence the stream resumes from
 	ListChats(context.Context, *connect.Request[v1.ListChatsRequest]) (*connect.Response[v1.ListChatsResponse], error)
 	// GetChat retrieves a specific chat by ID
+	// forge:custom — owner-checked, and reports the run's live Temporal state alongside the chat row
 	GetChat(context.Context, *connect.Request[v1.GetChatRequest]) (*connect.Response[v1.GetChatResponse], error)
 	// UpdateChat updates chat metadata (title, temperature, etc.)
+	// forge:custom — a partial update that resolves the worktree and emits title/config change events
 	UpdateChat(context.Context, *connect.Request[v1.UpdateChatRequest]) (*connect.Response[v1.UpdateChatResponse], error)
 	// DeleteChat archives or permanently deletes a chat
+	// forge:custom — archives first (cancelling the run), and only an already-archived chat is permanently deleted
 	DeleteChat(context.Context, *connect.Request[v1.DeleteChatRequest]) (*connect.Response[v1.DeleteChatResponse], error)
 	// SearchChats searches chats by title and message content
 	SearchChats(context.Context, *connect.Request[v1.SearchChatsRequest]) (*connect.Response[v1.SearchChatsResponse], error)
@@ -191,6 +195,7 @@ type ChatServiceClient interface {
 	// Queue the message first (SendAgentMessage), then interrupt.
 	InterruptThread(context.Context, *connect.Request[v1.InterruptThreadRequest]) (*connect.Response[v1.InterruptThreadResponse], error)
 	// ListMessages lists messages for a chat with content blocks
+	// forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
 	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
 	// UpdateChatState changes chat state (idle/archived)
 	UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error)
@@ -222,6 +227,7 @@ type ChatServiceClient interface {
 	// ListStepExecutions returns the full record of a chat's steps — resolved
 	// inputs, output and error per attempt — optionally scoped to one node.
 	// What the builder's Run tab inspects a step from.
+	// forge:custom — a chat's step records per attempt, scoped by node_path and bounded to the newest steps
 	ListStepExecutions(context.Context, *connect.Request[v1.ListStepExecutionsRequest]) (*connect.Response[v1.ListStepExecutionsResponse], error)
 	// GetThreadWorkflowInputs returns the workflow inputs for a specific thread
 	GetThreadWorkflowInputs(context.Context, *connect.Request[v1.GetThreadWorkflowInputsRequest]) (*connect.Response[v1.GetThreadWorkflowInputsResponse], error)
@@ -646,12 +652,16 @@ type ChatServiceHandler interface {
 	// Idempotent; owner-only.
 	UnadoptChat(context.Context, *connect.Request[v1.UnadoptChatRequest]) (*connect.Response[v1.UnadoptChatResponse], error)
 	// ListChats lists all non-archived chats for a project
+	// forge:custom — the caller's non-archived chats in one project, with the user update sequence the stream resumes from
 	ListChats(context.Context, *connect.Request[v1.ListChatsRequest]) (*connect.Response[v1.ListChatsResponse], error)
 	// GetChat retrieves a specific chat by ID
+	// forge:custom — owner-checked, and reports the run's live Temporal state alongside the chat row
 	GetChat(context.Context, *connect.Request[v1.GetChatRequest]) (*connect.Response[v1.GetChatResponse], error)
 	// UpdateChat updates chat metadata (title, temperature, etc.)
+	// forge:custom — a partial update that resolves the worktree and emits title/config change events
 	UpdateChat(context.Context, *connect.Request[v1.UpdateChatRequest]) (*connect.Response[v1.UpdateChatResponse], error)
 	// DeleteChat archives or permanently deletes a chat
+	// forge:custom — archives first (cancelling the run), and only an already-archived chat is permanently deleted
 	DeleteChat(context.Context, *connect.Request[v1.DeleteChatRequest]) (*connect.Response[v1.DeleteChatResponse], error)
 	// SearchChats searches chats by title and message content
 	SearchChats(context.Context, *connect.Request[v1.SearchChatsRequest]) (*connect.Response[v1.SearchChatsResponse], error)
@@ -699,6 +709,7 @@ type ChatServiceHandler interface {
 	// Queue the message first (SendAgentMessage), then interrupt.
 	InterruptThread(context.Context, *connect.Request[v1.InterruptThreadRequest]) (*connect.Response[v1.InterruptThreadResponse], error)
 	// ListMessages lists messages for a chat with content blocks
+	// forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
 	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
 	// UpdateChatState changes chat state (idle/archived)
 	UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error)
@@ -730,6 +741,7 @@ type ChatServiceHandler interface {
 	// ListStepExecutions returns the full record of a chat's steps — resolved
 	// inputs, output and error per attempt — optionally scoped to one node.
 	// What the builder's Run tab inspects a step from.
+	// forge:custom — a chat's step records per attempt, scoped by node_path and bounded to the newest steps
 	ListStepExecutions(context.Context, *connect.Request[v1.ListStepExecutionsRequest]) (*connect.Response[v1.ListStepExecutionsResponse], error)
 	// GetThreadWorkflowInputs returns the workflow inputs for a specific thread
 	GetThreadWorkflowInputs(context.Context, *connect.Request[v1.GetThreadWorkflowInputsRequest]) (*connect.Response[v1.GetThreadWorkflowInputsResponse], error)

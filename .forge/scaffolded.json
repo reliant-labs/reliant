@@ -48,6 +48,99 @@
     "internal/handlers/attachment/handlers_scaffold_upload_attachment_test.go": {
       "scaffolded_at": "2026-10-13T17:39:52Z"
     },
+    "internal/handlers/chat/handlers_scaffold_adopt_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_branch_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_cancel_queued_agent_message_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_compact_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_delete_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_dismiss_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_get_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_get_chat_updates_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_get_thread_workflow_inputs_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_get_workflow_executions_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_interrupt_thread_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_list_archived_chats_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_list_branches_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_list_chat_plans_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_list_chats_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_list_messages_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_list_queued_agent_messages_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_list_step_executions_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_mark_unread_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_pause_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_resume_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_search_chats_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_send_agent_message_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_send_message_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_set_chat_daemon_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_start_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_terminate_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_unadopt_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_update_chat_state_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_update_chat_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_update_workflow_params_test.go": {
+      "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
     "internal/handlers/connection/handlers_scaffold_complete_o_auth_test.go": {
       "scaffolded_at": "2026-10-14T06:03:02Z"
     },
@@ -493,6 +586,24 @@
     ".github/workflows/deploy.yml",
     ".github/workflows/e2e.yml",
     ".github/workflows/proto-breaking.yml",
+    "internal/handlers/chat/handlers_scaffold_adopt_chat_test.go",
+    "internal/handlers/chat/handlers_scaffold_branch_chat_test.go",
+    "internal/handlers/chat/handlers_scaffold_cancel_queued_agent_message_test.go",
+    "internal/handlers/chat/handlers_scaffold_get_chat_test.go",
+    "internal/handlers/chat/handlers_scaffold_get_workflow_executions_test.go",
+    "internal/handlers/chat/handlers_scaffold_interrupt_thread_test.go",
+    "internal/handlers/chat/handlers_scaffold_list_chats_test.go",
+    "internal/handlers/chat/handlers_scaffold_list_messages_test.go",
+    "internal/handlers/chat/handlers_scaffold_list_queued_agent_messages_test.go",
+    "internal/handlers/chat/handlers_scaffold_list_step_executions_test.go",
+    "internal/handlers/chat/handlers_scaffold_pause_chat_test.go",
+    "internal/handlers/chat/handlers_scaffold_send_agent_message_test.go",
+    "internal/handlers/chat/handlers_scaffold_send_message_test.go",
+    "internal/handlers/chat/handlers_scaffold_set_chat_daemon_test.go",
+    "internal/handlers/chat/handlers_scaffold_start_chat_test.go",
+    "internal/handlers/chat/handlers_scaffold_terminate_chat_test.go",
+    "internal/handlers/chat/handlers_scaffold_unadopt_chat_test.go",
+    "internal/handlers/chat/handlers_scaffold_update_workflow_params_test.go",
     "internal/handlers/connector/handlers_scaffold_create_connector_test.go",
     "internal/handlers/connector/handlers_scaffold_list_available_tools_test.go",
     "internal/handlers/connector/handlers_scaffold_list_connectors_test.go",

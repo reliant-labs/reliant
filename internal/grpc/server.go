@@ -40,6 +40,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
 	"github.com/reliant-labs/reliant/internal/handlers/attachment"
 	"github.com/reliant-labs/reliant/internal/handlers/background"
+	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/connection"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon"
@@ -70,6 +71,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/mcpserver"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
+	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -93,7 +95,7 @@ type Server struct {
 
 	// chatService is exposed so serverapi.Run can hand undelivered messages
 	// to it (queued delivery, the reconciler's wedge continuation).
-	chatService *services.ChatService
+	chatService *chat.Service
 
 	router toolexec.DaemonRouter
 
@@ -299,7 +301,25 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("question service: %w", err)
 	}
-	chatService := services.NewChatService(database, cfg.TemporalClient, cfg.PauseService, cfg.SharedTaskQueue, cfg.StreamingHub, router)
+	// A nil *PauseService stored in the interface field would not be nil and
+	// would pass chat's validateDeps; convert it explicitly so a server without
+	// one fails here rather than on the first pause.
+	var chatPause runs.PauseController
+	if cfg.PauseService != nil {
+		chatPause = cfg.PauseService
+	}
+	chatService, err := chat.New(chat.Deps{
+		Logger:    handlerLogger,
+		Config:    handlerConfig,
+		Repo:      database,
+		Temporal:  cfg.TemporalClient,
+		Pause:     chatPause,
+		TaskQueue: cfg.SharedTaskQueue,
+		Router:    router,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("chat service: %w", err)
+	}
 	messageService, err := message.New(message.Deps{
 		Logger: handlerLogger,
 		Config: handlerConfig,
@@ -904,7 +924,7 @@ func (s *Server) ProjectService() *services.ProjectService {
 
 // ChatService returns the chat service, for out-of-band callers that start
 // runs on a chat's behalf (serverapi.Run's queued delivery).
-func (s *Server) ChatService() *services.ChatService {
+func (s *Server) ChatService() *chat.Service {
 	return s.chatService
 }
 

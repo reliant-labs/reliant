@@ -10,6 +10,8 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
@@ -92,7 +94,9 @@ nodes:
 	}))
 
 	workflowService := &WorkflowService{database: repo}
-	chatService := &ChatService{database: repo}
+	// StartChat resolves a chat's workflow through the launcher: this is the
+	// one the chat service builds over the same store.
+	launcher := launch.NewLauncher(repo, threads.NewService(repo), nil, nil, "")
 
 	t.Run("default listing is create-chat safe", func(t *testing.T) {
 		resp, err := workflowService.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
@@ -116,7 +120,7 @@ nodes:
 		require.False(t, listedWorkflow.IsHidden)
 		require.NotNil(t, listedWorkflow.DraftId)
 
-		err = chatService.launcher().ValidateCreateChatWorkflowTree(ctx, "test-user", listedWorkflow.Filename, projectID)
+		err = launcher.ValidateCreateChatWorkflowTree(ctx, "test-user", listedWorkflow.Filename, projectID)
 		require.NoError(t, err, "workflow returned by default ListWorkflows must pass StartChat workflow resolution")
 	})
 
@@ -193,7 +197,9 @@ nodes:
 	}
 
 	workflowService := &WorkflowService{database: repo}
-	chatService := &ChatService{database: repo}
+	// StartChat resolves a chat's workflow through the launcher: this is the
+	// one the chat service builds over the same store.
+	launcher := launch.NewLauncher(repo, threads.NewService(repo), nil, nil, "")
 
 	resp, err := workflowService.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID}))
 	require.NoError(t, err)
@@ -209,8 +215,8 @@ nodes:
 	require.Equal(t, "nightly", bySlug["nightly-digest"].Triggers[0].GetName())
 	require.Equal(t, "Summarise yesterday.", bySlug["nightly-digest"].Triggers[0].GetPrompt())
 
-	err = chatService.launcher().ValidateCreateChatWorkflowTree(ctx, "test-user", "nightly-digest", projectID)
+	err = launcher.ValidateCreateChatWorkflowTree(ctx, "test-user", "nightly-digest", projectID)
 	require.Error(t, err, "a chat start of an automation-only workflow must be refused")
 	require.Contains(t, err.Error(), "cannot be started from a chat")
-	require.NoError(t, chatService.launcher().ValidateCreateChatWorkflowTree(ctx, "test-user", "chatty-digest", projectID))
+	require.NoError(t, launcher.ValidateCreateChatWorkflowTree(ctx, "test-user", "chatty-digest", projectID))
 }

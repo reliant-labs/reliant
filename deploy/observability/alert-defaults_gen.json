@@ -20,6 +20,10 @@
         "rpc_service": "reliant.v1.BackgroundService"
       },
       {
+        "name": "chat",
+        "rpc_service": "reliant.v1.ChatService"
+      },
+      {
         "name": "connection",
         "rpc_service": "reliant.v1.ConnectionService"
       },

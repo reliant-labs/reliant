@@ -12,12 +12,14 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/client"
 	"golang.org/x/net/http2"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
+	"github.com/reliant-labs/reliant/internal/workflow"
 )
 
 // The defect these pin: every prod rollout logged "Error stopping gRPC
@@ -56,7 +58,18 @@ func startDrainTestServer(t *testing.T) (*Server, string) {
 	t.Setenv("AUTH_API_KEY", drainTestAPIKey)
 	t.Setenv("RELIANT_AUTHORIZATION_SERVER", "")
 
-	srv, err := NewServer(&Config{Database: drainTestRepo{}, TokenAuthority: drainTestAuthority{}})
+	// The chat service requires Temporal, which nothing here reaches: a lazy
+	// client never dials.
+	temporal, err := client.NewLazyClient(client.Options{HostPort: "127.0.0.1:1"})
+	require.NoError(t, err)
+	t.Cleanup(temporal.Close)
+
+	srv, err := NewServer(&Config{
+		Database:       drainTestRepo{},
+		TokenAuthority: drainTestAuthority{},
+		TemporalClient: temporal,
+		PauseService:   workflow.NewPauseService(temporal, drainTestRepo{}),
+	})
 	require.NoError(t, err)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

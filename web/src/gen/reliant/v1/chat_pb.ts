@@ -3486,6 +3486,7 @@ export const ChatService: GenService<{
   },
   /**
    * ListChats lists all non-archived chats for a project
+   * forge:custom — the caller's non-archived chats in one project, with the user update sequence the stream resumes from
    *
    * @generated from rpc reliant.v1.ChatService.ListChats
    */
@@ -3496,6 +3497,7 @@ export const ChatService: GenService<{
   },
   /**
    * GetChat retrieves a specific chat by ID
+   * forge:custom — owner-checked, and reports the run's live Temporal state alongside the chat row
    *
    * @generated from rpc reliant.v1.ChatService.GetChat
    */
@@ -3506,6 +3508,7 @@ export const ChatService: GenService<{
   },
   /**
    * UpdateChat updates chat metadata (title, temperature, etc.)
+   * forge:custom — a partial update that resolves the worktree and emits title/config change events
    *
    * @generated from rpc reliant.v1.ChatService.UpdateChat
    */
@@ -3516,6 +3519,7 @@ export const ChatService: GenService<{
   },
   /**
    * DeleteChat archives or permanently deletes a chat
+   * forge:custom — archives first (cancelling the run), and only an already-archived chat is permanently deleted
    *
    * @generated from rpc reliant.v1.ChatService.DeleteChat
    */
@@ -3627,6 +3631,7 @@ export const ChatService: GenService<{
   },
   /**
    * ListMessages lists messages for a chat with content blocks
+   * forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
    *
    * @generated from rpc reliant.v1.ChatService.ListMessages
    */
@@ -3770,6 +3775,7 @@ export const ChatService: GenService<{
    * ListStepExecutions returns the full record of a chat's steps — resolved
    * inputs, output and error per attempt — optionally scoped to one node.
    * What the builder's Run tab inspects a step from.
+   * forge:custom — a chat's step records per attempt, scoped by node_path and bounded to the newest steps
    *
    * @generated from rpc reliant.v1.ChatService.ListStepExecutions
    */

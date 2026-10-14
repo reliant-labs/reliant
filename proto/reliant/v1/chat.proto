@@ -122,9 +122,6 @@ enum ChatActivity {
   CHAT_ACTIVITY_QUEUED_FOR_MACHINE = 6;
 }
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // ChatService handles chat-related operations
 service ChatService {
   // ============================================
@@ -154,15 +151,19 @@ service ChatService {
   rpc UnadoptChat(UnadoptChatRequest) returns (UnadoptChatResponse) {}
 
   // ListChats lists all non-archived chats for a project
+  // forge:custom — the caller's non-archived chats in one project, with the user update sequence the stream resumes from
   rpc ListChats(ListChatsRequest) returns (ListChatsResponse) {}
   
   // GetChat retrieves a specific chat by ID
+  // forge:custom — owner-checked, and reports the run's live Temporal state alongside the chat row
   rpc GetChat(GetChatRequest) returns (GetChatResponse) {}
   
   // UpdateChat updates chat metadata (title, temperature, etc.)
+  // forge:custom — a partial update that resolves the worktree and emits title/config change events
   rpc UpdateChat(UpdateChatRequest) returns (UpdateChatResponse) {}
   
   // DeleteChat archives or permanently deletes a chat
+  // forge:custom — archives first (cancelling the run), and only an already-archived chat is permanently deleted
   rpc DeleteChat(DeleteChatRequest) returns (DeleteChatResponse) {}
   
   // SearchChats searches chats by title and message content
@@ -218,6 +219,7 @@ service ChatService {
   rpc InterruptThread(InterruptThreadRequest) returns (InterruptThreadResponse) {}
   
   // ListMessages lists messages for a chat with content blocks
+  // forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
   rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse) {}
   
   // UpdateChatState changes chat state (idle/archived)
@@ -269,6 +271,7 @@ service ChatService {
   // ListStepExecutions returns the full record of a chat's steps — resolved
   // inputs, output and error per attempt — optionally scoped to one node.
   // What the builder's Run tab inspects a step from.
+  // forge:custom — a chat's step records per attempt, scoped by node_path and bounded to the newest steps
   rpc ListStepExecutions(ListStepExecutionsRequest) returns (ListStepExecutionsResponse) {}
   
   // GetThreadWorkflowInputs returns the workflow inputs for a specific thread

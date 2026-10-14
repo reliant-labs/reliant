@@ -243,7 +243,7 @@ func (e *rootDrainEnv) trace() []rootDrainEvent {
 }
 
 func rootDrainWorkflowInput(chatID, thread string) WorkflowInput {
-	// Mirrors internal/grpc/services/chat_send.go:1040 — the execution
+	// Mirrors internal/handlers/chat/chat_send.go — the execution
 	// context a plain SendMessage builds for a fresh chat run. Thread is the
 	// chat's root thread (targetThread == workflowID there).
 	return WorkflowInput{

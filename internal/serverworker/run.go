@@ -28,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -314,16 +315,28 @@ func Run(ctx context.Context, opts Options) error {
 
 	// The run-management tools (start_run, control_run, send_to_run) act as the
 	// calling chat's owner through the same launcher and run service the
-	// api-server uses. They are built here, after the daemon router and
-	// streaming hub they depend on, rather than with the other tool options.
+	// api-server uses. They are built here, after the daemon router they
+	// depend on, rather than with the other tool options.
 	pauseService := v2workflow.NewPauseService(temporalClient, repo)
 	runLifecycle := runs.NewService(repo, temporalClient, pauseService)
 	runLauncher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient, runLifecycle, v2workflow.SharedTaskQueue)
+	chatService, err := chat.New(chat.Deps{
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      repo,
+		Temporal:  temporalClient,
+		Pause:     pauseService,
+		TaskQueue: v2workflow.SharedTaskQueue,
+		Router:    router,
+	})
+	if err != nil {
+		return fmt.Errorf("chat service: %w", err)
+	}
 	runService, err := run.New(run.Deps{
 		Logger: slog.Default(),
 		Config: &typedconfig.Config{},
 		Repo:   repo,
-		Chats:  services.NewChatService(repo, temporalClient, pauseService, v2workflow.SharedTaskQueue, streamingHub, router),
+		Chats:  chatService,
 	})
 	if err != nil {
 		return fmt.Errorf("run service: %w", err)
