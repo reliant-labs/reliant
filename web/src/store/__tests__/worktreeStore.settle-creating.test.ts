@@ -25,7 +25,7 @@ vi.mock("../../api/worktree-grpc", () => ({
 }));
 
 vi.mock("../../lib/toast-manager", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn() },
 }));
 
 import { useWorktreeStore } from "../worktreeStore";
@@ -188,5 +188,47 @@ describe("worktreeStore: a CREATING worktree settles in place", () => {
     await flushRefetch();
 
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  // The create settles 30-120s later and can fail, so "created successfully"
+  // at accept time was followed by a failure toast. One toast per create,
+  // replaced in place under a shared id.
+  it("shows a pending toast when the create is accepted, not success", () => {
+    expect(toast.loading).toHaveBeenCalledTimes(1);
+    const [message, options] = vi.mocked(toast.loading).mock.calls[0];
+    expect(message).toBe(`Creating workspace "triggers"…`);
+    expect(options?.id).toBeTruthy();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("shows success, replacing the pending toast, once the worktree is ACTIVE", async () => {
+    listMock.mockResolvedValue({ worktrees: [mainRow, settledRow] });
+
+    triggerRefetch("worktree_changes", "wt-new");
+    await flushRefetch();
+
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    const [message, options] = vi.mocked(toast.success).mock.calls[0];
+    expect(message).toBe(`Workspace "triggers" created successfully`);
+    expect(options?.id).toBe(vi.mocked(toast.loading).mock.calls[0][1]?.id);
+
+    // A later refetch for the same row is not a second success.
+    triggerRefetch("worktree_changes", "wt-new");
+    await flushRefetch();
+    expect(toast.success).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows only the failure toast, replacing the pending one, when it FAILS", async () => {
+    listMock.mockResolvedValue({
+      worktrees: [mainRow, { ...creatingRow, status: WorktreeStatus.FAILED, failure_reason: "bad base" }],
+    });
+
+    triggerRefetch("worktree_changes", "wt-new");
+    await flushRefetch();
+
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    const options = vi.mocked(toast.error).mock.calls[0][1];
+    expect(options?.id).toBe(vi.mocked(toast.loading).mock.calls[0][1]?.id);
   });
 });

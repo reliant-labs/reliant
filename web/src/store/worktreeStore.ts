@@ -196,11 +196,32 @@ function handleWorktreeRefetch(event: RefetchEvent): void {
   void useWorktreeStore.getState().refreshWorktrees(pending.project_id).then(() => {
     const settled = useWorktreeStore.getState().worktrees.find((w) => w.id === pending.id);
     if (settled?.status === WorktreeStatus.FAILED) announceCreateFailed(settled);
+    else if (settled?.status === WorktreeStatus.ACTIVE) announceCreated(settled);
   });
 }
 
+// One toast per create: pending, then success or failure, replacing each other
+// in place under this id.
+const createToastId = (worktreeId: string) => `worktree-create:${worktreeId}`;
+
 // Ids already announced: two refetches can land while a row is still CREATING.
 const announcedCreateFailures = new Set<string>();
+const announcedCreates = new Set<string>();
+
+function announceCreatePending(worktree: Worktree): void {
+  void toast.loading(`Creating workspace "${worktree.name}"…`, {
+    id: createToastId(worktree.id),
+  });
+}
+
+function announceCreated(worktree: Worktree): void {
+  if (announcedCreates.has(worktree.id)) return;
+  announcedCreates.add(worktree.id);
+  toast.success(`Workspace "${worktree.name}" created successfully`, {
+    id: createToastId(worktree.id),
+    duration: 4000,
+  });
+}
 
 /**
  * Say why a create failed. It settles in the background, so without this the
@@ -216,7 +237,7 @@ function announceCreateFailed(worktree: Worktree): void {
     worktree.failure_reason
       ? `Couldn't create workspace "${worktree.name}": ${worktree.failure_reason}`
       : `Couldn't create workspace "${worktree.name}": creating it did not finish. Archive it and try again.`,
-    { duration: 10000 },
+    { id: createToastId(worktree.id), duration: 10000 },
   );
 }
 
@@ -452,9 +473,14 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
         isLoading: false
       }));
 
-      toast.success(`Workspace "${storeWorktree.name}" created successfully`, {
-        duration: 4000,
-      });
+      // The create settles in the background: say so now, and let the settle
+      // (ACTIVE or FAILED) replace this toast. A create that comes back
+      // already ACTIVE has nothing left to wait for.
+      if (storeWorktree.status === WorktreeStatus.CREATING) {
+        announceCreatePending(storeWorktree);
+      } else if (storeWorktree.status === WorktreeStatus.ACTIVE) {
+        announceCreated(storeWorktree);
+      }
 
       return storeWorktree;
     } catch (error) {
@@ -876,6 +902,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
     // Any in-flight load predates this reset, so let it be dropped on arrival.
     lastAppliedTicket = loadTicket;
     announcedCreateFailures.clear();
+    announcedCreates.clear();
     set({
       worktrees: [],
       currentWorktree: null,

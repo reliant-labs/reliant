@@ -3,6 +3,8 @@ import { parseAPIError } from './error-utils';
 import { HTTPError } from './http-error';
 
 export interface ToastOptions {
+  /** Toasts sharing an id replace each other in place (loading -> success/error). */
+  id?: string | number;
   duration?: number;
   dismissible?: boolean;
   position?:
@@ -34,6 +36,7 @@ class ToastManager {
 
   success(message: string, options?: ToastOptions) {
     sonnerToast.success(message, {
+      id: options?.id,
       duration: options?.duration || defaultOptions.duration,
       dismissible: true,
     });
@@ -44,6 +47,7 @@ class ToastManager {
     const description = this.getErrorDescription(error);
 
     sonnerToast.error(message, {
+      id: options?.id,
       duration: options?.duration || 6000,
       dismissible: true,
       description,
@@ -72,8 +76,9 @@ class ToastManager {
     });
   }
 
-  loading(message: string, _options?: ToastOptions) {
+  loading(message: string, options?: ToastOptions) {
     return sonnerToast.loading(message, {
+      id: options?.id,
       dismissible: true,
     });
   }

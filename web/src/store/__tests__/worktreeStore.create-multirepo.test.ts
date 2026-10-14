@@ -18,6 +18,7 @@ vi.mock("../../lib/toast-manager", () => ({
   toast: {
     success: toastSuccessMock,
     error: toastErrorMock,
+    loading: vi.fn(),
   },
 }));
 
