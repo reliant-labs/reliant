@@ -317,6 +317,9 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 	case model.NodeTypeAction:
 		validateActionNode(node, nodePath, result)
 
+	case model.NodeTypeCompute:
+		validateComputeNode(node, nodePath, result)
+
 	case model.NodeTypeRun:
 		args := node.GetRun()
 		if args == nil {

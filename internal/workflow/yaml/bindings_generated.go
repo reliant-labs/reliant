@@ -96,6 +96,13 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"model": {},
 		},
 	},
+	"compute": {
+		oneofFieldName: "compute",
+		isStructural:   true,
+		argFieldKeys: map[string]struct{}{
+			"outputs": {},
+		},
+	},
 	"create_worktree": {
 		oneofFieldName: "create_worktree",
 		isStructural:   false,

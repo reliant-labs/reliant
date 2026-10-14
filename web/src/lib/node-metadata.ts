@@ -13,7 +13,7 @@ import {
   Copy, Move, Archive, Unlink, Link, Eye, EyeOff, Bell, BellOff, Terminal,
   Code, Package, Cpu, Server, Cloud, Globe, Wifi, WifiOff, Power, PowerOff,
   AlertTriangle, AlertCircle, Info, HelpCircle, CheckCircle, XCircle,
-  Bot, Wrench, Hammer, Minimize2, GitMerge, Sparkles,
+  Bot, Wrench, Hammer, Minimize2, GitMerge, Sparkles, Calculator,
   FolderMinus,
   type LucideIcon,
 } from 'lucide-react'
@@ -33,6 +33,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   // Its own mark: it shared Call LLM's robot (the agentic category fallback),
   // which read as "a model runs here" when none does.
   'invoke_tool': Hammer,
+  'compute': Calculator,
   'compact': Minimize2,
   'approval': CheckCircle,
   'save_message': Save,
@@ -149,6 +150,7 @@ const NODE_COLOR_MAP: Record<string, NodeColorSet> = {
   'call_llm':         { bg: 'bg-emerald-500', text: 'text-emerald-600', border: 'border-emerald-500' },
   'execute_tools':    { bg: 'bg-orange-500',   text: 'text-orange-600',  border: 'border-orange-500' },
   'invoke_tool':      { bg: 'bg-fuchsia-500',  text: 'text-fuchsia-600', border: 'border-fuchsia-500' },
+  'compute':          { bg: 'bg-sky-500',      text: 'text-sky-600',     border: 'border-sky-500' },
   'compact':          { bg: 'bg-pink-500',     text: 'text-pink-600',    border: 'border-pink-500' },
   'approval':         { bg: 'bg-amber-500',    text: 'text-amber-600',   border: 'border-amber-500' },
   'save_message':     { bg: 'bg-blue-500',     text: 'text-blue-600',    border: 'border-blue-500' },
@@ -181,6 +183,7 @@ const NODE_THEME_MAP: Record<string, NodeTheme> = {
   'call_llm': 'emerald',
   'execute_tools': 'orange',
   'invoke_tool': 'fuchsia',
+  'compute': 'sky',
   'compact': 'pink',
   'approval': 'amber',
   'save_message': 'blue',

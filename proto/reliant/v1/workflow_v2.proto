@@ -291,6 +291,7 @@ message Node {
     RouterArgs router = 24;
     InvokeToolArgs invoke_tool = 25;
     ActionArgs action = 26;
+    ComputeArgs compute = 27;
   }
 }
 
@@ -724,6 +725,44 @@ message ActionArgs {
   // Field 4 is reserved for placement narrowing.
   reserved 4;
 }
+
+// ComputeArgs configures a compute node: named outputs computed from CEL, in the
+// workflow itself. No model, no shell, no worker round trip.
+//
+// Each output is an expression over inputs, trigger, nodes and iter, evaluated
+// when the node runs. A value that is exactly one {{ expr }} keeps the
+// expression's type (bool, number, list, map); text around it makes a string.
+// A value that is not a string (a number, a list) is a literal.
+//
+// Outputs are independent: one cannot read another from the same node. Chain two
+// compute nodes when a value feeds the next.
+//
+// Output fields accessible via nodes.<id>.*:
+//   one per declared output name
+message ComputeArgs {
+  option (node_meta) = {
+    node_type: "compute"
+    display_name: "Compute"
+    description: "Compute named values from CEL expressions: no model, no shell"
+    is_structural: true
+    category: "utility"
+    icon: "Calculator"
+  };
+
+  // Outputs maps each output name to its value or {{ }} expression.
+  map<string, google.protobuf.Value> outputs = 1 [(reliant) = {
+    description: "Named values, each a {{ }} expression (or a literal). Read them as nodes.<id>.<name>"
+    example: "{\"size\": \"{{ inputs.adds + inputs.dels < 60 ? 'S' : 'M' }}\"}"
+    type_hint: "JSON object"
+    label: "Outputs"
+    visibility_contexts: "basic"
+    required: true
+  }];
+}
+
+// ComputeOutput describes a compute node's output. Its fields are the names the
+// node declares, so none are listed here.
+message ComputeOutput {}
 
 // CompactArgs configures a compact node — compacts conversation context to reduce token usage.
 //

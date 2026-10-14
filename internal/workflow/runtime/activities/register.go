@@ -126,6 +126,7 @@ func registerNodeTypeActivities() {
 		model.NodeTypeLoop:     true,
 		model.NodeTypeJoin:     true,
 		model.NodeTypeRouter:   true,
+		model.NodeTypeCompute:  true,
 	}
 
 	for nodeType, meta := range metas {

@@ -18,6 +18,7 @@ func init() {
 	FieldDescriptions["call_llm.thinking_level"] = "Extended thinking level for complex reasoning"
 	FieldDescriptions["compact.force"] = "Compact even when it would remove little of the context (a compaction the user asked for)"
 	FieldDescriptions["compact.model"] = "Model used to summarize the conversation (defaults to the built-in summarization tier)"
+	FieldDescriptions["compute.outputs"] = "Named values, each a {{ }} expression (or a literal). Read them as nodes.<id>.<name>"
 	FieldDescriptions["create_worktree.base_branch"] = "The branch to start from. Empty uses the repository's default branch"
 	FieldDescriptions["create_worktree.copy_files"] = "Exact paths from the project root to copy into the new worktree, such as untracked config"
 	FieldDescriptions["create_worktree.force"] = "Force creation by deleting existing worktree"

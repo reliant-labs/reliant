@@ -19,6 +19,7 @@ const (
 	NodeTypeRouter         = "router"
 	NodeTypeInvokeTool     = "invoke_tool"
 	NodeTypeAction         = "action"
+	NodeTypeCompute        = "compute"
 )
 
 // Node outcome constants — the VERDICT a node stamps on the run when it

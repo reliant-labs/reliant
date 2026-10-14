@@ -356,6 +356,11 @@ func (s *workflowScope) validateNodeFields(node *reliantv1.Node, basePath []stri
 			validateWorkflowScope(child, result)
 		}
 
+	case node.GetCompute() != nil:
+		for _, name := range sortedValueKeys(node.GetCompute().GetOutputs()) {
+			s.validateValueTemplates(node.GetCompute().GetOutputs()[name], at("outputs", name), scope, result)
+		}
+
 	case node.GetSaveMessageNode() != nil:
 		args := node.GetSaveMessageNode()
 		for _, f := range []struct {

@@ -2,7 +2,9 @@ package wfcel
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/cel-go/common/types/ref"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -153,6 +155,12 @@ func ConvertToNative(v interface{}) interface{} {
 	case structpb.NullValue:
 		// CEL null → Go nil (see doc comment above).
 		return nil
+	case time.Time:
+		// A timestamp has no JSON/structpb form; its string form is what
+		// string(ts) gives, so an output can be a timestamp without a wrapper.
+		return val.UTC().Format(time.RFC3339Nano)
+	case time.Duration:
+		return strconv.FormatFloat(val.Seconds(), 'f', -1, 64) + "s"
 	case ref.Val:
 		return ConvertToNative(val.Value())
 	case []ref.Val:

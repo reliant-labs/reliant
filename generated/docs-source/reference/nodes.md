@@ -206,6 +206,18 @@ Compact conversation context to reduce token usage
 
 ---
 
+## Compute
+
+Compute named values from CEL expressions: no model, no shell
+
+### Inputs
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `outputs` | map | No | - | Named values, each a {{ }} expression (or a literal). Read them as nodes.<id>.<name> |
+
+---
+
 ## Create Worktree
 
 Create a git worktree for isolated development

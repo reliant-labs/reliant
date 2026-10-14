@@ -406,6 +406,9 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	case model.NodeTypeAskQuestion:
 		future, activityName = e.startAskQuestion(node, evalResult)
 
+	case model.NodeTypeCompute:
+		future, activityName = e.startCompute(node, evalResult)
+
 	default:
 		// All other types are activities (e.g., call_llm, save_message, execute_tools)
 		if isActivityType(stepType) {
@@ -870,6 +873,28 @@ func (e *StepExecutor) startAskQuestion(node *reliantv1.Node, evalResult *relian
 
 	return resultFuture, "AskQuestion"
 }
+
+// startCompute completes a compute node on the spot. Its outputs are the node's
+// config, and EvaluateNodeConfig has already resolved every {{ }} in them in
+// this scope, so there is nothing left to run: no activity, no worker, no
+// history beyond the workflow's own. An expression that fails never gets here;
+// it fails the step in EvaluateNodeConfig like any other node's config.
+func (e *StepExecutor) startCompute(node *reliantv1.Node, evalResult *reliantv1.Node) (workflow.Future, string) {
+	future, settable := workflow.NewFuture(e.ctx)
+	outputs := make(map[string]interface{})
+	for name, value := range evalResult.GetCompute().GetOutputs() {
+		outputs[name] = value.AsInterface()
+	}
+	// A structural node runs no activity, so nothing at the activity layer sees
+	// its completion; report it the way loops and sub-workflows do.
+	recordStructuralCompleted(e.ctx, joinNodePath(e.nodePathPrefix, node.GetId()), outputs)
+	settable.SetValue(outputs)
+	return future, computeActivityName
+}
+
+// computeActivityName labels a compute step in logs and output normalization.
+// It is not a registered activity: nothing is dispatched under it.
+const computeActivityName = "Compute"
 
 // startRun starts a run (shell command) activity.
 func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node) (workflow.Future, string, bool) {

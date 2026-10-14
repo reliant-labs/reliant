@@ -422,6 +422,14 @@ func getProtoNodeOutputFields(node *reliantv1.Node, loader WorkflowLoader) []str
 			}
 		}
 		return fields
+	case model.NodeTypeCompute:
+		// The node's outputs ARE its declared names.
+		var fields []string
+		for key := range node.GetCompute().GetOutputs() {
+			fields = append(fields, key)
+		}
+		sort.Strings(fields)
+		return fields
 	case model.NodeTypeRouter:
 		// Router has fixed top-level fields; child outputs are nested under `outputs`.
 		regFields := registryOutputFieldNames(sharedRegistry, model.NodeTypeRouter)
@@ -857,6 +865,19 @@ func getProtoNodeOutputFieldInfos(node *reliantv1.Node, loader WorkflowLoader) m
 					IsDynamic: true,
 				}
 			}
+		}
+		return result
+	}
+
+	// Compute nodes: one dynamic field per declared output name.
+	if nodeType == model.NodeTypeCompute {
+		outputs := node.GetCompute().GetOutputs()
+		if len(outputs) == 0 {
+			return nil
+		}
+		result := make(map[string]*FieldInfo, len(outputs))
+		for name := range outputs {
+			result[name] = &FieldInfo{Name: name, Kind: reflect.Interface, IsDynamic: true}
 		}
 		return result
 	}
