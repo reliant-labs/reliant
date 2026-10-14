@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers/lineage"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -481,7 +482,7 @@ func TestDispatch_LaunchCarriesTheActivationsActingIdentity(t *testing.T) {
 	require.NoError(t, f.repo.UpdateTrigger(ctx, tr))
 
 	spec, err := f.dispatcher.buildSpec(tr, &core.RunEvent{WorkflowName: "code-review", Outcome: core.RunEventFinished},
-		launch.Event{DedupeKey: "d1"}, nil)
+		launch.Event{DedupeKey: "d1"}, Spec{}, triggerspec.Scope{})
 	require.NoError(t, err)
 	assert.Equal(t, core.ActingIdentityApp, spec.ActingIdentity)
 	assert.Equal(t, "on-review-done", spec.Automation)
