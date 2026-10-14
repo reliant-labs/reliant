@@ -290,7 +290,7 @@ func installProcessLogging(t *testing.T) (*recordingReporter, *syncBuffer) {
 	})
 	lines := &syncBuffer{}
 	logging.DefaultOutput = lines
-	logging.Setup(slog.LevelInfo)
+	logging.Setup(logging.Settings{Format: "json"}, slog.LevelInfo)
 	reporter := &recordingReporter{}
 	telemetry.SetReporter(reporter)
 	return reporter, lines
