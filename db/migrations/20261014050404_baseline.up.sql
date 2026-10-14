@@ -1279,8 +1279,6 @@ CREATE TABLE public.triggers (
     webhook_secret_sealed bytea,
     workflow_trigger text,
     no_machine boolean DEFAULT false NOT NULL,
-    acting_identity text DEFAULT 'owner'::text NOT NULL,
-    CONSTRAINT triggers_acting_identity_check CHECK ((acting_identity = ANY (ARRAY['owner'::text, 'app'::text]))),
     CONSTRAINT triggers_kind_check CHECK ((kind = ANY (ARRAY['schedule'::text, 'webhook'::text, 'integration'::text, 'workflow_event'::text]))),
     CONSTRAINT triggers_no_machine_names_no_daemon_check CHECK (((NOT no_machine) OR (daemon_id IS NULL)))
 );
