@@ -34,6 +34,9 @@ var celWrapperNames = map[protoreflect.FullName]bool{
 	"reliant.v1.DirectCelBool":     true,
 }
 
+// nestedWorkflowName is the message type of an inline workflow body.
+const nestedWorkflowName protoreflect.FullName = "reliant.v1.Workflow"
+
 // isCelWrapper reports whether the given message descriptor is a CelX wrapper type.
 func isCelWrapper(md protoreflect.MessageDescriptor) bool {
 	return celWrapperNames[md.FullName()]
@@ -83,6 +86,15 @@ func resolveMessage(m protoreflect.Message, eval CELEvaluator, path string) erro
 			if err := resolveCelField(m, fd, msgVal, eval, fieldPath); err != nil {
 				errs = append(errs, err)
 			}
+			return true
+		}
+
+		// A nested workflow (the `inline:` body of a workflow or loop node)
+		// is a scope of its own: its templates read ITS inputs and ITS nodes,
+		// and each inner node resolves its own config when it runs. Resolving
+		// it here would evaluate every inner template against the OUTER scope
+		// before the body starts.
+		if md.FullName() == nestedWorkflowName {
 			return true
 		}
 
