@@ -206,7 +206,7 @@ func TestToJsonAndParseJsonRoundTrip(t *testing.T) {
 
 		original := map[string]interface{}{
 			"name":  "test",
-			"value": float64(42), // Use float64 since JSON numbers are float64
+			"value": int64(42),
 			"items": []interface{}{"a", "b", "c"},
 		}
 
@@ -217,7 +217,7 @@ func TestToJsonAndParseJsonRoundTrip(t *testing.T) {
 
 		result := out.Value().(map[string]interface{})
 		assert.Equal(t, "test", result["name"])
-		assert.Equal(t, float64(42), result["value"])
+		assert.Equal(t, int64(42), result["value"])
 
 		items := result["items"].([]interface{})
 		assert.Equal(t, []interface{}{"a", "b", "c"}, items)

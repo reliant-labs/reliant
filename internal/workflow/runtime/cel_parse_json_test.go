@@ -29,7 +29,7 @@ func TestCelParseJsonFunction(t *testing.T) {
 
 		result := out.Value().(map[string]interface{})
 		assert.Equal(t, "test", result["name"])
-		assert.Equal(t, float64(42), result["value"]) // JSON numbers are float64
+		assert.Equal(t, int64(42), result["value"]) // JSON integers stay integers
 	})
 
 	t.Run("parses array of objects (tool_results format)", func(t *testing.T) {
@@ -83,9 +83,9 @@ func TestCelParseJsonFunction(t *testing.T) {
 
 		result := out.Value().([]interface{})
 		require.Len(t, result, 3)
-		assert.Equal(t, float64(1), result[0])
-		assert.Equal(t, float64(2), result[1])
-		assert.Equal(t, float64(3), result[2])
+		assert.Equal(t, int64(1), result[0])
+		assert.Equal(t, int64(2), result[1])
+		assert.Equal(t, int64(3), result[2])
 	})
 
 	t.Run("parses nested objects", func(t *testing.T) {
@@ -265,7 +265,7 @@ func TestParseJsonWithMemberFunctions(t *testing.T) {
 		require.NoError(t, err)
 
 		// JSON numbers are float64
-		assert.Equal(t, float64(3), out.Value())
+		assert.Equal(t, int64(3), out.Value())
 	})
 
 	t.Run("parseJson with size function", func(t *testing.T) {

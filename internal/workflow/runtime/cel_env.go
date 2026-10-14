@@ -197,7 +197,7 @@ func (b *CELContextBuilder) evalSingleCEL(expr string, env *cel.Env, evalCtx map
 		return nil, fmt.Errorf("CEL compilation error: %w", issues.Err())
 	}
 
-	prg, err := env.Program(ast)
+	prg, err := env.Program(ast, wfcel.ProgramOptions()...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CEL program: %w", err)
 	}
@@ -207,7 +207,7 @@ func (b *CELContextBuilder) evalSingleCEL(expr string, env *cel.Env, evalCtx map
 	}
 	out, _, err := prg.Eval(evalCtx)
 	if err != nil {
-		return nil, fmt.Errorf("CEL evaluation error: %w", err)
+		return nil, fmt.Errorf("CEL evaluation error: %w", wfcel.ExplainEvalError(err))
 	}
 
 	// convertCELToNative (wfcel.ConvertToNative) maps CEL null — the
@@ -228,7 +228,7 @@ func (b *CELContextBuilder) EvalBool(expr string) (bool, error) {
 		return false, fmt.Errorf("CEL compilation error: %w", issues.Err())
 	}
 
-	prg, err := env.Program(ast)
+	prg, err := env.Program(ast, wfcel.ProgramOptions()...)
 	if err != nil {
 		return false, fmt.Errorf("failed to create CEL program: %w", err)
 	}
@@ -238,7 +238,7 @@ func (b *CELContextBuilder) EvalBool(expr string) (bool, error) {
 	}
 	out, _, err := prg.Eval(evalCtx)
 	if err != nil {
-		return false, fmt.Errorf("CEL evaluation error: %w", err)
+		return false, fmt.Errorf("CEL evaluation error: %w", wfcel.ExplainEvalError(err))
 	}
 
 	boolVal, ok := out.Value().(bool)

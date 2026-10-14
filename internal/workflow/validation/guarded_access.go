@@ -483,6 +483,7 @@ func guardParseEnv() (*cel.Env, error) {
 	for _, ns := range wfcel.AllNamespaces() {
 		opts = append(opts, cel.Variable(string(ns), cel.DynType))
 	}
+	opts = append(opts, wfcel.Extensions()...)
 	opts = append(opts, wfcel.CustomFunctions()...)
 	return cel.NewCustomEnv(opts...)
 }

@@ -89,8 +89,8 @@ func newValidationCELEnv(namespaces []wfcel.CELNamespace, typeCtx *WorkflowTypeC
 		}
 	}
 
-	// Enable extended string functions (trimPrefix, trimSuffix, replace, split, join, format, etc.)
-	opts = append(opts, ext.Strings())
+	// The same extended libraries the runtime has.
+	opts = append(opts, wfcel.Extensions()...)
 
 	// Add custom functions
 	opts = append(opts, wfcel.CustomFunctions()...)

@@ -385,17 +385,40 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 
 | Function | Description | Example |
 |----------|-------------|--------|
+| `base64.decode(string) -> bytes` | Decode base64 to bytes; wrap in string() for text | `string(base64.decode(nodes.file.data.content))` |
+| `base64.encode(bytes) -> string` | Base64-encode bytes | `base64.encode(bytes(inputs.text))` |
+| `cel.bind(name, value, body) -> dyn` | Name an intermediate value once and use it in body | `cel.bind(held, inputs.leases.filter(l, l.state == 'held'), size(held) > 0)` |
 | `coalesce(dyn, dyn) -> dyn` | Return first non-null/non-empty argument | `coalesce(inputs.name, "default")` |
+| `list.distinct() -> list` | Remove duplicates, keeping the first of each | `nodes.files.names.distinct()` |
+| `duration(string) -> duration` | Parse a duration such as '45m' or '90s'; timestamp + duration is a timestamp, and .getMinutes()/.getSeconds() read one | `string(timestamp(now()) + duration('45m'))` |
+| `list.flatten() -> list` | Flatten a list of lists one level | `[[1], [2, 3]].flatten()` |
 | `string.format(list) -> string` | Format a string with positional arguments | `"Hello %s, you have %d items".format([name, count])` |
 | `getOrDefault(map, key, default) -> dyn` | Safely access a map key with a fallback default value | `getOrDefault(inputs, "mode", "auto")` |
 | `list.join(string) -> string` | Join list elements with separator | `["a", "b"].join(", ")` |
+| `json.decode(string) -> optional(dyn)` | Parse JSON without failing: optional.none() when the text is empty or not exactly one JSON value. Integers stay integers. Use parseJson when bad input should fail the step | `json.decode(nodes.start.stdout).?status.orValue('error')` |
+| `lists.range(int) -> list(int)` | [0, 1, ..., n-1], at most 100000 long | `lists.range(3)` |
+| `string.lowerAscii() -> string` | Lower-case the ASCII letters of a string (also upperAscii, trim, indexOf, substring, padLeft, padRight) | `inputs.service.lowerAscii()` |
+| `string.matches(regex) -> bool` | True when the string matches the RE2 regular expression anywhere; anchor with ^ and $ to validate a whole value | `inputs.id.matches('^[1-9][0-9]{0,9}$')` |
+| `math.abs(number) -> number` | Absolute value (also math.ceil, math.floor, math.round, math.sign) | `math.abs(-3)` |
+| `math.greatest(a, b, ...) \| math.greatest(list) -> number` | The largest of the arguments or list elements | `math.greatest(inputs.adds, inputs.dels)` |
+| `math.least(a, b, ...) \| math.least(list) -> number` | The smallest of the arguments or list elements | `math.least(inputs.timeouts)` |
 | `merge(map, map) -> map` | Shallow-merge two maps; keys in the second map win (e.g. pin one setting on a model value) | `merge(inputs.model, {"thinking_level": "high"})` |
 | `now() -> string` | Return current time as RFC3339 string | `now()` |
 | `parseDuration(string) -> double` | Parse a Go duration string and return seconds as a number | `parseDuration("5m") == 300.0` |
 | `parseJson(string) -> dyn` | Parse a JSON string into a dynamic value | `parseJson(nodes.run.stdout)` |
+| `regex.extract(string, regex) -> optional(string)` | The first match (or its one capture group), or optional.none() when there is none | `regex.extract(inputs.branch, 'issue-(\\d+)').orValue('')` |
+| `regex.extractAll(string, regex) -> list(string)` | Every match of the regex | `regex.extractAll(inputs.text, '#\\d+')` |
+| `regex.replace(string, regex, replacement) -> string` | Replace every match; \1 refers to a capture group | `regex.replace(inputs.title, '\\s+', ' ')` |
 | `string.replace(string, string) -> string` | Replace all occurrences of old with new | `nodes.llm.response_text.replace("\n", " ")` |
+| `sets.contains(list, list) -> bool` | True when the first list contains every element of the second | `sets.contains(inputs.labels, ['agent:ready'])` |
+| `sets.equivalent(list, list) -> bool` | True when both lists hold the same elements, ignoring order and repeats | `sets.equivalent(inputs.a, inputs.b)` |
+| `sets.intersects(list, list) -> bool` | True when the lists share at least one element | `sets.intersects(inputs.labels, ['skip-review', 'wip'])` |
+| `list.slice(start, end) -> list` | The elements from start up to (not including) end | `inputs.items.slice(0, 5)` |
+| `list.sort() -> list` | Sort a list of numbers, strings, timestamps or durations | `[3, 1, 2].sort()` |
+| `list.sortBy(x, key) -> list` | Sort a list by a key computed per element (stable) | `inputs.leases.sortBy(l, l.created_at)` |
 | `spawn(string, list) -> string` | Generate a spawn directive for a child workflow with presets | `spawn("builtin://agent", ["general", "researcher"])` |
 | `string.split(string) -> list(string)` | Split string by separator | `nodes.run.stdout.split("\n")` |
+| `timestamp(string \| int) -> timestamp` | Parse an RFC3339 string (or epoch seconds); add a duration, subtract two timestamps for a duration, compare with < > | `timestamp(inputs.expires) > timestamp(now())` |
 | `toJson(dyn) -> string` | Serialize a value to a JSON string | `toJson(nodes.llm.tool_calls)` |
 | `string.trimPrefix(string) -> string` | Remove prefix from string | `nodes.run.stdout.trimPrefix("Error: ")` |
 | `string.trimSuffix(string) -> string` | Remove suffix from string | `nodes.run.stdout.trimSuffix("\n")` |

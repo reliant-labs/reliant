@@ -280,7 +280,8 @@ func populateCELNamespaces() {
 }
 
 // populateCELFunctions defines the custom CEL functions available in workflows.
-// These match the functions registered in v2cel/env.go.
+// These match the functions registered in cel/env.go (Extensions and
+// CustomFunctions) plus the CEL standard library's time functions.
 func populateCELFunctions() {
 	CELFunctions = []CELFunction{
 		// Custom functions (registered in cel/env.go)
@@ -299,6 +300,37 @@ func populateCELFunctions() {
 		{Name: "split", Signature: "string.split(string) -> list(string)", Description: "Split string by separator", Example: "nodes.run.stdout.split(\"\\n\")"},
 		{Name: "join", Signature: "list.join(string) -> string", Description: "Join list elements with separator", Example: "[\"a\", \"b\"].join(\", \")"},
 		{Name: "format", Signature: "string.format(list) -> string", Description: "Format a string with positional arguments", Example: "\"Hello %s, you have %d items\".format([name, count])"},
+		{Name: "lowerAscii", Signature: "string.lowerAscii() -> string", Description: "Lower-case the ASCII letters of a string (also upperAscii, trim, indexOf, substring, padLeft, padRight)", Example: "inputs.service.lowerAscii()"},
+		{Name: "matches", Signature: "string.matches(regex) -> bool", Description: "True when the string matches the RE2 regular expression anywhere; anchor with ^ and $ to validate a whole value", Example: "inputs.id.matches('^[1-9][0-9]{0,9}$')"},
+		// ext.Regex()
+		{Name: "regex.extract", Signature: "regex.extract(string, regex) -> optional(string)", Description: "The first match (or its one capture group), or optional.none() when there is none", Example: "regex.extract(inputs.branch, 'issue-(\\\\d+)').orValue('')"},
+		{Name: "regex.extractAll", Signature: "regex.extractAll(string, regex) -> list(string)", Description: "Every match of the regex", Example: "regex.extractAll(inputs.text, '#\\\\d+')"},
+		{Name: "regex.replace", Signature: "regex.replace(string, regex, replacement) -> string", Description: "Replace every match; \\1 refers to a capture group", Example: "regex.replace(inputs.title, '\\\\s+', ' ')"},
+		// ext.Lists()
+		{Name: "sort", Signature: "list.sort() -> list", Description: "Sort a list of numbers, strings, timestamps or durations", Example: "[3, 1, 2].sort()"},
+		{Name: "sortBy", Signature: "list.sortBy(x, key) -> list", Description: "Sort a list by a key computed per element (stable)", Example: "inputs.leases.sortBy(l, l.created_at)"},
+		{Name: "distinct", Signature: "list.distinct() -> list", Description: "Remove duplicates, keeping the first of each", Example: "nodes.files.names.distinct()"},
+		{Name: "flatten", Signature: "list.flatten() -> list", Description: "Flatten a list of lists one level", Example: "[[1], [2, 3]].flatten()"},
+		{Name: "slice", Signature: "list.slice(start, end) -> list", Description: "The elements from start up to (not including) end", Example: "inputs.items.slice(0, 5)"},
+		{Name: "lists.range", Signature: "lists.range(int) -> list(int)", Description: "[0, 1, ..., n-1], at most 100000 long", Example: "lists.range(3)"},
+		// ext.Sets()
+		{Name: "sets.contains", Signature: "sets.contains(list, list) -> bool", Description: "True when the first list contains every element of the second", Example: "sets.contains(inputs.labels, ['agent:ready'])"},
+		{Name: "sets.intersects", Signature: "sets.intersects(list, list) -> bool", Description: "True when the lists share at least one element", Example: "sets.intersects(inputs.labels, ['skip-review', 'wip'])"},
+		{Name: "sets.equivalent", Signature: "sets.equivalent(list, list) -> bool", Description: "True when both lists hold the same elements, ignoring order and repeats", Example: "sets.equivalent(inputs.a, inputs.b)"},
+		// ext.Math()
+		{Name: "math.greatest", Signature: "math.greatest(a, b, ...) | math.greatest(list) -> number", Description: "The largest of the arguments or list elements", Example: "math.greatest(inputs.adds, inputs.dels)"},
+		{Name: "math.least", Signature: "math.least(a, b, ...) | math.least(list) -> number", Description: "The smallest of the arguments or list elements", Example: "math.least(inputs.timeouts)"},
+		{Name: "math.abs", Signature: "math.abs(number) -> number", Description: "Absolute value (also math.ceil, math.floor, math.round, math.sign)", Example: "math.abs(-3)"},
+		// ext.Encoders()
+		{Name: "base64.encode", Signature: "base64.encode(bytes) -> string", Description: "Base64-encode bytes", Example: "base64.encode(bytes(inputs.text))"},
+		{Name: "base64.decode", Signature: "base64.decode(string) -> bytes", Description: "Decode base64 to bytes; wrap in string() for text", Example: "string(base64.decode(nodes.file.data.content))"},
+		// ext.Bindings()
+		{Name: "cel.bind", Signature: "cel.bind(name, value, body) -> dyn", Description: "Name an intermediate value once and use it in body", Example: "cel.bind(held, inputs.leases.filter(l, l.state == 'held'), size(held) > 0)"},
+		// json
+		{Name: "json.decode", Signature: "json.decode(string) -> optional(dyn)", Description: "Parse JSON without failing: optional.none() when the text is empty or not exactly one JSON value. Integers stay integers. Use parseJson when bad input should fail the step", Example: "json.decode(nodes.start.stdout).?status.orValue('error')"},
+		// timestamps and durations
+		{Name: "timestamp", Signature: "timestamp(string | int) -> timestamp", Description: "Parse an RFC3339 string (or epoch seconds); add a duration, subtract two timestamps for a duration, compare with < >", Example: "timestamp(inputs.expires) > timestamp(now())"},
+		{Name: "duration", Signature: "duration(string) -> duration", Description: "Parse a duration such as '45m' or '90s'; timestamp + duration is a timestamp, and .getMinutes()/.getSeconds() read one", Example: "string(timestamp(now()) + duration('45m'))"},
 	}
 }
 

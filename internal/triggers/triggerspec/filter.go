@@ -79,7 +79,7 @@ func CompileFilter(expr string) (*Filter, error) {
 	if out := ast.OutputType(); out != cel.BoolType && out != cel.DynType {
 		return nil, &FilterError{Expr: expr, Reason: fmt.Sprintf("must evaluate to a bool, not %s", out)}
 	}
-	program, err := env.Program(ast)
+	program, err := env.Program(ast, wfcel.ProgramOptions()...)
 	if err != nil {
 		return nil, &FilterError{Expr: expr, Reason: err.Error()}
 	}

@@ -161,8 +161,9 @@ func NewEnv(config CELEnvConfig) (*cel.Env, error) {
 		opts = append(opts, getNamespaceDecl(ns))
 	}
 
-	// Enable extended string functions (trimPrefix, trimSuffix, replace, split, join, format, etc.)
-	opts = append(opts, ext.Strings())
+	// Extended libraries: strings, lists, sets, math, encoders, bindings,
+	// regex, two-variable comprehensions, json.decode.
+	opts = append(opts, Extensions()...)
 
 	// Add custom functions
 	if config.IncludeCustomFunctions {
@@ -172,6 +173,55 @@ func NewEnv(config CELEnvConfig) (*cel.Env, error) {
 	// NewCustomEnv, not NewEnv: cel.NewEnv always starts from cel-go's full
 	// stdlib, which would reintroduce the singleton size() that StdLib replaces.
 	return cel.NewCustomEnv(opts...)
+}
+
+// MaxEvalCost bounds one workflow expression's work, in CEL cost units (about
+// one per operation or comprehension step; mapping a 20,000-element list costs
+// ~260,000). It stops a runaway expression, not a large one. It is also the
+// wall-clock bound: cel-go's cost tracking makes one long comprehension
+// superlinear, so a limit this size keeps the worst case to a few seconds.
+const MaxEvalCost = 1_000_000
+
+// MaxRangeSize bounds lists.range(n).
+const MaxRangeSize = 100_000
+
+// Extensions returns the standard CEL libraries and workflow functions every
+// workflow expression environment includes. The runtime, validation and the
+// trigger filter all take them from here, so what validates is what runs.
+//
+//   - ext.Strings: trimPrefix, split, join, format, lowerAscii, padLeft, ...
+//   - ext.Lists: sort, sortBy, distinct, flatten, slice, first, last, lists.range
+//   - ext.Sets: sets.contains, sets.intersects, sets.equivalent
+//   - ext.Math: math.greatest, math.least, math.abs, math.ceil, ...
+//   - ext.Encoders: base64.encode, base64.decode
+//   - ext.Bindings: cel.bind(name, value, body)
+//   - ext.Regex: regex.extract, regex.extractAll, regex.replace
+//   - ext.TwoVarComprehensions: m.all(k, v, ...), m.transformMap(k, v, ...)
+//   - json.decode(string) -> optional
+//
+// Requires cel.OptionalTypes() earlier in the environment.
+func Extensions() []cel.EnvOption {
+	return []cel.EnvOption{
+		ext.Strings(),
+		ext.Lists(ext.ListsMaxRangeSize(MaxRangeSize)),
+		ext.Sets(),
+		ext.Math(),
+		ext.Encoders(),
+		ext.Bindings(),
+		ext.Regex(),
+		ext.TwoVarComprehensions(),
+		celJSONDecodeFunction(),
+	}
+}
+
+// ProgramOptions are applied to every program built from a workflow
+// expression: the cost limit (MaxEvalCost) and a per-call charge for the
+// functions whose work scales with their input.
+func ProgramOptions() []cel.ProgramOption {
+	return []cel.ProgramOption{
+		cel.CostLimit(MaxEvalCost),
+		cel.CostTracking(costEstimator{}),
+	}
 }
 
 // EnsureNamespaceDefaults ensures all required namespaces have at least defaults.
@@ -337,8 +387,8 @@ func celParseJsonFunction() cel.EnvOption {
 					return types.NewErr("parseJson() requires a string, got %T", val)
 				}
 
-				var result interface{}
-				if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+				result, err := decodeJSON(jsonStr)
+				if err != nil {
 					return types.NewErr("parseJson() failed to parse JSON: %v", err)
 				}
 
@@ -571,4 +621,13 @@ func celSpawnFunction() cel.EnvOption {
 			}),
 		),
 	)
+}
+
+// ExplainEvalError adds what to do about the one evaluation error whose cause
+// is not in the expression's text: the cost limit.
+func ExplainEvalError(err error) error {
+	if err != nil && strings.Contains(err.Error(), "cost limit exceeded") {
+		return fmt.Errorf("%w (an expression may do at most %d units of work; narrow the data it loops over)", err, MaxEvalCost)
+	}
+	return err
 }

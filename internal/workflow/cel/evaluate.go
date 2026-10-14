@@ -114,7 +114,7 @@ func evaluateRaw(expr string, ctx CELEvalContext) (interface{}, error) {
 		return nil, fmt.Errorf("CEL compilation error: %w", issues.Err())
 	}
 
-	prg, err := env.Program(ast)
+	prg, err := env.Program(ast, ProgramOptions()...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CEL program: %w", err)
 	}
@@ -125,7 +125,7 @@ func evaluateRaw(expr string, ctx CELEvalContext) (interface{}, error) {
 	}
 	out, _, err := prg.Eval(activation)
 	if err != nil {
-		return nil, fmt.Errorf("CEL evaluation error: %w", err)
+		return nil, fmt.Errorf("CEL evaluation error: %w", ExplainEvalError(err))
 	}
 
 	return ConvertToNative(out.Value()), nil
