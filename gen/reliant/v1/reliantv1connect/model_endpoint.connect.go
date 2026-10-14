@@ -54,12 +54,16 @@ const (
 
 // ModelEndpointServiceClient is a client for the reliant.v1.ModelEndpointService service.
 type ModelEndpointServiceClient interface {
+	// forge:custom — scoped to the caller, and resolves each endpoint's credential and last probe
 	ListModelEndpoints(context.Context, *connect.Request[v1.ListModelEndpointsRequest]) (*connect.Response[v1.ListModelEndpointsResponse], error)
 	// CreateModelEndpoint validates, probes, and stores an endpoint. The probe
 	// result is returned; a failing probe does NOT prevent saving (the server
 	// may simply be down right now), it is reported in `probe`.
+	// forge:custom — seals the endpoint's credential in the credential store and probes before it stores
 	CreateModelEndpoint(context.Context, *connect.Request[v1.CreateModelEndpointRequest]) (*connect.Response[v1.CreateModelEndpointResponse], error)
+	// forge:custom — re-probes, and revokes the endpoint from the daemon it moved off
 	UpdateModelEndpoint(context.Context, *connect.Request[v1.UpdateModelEndpointRequest]) (*connect.Response[v1.UpdateModelEndpointResponse], error)
+	// forge:custom — also deletes the endpoint's credential and revokes it from its relaying daemon
 	DeleteModelEndpoint(context.Context, *connect.Request[v1.DeleteModelEndpointRequest]) (*connect.Response[v1.DeleteModelEndpointResponse], error)
 	// TestModelEndpoint probes an endpoint (saved, or an unsaved draft) and
 	// returns the models it serves. Backs the UI's "Test connection".
@@ -146,12 +150,16 @@ func (c *modelEndpointServiceClient) TestModelEndpoint(ctx context.Context, req 
 
 // ModelEndpointServiceHandler is an implementation of the reliant.v1.ModelEndpointService service.
 type ModelEndpointServiceHandler interface {
+	// forge:custom — scoped to the caller, and resolves each endpoint's credential and last probe
 	ListModelEndpoints(context.Context, *connect.Request[v1.ListModelEndpointsRequest]) (*connect.Response[v1.ListModelEndpointsResponse], error)
 	// CreateModelEndpoint validates, probes, and stores an endpoint. The probe
 	// result is returned; a failing probe does NOT prevent saving (the server
 	// may simply be down right now), it is reported in `probe`.
+	// forge:custom — seals the endpoint's credential in the credential store and probes before it stores
 	CreateModelEndpoint(context.Context, *connect.Request[v1.CreateModelEndpointRequest]) (*connect.Response[v1.CreateModelEndpointResponse], error)
+	// forge:custom — re-probes, and revokes the endpoint from the daemon it moved off
 	UpdateModelEndpoint(context.Context, *connect.Request[v1.UpdateModelEndpointRequest]) (*connect.Response[v1.UpdateModelEndpointResponse], error)
+	// forge:custom — also deletes the endpoint's credential and revokes it from its relaying daemon
 	DeleteModelEndpoint(context.Context, *connect.Request[v1.DeleteModelEndpointRequest]) (*connect.Response[v1.DeleteModelEndpointResponse], error)
 	// TestModelEndpoint probes an endpoint (saved, or an unsaved draft) and
 	// returns the models it serves. Backs the UI's "Test connection".

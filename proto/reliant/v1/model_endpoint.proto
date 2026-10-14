@@ -26,12 +26,16 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // are NOT endpoints here; they appear in each daemon's LocalModelInventory.
 // Configuring an endpoint is for everything detection cannot find.
 service ModelEndpointService {
+  // forge:custom — scoped to the caller, and resolves each endpoint's credential and last probe
   rpc ListModelEndpoints(ListModelEndpointsRequest) returns (ListModelEndpointsResponse) {}
   // CreateModelEndpoint validates, probes, and stores an endpoint. The probe
   // result is returned; a failing probe does NOT prevent saving (the server
   // may simply be down right now), it is reported in `probe`.
+  // forge:custom — seals the endpoint's credential in the credential store and probes before it stores
   rpc CreateModelEndpoint(CreateModelEndpointRequest) returns (CreateModelEndpointResponse) {}
+  // forge:custom — re-probes, and revokes the endpoint from the daemon it moved off
   rpc UpdateModelEndpoint(UpdateModelEndpointRequest) returns (UpdateModelEndpointResponse) {}
+  // forge:custom — also deletes the endpoint's credential and revokes it from its relaying daemon
   rpc DeleteModelEndpoint(DeleteModelEndpointRequest) returns (DeleteModelEndpointResponse) {}
   // TestModelEndpoint probes an endpoint (saved, or an unsaved draft) and
   // returns the models it serves. Backs the UI's "Test connection".

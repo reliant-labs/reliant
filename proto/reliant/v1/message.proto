@@ -11,6 +11,7 @@ import "reliant/v1/chat.proto";
 // Note: Bulk message operations (list, send) are in ChatService
 service MessageService {
   // GetMessage retrieves a single message by ID with its content blocks
+  // forge:custom — authorizes through the message's chat and joins its content blocks
   rpc GetMessage(GetMessageRequest) returns (GetMessageResponse) {}
 }
 

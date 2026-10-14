@@ -297,6 +297,7 @@ export const AttachmentService: GenService<{
   },
   /**
    * GetAttachment retrieves an attachment by ID (includes file content)
+   * forge:custom — scoped to the caller: another user's attachment answers NotFound
    *
    * @generated from rpc reliant.v1.AttachmentService.GetAttachment
    */
@@ -307,6 +308,7 @@ export const AttachmentService: GenService<{
   },
   /**
    * DeleteAttachment removes an attachment by ID
+   * forge:custom — checks the caller owns the attachment before it deletes, answering NotFound otherwise
    *
    * @generated from rpc reliant.v1.AttachmentService.DeleteAttachment
    */

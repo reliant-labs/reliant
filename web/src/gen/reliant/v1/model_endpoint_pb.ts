@@ -472,6 +472,8 @@ export const ModelEndpointRouteSchema: GenEnum<ModelEndpointRoute> = /*@__PURE__
  */
 export const ModelEndpointService: GenService<{
   /**
+   * forge:custom — scoped to the caller, and resolves each endpoint's credential and last probe
+   *
    * @generated from rpc reliant.v1.ModelEndpointService.ListModelEndpoints
    */
   listModelEndpoints: {
@@ -483,6 +485,7 @@ export const ModelEndpointService: GenService<{
    * CreateModelEndpoint validates, probes, and stores an endpoint. The probe
    * result is returned; a failing probe does NOT prevent saving (the server
    * may simply be down right now), it is reported in `probe`.
+   * forge:custom — seals the endpoint's credential in the credential store and probes before it stores
    *
    * @generated from rpc reliant.v1.ModelEndpointService.CreateModelEndpoint
    */
@@ -492,6 +495,8 @@ export const ModelEndpointService: GenService<{
     output: typeof CreateModelEndpointResponseSchema;
   },
   /**
+   * forge:custom — re-probes, and revokes the endpoint from the daemon it moved off
+   *
    * @generated from rpc reliant.v1.ModelEndpointService.UpdateModelEndpoint
    */
   updateModelEndpoint: {
@@ -500,6 +505,8 @@ export const ModelEndpointService: GenService<{
     output: typeof UpdateModelEndpointResponseSchema;
   },
   /**
+   * forge:custom — also deletes the endpoint's credential and revokes it from its relaying daemon
+   *
    * @generated from rpc reliant.v1.ModelEndpointService.DeleteModelEndpoint
    */
   deleteModelEndpoint: {

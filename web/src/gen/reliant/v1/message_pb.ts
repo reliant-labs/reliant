@@ -64,6 +64,7 @@ export const GetMessageResponseSchema: GenMessage<GetMessageResponse> = /*@__PUR
 export const MessageService: GenService<{
   /**
    * GetMessage retrieves a single message by ID with its content blocks
+   * forge:custom — authorizes through the message's chat and joins its content blocks
    *
    * @generated from rpc reliant.v1.MessageService.GetMessage
    */

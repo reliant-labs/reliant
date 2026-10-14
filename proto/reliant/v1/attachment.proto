@@ -15,9 +15,11 @@ service AttachmentService {
   rpc CreateFileReference(CreateFileReferenceRequest) returns (CreateFileReferenceResponse) {}
   
   // GetAttachment retrieves an attachment by ID (includes file content)
+  // forge:custom — scoped to the caller: another user's attachment answers NotFound
   rpc GetAttachment(GetAttachmentRequest) returns (GetAttachmentResponse) {}
   
   // DeleteAttachment removes an attachment by ID
+  // forge:custom — checks the caller owns the attachment before it deletes, answering NotFound otherwise
   rpc DeleteAttachment(DeleteAttachmentRequest) returns (DeleteAttachmentResponse) {}
 }
 

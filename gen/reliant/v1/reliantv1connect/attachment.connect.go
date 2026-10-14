@@ -56,8 +56,10 @@ type AttachmentServiceClient interface {
 	// CreateFileReference creates a reference to a local file (for text files)
 	CreateFileReference(context.Context, *connect.Request[v1.CreateFileReferenceRequest]) (*connect.Response[v1.CreateFileReferenceResponse], error)
 	// GetAttachment retrieves an attachment by ID (includes file content)
+	// forge:custom — scoped to the caller: another user's attachment answers NotFound
 	GetAttachment(context.Context, *connect.Request[v1.GetAttachmentRequest]) (*connect.Response[v1.GetAttachmentResponse], error)
 	// DeleteAttachment removes an attachment by ID
+	// forge:custom — checks the caller owns the attachment before it deletes, answering NotFound otherwise
 	DeleteAttachment(context.Context, *connect.Request[v1.DeleteAttachmentRequest]) (*connect.Response[v1.DeleteAttachmentResponse], error)
 }
 
@@ -134,8 +136,10 @@ type AttachmentServiceHandler interface {
 	// CreateFileReference creates a reference to a local file (for text files)
 	CreateFileReference(context.Context, *connect.Request[v1.CreateFileReferenceRequest]) (*connect.Response[v1.CreateFileReferenceResponse], error)
 	// GetAttachment retrieves an attachment by ID (includes file content)
+	// forge:custom — scoped to the caller: another user's attachment answers NotFound
 	GetAttachment(context.Context, *connect.Request[v1.GetAttachmentRequest]) (*connect.Response[v1.GetAttachmentResponse], error)
 	// DeleteAttachment removes an attachment by ID
+	// forge:custom — checks the caller owns the attachment before it deletes, answering NotFound otherwise
 	DeleteAttachment(context.Context, *connect.Request[v1.DeleteAttachmentRequest]) (*connect.Response[v1.DeleteAttachmentResponse], error)
 }
 

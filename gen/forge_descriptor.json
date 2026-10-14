@@ -731,6 +731,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.GetAttachmentRequest",
           "OutputTypeFQ": "reliant.v1.GetAttachmentResponse",
           "InputProtoFile": "reliant/v1/attachment.proto",
@@ -744,6 +745,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.DeleteAttachmentRequest",
           "OutputTypeFQ": "reliant.v1.DeleteAttachmentResponse",
           "InputProtoFile": "reliant/v1/attachment.proto",
@@ -16710,6 +16712,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.GetMessageRequest",
           "OutputTypeFQ": "reliant.v1.GetMessageResponse",
           "InputProtoFile": "reliant/v1/message.proto",
@@ -17076,6 +17079,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListModelEndpointsRequest",
           "OutputTypeFQ": "reliant.v1.ListModelEndpointsResponse",
           "InputProtoFile": "reliant/v1/model_endpoint.proto",
@@ -17089,6 +17093,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.CreateModelEndpointRequest",
           "OutputTypeFQ": "reliant.v1.CreateModelEndpointResponse",
           "InputProtoFile": "reliant/v1/model_endpoint.proto",
@@ -17102,6 +17107,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.UpdateModelEndpointRequest",
           "OutputTypeFQ": "reliant.v1.UpdateModelEndpointResponse",
           "InputProtoFile": "reliant/v1/model_endpoint.proto",
@@ -17115,6 +17121,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.DeleteModelEndpointRequest",
           "OutputTypeFQ": "reliant.v1.DeleteModelEndpointResponse",
           "InputProtoFile": "reliant/v1/model_endpoint.proto",
@@ -34365,5 +34372,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "5a1763bb7bff24f98ecbed48e1a581969e27f76386f2671a80c5cf7e5dd0c2c4"
+  "source_hash": "3b4f15aea55a20d58615b959e2905bf0d1ce746b7920b1ad105294d04f08d014"
 }

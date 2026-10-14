@@ -43,6 +43,7 @@ const (
 // MessageServiceClient is a client for the reliant.v1.MessageService service.
 type MessageServiceClient interface {
 	// GetMessage retrieves a single message by ID with its content blocks
+	// forge:custom — authorizes through the message's chat and joins its content blocks
 	GetMessage(context.Context, *connect.Request[v1.GetMessageRequest]) (*connect.Response[v1.GetMessageResponse], error)
 }
 
@@ -79,6 +80,7 @@ func (c *messageServiceClient) GetMessage(ctx context.Context, req *connect.Requ
 // MessageServiceHandler is an implementation of the reliant.v1.MessageService service.
 type MessageServiceHandler interface {
 	// GetMessage retrieves a single message by ID with its content blocks
+	// forge:custom — authorizes through the message's chat and joins its content blocks
 	GetMessage(context.Context, *connect.Request[v1.GetMessageRequest]) (*connect.Response[v1.GetMessageResponse], error)
 }
 
