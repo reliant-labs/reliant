@@ -94,7 +94,7 @@ func TestIntegrationToolCarriesTheRunsActingIdentity(t *testing.T) {
 	run := func(ctx context.Context) httpaction.CredentialRequest {
 		t.Helper()
 		src := &toolCredSource{}
-		tool := newIntegrationTool(m, m.GetActions()[0], src)
+		tool := newIntegrationTool(m, m.GetActions()[0], src, nil)
 		_, err := tool.Run(&rctx.ToolContext{Context: ctx, ChatID: "run-7", Thread: "run-7"},
 			ToolCall{ID: "tc-1", Name: tool.Name(), Input: `{"text":"abc"}`})
 		require.NoError(t, err)
@@ -124,7 +124,7 @@ func TestIntegrationToolIdentityCannotComeFromParams(t *testing.T) {
 	defer restore()
 
 	src := &toolCredSource{}
-	tool := newIntegrationTool(m, m.GetActions()[0], src)
+	tool := newIntegrationTool(m, m.GetActions()[0], src, nil)
 	_, err = tool.Run(&rctx.ToolContext{Context: context.Background(), ChatID: "run-7", Thread: "run-7"},
 		ToolCall{ID: "tc-1", Name: tool.Name(), Input: `{"text":"abc","acting_identity":"app","__acting_identity":"app"}`})
 	require.NoError(t, err)

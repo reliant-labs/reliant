@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/integrations/provenance"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
 )
@@ -43,6 +44,15 @@ func TestACommentWriteAgreesWithItsEcho(t *testing.T) {
 	assert.Equal(t, p.correlation.ObjectKind, echo.ObjectKind)
 	assert.Contains(t, p.correlation.Events, echo.EventType)
 	assert.Equal(t, p.correlation.BodySHA256, echo.BodySHA256, "GitHub's CRLF and trailing newline must not break the match")
+}
+
+func TestASignedCommentWriteStillAgreesWithItsEcho(t *testing.T) {
+	// The bot's footer is added after the ledger plans the write, so the echo's
+	// body carries it and the intent's does not.
+	body := "**Review**\n\nLooks good overall."
+	p := planFor("github", "issue.comment", map[string]any{"owner": "Acme", "repo": "App", "issue_number": float64(42), "body": body})
+	signed := body + "\n\n" + ghdelegated.Footer("nightly triage", "octocat")
+	assert.Equal(t, provenance.BodyDigest(signed), p.correlation.BodySHA256)
 }
 
 func TestAReviewWriteAgreesWithItsEcho(t *testing.T) {

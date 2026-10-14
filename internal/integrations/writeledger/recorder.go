@@ -63,13 +63,17 @@ func (d *recorded) RunAuthenticated(ctx context.Context, m *reliantv1.Integratio
 	}
 	r := d.rec
 	p := planFor(m.GetId(), a.GetId(), params)
+	actor := core.IntegrationActorOwner
+	if site.ActingIdentity == httpaction.IdentityApp {
+		actor = core.IntegrationActorApp
+	}
 	w := &core.IntegrationWrite{
 		ID:          uuid.NewString(),
 		NodeID:      site.NodeID,
 		ToolCallID:  site.ToolCallID,
 		Integration: m.GetId(),
 		Action:      a.GetId(),
-		Actor:       core.IntegrationActorOwner,
+		Actor:       actor,
 		Scope:       p.scope,
 		Target:      p.target,
 		Correlation: p.correlation.Map(),

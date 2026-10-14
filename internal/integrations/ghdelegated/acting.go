@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
+	"github.com/reliant-labs/reliant/internal/integrations/provenance"
 )
 
 // ActingCredential implements Service.
@@ -171,9 +172,9 @@ func Footer(automation, ownerLogin string) string {
 	}
 	owner := strings.TrimSpace(ownerLogin)
 	if owner == "" {
-		return fmt.Sprintf("<sub>Posted by Reliant for %s.</sub>", escapeInline(name))
+		return provenance.SignaturePrefix + escapeInline(name) + ".</sub>"
 	}
-	return fmt.Sprintf("<sub>Posted by Reliant for %s, an automation of @%s.</sub>", escapeInline(name), owner)
+	return provenance.SignaturePrefix + escapeInline(name) + ", an automation of @" + owner + ".</sub>"
 }
 
 // escapeInline keeps a trigger name from breaking out of the footer's markup or

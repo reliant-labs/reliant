@@ -235,3 +235,30 @@ func (brokenStore) CreateIntegrationWrite(context.Context, *core.IntegrationWrit
 func (brokenStore) CompleteIntegrationWrite(context.Context, string, core.IntegrationWriteResult) (bool, error) {
 	return false, errors.New("database is down")
 }
+
+func TestTheLedgerRecordsWhoTheWriteWasMadeAs(t *testing.T) {
+	repo := db.NewTestRepo(t)
+	ctx := context.Background()
+	store := repo.IntegrationWrites()
+	rec := writeledger.New(writeledger.Deps{Store: store, Runs: repo})
+	runner := &fakeRunner{result: &httpaction.Result{StatusCode: 201, Data: map[string]any{"id": int64(11)}}}
+
+	for id, tc := range map[string]struct{ identity, want string }{
+		"owner": {"", core.IntegrationActorOwner},
+		"app":   {httpaction.IdentityApp, core.IntegrationActorApp},
+	} {
+		_, err := rec.Wrap(runner).RunAuthenticated(ctx, githubManifest(), action("issue.comment", true),
+			map[string]any{"owner": "acme", "repo": "app", "issue_number": float64(7), "body": id}, nil,
+			httpaction.CallSite{RunID: "run-" + id, ActingIdentity: tc.identity})
+		require.NoError(t, err)
+	}
+	rows, err := store.ListRecentIntegrationWrites(ctx, "github", "github:acme/app", time.Now().Add(-time.Minute), 10)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	byBody := map[string]string{}
+	for _, w := range rows {
+		byBody[w.Correlation["body_sha256"].(string)] = w.Actor
+	}
+	assert.Equal(t, core.IntegrationActorOwner, byBody[provenance.BodyDigest("owner")])
+	assert.Equal(t, core.IntegrationActorApp, byBody[provenance.BodyDigest("app")])
+}

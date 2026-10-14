@@ -14,6 +14,7 @@ import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 
 import {
+  ActingIdentity,
   CreateTriggerResponseSchema,
   RotateWebhookTokenResponseSchema,
   TriggerSchema,
@@ -134,6 +135,21 @@ describe("ActivateTriggerDialog", () => {
     expect(Object.keys(definition.params)).not.toContain("label");
     expect(definition.enabled).toBe(true);
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("activates as the owner unless the Reliant bot is chosen, and sends the choice", async () => {
+    const user = userEvent.setup();
+    createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "t-3", name: "Triage · nightly" }) }));
+    render(scheduleDeclared);
+    await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+    expect(screen.getByRole("radio", { name: /You/ })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: /Reliant bot/ }));
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Triage" } });
+    await user.click(screen.getByRole("button", { name: "Activate" }));
+
+    await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+    const definition = (createTrigger.mock.calls[0]![0] as CreateTriggerRequest).trigger!;
+    expect(definition.actingIdentity).toBe(ActingIdentity.APP);
   });
 
   it("requires a prompt and a machine before creating anything", async () => {

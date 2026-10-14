@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 
 import {
+  ActingIdentity,
   ScheduleSourceSchema,
   TriggerEventOutcome,
   TriggerEventRunSchema,
@@ -214,5 +215,31 @@ describe("activations of a workflow-declared trigger", () => {
     const stored = triggerFromProto(proto({ workflowTrigger: "new-issue", workflow: "triage-new-issues" }));
     expect(stored.source).toMatchObject({ kind: "activation", workflowTrigger: "new-issue", declared: { kind: "schedule" } });
     expect(definitionToProto(definitionFromTrigger(stored)).source).toEqual({ case: "workflowTrigger", value: "new-issue" });
+  });
+});
+
+describe("acting identity", () => {
+  const base = {
+    name: "Triage",
+    projectId: "proj-1",
+    workflow: "triage",
+    presets: {},
+    params: {},
+    message: "Triage it",
+    daemonId: "daemon-1",
+    notifyOnComplete: false,
+    source: { kind: "activation" as const, workflowTrigger: "new-issue" },
+  };
+
+  it("sends the chosen identity, and UNSPECIFIED when none is chosen so an update leaves it alone", () => {
+    expect(definitionToProto({ ...base, actingIdentity: "app" }).actingIdentity).toBe(ActingIdentity.APP);
+    expect(definitionToProto({ ...base, actingIdentity: "owner" }).actingIdentity).toBe(ActingIdentity.OWNER);
+    expect(definitionToProto(base).actingIdentity).toBe(ActingIdentity.UNSPECIFIED);
+  });
+
+  it("reads a stored trigger's identity, treating an unset one as the owner", () => {
+    expect(triggerFromProto(create(TriggerSchema, { actingIdentity: ActingIdentity.APP })).actingIdentity).toBe("app");
+    expect(triggerFromProto(create(TriggerSchema, { actingIdentity: ActingIdentity.OWNER })).actingIdentity).toBe("owner");
+    expect(triggerFromProto(create(TriggerSchema, {})).actingIdentity).toBe("owner");
   });
 });

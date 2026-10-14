@@ -15,6 +15,16 @@ func TestBodyDigestSurvivesWhatGitHubChangesInTransit(t *testing.T) {
 	assert.NotEqual(t, BodyDigest(sent), BodyDigest("Looks good.\n\nTwo nits."))
 }
 
+func TestBodyDigestIgnoresTheBotsSignature(t *testing.T) {
+	footer := SignaturePrefix + "nightly triage, an automation of @octocat.</sub>"
+	authored := "Looks good.\n\nOne nit."
+	assert.Equal(t, BodyDigest(authored), BodyDigest(authored+"\n\n"+footer), "the ledger digests the text before it is signed, the echo after")
+	assert.Equal(t, BodyDigest(authored), BodyDigest(authored+"\r\n\r\n"+footer+"\r\n"))
+	assert.Equal(t, BodyDigest(""), BodyDigest(footer), "a body that is only the signature is empty")
+	assert.NotEqual(t, BodyDigest(authored), BodyDigest(authored+"\n\n"+footer+"\n\nmore"), "only a TRAILING signature paragraph is ignored")
+	assert.NotEqual(t, BodyDigest(authored), BodyDigest(authored+"\n\n"+SignaturePrefix+"x.</sub> and then some"), "text after the closing tag is not a signature")
+}
+
 func TestScopeIsCaseInsensitiveButBranchesAreNot(t *testing.T) {
 	assert.Equal(t, "github:acme/app", ScopeOf("Acme/App"))
 	assert.Equal(t, "github:acme/app#7", TargetOf(ScopeOf("Acme/App"), "7"))

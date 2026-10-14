@@ -11,7 +11,7 @@ Reliant acts through the Reliant GitHub App, signed in as you. What it can do is
 
 ### Acting as the Reliant bot
 
-An [automation](/automations/overview#who-an-automation-acts-as) can instead write as `reliant-labs[bot]`, the App itself, by activating with `acting_identity: app`. The pull requests, comments and reviews then belong to the bot, so you can approve and merge what an agent opens. Reliant mints a token for the bot per call:
+An [automation](/automations/overview#who-an-automation-acts-as) can instead write as `reliant-labs[bot]`, the App itself, by choosing **Reliant bot** under *Writes as* when you create or edit it. The pull requests, comments and reviews then belong to the bot, so you can approve and merge what an agent opens. Reliant mints a token for the bot per call:
 
 1. It checks that **your own account has push access** to the repository (cached for ten minutes). The bot cannot do anything you could not.
 2. It looks up the App's installation for that one repository. If the App is not installed there, the write fails and says so.
@@ -19,7 +19,7 @@ An [automation](/automations/overview#who-an-automation-acts-as) can instead wri
 
 Only writes use the bot. Reads use your own access. Every comment, review, pull request and issue the bot writes ends with a footer naming the automation and its owner. A write the bot cannot make (you cannot push, the App is not installed or lacks a permission) is an error, never a quiet fallback to your name. The one exception is a deployment that has no App key at all, which acts as the owner.
 
-On a self-hosted deployment there is no control plane to mint tokens, so `app` is refused when you activate; use your own connection, or a separate bot account saved as a connection and named in the action's `connection`.
+On a self-hosted deployment there is no control plane to mint tokens, so Reliant bot is refused when you save; use your own connection, or a separate bot account saved as a connection and named in the action's `connection`.
 
 ## Actions
 

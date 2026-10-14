@@ -41,6 +41,7 @@ import {
   triggerErrorMessage,
   triggerGrpc,
   webhookUrlForDisplay,
+  type ActingIdentityKey,
   type Trigger,
   type WebhookCredential,
 } from "@/api/trigger-grpc";
@@ -56,6 +57,7 @@ import { integrationOf, promptOf, sourceCase, type DeclaredTrigger } from "@/lib
 import { TriggerSourceFields } from "../workflow/config/DeclaredTriggerPanel";
 import { OnlyFromControl } from "../workflow/config/OnlyFromControl";
 import { cn } from "@/lib/utils";
+import { ActingIdentityField } from "./ActingIdentityField";
 
 export interface ActivateTriggerDialogProps {
   open: boolean;
@@ -122,6 +124,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
   const [message, setMessage] = useState(!declaredPrompt && declared.description ? `${declared.description}.` : "");
   const [enabled, setEnabled] = useState(true);
   const [notify, setNotify] = useState(false);
+  const [actingIdentity, setActingIdentity] = useState<ActingIdentityKey>("owner");
   // A personal trigger's own filter ("Only from" writes it); an activation's
   // is its declaration's.
   const [filter, setFilter] = useState(personal ? (initialDeclared.filter ?? "") : "");
@@ -172,6 +175,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
         daemonId: machine === NO_MACHINE ? "" : machine,
         noMachine: machine === NO_MACHINE,
         notifyOnComplete: notify,
+        actingIdentity,
         connectionId: connectionId || undefined,
         source: personal ? inlineTriggerSource(declared.source) : { kind: "activation", workflowTrigger: declared.name ?? "" },
         filter: personal && kind !== "schedule" ? filter : undefined,
@@ -344,6 +348,8 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
           />
         )}
         {show("inputs") && !inputsStatus?.missingRequired.length && <p className={errorTextClass} role="alert">{errors.inputs}</p>}
+
+        <ActingIdentityField value={actingIdentity} onChange={setActingIdentity} />
 
         <div className="flex flex-wrap items-center gap-6">
           <div className="flex items-center gap-2">

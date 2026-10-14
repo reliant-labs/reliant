@@ -237,12 +237,12 @@ A workflow that should only ever start from its triggers, never from a chat, can
 
 ## Who an automation acts as
 
-An automation's integration actions, a node's `action` and an agent's integration tools alike, write as one of two identities, chosen when you activate it:
+An automation's integration actions, a node's `action` and an agent's integration tools alike, write as one of two identities, chosen under **Writes as** when you create or edit the automation:
 
 | Identity | Comments, reviews and pull requests appear as | When to choose it |
 |----------|-----------------------------------------------|-------------------|
-| `owner` (default) | You, through your own GitHub connection | The automation is you acting on a schedule |
-| `app` | `reliant-labs[bot]` | A reviewer, triager or worker that should read as its own participant: you can approve and merge what it opens, and a branch rule that wants "someone other than the last pusher" works |
+| You (`owner`, the default) | You, through your own GitHub connection | The automation is you acting on a schedule |
+| Reliant bot (`app`) | `reliant-labs[bot]` | A reviewer, triager or worker that should read as its own participant: you can approve and merge what it opens, and a branch rule that wants "someone other than the last pusher" works |
 
 Everything a bot writes ends with a footer naming the automation and its owner, so nobody has to guess whose it is:
 
@@ -254,7 +254,7 @@ Three things stay as they are:
 
 - **Reads** use your own access. Only writes carry the bot's name.
 - **A person typing in the run's chat acts as themselves.** The bot identity belongs to the automation's own run, not to the chat.
-- **A deployment with no Reliant GitHub App** (self-hosted) acts as the owner. Choosing `app` there is refused when you activate, rather than silently doing something else.
+- **A deployment with no Reliant GitHub App** (self-hosted) acts as the owner. Choosing Reliant bot there is refused when you save, rather than silently doing something else.
 
 Comments the bot writes never fire a trigger on `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments cannot start itself. Another bot's comments (Dependabot, a CI app) do reach your filters.
 

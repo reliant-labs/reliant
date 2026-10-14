@@ -30,6 +30,7 @@ import {
   sourceKindLabel,
   triggerErrorMessage,
   triggerSchedule,
+  type ActingIdentityKey,
   type OverlapPolicy,
   type Trigger,
   type TriggerDefinitionInput,
@@ -61,6 +62,7 @@ import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from
 import { OnlyFromControl } from "../workflow/config/OnlyFromControl";
 import { buildDaemonChoices, defaultDaemonId, NO_MACHINE, noMachineBlockerFor } from "./daemonChoices";
 import { validateTimezone } from "./timezone";
+import { ActingIdentityField } from "./ActingIdentityField";
 
 /**
  * Starting values for a NEW automation — a starter template, or "Save as
@@ -221,13 +223,14 @@ function AutomationFormBody({
   const [overlap, setOverlap] = useState<OverlapPolicy>(initialSchedule?.overlap ?? "skip");
   const [catchupWindow, setCatchupWindow] = useState(initialSchedule?.catchupWindow ?? "");
   const [notifyOnComplete, setNotifyOnComplete] = useState(trigger?.notifyOnComplete ?? false);
+  const [actingIdentity, setActingIdentity] = useState<ActingIdentityKey>(trigger?.actingIdentity ?? "owner");
   // An inline event source's own filter, sent back on save (an update
   // replaces it). An activation's belongs to its declaration.
   const [filter, setFilter] = useState(trigger && trigger.source.kind !== "activation" ? (trigger.filter ?? "") : "");
   // Advanced settings open on their own when they hold something non-default,
   // so an edit never hides a value it is about to save.
   const [advancedOpen, setAdvancedOpen] = useState(
-    !!initialSchedule?.catchupWindow || initialSchedule?.overlap === "allow" || !!trigger?.notifyOnComplete,
+    !!initialSchedule?.catchupWindow || initialSchedule?.overlap === "allow" || !!trigger?.notifyOnComplete || trigger?.actingIdentity === "app",
   );
   const [errors, setErrors] = useState<FieldErrors>({});
   const [attempted, setAttempted] = useState(false);
@@ -248,6 +251,7 @@ function AutomationFormBody({
     overlap,
     catchupWindow,
     notifyOnComplete,
+    actingIdentity,
     filter,
   });
   // Workflow inputs change on their own too (RunWorkflowForm applies a
@@ -402,6 +406,7 @@ function AutomationFormBody({
     daemonId: noMachine ? "" : daemonId,
     noMachine,
     notifyOnComplete,
+    actingIdentity,
     source: buildSource(),
     filter: lockedSource && lockedSource.kind !== "activation" ? filter : undefined,
   });
@@ -481,6 +486,7 @@ function AutomationFormBody({
       overlap !== initial.overlap ||
       catchupWindow !== initial.catchupWindow ||
       notifyOnComplete !== initial.notifyOnComplete ||
+      actingIdentity !== initial.actingIdentity ||
       filter !== initial.filter ||
       (daemonChosen.current &&
         daemonId !== (trigger?.noMachine ? NO_MACHINE : (trigger?.daemonId ?? ""))) ||
@@ -871,6 +877,8 @@ function AutomationFormBody({
                 </div>
               </fieldset>
             )}
+
+            <ActingIdentityField value={actingIdentity} onChange={setActingIdentity} />
 
             <div>
               <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">

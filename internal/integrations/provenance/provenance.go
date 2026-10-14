@@ -115,9 +115,32 @@ type Echo struct {
 // the recorded payload truncates it, so a long comment still matches.
 func BodyDigest(body string) string {
 	body = strings.ReplaceAll(body, "\r\n", "\n")
-	body = strings.TrimSpace(body)
+	body = strings.TrimSpace(stripSignature(strings.TrimSpace(body)))
 	sum := sha256.Sum256([]byte(body))
 	return hex.EncodeToString(sum[:])
+}
+
+// SignaturePrefix opens the one-line footer the GitHub App's bot appends to
+// what it writes. The write ledger records a body before the credential that
+// signs it is chosen, so it digests the text without the footer; the echo has
+// it. Both go through BodyDigest, which ignores a trailing signature, so they
+// agree without either side knowing the other's footer.
+const SignaturePrefix = "<sub>Posted by Reliant for "
+
+// stripSignature removes a trailing signature paragraph from a trimmed body.
+func stripSignature(body string) string {
+	i := strings.LastIndex(body, "\n\n")
+	if i < 0 {
+		if strings.HasPrefix(body, SignaturePrefix) && strings.HasSuffix(body, "</sub>") {
+			return ""
+		}
+		return body
+	}
+	last := body[i+2:]
+	if strings.HasPrefix(last, SignaturePrefix) && strings.HasSuffix(last, "</sub>") && !strings.Contains(last, "\n") {
+		return body[:i]
+	}
+	return body
 }
 
 // ScopeOf names a GitHub repository: "github:owner/repo", lowercased because

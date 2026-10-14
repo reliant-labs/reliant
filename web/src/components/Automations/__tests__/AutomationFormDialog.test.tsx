@@ -16,6 +16,7 @@ import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
+  ActingIdentity,
   CreateTriggerResponseSchema,
   IntegrationSourceSchema,
   ScheduleSourceSchema,
@@ -780,6 +781,33 @@ describe("AutomationFormDialog", () => {
       await user.click(screen.getByRole("button", { name: "Save changes" }));
       await waitFor(() => expect(updateTrigger).toHaveBeenCalledTimes(1));
       expect(updateTrigger.mock.calls[0]![0].trigger.notifyOnComplete).toBe(false);
+    });
+
+    it("sends who the writes speak as: the owner by default, the bot when chosen", async () => {
+      createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: storedTrigger() }));
+      const user = userEvent.setup();
+      renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
+      fill(await screen.findByLabelText("Name"), "Sweep");
+      fill(screen.getByLabelText("Prompt"), "Sweep");
+      await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+      await user.click(screen.getByRole("button", { name: "Advanced" }));
+      expect(screen.getByRole("radio", { name: /You/ })).toBeChecked();
+      await user.click(screen.getByRole("radio", { name: /Reliant bot/ }));
+      await user.click(screen.getByRole("button", { name: "Create automation" }));
+      await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+      expect(createTrigger.mock.calls[0]![0].trigger.actingIdentity).toBe(ActingIdentity.APP);
+    });
+
+    it("an edit of a bot automation opens Advanced on the stored choice and sends it back", async () => {
+      const stored = storedTrigger();
+      stored.actingIdentity = ActingIdentity.APP;
+      updateTrigger.mockResolvedValue(create(UpdateTriggerResponseSchema, { trigger: stored }));
+      const user = userEvent.setup();
+      renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} trigger={triggerFromProto(stored)} />);
+      expect(await screen.findByRole("radio", { name: /Reliant bot/ })).toBeChecked();
+      await user.click(screen.getByRole("button", { name: "Save changes" }));
+      await waitFor(() => expect(updateTrigger).toHaveBeenCalledTimes(1));
+      expect(updateTrigger.mock.calls[0]![0].trigger.actingIdentity).toBe(ActingIdentity.APP);
     });
 
     it("clears the catch-up window back to the server default", async () => {

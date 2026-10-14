@@ -40,6 +40,7 @@ function trigger(id: string, workflow: string, status: TriggerHealthStatusKey = 
     message: "",
     daemonId: "d",
     notifyOnComplete: false,
+    actingIdentity: "owner",
     health: { status, consecutiveFailures: status === "failing" ? 3 : 0, consecutiveSkips: 0, lastFailureDetail: "" },
     createdAt: "",
     updatedAt: "",

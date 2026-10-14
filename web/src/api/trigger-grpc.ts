@@ -26,6 +26,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { grpcClient } from "./grpc-client";
 import { jsToProtoValue, protoValueToJs } from "./proto-utils";
 import {
+  ActingIdentity,
   CreateTriggerRequestSchema,
   DeleteTriggerRequestSchema,
   DisableWorkflowRequestSchema,
@@ -153,6 +154,24 @@ export interface ResolvedSender {
 export type TriggerHealthStatusKey = "healthy" | "degraded" | "failing" | "broken" | "unknown";
 
 /** The server's read-only health summary. Rules: TriggerHealthStatus in trigger.proto. */
+/** Who an automation's integration writes speak as. */
+export type ActingIdentityKey = "owner" | "app";
+
+function actingIdentityFromProto(identity: ActingIdentity): ActingIdentityKey {
+  return identity === ActingIdentity.APP ? "app" : "owner";
+}
+
+function actingIdentityToProto(identity: ActingIdentityKey | undefined): ActingIdentity {
+  switch (identity) {
+    case "app":
+      return ActingIdentity.APP;
+    case "owner":
+      return ActingIdentity.OWNER;
+    default:
+      return ActingIdentity.UNSPECIFIED;
+  }
+}
+
 export interface TriggerHealth {
   status: TriggerHealthStatusKey;
   consecutiveFailures: number;
@@ -177,6 +196,8 @@ export interface Trigger {
   noMachine: boolean;
   /** Tell the owner when a run completes (unread, OS notification, Inbox item). */
   notifyOnComplete: boolean;
+  /** Who the runs' integration writes speak as: the owner, or the Reliant bot. */
+  actingIdentity: ActingIdentityKey;
   /** The project's name, joined by the server. Unset when the project was deleted. */
   projectName?: string;
   /** The daemon's hostname, joined by the server. Unset when it never reported one. */
@@ -256,6 +277,11 @@ export interface TriggerDefinitionInput {
   noMachine?: boolean;
   /** Replaced on update like every field here, so an edit must send it back. */
   notifyOnComplete: boolean;
+  /**
+   * Who the runs' integration writes speak as. Unset: the owner on create,
+   * unchanged on update.
+   */
+  actingIdentity?: ActingIdentityKey;
   /** Replaced on update too: an edit that does not change it sends the stored one. */
   source: TriggerSource;
   /**
@@ -383,6 +409,7 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
     daemonId: proto.daemonId,
     noMachine: proto.noMachine,
     notifyOnComplete: proto.notifyOnComplete,
+    actingIdentity: actingIdentityFromProto(proto.actingIdentity),
     projectName: proto.projectName || undefined,
     daemonName: proto.daemonName || undefined,
     health: healthFromProto(proto.health),
@@ -419,6 +446,7 @@ export function definitionToProto(input: TriggerDefinitionInput): ProtoTriggerDe
     daemonId: input.noMachine ? "" : input.daemonId,
     noMachine: input.noMachine ?? false,
     notifyOnComplete: input.notifyOnComplete,
+    actingIdentity: actingIdentityToProto(input.actingIdentity),
     connectionId: input.connectionId || undefined,
     filter: input.source.kind === "activation" ? "" : (input.filter ?? "").trim(),
   });
@@ -510,6 +538,7 @@ export function definitionFromTrigger(trigger: Trigger): TriggerDefinitionInput 
     daemonId: trigger.daemonId,
     noMachine: trigger.noMachine,
     notifyOnComplete: trigger.notifyOnComplete,
+    actingIdentity: trigger.actingIdentity,
     source: trigger.source,
     connectionId: trigger.connectionId,
     // An activation's filter is its declaration's: not the row's to send.
