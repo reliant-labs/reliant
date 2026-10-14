@@ -213,7 +213,7 @@ func TestIssueCreate(t *testing.T) {
 	}, req.Body)
 
 	assert.Equal(t, map[string]any{
-		"number": 42.0, "id": 1.0, "title": "Crash on save", "state": "open",
+		"number": 42.0, "id": 1.0, "node_id": "I_1", "title": "Crash on save", "state": "open",
 		"html_url": "https://github.com/acme/app/issues/42",
 	}, out)
 }
@@ -275,7 +275,7 @@ func TestIssueComment(t *testing.T) {
 	assert.Equal(t, map[string]any{"body": "Looking into it"}, req.Body)
 
 	assert.Equal(t, map[string]any{
-		"id": 555.0, "html_url": "https://github.com/acme/app/issues/42#issuecomment-555",
+		"id": 555.0, "node_id": "IC_1", "html_url": "https://github.com/acme/app/issues/42#issuecomment-555",
 		"created_at": "2026-01-04T00:00:00Z",
 	}, out)
 }
@@ -283,7 +283,7 @@ func TestIssueComment(t *testing.T) {
 func TestIssueUpdateSendsOnlyTheChangedFields(t *testing.T) {
 	f := newFake(t)
 	f.on("PATCH", "/repos/acme/app/issues/42", jsonReply(200,
-		`{"id":1,"number":42,"title":"Crash on save","state":"closed","state_reason":"completed",
+		`{"id":1,"node_id":"I_1","number":42,"title":"Crash on save","state":"closed","state_reason":"completed",
 		  "html_url":"https://github.com/acme/app/issues/42","labels":[{"name":"bug"}],"assignees":[]}`))
 	out := data(t, f.run("issue.update", map[string]any{
 		"owner": "acme", "repo": "app", "issue_number": 42,
@@ -301,7 +301,7 @@ func TestIssueUpdateSendsOnlyTheChangedFields(t *testing.T) {
 	}, req.Body)
 
 	assert.Equal(t, map[string]any{
-		"number": 42.0, "id": 1.0, "title": "Crash on save", "state": "closed", "state_reason": "completed",
+		"number": 42.0, "id": 1.0, "node_id": "I_1", "title": "Crash on save", "state": "closed", "state_reason": "completed",
 		"html_url": "https://github.com/acme/app/issues/42", "labels": []any{"bug"}, "assignees": []any{},
 	}, out)
 }
@@ -466,7 +466,7 @@ func TestPullRequestReviewCreate(t *testing.T) {
 	assert.Equal(t, map[string]any{"event": "REQUEST_CHANGES", "body": "Needs a test.", "commit_id": "6dcb09b5b57875f334f61aebed695e2e4193db5e"}, req.Body)
 
 	assert.Equal(t, map[string]any{
-		"id": 80.0, "state": "CHANGES_REQUESTED",
+		"id": 80.0, "node_id": "PRR_1", "state": "CHANGES_REQUESTED",
 		"html_url":     "https://github.com/acme/app/pull/17#pullrequestreview-80",
 		"submitted_at": "2026-01-05T00:00:00Z", "commit_id": "6dcb09b5b57875f334f61aebed695e2e4193db5e",
 	}, out)
@@ -905,6 +905,17 @@ var minimal = map[string]map[string]any{
 	"repo.get_tree":      {"owner": "acme", "repo": "app"},
 	"code.search":        {"q": "retry repo:acme/app"},
 	"workflow.dispatch":  {"owner": "acme", "repo": "app", "workflow": "ci.yml", "ref": "main"},
+
+	"issue.comment.update":    {"owner": "acme", "repo": "app", "comment_id": 5, "body": "b"},
+	"issue.comment.list":      {"owner": "acme", "repo": "app", "issue_number": 1},
+	"issue.labels.add":        {"owner": "acme", "repo": "app", "issue_number": 1, "label": "bug"},
+	"issue.labels.remove":     {"owner": "acme", "repo": "app", "issue_number": 1, "label": "bug"},
+	"issue.search":            {"q": "repo:acme/app is:open"},
+	"pr.create":               {"owner": "acme", "repo": "app", "head": "fix", "base": "main", "title": "t"},
+	"pr.update":               {"owner": "acme", "repo": "app", "pull_number": 1, "title": "t"},
+	"pr.reviews.list":         {"owner": "acme", "repo": "app", "pull_number": 1},
+	"pr.review_comments.list": {"owner": "acme", "repo": "app", "pull_number": 1},
+	"pr.review_comment.reply": {"owner": "acme", "repo": "app", "pull_number": 1, "comment_id": 5, "body": "b"},
 }
 
 // Every action in the manifest is covered by these tests: adding one without

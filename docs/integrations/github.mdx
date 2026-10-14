@@ -11,37 +11,95 @@ Reliant acts through the Reliant GitHub App, signed in as you. What it can do is
 
 ## Actions
 
-| Action | What it does |
-|--------|--------------|
-| `user.get` | The account the connection acts as |
-| `issue.create` | Open an issue with a title, body, labels and assignees |
-| `issue.get` | Read an issue (or a pull request's conversation) |
-| `issue.comment` | Comment on an issue or pull request |
-| `issue.update` | Change state, labels, assignees, title or body |
-| `pr.get` | Read a pull request: head and base, mergeability |
-| `pr.list_files` | The files a pull request changes, with diff hunks |
-| `pr.review.create` | Submit a review: comment, approve or request changes |
-| `repo.list_for_user` | Repositories the connection can see |
-| `repo.get` | A repository's metadata, including its default branch |
-| `repo.get_content` | Read a file, or list a directory, at a branch, tag or commit |
-| `repo.get_tree` | Every file path in a repository or directory |
-| `code.search` | GitHub code search |
-| `workflow.dispatch` | Run an Actions workflow that has a `workflow_dispatch` trigger |
+| Action | What it does | Changes GitHub |
+|--------|--------------|----------------|
+| `user.get` | The account the connection acts as | no |
+| `issue.create` | Open an issue with a title, body, labels and assignees | yes |
+| `issue.get` | Read an issue (or a pull request's conversation) | no |
+| `issue.search` | Find issues and pull requests with GitHub search syntax, such as `repo:acme/app is:open "marker"` | no |
+| `issue.comment` | Comment on an issue or pull request | yes |
+| `issue.comment.update` | Edit a comment by id | yes |
+| `issue.comment.list` | The comments on an issue or pull request, with an optional `since` time; follows pagination | no |
+| `issue.update` | Change state, title or body, or **replace** the label and assignee lists | yes |
+| `issue.labels.add` | Add one label, leaving the others alone | yes |
+| `issue.labels.remove` | Remove one label, leaving the others alone | yes |
+| `pr.get` | Read a pull request: head and base, mergeability | no |
+| `pr.list_files` | The files a pull request changes, with diff hunks | no |
+| `pr.create` | Open a pull request from a pushed branch, as a draft or ready | yes |
+| `pr.update` | Change a pull request's title, body or base branch, or close or reopen it | yes |
+| `pr.review.create` | Submit a review: comment, approve or request changes | yes |
+| `pr.reviews.list` | The reviews on a pull request, with verdicts | no |
+| `pr.review_comments.list` | The inline comments on a pull request's diff, with an optional `since` time | no |
+| `pr.review_comment.reply` | Reply in an inline review thread | yes |
+| `repo.list_for_user` | Repositories the connection can see | no |
+| `repo.get` | A repository's metadata, including its default branch | no |
+| `repo.get_content` | Read a file, or list a directory, at a branch, tag or commit | no |
+| `repo.get_tree` | Every file path in a repository or directory | no |
+| `code.search` | GitHub code search | no |
+| `workflow.dispatch` | Run an Actions workflow that has a `workflow_dispatch` trigger | yes |
 
 Use them as `github/<action>@1`. Repository parameters are `owner` and `repo`, the two halves of `owner/repo`.
+
+Every action that creates or updates something returns the object's `id`, its GraphQL `node_id` and its `html_url`, so a later step can refer to it or recognise it. The list actions follow GitHub's pagination (up to 1,000 items; `issue.search` returns one page and takes `page`) and return `{items: [...]}`. Each item names its author by `user` (the login) and `user_id` (the number, which GitHub never reuses).
+
+### Labels: add and remove, don't replace
+
+`issue.update` sets the **whole** label list. Two runs that each read the labels, change them and write them back can undo each other. `issue.labels.add` and `issue.labels.remove` each send one request for one label and GitHub applies it on its own, so use them to claim a task (`agent:in-progress`) or release it. `issue.labels.remove` on a label the issue does not carry fails with *not found*.
+
+### Pull requests are created without labels
+
+GitHub's API opens a pull request with no labels. After `pr.create`, add them with `issue.labels.add` and the returned `number`.
+
+### Merging is deliberately not an action
+
+There is no merge action, and `pr.update` cannot merge, whatever it is given. A person merges. Approving stays available through `pr.review.create` with the `APPROVE` verdict, so whether a workflow may approve is something you decide in the workflow.
+
+### Unattended runs
+
+Automation runs have nobody watching them, so an unattended run is not handed an action that changes GitHub (the **yes** rows above) unless the workflow step names it in its `tools`. Read-only actions are always reachable. See [Unattended by design](/automations/overview#unattended-by-design).
 
 ## Events
 
 | Trigger | `events` value |
 |---------|----------------|
-| Issue opened, closed, edited, labeled, assigned | `issues.opened`, `issues.closed`, `issues.edited`, `issues.labeled`, `issues.assigned` |
+| Issue opened, closed, reopened, edited | `issues.opened`, `issues.closed`, `issues.reopened`, `issues.edited` |
+| Issue labeled or unlabeled, assigned | `issues.labeled`, `issues.unlabeled`, `issues.assigned` |
 | Comment on an issue or pull request | `issue_comment.created` |
-| Pull request opened, updated, closed or merged, ready for review, review requested | `pull_request.opened`, `pull_request.synchronize`, `pull_request.closed`, `pull_request.ready_for_review`, `pull_request.review_requested` |
+| Pull request opened, reopened, updated, closed or merged, ready for review | `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.closed`, `pull_request.ready_for_review` |
+| Pull request labeled or unlabeled | `pull_request.labeled`, `pull_request.unlabeled` |
+| Review requested | `pull_request.review_requested` |
 | Review submitted | `pull_request_review.submitted` |
+| Comment on a line of a pull request's diff, or a reply in that thread | `pull_request_review_comment.created` |
 | Push | `push` |
 | Actions run finished | `workflow_run.completed` |
+| A check finished (one job), or all of a commit's checks | `check_run.completed`, `check_suite.completed` |
 
-You can narrow a trigger with `match`. Every event carries `repository` (`owner/name`), `installation_id`, `sender` and `action`; individual events add more, such as `label` and `assignee` on labeled and assigned issues, `merged` on closed pull requests, `branch` and `tag` on pushes, `conclusion` on finished runs, and `mentions_reliant` and `is_pull_request` on comments.
+Each event's payload is declared, so `get_integration_schema` lists it and validation checks a trigger's `filter`, `inputs` and `prompt` against it: reading a top-level key the event never carries (`data.issue` on an inline diff comment) is an error before the trigger fires. Lists of names, such as `issue.labels` and `pull_request.labels`, hold strings.
+
+You can narrow a trigger with `match`. Every event carries `repository` (`owner/name`), `installation_id`, `sender` and `action`; individual events add more:
+
+| Attribute | On |
+|-----------|----|
+| `label` | `issues.labeled`, `issues.unlabeled`, `pull_request.labeled`, `pull_request.unlabeled` |
+| `assignee` | `issues.assigned` |
+| `branch`, `base_branch` | every pull request event, `pull_request_review.submitted`, `pull_request_review_comment.created` |
+| `merged` | `pull_request.closed` |
+| `requested_reviewer` | `pull_request.review_requested` |
+| `state` | `pull_request_review.submitted` (`approved`, `changes_requested`, `commented`) |
+| `mentions_reliant` | `issue_comment.created`, `pull_request_review_comment.created` |
+| `is_pull_request` | `issue_comment.created` |
+| `is_reply` | `pull_request_review_comment.created` (`"true"` for a reply, `"false"` for the first comment of a thread) |
+| `branch`, `tag` | `push` (one or the other) |
+| `conclusion`, `branch` | `workflow_run.completed`, `check_run.completed`, `check_suite.completed` |
+| `workflow` | `workflow_run.completed` |
+| `name`, `app` | `check_run.completed` (the check's name, and the slug of the App that ran it, `github-actions` for Actions) |
+| `app` | `check_suite.completed` |
+
+Boolean-like attributes are the strings `"true"` and `"false"`; quote them in YAML.
+
+Comments written by a GitHub App, including Reliant's own, never fire `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments or replies cannot trigger itself. Labels and other events are not filtered this way: a trigger on `pull_request.labeled` also fires when a run adds the label, so guard it with a `sender` check or a label the run does not add.
+
+On a self-hosted deployment the GitHub App must be subscribed to the events you use (Pull request review comment, Check run, Check suite and so on) and the repository permissions that go with them.
 
 ## Example: review each new pull request
 

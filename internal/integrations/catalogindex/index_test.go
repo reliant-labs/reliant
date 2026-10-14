@@ -167,8 +167,6 @@ func TestEmbeddedCatalogRanksTheObviousActionFirst(t *testing.T) {
 	for query, want := range map[string]string{
 		"github/issue.create@1": "github/issue.create@1",
 		"create issue":          "github/issue.create@1",
-		"pull request":          "github/pr.get@1",
-		"comment":               "github/issue.comment@1",
 		"dispatch workflow":     "github/workflow.dispatch@1",
 		"http request":          "http/request@1",
 	} {
@@ -181,6 +179,17 @@ func TestEmbeddedCatalogRanksTheObviousActionFirst(t *testing.T) {
 		// Unscoped, the action still comes up near the top.
 		all := search(t, idx, Query{Text: query, PageSize: 3})
 		assert.Contains(t, refs(all), want, "unscoped query %q", query)
+	}
+
+	// Several GitHub actions share these words (pr.get, pr.create, pr.update;
+	// the comment actions), so none is "the" first hit; the one an agent most
+	// often means must still be near the top.
+	for query, want := range map[string]string{
+		"pull request": "github/pr.get@1",
+		"comment":      "github/issue.comment@1",
+	} {
+		r := search(t, idx, Query{Text: query, Kinds: []Kind{KindAction}, PageSize: 6})
+		assert.Contains(t, refs(r), want, "query %q", query)
 	}
 }
 

@@ -156,15 +156,20 @@ type mapping struct {
 // (or the bare event for push). The github manifest declares a trigger for
 // each; TestEmittedEventsMatchTheManifest pins that.
 var mappings = map[string]mapping{
-	"issues.opened":   {data: issueData},
-	"issues.closed":   {data: issueData},
-	"issues.edited":   {data: issueEditedData},
-	"issues.labeled":  {attrs: labelAttrs, data: labelData},
-	"issues.assigned": {attrs: assigneeAttrs, data: assigneeData},
+	"issues.opened":    {data: issueData},
+	"issues.closed":    {data: issueData},
+	"issues.edited":    {data: issueEditedData},
+	"issues.labeled":   {attrs: labelAttrs, data: labelData},
+	"issues.unlabeled": {attrs: labelAttrs, data: labelData},
+	"issues.reopened":  {data: issueData},
+	"issues.assigned":  {attrs: assigneeAttrs, data: assigneeData},
 
 	"issue_comment.created": {attrs: commentAttrs, data: commentData},
 
 	"pull_request.opened":           {attrs: prAttrs, data: prData},
+	"pull_request.reopened":         {attrs: prAttrs, data: prData},
+	"pull_request.labeled":          {attrs: prLabelAttrs, data: prLabelData},
+	"pull_request.unlabeled":        {attrs: prLabelAttrs, data: prLabelData},
 	"pull_request.synchronize":      {attrs: prAttrs, data: prSyncData},
 	"pull_request.closed":           {attrs: prClosedAttrs, data: prData},
 	"pull_request.ready_for_review": {attrs: prAttrs, data: prData},
@@ -172,9 +177,13 @@ var mappings = map[string]mapping{
 
 	"pull_request_review.submitted": {attrs: reviewAttrs, data: reviewData},
 
+	"pull_request_review_comment.created": {attrs: reviewCommentAttrs, data: reviewCommentData},
+
 	"push": {attrs: pushAttrs, data: pushData},
 
 	"workflow_run.completed": {attrs: workflowRunAttrs, data: workflowRunData},
+	"check_run.completed":    {attrs: checkRunAttrs, data: checkRunData},
+	"check_suite.completed":  {attrs: checkSuiteAttrs, data: checkSuiteData},
 }
 
 // EventTypes lists every event type the parser emits, sorted.
@@ -264,9 +273,13 @@ func sender(body *payload) *core.TriggerSender {
 
 // isAppComment is a comment written by a GitHub App, ours included. A
 // trigger whose run comments would otherwise fire on its own comment,
-// forever.
+// forever. It covers inline diff comments too: a responder's reply in a
+// review thread is a pull_request_review_comment of its own.
 func isAppComment(event string, body *payload) bool {
-	return event == "issue_comment" && body.Sender != nil && body.Sender.Type == "Bot"
+	if event != "issue_comment" && event != "pull_request_review_comment" {
+		return false
+	}
+	return body.Sender != nil && body.Sender.Type == "Bot"
 }
 
 func senderLogin(body *payload) string {
@@ -281,6 +294,7 @@ func senderLogin(body *payload) string {
 func occurredAt(raw map[string]any, receivedAt time.Time) time.Time {
 	for _, path := range [][]string{
 		{"comment", "created_at"}, {"review", "submitted_at"}, {"workflow_run", "updated_at"},
+		{"check_run", "completed_at"}, {"check_suite", "updated_at"},
 		{"head_commit", "timestamp"}, {"pull_request", "updated_at"}, {"issue", "updated_at"},
 	} {
 		if s, ok := str(dig(raw, path...)); ok {

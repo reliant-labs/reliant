@@ -161,7 +161,7 @@ actions:
       Open an issue in owner/repo with a title and optional markdown body,
       labels and assignees. Labels that do not exist are created; an assignee
       without access to the repository fails validation. Returns the issue
-      number and URL.
+      number, id, node id and URL.
     keywords: [issue, open, file, bug, ticket, report]
     placement: server
     mutates: true
@@ -227,6 +227,7 @@ actions:
       select: >-
         {"number": response.number,
          "id": response.id,
+         "node_id": response.?node_id.orValue(null),
          "title": response.title,
          "state": response.state,
          "html_url": response.html_url}
@@ -235,6 +236,7 @@ actions:
         properties:
           number: { type: integer, description: The issue number within the repository. }
           id: { type: integer }
+          node_id: { type: [string, "null"] }
           title: { type: string }
           state: { type: string }
           html_url: { type: string }
@@ -343,12 +345,14 @@ actions:
     output:
       select: >-
         {"id": response.id,
+         "node_id": response.?node_id.orValue(null),
          "html_url": response.html_url,
          "created_at": response.?created_at.orValue(null)}
       schema:
         type: object
         properties:
           id: { type: integer }
+          node_id: { type: [string, "null"] }
           html_url: { type: string }
           created_at: { type: [string, "null"] }
 
@@ -427,6 +431,7 @@ actions:
       select: >-
         {"number": response.number,
          "id": response.id,
+         "node_id": response.?node_id.orValue(null),
          "title": response.title,
          "state": response.state,
          "state_reason": response.?state_reason.orValue(null),
@@ -440,12 +445,346 @@ actions:
         properties:
           number: { type: integer }
           id: { type: integer }
+          node_id: { type: [string, "null"] }
           title: { type: string }
           state: { type: string, enum: [open, closed] }
           state_reason: { type: [string, "null"] }
           html_url: { type: string }
           labels: { type: array, items: { type: string } }
           assignees: { type: array, items: { type: string } }
+
+  - id: issue.comment.update
+    display_name: Edit issue or pull request comment
+    summary: Replace the text of an existing comment on an issue or a pull request's conversation.
+    description: >-
+      Edit a comment by id. body REPLACES the whole text, so read the current
+      one first (issue.comment.list) to change part of it. The id is what
+      issue.comment, issue.comment.list or an issue_comment.created event
+      gives; pull request conversation comments are issue comments too.
+      Inline diff comments (on a line of the diff) are a different resource
+      and cannot be edited here. The connection's account can edit only
+      comments it may edit on GitHub. Returns the comment's id, node id and
+      URL.
+    keywords: [comment, edit, update, change, rewrite, status comment, issue, pull request]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, comment_id, body]
+      properties:
+        owner: *owner
+        repo: *repo
+        comment_id: &comment_id
+          type: integer
+          minimum: 1
+          title: Comment id
+          description: The comment's numeric id (the number after issuecomment- in its URL).
+          examples: [555]
+        body:
+          type: string
+          minLength: 1
+          title: New text
+          description: The comment's new text, in GitHub-flavored markdown. It replaces the current text.
+          examples: ["Status: fix is up in #57."]
+        connection: *connection
+    request:
+      method: PATCH
+      path: /repos/{{ params.owner }}/{{ params.repo }}/issues/comments/{{ params.comment_id }}
+      body_expr: '{"body": params.body}'
+      errors: *github_errors
+    output:
+      select: >-
+        {"id": response.id,
+         "node_id": response.?node_id.orValue(null),
+         "html_url": response.html_url,
+         "updated_at": response.?updated_at.orValue(null)}
+      schema:
+        type: object
+        properties:
+          id: { type: integer }
+          node_id: { type: [string, "null"] }
+          html_url: { type: string }
+          updated_at: { type: [string, "null"] }
+
+  - id: issue.comment.list
+    display_name: List issue or pull request comments
+    summary: Read the conversation comments on an issue or pull request, optionally only those changed since a time.
+    description: >-
+      List the comments on an issue, or on a pull request's conversation tab
+      (pass the PR number as issue_number), oldest first. Pass since, an ISO
+      8601 time such as 2026-01-02T03:04:05Z, to get only comments created or
+      edited after it, so a recurring run reads what is new. Follows GitHub's
+      pagination up to 1000 comments; narrow with since for busier threads.
+      Each comment carries its id, node id, author login and numeric user id.
+      Inline diff comments are listed by pr.review_comments.list and review
+      summaries by pr.reviews.list.
+    keywords: [comment, comments, list, read, thread, conversation, since, new, issue, pull request]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, issue_number]
+      properties:
+        owner: *owner
+        repo: *repo
+        issue_number: *issue_number
+        since: &since
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$"
+          title: Since
+          description: Only comments updated at or after this ISO 8601 time. Omit for every comment.
+          examples: ["2026-01-02T03:04:05Z"]
+        connection: *connection
+    request:
+      method: GET
+      path: /repos/{{ params.owner }}/{{ params.repo }}/issues/{{ params.issue_number }}/comments
+      query: { per_page: "100" }
+      query_expr: '{?"since": params.?since}'
+      pagination: { style: link_header, max_pages: 10 }
+      max_response_bytes: 5242880
+      errors: *github_errors
+    output:
+      select: >-
+        response.map(c, {"id": c.id,
+                         "node_id": c.?node_id.orValue(null),
+                         "body": type(c.?body.orValue(null)) == string ? c.body : "",
+                         "html_url": c.html_url,
+                         "user": c.?user.?login.orValue(null),
+                         "user_id": c.?user.?id.orValue(null),
+                         "author_association": c.?author_association.orValue(null),
+                         "created_at": c.?created_at.orValue(null),
+                         "updated_at": c.?updated_at.orValue(null)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: integer }
+                node_id: { type: [string, "null"] }
+                body: { type: string }
+                html_url: { type: string }
+                user: { type: [string, "null"], description: The author's login (null for a deleted account). }
+                user_id: { type: [integer, "null"], description: The author's numeric user id, which is never reused. }
+                author_association: { type: [string, "null"] }
+                created_at: { type: [string, "null"] }
+                updated_at: { type: [string, "null"] }
+
+  - id: issue.labels.add
+    display_name: Add a label to an issue or pull request
+    summary: Add one label without touching the others (atomic, unlike issue.update).
+    description: >-
+      Add a single label to an issue or pull request. This is one request that
+      GitHub applies on its own, so it cannot overwrite a label someone else
+      added at the same moment; issue.update with labels replaces the whole
+      list and can. A label that does not exist in the repository is created;
+      adding one the issue already has changes nothing. Returns the issue's
+      labels after the change.
+    keywords: [label, add, tag, mark, triage, issue, pull request, atomic]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, issue_number, label]
+      properties:
+        owner: *owner
+        repo: *repo
+        issue_number: *issue_number
+        label: &label_name
+          type: string
+          minLength: 1
+          maxLength: 50
+          # At least one character that is not a dot, so the name can never be
+          # the "." or ".." path segment that survives percent-escaping.
+          pattern: "^.*[^.].*$"
+          title: Label
+          description: One label name, exactly as it is spelled on GitHub.
+          examples: ["agent:in-progress"]
+        connection: *connection
+    request:
+      method: POST
+      path: /repos/{{ params.owner }}/{{ params.repo }}/issues/{{ params.issue_number }}/labels
+      body_expr: '{"labels": [params.label]}'
+      errors: *github_errors
+    output:
+      select: >-
+        {"added": params.label,
+         "labels": response.map(l, type(l) == string ? l : l.name),
+         "number": params.issue_number,
+         "html_url": "https://github.com/" + params.owner + "/" + params.repo + "/issues/" + string(int(params.issue_number))}
+      schema:
+        type: object
+        properties:
+          added: { type: string }
+          labels: { type: array, items: { type: string }, description: The issue's labels after the change. }
+          number: { type: integer }
+          html_url: { type: string, description: The issue's page (GitHub redirects it to the pull request for one). }
+
+  - id: issue.labels.remove
+    display_name: Remove a label from an issue or pull request
+    summary: Remove one label without touching the others (atomic, unlike issue.update).
+    description: >-
+      Remove a single label from an issue or pull request. This is one request
+      that GitHub applies on its own, so it cannot drop a label someone else
+      added at the same moment; issue.update with labels replaces the whole
+      list and can. The label stays in the repository. If the issue does not
+      carry the label GitHub answers 404, and so does this action: a not found
+      here can mean the label was already removed. Returns the issue's labels
+      after the change.
+    keywords: [label, remove, delete, untag, unmark, clear, triage, issue, pull request, atomic]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, issue_number, label]
+      properties:
+        owner: *owner
+        repo: *repo
+        issue_number: *issue_number
+        label: *label_name
+        connection: *connection
+    request:
+      method: DELETE
+      path: /repos/{{ params.owner }}/{{ params.repo }}/issues/{{ params.issue_number }}/labels/{{ params.label }}
+      errors: *github_errors
+    output:
+      select: >-
+        {"removed": params.label,
+         "labels": response.map(l, type(l) == string ? l : l.name),
+         "number": params.issue_number,
+         "html_url": "https://github.com/" + params.owner + "/" + params.repo + "/issues/" + string(int(params.issue_number))}
+      schema:
+        type: object
+        properties:
+          removed: { type: string }
+          labels: { type: array, items: { type: string }, description: The issue's labels after the change. }
+          number: { type: integer }
+          html_url: { type: string }
+
+  - id: issue.search
+    display_name: Search issues and pull requests
+    summary: Find issues and pull requests with GitHub search syntax, e.g. repo:acme/app is:open "marker".
+    description: >-
+      Search issues and pull requests with GitHub's search syntax. Scope the
+      query with repo:owner/name (or org:, user:) and narrow it with is:issue,
+      is:pr, is:open, is:closed, label:"name", author:, in:title,body, or a
+      quoted phrase, for example repo:acme/app is:open "autopilot:marker".
+      Each hit says whether it is a pull request. Returns one page; ask for the
+      next with page. GitHub returns at most the first 1,000 matches, indexes
+      new items with a short delay, and allows about thirty searches a minute.
+    keywords: [search, find, query, issues, pull requests, marker, existing, duplicate, label, open]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [q]
+      properties:
+        q:
+          type: string
+          minLength: 1
+          maxLength: 256
+          title: Search
+          description: Search terms plus GitHub qualifiers (repo:, is:, label:, author:, in:).
+          examples: ["repo:acme/app is:open is:issue label:bug"]
+        sort:
+          type: string
+          enum: [comments, created, updated]
+          title: Sort by
+          description: What to sort by. Omit for best match.
+        order:
+          type: string
+          enum: [asc, desc]
+          title: Order
+          description: Sort direction; only used with Sort by. Defaults to desc.
+        per_page:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 30
+          title: Results per page
+          description: How many results to return, 1 to 100.
+          examples: [30]
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+          description: Which page of results, from 1.
+          examples: [2]
+        connection: *connection
+    request:
+      method: GET
+      path: /search/issues
+      query:
+        q: "{{ params.q }}"
+        per_page: "{{ params.per_page }}"
+        page: "{{ params.page }}"
+      query_expr: '{?"sort": params.?sort, ?"order": params.?order}'
+      max_response_bytes: 5242880
+      errors: *github_errors
+    output:
+      select: >-
+        {"total_count": response.total_count,
+         "incomplete_results": response.?incomplete_results.orValue(false),
+         "items": response.items.map(i, {
+           "number": i.number,
+           "id": i.id,
+           "node_id": i.?node_id.orValue(null),
+           "title": i.title,
+           "state": i.state,
+           "html_url": i.html_url,
+           "repository_url": i.?repository_url.orValue(null),
+           "user": i.?user.?login.orValue(null),
+           "user_id": i.?user.?id.orValue(null),
+           "labels": type(i.?labels.orValue(null)) == list ?
+             i.labels.map(l, type(l) == string ? l : l.name) : [],
+           "is_pull_request": i.?pull_request.orValue(null) != null,
+           "comments": i.?comments.orValue(0),
+           "created_at": i.?created_at.orValue(null),
+           "updated_at": i.?updated_at.orValue(null),
+           "closed_at": i.?closed_at.orValue(null)})}
+      schema:
+        type: object
+        properties:
+          total_count: { type: integer }
+          incomplete_results: { type: boolean, description: GitHub timed out before searching everything. }
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                number: { type: integer }
+                id: { type: integer }
+                node_id: { type: [string, "null"] }
+                title: { type: string }
+                state: { type: string, enum: [open, closed] }
+                html_url: { type: string }
+                repository_url: { type: [string, "null"], description: "The API URL of the repository, ending in /repos/owner/name." }
+                user: { type: [string, "null"] }
+                user_id: { type: [integer, "null"] }
+                labels: { type: array, items: { type: string } }
+                is_pull_request: { type: boolean }
+                comments: { type: integer }
+                created_at: { type: [string, "null"] }
+                updated_at: { type: [string, "null"] }
+                closed_at: { type: [string, "null"] }
 
   # ---------------------------------------------------------- pull requests
 
@@ -656,6 +995,7 @@ actions:
     output:
       select: >-
         {"id": response.id,
+         "node_id": response.?node_id.orValue(null),
          "state": response.state,
          "html_url": response.html_url,
          "submitted_at": response.?submitted_at.orValue(null),
@@ -664,10 +1004,362 @@ actions:
         type: object
         properties:
           id: { type: integer }
+          node_id: { type: [string, "null"] }
           state: { type: string, description: "APPROVED, CHANGES_REQUESTED or COMMENTED." }
           html_url: { type: string }
           submitted_at: { type: [string, "null"] }
           commit_id: { type: [string, "null"] }
+
+  - id: pr.create
+    display_name: Open pull request
+    summary: Open a pull request from a pushed branch, as a draft or ready for review.
+    description: >-
+      Open a pull request merging head into base. The head branch must already
+      be pushed (from a workspace, or created through GitHub). head is a
+      branch name, or owner:branch for a branch in a fork. A pull request
+      cannot be created with labels in the same request; add them afterwards
+      with issue.labels.add using the returned number. GitHub answers 422 when
+      the branches are identical, have no commits between them, or a pull
+      request for them is already open; the message says which. Merging is not
+      an action here: a person merges. Returns the pull request's number, id,
+      node id and URL.
+    keywords: [pull request, pr, open, create, draft, branch, propose]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, head, base, title]
+      properties:
+        owner: *owner
+        repo: *repo
+        head:
+          type: string
+          minLength: 1
+          maxLength: 255
+          title: Head branch
+          description: The branch with the changes, or owner:branch when it lives in a fork.
+          examples: ["agent/issue-42", "octocat:fix-save"]
+        base:
+          type: string
+          minLength: 1
+          maxLength: 255
+          title: Base branch
+          description: The branch to merge into, usually the repository's default branch.
+          examples: ["main"]
+        title:
+          type: string
+          minLength: 1
+          title: Title
+          description: The pull request's title.
+          examples: ["Fix the save crash (#42)"]
+        body:
+          type: string
+          title: Body
+          description: The pull request's description, in GitHub-flavored markdown.
+          examples: ["Fixes #42."]
+        draft:
+          type: boolean
+          title: Draft
+          description: Open as a draft that is not ready for review. Omit for a ready pull request.
+        connection: *connection
+    request:
+      method: POST
+      path: /repos/{{ params.owner }}/{{ params.repo }}/pulls
+      body_expr: >-
+        {"head": params.head,
+         "base": params.base,
+         "title": params.title,
+         ?"body": params.?body,
+         ?"draft": params.?draft}
+      errors: *github_errors
+    output:
+      select: &pr_write_select >-
+        {"number": response.number,
+         "id": response.id,
+         "node_id": response.?node_id.orValue(null),
+         "html_url": response.html_url,
+         "title": response.title,
+         "state": response.state,
+         "draft": response.?draft.orValue(false),
+         "head_sha": response.?head.?sha.orValue(null),
+         "base_ref": response.?base.?ref.orValue(null)}
+      schema: &pr_write_schema
+        type: object
+        properties:
+          number: { type: integer }
+          id: { type: integer }
+          node_id: { type: [string, "null"] }
+          html_url: { type: string }
+          title: { type: string }
+          state: { type: string, enum: [open, closed] }
+          draft: { type: boolean }
+          head_sha: { type: [string, "null"] }
+          base_ref: { type: [string, "null"], description: The branch it targets. }
+
+  - id: pr.update
+    display_name: Update pull request
+    summary: Change a pull request's title, body, base branch, or close or reopen it.
+    description: >-
+      Edit a pull request. Only the fields you pass change; pass at least one.
+      state closed closes it without merging and open reopens it. Changing
+      base retargets the pull request to another branch. Labels and assignees
+      are changed through issue.labels.add, issue.labels.remove and
+      issue.update, since a pull request is an issue too. Merging is not an
+      action here: a person merges. Returns the pull request's number, id,
+      node id and URL.
+    keywords: [pull request, pr, edit, update, retitle, close, reopen, retarget, base]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, pull_number]
+      properties:
+        owner: *owner
+        repo: *repo
+        pull_number: *pull_number
+        title:
+          type: string
+          minLength: 1
+          title: New title
+          description: Replaces the title. Omit to keep it.
+          examples: ["Fix the save crash (#42)"]
+        body:
+          type: string
+          title: New body
+          description: Replaces the description, in GitHub-flavored markdown. Omit to keep it.
+          examples: ["Fixes #42.\n\nRe-tested on main."]
+        state:
+          type: string
+          enum: [open, closed]
+          title: State
+          description: closed closes the pull request without merging; open reopens it.
+        base:
+          type: string
+          minLength: 1
+          maxLength: 255
+          title: Base branch
+          description: Retarget the pull request to this branch.
+          examples: ["release-1.2"]
+        connection: *connection
+    request:
+      method: PATCH
+      path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}
+      # Absent params are left out, not sent as null.
+      body_expr: >-
+        {?"title": params.?title,
+         ?"body": params.?body,
+         ?"state": params.?state,
+         ?"base": params.?base}
+      errors: *github_errors
+    output:
+      select: *pr_write_select
+      schema: *pr_write_schema
+
+  - id: pr.reviews.list
+    display_name: List pull request reviews
+    summary: The reviews submitted on a pull request, with verdicts and summaries.
+    description: >-
+      List the reviews on a pull request, oldest first: who reviewed, the
+      verdict (APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED or PENDING),
+      the summary text, and the commit reviewed. Pending reviews are visible
+      only to their author. The comments inside a review are listed by
+      pr.review_comments.list (match on review_id). Follows GitHub's
+      pagination up to 1000 reviews.
+    keywords: [pull request, pr, reviews, list, approved, changes requested, verdict, reviewer]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, pull_number]
+      properties:
+        owner: *owner
+        repo: *repo
+        pull_number: *pull_number
+        connection: *connection
+    request:
+      method: GET
+      path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}/reviews
+      query: { per_page: "100" }
+      pagination: { style: link_header, max_pages: 10 }
+      max_response_bytes: 5242880
+      errors: *github_errors
+    output:
+      select: >-
+        response.map(r, {"id": r.id,
+                         "node_id": r.?node_id.orValue(null),
+                         "state": r.state,
+                         "body": type(r.?body.orValue(null)) == string ? r.body : "",
+                         "html_url": r.?html_url.orValue(null),
+                         "user": r.?user.?login.orValue(null),
+                         "user_id": r.?user.?id.orValue(null),
+                         "author_association": r.?author_association.orValue(null),
+                         "commit_id": r.?commit_id.orValue(null),
+                         "submitted_at": r.?submitted_at.orValue(null)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: integer }
+                node_id: { type: [string, "null"] }
+                state: { type: string, description: "APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED or PENDING." }
+                body: { type: string }
+                html_url: { type: [string, "null"] }
+                user: { type: [string, "null"], description: The reviewer's login (null for a deleted account). }
+                user_id: { type: [integer, "null"], description: The reviewer's numeric user id, which is never reused. }
+                author_association: { type: [string, "null"] }
+                commit_id: { type: [string, "null"] }
+                submitted_at: { type: [string, "null"] }
+
+  - id: pr.review_comments.list
+    display_name: List pull request inline comments
+    summary: The comments left on lines of a pull request's diff, optionally only those since a time.
+    description: >-
+      List the inline review comments on a pull request: comments attached to a
+      line of the diff, including replies, oldest first. Each carries the file
+      path, line, the diff hunk it points at, the review it belongs to
+      (review_id) and, for a reply, the comment it answers (in_reply_to_id;
+      reply to a thread by passing its first comment's id to
+      pr.review_comment.reply). Pass since, an ISO 8601 time, to get only
+      comments created or edited after it. Follows GitHub's pagination up to
+      1000 comments. line is null when the commented line is no longer in the
+      diff (the comment is outdated); original_line is where it was.
+    keywords: [pull request, pr, review comments, inline, diff, line, thread, list, since, responder]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, pull_number]
+      properties:
+        owner: *owner
+        repo: *repo
+        pull_number: *pull_number
+        since: *since
+        connection: *connection
+    request:
+      method: GET
+      path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}/comments
+      query: { per_page: "100" }
+      query_expr: '{?"since": params.?since}'
+      pagination: { style: link_header, max_pages: 10 }
+      max_response_bytes: 5242880
+      errors: *github_errors
+    output:
+      select: >-
+        response.map(c, {"id": c.id,
+                         "node_id": c.?node_id.orValue(null),
+                         "review_id": c.?pull_request_review_id.orValue(null),
+                         "in_reply_to_id": c.?in_reply_to_id.orValue(null),
+                         "path": c.?path.orValue(null),
+                         "line": c.?line.orValue(null),
+                         "original_line": c.?original_line.orValue(null),
+                         "side": c.?side.orValue(null),
+                         "commit_id": c.?commit_id.orValue(null),
+                         "diff_hunk": c.?diff_hunk.orValue(null),
+                         "body": type(c.?body.orValue(null)) == string ? c.body : "",
+                         "html_url": c.?html_url.orValue(null),
+                         "user": c.?user.?login.orValue(null),
+                         "user_id": c.?user.?id.orValue(null),
+                         "author_association": c.?author_association.orValue(null),
+                         "created_at": c.?created_at.orValue(null),
+                         "updated_at": c.?updated_at.orValue(null)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: integer }
+                node_id: { type: [string, "null"] }
+                review_id: { type: [integer, "null"], description: The review this comment belongs to. }
+                in_reply_to_id: { type: [integer, "null"], description: The comment this one replies to; null for the first comment of a thread. }
+                path: { type: [string, "null"] }
+                line: { type: [integer, "null"], description: The line in the diff; null when the comment is outdated. }
+                original_line: { type: [integer, "null"] }
+                side: { type: [string, "null"], description: "LEFT (removed line) or RIGHT (added or unchanged)." }
+                commit_id: { type: [string, "null"] }
+                diff_hunk: { type: [string, "null"] }
+                body: { type: string }
+                html_url: { type: [string, "null"] }
+                user: { type: [string, "null"] }
+                user_id: { type: [integer, "null"] }
+                author_association: { type: [string, "null"] }
+                created_at: { type: [string, "null"] }
+                updated_at: { type: [string, "null"] }
+
+  - id: pr.review_comment.reply
+    display_name: Reply to a pull request inline comment
+    summary: Reply in a review thread on a line of a pull request's diff.
+    description: >-
+      Post a reply to an inline review comment, in the same thread. comment_id
+      is the id of a comment in the thread (pr.review_comments.list, or a
+      pull_request_review_comment.created event); GitHub does not nest replies,
+      so replying to a reply lands in the same thread. To start a new thread, or
+      for a conversation-tab comment, use pr.review.create or issue.comment.
+      Returns the reply's id, node id and URL.
+    keywords: [pull request, pr, review comment, reply, thread, inline, respond, address]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, pull_number, comment_id, body]
+      properties:
+        owner: *owner
+        repo: *repo
+        pull_number: *pull_number
+        comment_id:
+          type: integer
+          minimum: 1
+          title: Comment id
+          description: The inline comment to reply to.
+          examples: [1234]
+        body:
+          type: string
+          minLength: 1
+          title: Reply
+          description: The reply, in GitHub-flavored markdown.
+          examples: ["Good catch, fixed in abc1234."]
+        connection: *connection
+    request:
+      method: POST
+      path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}/comments/{{ params.comment_id }}/replies
+      body_expr: '{"body": params.body}'
+      errors: *github_errors
+    output:
+      select: >-
+        {"id": response.id,
+         "node_id": response.?node_id.orValue(null),
+         "html_url": response.html_url,
+         "in_reply_to_id": response.?in_reply_to_id.orValue(null),
+         "created_at": response.?created_at.orValue(null)}
+      schema:
+        type: object
+        properties:
+          id: { type: integer }
+          node_id: { type: [string, "null"] }
+          html_url: { type: string }
+          in_reply_to_id: { type: [integer, "null"] }
+          created_at: { type: [string, "null"] }
 
   # ------------------------------------------------------------ repositories
 
@@ -1155,7 +1847,10 @@ actions:
 # see. `events` are the provider's event types; `attributes` are what an
 # IntegrationSource `match:` can require, and every event of a trigger sets
 # each of them. `data` is trigger.payload.data: a trimmed copy of GitHub's
-# webhook body, untrusted, with long text capped at 16 KiB.
+# webhook body, untrusted, with long text capped at 16 KiB. Each `data` is
+# closed (additionalProperties: false) at its top level, so a filter that reads
+# a key the event never carries (`data.issue` on an inline diff comment) is a
+# validation error, not a run that fails on every event.
 triggers:
   - id: issue.opened
     display_name: Issue opened
@@ -1172,6 +1867,7 @@ triggers:
       - &attr_action { name: action, description: The webhook action., example: opened }
     data: &issue_data
       type: object
+      additionalProperties: false
       properties:
         action: { type: string }
         issue: &issue_schema
@@ -1228,6 +1924,7 @@ triggers:
     attributes: *issue_attrs
     data:
       type: object
+      additionalProperties: false
       properties:
         action: { type: string }
         issue: *issue_schema
@@ -1255,12 +1952,47 @@ triggers:
       - { name: label, description: The label that was added., example: needs-triage }
     data:
       type: object
+      additionalProperties: false
       properties:
         action: { type: string }
         label: { type: string, description: The label that was added. }
         issue: *issue_schema
         repository: *repository_schema
         sender: *user_schema
+
+  - id: issue.unlabeled
+    display_name: Issue unlabeled
+    summary: A label was removed from an issue.
+    description: >-
+      Fires when a label is removed from an issue, by a person or by a run.
+      Match `label` to react to one label, e.g. label: agent:ready to notice
+      an issue being withdrawn from automation.
+    keywords: [label, untag, remove label, triage]
+    events: [issues.unlabeled]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - { name: label, description: The label that was removed., example: needs-triage }
+    data:
+      type: object
+      additionalProperties: false
+      properties:
+        action: { type: string }
+        label: { type: string, description: The label that was removed. }
+        issue: *issue_schema
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: issue.reopened
+    display_name: Issue reopened
+    summary: A closed issue was reopened.
+    description: Fires when a closed issue is reopened. issue.state_reason is reopened.
+    keywords: [reopen, regression, came back]
+    events: [issues.reopened]
+    attributes: *issue_attrs
+    data: *issue_data
 
   - id: issue.assigned
     display_name: Issue assigned
@@ -1276,6 +2008,7 @@ triggers:
       - { name: assignee, description: Login of the user who was assigned., example: octocat }
     data:
       type: object
+      additionalProperties: false
       properties:
         action: { type: string }
         assignee: *user_schema
@@ -1303,6 +2036,7 @@ triggers:
       - { name: is_pull_request, description: '"true" when the comment is on a pull request.', example: "false" }
     data:
       type: object
+      additionalProperties: false
       properties:
         action: { type: string }
         issue: *issue_schema
@@ -1335,6 +2069,7 @@ triggers:
       - &attr_base_branch { name: base_branch, description: The branch the pull request targets., example: main }
     data: &pr_data
       type: object
+      additionalProperties: false
       properties:
         action: { type: string }
         number: { type: integer }
@@ -1380,6 +2115,7 @@ triggers:
     attributes: *pr_attrs
     data:
       type: object
+      additionalProperties: false
       properties:
         action: { type: string }
         number: { type: integer }
@@ -1415,6 +2151,63 @@ triggers:
     attributes: *pr_attrs
     data: *pr_data
 
+  - id: pull_request.reopened
+    display_name: Pull request reopened
+    summary: A closed pull request was reopened.
+    description: Fires when a closed pull request is reopened. Match base_branch or branch like pull_request.opened.
+    keywords: [pr, reopen]
+    events: [pull_request.reopened]
+    attributes: *pr_attrs
+    data: *pr_data
+
+  - id: pull_request.labeled
+    display_name: Pull request labeled
+    summary: A label was added to a pull request.
+    description: >-
+      Fires when a label is added to a pull request. Match `label` to react
+      to one label, e.g. label: agent:re-review, and base_branch or branch to
+      narrow by branch. The label is also data.label; the full set is
+      data.pull_request.labels.
+    keywords: [pr, label, tag, triage, re-review]
+    events: [pull_request.labeled]
+    attributes: &pr_label_attrs
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - *attr_branch
+      - *attr_base_branch
+      - { name: label, description: The label that was added., example: "agent:re-review" }
+    data: &pr_label_data
+      type: object
+      additionalProperties: false
+      properties:
+        action: { type: string }
+        number: { type: integer }
+        label: { type: string, description: The label that was added or removed. }
+        pull_request: *pr_schema
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: pull_request.unlabeled
+    display_name: Pull request unlabeled
+    summary: A label was removed from a pull request.
+    description: >-
+      Fires when a label is removed from a pull request. Match `label` to
+      react to one label. data.label is the label removed;
+      data.pull_request.labels is what remains.
+    keywords: [pr, label, untag, remove label]
+    events: [pull_request.unlabeled]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - *attr_branch
+      - *attr_base_branch
+      - { name: label, description: The label that was removed., example: "agent:re-review" }
+    data: *pr_label_data
+
   - id: pull_request.review_requested
     display_name: Review requested
     summary: Someone's review was requested on a pull request.
@@ -1434,6 +2227,7 @@ triggers:
       - { name: requested_reviewer, description: "The requested reviewer's login, or the team's slug.", example: octocat }
     data:
       type: object
+      additionalProperties: false
       properties:
         action: { type: string }
         number: { type: integer }
@@ -1461,6 +2255,7 @@ triggers:
       - { name: state, description: "The review's state: approved, changes_requested or commented.", example: approved }
     data:
       type: object
+      additionalProperties: false
       properties:
         action: { type: string }
         pull_request: *pr_schema
@@ -1475,6 +2270,57 @@ triggers:
             commit_id: { type: string }
             submitted_at: { type: string }
             author_association: { type: string }
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: pull_request_review_comment.created
+    display_name: Pull request inline comment
+    summary: A comment was left on a line of a pull request's diff.
+    description: >-
+      Fires when someone comments on a line of a pull request's diff, or
+      replies in such a thread, including the comments of a review as it is
+      submitted (each comment fires on its own). Conversation-tab comments are
+      issue_comment.created instead. Match mentions_reliant: "true" for
+      comments that mention @reliant and is_reply: "false" for the first
+      comment of a thread. data.comment has the file path, line, side, the diff
+      hunk and review id; reply with github/pr.review_comment.reply using
+      data.comment.id. Comments written by GitHub Apps (including this one)
+      never fire, so a run that replies cannot trigger itself.
+    keywords: [pr, review comment, inline, diff, line, thread, responder, address feedback]
+    events: [pull_request_review_comment.created]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - *attr_branch
+      - *attr_base_branch
+      - { name: mentions_reliant, description: '"true" when the comment mentions @reliant.', example: "true" }
+      - { name: is_reply, description: '"true" when the comment replies to another in its thread.', example: "false" }
+    data:
+      type: object
+      additionalProperties: false
+      properties:
+        action: { type: string }
+        pull_request: *pr_schema
+        comment:
+          type: object
+          properties:
+            id: { type: integer }
+            body: { type: string }
+            html_url: { type: string }
+            user: *user_schema
+            author_association: { type: string }
+            path: { type: string }
+            line: { type: integer, description: The line in the diff; absent when the comment is outdated. }
+            original_line: { type: integer }
+            side: { type: string, description: "LEFT or RIGHT." }
+            subject_type: { type: string, description: "line or file." }
+            commit_id: { type: string }
+            diff_hunk: { type: string }
+            in_reply_to_id: { type: integer, description: The comment this replies to; absent for the first comment of a thread. }
+            pull_request_review_id: { type: integer }
+            created_at: { type: string }
         repository: *repository_schema
         sender: *user_schema
 
@@ -1496,6 +2342,7 @@ triggers:
       - { name: tag, description: "The tag pushed, for a tag push only.", example: v1.2.0 }
     data:
       type: object
+      additionalProperties: false
       properties:
         ref: { type: string }
         before: { type: string }
@@ -1542,6 +2389,7 @@ triggers:
       - { name: workflow, description: The workflow's name., example: CI }
     data:
       type: object
+      additionalProperties: false
       properties:
         action: { type: string }
         workflow: { type: object, properties: { id: { type: integer }, name: { type: string }, path: { type: string } } }
@@ -1562,6 +2410,90 @@ triggers:
             run_started_at: { type: string }
             updated_at: { type: string }
             head_commit: { type: object, properties: { id: { type: string }, message: { type: string } } }
+            pull_requests: { type: array, items: { type: integer } }
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: check_run.completed
+    display_name: Check run completed
+    summary: A check (a CI job or another App's check) finished.
+    description: >-
+      Fires when a check run completes. Match conclusion (success, failure,
+      cancelled, timed_out, ...), branch, name (the check's name) and app (the
+      slug of the App that ran it; github-actions for Actions). Fires once
+      per job, so a busy repository sends many; check_suite.completed is one
+      event for all of a commit's checks, and workflow_run.completed one for
+      a whole Actions workflow.
+    keywords: [check, job, status]
+    events: [check_run.completed]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - { name: conclusion, description: The check's conclusion., example: failure }
+      - { name: branch, description: The branch the check ran on., example: main }
+      - { name: name, description: The check's name., example: build }
+      - { name: app, description: The slug of the GitHub App that ran the check., example: github-actions }
+    data:
+      type: object
+      additionalProperties: false
+      properties:
+        action: { type: string }
+        check_run:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            status: { type: string }
+            conclusion: { type: string }
+            head_sha: { type: string }
+            head_branch: { type: string }
+            check_suite_id: { type: integer }
+            html_url: { type: string }
+            details_url: { type: string }
+            started_at: { type: string }
+            completed_at: { type: string }
+            app: &app_schema { type: object, properties: { slug: { type: string }, name: { type: string } } }
+            output: { type: object, properties: { title: { type: string }, summary: { type: string } } }
+            pull_requests: { type: array, items: { type: integer }, description: Numbers of the pull requests the commit belongs to. }
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: check_suite.completed
+    display_name: Check suite completed
+    summary: Every check on a commit finished.
+    description: >-
+      Fires when all the checks of one App on a commit complete. Match
+      conclusion, branch and app (github-actions for Actions). One event per
+      App per commit, so it suits "CI finished on this branch" better than
+      check_run.completed.
+    keywords: [check, suite, status, commit]
+    events: [check_suite.completed]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - { name: conclusion, description: The suite's conclusion., example: success }
+      - { name: branch, description: The branch the commit is on., example: main }
+      - { name: app, description: The slug of the GitHub App that ran the checks., example: github-actions }
+    data:
+      type: object
+      additionalProperties: false
+      properties:
+        action: { type: string }
+        check_suite:
+          type: object
+          properties:
+            id: { type: integer }
+            status: { type: string }
+            conclusion: { type: string }
+            head_sha: { type: string }
+            head_branch: { type: string }
+            app: *app_schema
+            created_at: { type: string }
+            updated_at: { type: string }
             pull_requests: { type: array, items: { type: integer } }
         repository: *repository_schema
         sender: *user_schema

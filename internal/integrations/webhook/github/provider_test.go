@@ -334,16 +334,23 @@ func TestEmittedEventsMatchTheManifest(t *testing.T) {
 	cases := map[string]string{
 		"issues.opened": "issues", "issues.labeled": "issues", "issues.closed": "issues",
 		"issues.edited": "issues", "issues.assigned": "issues",
-		"issue_comment.created":         "issue_comment",
-		"pull_request.opened":           "pull_request",
-		"pull_request.synchronize":      "pull_request",
-		"pull_request.closed":           "pull_request",
-		"pull_request.review_requested": "pull_request",
-		"pull_request.ready_for_review": "pull_request",
-		"pull_request_review.submitted": "pull_request_review",
-		"push":                          "push",
-		"push.tag":                      "push",
-		"workflow_run.completed":        "workflow_run",
+		"issues.unlabeled": "issues", "issues.reopened": "issues",
+		"issue_comment.created":               "issue_comment",
+		"pull_request.reopened":               "pull_request",
+		"pull_request.labeled":                "pull_request",
+		"pull_request.unlabeled":              "pull_request",
+		"pull_request_review_comment.created": "pull_request_review_comment",
+		"check_run.completed":                 "check_run",
+		"check_suite.completed":               "check_suite",
+		"pull_request.opened":                 "pull_request",
+		"pull_request.synchronize":            "pull_request",
+		"pull_request.closed":                 "pull_request",
+		"pull_request.review_requested":       "pull_request",
+		"pull_request.ready_for_review":       "pull_request",
+		"pull_request_review.submitted":       "pull_request_review",
+		"push":                                "push",
+		"push.tag":                            "push",
+		"workflow_run.completed":              "workflow_run",
 	}
 	for name, header := range cases {
 		ev := one(t, parseFixture(t, header, name))
@@ -354,4 +361,163 @@ func TestEmittedEventsMatchTheManifest(t *testing.T) {
 		}
 	}
 	assert.Len(t, declared, len(EventTypes()), "every mapped type is declared, and nothing else")
+}
+
+func TestIssueUnlabeledAndReopened(t *testing.T) {
+	un := one(t, parseFixture(t, "issues", "issues.unlabeled"))
+	assertRepoEvent(t, un, "issues.unlabeled")
+	assert.Equal(t, "bug", un.Attributes["label"], "the label that was removed")
+	assert.Equal(t, "bug", un.Data["label"])
+	assert.Equal(t, []any{}, un.Data["issue"].(map[string]any)["labels"], "labels after the removal")
+
+	re := one(t, parseFixture(t, "issues", "issues.reopened"))
+	assertRepoEvent(t, re, "issues.reopened")
+	assert.Equal(t, "reopened", re.Attributes["action"])
+	issue := re.Data["issue"].(map[string]any)
+	assert.Equal(t, "open", issue["state"])
+	assert.Equal(t, "reopened", issue["state_reason"])
+	assert.NotContains(t, issue, "closed_at", "a reopened issue is not closed")
+}
+
+func TestPullRequestLabeledAndUnlabeled(t *testing.T) {
+	for _, action := range []string{"labeled", "unlabeled"} {
+		t.Run(action, func(t *testing.T) {
+			ev := one(t, parseFixture(t, "pull_request", "pull_request."+action))
+			assertRepoEvent(t, ev, "pull_request."+action)
+			assert.Equal(t, "agent:ready", ev.Attributes["label"], "label is a match attribute")
+			assert.Equal(t, "agent:ready", ev.Data["label"])
+			assert.Equal(t, "fix-save", ev.Attributes["branch"], "the PR attributes are still set")
+			assert.Equal(t, "main", ev.Attributes["base_branch"])
+			assert.EqualValues(t, 7, ev.Data["number"])
+			labels := ev.Data["pull_request"].(map[string]any)["labels"]
+			if action == "labeled" {
+				assert.Equal(t, []any{"agent:ready"}, labels)
+			} else {
+				assert.Equal(t, []any{}, labels)
+			}
+		})
+	}
+}
+
+func TestPullRequestReopened(t *testing.T) {
+	ev := one(t, parseFixture(t, "pull_request", "pull_request.reopened"))
+	assertRepoEvent(t, ev, "pull_request.reopened")
+	assert.Equal(t, "fix-save", ev.Attributes["branch"])
+	assert.EqualValues(t, 7, ev.Data["pull_request"].(map[string]any)["number"])
+}
+
+func TestPullRequestReviewCommentCreated(t *testing.T) {
+	ev := one(t, parseFixture(t, "pull_request_review_comment", "pull_request_review_comment.created"))
+	assertRepoEvent(t, ev, "pull_request_review_comment.created")
+	assert.Equal(t, "true", ev.Attributes["mentions_reliant"])
+	assert.Equal(t, "false", ev.Attributes["is_reply"], "the first comment of a thread")
+	assert.Equal(t, "fix-save", ev.Attributes["branch"])
+	assert.Equal(t, "main", ev.Attributes["base_branch"])
+	assert.EqualValues(t, 7, ev.Data["pull_request"].(map[string]any)["number"])
+
+	c := ev.Data["comment"].(map[string]any)
+	assert.EqualValues(t, 9001, c["id"])
+	assert.Equal(t, "cmd/save.go", c["path"])
+	assert.EqualValues(t, 12, c["line"])
+	assert.Equal(t, "RIGHT", c["side"])
+	assert.Contains(t, c["diff_hunk"], "y := 2")
+	assert.EqualValues(t, 5150, c["pull_request_review_id"])
+	assert.Equal(t, "line", c["subject_type"])
+	assert.Equal(t, map[string]any{"login": "hubot", "id": int64(2), "type": "User"}, c["user"])
+	assert.NotContains(t, c, "in_reply_to_id", "a thread's first comment replies to nothing")
+	assert.Equal(t, time.Date(2026, 10, 5, 14, 0, 0, 0, time.UTC), ev.OccurredAt, "the comment's created_at")
+}
+
+func TestPullRequestReviewCommentReply(t *testing.T) {
+	ev := one(t, parseFixture(t, "pull_request_review_comment", "pull_request_review_comment.created.reply"))
+	assert.Equal(t, "true", ev.Attributes["is_reply"])
+	assert.Equal(t, "false", ev.Attributes["mentions_reliant"])
+	c := ev.Data["comment"].(map[string]any)
+	assert.EqualValues(t, 9001, c["in_reply_to_id"])
+	assert.NotContains(t, c, "line", "an outdated comment has no line to record")
+}
+
+// A responder that replies in a thread fires pull_request_review_comment
+// itself; dropping App comments stops it re-firing on its own reply.
+func TestBotReviewCommentsAreDropped(t *testing.T) {
+	assert.Empty(t, parseFixture(t, "pull_request_review_comment", "pull_request_review_comment.created.bot").Events)
+}
+
+func TestCheckRunCompleted(t *testing.T) {
+	ev := one(t, parseFixture(t, "check_run", "check_run.completed"))
+	assertRepoEvent(t, ev, "check_run.completed")
+	assert.Equal(t, "failure", ev.Attributes["conclusion"])
+	assert.Equal(t, "fix-save", ev.Attributes["branch"])
+	assert.Equal(t, "build", ev.Attributes["name"])
+	assert.Equal(t, "github-actions", ev.Attributes["app"])
+	r := ev.Data["check_run"].(map[string]any)
+	assert.EqualValues(t, 6006, r["id"])
+	assert.Equal(t, "completed", r["status"])
+	assert.Equal(t, "fix-save", r["head_branch"])
+	assert.EqualValues(t, 7007, r["check_suite_id"])
+	assert.Equal(t, map[string]any{"slug": "github-actions", "name": "GitHub Actions"}, r["app"])
+	assert.Equal(t, map[string]any{"title": "build failed", "summary": "2 tests failed"}, r["output"])
+	assert.Equal(t, []any{int64(7)}, r["pull_requests"])
+	assert.Equal(t, time.Date(2026, 10, 5, 9, 5, 0, 0, time.UTC), ev.OccurredAt, "completed_at")
+}
+
+func TestCheckSuiteCompleted(t *testing.T) {
+	ev := one(t, parseFixture(t, "check_suite", "check_suite.completed"))
+	assertRepoEvent(t, ev, "check_suite.completed")
+	assert.Equal(t, "success", ev.Attributes["conclusion"])
+	assert.Equal(t, "fix-save", ev.Attributes["branch"])
+	assert.Equal(t, "github-actions", ev.Attributes["app"])
+	s := ev.Data["check_suite"].(map[string]any)
+	assert.EqualValues(t, 7007, s["id"])
+	assert.Equal(t, "cccccccccccccccccccccccccccccccccccccccc", s["head_sha"])
+	assert.Equal(t, []any{int64(7)}, s["pull_requests"])
+}
+
+func TestUnmappedActionsOfNewEventsYieldNothing(t *testing.T) {
+	for _, tc := range []struct{ event, name, action string }{
+		{"issues", "issues.opened", "pinned"},
+		{"pull_request", "pull_request.opened", "converted_to_draft"},
+		{"pull_request_review_comment", "pull_request_review_comment.created", "edited"},
+		{"check_run", "check_run.completed", "created"},
+		{"check_suite", "check_suite.completed", "requested"},
+	} {
+		var m map[string]any
+		require.NoError(t, json.Unmarshal(fixture(t, tc.name), &m))
+		m["action"] = tc.action
+		body, err := json.Marshal(m)
+		require.NoError(t, err)
+		assert.Empty(t, parseBody(t, tc.event, body).Events, "%s.%s", tc.event, tc.action)
+	}
+}
+
+// Every trigger's `data` schema is closed, so validation rejects a read of a
+// top-level key the event never carries. That is only sound if the parser
+// emits nothing the schema leaves out; this pins it for every event.
+func TestEmittedDataKeysAreDeclaredAndSchemasAreClosed(t *testing.T) {
+	declared, closed := declaredDataKeys(t)
+	for name, header := range map[string]string{
+		"issues.opened": "issues", "issues.labeled": "issues", "issues.unlabeled": "issues", "issues.reopened": "issues",
+		"issues.closed": "issues", "issues.edited": "issues", "issues.assigned": "issues",
+		"issue_comment.created":               "issue_comment",
+		"pull_request.opened":                 "pull_request",
+		"pull_request.reopened":               "pull_request",
+		"pull_request.labeled":                "pull_request",
+		"pull_request.unlabeled":              "pull_request",
+		"pull_request.synchronize":            "pull_request",
+		"pull_request.closed":                 "pull_request",
+		"pull_request.review_requested":       "pull_request",
+		"pull_request.ready_for_review":       "pull_request",
+		"pull_request_review.submitted":       "pull_request_review",
+		"pull_request_review_comment.created": "pull_request_review_comment",
+		"push":                                "push",
+		"workflow_run.completed":              "workflow_run",
+		"check_run.completed":                 "check_run",
+		"check_suite.completed":               "check_suite",
+	} {
+		ev := one(t, parseFixture(t, header, name))
+		assert.True(t, closed[ev.Type], "%s: data schema must be closed", ev.Type)
+		for k := range ev.Data {
+			assert.True(t, declared[ev.Type][k], "%s emits data.%s, which its trigger does not declare", ev.Type, k)
+		}
+	}
 }

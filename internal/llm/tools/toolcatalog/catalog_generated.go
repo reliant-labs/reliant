@@ -261,6 +261,26 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"github__issue_comment_list": {
+		Bindable: map[string]struct{}{
+			"connection":   {},
+			"issue_number": {},
+			"owner":        {},
+			"repo":         {},
+			"since":        {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__issue_comment_update": {
+		Bindable: map[string]struct{}{
+			"body":       {},
+			"comment_id": {},
+			"connection": {},
+			"owner":      {},
+			"repo":       {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"github__issue_create": {
 		Bindable: map[string]struct{}{
 			"assignees":  {},
@@ -282,6 +302,37 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"github__issue_labels_add": {
+		Bindable: map[string]struct{}{
+			"connection":   {},
+			"issue_number": {},
+			"label":        {},
+			"owner":        {},
+			"repo":         {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__issue_labels_remove": {
+		Bindable: map[string]struct{}{
+			"connection":   {},
+			"issue_number": {},
+			"label":        {},
+			"owner":        {},
+			"repo":         {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__issue_search": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"order":      {},
+			"page":       {},
+			"per_page":   {},
+			"q":          {},
+			"sort":       {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"github__issue_update": {
 		Bindable: map[string]struct{}{
 			"assignees":    {},
@@ -294,6 +345,19 @@ var generatedToolParams = map[string]ToolParams{
 			"state":        {},
 			"state_reason": {},
 			"title":        {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__pr_create": {
+		Bindable: map[string]struct{}{
+			"base":       {},
+			"body":       {},
+			"connection": {},
+			"draft":      {},
+			"head":       {},
+			"owner":      {},
+			"repo":       {},
+			"title":      {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -315,6 +379,27 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"github__pr_review_comment_reply": {
+		Bindable: map[string]struct{}{
+			"body":        {},
+			"comment_id":  {},
+			"connection":  {},
+			"owner":       {},
+			"pull_number": {},
+			"repo":        {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__pr_review_comments_list": {
+		Bindable: map[string]struct{}{
+			"connection":  {},
+			"owner":       {},
+			"pull_number": {},
+			"repo":        {},
+			"since":       {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"github__pr_review_create": {
 		Bindable: map[string]struct{}{
 			"body":        {},
@@ -324,6 +409,28 @@ var generatedToolParams = map[string]ToolParams{
 			"owner":       {},
 			"pull_number": {},
 			"repo":        {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__pr_reviews_list": {
+		Bindable: map[string]struct{}{
+			"connection":  {},
+			"owner":       {},
+			"pull_number": {},
+			"repo":        {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__pr_update": {
+		Bindable: map[string]struct{}{
+			"base":        {},
+			"body":        {},
+			"connection":  {},
+			"owner":       {},
+			"pull_number": {},
+			"repo":        {},
+			"state":       {},
+			"title":       {},
 		},
 		Unbindable: map[string]string{},
 	},

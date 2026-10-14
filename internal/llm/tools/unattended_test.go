@@ -277,3 +277,28 @@ func TestCapabilities_UnattendedProtoRoundTrip(t *testing.T) {
 	assert.False(t, back.CanLoad(ToolWriteWorkflow), "the restriction survives the round trip")
 	assert.True(t, back.Offers(ToolEditWorkflow))
 }
+
+// The GitHub actions an automation uses to change GitHub are withheld from an
+// unattended run that reaches them by tag or "*", and its reads are not; an
+// action that is merely renamed or reclassified fails here.
+func TestResolveCapabilities_UnattendedRunIsWithheldTheGitHubWrites(t *testing.T) {
+	t.Parallel()
+
+	unattended := unattendedCaps(PermissionMutating, []string{"tag:integration"}, []string{LoadableWildcard}, true)
+	for _, name := range []string{
+		"github__issue_comment_update", "github__issue_labels_add", "github__issue_labels_remove",
+		"github__pr_create", "github__pr_update", "github__pr_review_comment_reply",
+	} {
+		assert.True(t, MutatingIntegrationAction(name), name)
+		assert.False(t, unattended.Offers(name), "%s changes GitHub", name)
+	}
+	for _, name := range []string{
+		"github__issue_comment_list", "github__issue_search", "github__pr_reviews_list", "github__pr_review_comments_list",
+	} {
+		assert.False(t, MutatingIntegrationAction(name), name)
+		assert.True(t, unattended.Offers(name), "%s only reads", name)
+	}
+
+	named := unattendedCaps(PermissionMutating, []string{"github__issue_labels_add"}, nil, true)
+	assert.True(t, named.Offers("github__issue_labels_add"), "a step that names it keeps it")
+}

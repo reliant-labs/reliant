@@ -1,0 +1,86 @@
+{
+  "action": "completed",
+  "check_run": {
+    "id": 6006,
+    "node_id": "CR_kwDOAB",
+    "name": "build",
+    "head_sha": "cccccccccccccccccccccccccccccccccccccccc",
+    "external_id": "",
+    "url": "https://api.github.com/repos/acme/app/check-runs/6006",
+    "html_url": "https://github.com/acme/app/runs/6006",
+    "details_url": "https://github.com/acme/app/actions/runs/4004/job/6006",
+    "status": "completed",
+    "conclusion": "failure",
+    "started_at": "2026-10-05T09:01:00Z",
+    "completed_at": "2026-10-05T09:05:00Z",
+    "output": {
+      "title": "build failed",
+      "summary": "2 tests failed",
+      "text": null,
+      "annotations_count": 2
+    },
+    "check_suite": {
+      "id": 7007,
+      "node_id": "CS_kwDOAB",
+      "head_branch": "fix-save",
+      "head_sha": "cccccccccccccccccccccccccccccccccccccccc",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    "app": {
+      "id": 15368,
+      "slug": "github-actions",
+      "node_id": "MDM6QXBwMTUzNjg=",
+      "name": "GitHub Actions",
+      "owner": {
+        "login": "github",
+        "id": 9919,
+        "type": "Organization"
+      }
+    },
+    "pull_requests": [
+      {
+        "url": "https://api.github.com/repos/acme/app/pulls/7",
+        "id": 2002,
+        "number": 7,
+        "head": {
+          "ref": "fix-save",
+          "sha": "cccc"
+        },
+        "base": {
+          "ref": "main",
+          "sha": "bbbb"
+        }
+      }
+    ]
+  },
+  "repository": {
+    "id": 123456,
+    "node_id": "R_kgDOAB",
+    "name": "app",
+    "full_name": "acme/app",
+    "private": true,
+    "owner": {
+      "login": "acme",
+      "id": 9001,
+      "type": "Organization"
+    },
+    "html_url": "https://github.com/acme/app",
+    "default_branch": "main",
+    "description": "The app",
+    "fork": false
+  },
+  "sender": {
+    "login": "octocat",
+    "id": 1,
+    "node_id": "MDQ6VXNlcjE=",
+    "type": "User",
+    "site_admin": false,
+    "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4",
+    "html_url": "https://github.com/octocat"
+  },
+  "installation": {
+    "id": 98765,
+    "node_id": "MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uOTg3NjU="
+  }
+}

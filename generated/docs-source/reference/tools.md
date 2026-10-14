@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (20 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (54 tools)
+- [Other Tools](#other-tools) (64 tools)
 
 ---
 
@@ -2050,12 +2050,22 @@ _Miscellaneous tools and utilities._
 | [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, and ... |
 | [`github__code_search`](#github__code_search) | integration | Search file contents with GitHub's code search syntax. Scope the query with a qualifier, repo:own... |
 | [`github__issue_comment`](#github__issue_comment) | integration | Post a markdown comment on an issue, or on a pull request's conversation tab (pull requests share... |
+| [`github__issue_comment_list`](#github__issue_comment_list) | integration | List the comments on an issue, or on a pull request's conversation tab (pass the PR number as iss... |
+| [`github__issue_comment_update`](#github__issue_comment_update) | integration | Edit a comment by id. body REPLACES the whole text, so read the current one first (issue.comment.... |
 | [`github__issue_create`](#github__issue_create) | integration | Open an issue in owner/repo with a title and optional markdown body, labels and assignees. Labels... |
 | [`github__issue_get`](#github__issue_get) | integration | Return one issue: title, body, state, author, labels, assignees and timestamps. Pull requests are... |
+| [`github__issue_labels_add`](#github__issue_labels_add) | integration | Add a single label to an issue or pull request. This is one request that GitHub applies on its ow... |
+| [`github__issue_labels_remove`](#github__issue_labels_remove) | integration | Remove a single label from an issue or pull request. This is one request that GitHub applies on i... |
+| [`github__issue_search`](#github__issue_search) | integration | Search issues and pull requests with GitHub's search syntax. Scope the query with repo:owner/name... |
 | [`github__issue_update`](#github__issue_update) | integration | Edit an issue (or a pull request's issue fields). Only the fields you pass change; pass at least ... |
+| [`github__pr_create`](#github__pr_create) | integration | Open a pull request merging head into base. The head branch must already be pushed (from a worksp... |
 | [`github__pr_get`](#github__pr_get) | integration | Return one pull request: title, body, state, draft and merged flags, the head and base refs (bran... |
 | [`github__pr_list_files`](#github__pr_list_files) | integration | List the files a pull request changes: filename, status (added, modified, removed, renamed, ...),... |
+| [`github__pr_review_comment_reply`](#github__pr_review_comment_reply) | integration | Post a reply to an inline review comment, in the same thread. comment_id is the id of a comment i... |
+| [`github__pr_review_comments_list`](#github__pr_review_comments_list) | integration | List the inline review comments on a pull request: comments attached to a line of the diff, inclu... |
 | [`github__pr_review_create`](#github__pr_review_create) | integration | Submit a review on a pull request with a verdict: COMMENT (the default), APPROVE, or REQUEST_CHAN... |
+| [`github__pr_reviews_list`](#github__pr_reviews_list) | integration | List the reviews on a pull request, oldest first: who reviewed, the verdict (APPROVED, CHANGES_RE... |
+| [`github__pr_update`](#github__pr_update) | integration | Edit a pull request. Only the fields you pass change; pass at least one. state closed closes it w... |
 | [`github__repo_get`](#github__repo_get) | integration | Return one repository: full name, description, visibility, default branch, primary language, topi... |
 | [`github__repo_get_content`](#github__repo_get_content) | integration | Read one path in a repository through GitHub, with no checkout. For a file, content is its text. ... |
 | [`github__repo_get_tree`](#github__repo_get_tree) | integration | List the repository's files recursively from its git tree, with no checkout: each entry's full pa... |
@@ -2284,11 +2294,27 @@ Post a markdown comment on an issue, or on a pull request's conversation tab (pu
 
 ---
 
+### github__issue_comment_list
+
+**Tags:** `integration`
+
+List the comments on an issue, or on a pull request's conversation tab (pass the PR number as issue_number), oldest first. Pass since, an ISO 8601 time such as 2026-01-02T03:04:05Z, to get only comments created or edited after it, so a recurring run reads what is new. Follows GitHub's pagination up to 1000 comments; narrow with since for busier threads. Each comment carries its id, node id, author login and numeric user id. Inline diff comments are listed by pr.review_comments.list and review summaries by pr.reviews.list.
+
+---
+
+### github__issue_comment_update
+
+**Tags:** `integration`
+
+Edit a comment by id. body REPLACES the whole text, so read the current one first (issue.comment.list) to change part of it. The id is what issue.comment, issue.comment.list or an issue_comment.created event gives; pull request conversation comments are issue comments too. Inline diff comments (on a line of the diff) are a different resource and cannot be edited here. The connection's account can edit only comments it may edit on GitHub. Returns the comment's id, node id and URL.
+
+---
+
 ### github__issue_create
 
 **Tags:** `integration`
 
-Open an issue in owner/repo with a title and optional markdown body, labels and assignees. Labels that do not exist are created; an assignee without access to the repository fails validation. Returns the issue number and URL.
+Open an issue in owner/repo with a title and optional markdown body, labels and assignees. Labels that do not exist are created; an assignee without access to the repository fails validation. Returns the issue number, id, node id and URL.
 
 ---
 
@@ -2300,11 +2326,43 @@ Return one issue: title, body, state, author, labels, assignees and timestamps. 
 
 ---
 
+### github__issue_labels_add
+
+**Tags:** `integration`
+
+Add a single label to an issue or pull request. This is one request that GitHub applies on its own, so it cannot overwrite a label someone else added at the same moment; issue.update with labels replaces the whole list and can. A label that does not exist in the repository is created; adding one the issue already has changes nothing. Returns the issue's labels after the change.
+
+---
+
+### github__issue_labels_remove
+
+**Tags:** `integration`
+
+Remove a single label from an issue or pull request. This is one request that GitHub applies on its own, so it cannot drop a label someone else added at the same moment; issue.update with labels replaces the whole list and can. The label stays in the repository. If the issue does not carry the label GitHub answers 404, and so does this action: a not found here can mean the label was already removed. Returns the issue's labels after the change.
+
+---
+
+### github__issue_search
+
+**Tags:** `integration`
+
+Search issues and pull requests with GitHub's search syntax. Scope the query with repo:owner/name (or org:, user:) and narrow it with is:issue, is:pr, is:open, is:closed, label:"name", author:, in:title,body, or a quoted phrase, for example repo:acme/app is:open "autopilot:marker". Each hit says whether it is a pull request. Returns one page; ask for the next with page. GitHub returns at most the first 1,000 matches, indexes new items with a short delay, and allows about thirty searches a minute.
+
+---
+
 ### github__issue_update
 
 **Tags:** `integration`
 
 Edit an issue (or a pull request's issue fields). Only the fields you pass change; pass at least one. labels and assignees REPLACE the current set; pass an empty list to clear them. Close with state closed and an optional state_reason.
+
+---
+
+### github__pr_create
+
+**Tags:** `integration`
+
+Open a pull request merging head into base. The head branch must already be pushed (from a workspace, or created through GitHub). head is a branch name, or owner:branch for a branch in a fork. A pull request cannot be created with labels in the same request; add them afterwards with issue.labels.add using the returned number. GitHub answers 422 when the branches are identical, have no commits between them, or a pull request for them is already open; the message says which. Merging is not an action here: a person merges. Returns the pull request's number, id, node id and URL.
 
 ---
 
@@ -2324,11 +2382,43 @@ List the files a pull request changes: filename, status (added, modified, remove
 
 ---
 
+### github__pr_review_comment_reply
+
+**Tags:** `integration`
+
+Post a reply to an inline review comment, in the same thread. comment_id is the id of a comment in the thread (pr.review_comments.list, or a pull_request_review_comment.created event); GitHub does not nest replies, so replying to a reply lands in the same thread. To start a new thread, or for a conversation-tab comment, use pr.review.create or issue.comment. Returns the reply's id, node id and URL.
+
+---
+
+### github__pr_review_comments_list
+
+**Tags:** `integration`
+
+List the inline review comments on a pull request: comments attached to a line of the diff, including replies, oldest first. Each carries the file path, line, the diff hunk it points at, the review it belongs to (review_id) and, for a reply, the comment it answers (in_reply_to_id; reply to a thread by passing its first comment's id to pr.review_comment.reply). Pass since, an ISO 8601 time, to get only comments created or edited after it. Follows GitHub's pagination up to 1000 comments. line is null when the commented line is no longer in the diff (the comment is outdated); original_line is where it was.
+
+---
+
 ### github__pr_review_create
 
 **Tags:** `integration`
 
 Submit a review on a pull request with a verdict: COMMENT (the default), APPROVE, or REQUEST_CHANGES. body is required for COMMENT and REQUEST_CHANGES. The review is submitted immediately, never left pending. Pass commit_id to pin the review to the commit you read (pr.get head.sha); otherwise GitHub uses the latest commit.
+
+---
+
+### github__pr_reviews_list
+
+**Tags:** `integration`
+
+List the reviews on a pull request, oldest first: who reviewed, the verdict (APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED or PENDING), the summary text, and the commit reviewed. Pending reviews are visible only to their author. The comments inside a review are listed by pr.review_comments.list (match on review_id). Follows GitHub's pagination up to 1000 reviews.
+
+---
+
+### github__pr_update
+
+**Tags:** `integration`
+
+Edit a pull request. Only the fields you pass change; pass at least one. state closed closes it without merging and open reopens it. Changing base retargets the pull request to another branch. Labels and assignees are changed through issue.labels.add, issue.labels.remove and issue.update, since a pull request is an issue too. Merging is not an action here: a person merges. Returns the pull request's number, id, node id and URL.
 
 ---
 

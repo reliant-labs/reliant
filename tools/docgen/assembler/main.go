@@ -361,6 +361,14 @@ An integration's payload is declared (` + bt + `get_integration_schema` + bt + `
 prompt against it. Lists of names are strings, not objects: GitHub's ` + bt + `issue.labels` + bt + ` and ` + bt + `issue.assignees` + bt + `, and
 ` + bt + `data.label` + bt + ` on ` + bt + `issues.labeled` + bt + `. Write ` + bt + `'wontfix' in trigger.payload.data.issue.labels` + bt + `, never ` + bt + `l.name` + bt + `.
 
+GitHub is the fullest integration for automations. Besides ` + bt + `issues.opened` + bt + ` and the like it delivers ` + bt + `issues.labeled` + bt + `/` + bt + `unlabeled` + bt + `/` + bt + `reopened` + bt + `,
+` + bt + `pull_request.labeled` + bt + `/` + bt + `unlabeled` + bt + `/` + bt + `reopened` + bt + ` (` + bt + `match: {label: ...}` + bt + `), ` + bt + `pull_request_review_comment.created` + bt + ` (inline diff comments; ` + bt + `match` + bt + ` ` + bt + `is_reply` + bt + `
+and ` + bt + `mentions_reliant` + bt + `), and ` + bt + `check_run.completed` + bt + ` / ` + bt + `check_suite.completed` + bt + ` / ` + bt + `workflow_run.completed` + bt + ` (` + bt + `conclusion` + bt + `, ` + bt + `branch` + bt + `, ` + bt + `app` + bt + `).
+Its ` + bt + `type: action` + bt + ` nodes cover comments (` + bt + `issue.comment` + bt + `, ` + bt + `.update` + bt + `, ` + bt + `.list` + bt + `), atomic ` + bt + `issue.labels.add` + bt + `/` + bt + `remove` + bt + ` (prefer them to ` + bt + `issue.update` + bt + `,
+which replaces the whole label list and races), ` + bt + `issue.search` + bt + `, ` + bt + `pr.create` + bt + `/` + bt + `update` + bt + `, ` + bt + `pr.reviews.list` + bt + `, ` + bt + `pr.review_comments.list` + bt + ` and
+` + bt + `pr.review_comment.reply` + bt + `. There is no merge action, on purpose. Actions that change GitHub are withheld from an unattended run unless the
+step names them in its ` + bt + `tools` + bt + `. A trigger on a label event also fires for a label a run itself adds, so guard it.
+
 **` + bt + `trigger.sender` + bt + `** is who sent the event, set by the receiver from what the source authenticated, never from the
 payload: ` + bt + `kind` + bt + ` (slack, github, email, sms, webhook, workflow, schedule, user), ` + bt + `id` + bt + `, ` + bt + `display_name` + bt + `, ` + bt + `verified` + bt + `.
 Slack's ` + bt + `id` + bt + ` is the user id, GitHub's the numeric user id as a string (` + bt + `"583231"` + bt + `; the login is ` + bt + `display_name` + bt + `, and

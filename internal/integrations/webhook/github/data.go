@@ -57,6 +57,14 @@ func prAttrs(raw map[string]any, attrs map[string]string) {
 	attrs["base_branch"] = text(dig(raw, "pull_request", "base", "ref"))
 }
 
+// prLabelAttrs adds the label to the pull request's branches, so a trigger
+// can match label: agent:ready on pull_request.labeled like it does on
+// issues.labeled.
+func prLabelAttrs(raw map[string]any, attrs map[string]string) {
+	prAttrs(raw, attrs)
+	labelAttrs(raw, attrs)
+}
+
 func prClosedAttrs(raw map[string]any, attrs map[string]string) {
 	prAttrs(raw, attrs)
 	merged, _ := dig(raw, "pull_request", "merged").(bool)
@@ -76,6 +84,28 @@ func reviewRequestedAttrs(raw map[string]any, attrs map[string]string) {
 func reviewAttrs(raw map[string]any, attrs map[string]string) {
 	prAttrs(raw, attrs)
 	attrs["state"] = strings.ToLower(text(dig(raw, "review", "state")))
+}
+
+func reviewCommentAttrs(raw map[string]any, attrs map[string]string) {
+	prAttrs(raw, attrs)
+	attrs["mentions_reliant"] = strconv.FormatBool(mentionPattern.MatchString(text(dig(raw, "comment", "body"))))
+	_, isReply := intString(dig(raw, "comment", "in_reply_to_id"))
+	attrs["is_reply"] = strconv.FormatBool(isReply)
+}
+
+// checkRunAttrs: `app` is the slug of the GitHub App that ran the check
+// (github-actions for Actions), `name` the check's own name.
+func checkRunAttrs(raw map[string]any, attrs map[string]string) {
+	attrs["conclusion"] = text(dig(raw, "check_run", "conclusion"))
+	attrs["branch"] = text(dig(raw, "check_run", "check_suite", "head_branch"))
+	attrs["name"] = text(dig(raw, "check_run", "name"))
+	attrs["app"] = text(dig(raw, "check_run", "app", "slug"))
+}
+
+func checkSuiteAttrs(raw map[string]any, attrs map[string]string) {
+	attrs["conclusion"] = text(dig(raw, "check_suite", "conclusion"))
+	attrs["branch"] = text(dig(raw, "check_suite", "head_branch"))
+	attrs["app"] = text(dig(raw, "check_suite", "app", "slug"))
 }
 
 // pushAttrs splits the ref: a branch push sets `branch`, a tag push sets
@@ -149,6 +179,12 @@ func prData(raw map[string]any) map[string]any {
 	return map[string]any{"number": num(raw["number"]), "pull_request": prObject(raw["pull_request"])}
 }
 
+func prLabelData(raw map[string]any) map[string]any {
+	out := prData(raw)
+	out["label"] = text(dig(raw, "label", "name"))
+	return out
+}
+
 func prSyncData(raw map[string]any) map[string]any {
 	out := prData(raw)
 	out["before"] = text(raw["before"])
@@ -182,6 +218,71 @@ func reviewData(raw map[string]any) map[string]any {
 			"author_association": text(r["author_association"]),
 		},
 	}
+}
+
+func reviewCommentData(raw map[string]any) map[string]any {
+	c, _ := raw["comment"].(map[string]any)
+	comment := map[string]any{
+		"id":                     num(c["id"]),
+		"body":                   capText(text(c["body"])),
+		"html_url":               text(c["html_url"]),
+		"user":                   userData(c["user"]),
+		"author_association":     text(c["author_association"]),
+		"path":                   text(c["path"]),
+		"commit_id":              text(c["commit_id"]),
+		"diff_hunk":              capText(text(c["diff_hunk"])),
+		"side":                   text(c["side"]),
+		"subject_type":           text(c["subject_type"]),
+		"pull_request_review_id": num(c["pull_request_review_id"]),
+		"created_at":             text(c["created_at"]),
+	}
+	// line is null once the commented line has left the diff, and a reply
+	// has no in_reply_to_id of its own to read when it starts a thread: both
+	// are left out rather than recorded as zero.
+	for _, k := range []string{"line", "original_line", "in_reply_to_id"} {
+		if n := num(c[k]); n != nil {
+			comment[k] = n
+		}
+	}
+	return map[string]any{"pull_request": prObject(raw["pull_request"]), "comment": comment}
+}
+
+func checkRunData(raw map[string]any) map[string]any {
+	r, _ := raw["check_run"].(map[string]any)
+	return map[string]any{"check_run": map[string]any{
+		"id":             num(r["id"]),
+		"name":           text(r["name"]),
+		"status":         text(r["status"]),
+		"conclusion":     text(r["conclusion"]),
+		"head_sha":       text(r["head_sha"]),
+		"head_branch":    text(dig(r, "check_suite", "head_branch")),
+		"check_suite_id": num(dig(r, "check_suite", "id")),
+		"html_url":       text(r["html_url"]),
+		"details_url":    text(r["details_url"]),
+		"started_at":     text(r["started_at"]),
+		"completed_at":   text(r["completed_at"]),
+		"app":            appData(r["app"]),
+		"output": map[string]any{
+			"title":   capText(text(dig(r, "output", "title"))),
+			"summary": capText(text(dig(r, "output", "summary"))),
+		},
+		"pull_requests": prNumbers(r["pull_requests"]),
+	}}
+}
+
+func checkSuiteData(raw map[string]any) map[string]any {
+	s, _ := raw["check_suite"].(map[string]any)
+	return map[string]any{"check_suite": map[string]any{
+		"id":            num(s["id"]),
+		"status":        text(s["status"]),
+		"conclusion":    text(s["conclusion"]),
+		"head_sha":      text(s["head_sha"]),
+		"head_branch":   text(s["head_branch"]),
+		"app":           appData(s["app"]),
+		"created_at":    text(s["created_at"]),
+		"updated_at":    text(s["updated_at"]),
+		"pull_requests": prNumbers(s["pull_requests"]),
+	}}
 }
 
 func pushData(raw map[string]any) map[string]any {
@@ -333,6 +434,13 @@ func userData(v any) map[string]any {
 		return nil
 	}
 	return map[string]any{"login": text(u["login"]), "id": num(u["id"]), "type": text(u["type"])}
+}
+
+// appData is the GitHub App that ran a check: its slug is what a trigger
+// matches (`github-actions` for Actions), its name what a person reads.
+func appData(v any) map[string]any {
+	a, _ := v.(map[string]any)
+	return map[string]any{"slug": text(a["slug"]), "name": text(a["name"])}
 }
 
 func prNumbers(v any) []any {

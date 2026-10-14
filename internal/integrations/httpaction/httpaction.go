@@ -271,7 +271,9 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 			maxPages = defaultMaxPages
 		}
 	}
-	var items []any
+	// Never nil: a walk that finds nothing is an empty list, which a workflow
+	// can take the size of, not a null it cannot.
+	items := []any{}
 	var last *page
 	// followed is a URL the provider handed back (a Link header, a
 	// next_url). It is requested verbatim: a next link is opaque, and

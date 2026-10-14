@@ -247,6 +247,14 @@ An integration's payload is declared (`get_integration_schema` shows it), and va
 prompt against it. Lists of names are strings, not objects: GitHub's `issue.labels` and `issue.assignees`, and
 `data.label` on `issues.labeled`. Write `'wontfix' in trigger.payload.data.issue.labels`, never `l.name`.
 
+GitHub is the fullest integration for automations. Besides `issues.opened` and the like it delivers `issues.labeled`/`unlabeled`/`reopened`,
+`pull_request.labeled`/`unlabeled`/`reopened` (`match: {label: ...}`), `pull_request_review_comment.created` (inline diff comments; `match` `is_reply`
+and `mentions_reliant`), and `check_run.completed` / `check_suite.completed` / `workflow_run.completed` (`conclusion`, `branch`, `app`).
+Its `type: action` nodes cover comments (`issue.comment`, `.update`, `.list`), atomic `issue.labels.add`/`remove` (prefer them to `issue.update`,
+which replaces the whole label list and races), `issue.search`, `pr.create`/`update`, `pr.reviews.list`, `pr.review_comments.list` and
+`pr.review_comment.reply`. There is no merge action, on purpose. Actions that change GitHub are withheld from an unattended run unless the
+step names them in its `tools`. A trigger on a label event also fires for a label a run itself adds, so guard it.
+
 **`trigger.sender`** is who sent the event, set by the receiver from what the source authenticated, never from the
 payload: `kind` (slack, github, email, sms, webhook, workflow, schedule, user), `id`, `display_name`, `verified`.
 Slack's `id` is the user id, GitHub's the numeric user id as a string (`"583231"`; the login is `display_name`, and
