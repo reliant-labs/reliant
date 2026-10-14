@@ -221,6 +221,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge skill list`](#reliant-forge-skill-list) | List available skills (forge-shipped, project, and user-global) |
 | [`reliant forge skill load`](#reliant-forge-skill-load) | Print a skill's content to stdout (resolves user > project > forge) |
 | [`reliant forge skill search`](#reliant-forge-skill-search) | Search skills across all scopes by keyword (path/name=3, desc/body=1) |
+| [`reliant forge slot`](#reliant-forge-slot) | Queue heavy work behind host-wide slots: at most N heavy jobs at once on this machine |
+| [`reliant forge slot run`](#reliant-forge-slot-run) | Run a command holding a host slot, waiting while every slot is held |
+| [`reliant forge slot status`](#reliant-forge-slot-status) | Show a slot class's capacity, why, who holds its slots and who waits |
 | [`reliant forge start`](#reliant-forge-start) | Print the greenfield brief: empty directory to authored protos, in one call |
 | [`reliant forge storage`](#reliant-forge-storage) | Inspect and bound local caches; preserve persistent application data |
 | [`reliant forge storage check`](#reliant-forge-storage-check) | Refuse a build below the physical host free-space reserve |
@@ -843,6 +846,7 @@ reliant forge
 | [`scaffold`](#reliant-forge-scaffold) | Scaffold code: bare, everything the protos imply; with a noun, exactly one thing |
 | [`secret`](#reliant-forge-secret) | Manage an environment's secret store (local file or hosted control plane) |
 | [`skill`](#reliant-forge-skill) | Manage Forge skills — conventions and playbooks for LLM agents |
+| [`slot`](#reliant-forge-slot) | Queue heavy work behind host-wide slots: at most N heavy jobs at once on this machine |
 | [`start`](#reliant-forge-start) | Print the greenfield brief: empty directory to authored protos, in one call |
 | [`storage`](#reliant-forge-storage) | Inspect and bound local caches; preserve persistent application data |
 | [`tools`](#reliant-forge-tools) | Manage developer tooling forge depends on (proto plugins, etc.) |
@@ -7916,6 +7920,78 @@ reliant forge skill search <query> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--json` | `bool` | - | Output JSON instead of a tab-separated table |
+
+---
+
+### reliant forge slot
+
+Queue heavy work behind host-wide slots: at most N heavy jobs at once on this machine
+
+A host-wide counting semaphore for heavy work (builds, test lanes, codegen, full lints).
+
+On a shared machine, past a handful of concurrent heavy jobs every job slows down — measured,
+`go build ./...` went from ~45s to ~130s beside 8 others — so queueing them finishes sooner
+than running them all at once. A slot is an OS file lock: a crashed holder releases it.
+
+Slots per class default to min(CPUs / 4, memory GiB / 8), read from the cgroup limit when
+there is one, at least 1. FORGE_HEAVY_SLOTS=`<n>` overrides it; FORGE_HEAVY_SLOTS=off turns
+the limit off. FORGE_SLOTS_DIR relocates the slot files (default: the user cache dir).
+
+`forge generate`, `forge lint` and the heavy checks of `forge ci gate` take a slot on
+their own. Anything running inside a slot passes it to its children (FORGE_SLOT_HELD),
+so a nested heavy command never waits on its own parent.
+
+```
+reliant forge slot
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`run`](#reliant-forge-slot-run) | Run a command holding a host slot, waiting while every slot is held |
+| [`status`](#reliant-forge-slot-status) | Show a slot class's capacity, why, who holds its slots and who waits |
+
+---
+
+#### reliant forge slot run
+
+Run a command holding a host slot, waiting while every slot is held
+
+Runs `<command>` once a slot of --class is free, holding the slot until the command
+exits, and exits with the command's status. While it waits it prints who holds the
+slots, and repeats that every 30s. Ctrl-C while waiting gives up (exit 130).
+
+Already inside a slot of the class — a parent ran under `forge slot run`, or a gate
+check — it runs the command at once: a child never queues behind its own parent.
+
+```
+reliant forge slot run [--class heavy] -- <command> [args...] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--class` | `string` | `heavy` | Slot class |
+| `--slots` | `int` | `0` | Slots in the class (default: FORGE_`<CLASS>`_SLOTS, else derived from the machine) |
+
+---
+
+#### reliant forge slot status
+
+Show a slot class's capacity, why, who holds its slots and who waits
+
+```
+reliant forge slot status [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--class` | `string` | `heavy` | Slot class |
+| `--json` | `bool` | - | Print the status as JSON |
 
 ---
 

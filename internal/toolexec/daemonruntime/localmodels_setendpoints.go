@@ -1,6 +1,4 @@
 // Copyright (c) 2025 Reliant Labs
-//
-//forge:exclude-contract: a tools-daemon command handler; shaped by the daemon command dispatch table
 package daemonruntime
 
 import (

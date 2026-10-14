@@ -1,6 +1,4 @@
 // Copyright (c) 2025 Reliant Labs
-//
-//forge:exclude-contract: Temporal signal delivery for spawn cancellation; SDK wiring
 package temporal
 
 import (
