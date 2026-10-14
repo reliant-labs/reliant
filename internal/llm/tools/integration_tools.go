@@ -224,7 +224,7 @@ type integrationTool struct {
 	// model's arguments.
 	credentials httpaction.CredentialSource
 	// ledger records a mutating call before it is made (nil records nothing).
-	ledger *writeledger.Recorder
+	ledger writeledger.Service
 }
 
 var _ BindableTool = (*integrationTool)(nil)
@@ -250,11 +250,11 @@ func (t *integrationTool) WithBindings(bindings Bindings) (Tool, error) {
 
 func (t *integrationTool) Bindings() Bindings { return t.bindings }
 
-func newIntegrationTool(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, credentials httpaction.CredentialSource, ledger *writeledger.Recorder) Tool {
+func newIntegrationTool(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, credentials httpaction.CredentialSource, ledger writeledger.Service) Tool {
 	return &integrationTool{manifest: m, action: a, credentials: credentials, ledger: ledger}
 }
 
-func (f *ToolsFactory) integrationLedger() *writeledger.Recorder {
+func (f *ToolsFactory) integrationLedger() writeledger.Service {
 	if f == nil || f.opts == nil {
 		return nil
 	}
@@ -325,7 +325,11 @@ func (t *integrationTool) Run(rc *rctx.ToolContext, call ToolCall) (ToolResponse
 		return NewTextErrorResponse("no execution context"), nil
 	}
 	site := httpaction.CallSite{RunID: integrationRunID(rc.ChatID, rc.Thread), ToolCallID: call.ID}
-	result, err := t.ledger.Wrap(sharedIntegrationRunner()).RunAuthenticated(ctx, t.manifest, t.action, params, t.credentials, site)
+	var runner writeledger.Runner = sharedIntegrationRunner()
+	if t.ledger != nil {
+		runner = t.ledger.Wrap(runner)
+	}
+	result, err := runner.RunAuthenticated(ctx, t.manifest, t.action, params, t.credentials, site)
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}

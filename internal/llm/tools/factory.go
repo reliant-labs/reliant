@@ -42,7 +42,7 @@ type ToolsOptions struct {
 	IntegrationCredentials httpaction.CredentialSource
 	// WriteLedger records the agent's mutating integration calls, so an event
 	// they cause can be attributed. Optional: nil records nothing.
-	WriteLedger *writeledger.Recorder
+	WriteLedger writeledger.Service
 	// CatalogSearch backs search_integrations / get_integration_schema with
 	// the caller's connection state. Optional: nil searches the embedded
 	// catalog with no connections, so refs and schemas are still found but

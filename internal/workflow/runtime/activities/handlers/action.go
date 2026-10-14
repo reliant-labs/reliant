@@ -37,10 +37,12 @@ type ActionActivity struct {
 }
 
 // WithLedger records every mutating call this activity makes in the write
-// ledger. A nil recorder changes nothing.
-func (a *ActionActivity) WithLedger(rec *writeledger.Recorder) *ActionActivity {
+// ledger. A nil ledger changes nothing.
+func (a *ActionActivity) WithLedger(rec writeledger.Service) *ActionActivity {
 	clone := *a
-	clone.runner = rec.Wrap(a.runner)
+	if rec != nil {
+		clone.runner = rec.Wrap(a.runner)
+	}
 	return &clone
 }
 

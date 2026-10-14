@@ -95,7 +95,7 @@ type Config struct {
 	ControlPlaneURL string
 	// WriteLedger records the action node's mutating integration calls, so an
 	// event they cause can be attributed. nil records nothing.
-	WriteLedger *writeledger.Recorder
+	WriteLedger writeledger.Service
 
 	// Optional overrides (for testing)
 	RunExecutorOverride handlers.RunExecutor

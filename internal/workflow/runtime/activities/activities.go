@@ -47,7 +47,7 @@ type Activities struct {
 	ControlPlaneURL string
 	// WriteLedger records the action node's mutating integration calls.
 	// Optional: nil records nothing.
-	WriteLedger *writeledger.Recorder
+	WriteLedger writeledger.Service
 }
 
 // NewActivities creates a new Activities container

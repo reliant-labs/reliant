@@ -21,15 +21,15 @@ import (
 // be settled, because an intent that stays "intent" forever looks pending.
 const settleTimeout = 10 * time.Second
 
-// Recorder builds the decorated runner.
+// Recorder is the Service: it builds the decorated runner.
 type Recorder struct {
 	store Store
 	runs  RunLookup
 	now   func() time.Time
 }
 
-// New builds a Recorder.
-func New(deps Deps) *Recorder {
+// New builds the write ledger.
+func New(deps Deps) Service {
 	now := deps.Now
 	if now == nil {
 		now = time.Now
@@ -175,11 +175,6 @@ func triggerName(t *core.Trigger) string {
 		return strings.TrimSpace(*t.WorkflowTrigger)
 	}
 	return t.Name
-}
-
-// Pruner deletes old ledger entries. core.IntegrationWriteStore satisfies it.
-type Pruner interface {
-	PruneIntegrationWrites(ctx context.Context, before time.Time) (int64, error)
 }
 
 // Prune deletes entries older than Retention. It reports how many.

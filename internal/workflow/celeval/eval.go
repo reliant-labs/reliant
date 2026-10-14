@@ -3,6 +3,8 @@
 // a filter, an input mapping or a condition without activating anything and
 // waiting for an event. The cel_eval tool, `reliant workflow eval` and
 // `reliant workflow validate --trigger-payload` are all thin shells over it.
+//
+//forge:exclude-contract: pure evaluation of a CEL expression or template over a caller-supplied context (Evaluate, DryRunTrigger); no I/O, state or clock, and nothing to substitute
 package celeval
 
 import (

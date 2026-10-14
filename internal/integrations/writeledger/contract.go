@@ -27,6 +27,24 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 )
 
+// Service is the write ledger: it decorates the authenticated call so no
+// mutating integration call goes out unrecorded, and it prunes old entries.
+// New returns it; a caller holding a nil Service records nothing and makes the
+// call undecorated.
+type Service interface {
+	// Wrap returns inner with every mutating call recorded.
+	Wrap(inner Runner) Runner
+	// Prune deletes entries older than Retention. It reports how many.
+	Prune(ctx context.Context, pruner Pruner) (int64, error)
+	// PruneLoop prunes hourly until ctx is done.
+	PruneLoop(ctx context.Context, pruner Pruner)
+}
+
+// Pruner deletes old ledger entries. core.IntegrationWriteStore satisfies it.
+type Pruner interface {
+	PruneIntegrationWrites(ctx context.Context, before time.Time) (int64, error)
+}
+
 // Runner is the authenticated call the ledger decorates. *httpaction.Runner
 // implements it, and so does the decorator itself.
 type Runner interface {

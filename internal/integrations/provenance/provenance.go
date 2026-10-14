@@ -10,6 +10,8 @@
 // It is pure: no I/O and no dependencies, so the writer and the parser cannot
 // disagree about how a body is hashed or a repository is named — the only way
 // a correlation silently stops matching.
+//
+//forge:exclude-contract: pure vocabulary (value types and hash/name functions) shared by the write ledger and the webhook parser; no I/O, state or clock, and nothing to substitute
 package provenance
 
 import (
