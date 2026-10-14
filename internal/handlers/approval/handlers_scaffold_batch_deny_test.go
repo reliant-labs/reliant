@@ -1,0 +1,56 @@
+package approval_test
+
+import (
+	"context"
+	"database/sql"
+	"testing"
+
+	"connectrpc.com/connect"
+
+	"github.com/reliant-labs/forge/pkg/tdd"
+
+	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	approval "github.com/reliant-labs/reliant/internal/handlers/approval"
+)
+
+// approval_test.go covers batch denial against a real database; these rows
+// pin the checks that run before anything is written.
+func TestBatchDeny_Generated(t *testing.T) {
+	t.Parallel()
+
+	// a-1 is pending in another user's chat; no other approval exists.
+	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.StubRepo{
+		GetApprovalFunc: func(_ context.Context, id string) (*db.Approval, error) {
+			if id == "a-1" {
+				return &db.Approval{ID: id, ChatID: "chat-1", Status: int32(pb.ApprovalStatus_APPROVAL_STATUS_PENDING)}, nil
+			}
+			return nil, sql.ErrNoRows
+		},
+		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
+			return &db.Chat{ID: id, UserID: "someone-else"}, nil
+		},
+	}}))
+
+	tdd.RunRPCCases(t, []tdd.RPCCase[pb.BatchDenyRequest, pb.BatchDenyResponse]{
+		{
+			Name:    "request_ids is required",
+			Req:     connect.NewRequest(&pb.BatchDenyRequest{}),
+			Ctx:     approval.AuthedContext(t),
+			WantErr: connect.CodeInvalidArgument,
+		},
+		{
+			Name:    "an unknown approval is not found",
+			Req:     connect.NewRequest(&pb.BatchDenyRequest{RequestIds: []string{"a-2"}}),
+			Ctx:     approval.AuthedContext(t),
+			WantErr: connect.CodeNotFound,
+		},
+		{
+			Name:    "another user's approval is not found",
+			Req:     connect.NewRequest(&pb.BatchDenyRequest{RequestIds: []string{"a-1"}}),
+			Ctx:     approval.AuthedContext(t),
+			WantErr: connect.CodeNotFound,
+		},
+	}, svc.BatchDeny)
+}

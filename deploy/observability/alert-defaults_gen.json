@@ -8,6 +8,10 @@
         "rpc_service": "reliant.v1.AccountService"
       },
       {
+        "name": "approval",
+        "rpc_service": "reliant.v1.ApprovalService"
+      },
+      {
         "name": "attachment",
         "rpc_service": "reliant.v1.AttachmentService"
       },

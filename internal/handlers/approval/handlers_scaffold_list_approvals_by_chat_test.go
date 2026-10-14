@@ -1,0 +1,59 @@
+package approval_test
+
+import (
+	"context"
+	"database/sql"
+	"testing"
+
+	"connectrpc.com/connect"
+
+	"github.com/reliant-labs/forge/pkg/tdd"
+
+	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	approval "github.com/reliant-labs/reliant/internal/handlers/approval"
+)
+
+// Ownership resolves through the approvals' chat; these rows pin the checks
+// that run before any approval is read.
+func TestListApprovalsByChat_Generated(t *testing.T) {
+	t.Parallel()
+
+	// chat-1 belongs to another user; no other chat exists.
+	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.StubRepo{
+		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
+			if id == "chat-1" {
+				return &db.Chat{ID: id, UserID: "someone-else"}, nil
+			}
+			return nil, sql.ErrNoRows
+		},
+	}}))
+
+	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListApprovalsByChatRequest, pb.ListApprovalsByChatResponse]{
+		{
+			Name:    "chat_id is required",
+			Req:     connect.NewRequest(&pb.ListApprovalsByChatRequest{}),
+			Ctx:     approval.AuthedContext(t),
+			WantErr: connect.CodeInvalidArgument,
+		},
+		{
+			Name:    "a caller without a user is unauthenticated",
+			Req:     connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-1"}),
+			Ctx:     context.Background(),
+			WantErr: connect.CodeUnauthenticated,
+		},
+		{
+			Name:    "an unknown chat is not found",
+			Req:     connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-2"}),
+			Ctx:     approval.AuthedContext(t),
+			WantErr: connect.CodeNotFound,
+		},
+		{
+			Name:    "another user's chat is not found",
+			Req:     connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-1"}),
+			Ctx:     approval.AuthedContext(t),
+			WantErr: connect.CodeNotFound,
+		},
+	}, svc.ListApprovalsByChat)
+}

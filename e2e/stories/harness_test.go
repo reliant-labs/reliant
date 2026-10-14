@@ -33,6 +33,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/approval"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -146,7 +147,7 @@ type Harness struct {
 
 	ChatSvc     *services.ChatService
 	QuestionSvc *question.Service
-	ApprovalSvc *services.ApprovalService
+	ApprovalSvc *approval.Service
 	// TriggerSvc is the production TriggerService over the story's Temporal:
 	// a fire goes through the real fire workflow, Firer and launcher.
 	TriggerSvc *services.TriggerService
@@ -286,7 +287,13 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Signals: pause,
 	})
 	require.NoError(t, err, "question service")
-	approvalSvc := services.NewApprovalService(s.Repo, pause)
+	approvalSvc, err := approval.New(approval.Deps{
+		Logger:  slog.Default(),
+		Config:  &typedconfig.Config{},
+		Repo:    s.Repo,
+		Signals: pause,
+	})
+	require.NoError(t, err, "approval service")
 	triggerSvc := services.NewTriggerServiceFor(s.Repo, s.Temporal, taskQueue)
 
 	return &Harness{
@@ -556,7 +563,7 @@ func (h *Harness) WaitPendingQuestion(chatID string) *db.Question {
 // WaitPendingApproval polls until the chat has exactly one pending approval.
 func (h *Harness) WaitPendingApproval(chatID string) *db.Approval {
 	h.T.Helper()
-	var approval *db.Approval
+	var found *db.Approval
 	h.eventually("pending approval on chat "+chatID, func() (bool, string) {
 		pending, err := h.Stack.Repo.ListPendingApprovalsByChat(h.Ctx, chatID)
 		if err != nil {
@@ -565,10 +572,10 @@ func (h *Harness) WaitPendingApproval(chatID string) *db.Approval {
 		if len(pending) != 1 {
 			return false, fmt.Sprintf("%d pending approvals", len(pending))
 		}
-		approval = pending[0]
+		found = pending[0]
 		return true, ""
 	})
-	return approval
+	return found
 }
 
 // Messages returns the chat's messages on the root thread, ordinal-ordered,

@@ -1,6 +1,4 @@
 // Copyright (c) 2025 Reliant Labs
-//
-//forge:exclude-contract: Connect RPC handler implementation; its contract is the generated proto service interface
 package services
 
 import (

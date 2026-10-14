@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
+	"github.com/reliant-labs/reliant/internal/handlers/approval"
 	"github.com/reliant-labs/reliant/internal/handlers/attachment"
 	"github.com/reliant-labs/reliant/internal/handlers/background"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
@@ -251,7 +252,15 @@ func NewServer(cfg *Config) (*Server, error) {
 		worktreeService.WithSettler(worktreeSweeper)
 	}
 	repoService := services.NewRepoService(database, router)
-	approvalService := services.NewApprovalService(database, cfg.PauseService)
+	approvalService, err := approval.New(approval.Deps{
+		Logger:  handlerLogger,
+		Config:  handlerConfig,
+		Repo:    database,
+		Signals: cfg.PauseService,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("approval service: %w", err)
+	}
 	questionService, err := question.New(question.Deps{
 		Logger:  handlerLogger,
 		Config:  handlerConfig,

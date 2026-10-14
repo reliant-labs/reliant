@@ -1,13 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-//
-// These are Connect RPC handlers: the exported methods are the proto-defined
-// service methods, and the package embeds the generated
-// reliantv1connect.*ServiceHandler. The contract is the .proto service, so a
-// contract.go here would duplicate the proto boundary.
-//
-//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the handlers publish chat events to JetStream (project.go) as part of serving RPCs; the RPC surface is the contract, and extracting a publisher adapter is deferred; tracked in H-RELIANT-CI-lint follow-ups
-//forge:exclude-contract: Connect RPC handler implementations; their contract is the generated proto service interface
-package services
+package approval
 
 import (
 	"context"
@@ -19,39 +11,22 @@ import (
 	"github.com/google/uuid"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/workflow"
 )
-
-// ApprovalService implements the ApprovalService RPC handlers
-type ApprovalService struct {
-	reliantv1connect.UnimplementedApprovalServiceHandler
-	database     db.Repository
-	pauseService *workflow.PauseService
-}
-
-// NewApprovalService creates a new ApprovalService
-func NewApprovalService(database db.Repository, pauseService *workflow.PauseService) *ApprovalService {
-	return &ApprovalService{
-		database:     database,
-		pauseService: pauseService,
-	}
-}
 
 // chatBelongsToUser verifies the chat exists and is owned by the caller.
 // Approvals gate tool execution, so acting on one is acting on the chat —
 // ownership is transitive through Approval.ChatID. A foreign chat is
 // NotFound, never PermissionDenied, so the check cannot be used as a
 // cross-tenant existence oracle.
-func (s *ApprovalService) chatBelongsToUser(ctx context.Context, chatID string) error {
+func (s *Service) chatBelongsToUser(ctx context.Context, chatID string) error {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
 		return connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
 	}
-	chat, err := s.database.GetChat(ctx, chatID)
+	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil || chat == nil || chat.UserID != userID {
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found"))
 	}
@@ -112,7 +87,7 @@ func answeredByItsRun(a *db.Approval) bool {
 }
 
 // ListApprovalsByChat lists all pending approvals for a chat
-func (s *ApprovalService) ListApprovalsByChat(
+func (s *Service) ListApprovalsByChat(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListApprovalsByChatRequest],
 ) (*connect.Response[reliantv1.ListApprovalsByChatResponse], error) {
@@ -124,7 +99,7 @@ func (s *ApprovalService) ListApprovalsByChat(
 		return nil, err
 	}
 
-	approvals, err := s.database.ListPendingApprovalsByChat(ctx, req.Msg.ChatId)
+	approvals, err := s.deps.Repo.ListPendingApprovalsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
 		logging.Error("Failed to list approvals", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list approvals"))
@@ -142,7 +117,7 @@ func (s *ApprovalService) ListApprovalsByChat(
 }
 
 // Approve approves a pending approval request
-func (s *ApprovalService) Approve(
+func (s *Service) Approve(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ApproveRequest],
 ) (*connect.Response[reliantv1.ApproveResponse], error) {
@@ -151,7 +126,7 @@ func (s *ApprovalService) Approve(
 	}
 
 	// Get the approval
-	approval, err := s.database.GetApproval(ctx, req.Msg.RequestId)
+	approval, err := s.deps.Repo.GetApproval(ctx, req.Msg.RequestId)
 	if err != nil || approval == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found"))
 	}
@@ -171,9 +146,9 @@ func (s *ApprovalService) Approve(
 	}
 
 	// Dual-write: Update approval status AND create chat_update atomically
-	err = s.database.RunTx(ctx, func(txCtx context.Context) error {
+	err = s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
 		// Update approval status
-		if err := s.database.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), nil, actionTaken, nil); err != nil {
+		if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), nil, actionTaken, nil); err != nil {
 			return fmt.Errorf("failed to update approval status: %w", err)
 		}
 
@@ -199,7 +174,7 @@ func (s *ApprovalService) Approve(
 		}
 
 		// Create chat_update in same transaction
-		if err := s.database.CreateChatUpdate(txCtx, approval.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
+		if err := s.deps.Repo.CreateChatUpdate(txCtx, approval.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
 			return fmt.Errorf("failed to create chat_update: %w", err)
 		}
 
@@ -228,7 +203,7 @@ func (s *ApprovalService) Approve(
 }
 
 // Deny denies a pending approval request
-func (s *ApprovalService) Deny(
+func (s *Service) Deny(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DenyRequest],
 ) (*connect.Response[reliantv1.DenyResponse], error) {
@@ -237,7 +212,7 @@ func (s *ApprovalService) Deny(
 	}
 
 	// Get the approval
-	approval, err := s.database.GetApproval(ctx, req.Msg.RequestId)
+	approval, err := s.deps.Repo.GetApproval(ctx, req.Msg.RequestId)
 	if err != nil || approval == nil {
 		logging.Error("Failed to get approval", "error", err, "requestID", req.Msg.RequestId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found"))
@@ -265,9 +240,9 @@ func (s *ApprovalService) Deny(
 	}
 
 	// Dual-write: Update approval status AND create chat_update atomically
-	err = s.database.RunTx(ctx, func(txCtx context.Context) error {
+	err = s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
 		// Update approval status
-		if err := s.database.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), denialReasonPtr, actionTaken, nil); err != nil {
+		if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), denialReasonPtr, actionTaken, nil); err != nil {
 			return fmt.Errorf("failed to update approval status: %w", err)
 		}
 
@@ -294,7 +269,7 @@ func (s *ApprovalService) Deny(
 		}
 
 		// Create chat_update in same transaction
-		if err := s.database.CreateChatUpdate(txCtx, approval.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
+		if err := s.deps.Repo.CreateChatUpdate(txCtx, approval.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
 			return fmt.Errorf("failed to create chat_update: %w", err)
 		}
 
@@ -335,7 +310,7 @@ func (s *ApprovalService) Deny(
 }
 
 // BatchApprove approves multiple pending approval requests at once
-func (s *ApprovalService) BatchApprove(
+func (s *Service) BatchApprove(
 	ctx context.Context,
 	req *connect.Request[reliantv1.BatchApproveRequest],
 ) (*connect.Response[reliantv1.BatchApproveResponse], error) {
@@ -352,7 +327,7 @@ func (s *ApprovalService) BatchApprove(
 	// Process each approval
 	var chatID string
 	for _, requestID := range req.Msg.RequestIds {
-		approval, err := s.database.GetApproval(ctx, requestID)
+		approval, err := s.deps.Repo.GetApproval(ctx, requestID)
 		if err != nil || approval == nil {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found: %s", requestID))
 		}
@@ -374,9 +349,9 @@ func (s *ApprovalService) BatchApprove(
 		}
 
 		// Dual-write: Update approval status AND create chat_update atomically
-		err = s.database.RunTx(ctx, func(txCtx context.Context) error {
+		err = s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
 			// Update approval status
-			if err := s.database.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), nil, actionTaken, nil); err != nil {
+			if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), nil, actionTaken, nil); err != nil {
 				return fmt.Errorf("failed to update approval status: %w", err)
 			}
 
@@ -402,7 +377,7 @@ func (s *ApprovalService) BatchApprove(
 			}
 
 			// Create chat_update in same transaction
-			if err := s.database.CreateChatUpdate(txCtx, approval.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
+			if err := s.deps.Repo.CreateChatUpdate(txCtx, approval.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
 				return fmt.Errorf("failed to create chat_update: %w", err)
 			}
 
@@ -433,7 +408,7 @@ func (s *ApprovalService) BatchApprove(
 }
 
 // BatchDeny denies multiple pending approval requests at once
-func (s *ApprovalService) BatchDeny(
+func (s *Service) BatchDeny(
 	ctx context.Context,
 	req *connect.Request[reliantv1.BatchDenyRequest],
 ) (*connect.Response[reliantv1.BatchDenyResponse], error) {
@@ -458,7 +433,7 @@ func (s *ApprovalService) BatchDeny(
 	var chatID string
 	deniedStepApproval := false
 	for _, requestID := range req.Msg.RequestIds {
-		approval, err := s.database.GetApproval(ctx, requestID)
+		approval, err := s.deps.Repo.GetApproval(ctx, requestID)
 		if err != nil || approval == nil {
 			logging.Error("Approval not found in batch", "requestID", requestID)
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found: %s", requestID))
@@ -482,9 +457,9 @@ func (s *ApprovalService) BatchDeny(
 		}
 
 		// Dual-write: Update approval status AND create chat_update atomically
-		err = s.database.RunTx(ctx, func(txCtx context.Context) error {
+		err = s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
 			// Update approval status
-			if err := s.database.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), denialReasonPtr, actionTaken, nil); err != nil {
+			if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), denialReasonPtr, actionTaken, nil); err != nil {
 				return fmt.Errorf("failed to update approval status: %w", err)
 			}
 
@@ -511,7 +486,7 @@ func (s *ApprovalService) BatchDeny(
 			}
 
 			// Create chat_update in same transaction
-			if err := s.database.CreateChatUpdate(txCtx, approval.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
+			if err := s.deps.Repo.CreateChatUpdate(txCtx, approval.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
 				return fmt.Errorf("failed to create chat_update: %w", err)
 			}
 
@@ -552,13 +527,13 @@ func (s *ApprovalService) BatchDeny(
 }
 
 // signalApproval sends a signal to the workflow using PauseService.SignalWithRecovery
-func (s *ApprovalService) signalApproval(ctx context.Context, approval *db.Approval, signalData map[string]interface{}) {
+func (s *Service) signalApproval(ctx context.Context, approval *db.Approval, signalData map[string]interface{}) {
 	if approval.TemporalWorkflowID == "" {
 		logging.Warn("[Approval] No temporal_workflow_id on approval, cannot signal", "approvalID", approval.ID)
 		return
 	}
 	signalName := "signal.approval." + approval.ID
-	if err := s.pauseService.SignalWithRecovery(ctx, approval.TemporalWorkflowID, signalName, signalData, nil); err != nil {
+	if err := s.deps.Signals.SignalWithRecovery(ctx, approval.TemporalWorkflowID, signalName, signalData, nil); err != nil {
 		logging.Warn("[Approval] Failed to signal approval resolution",
 			"error", err,
 			"approvalID", approval.ID,
@@ -568,10 +543,10 @@ func (s *ApprovalService) signalApproval(ctx context.Context, approval *db.Appro
 }
 
 // createDenialMessage creates a tool message with denied tool results for the given chat
-func (s *ApprovalService) createDenialMessage(ctx context.Context, chatID string, denialReason string) error {
+func (s *Service) createDenialMessage(ctx context.Context, chatID string, denialReason string) error {
 
 	// Get all messages to find the last assistant message with tool_calls
-	msgs, err := s.database.ListMessages(ctx, chatID, db.MessageListOptions{})
+	msgs, err := s.deps.Repo.ListMessages(ctx, chatID, db.MessageListOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to list messages: %w", err)
 	}
@@ -591,7 +566,7 @@ func (s *ApprovalService) createDenialMessage(ctx context.Context, chatID string
 	}
 
 	// Get content blocks for the assistant message to find tool_calls
-	blocks, err := s.database.ListContentBlocks(ctx, lastAssistantMsg.ID)
+	blocks, err := s.deps.Repo.ListContentBlocks(ctx, lastAssistantMsg.ID)
 	if err != nil {
 		return fmt.Errorf("failed to list content blocks: %w", err)
 	}
@@ -612,13 +587,13 @@ func (s *ApprovalService) createDenialMessage(ctx context.Context, chatID string
 	logging.Debug("[Approval] Found tool_call blocks to deny", "count", len(toolCallBlocks), "chatID", chatID)
 
 	// Get next ordinal for the chat
-	nextOrdinal, err := s.database.GetNextOrdinal(ctx, lastAssistantMsg.ThreadID)
+	nextOrdinal, err := s.deps.Repo.GetNextOrdinal(ctx, lastAssistantMsg.ThreadID)
 	if err != nil {
 		return fmt.Errorf("failed to get next ordinal: %w", err)
 	}
 
 	// Get next chat-global seq. See 20260802000000_add_message_seq.sql.
-	nextSeq, err := s.database.GetNextSeq(ctx, chatID, lastAssistantMsg.ThreadID)
+	nextSeq, err := s.deps.Repo.GetNextSeq(ctx, chatID, lastAssistantMsg.ThreadID)
 	if err != nil {
 		return fmt.Errorf("failed to get next seq: %w", err)
 	}
@@ -629,7 +604,7 @@ func (s *ApprovalService) createDenialMessage(ctx context.Context, chatID string
 	isError := true
 	denialContent := denialReason
 
-	err = s.database.RunTx(ctx, func(txCtx context.Context) error {
+	err = s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
 		// Create the tool message (same context_window as the assistant message)
 		msg := &db.Message{
 			ID:              messageID,
@@ -643,7 +618,7 @@ func (s *ApprovalService) createDenialMessage(ctx context.Context, chatID string
 			UpdatedAt:       now,
 		}
 
-		if err := s.database.CreateMessage(txCtx, msg); err != nil {
+		if err := s.deps.Repo.CreateMessage(txCtx, msg); err != nil {
 			return fmt.Errorf("failed to create denial message: %w", err)
 		}
 
@@ -662,7 +637,7 @@ func (s *ApprovalService) createDenialMessage(ctx context.Context, chatID string
 			UpdatedAt: now,
 		}
 
-		if err := s.database.CreateContentBlock(txCtx, textBlock); err != nil {
+		if err := s.deps.Repo.CreateContentBlock(txCtx, textBlock); err != nil {
 			return fmt.Errorf("failed to create text content block: %w", err)
 		}
 
@@ -682,7 +657,7 @@ func (s *ApprovalService) createDenialMessage(ctx context.Context, chatID string
 				UpdatedAt:  now,
 			}
 
-			if err := s.database.CreateContentBlock(txCtx, block); err != nil {
+			if err := s.deps.Repo.CreateContentBlock(txCtx, block); err != nil {
 				return fmt.Errorf("failed to create tool_result block %d: %w", i, err)
 			}
 		}
@@ -729,7 +704,7 @@ func (s *ApprovalService) createDenialMessage(ctx context.Context, chatID string
 			return fmt.Errorf("failed to marshal chat_update data: %w", err)
 		}
 
-		if err := s.database.CreateChatUpdate(txCtx, chatID, db.UpdateTypeMessage, messageID, string(updateDataJSON)); err != nil {
+		if err := s.deps.Repo.CreateChatUpdate(txCtx, chatID, db.UpdateTypeMessage, messageID, string(updateDataJSON)); err != nil {
 			return fmt.Errorf("failed to create chat_update: %w", err)
 		}
 

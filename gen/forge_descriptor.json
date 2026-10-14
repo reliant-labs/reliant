@@ -689,8 +689,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "ApprovalType"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "AttachmentService",
@@ -29208,6 +29207,15 @@
             "type_name": "reliant.v1.CelBool"
           }
         ],
+        "reliant.v1.ComputeArgs": [
+          {
+            "name": "outputs",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "message",
+            "map_value_type_name": "google.protobuf.Value"
+          }
+        ],
         "reliant.v1.CopyWorkflowRequest": [
           {
             "name": "project_id",
@@ -30194,6 +30202,12 @@
             "name": "action",
             "kind": "message",
             "type_name": "reliant.v1.ActionArgs",
+            "oneof": "args"
+          },
+          {
+            "name": "compute",
+            "kind": "message",
+            "type_name": "reliant.v1.ComputeArgs",
             "oneof": "args"
           }
         ],
@@ -31441,6 +31455,7 @@
         "reliant.v1.CelString": "reliant/v1/workflow_v2.proto",
         "reliant.v1.CelStringList": "reliant/v1/workflow_v2.proto",
         "reliant.v1.CompactArgs": "reliant/v1/workflow_v2.proto",
+        "reliant.v1.ComputeArgs": "reliant/v1/workflow_v2.proto",
         "reliant.v1.CopyWorkflowRequest": "reliant/v1/workflow.proto",
         "reliant.v1.CopyWorkflowResponse": "reliant/v1/workflow.proto",
         "reliant.v1.CreateWorkflowDraftRequest": "reliant/v1/workflow.proto",
@@ -33937,5 +33952,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "5cbf1d4aafbe6adab0a21ede20b22dec249bf362810e11429f48fa41170fa017"
+  "source_hash": "f7813947e213279f1abcced9db3d16d9d5332a633c9421f3e499df1c1b9097b4"
 }

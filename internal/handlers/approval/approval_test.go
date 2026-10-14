@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package approval
 
 import (
 	"context"
@@ -44,23 +44,24 @@ func (m *mockTemporalSignalClient) SignalWorkflow(_ context.Context, workflowID,
 }
 
 // setupTestApprovalService creates a database and approval service for testing.
-func setupTestApprovalService(t *testing.T) (*ApprovalService, *db.Repo) {
+func setupTestApprovalService(t *testing.T) (*Service, *db.Repo) {
 	t.Helper()
 
 	repo := db.NewTestRepo(t)
-	service := NewApprovalService(repo, nil)
+	// The harness stubs Signals: these tests resolve approvals no run waits on.
+	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo}))
 	return service, repo
 }
 
 // setupTestApprovalServiceWithMockClient creates an approval service wired to a mock Temporal client
 // so we can verify signal routing.
-func setupTestApprovalServiceWithMockClient(t *testing.T) (*ApprovalService, *db.Repo, *mockTemporalSignalClient) {
+func setupTestApprovalServiceWithMockClient(t *testing.T) (*Service, *db.Repo, *mockTemporalSignalClient) {
 	t.Helper()
 
 	repo := db.NewTestRepo(t)
 	mockClient := &mockTemporalSignalClient{}
 	pauseService := workflowpkg.NewPauseService(mockClient, repo)
-	service := NewApprovalService(repo, pauseService)
+	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Signals: pauseService}))
 	return service, repo, mockClient
 }
 
@@ -297,12 +298,12 @@ func createRetiredToolApproval(t *testing.T, repo *db.Repo, chatID, workflowID s
 func TestApprovalService_DenyRetiredToolApprovalWritesNoDenialMessage(t *testing.T) {
 	ctx := approvalTestCtx()
 
-	for name, deny := range map[string]func(*ApprovalService, string) error{
-		"Deny": func(s *ApprovalService, id string) error {
+	for name, deny := range map[string]func(*Service, string) error{
+		"Deny": func(s *Service, id string) error {
 			_, err := s.Deny(ctx, connect.NewRequest(&reliantv1.DenyRequest{RequestId: id}))
 			return err
 		},
-		"BatchDeny": func(s *ApprovalService, id string) error {
+		"BatchDeny": func(s *Service, id string) error {
 			_, err := s.BatchDeny(ctx, connect.NewRequest(&reliantv1.BatchDenyRequest{RequestIds: []string{id}}))
 			return err
 		},
