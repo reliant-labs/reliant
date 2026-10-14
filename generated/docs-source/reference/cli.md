@@ -1017,11 +1017,12 @@ Lanes (default: all):
                deployability, and any ci.gate.extra_checks from forge.yaml   (`task ci:checks`)
   test         the unit suite, via `task test`
   integration  the integration suite, via `task test:integration`
-  all          the three lanes, in that order                                  (`task ci`)
+  all          the three lanes, in one table                                   (`task ci`)
+  <lane>       a lane extra checks of your own declare (`lane: docker`); never part of all
 
 Four rules:
-  1. Every check runs even if an earlier one failed; a summary table follows and the
-     exit status is non-zero if any failed.
+  1. Every check runs even if another failed; a summary table follows and the exit
+     status is non-zero if any failed.
   2. A check that could not run (missing tool or prerequisite) is SKIPPED, not PASS,
      and fails the gate unless CI_SKIP names it: CI_SKIP=golangci-lint,license-check.
      The summary still lists it. N/A rows (nothing for the check to look at) are fine.
@@ -1030,19 +1031,40 @@ Four rules:
      version that happens to be on PATH.
   4. Under GitHub Actions the table is appended to $GITHUB_STEP_SUMMARY.
 
-Change detection (skip jobs a docs-only change cannot affect) is a CI cost optimization and
-stays in the workflow. Locally you scope by choosing a lane.
+Checks run concurrently. A check waits for the checks it names in `after`; a check that
+rewrites the tree (verify-generated, `mutates_tree`) runs alone, before the checks that
+read it; a heavy check holds one of the machine's heavy slots (`forge slot status`), and
+at most --jobs light checks run at once. Each check's output goes to
+tmp/ci/<lane>/<check>.log; the console shows start and finish lines and a failure's tail.
+
+On a committed tree, a check that PASSED on this exact tree before (any worktree of the
+repository, same forge and pinned tools) is not run again: its row reads
+`PASS (cached <sha>)`. CI_NO_CACHE=1 or --no-cache runs everything.
+
+On a branch, unit-tests runs only the Go packages the branch's changes reach (affected
+mode), and falls back to the whole suite when anything but Go source changed, on the
+default branch, or with CI_FULL=1 / --full. The mode and why are printed.
+
+Environment: CI_SKIP, CI_ONLY (checks or groups to run, with what they depend on),
+CI_FULL, CI_BASE, CI_NO_CACHE, CI_REPORT (also write the Markdown table to a file),
+CI_LOG_DIR, FORGE_CI_CACHE_DIR.
 
 ```
-reliant forge ci gate [checks|test|integration|all] [flags]
+reliant forge ci gate [checks|test|integration|all|<lane>] [flags]
 ```
 
 **Flags:**
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--groups` | `bool` | - | Wrap each check's output in GitHub Actions ::group:: lines (automatic under GITHUB_ACTIONS) |
-| `--list` | `bool` | - | Print the checks of the selected lanes and exit |
+| `--base` | `string` | - | Ref a branch's changes are measured from for affected unit tests (default origin/<default branch>; a stacked branch names its parent; also CI_BASE) |
+| `--full` | `bool` | - | Run the whole unit suite on a branch instead of the affected packages (also CI_FULL=1) |
+| `--groups` | `bool` | - | Print each check's output in a GitHub Actions ::group:: (automatic under GITHUB_ACTIONS) |
+| `--jobs` | `int` | `0` | Light checks to run at once (default: half the CPUs, 2-8); heavy checks are bounded by host slots |
+| `--list` | `bool` | - | Print the checks of the selected lanes (lane, group, name, scheduling) and exit |
+| `--no-cache` | `bool` | - | Run every check even when this tree already passed it (also CI_NO_CACHE=1) |
+| `--only` | `stringSlice` | `[]` | Checks or groups to run, in addition to CI_ONLY (plus what they depend on) |
+| `--report` | `string` | - | Also write the Markdown summary to this file (also CI_REPORT) |
 | `--skip` | `stringSlice` | `[]` | Check names to skip, in addition to CI_SKIP (still listed, as SKIPPED) |
 
 ---
@@ -2148,14 +2170,16 @@ Commands:
   new     allocate a fresh timestamp and scaffold the .up.sql file
   rebase  re-version an existing file whose version the schema has passed
 
-The .up.sql file includes rich schema context so LLMs can immediately write
-the migration SQL. Context includes:
+The .up.sql file opens with a short header saying where the schema lives —
+`forge project shapes --kind table`, `forge db introspect` — rather than a copy
+of it. --context writes the full context into the file instead:
   - Current schema (parsed from existing migrations, or from DB with --dsn)
   - Previous migration content
   - Migration history
 
 Examples:
   forge db migration new add_users_table
+  forge db migration new add_preferences --context
   forge db migration new add_preferences --dsn "$DATABASE_URL"
   forge db migration new "backfill account status" --dir db/migrations
   forge db migration rebase db/migrations/20260101120000_add_users.up.sql
@@ -2188,9 +2212,24 @@ same one.
 There is no .down.sql. Forge rolls forward — a bad migration is repaired by a
 new migration written against the state the database is actually in.
 
+Declare, in the file, whether the PREVIOUS release keeps working on the
+schema this migration leaves — every rolling deploy runs it there:
+  --backward-compatible "<why>"  writes  -- forge:backward-compatible — <why>
+  --breaks-rollback "<why>"      writes  -- forge:breaks-rollback <why>
+A project with database.migration_safety.require_compat_declaration gets
+both choices as a comment to replace when neither flag is given, and
+`forge lint --migration-safety` fails the file until it says one.
+
+The file opens with a short header saying where the schema lives. --context
+writes the reconstructed schema, the previous migration and the history into
+it instead (on a large project, thousands of lines); --dsn does the same with
+the schema read from a live database.
+
 Examples:
   forge db migration new add_users_table
+  forge db migration new add_preferences --context
   forge db migration new add_preferences --dsn "$DATABASE_URL"
+  forge db migration new add_retired_at --backward-compatible "additive column the previous release never reads"
 
 ```
 reliant forge db migration new [name] [flags]
@@ -2200,8 +2239,11 @@ reliant forge db migration new [name] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--backward-compatible` | `string` | - | declare that the previous release keeps working on this schema, and why (writes `-- forge:backward-compatible — <why>`) |
+| `--breaks-rollback` | `string` | - | declare that the previous release deliberately does NOT keep working on this schema, and why (writes `-- forge:breaks-rollback <why>`) |
+| `--context` | `bool` | - | write the schema, the previous migration and the history into the file's header instead of a pointer to them |
 | `--dir` | `string` | - | Migrations directory (default: forge.yaml database.migrations_dir, else db/migrations; a relative path resolves against the project root, not the CWD) |
-| `--dsn` | `string` | - | Database connection string for live schema introspection |
+| `--dsn` | `string` | - | Database connection string for live schema introspection (implies --context) |
 
 ---
 
@@ -4914,6 +4956,7 @@ reliant forge generate [flags]
 | `--dry-run` | `bool` | - | Print the pipeline plan ([RUN]/[SKIP] per step + gate reason) and exit without running any step. |
 | `--explain` | `bool` | - | Print a per-file provenance log after generate |
 | `--force`, `-f` | `bool` | - | Discard hand-edits to Tier-1 files and regenerate from current templates |
+| `--force-cleanup` | `bool` | - | Also delete stale generated files that carry hand-edits. Generate always deletes the stale files nobody edited; without this flag it lists the edited ones and keeps them. |
 | `--heal` | `bool` | - | Overwrite on-disk content that matches a PRIOR forge render (an older vintage) with the current template. OFF by default: such content is byte-indistinguishable from a deliberate edit, so forge leaves it untouched and tells you how to proceed rather than silently reverting your work. Pass --heal to advance every such file to the current templates. |
 | `--help-dev` | `bool` | - | List maintainer/debug flags hidden from --help |
 | `--verbose`, `-v` | `bool` | - | Print one line per gate-off skipped step ('⏩ skipped: <step name> (<reason>)'). Default is silent skip. |
@@ -6561,7 +6604,14 @@ Examples:
   forge project shapes --grep Estimate          # one entity across all layers
   forge project shapes --grep 'Invoice|Payment' # SEVERAL entities in one call
   forge project shapes --kind rpc,handler       # what is declared vs implemented
+  forge project shapes --service ChatService    # one service's rpcs and their handlers
+  forge project shapes --unimplemented          # declared rpcs with no handler (or a stub)
   forge project shapes --kind deploy-target     # what a workload's deploy= accepts
+
+A handler line is named like the rpc it serves (ChatService.SendMessage), so
+rpc and handler lines diff by name. Only methods on a handler package's
+*Service that ARE an rpc of its service are handlers: helpers, Name and
+Register are not listed.
 
 ```
 reliant forge project shapes [flags]
@@ -6573,6 +6623,8 @@ reliant forge project shapes [flags]
 |------|------|---------|-------------|
 | `--grep` | `string` | - | case-insensitive regex filter over name and detail |
 | `--kind` | `string` | - | comma-separated kinds: rpc,message,enum,table,store,handler,hook,deploy-target |
+| `--service` | `string` | - | only this service's rpcs and handlers (ChatService, or Chat) |
+| `--unimplemented` | `bool` | - | list the declared rpcs of forge-managed services that have no handler method, or only forge's unwired stub |
 
 ---
 
