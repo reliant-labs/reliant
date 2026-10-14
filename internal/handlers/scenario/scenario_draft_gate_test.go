@@ -16,7 +16,7 @@ import (
 // A draft is never runnable (specs/workflow-draft-lifecycle.md). The scenario
 // runner's workflow loader refuses a draft by slug with an actionable "is a
 // draft" message, as StartChat does
-// (internal/grpc/services/workflow_draft_gate_test.go) and preset resolution
+// (internal/handlers/chat/workflow_draft_gate_test.go) and preset resolution
 // (internal/handlers/preset/preset_draft_gate_test.go).
 func TestScenarioWorkflowLoaderRefusesADraft(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)

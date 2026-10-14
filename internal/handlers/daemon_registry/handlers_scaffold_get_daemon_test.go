@@ -14,7 +14,7 @@ import (
 )
 
 // GetDaemon's happy path (stored local models, disk report, attachment)
-// runs against a real database in internal/grpc/services
+// runs against a real database in internal/handlers/tools_daemon
 // (daemon_registry_localmodel_test.go, daemon_registry_disk_test.go); these
 // rows pin the checks before it.
 func TestGetDaemon_Generated(t *testing.T) {

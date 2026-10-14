@@ -17,7 +17,7 @@ import (
 
 // The listing itself (status composition, stored local models, disk
 // reports, liveness read failures) runs against a real database in
-// internal/grpc/services (daemon_registry_localmodel_test.go,
+// internal/handlers/tools_daemon (daemon_registry_localmodel_test.go,
 // daemon_registry_disk_test.go, tools_daemon_lease_test.go); these rows pin
 // the caller check and the empty answer.
 func TestListDaemons_Generated(t *testing.T) {

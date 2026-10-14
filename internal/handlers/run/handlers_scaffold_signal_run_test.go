@@ -12,7 +12,7 @@ import (
 	run "github.com/reliant-labs/reliant/internal/handlers/run"
 )
 
-// TestSignalRunOnPendingRunIsNotDelivered (internal/grpc/services, which
+// TestSignalRunOnPendingRunIsNotDelivered (internal/handlers/chat/run_signal_pending_test.go, which
 // builds the chat service) covers delivery against a real database; these
 // rows pin the ownership checks that run before it.
 func TestSignalRun_Generated(t *testing.T) {

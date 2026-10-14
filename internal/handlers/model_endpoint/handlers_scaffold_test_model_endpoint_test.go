@@ -14,7 +14,7 @@ import (
 )
 
 // Probing a saved endpoint runs against a real database in
-// internal/grpc/services/model_endpoint_test.go; these rows pin the checks
+// internal/handlers/catalog/model_endpoint_test.go; these rows pin the checks
 // before a probe is attempted.
 func TestTestModelEndpoint_Generated(t *testing.T) {
 	t.Parallel()

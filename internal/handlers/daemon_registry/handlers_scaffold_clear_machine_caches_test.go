@@ -14,7 +14,7 @@ import (
 )
 
 // The relay to an attached machine runs against a real database in
-// internal/grpc/services/daemon_registry_disk_test.go
+// internal/handlers/tools_daemon/daemon_registry_disk_test.go
 // (TestClearMachineCaches_RelaysToTheMachine); these rows pin the checks
 // before it.
 func TestClearMachineCaches_Generated(t *testing.T) {

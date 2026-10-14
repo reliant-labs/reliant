@@ -155,7 +155,7 @@ func TestLaunchFailsWhenRootStartFailsEvenIfTitleStarts(t *testing.T) {
 // make every new chat wait on a round trip to the user's machine. What a
 // launch does instead is hand the question to the run: the request path costs
 // a transaction and a Temporal start, and seeds exactly what the caller asked
-// for. (internal/grpc/services pins the same with a daemon that never answers.)
+// for. (internal/handlers/chat pins the same with a daemon that never answers.)
 func TestLaunchHandsTheGreenfieldProbeToTheRun(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}

@@ -15,7 +15,7 @@ import (
 // resolution is one of the request-side resolvers that refuse a draft by slug
 // with an actionable "is a draft" message. StartChat and the scenario
 // runner's workflow loader are the others
-// (internal/grpc/services/workflow_draft_gate_test.go).
+// (internal/handlers/chat/workflow_draft_gate_test.go).
 func TestDraftWorkflowIsNeverRunnable(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)

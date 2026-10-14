@@ -15,7 +15,7 @@ import (
 )
 
 // fakeSettings is an in-memory SettingsReader. Deliberately NOT the postgres
-// harness: internal/grpc/services-style tests t.Skip when DATABASE_URL is
+// harness: internal/handlers-style tests t.Skip when DATABASE_URL is
 // unset, and a package that reports "ok" having run zero assertions is worse
 // than a package that fails.
 type fakeSettings struct {

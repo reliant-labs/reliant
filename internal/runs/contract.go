@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/grpc/services, internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+//forge:not-a-component: built by reliant's hand-wired server (internal/handlers, internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
 package runs
 
 import (

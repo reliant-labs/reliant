@@ -14,7 +14,7 @@ import (
 )
 
 // The relay to an attached machine runs against a real database in
-// internal/grpc/services/daemon_registry_localmodel_test.go
+// internal/handlers/tools_daemon/daemon_registry_localmodel_test.go
 // (TestDaemonRegistry_RefreshLocalModels); these rows pin the checks before
 // it.
 func TestRefreshLocalModels_Generated(t *testing.T) {

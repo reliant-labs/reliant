@@ -24,7 +24,7 @@ func (previewNoProjectRepo) GetProject(context.Context, string) (*db.Project, er
 }
 
 // The preview served from the owning machine, its refusals and its wake are
-// TestFileSystemProxy_GetFilePreview_* (internal/grpc/services, next to the
+// TestFileSystemProxy_GetFilePreview_* (internal/handlers/worktree/machine_wake_test.go, next to the
 // worktree fixtures they share); these rows need no database.
 func TestGetFilePreview_Generated(t *testing.T) {
 	t.Parallel()

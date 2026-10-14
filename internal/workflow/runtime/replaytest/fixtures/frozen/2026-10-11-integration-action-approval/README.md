@@ -24,7 +24,7 @@ The prompt shipped to prod in #552 (`b7a4d6bd`, part of prod build
 `4c6f6d3e`), so such runs can exist there.
 
 Retire this set together with `actionApprovalRemovedChangeID`, the
-`answeredByItsRun` check in `grpc/services/approval.go`, and the deprecated
+`answeredByItsRun` check in `internal/handlers/approval/approval.go`, and the deprecated
 `ExecuteToolsArgs.refused_tool_calls` (7) and `ToolCapabilities.approval_required`
 (12) — reserve both tags then — once no run recorded before #664's deploy can
 still be open.

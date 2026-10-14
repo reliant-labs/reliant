@@ -17,7 +17,7 @@
 // LocalClient calls a model server over HTTP, directly or relayed through the
 // user's daemon, and serves nothing inbound.
 //
-//forge:not-a-component: built by reliant's hand-wired drivers (internal/llm/drivers), model catalog (internal/grpc/services) and call_llm activity, not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+//forge:not-a-component: built by reliant's hand-wired drivers (internal/llm/drivers), model catalog (internal/handlers/catalog) and call_llm activity, not forge's composition root — until P3c (research/forge-migration/PLAN.md)
 package local
 
 import (

@@ -10,8 +10,8 @@
 #
 # `reliant workflow run --project-path` is find-or-create, and the "find" half
 # short-circuits. CreateProject returns AlreadyExists as soon as it matches the
-# path (internal/grpc/services/project.go:364) — BEFORE the auto git-init block
-# at :453. So on a reused path:
+# path (internal/handlers/project/project.go:390) — BEFORE the auto git-init block
+# at :470. So on a reused path:
 #
 #   first run   → row created → repo.discover finds nothing → git init -b main
 #   later runs  → row found   → returns immediately, git init NEVER runs

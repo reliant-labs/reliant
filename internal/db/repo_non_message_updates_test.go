@@ -87,7 +87,7 @@ func TestGetLatestNonMessageUpdatesPerEntity_NotEvictedByMessageVolume(t *testin
 // synthesizes them from the durable tool_calls table (see snapshotToolCalls),
 // because replaying the transition history was ~94% of the rows on a long chat.
 // The per-tool-call "latest status wins" intent now lives in the snapshot-level
-// tests in internal/grpc/services.
+// tests in internal/handlers/chat (tool_call_status_read_test.go).
 func TestGetLatestNonMessageUpdatesPerEntity_ExcludesToolCalls(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()

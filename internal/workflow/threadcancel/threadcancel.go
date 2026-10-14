@@ -7,7 +7,7 @@
 // It is its own package, holding nothing but a constant and a struct, for the
 // same reason threadwake is: both ENDS of the signal need it and they sit on
 // opposite sides of an import edge. The receiver is internal/workflow/runtime;
-// the senders are internal/grpc/services (the UI cancel path) and, via
+// the senders are internal/handlers/tool_call (the UI cancel path) and, via
 // internal/temporal, internal/llm/tools (the spawn_stop tool) — and runtime
 // imports tools, so defining the contract in runtime makes a sender's import
 // a cycle.

@@ -3,7 +3,7 @@
 // Workflow and preset resolution for the start path.
 //
 // These were ChatService methods. They moved here because a scheduled trigger
-// fires on the worker, which does not import internal/grpc/services — so the
+// fires on the worker, which does not import the handlers under internal/handlers — so the
 // code that resolves, builds and validates a run's inputs has to live in a
 // package both tiers can reach. The behavior is unchanged; the one real
 // difference is that the owner's userID is now an explicit argument everywhere

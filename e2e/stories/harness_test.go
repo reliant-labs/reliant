@@ -437,7 +437,7 @@ func (h *Harness) SendMessage(chatID, prompt string) *reliantv1.SendMessageRespo
 //     internal/workflow/runtime/inline_workflow_executor.go) to compute
 //     has_feedback / response.
 //   - "reply": parsed by QuestionService.saveUserReplyMessage
-//     (internal/grpc/services/question.go) to persist the feedback as a user
+//     (internal/handlers/question/question.go) to persist the feedback as a user
 //     message in the thread.
 //
 // The web client (ChatInput.handleQuestionSubmit) only sends "answers", so

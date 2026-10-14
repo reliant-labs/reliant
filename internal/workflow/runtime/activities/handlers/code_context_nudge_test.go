@@ -29,7 +29,7 @@ func shellToolOutputJSON(t *testing.T, stdout string) string {
 // Hits as rg prints them, for searches that name no file type: the nudge reads
 // the files the matches came from to decide whether code_context can help.
 const (
-	goHits    = "internal/grpc/services/chat_crud.go:960:func (s *Service) UpdateWorkflowName(ctx context.Context) error {\n"
+	goHits    = "internal/handlers/chat/chat_crud.go:383:func (s *Service) UpdateWorkflowName(ctx context.Context) error {\n"
 	protoHits = "proto/services/jobs/v1/jobs.proto:41:message ListJobsRequest {\n"
 	goPaths   = "internal/threads/transition.go\ninternal/threads/transition_test.go\n"
 )

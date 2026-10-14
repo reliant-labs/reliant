@@ -2656,7 +2656,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 // thread without touching the rest of the run.
 //
 // Aliased from the threadcancel leaf package, as ThreadWakeSignalName is from
-// threadwake: the senders (internal/grpc/services, and internal/llm/tools via
+// threadwake: the senders (internal/handlers/tool_call, and internal/llm/tools via
 // internal/temporal) cannot import this package, so the contract has to live
 // somewhere both ends can reach. The aliases stay because the runtime's own
 // tests and read sites spell it this way.

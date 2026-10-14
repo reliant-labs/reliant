@@ -157,7 +157,7 @@ func (p *Publisher) OnDaemonConnected(userID, daemonID string) {
 
 // OnDaemonConnectedWithInfo satisfies toolexec.DaemonConnectionInfoListener.
 // name/hostname/platform are whatever the daemon asserted in its
-// DaemonRegister message (internal/grpc/services/tools_daemon.go); any of
+// DaemonRegister message (internal/handlers/tools_daemon/tools_daemon.go); any of
 // them may be empty. ToolsDaemonService.notifyConnected calls this instead
 // of OnDaemonConnected when the listener implements the interface, so this
 // is the path actually used in production; OnDaemonConnected above only

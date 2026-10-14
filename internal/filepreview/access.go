@@ -37,7 +37,7 @@ const (
 	// ScopeAllowAbsolute additionally permits an absolute path that names a
 	// location outside the base. It is granted only to read-only viewer
 	// operations, and only where the filesystem being read belongs to the
-	// requesting user (see the callers in internal/grpc/services).
+	// requesting user (see the callers in internal/handlers/file_system).
 	ScopeAllowAbsolute
 )
 

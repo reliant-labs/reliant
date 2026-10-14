@@ -14,7 +14,7 @@ import (
 )
 
 // Creation (probe, limits, the hosted network policy) runs against a real
-// database in internal/grpc/services/model_endpoint_test.go; these rows pin
+// database in internal/handlers/catalog/model_endpoint_test.go; these rows pin
 // the checks before it.
 func TestCreateModelEndpoint_Generated(t *testing.T) {
 	t.Parallel()

@@ -12,7 +12,7 @@ import (
 	message "github.com/reliant-labs/reliant/internal/handlers/message"
 )
 
-// TestGetMessage_PopulatesDurableToolCallStatus (internal/grpc/services, which
+// TestGetMessage_PopulatesDurableToolCallStatus (internal/handlers/chat, which
 // also builds the chat service) reads a real message back; these rows pin the
 // request and ownership checks that run before it.
 func TestGetMessage_Generated(t *testing.T) {

@@ -14,7 +14,7 @@ import (
 )
 
 // The write and re-probe on an attached machine run against a real database
-// in internal/grpc/services/daemon_registry_localmodel_test.go
+// in internal/handlers/tools_daemon/daemon_registry_localmodel_test.go
 // (TestDaemonRegistry_SetLocalModelEndpoints); these rows pin the checks
 // before it.
 func TestSetLocalModelEndpoints_Generated(t *testing.T) {

@@ -16,7 +16,7 @@ import (
 // 2026-07-27, dropping every in-flight tool request each time.
 //
 // The gateway signals this with CodeAborted (see supersedeIncumbent in
-// internal/grpc/services). This test asserts the code, not the message, so it
+// internal/handlers/tools_daemon). This test asserts the code, not the message, so it
 // survives a reword and fails on a rewire.
 func TestSupersededDaemonDoesNotReconnect(t *testing.T) {
 	superseded := connect.NewError(connect.CodeAborted,

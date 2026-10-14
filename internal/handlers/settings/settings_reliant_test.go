@@ -16,9 +16,8 @@ import (
 )
 
 // fakeControlPlaneClient is the controlplane.Client the settings tests drive.
-// internal/grpc/services keeps a copy for the Trigger tests until Trigger
-// moves; neither leaves _test.go (research/forge-migration/06-p3b-recipe.md
-// §3.7).
+// internal/handlers/trigger keeps its own copy (fake_control_plane_client_test.go);
+// neither leaves _test.go (research/forge-migration/06-p3b-recipe.md §3.7).
 type fakeControlPlaneClient struct {
 	issueKey       string
 	issueRotated   bool

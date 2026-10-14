@@ -8,7 +8,7 @@
 // It is its own package, holding nothing but a constant and a struct, because
 // both ENDS of the signal need it and they sit on opposite sides of an import
 // edge. The receiver is internal/workflow/runtime; the senders are
-// internal/grpc/services and (via internal/temporal) internal/llm/tools, which
+// the chat handlers (internal/handlers/chat) and (via internal/temporal) internal/llm/tools, which
 // runtime itself imports. Defining the contract in runtime therefore creates a
 // cycle as soon as a sender needs it — including a test-only cycle, which is
 // how this was first caught.

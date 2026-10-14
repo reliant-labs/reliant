@@ -17,7 +17,7 @@ import (
 // allocation rather than going through SaveMessage:
 //
 //	internal/handlers/chat/chat_branch.go   branch-point tool repair
-//	internal/grpc/services/approval.go      tool-denial message
+//	internal/handlers/approval/approval.go    tool-denial message
 //	internal/workflow/.../cleanup.go        orphaned tool-call repair
 //
 // Each of those advances messages past the counter without touching it. A

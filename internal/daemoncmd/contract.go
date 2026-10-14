@@ -16,7 +16,7 @@
 // carry their own copies of getUserID/sendCommand; they are structured so they
 // can adopt it later (tracked as a follow-up).
 //
-//forge:not-a-component: built by reliant's hand-wired handlers (internal/grpc/services), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+//forge:not-a-component: built by reliant's hand-wired handlers (the handlers under internal/handlers), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
 package daemoncmd
 
 import "context"

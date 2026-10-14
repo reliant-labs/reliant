@@ -107,7 +107,7 @@ func (u ToolCallUpdate) Type() UpdateType { return UpdateTypeToolCall }
 // the row that renders as a message in the transcript. Four call sites build
 // this payload (SaveMessage's hot path in internal/threads, EnrichMessageUpdate,
 // SaveMessageToThreadWithID, and the tool-denial message in
-// internal/grpc/services/approval.go); route all of them through this struct
+// internal/handlers/approval/approval.go); route all of them through this struct
 // instead of a hand-built map so a field rename (e.g. ordinal -> seq) fails to
 // compile at every call site instead of silently vanishing from the JSON.
 //

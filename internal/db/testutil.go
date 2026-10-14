@@ -277,9 +277,9 @@ var probeTestDB = probeDSN
 // -short is the hermetic inner-loop tier (`make test-short`), so it does not
 // touch Postgres. That is not about any one slow test: DB-backed tests are
 // serial and Postgres-bound, and every agent on a shared box queues behind the
-// SAME server. Measured: internal/grpc/services under -short took 173s wall for
-// 10s of CPU with the database, 7.9s without it. The full lane (no -short) and
-// CI still run every one of them.
+// SAME server. Measured: the service tests (then in internal/grpc/services)
+// under -short took 173s wall for 10s of CPU with the database, 7.9s without
+// it. The full lane (no -short) and CI still run every one of them.
 //
 // REQUIRE_TEST_DB=1 opts back in — it already means "these tests must run" —
 // so a change to SQL or a repo method can still be iterated on with -short.

@@ -103,9 +103,8 @@ func isKnownViolation(relPath string) string {
 // serverSidePackages lists packages whose non-test .go files must not contain
 // direct filesystem access.
 var serverSidePackages = []string{
-	"internal/grpc/services",
-	"internal/daemoncmd", // P3a: extracted from grpc/services
-	// Helpers extracted from grpc/services keep its ban (P3a,
+	"internal/daemoncmd", // P3a: extracted from the old internal/grpc/services
+	// Helpers extracted from the old internal/grpc/services keep its ban (P3a,
 	// research/forge-migration/05-p3a-handler-map.md).
 	"internal/checkoutstate",
 	"internal/daemonerr",
@@ -116,22 +115,24 @@ var serverSidePackages = []string{
 	"internal/planproto",
 	"internal/workflow/runtime/activities",
 	"internal/workflow/runtime/activities/handlers",
-	"internal/db/dbtest", // P3a: test fixtures extracted from grpc/services
-	// Extracted from grpc/services, so it keeps that package's ban (P3a,
+	"internal/db/dbtest", // P3a: test fixtures extracted from the old internal/grpc/services
+	// Extracted from the old internal/grpc/services, so it keeps that
+	// package's ban (P3a,
 	// research/forge-migration/05-p3a-handler-map.md).
 	"internal/processproto",
 	"internal/daemonchoice",
 	"internal/projectfacts",
 
-	"internal/workflow/workflowlisttest", // P3a: test double extracted from grpc/services
-	// Extracted from grpc/services, so it keeps that package's ban (P3a,
+	"internal/workflow/workflowlisttest", // P3a: test double extracted from the old internal/grpc/services
+	// Extracted from the old internal/grpc/services, so it keeps that
+	// package's ban (P3a,
 	// research/forge-migration/05-p3a-handler-map.md).
 	"internal/runstateproto",
 	"internal/messageproto",
 	"internal/workflow/workflowcatalog",
 
 	"internal/config",
-	"internal/temporal/signaltest", // P3a: test double extracted from grpc/services
+	"internal/temporal/signaltest", // P3a: test double extracted from the old internal/grpc/services
 }
 
 // serverSideTrees lists directories every package under which is

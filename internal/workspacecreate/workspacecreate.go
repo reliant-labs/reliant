@@ -18,9 +18,9 @@
 //
 // This is a leaf package: it knows a daemon only through the one-method
 // Machine, so it can be imported from internal/llm/tools without touching
-// toolexec, grpc/services or the workflow packages.
+// toolexec, internal/handlers or the workflow packages.
 //
-//forge:not-a-component: nothing constructs it: Insert and Finish are functions that take their collaborators per call, from internal/grpc/services, internal/llm/tools and the workflow activity handlers
+//forge:not-a-component: nothing constructs it: Insert and Finish are functions that take their collaborators per call, from internal/handlers/worktree, internal/llm/tools and the workflow activity handlers
 package workspacecreate
 
 import (

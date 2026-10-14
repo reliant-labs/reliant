@@ -15,7 +15,7 @@ import (
 )
 
 // The listing itself, scoped to its caller, runs against a real database in
-// internal/grpc/services/model_endpoint_test.go
+// internal/handlers/catalog/model_endpoint_test.go
 // (TestModelEndpointServiceCRUDOverTheHandler).
 func TestListModelEndpoints_Generated(t *testing.T) {
 	t.Parallel()

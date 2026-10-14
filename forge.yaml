@@ -7,12 +7,11 @@
 # `forge skill list` indexes the per-topic skills, e.g. `auth`).
 #
 # reliant adopts forge in place, one concern per PR
-# (research/forge-migration/PLAN.md). Proto services move onto forge's
-# handler model one at a time (P3b, research/forge-migration/06-p3b-recipe.md):
-# a service without `// forge:unmanaged` lives in internal/handlers/<svc>,
-# which forge scaffolds and keeps a generated mock, test harness and
-# dashboard for; internal/grpc/server.go still mounts every service until
-# P3c. The contract packages the server or CLI builds by hand are
+# (research/forge-migration/PLAN.md). Every proto service is a forge handler
+# package under internal/handlers/<svc> (P3b, research/forge-migration/
+# 06-p3b-recipe.md), for which forge scaffolds and keeps a generated mock,
+# test harness and dashboard; internal/grpc/server.go still mounts them by
+# hand until P3c. The contract packages the server or CLI builds by hand are
 # `//forge:not-a-component`. Beyond that, `forge generate` projects the
 # contract mocks/decorators, the descriptor and the open-procedure set, and
 # runs sqlc (below). The Makefile
