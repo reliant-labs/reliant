@@ -625,6 +625,7 @@ export const DependencyTypeSchema: GenEnum<DependencyType> = /*@__PURE__*/
 export const TaskService: GenService<{
   /**
    * CreateTask creates a new task
+   * forge:custom — authorizes the caller through the plan's thread and chat before it writes
    *
    * @generated from rpc reliant.v1.TaskService.CreateTask
    */
@@ -635,6 +636,7 @@ export const TaskService: GenService<{
   },
   /**
    * GetTask retrieves a task by ID
+   * forge:custom — authorizes through the task's plan, thread and chat
    *
    * @generated from rpc reliant.v1.TaskService.GetTask
    */
@@ -645,6 +647,7 @@ export const TaskService: GenService<{
   },
   /**
    * ListTasks lists tasks (optionally filtered by plan)
+   * forge:custom — requires plan_id and authorizes through the plan's chat before it lists
    *
    * @generated from rpc reliant.v1.TaskService.ListTasks
    */
@@ -655,6 +658,7 @@ export const TaskService: GenService<{
   },
   /**
    * UpdateTask updates an existing task
+   * forge:custom — a partial update authorized through the task's chat, which it notifies to refetch
    *
    * @generated from rpc reliant.v1.TaskService.UpdateTask
    */
@@ -665,6 +669,7 @@ export const TaskService: GenService<{
   },
   /**
    * DeleteTask deletes a task
+   * forge:custom — authorized through the task's chat, which it notifies to refetch
    *
    * @generated from rpc reliant.v1.TaskService.DeleteTask
    */

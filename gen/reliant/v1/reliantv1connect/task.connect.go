@@ -59,14 +59,19 @@ const (
 // TaskServiceClient is a client for the reliant.v1.TaskService service.
 type TaskServiceClient interface {
 	// CreateTask creates a new task
+	// forge:custom — authorizes the caller through the plan's thread and chat before it writes
 	CreateTask(context.Context, *connect.Request[v1.CreateTaskRequest]) (*connect.Response[v1.CreateTaskResponse], error)
 	// GetTask retrieves a task by ID
+	// forge:custom — authorizes through the task's plan, thread and chat
 	GetTask(context.Context, *connect.Request[v1.GetTaskRequest]) (*connect.Response[v1.GetTaskResponse], error)
 	// ListTasks lists tasks (optionally filtered by plan)
+	// forge:custom — requires plan_id and authorizes through the plan's chat before it lists
 	ListTasks(context.Context, *connect.Request[v1.ListTasksRequest]) (*connect.Response[v1.ListTasksResponse], error)
 	// UpdateTask updates an existing task
+	// forge:custom — a partial update authorized through the task's chat, which it notifies to refetch
 	UpdateTask(context.Context, *connect.Request[v1.UpdateTaskRequest]) (*connect.Response[v1.UpdateTaskResponse], error)
 	// DeleteTask deletes a task
+	// forge:custom — authorized through the task's chat, which it notifies to refetch
 	DeleteTask(context.Context, *connect.Request[v1.DeleteTaskRequest]) (*connect.Response[v1.DeleteTaskResponse], error)
 	// AddTaskDependency creates a dependency between two tasks
 	AddTaskDependency(context.Context, *connect.Request[v1.AddTaskDependencyRequest]) (*connect.Response[v1.AddTaskDependencyResponse], error)
@@ -193,14 +198,19 @@ func (c *taskServiceClient) ListReadyTasks(ctx context.Context, req *connect.Req
 // TaskServiceHandler is an implementation of the reliant.v1.TaskService service.
 type TaskServiceHandler interface {
 	// CreateTask creates a new task
+	// forge:custom — authorizes the caller through the plan's thread and chat before it writes
 	CreateTask(context.Context, *connect.Request[v1.CreateTaskRequest]) (*connect.Response[v1.CreateTaskResponse], error)
 	// GetTask retrieves a task by ID
+	// forge:custom — authorizes through the task's plan, thread and chat
 	GetTask(context.Context, *connect.Request[v1.GetTaskRequest]) (*connect.Response[v1.GetTaskResponse], error)
 	// ListTasks lists tasks (optionally filtered by plan)
+	// forge:custom — requires plan_id and authorizes through the plan's chat before it lists
 	ListTasks(context.Context, *connect.Request[v1.ListTasksRequest]) (*connect.Response[v1.ListTasksResponse], error)
 	// UpdateTask updates an existing task
+	// forge:custom — a partial update authorized through the task's chat, which it notifies to refetch
 	UpdateTask(context.Context, *connect.Request[v1.UpdateTaskRequest]) (*connect.Response[v1.UpdateTaskResponse], error)
 	// DeleteTask deletes a task
+	// forge:custom — authorized through the task's chat, which it notifies to refetch
 	DeleteTask(context.Context, *connect.Request[v1.DeleteTaskRequest]) (*connect.Response[v1.DeleteTaskResponse], error)
 	// AddTaskDependency creates a dependency between two tasks
 	AddTaskDependency(context.Context, *connect.Request[v1.AddTaskDependencyRequest]) (*connect.Response[v1.AddTaskDependencyResponse], error)

@@ -53,6 +53,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
+	"github.com/reliant-labs/reliant/internal/handlers/task"
 	"github.com/reliant-labs/reliant/internal/handlers/terminal"
 	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/handlers/tool_call"
@@ -244,7 +245,14 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("plan service: %w", err)
 	}
-	taskService := services.NewTaskService(database)
+	taskService, err := task.New(task.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("task service: %w", err)
+	}
 	catalogService := services.NewCatalogService(cfg.ToolsFactory).WithTagPrefs(database)
 	if cfg.CatalogSearch != nil {
 		catalogService.WithCatalogSearch(cfg.CatalogSearch, services.IntegrationMethodsFrom(cfg.Connections))

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package task
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -16,20 +15,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
-// TaskService implements the TaskService RPC handlers
-type TaskService struct {
-	reliantv1connect.UnimplementedTaskServiceHandler
-	database db.Repository
-}
-
-// NewTaskService creates a new TaskService
-func NewTaskService(database db.Repository) *TaskService {
-	return &TaskService{database: database}
-}
-
 // getChatIDForPlan looks up the chat (conversation) ID for a plan by resolving its thread.
-func (s *TaskService) getChatIDForPlan(ctx context.Context, plan *db.Plan) (string, error) {
-	thread, err := s.database.GetThread(ctx, plan.ThreadID)
+func (s *Service) getChatIDForPlan(ctx context.Context, plan *db.Plan) (string, error) {
+	thread, err := s.deps.Repo.GetThread(ctx, plan.ThreadID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get thread for plan: %w", err)
 	}
@@ -37,13 +25,13 @@ func (s *TaskService) getChatIDForPlan(ctx context.Context, plan *db.Plan) (stri
 }
 
 // taskBelongsToUser checks if a task belongs to a user via the plan's thread and chat
-func (s *TaskService) taskBelongsToUser(ctx context.Context, taskID string, userID string) error {
-	task, err := s.database.GetTask(ctx, taskID)
+func (s *Service) taskBelongsToUser(ctx context.Context, taskID string, userID string) error {
+	task, err := s.deps.Repo.GetTask(ctx, taskID)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("task not found"))
 	}
 
-	plan, err := s.database.GetPlan(ctx, task.PlanID)
+	plan, err := s.deps.Repo.GetPlan(ctx, task.PlanID)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("plan not found"))
 	}
@@ -53,7 +41,7 @@ func (s *TaskService) taskBelongsToUser(ctx context.Context, taskID string, user
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
-	chat, err := s.database.GetChat(ctx, chatID)
+	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
@@ -66,14 +54,14 @@ func (s *TaskService) taskBelongsToUser(ctx context.Context, taskID string, user
 }
 
 // CreateTask creates a new task
-func (s *TaskService) CreateTask(
+func (s *Service) CreateTask(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateTaskRequest],
 ) (*connect.Response[reliantv1.CreateTaskResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Verify user owns the plan
-	plan, err := s.database.GetPlan(ctx, req.Msg.PlanId)
+	plan, err := s.deps.Repo.GetPlan(ctx, req.Msg.PlanId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("plan not found"))
 	}
@@ -83,7 +71,7 @@ func (s *TaskService) CreateTask(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
-	chat, err := s.database.GetChat(ctx, chatID)
+	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
@@ -118,12 +106,12 @@ func (s *TaskService) CreateTask(
 		task.ParentTaskID = req.Msg.ParentTaskId
 	}
 
-	if err := s.database.CreateTask(ctx, task); err != nil {
+	if err := s.deps.Repo.CreateTask(ctx, task); err != nil {
 		logging.Error("Failed to create task", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create task"))
 	}
 
-	if err := s.database.EmitChatRefetch(ctx, chatID, db.RefetchPlanTasks); err != nil {
+	if err := s.deps.Repo.EmitChatRefetch(ctx, chatID, db.RefetchPlanTasks); err != nil {
 		logging.Warn("[TaskService] Failed to emit plan_tasks refetch", "error", err)
 	}
 
@@ -149,7 +137,7 @@ func (s *TaskService) CreateTask(
 }
 
 // GetTask retrieves a task by ID
-func (s *TaskService) GetTask(
+func (s *Service) GetTask(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetTaskRequest],
 ) (*connect.Response[reliantv1.GetTaskResponse], error) {
@@ -159,7 +147,7 @@ func (s *TaskService) GetTask(
 		return nil, err
 	}
 
-	task, err := s.database.GetTask(ctx, req.Msg.TaskId)
+	task, err := s.deps.Repo.GetTask(ctx, req.Msg.TaskId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("task not found"))
 	}
@@ -186,7 +174,7 @@ func (s *TaskService) GetTask(
 }
 
 // ListTasks lists tasks (optionally filtered by plan)
-func (s *TaskService) ListTasks(
+func (s *Service) ListTasks(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListTasksRequest],
 ) (*connect.Response[reliantv1.ListTasksResponse], error) {
@@ -197,7 +185,7 @@ func (s *TaskService) ListTasks(
 	}
 
 	// Verify user owns the plan
-	plan, err := s.database.GetPlan(ctx, *req.Msg.PlanId)
+	plan, err := s.deps.Repo.GetPlan(ctx, *req.Msg.PlanId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("plan not found"))
 	}
@@ -207,7 +195,7 @@ func (s *TaskService) ListTasks(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
-	chat, err := s.database.GetChat(ctx, chatID)
+	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
@@ -216,7 +204,7 @@ func (s *TaskService) ListTasks(
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("access denied"))
 	}
 
-	tasks, err := s.database.ListTasksByPlan(ctx, *req.Msg.PlanId)
+	tasks, err := s.deps.Repo.ListTasksByPlan(ctx, *req.Msg.PlanId)
 	if err != nil {
 		logging.Error("Failed to list tasks", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list tasks"))
@@ -248,7 +236,7 @@ func (s *TaskService) ListTasks(
 }
 
 // UpdateTask updates an existing task
-func (s *TaskService) UpdateTask(
+func (s *Service) UpdateTask(
 	ctx context.Context,
 	req *connect.Request[reliantv1.UpdateTaskRequest],
 ) (*connect.Response[reliantv1.UpdateTaskResponse], error) {
@@ -258,7 +246,7 @@ func (s *TaskService) UpdateTask(
 		return nil, err
 	}
 
-	task, err := s.database.GetTask(ctx, req.Msg.TaskId)
+	task, err := s.deps.Repo.GetTask(ctx, req.Msg.TaskId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("task not found"))
 	}
@@ -277,15 +265,15 @@ func (s *TaskService) UpdateTask(
 		task.Position = int(*req.Msg.Position)
 	}
 
-	if err := s.database.UpdateTask(ctx, task); err != nil {
+	if err := s.deps.Repo.UpdateTask(ctx, task); err != nil {
 		logging.Error("Failed to update task", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update task"))
 	}
 
 	// Get chatID from the plan's thread for refetch emission
-	if taskPlan, err := s.database.GetPlan(ctx, task.PlanID); err == nil {
+	if taskPlan, err := s.deps.Repo.GetPlan(ctx, task.PlanID); err == nil {
 		if cid, err := s.getChatIDForPlan(ctx, taskPlan); err == nil {
-			if err := s.database.EmitChatRefetch(ctx, cid, db.RefetchPlanTasks); err != nil {
+			if err := s.deps.Repo.EmitChatRefetch(ctx, cid, db.RefetchPlanTasks); err != nil {
 				logging.Warn("[TaskService] Failed to emit plan_tasks refetch", "error", err)
 			}
 		}
@@ -313,7 +301,7 @@ func (s *TaskService) UpdateTask(
 }
 
 // DeleteTask deletes a task
-func (s *TaskService) DeleteTask(
+func (s *Service) DeleteTask(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DeleteTaskRequest],
 ) (*connect.Response[reliantv1.DeleteTaskResponse], error) {
@@ -325,21 +313,21 @@ func (s *TaskService) DeleteTask(
 
 	// Get chatID before deleting (via plan's thread)
 	var deleteChatID string
-	if task, err := s.database.GetTask(ctx, req.Msg.TaskId); err == nil {
-		if taskPlan, err := s.database.GetPlan(ctx, task.PlanID); err == nil {
+	if task, err := s.deps.Repo.GetTask(ctx, req.Msg.TaskId); err == nil {
+		if taskPlan, err := s.deps.Repo.GetPlan(ctx, task.PlanID); err == nil {
 			if cid, err := s.getChatIDForPlan(ctx, taskPlan); err == nil {
 				deleteChatID = cid
 			}
 		}
 	}
 
-	if err := s.database.DeleteTask(ctx, req.Msg.TaskId); err != nil {
+	if err := s.deps.Repo.DeleteTask(ctx, req.Msg.TaskId); err != nil {
 		logging.Error("Failed to delete task", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete task"))
 	}
 
 	if deleteChatID != "" {
-		if err := s.database.EmitChatRefetch(ctx, deleteChatID, db.RefetchPlanTasks); err != nil {
+		if err := s.deps.Repo.EmitChatRefetch(ctx, deleteChatID, db.RefetchPlanTasks); err != nil {
 			logging.Warn("[TaskService] Failed to emit plan_tasks refetch", "error", err)
 		}
 	}

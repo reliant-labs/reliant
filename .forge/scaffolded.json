@@ -261,6 +261,30 @@
     "internal/handlers/system/handlers_scaffold_version_test.go": {
       "scaffolded_at": "2026-10-13T06:58:06Z"
     },
+    "internal/handlers/task/handlers_scaffold_add_task_dependency_test.go": {
+      "scaffolded_at": "2026-10-14T05:01:13Z"
+    },
+    "internal/handlers/task/handlers_scaffold_create_task_test.go": {
+      "scaffolded_at": "2026-10-14T05:01:13Z"
+    },
+    "internal/handlers/task/handlers_scaffold_delete_task_test.go": {
+      "scaffolded_at": "2026-10-14T05:01:13Z"
+    },
+    "internal/handlers/task/handlers_scaffold_get_task_test.go": {
+      "scaffolded_at": "2026-10-14T05:01:13Z"
+    },
+    "internal/handlers/task/handlers_scaffold_list_ready_tasks_test.go": {
+      "scaffolded_at": "2026-10-14T05:01:13Z"
+    },
+    "internal/handlers/task/handlers_scaffold_list_tasks_test.go": {
+      "scaffolded_at": "2026-10-14T05:01:13Z"
+    },
+    "internal/handlers/task/handlers_scaffold_remove_task_dependency_test.go": {
+      "scaffolded_at": "2026-10-14T05:01:13Z"
+    },
+    "internal/handlers/task/handlers_scaffold_update_task_test.go": {
+      "scaffolded_at": "2026-10-14T05:01:13Z"
+    },
     "internal/handlers/token/handlers_scaffold_create_token_test.go": {
       "scaffolded_at": "2026-10-13T13:25:02Z"
     },

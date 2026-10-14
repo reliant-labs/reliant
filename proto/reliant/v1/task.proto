@@ -30,24 +30,26 @@ enum DependencyType {
   DEPENDENCY_TYPE_PARALLEL_WITH = 3;
 }
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // TaskService handles task-related operations
 service TaskService {
   // CreateTask creates a new task
+  // forge:custom — authorizes the caller through the plan's thread and chat before it writes
   rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse) {}
   
   // GetTask retrieves a task by ID
+  // forge:custom — authorizes through the task's plan, thread and chat
   rpc GetTask(GetTaskRequest) returns (GetTaskResponse) {}
   
   // ListTasks lists tasks (optionally filtered by plan)
+  // forge:custom — requires plan_id and authorizes through the plan's chat before it lists
   rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {}
   
   // UpdateTask updates an existing task
+  // forge:custom — a partial update authorized through the task's chat, which it notifies to refetch
   rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse) {}
   
   // DeleteTask deletes a task
+  // forge:custom — authorized through the task's chat, which it notifies to refetch
   rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse) {}
 
   // AddTaskDependency creates a dependency between two tasks

@@ -72,6 +72,10 @@
         "rpc_service": "reliant.v1.SystemService"
       },
       {
+        "name": "task",
+        "rpc_service": "reliant.v1.TaskService"
+      },
+      {
         "name": "terminal",
         "rpc_service": "reliant.v1.TerminalService"
       },

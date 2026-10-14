@@ -7853,6 +7853,18 @@
             "ProtoType": "message",
             "IsOptional": false,
             "MessageType": "reliant.v1.LocalModelRefresh"
+          },
+          {
+            "Name": "drain",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.GatewayDrain"
+          },
+          {
+            "Name": "tool_result_ack",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ToolResultAck"
           }
         ],
         "WhoAmIRequest": null,
@@ -7998,6 +8010,10 @@
             "name": "disk",
             "kind": "message",
             "type_name": "reliant.v1.DiskReport"
+          },
+          {
+            "name": "tool_calls_in_flight",
+            "kind": "uint32"
           }
         ],
         "reliant.v1.DaemonKillProcessRequest": [
@@ -8147,6 +8163,10 @@
           {
             "name": "daemon_id",
             "kind": "string"
+          },
+          {
+            "name": "moves_on_drain",
+            "kind": "bool"
           }
         ],
         "reliant.v1.DiscoveredProject": [
@@ -8269,6 +8289,12 @@
           },
           {
             "name": "timestamp_unix_ms",
+            "kind": "int64"
+          }
+        ],
+        "reliant.v1.GatewayDrain": [
+          {
+            "name": "deadline_unix_ms",
             "kind": "int64"
           }
         ],
@@ -8922,6 +8948,18 @@
             "kind": "message",
             "type_name": "reliant.v1.LocalModelRefresh",
             "oneof": "message"
+          },
+          {
+            "name": "drain",
+            "kind": "message",
+            "type_name": "reliant.v1.GatewayDrain",
+            "oneof": "message"
+          },
+          {
+            "name": "tool_result_ack",
+            "kind": "message",
+            "type_name": "reliant.v1.ToolResultAck",
+            "oneof": "message"
           }
         ],
         "reliant.v1.TerminalInputMessage": [
@@ -9067,6 +9105,12 @@
             "kind": "bool"
           }
         ],
+        "reliant.v1.ToolResultAck": [
+          {
+            "name": "request_id",
+            "kind": "string"
+          }
+        ],
         "reliant.v1.UnwatchProjectConfigsRequest": [
           {
             "name": "project_path",
@@ -9107,6 +9151,7 @@
         "reliant.v1.DiskReport": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DiskVolume": "reliant/v1/tools_daemon.proto",
         "reliant.v1.FileSystemChanged": "reliant/v1/tools_daemon.proto",
+        "reliant.v1.GatewayDrain": "reliant/v1/tools_daemon.proto",
         "reliant.v1.GatewayHello": "reliant/v1/tools_daemon.proto",
         "reliant.v1.IndexedPreset": "reliant/v1/tools_daemon.proto",
         "reliant.v1.IndexedScenario": "reliant/v1/tools_daemon.proto",
@@ -9141,6 +9186,7 @@
         "reliant.v1.ToolExecutionCancel": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ToolRequest": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ToolResponse": "reliant/v1/tools_daemon.proto",
+        "reliant.v1.ToolResultAck": "reliant/v1/tools_daemon.proto",
         "reliant.v1.UnwatchProjectConfigsRequest": "reliant/v1/tools_daemon.proto",
         "reliant.v1.WatchProjectConfigsRequest": "reliant/v1/tools_daemon.proto",
         "reliant.v1.WhoAmIRequest": "reliant/v1/tools_daemon.proto",
@@ -17804,6 +17850,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.CreateTaskRequest",
           "OutputTypeFQ": "reliant.v1.CreateTaskResponse",
           "InputProtoFile": "reliant/v1/task.proto",
@@ -17817,6 +17864,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.GetTaskRequest",
           "OutputTypeFQ": "reliant.v1.GetTaskResponse",
           "InputProtoFile": "reliant/v1/task.proto",
@@ -17830,6 +17878,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListTasksRequest",
           "OutputTypeFQ": "reliant.v1.ListTasksResponse",
           "InputProtoFile": "reliant/v1/task.proto",
@@ -17843,6 +17892,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.UpdateTaskRequest",
           "OutputTypeFQ": "reliant.v1.UpdateTaskResponse",
           "InputProtoFile": "reliant/v1/task.proto",
@@ -17856,6 +17906,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.DeleteTaskRequest",
           "OutputTypeFQ": "reliant.v1.DeleteTaskResponse",
           "InputProtoFile": "reliant/v1/task.proto",
@@ -18456,8 +18507,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "TaskStatus"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "PlanService",
@@ -33963,5 +34013,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "209f98af17f268aaf28fa5dfdd71d9bd71a43a71174ee2b01c96ad374d9766a1"
+  "source_hash": "ce87970b2eefb8b2a8bb65f2a1c0f5dbcf86740be6758d303620a0b0f93c8a27"
 }
