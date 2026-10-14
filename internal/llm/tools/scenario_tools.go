@@ -744,11 +744,11 @@ func createScenarioWorkflowLoader(ctx *rctx.ToolContext, repo db.Repository) fun
 }
 
 func dbScenarioToScenarioInternal(s *db.WorkflowScenario) (*wfscenario.Scenario, error) {
-	var parsed wfscenario.Scenario
-	if err := yaml.Unmarshal([]byte(s.Events), &parsed); err != nil {
+	parsed, err := wfscenario.ParseScenarioFile([]byte(s.Events), s.Name)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse scenario YAML: %w", err)
 	}
-	return &parsed, nil
+	return parsed, nil
 }
 
 // Budgets for the scenario result text. This string is fed straight into a

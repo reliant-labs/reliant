@@ -30,35 +30,93 @@ func LoadScenariosFromFile(path string) ([]*Scenario, error) {
 	return ParseScenarioYAML(data)
 }
 
-// ParseScenarioYAML parses scenario YAML bytes into Scenario structs.
-// Supports multi-document YAML or wrapper format.
-func ParseScenarioYAML(data []byte) ([]*Scenario, error) {
-	var scenarios []*Scenario
+// scenarioDoc is one YAML document of a scenario file: a single scenario, or a
+// wrapper holding a list of them.
+type scenarioDoc struct {
+	wrapper   bool
+	scenarios []*Scenario
+}
 
-	// First try to parse as wrapper format
-	var wrapper ScenarioFile
-	if err := yaml.Unmarshal(data, &wrapper); err == nil && len(wrapper.Scenarios) > 0 {
-		return wrapper.Scenarios, nil
-	}
+// readScenarioDocs decodes every non-empty document of data. Decoding is
+// strict: a key the schema does not declare is an error naming the field and
+// line. A lenient decode drops such keys, and a scenario whose assertion was
+// written under the wrong key (`contains:` for `content_contains:`) then loads
+// as an empty assertion and passes whatever the run did.
+//
+// Two decoders walk the stream in step: one into yaml.Node to see which shape
+// a document has, one into the typed struct with KnownFields set. Decoding a
+// Node would not carry that option, and re-encoding it would lose the line
+// numbers the errors report.
+func readScenarioDocs(data []byte) ([]scenarioDoc, error) {
+	shape := yaml.NewDecoder(bytes.NewReader(data))
+	typed := yaml.NewDecoder(bytes.NewReader(data))
+	typed.KnownFields(true)
 
-	// Fall back to multi-document format
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	var docs []scenarioDoc
 	for {
-		var scenario Scenario
-		err := decoder.Decode(&scenario)
+		var node yaml.Node
+		err := shape.Decode(&node)
 		if err == io.EOF {
-			break
+			return docs, nil
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse scenario YAML: %w", err)
 		}
-		// Skip empty documents
-		if scenario.Name == "" {
+		if len(node.Content) == 0 || node.Content[0].Kind == 0 {
+			var skip interface{}
+			if err := typed.Decode(&skip); err != nil && err != io.EOF {
+				return nil, fmt.Errorf("failed to parse scenario YAML: %w", err)
+			}
+			continue // an empty document between separators
+		}
+
+		if hasTopLevelKey(node.Content[0], "scenarios") {
+			var wrapper ScenarioFile
+			if err := typed.Decode(&wrapper); err != nil {
+				return nil, fmt.Errorf("failed to parse scenario YAML: %w", err)
+			}
+			docs = append(docs, scenarioDoc{wrapper: true, scenarios: wrapper.Scenarios})
 			continue
 		}
-		scenarios = append(scenarios, &scenario)
-	}
 
+		var sc Scenario
+		if err := typed.Decode(&sc); err != nil {
+			return nil, fmt.Errorf("failed to parse scenario YAML: %w", err)
+		}
+		docs = append(docs, scenarioDoc{scenarios: []*Scenario{&sc}})
+	}
+}
+
+func hasTopLevelKey(n *yaml.Node, key string) bool {
+	if n.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if n.Content[i].Value == key {
+			return true
+		}
+	}
+	return false
+}
+
+// ParseScenarioYAML parses scenario YAML bytes into Scenario structs.
+// Supports multi-document YAML or wrapper format. A scenario without a name is
+// an error rather than being skipped: a skipped scenario never runs, so its
+// assertions would pass by not existing.
+func ParseScenarioYAML(data []byte) ([]*Scenario, error) {
+	docs, err := readScenarioDocs(data)
+	if err != nil {
+		return nil, err
+	}
+	var scenarios []*Scenario
+	for _, d := range docs {
+		for i, sc := range d.scenarios {
+			if sc == nil || sc.Name == "" {
+				return nil, fmt.Errorf("scenario %d has no name", len(scenarios)+i+1)
+			}
+		}
+		scenarios = append(scenarios, d.scenarios...)
+	}
 	return scenarios, nil
 }
 
@@ -73,29 +131,16 @@ func ParseScenarioYAML(data []byte) ([]*Scenario, error) {
 // both surfaces. (ParseScenarioYAML, which accepts many, is for the builtin
 // corpus under internal/workflow/builtin/testdata.)
 func ParseScenarioFile(data []byte, defaultName string) (*Scenario, error) {
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	docs, err := readScenarioDocs(data)
+	if err != nil {
+		return nil, err
+	}
 	var scenarios []*Scenario
-	for {
-		var doc yaml.Node
-		err := decoder.Decode(&doc)
-		if err == io.EOF {
-			break
+	for _, d := range docs {
+		if d.wrapper && len(d.scenarios) > 0 {
+			return nil, fmt.Errorf("holds a list of %d scenarios; a project scenario file holds one — split it into one file per scenario", len(d.scenarios))
 		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse scenario YAML: %w", err)
-		}
-		if len(doc.Content) == 0 || doc.Content[0].Kind == 0 {
-			continue // an empty document between separators
-		}
-		var wrapper ScenarioFile
-		if err := doc.Decode(&wrapper); err == nil && len(wrapper.Scenarios) > 0 {
-			return nil, fmt.Errorf("holds a list of %d scenarios; a project scenario file holds one — split it into one file per scenario", len(wrapper.Scenarios))
-		}
-		var sc Scenario
-		if err := doc.Decode(&sc); err != nil {
-			return nil, fmt.Errorf("failed to parse scenario YAML: %w", err)
-		}
-		scenarios = append(scenarios, &sc)
+		scenarios = append(scenarios, d.scenarios...)
 	}
 	switch len(scenarios) {
 	case 0:

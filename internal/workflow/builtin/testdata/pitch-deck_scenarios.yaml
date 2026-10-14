@@ -830,7 +830,6 @@ events:
 
   # Phase 5, Iteration 0: Build slides
   - node: slides_loop.build_slides.agent_loop.call_llm
-    iteration: 0
     output:
       message:
         role: assistant
@@ -838,14 +837,12 @@ events:
       response_text: "Built 3 slide components."
       tool_calls: []
   - node: slides_loop.start_dev_server
-    iteration: 0
     output:
       exit_code: 0
       stdout: "Dev server started"
 
   # Phase 5, Iteration 0: Visual reviewer FAILS
   - node: slides_loop.visual_review.agent_loop.call_llm
-    iteration: 0
     output:
       message:
         role: assistant
@@ -877,7 +874,6 @@ events:
                   severity: critical
                   description: "Slide shows '5,000 downloads' but founder-brief.md says 3,200. Use the real number and cite the source."
   - node: slides_loop.visual_review.agent_loop.execute_tools
-    iteration: 0
     output:
       response_data:
         submit_visual_review:
@@ -905,13 +901,11 @@ events:
       tool_results: []
       thread_token_count: 100
   - node: slides_loop.stop_dev_server
-    iteration: 0
     output:
       exit_code: 0
 
   # Phase 5, Iteration 1: Rebuild
   - node: slides_loop.build_slides.agent_loop.call_llm
-    iteration: 1
     output:
       message:
         role: assistant
@@ -919,14 +913,12 @@ events:
       response_text: "Rebuilt slides. Fixed colors, varied layouts, removed gradient blobs and emoji icons."
       tool_calls: []
   - node: slides_loop.start_dev_server
-    iteration: 1
     output:
       exit_code: 0
       stdout: "Dev server started"
 
   # Phase 5, Iteration 1: Visual reviewer PASSES
   - node: slides_loop.visual_review.agent_loop.call_llm
-    iteration: 1
     output:
       message:
         role: assistant
@@ -944,7 +936,6 @@ events:
               ai_visual_tells: []
               typography_issues: []
   - node: slides_loop.visual_review.agent_loop.execute_tools
-    iteration: 1
     output:
       response_data:
         submit_visual_review:
@@ -958,7 +949,6 @@ events:
       tool_results: []
       thread_token_count: 100
   - node: slides_loop.stop_dev_server
-    iteration: 1
     output:
       exit_code: 0
 

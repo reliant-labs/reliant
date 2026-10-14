@@ -119,6 +119,8 @@ func ValidateScenario(scenario *Scenario, workflow *reliantv1.Workflow) *Validat
 				result.AddError("expect.node_outputs: unknown node %q", nodeRef)
 			}
 		}
+
+		validateMessageExpectations(result, scenario.Expect.Messages, validNodes)
 	}
 
 	// Validate StartAt node
@@ -142,6 +144,66 @@ func ValidateScenario(scenario *Scenario, workflow *reliantv1.Workflow) *Validat
 	validateMockingConsistency(result, scenario.Events)
 
 	return result
+}
+
+// validateMessageExpectations rejects an expect.messages block that cannot fail.
+// Each case below passes whatever the run does, which is worse than no
+// assertion because it reads as coverage:
+//   - a node id the workflow does not have never saves a message, so
+//     `saved: false` and `content_not_contains` hold for it trivially;
+//   - a node with neither a save_message node type nor a save_message: block
+//     never saves one either;
+//   - an entry with no assertions checks nothing;
+//   - an empty needle is contained in every string.
+func validateMessageExpectations(result *ValidationResult, msgs map[string]MessageExpectation, validNodes map[string]nodeInfo) {
+	if msgs == nil {
+		return
+	}
+	if len(msgs) == 0 {
+		result.AddError("expect.messages: no nodes listed; key each entry by the id of the node that saves the message")
+		return
+	}
+	nodes := make([]string, 0, len(msgs))
+	for n := range msgs {
+		nodes = append(nodes, n)
+	}
+	sort.Strings(nodes)
+
+	for _, nodeRef := range nodes {
+		want := msgs[nodeRef]
+		if !isValidNodeRef(nodeRef, validNodes) {
+			result.AddError("expect.messages: unknown node %q (valid nodes: %s)", nodeRef, formatNodeList(validNodes))
+			continue
+		}
+		if info, ok := validNodes[nodeRef]; ok && !canSaveMessage(info) {
+			result.AddError("expect.messages.%s: node never saves a message (it is not a save_message node and has no save_message: block)", nodeRef)
+			continue
+		}
+		if want.Saved == nil && want.Count == nil && want.Role == "" &&
+			len(want.ContentContains) == 0 && len(want.ContentNotContains) == 0 {
+			result.AddError("expect.messages.%s: asserts nothing; set at least one of saved, count, role, content_contains, content_not_contains", nodeRef)
+		}
+		for _, needle := range want.ContentContains {
+			if needle == "" {
+				result.AddError("expect.messages.%s.content_contains: empty string matches every message", nodeRef)
+			}
+		}
+		for _, needle := range want.ContentNotContains {
+			if needle == "" {
+				result.AddError("expect.messages.%s.content_not_contains: empty string is contained in every message, so this can never hold", nodeRef)
+			}
+		}
+	}
+}
+
+// canSaveMessage reports whether a workflow node can save a message: it is a
+// save_message node, or it carries a save_message: block (any node type,
+// including loops and sub-workflows, which save on the workflow side).
+func canSaveMessage(info nodeInfo) bool {
+	if info.nodeType == model.NodeTypeSaveMessage {
+		return true
+	}
+	return info.protoNode != nil && info.protoNode.GetSaveMessage() != nil
 }
 
 // collectValidNodes recursively collects all valid node IDs from a workflow.

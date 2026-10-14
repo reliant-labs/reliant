@@ -363,7 +363,10 @@ func (s *Service) RunScenario(
 				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("scenario has no associated workflow"))
 			}
 
-			simScenario = dbScenarioToScenario(dbScenario)
+			simScenario, err = dbScenarioToScenario(dbScenario)
+			if err != nil {
+				return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			}
 		}
 	} else if req.Msg.Scenario != nil && req.Msg.WorkflowSlug != "" {
 		// Run an ad-hoc scenario
@@ -593,7 +596,10 @@ func (s *Service) ExportScenario(
 	}
 
 	// Convert to wfscenario.Scenario for YAML export
-	simScenario := dbScenarioToScenario(dbScenario)
+	simScenario, err := dbScenarioToScenario(dbScenario)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 
 	// Marshal to YAML
 	yamlData, err := yaml.Marshal(simScenario)
@@ -713,16 +719,18 @@ func protoToScenario(p *reliantv1.ScenarioDefinition) *wfscenario.Scenario {
 	return s
 }
 
-func dbScenarioToScenario(s *db.WorkflowScenario) *wfscenario.Scenario {
+// dbScenarioToScenario reads a stored scenario through the same strict parser
+// the project scenario files use. An unparseable one is an error: running an
+// empty stand-in instead would pass without testing anything.
+func dbScenarioToScenario(s *db.WorkflowScenario) (*wfscenario.Scenario, error) {
 	if s == nil {
-		return nil
+		return nil, nil
 	}
-
-	var sim wfscenario.Scenario
-	if err := yaml.Unmarshal([]byte(s.Events), &sim); err != nil {
-		return &wfscenario.Scenario{Name: s.Name}
+	sc, err := wfscenario.ParseScenarioFile([]byte(s.Events), s.Name)
+	if err != nil {
+		return nil, fmt.Errorf("scenario %s: %w", s.Name, err)
 	}
-	return &sim
+	return sc, nil
 }
 
 func scenarioEventsToProto(events []wfscenario.SimulatedEvent) ([]*reliantv1.SimulatedEvent, error) {
