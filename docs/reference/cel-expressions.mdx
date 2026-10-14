@@ -31,7 +31,7 @@ role: user
 content: "Processing iteration {{iter.iteration + 1}}"
 
 # Conditional expression (ternary)
-model: "{{inputs.model.id != '' ? inputs.model : {tags: ['moderate']}}}"
+model: "{{inputs.model.id != '' ? inputs.model : {'tags': ['moderate']}}}"
 
 # Accessing node outputs
 tool_calls: "{{nodes.call_llm.tool_calls}}"
@@ -375,16 +375,21 @@ Used in loop `while` conditions to reference the sub-workflow's declared outputs
 |----------|-------------|---------|
 | `size(x)` | Length of list, map, or string | `size(nodes.call_llm.tool_calls) > 0` |
 | `has(x.field)` | Check if field exists | `has(nodes.verify) ? nodes.verify.exit_code == 0 : true` |
-| `type(x)` | Get type of value | `type(inputs.data) == "string"` |
+| `type(x)` | Get type of value (compare with a type name, not a string) | `type(inputs.data) == string` |
 
 ### String Functions
 
 | Function | Description | Example |
 |----------|-------------|---------|
-| `contains(s, substr)` | Check if string contains substring | `contains(output.stderr, "error")` |
-| `startsWith(s, prefix)` | Check if string starts with prefix | `startsWith(inputs.model, "claude")` |
-| `endsWith(s, suffix)` | Check if string ends with suffix | `endsWith(file, ".go")` |
-| `matches(s, pattern)` | Regex match | `matches(output.stdout, "^OK")` |
+| `s.contains(substr)` | Check if string contains substring | `output.stderr.contains("error")` |
+| `s.startsWith(prefix)` | Check if string starts with prefix | `inputs.model.startsWith("claude")` |
+| `s.endsWith(suffix)` | Check if string ends with suffix | `inputs.file.endsWith(".go")` |
+| `s.trimPrefix(prefix)` | Remove a leading prefix when present | `nodes.run.stdout.trimPrefix("Error: ")` |
+| `s.trimSuffix(suffix)` | Remove a trailing suffix when present | `nodes.run.stdout.trimSuffix("\n")` |
+| `s.matches(pattern)` | Regex match | `output.stdout.matches("^OK")` |
+
+These are member functions: write `s.contains(x)`, not `contains(s, x)`. The full string,
+list, set, math and regex function set is in the function reference above.
 
 ### Reliant Custom Functions
 
@@ -446,7 +451,7 @@ Returns the first non-null argument. Supports 2-4 arguments.
 
 ```yaml
 # Use default if input is null
-model: "{{coalesce(inputs.model, {tags: ['moderate']})}}"
+model: "{{coalesce(inputs.model, {'tags': ['moderate']})}}"
 
 # Chain multiple fallbacks
 value: "{{coalesce(inputs.primary, inputs.secondary, 'default')}}"
@@ -633,7 +638,7 @@ Use the ternary operator for conditional values:
 
 ```yaml
 # Simple conditional
-model: "{{inputs.model.id != '' ? inputs.model : {tags: ['moderate']}}}"
+model: "{{inputs.model.id != '' ? inputs.model : {'tags': ['moderate']}}}"
 
 # Nested conditional
 prompt: "{{inputs.mode == 'plan' ? inputs.planning_prompt : inputs.system_prompt}}"

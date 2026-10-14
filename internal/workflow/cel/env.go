@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/env"
+	"github.com/google/cel-go/common/functions"
 	"github.com/google/cel-go/common/overloads"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
@@ -189,7 +190,8 @@ const MaxRangeSize = 100_000
 // workflow expression environment includes. The runtime, validation and the
 // trigger filter all take them from here, so what validates is what runs.
 //
-//   - ext.Strings: trimPrefix, split, join, format, lowerAscii, padLeft, ...
+//   - ext.Strings: split, join, format, lowerAscii, padLeft, ...
+//   - trimPrefix, trimSuffix: member functions ext.Strings lacks (see celTrimFunctions)
 //   - ext.Lists: sort, sortBy, distinct, flatten, slice, first, last, lists.range
 //   - ext.Sets: sets.contains, sets.intersects, sets.equivalent
 //   - ext.Math: math.greatest, math.least, math.abs, math.ceil, ...
@@ -201,7 +203,7 @@ const MaxRangeSize = 100_000
 //
 // Requires cel.OptionalTypes() earlier in the environment.
 func Extensions() []cel.EnvOption {
-	return []cel.EnvOption{
+	opts := []cel.EnvOption{
 		ext.Strings(),
 		ext.Lists(ext.ListsMaxRangeSize(MaxRangeSize)),
 		ext.Sets(),
@@ -212,6 +214,7 @@ func Extensions() []cel.EnvOption {
 		ext.TwoVarComprehensions(),
 		celJSONDecodeFunction(),
 	}
+	return append(opts, celTrimFunctions()...)
 }
 
 // ProgramOptions are applied to every program built from a workflow
@@ -480,6 +483,33 @@ func celValueToJSON(val ref.Val) (any, error) {
 		return nil, fmt.Errorf("%v", val)
 	}
 	return ConvertToNative(val.Value()), nil
+}
+
+// celTrimFunctions is string.trimPrefix(prefix) and string.trimSuffix(suffix):
+// the string without the leading/trailing text when present, otherwise
+// unchanged. ext.Strings has trim() for whitespace but nothing for a literal.
+func celTrimFunctions() []cel.EnvOption {
+	strBinding := func(trim func(s, affix string) string) functions.BinaryOp {
+		return func(lhs, rhs ref.Val) ref.Val {
+			s, ok := lhs.(types.String)
+			if !ok {
+				return types.MaybeNoSuchOverloadErr(lhs)
+			}
+			affix, ok := rhs.(types.String)
+			if !ok {
+				return types.MaybeNoSuchOverloadErr(rhs)
+			}
+			return types.String(trim(string(s), string(affix)))
+		}
+	}
+	return []cel.EnvOption{
+		cel.Function("trimPrefix",
+			cel.MemberOverload("string_trim_prefix_string", []*cel.Type{cel.StringType, cel.StringType}, cel.StringType,
+				cel.BinaryBinding(strBinding(strings.TrimPrefix)))),
+		cel.Function("trimSuffix",
+			cel.MemberOverload("string_trim_suffix_string", []*cel.Type{cel.StringType, cel.StringType}, cel.StringType,
+				cel.BinaryBinding(strBinding(strings.TrimSuffix)))),
+	}
 }
 
 // celCoalesceFunction returns the first non-null value.

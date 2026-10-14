@@ -517,7 +517,7 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 | `list.distinct() -> list` | Remove duplicates, keeping the first of each | `nodes.files.names.distinct()` |
 | `duration(string) -> duration` | Parse a duration such as '45m' or '90s'; timestamp + duration is a timestamp, and .getMinutes()/.getSeconds() read one | `string(timestamp(now()) + duration('45m'))` |
 | `list.flatten() -> list` | Flatten a list of lists one level | `[[1], [2, 3]].flatten()` |
-| `string.format(list) -> string` | Format a string with positional arguments | `"Hello %s, you have %d items".format([name, count])` |
+| `string.format(list) -> string` | Format a string with positional arguments | `"Hello %s, you have %d items".format([inputs.name, inputs.count])` |
 | `getOrDefault(map, key, default) -> dyn` | Safely access a map key with a fallback default value | `getOrDefault(inputs, "mode", "auto")` |
 | `list.join(string) -> string` | Join list elements with separator | `["a", "b"].join(", ")` |
 | `json.decode(string) -> optional(dyn)` | Parse JSON without failing: optional.none() when the text is empty or not exactly one JSON value. Integers stay integers. Use parseJson when bad input should fail the step | `json.decode(nodes.start.stdout).?status.orValue('error')` |

@@ -293,13 +293,13 @@ func populateCELFunctions() {
 		{Name: "now", Signature: "now() -> string", Description: "Return current time as RFC3339 string", Example: "now()"},
 		{Name: "parseDuration", Signature: "parseDuration(string) -> double", Description: "Parse a Go duration string and return seconds as a number", Example: "parseDuration(\"5m\") == 300.0"},
 		{Name: "spawn", Signature: "spawn(string, list) -> string", Description: "Generate a spawn directive for a child workflow with presets", Example: "spawn(\"builtin://agent\", [\"general\", \"researcher\"])"},
-		// ext.Strings() functions
+		// Member string functions: trimPrefix/trimSuffix (cel/env.go), the rest ext.Strings()
 		{Name: "trimPrefix", Signature: "string.trimPrefix(string) -> string", Description: "Remove prefix from string", Example: "nodes.run.stdout.trimPrefix(\"Error: \")"},
 		{Name: "trimSuffix", Signature: "string.trimSuffix(string) -> string", Description: "Remove suffix from string", Example: "nodes.run.stdout.trimSuffix(\"\\n\")"},
 		{Name: "replace", Signature: "string.replace(string, string) -> string", Description: "Replace all occurrences of old with new", Example: "nodes.llm.response_text.replace(\"\\n\", \" \")"},
 		{Name: "split", Signature: "string.split(string) -> list(string)", Description: "Split string by separator", Example: "nodes.run.stdout.split(\"\\n\")"},
 		{Name: "join", Signature: "list.join(string) -> string", Description: "Join list elements with separator", Example: "[\"a\", \"b\"].join(\", \")"},
-		{Name: "format", Signature: "string.format(list) -> string", Description: "Format a string with positional arguments", Example: "\"Hello %s, you have %d items\".format([name, count])"},
+		{Name: "format", Signature: "string.format(list) -> string", Description: "Format a string with positional arguments", Example: "\"Hello %s, you have %d items\".format([inputs.name, inputs.count])"},
 		{Name: "lowerAscii", Signature: "string.lowerAscii() -> string", Description: "Lower-case the ASCII letters of a string (also upperAscii, trim, indexOf, substring, padLeft, padRight)", Example: "inputs.service.lowerAscii()"},
 		{Name: "matches", Signature: "string.matches(regex) -> bool", Description: "True when the string matches the RE2 regular expression anywhere; anchor with ^ and $ to validate a whole value", Example: "inputs.id.matches('^[1-9][0-9]{0,9}$')"},
 		// ext.Regex()
