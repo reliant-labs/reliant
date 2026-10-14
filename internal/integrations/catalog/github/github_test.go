@@ -583,6 +583,41 @@ func TestRepoGet(t *testing.T) {
 	}, out)
 }
 
+func TestBranchGet(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/branches/autopilot/issue-12", jsonReply(200, `{
+	  "name": "autopilot/issue-12", "protected": true,
+	  "commit": {"sha": "3d21ec53a331a6f037a91c368710b99387d012c1"}}`))
+	out := data(t, f.run("branch.get", map[string]any{"owner": "acme", "repo": "app", "branch": "autopilot/issue-12"}))
+
+	req := f.only()
+	assert.Equal(t, "GET", req.Method)
+	assert.Equal(t, "/repos/acme/app/branches/autopilot%2Fissue-12", req.Path, "the name is ONE escaped path segment")
+	assertGitHubHeaders(t, req)
+	assert.Equal(t, map[string]any{
+		"exists": true, "name": "autopilot/issue-12", "protected": true,
+		"sha": "3d21ec53a331a6f037a91c368710b99387d012c1",
+	}, out)
+}
+
+// A branch that does not exist yet is the usual case for a publish, and an
+// answer, not an error.
+func TestBranchGetOfAMissingBranchIsNotAnError(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/branches/feat", jsonReply(404, `{"message": "Branch not found"}`))
+	out := data(t, f.run("branch.get", map[string]any{"owner": "acme", "repo": "app", "branch": "feat"}))
+	assert.Equal(t, false, out["exists"])
+	assert.Equal(t, false, out["protected"])
+
+	// A missing REPOSITORY is still an error: it must not read as "unprotected".
+	f = newFake(t)
+	f.on("GET", "/repos/acme/app/branches/feat", jsonReply(404, `{"message": "Not Found"}`))
+	res, err := f.try("branch.get", map[string]any{"owner": "acme", "repo": "app", "branch": "feat"})
+	if err == nil {
+		require.True(t, res.IsError, "a missing repository must not read as an unprotected branch: %+v", res.Data)
+	}
+}
+
 // contentJSON is a contents-API file object: content base64 in 60-column
 // lines, as GitHub wraps it.
 func contentJSON(t *testing.T, path, encoding string, raw []byte) string {
@@ -901,6 +936,7 @@ var minimal = map[string]map[string]any{
 	"pr.review.create":   {"owner": "acme", "repo": "app", "pull_number": 1, "event": "APPROVE"},
 	"repo.list_for_user": {},
 	"repo.get":           {"owner": "acme", "repo": "app"},
+	"branch.get":         {"owner": "acme", "repo": "app", "branch": "feat/x"},
 	"repo.get_content":   {"owner": "acme", "repo": "app", "path": "README.md"},
 	"repo.get_tree":      {"owner": "acme", "repo": "app"},
 	"code.search":        {"q": "retry repo:acme/app"},

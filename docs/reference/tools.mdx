@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (20 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (66 tools)
+- [Other Tools](#other-tools) (67 tools)
 
 ---
 
@@ -2079,6 +2079,7 @@ _Miscellaneous tools and utilities._
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
 | [`generate_video`](#generate_video) | media | Generate a short video clip from a text description. |
 | [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, and ... |
+| [`github__branch_get`](#github__branch_get) | integration | Return one branch: whether it exists, its head commit sha, and whether GitHub treats it as protec... |
 | [`github__code_search`](#github__code_search) | integration | Search file contents with GitHub's code search syntax. Scope the query with a qualifier, repo:own... |
 | [`github__issue_comment`](#github__issue_comment) | integration | Post a markdown comment on an issue, or on a pull request's conversation tab (pull requests share... |
 | [`github__issue_comment_list`](#github__issue_comment_list) | integration | List the comments on an issue, or on a pull request's conversation tab (pass the PR number as iss... |
@@ -2308,6 +2309,14 @@ Check on one top-level run: its state, title, workflow, when it was created and 
 The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt.
 
 Only runs the user owns can be inspected. To check on a sub-agent you spawned, use spawn_status.
+
+---
+
+### github__branch_get
+
+**Tags:** `integration`
+
+Return one branch: whether it exists, its head commit sha, and whether GitHub treats it as protected (branch protection or a ruleset). A branch that does not exist answers exists false, not an error. Publishing steps read this before pushing, to refuse a protected branch.
 
 ---
 

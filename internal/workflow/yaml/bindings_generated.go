@@ -127,6 +127,20 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"tool_calls":              {},
 		},
 	},
+	"git_publish": {
+		oneofFieldName: "git_publish",
+		isStructural:   false,
+		argFieldKeys: map[string]struct{}{
+			"allow":        {},
+			"author_email": {},
+			"author_name":  {},
+			"branch":       {},
+			"message":      {},
+			"pr_head_of":   {},
+			"repo":         {},
+			"worktree":     {},
+		},
+	},
 	"invoke_tool": {
 		oneofFieldName: "invoke_tool",
 		isStructural:   false,

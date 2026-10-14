@@ -163,7 +163,7 @@ var AllToolNames = []string{
 	"github__issue_search", "github__labels_create", "github__labels_list", "github__issue_update", "github__pr_get", "github__pr_list_files", "github__pr_create",
 	"github__pr_update", "github__pr_review_create", "github__pr_reviews_list", "github__pr_review_comments_list",
 	"github__pr_review_comment_reply",
-	"github__repo_list_for_user", "github__repo_get", "github__repo_get_content", "github__repo_get_tree",
+	"github__repo_list_for_user", "github__repo_get", "github__branch_get", "github__repo_get_content", "github__repo_get_tree",
 	"github__code_search", "github__workflow_dispatch",
 	"gmail__message_send", "gmail__message_list", "gmail__message_get", "gmail__label_list",
 	"slack__message_post", "slack__message_reply", "slack__message_update", "slack__reaction_add",

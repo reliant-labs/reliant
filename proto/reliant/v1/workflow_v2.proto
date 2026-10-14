@@ -292,6 +292,7 @@ message Node {
     InvokeToolArgs invoke_tool = 25;
     ActionArgs action = 26;
     ComputeArgs compute = 27;
+    GitPublishArgs git_publish = 28;
   }
 }
 
@@ -724,6 +725,93 @@ message ActionArgs {
 
   // Field 4 is reserved for placement narrowing.
   reserved 4;
+}
+
+// GitPublishArgs configures a git_publish node: commit a worktree's changes and
+// push them to a feature branch, without a shell ever holding a credential.
+//
+// The checks run on the server, in the activity, before anything is sent to the
+// machine: the branch must not be the repository's default branch, a protected
+// branch, main, master or release/*, and must match `allow` when one is given.
+// A pull request head (`pr_head_of`) must live in this repository, not a fork.
+// The push is never forced: a remote that has moved on is refused, not
+// overwritten. The credential is fetched for this one push, handed to the
+// machine over its command channel, used by one git process and never written
+// to disk, the environment or a command line.
+//
+// Nothing to commit is not an error: nothing is pushed, pushed is false.
+//
+// The write is recorded in the integration write ledger with the pushed sha
+// BEFORE the push, so the push event it causes is attributed to this run, and
+// the commit carries Reliant-Run and Reliant-Workflow trailers.
+//
+// Output fields accessible via nodes.<id>.*:
+//   pushed, sha, branch, refused, refusal, files_changed, insertions, deletions, base_sha
+message GitPublishArgs {
+  option (node_meta) = {
+    node_type: "git_publish"
+    display_name: "Publish Branch"
+    description: "Commit a worktree's changes and push them to a feature branch. Refuses the default branch, protected branches, main, master and release/*, and any branch outside the allow list; refuses a fork head; never force-pushes. Nothing to commit is not an error (pushed is false). The credential is used for this one push and never reaches a shell, a file or the environment. Pair it with shell credentials: none"
+    is_structural: false
+    category: "git"
+    icon: "GitBranch"
+  };
+
+  // Worktree is the absolute path of the checkout to publish.
+  CelString worktree = 1 [(reliant) = {
+    description: "Absolute path of the worktree whose changes to commit and push"
+    example: "{{ nodes.wt.path }}"
+    label: "Worktree"
+    required: true
+  }];
+  // Repo is the GitHub repository, owner/name.
+  CelString repo = 2 [(reliant) = {
+    description: "The GitHub repository, as owner/name"
+    example: "{{ inputs.repo }}"
+    label: "Repository"
+    required: true
+  }];
+  // Branch is the branch to push to.
+  CelString branch = 3 [(reliant) = {
+    description: "The branch to push to. Leave it empty when pr_head_of is set"
+    example: "autopilot/issue-{{ inputs.issue }}"
+    label: "Branch"
+  }];
+  // PrHeadOf is a pull request number: push to that pull request's head branch.
+  // The pull request must be open and its head must live in repo, not a fork.
+  CelInt pr_head_of = 4 [(reliant) = {
+    description: "A pull request number: push to that pull request's own head branch. The head must be in this repository, not a fork"
+    example: "{{ inputs.pr }}"
+    label: "Pull request"
+  }];
+  // Allow lists glob patterns the branch must match, such as "autopilot/*".
+  // Empty means any branch the always-on checks accept. A pr_head_of branch is
+  // the pull request's own and is not matched against it.
+  CelStringList allow = 5 [(reliant) = {
+    description: "Glob patterns the branch must match, such as autopilot/*. Empty allows any branch the built-in checks accept"
+    example: "[autopilot/*]"
+    type_hint: "list of globs"
+    label: "Allowed branches"
+  }];
+  // Message is the commit message. A Reliant-Run trailer is appended.
+  CelString message = 6 [(reliant) = {
+    description: "The commit message. Reliant-Run and Reliant-Workflow trailers are appended"
+    example: "{{ nodes.agent.response.commit_message }}"
+    label: "Commit message"
+    required: true
+  }];
+  // AuthorName and AuthorEmail identify the commit's author and committer when
+  // the machine has no git identity configured.
+  CelString author_name = 7 [(reliant) = {
+    description: "Commit author name when the machine has no git identity. Default: Reliant"
+    label: "Author name"
+    hidden: true
+  }];
+  CelString author_email = 8 [(reliant) = {
+    description: "Commit author email when the machine has no git identity. Default: noreply@reliantlabs.io"
+    label: "Author email"
+    hidden: true
+  }];
 }
 
 // ComputeArgs configures a compute node: named outputs computed from CEL, in the
@@ -1782,6 +1870,27 @@ message SaveMessageOutput {
   repeated ToolResultMsg tool_results = 5;
   int32 thread_token_count = 6;
   int32 message_count = 7;
+}
+
+// GitPublishOutput is the output from the git_publish activity.
+message GitPublishOutput {
+  // Pushed is true when a commit reached the remote branch.
+  bool pushed = 1;
+  // Sha is the pushed head commit (or the head already on the branch when
+  // there was nothing to commit).
+  string sha = 2;
+  // Branch is the branch pushed to.
+  string branch = 3;
+  // Refused is true when a policy check or the remote refused the publish. It
+  // does NOT fail the node: the graph decides what a refusal means.
+  bool refused = 4;
+  // Refusal says why, in words for a person.
+  string refusal = 5;
+  int32 files_changed = 6;
+  int32 insertions = 7;
+  int32 deletions = 8;
+  // BaseSha is the branch head the commit was made on top of.
+  string base_sha = 9;
 }
 
 // CreateWorktreeOutput is the output from the create_worktree activity.

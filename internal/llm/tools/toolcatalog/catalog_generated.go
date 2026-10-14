@@ -242,6 +242,15 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
 	},
+	"github__branch_get": {
+		Bindable: map[string]struct{}{
+			"branch":     {},
+			"connection": {},
+			"owner":      {},
+			"repo":       {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"github__code_search": {
 		Bindable: map[string]struct{}{
 			"connection": {},

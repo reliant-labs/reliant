@@ -101,6 +101,29 @@ read each other: chain two compute nodes. A failing expression fails the node.
     status: "{{ json.decode(nodes.start.stdout).?status.orValue('error') }}"
 ```
 
+### Publishing a branch
+
+`type: git_publish` commits a worktree's changes and pushes them to a feature branch with no shell ever holding a
+credential. Pair it with `credentials: none` on the editing shell.
+
+```yaml
+- id: publish
+  type: git_publish
+  args:
+    worktree: "{{ nodes.wt.path }}"
+    repo: "{{ inputs.repo }}"                      # owner/name
+    branch: "autopilot/issue-{{ inputs.issue }}"   # or pr_head_of: "{{ inputs.pr }}"
+    allow: ["autopilot/*"]                         # optional
+    message: "{{ nodes.edit.commit_message }}"
+```
+
+Refused (the node completes with `refused: true` and a `refusal`, it does not fail): the default branch, protected
+branches, `main`, `master`, `release/*`, names that are not plain branches, branches outside `allow`, a pull
+request head in a fork. Never forces: a diverged remote is refused. No changes means `pushed: false` and no error.
+Outputs: `pushed`, `sha`, `branch`, `base_sha`, `files_changed`, `insertions`, `deletions`, `refused`, `refusal`. Route on
+them: `condition: nodes.publish.pushed == true`. The push is recorded in the write ledger with its sha, so its events
+carry `trigger.origin`. In a scenario, mock the node's outputs like any activity.
+
 ### Shells without credentials
 
 `credentials: none` removes GitHub, git, ssh and cloud credentials from a command's environment: no
@@ -117,7 +140,7 @@ tools_config:
 
 It is **not containment**: the command still runs as the daemon's Unix user and can read that user's files
 (`~/.config/gh/hosts.yml`, `~/.git-credentials`, `~/.ssh`). It stops an accidental push, not a command that goes
-looking. Never tell an agent to look elsewhere for a token.
+looking. Never tell an agent to look elsewhere for a token; publish with a `git_publish` node.
 
 ### Threading
 
@@ -612,6 +635,7 @@ condition: "nodes.check.exit_code == 0"
 | `compute` | Named values from CEL expressions: no model, no shell, no worker round trip. Each output is {{ expr }} (or a literal); a value that is exactly one {{ }} keeps its type. Read them as nodes.<id>.<name>. Outputs cannot read each other: chain two compute nodes when one feeds the next. A failing expression fails the node. Use it for deterministic logic (labels, sizes, expiry, parsing a node's JSON stdout) instead of a script |
 | `create_worktree` | Create a git worktree for isolated development |
 | `execute_tools` | Run the tool calls an upstream Call LLM step returned |
+| `git_publish` | Commit a worktree's changes and push them to a feature branch. Refuses the default branch, protected branches, main, master and release/*, and any branch outside the allow list; refuses a fork head; never force-pushes. Nothing to commit is not an error (pushed is false). The credential is used for this one push and never reaches a shell, a file or the environment. Pair it with shell credentials: none |
 | `invoke_tool` | Run one tool you pick, with parameters you set; no LLM involved |
 | `join` | Wait for parallel branches to complete before continuing |
 | `loop` | Execute a sub-workflow in a loop with conditions |

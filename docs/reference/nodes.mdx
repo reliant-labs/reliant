@@ -285,6 +285,37 @@ Execute a sub-workflow in a loop with conditions
 
 ---
 
+## Publish Branch
+
+Commit a worktree's changes and push them to a feature branch. Refuses the default branch, protected branches, main, master and release/*, and any branch outside the allow list; refuses a fork head; never force-pushes. Nothing to commit is not an error (pushed is false). The credential is used for this one push and never reaches a shell, a file or the environment. Pair it with shell credentials: none
+
+### Inputs
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `worktree` | string | No | - | Absolute path of the worktree whose changes to commit and push |
+| `repo` | string | No | - | The GitHub repository, as owner/name |
+| `branch` | string | No | - | The branch to push to. Leave it empty when pr_head_of is set |
+| `pr_head_of` | integer | No | - | A pull request number: push to that pull request's own head branch. The head must be in this repository, not a fork |
+| `allow` | array | No | - | Glob patterns the branch must match, such as autopilot/*. Empty allows any branch the built-in checks accept |
+| `message` | string | No | - | The commit message. Reliant-Run and Reliant-Workflow trailers are appended |
+
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pushed` | boolean | - |
+| `sha` | string | - |
+| `branch` | string | - |
+| `refused` | boolean | - |
+| `refusal` | string | - |
+| `files_changed` | integer | - |
+| `insertions` | integer | - |
+| `deletions` | integer | - |
+| `base_sha` | string | - |
+
+---
+
 ## Router
 
 Route to a workflow or node based on LLM classification

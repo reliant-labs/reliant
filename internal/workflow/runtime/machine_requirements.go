@@ -117,6 +117,8 @@ func (a *machineAnalysis) node(node *reliantv1.Node, path string) {
 		a.hard = append(a.hard, fmt.Sprintf("node `%s` runs a shell command", path))
 	case model.NodeTypeCreateWorktree:
 		a.hard = append(a.hard, fmt.Sprintf("node `%s` creates a git worktree", path))
+	case model.NodeTypeGitPublish:
+		a.hard = append(a.hard, fmt.Sprintf("node `%s` commits and pushes a checkout on the user's machine", path))
 	case model.NodeTypeAction:
 		if actionNeedsMachine(node.GetAction()) {
 			a.hard = append(a.hard, fmt.Sprintf("node `%s` uses an action that runs on the user's machine", path))

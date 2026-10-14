@@ -29975,6 +29975,48 @@
             "repeated": true
           }
         ],
+        "reliant.v1.GitPublishArgs": [
+          {
+            "name": "worktree",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "repo",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "branch",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "pr_head_of",
+            "kind": "message",
+            "type_name": "reliant.v1.CelInt"
+          },
+          {
+            "name": "allow",
+            "kind": "message",
+            "type_name": "reliant.v1.CelStringList"
+          },
+          {
+            "name": "message",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "author_name",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "author_email",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          }
+        ],
         "reliant.v1.GroupInputConfig": [
           {
             "name": "base",
@@ -30606,6 +30648,12 @@
             "name": "compute",
             "kind": "message",
             "type_name": "reliant.v1.ComputeArgs",
+            "oneof": "args"
+          },
+          {
+            "name": "git_publish",
+            "kind": "message",
+            "type_name": "reliant.v1.GitPublishArgs",
             "oneof": "args"
           }
         ],
@@ -31887,6 +31935,7 @@
         "reliant.v1.ExportWorkflowResponse": "reliant/v1/workflow.proto",
         "reliant.v1.GetWorkflowRequest": "reliant/v1/workflow.proto",
         "reliant.v1.GetWorkflowResponse": "reliant/v1/workflow.proto",
+        "reliant.v1.GitPublishArgs": "reliant/v1/workflow_v2.proto",
         "reliant.v1.GroupInputConfig": "reliant/v1/workflow_v2.proto",
         "reliant.v1.HighlightSpan": "reliant/v1/workflow.proto",
         "reliant.v1.ImportWorkflowRequest": "reliant/v1/workflow.proto",

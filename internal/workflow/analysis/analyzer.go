@@ -545,7 +545,7 @@ func baseComplexity(nodeType string) int {
 		return 12
 	case model.NodeTypeAskQuestion, model.NodeTypeApproval:
 		return 2
-	case model.NodeTypeJoin, model.NodeTypeSaveMessage, model.NodeTypeCompact, model.NodeTypeCreateWorktree:
+	case model.NodeTypeJoin, model.NodeTypeSaveMessage, model.NodeTypeCompact, model.NodeTypeCreateWorktree, model.NodeTypeGitPublish:
 		return 1
 	default:
 		return 1

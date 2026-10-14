@@ -122,11 +122,12 @@ func emptyGHConfig() string {
 	return emptyGHConfigDir
 }
 
-// WithoutCredentials returns env with every credential variable removed, then
-// the neutral settings appended: no prompts, no helpers, no ssh, an empty gh
-// config directory. It removes whatever the caller's own env added too, so the
-// result carries no credential variable at all.
-func WithoutCredentials(env []string) []string {
+// StripCredentials returns env with every credential variable removed and the
+// neutral non-git settings appended: no prompts, no ssh, an empty gh config
+// directory. It leaves git's own configuration to the caller, which is what a
+// caller that supplies its own credential helper needs: GIT_CONFIG_COUNT entries
+// are read AFTER `git -c`, so the resets in WithoutCredentials would wipe it.
+func StripCredentials(env []string) []string {
 	out := make([]string, 0, len(env)+12)
 	for _, kv := range env {
 		name, _, ok := strings.Cut(kv, "=")
@@ -140,15 +141,24 @@ func WithoutCredentials(env []string) []string {
 		"GCM_INTERACTIVE=never",
 		"GH_PROMPT_DISABLED=1",
 		"GH_CONFIG_DIR="+emptyGHConfig(),
-		"GIT_CONFIG_COUNT="+strconv.Itoa(len(gitNeutralConfig)),
 	)
+	if runtime.GOOS != "windows" {
+		out = append(out, "GIT_SSH_COMMAND=/bin/false")
+	}
+	return out
+}
+
+// WithoutCredentials is StripCredentials plus git's credential helpers and
+// askpass program reset, so a `git push` fails to authenticate and returns at
+// once. It removes whatever the caller's own env added too, so the result carries
+// no credential variable at all.
+func WithoutCredentials(env []string) []string {
+	out := StripCredentials(env)
+	out = append(out, "GIT_CONFIG_COUNT="+strconv.Itoa(len(gitNeutralConfig)))
 	for i, kv := range gitNeutralConfig {
 		out = append(out,
 			"GIT_CONFIG_KEY_"+strconv.Itoa(i)+"="+kv[0],
 			"GIT_CONFIG_VALUE_"+strconv.Itoa(i)+"="+kv[1])
-	}
-	if runtime.GOOS != "windows" {
-		out = append(out, "GIT_SSH_COMMAND=/bin/false")
 	}
 	return out
 }

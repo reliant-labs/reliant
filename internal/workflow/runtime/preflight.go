@@ -88,8 +88,9 @@ func requiresDaemonNode(node *reliantv1.Node, cfg *PreflightConfig) bool {
 
 	nodeType := node.GetType()
 
-	// Run nodes always execute on daemon (shell commands).
-	if nodeType == model.NodeTypeRun {
+	// Run nodes always execute on daemon (shell commands), and so does a
+	// publish: its checkout is on the machine.
+	if nodeType == model.NodeTypeRun || nodeType == model.NodeTypeGitPublish {
 		return true
 	}
 

@@ -123,7 +123,11 @@ var userActionCommands = map[string]bool{
 	"git.clone":   true,
 	"git.pull":    true,
 	"git.reclone": true,
-	"git.remove":  true,
+
+	// A workflow publishing a branch: a commit, then a push.
+	"git.publish":         true,
+	"git.publish_prepare": true,
+	"git.remove":          true,
 
 	"localmodels.set_endpoints": true,
 

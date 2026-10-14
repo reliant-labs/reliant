@@ -38,6 +38,12 @@ type Service interface {
 	Prune(ctx context.Context, pruner Pruner) (int64, error)
 	// PruneLoop prunes hourly until ctx is done.
 	PruneLoop(ctx context.Context, pruner Pruner)
+	// BeginPush records the intent to push a branch, with the sha it will end
+	// on, BEFORE the push is made, and returns the handle that settles it. It
+	// refuses (an error, nothing pushed) when the intent cannot be recorded.
+	// This is how a git_publish node's push is attributed: it goes over git, not
+	// through Wrap.
+	BeginPush(ctx context.Context, p Push) (*PushIntent, error)
 }
 
 // Pruner deletes old ledger entries. core.IntegrationWriteStore satisfies it.

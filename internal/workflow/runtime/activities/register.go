@@ -32,6 +32,7 @@ var nodeTypeActivities = map[string]nodeTypeActivityDef{
 	model.NodeTypeSaveMessage:    {"SaveMessage", reflect.TypeOf(reliantv1.SaveMessageNodeArgs{}), reflect.TypeOf((*reliantv1.SaveMessageOutput)(nil))},
 	model.NodeTypeInvokeTool:     {"InvokeTool", reflect.TypeOf(reliantv1.InvokeToolArgs{}), reflect.TypeOf((*reliantv1.InvokeToolOutput)(nil))},
 	model.NodeTypeAction:         {"Action", reflect.TypeOf(reliantv1.ActionArgs{}), reflect.TypeOf((*reliantv1.ActionOutput)(nil))},
+	model.NodeTypeGitPublish:     {"GitPublish", reflect.TypeOf(reliantv1.GitPublishArgs{}), reflect.TypeOf((*reliantv1.GitPublishOutput)(nil))},
 }
 
 func init() {
@@ -206,6 +207,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// ========================================================================
 
 	v2.RegisterActivity(registry, handlers.NewCreateWorktreeActivity(deps.Repo, deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewGitPublishActivity(deps.Repo, deps.DaemonRouter, deps.Connections).WithLedger(deps.WriteLedger))
 	v2.RegisterActivity(registry, handlers.NewDeleteWorktreeActivity(deps.Repo, deps.DaemonRouter))
 
 	// ========================================================================

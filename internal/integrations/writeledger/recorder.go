@@ -123,12 +123,18 @@ func (r *Recorder) settle(ctx context.Context, w *core.IntegrationWrite, p plan,
 	}
 	out.Error = truncate(out.Error, 1000)
 
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
+	ctx, cancel := settleContext(ctx)
 	defer cancel()
 	if _, err := r.store.CompleteIntegrationWrite(ctx, w.ID, out); err != nil {
 		slog.Warn("integration write ledger: could not settle a write; its intent row stays open",
 			"write_id", w.ID, "integration", w.Integration, "action", w.Action, "error", err)
 	}
+}
+
+// settleContext is the context a row is settled under: the caller's values, but
+// not its cancellation, bounded by settleTimeout.
+func settleContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
 }
 
 // attributeRun fills in the run a call belongs to. Every lookup is best effort:

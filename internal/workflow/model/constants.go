@@ -20,6 +20,7 @@ const (
 	NodeTypeInvokeTool     = "invoke_tool"
 	NodeTypeAction         = "action"
 	NodeTypeCompute        = "compute"
+	NodeTypeGitPublish     = "git_publish"
 )
 
 // Node outcome constants — the VERDICT a node stamps on the run when it

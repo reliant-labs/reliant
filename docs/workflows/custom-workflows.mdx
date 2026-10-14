@@ -275,6 +275,46 @@ cannot read each other, so chain two compute nodes when one feeds the next. A fa
 fails the node. In a scenario a compute node needs no mock event. The expressions it can use are
 listed in [CEL expressions](/reference/cel-expressions).
 
+**Publish nodes** commit a worktree's changes and push them to a feature branch, so a workflow can open a
+pull request without any shell holding a git credential. Pair one with `credentials: none` on the shell
+that does the editing:
+
+```yaml
+- id: edit
+  type: workflow
+  ref: builtin://agent
+  args:
+    tools_config:
+      tools:
+        shell: {credentials: none}
+
+- id: publish
+  type: git_publish
+  args:
+    worktree: "{{ nodes.wt.path }}"
+    repo: "{{ inputs.repo }}"                           # owner/name
+    branch: "autopilot/issue-{{ inputs.issue }}"        # or pr_head_of: "{{ inputs.pr }}"
+    allow: ["autopilot/*"]                              # optional: the branch must match one
+    message: "{{ nodes.edit.commit_message }}"
+```
+
+The policy runs on the server before anything reaches your machine. A publish is **refused** (the node
+completes with `refused: true` and a `refusal` that says why; it does not fail) when the branch is the
+repository's default branch, a protected branch, `main`, `master` or `release/*`, is not a plain branch name
+(`refs/...`, tags, odd characters), or falls outside `allow`. With `pr_head_of` the pull request must be open
+and its head must be in the same repository, never a fork. It **never force-pushes**: if the remote branch has
+commits your checkout lacks, the push is refused, not overwritten. No changes to commit is not an error:
+`pushed` is false and nothing is sent.
+
+The credential is fetched for the one push, travels to your machine in that command and is handed to a single
+git process over a private pipe. It is never in an environment variable, a command line or a file, and never
+reaches a shell. The commit carries `Reliant-Run` and `Reliant-Workflow` trailers, and the push is recorded in
+the write ledger with its sha before it is made, so the `push` and `pull_request.synchronize` events it causes
+are recognized as this run's own (`trigger.origin`). Outputs: `pushed`, `sha`, `branch`, `base_sha`,
+`files_changed`, `insertions`, `deletions`, `refused`, `refusal`.
+
+Today the push is made with your own GitHub token, through the same connection an `action` node uses.
+
 **Shells without credentials.** A workflow that should never push, merge or deploy can say so for the
 shell its agents use and for its `run` nodes. With `credentials: none`, the command's environment has no
 `GH_TOKEN`, `GITHUB_TOKEN`, `GH_*`/`GITHUB_*`, `GIT_TOKEN`, no ssh agent socket or `GIT_SSH_COMMAND`, no
@@ -303,7 +343,8 @@ command still runs as the daemon's Unix user, so it can read that user's files: 
 `~/.git-credentials`, `~/.ssh`, and the daemon's own credentials file. A command that goes looking can
 still find a login. Stopping that needs the shell to run as a different user or in a sandbox, which
 Reliant does not do yet. Treat `credentials: none` as the seatbelt that stops an accidental
-`git push`, not as a wall.
+`git push`, not as a wall. Publish a branch with a `git_publish` node, which never gives its credential to
+a shell.
 
 **Loop nodes** repeat a sub-workflow while a condition is true:
 

@@ -38,6 +38,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'approval': CheckCircle,
   'save_message': Save,
   'create_worktree': FolderGit2,
+  'git_publish': GitCommit,
   'delete_worktree': Trash2,
 
   // Structural / control-flow node types
@@ -155,6 +156,7 @@ const NODE_COLOR_MAP: Record<string, NodeColorSet> = {
   'approval':         { bg: 'bg-amber-500',    text: 'text-amber-600',   border: 'border-amber-500' },
   'save_message':     { bg: 'bg-blue-500',     text: 'text-blue-600',    border: 'border-blue-500' },
   'create_worktree':  { bg: 'bg-cyan-500',     text: 'text-cyan-600',    border: 'border-cyan-500' },
+  'git_publish':      { bg: 'bg-emerald-500',  text: 'text-emerald-600', border: 'border-emerald-500' },
   'delete_worktree':  { bg: 'bg-rose-500',     text: 'text-rose-600',    border: 'border-rose-500' },
   // Structural nodes
   'run':              { bg: 'bg-indigo-500',   text: 'text-indigo-600',  border: 'border-indigo-500' },
@@ -188,6 +190,7 @@ const NODE_THEME_MAP: Record<string, NodeTheme> = {
   'approval': 'amber',
   'save_message': 'blue',
   'create_worktree': 'cyan',
+  'git_publish': 'emerald',
   'delete_worktree': 'rose',
   'run': 'indigo',
   'workflow': 'purple',
