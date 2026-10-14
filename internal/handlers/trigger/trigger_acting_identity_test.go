@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -14,8 +14,9 @@ import (
 )
 
 // hosted is a deployment with a control plane to mint the bot's tokens from.
-func (e *triggerTestEnv) hosted() *triggerTestEnv {
-	e.svc.appIdentity = true
+func (e *triggerTestEnv) hosted(t *testing.T) *triggerTestEnv {
+	t.Helper()
+	e.configure(t, func(d *Deps) { d.ControlPlane = &fakeControlPlaneClient{} })
 	return e
 }
 
@@ -40,7 +41,7 @@ func TestCreateTrigger_ActingIdentityDefaultsToTheOwner(t *testing.T) {
 }
 
 func TestCreateTrigger_ActingAsTheAppIsStoredAndReturned(t *testing.T) {
-	env := setupTriggerTest(t).hosted()
+	env := setupTriggerTest(t).hosted(t)
 	got := env.create(t, env.definition(asApp))
 	assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_APP, got.GetActingIdentity())
 	assert.Equal(t, core.ActingIdentityApp, env.storedIdentity(t, got.GetId()))
@@ -73,7 +74,7 @@ func TestCreateTrigger_ExplicitOwnerWorksEverywhere(t *testing.T) {
 // An update that does not mention the identity leaves it alone, so a client that
 // predates the field cannot flip an activation back to the owner by omission.
 func TestUpdateTrigger_OmittedIdentityIsUnchanged(t *testing.T) {
-	env := setupTriggerTest(t).hosted()
+	env := setupTriggerTest(t).hosted(t)
 	created := env.create(t, env.definition(asApp))
 
 	_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
@@ -84,7 +85,7 @@ func TestUpdateTrigger_OmittedIdentityIsUnchanged(t *testing.T) {
 }
 
 func TestUpdateTrigger_IdentityCanBeChangedBothWays(t *testing.T) {
-	env := setupTriggerTest(t).hosted()
+	env := setupTriggerTest(t).hosted(t)
 	created := env.create(t, env.definition(nil))
 	require.Equal(t, core.ActingIdentityOwner, env.storedIdentity(t, created.GetId()))
 
@@ -115,7 +116,7 @@ func TestUpdateTrigger_AppIdentityIsRefusedWithoutAControlPlane(t *testing.T) {
 }
 
 func TestListTriggers_CarriesTheIdentity(t *testing.T) {
-	env := setupTriggerTest(t).hosted()
+	env := setupTriggerTest(t).hosted(t)
 	owner := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "mine" }))
 	bot := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "the bot's"; asApp(d) }))
 
