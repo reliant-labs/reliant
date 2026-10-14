@@ -81,20 +81,20 @@ func TestListPresetsForWorkflow_ReadsRunConcurrently(t *testing.T) {
 	require.NoError(t, err)
 
 	repo.ResetCounts()
-	const latency = 50 * time.Millisecond
-	repo.Latency = latency
+	repo.Latency = 50 * time.Millisecond
 
-	start := time.Now()
 	_, err = svc.ListPresetsForWorkflow(ctx, req)
-	elapsed := time.Since(start)
 	require.NoError(t, err)
 
 	reads := repo.TotalReads()
 	require.GreaterOrEqual(t, reads, 5, "ownership, presets, visibility x2 and the workflow's own reads")
-	// Serial: reads*latency. Concurrent: ownership, then the longest chain
-	// (workflow, then presets by tag) — three round trips.
-	assert.Less(t, elapsed, time.Duration(reads-2)*latency,
-		"%d reads at %v took %v: they are running one after another", reads, latency, elapsed)
+	// Ownership is checked first, alone. After it, the stored presets and the
+	// two visibility lookups are independent reads on their own goroutines,
+	// so all three are in flight together. Serial reads never exceed one.
+	// Counted rather than timed: a wall-clock bound failed on a loaded host
+	// (234ms against 150ms) with the reads overlapping as designed.
+	assert.GreaterOrEqual(t, repo.PeakInFlight(), 3,
+		"%d reads, at most %d in flight at once: they are running one after another", reads, repo.PeakInFlight())
 }
 
 // The embedded presets are compiled into the binary: parsed once per process,

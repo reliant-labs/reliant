@@ -40,21 +40,38 @@ type Repo struct {
 	// trip that turned per-ref reads into seconds in prod.
 	Latency time.Duration
 
-	mu    sync.Mutex
-	calls map[string]int
+	mu       sync.Mutex
+	calls    map[string]int
+	inFlight int
+	peak     int
 }
 
-// Count records one read of name, then waits Latency.
+// Count records one read of name, then waits Latency. The read counts as in
+// flight for that wait, so PeakInFlight sees reads that overlap.
 func (r *Repo) Count(name string) {
 	r.mu.Lock()
 	if r.calls == nil {
 		r.calls = map[string]int{}
 	}
 	r.calls[name]++
+	r.inFlight++
+	r.peak = max(r.peak, r.inFlight)
 	r.mu.Unlock()
 	if r.Latency > 0 {
 		time.Sleep(r.Latency)
 	}
+	r.mu.Lock()
+	r.inFlight--
+	r.mu.Unlock()
+}
+
+// PeakInFlight is the most reads that were in flight at once since the last
+// ResetCounts. Unlike wall-clock time it does not depend on how loaded the
+// host is, so a test can assert reads overlap without timing them.
+func (r *Repo) PeakInFlight() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.peak
 }
 
 // CallCount is how many times name was read.
@@ -68,6 +85,7 @@ func (r *Repo) CallCount(name string) int {
 func (r *Repo) ResetCounts() {
 	r.mu.Lock()
 	r.calls = nil
+	r.peak = r.inFlight
 	r.mu.Unlock()
 }
 
