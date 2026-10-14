@@ -237,6 +237,13 @@ type stubStream struct {
 	createErr        error
 	lastConsumerCfg  jetstream.ConsumerConfig
 	deletedConsumers []string
+	// idle makes Info report nothing queued for the subject.
+	idle    bool
+	infoErr error
+	// consumerExists makes Consumer() find the durable instead of
+	// ErrConsumerNotFound.
+	consumerExists bool
+	createCalls    int
 }
 
 func (s *stubStream) OrderedConsumer(_ context.Context, _ jetstream.OrderedConsumerConfig) (jetstream.Consumer, error) {
@@ -246,6 +253,7 @@ func (s *stubStream) OrderedConsumer(_ context.Context, _ jetstream.OrderedConsu
 // createErr, when set, is returned by CreateOrUpdateConsumer to simulate a
 // consumer-creation failure (e.g. WorkQueue overlap on fast reconnect).
 func (s *stubStream) CreateOrUpdateConsumer(_ context.Context, cfg jetstream.ConsumerConfig) (jetstream.Consumer, error) {
+	s.createCalls++
 	s.lastConsumerCfg = cfg
 	if s.createErr != nil {
 		return nil, s.createErr
@@ -259,7 +267,10 @@ func (s *stubStream) UpdateConsumer(context.Context, jetstream.ConsumerConfig) (
 	panic("not implemented")
 }
 func (s *stubStream) Consumer(context.Context, string) (jetstream.Consumer, error) {
-	panic("not implemented")
+	if s.consumerExists {
+		return s.consumer, nil
+	}
+	return nil, jetstream.ErrConsumerNotFound
 }
 func (s *stubStream) DeleteConsumer(_ context.Context, name string) error {
 	s.deletedConsumers = append(s.deletedConsumers, name)
@@ -297,7 +308,14 @@ func (s *stubStream) PushConsumer(context.Context, string) (jetstream.PushConsum
 	panic("not implemented")
 }
 func (s *stubStream) Info(context.Context, ...jetstream.StreamInfoOpt) (*jetstream.StreamInfo, error) {
-	panic("not implemented")
+	if s.infoErr != nil {
+		return nil, s.infoErr
+	}
+	n := uint64(1)
+	if s.idle {
+		n = 0
+	}
+	return &jetstream.StreamInfo{State: jetstream.StreamState{Subjects: map[string]uint64{"daemon.pending.x": n}}}, nil
 }
 func (s *stubStream) CachedInfo() *jetstream.StreamInfo { panic("not implemented") }
 func (s *stubStream) Purge(context.Context, ...jetstream.StreamPurgeOpt) error {
@@ -767,25 +785,78 @@ func TestDrainPendingCommands_SanitizesDaemonIDInFilterSubject(t *testing.T) {
 	assert.True(t, msg.wasAcked())
 }
 
-// On successful clean drain the named consumer is deleted (best-effort cleanup).
-func TestDrainPendingCommands_DeletesConsumerOnCleanDrain(t *testing.T) {
+// The drain consumer is long-lived: a drain never deletes it. Deleting per
+// poll is the R3 raft churn that failed prod nats /healthz.
+func TestDrainPendingCommands_NeverDeletesConsumer(t *testing.T) {
 	mgr := &recordingDaemonMgr{}
 	msg := makePendingMsg(t, "req-1", "git.clone", json.RawMessage(`{}`), 5000)
-
 	consumer := &stubConsumer{
 		batches: []jetstream.MessageBatch{
 			&stubMessageBatch{msgs: []jetstream.Msg{msg}, err: jetstream.ErrMsgIteratorClosed},
 		},
 	}
 	stream := &stubStream{consumer: consumer}
-	js := &stubJetStream{stream: stream}
-	bridge := newTestBridge(js, mgr)
+	bridge := newTestBridge(&stubJetStream{stream: stream}, mgr)
 	defer bridge.cancel()
 
 	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
-	require.Len(t, stream.deletedConsumers, 1, "clean drain should delete its consumer")
-	assert.Equal(t, "pending-drain-daemon-1", stream.deletedConsumers[0])
+	assert.Empty(t, stream.deletedConsumers)
+	assert.Equal(t, "pending-drain-daemon-1", stream.lastConsumerCfg.Name)
+	assert.True(t, msg.wasAcked())
+}
+
+// Nothing queued: the poll must not touch consumers at all.
+func TestDrainPendingCommands_IdlePollCreatesNoConsumer(t *testing.T) {
+	mgr := &recordingDaemonMgr{}
+	consumer := &stubConsumer{}
+	stream := &stubStream{consumer: consumer, idle: true}
+	bridge := newTestBridge(&stubJetStream{stream: stream}, mgr)
+	defer bridge.cancel()
+
+	for range 20 {
+		bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
+	}
+
+	assert.Zero(t, stream.createCalls)
+	assert.Empty(t, stream.deletedConsumers)
+	assert.Zero(t, consumer.callIdx, "no fetch when nothing is queued")
+}
+
+// An existing durable is attached to, not re-created.
+func TestDrainPendingCommands_ReusesExistingConsumer(t *testing.T) {
+	mgr := &recordingDaemonMgr{}
+	msg := makePendingMsg(t, "req-1", "git.clone", json.RawMessage(`{}`), 5000)
+	consumer := &stubConsumer{batches: []jetstream.MessageBatch{
+		&stubMessageBatch{msgs: []jetstream.Msg{msg}, err: jetstream.ErrMsgIteratorClosed},
+	}}
+	stream := &stubStream{consumer: consumer, consumerExists: true}
+	bridge := newTestBridge(&stubJetStream{stream: stream}, mgr)
+	defer bridge.cancel()
+
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
+
+	assert.Zero(t, stream.createCalls)
+	assert.True(t, msg.wasAcked())
+}
+
+// A failing stream-info read must not wedge delivery: fall through to the
+// consumer path.
+func TestDrainPendingCommands_InfoErrorStillDrains(t *testing.T) {
+	mgr := &recordingDaemonMgr{}
+	msg := makePendingMsg(t, "req-1", "git.clone", json.RawMessage(`{}`), 5000)
+	consumer := &stubConsumer{batches: []jetstream.MessageBatch{
+		&stubMessageBatch{msgs: []jetstream.Msg{msg}, err: jetstream.ErrMsgIteratorClosed},
+	}}
+	stream := &stubStream{consumer: consumer, infoErr: errors.New("timeout")}
+	bridge := newTestBridge(&stubJetStream{stream: stream}, mgr)
+	defer bridge.cancel()
+
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
+
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+	require.Len(t, mgr.commands, 1)
 }
 
 // When CreateOrUpdateConsumer fails, the drain gives up without dispatching.

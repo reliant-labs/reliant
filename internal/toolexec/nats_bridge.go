@@ -934,11 +934,78 @@ func (b *NATSToolBridge) pollPendingCommands(ctx context.Context, userID, daemon
 	}
 }
 
-// drainPendingCommands creates a pull consumer on the
-// DAEMON_PENDING_COMMANDS stream, drains any messages currently queued for
-// this daemon, dispatches them, and returns. Called both once at connect
-// (draining what queued while offline) and periodically by
-// pollPendingCommands while the daemon stays connected.
+// hasPendingCommands reports whether DAEMON_PENDING_COMMANDS holds anything
+// for subject, from the stream's per-subject message count. It is a read
+// answered by the stream leader: no raft proposal, no consumer.
+//
+// Unknown is treated as "yes": if the stream info can't be read, the caller
+// falls through to the consumer path, so a flaky info lookup can delay
+// nothing and never wedge delivery. An unacked in-flight message still counts
+// (a WorkQueue stream removes a message only on ack), so a command being
+// redelivered keeps the poll draining.
+func hasPendingCommands(ctx context.Context, stream jetstream.Stream, subject string) bool {
+	info, err := stream.Info(ctx, jetstream.WithSubjectFilter(subject))
+	if err != nil || info == nil {
+		return true
+	}
+	// The server applied the subject filter, so every entry is this daemon's.
+	for _, n := range info.State.Subjects {
+		if n > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// pendingDrainConsumer returns the daemon's long-lived durable pull consumer,
+// creating it only if it does not exist.
+//
+// Why get-before-create: on an R3 stream every consumer is its own raft group,
+// and CreateOrUpdateConsumer on an EXISTING durable still proposes to the
+// meta leader. Creating and deleting one per poll per connected daemon kept
+// followers perpetually "not current", which fails nats /healthz and, with
+// enough daemons, empties the nats Service. A lookup is a read; a create
+// happens only when a command is actually waiting and the previous consumer
+// was reaped (InactiveThreshold) or never existed.
+//
+// The consumer is NOT deleted after a drain. Deleting resets NumDelivered
+// (the poison-message guard) and would just be the same meta churn on the way
+// out; the server reaps it once polls stop pulling.
+func pendingDrainConsumer(ctx context.Context, stream jetstream.Stream, name, subject string) (jetstream.Consumer, error) {
+	consumer, err := stream.Consumer(ctx, name)
+	if err == nil {
+		return consumer, nil
+	}
+	if !errors.Is(err, jetstream.ErrConsumerNotFound) {
+		// Not "missing" — still try to create/attach; CreateOrUpdate is
+		// idempotent and the create below surfaces a real outage.
+		logging.Debug("[NATSToolBridge] Pending commands consumer lookup failed; attaching via create",
+			"consumer", name, "error", err)
+	}
+	// DAEMON_PENDING_COMMANDS is WorkQueue retention: one consumer per filter
+	// subject, explicit ack required (ordered consumers force AckNone), and the
+	// consumer's replica count must equal the stream's — NATS rejects a
+	// lower-replica consumer on a WorkQueue/Interest stream, so the consumer
+	// cannot be made R1. A deterministic durable name is re-attached on
+	// reconnect, which also preserves per-message NumDelivered across them.
+	return stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+		Name:              name,
+		Durable:           name,
+		FilterSubject:     subject,
+		AckPolicy:         jetstream.AckExplicitPolicy,
+		DeliverPolicy:     jetstream.DeliverAllPolicy,
+		AckWait:           30 * time.Second,
+		InactiveThreshold: 1 * time.Minute,
+	})
+}
+
+// drainPendingCommands drains any commands queued on DAEMON_PENDING_COMMANDS
+// for this daemon and dispatches them. Called once at connect (what queued
+// while offline) and then by pollPendingCommands for as long as the daemon
+// stays connected.
+//
+// An idle poll — the overwhelmingly common case — is one read-only stream
+// info request and touches no consumer.
 func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemonID string) {
 	if b.js == nil {
 		return
@@ -960,51 +1027,17 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 		return
 	}
 
-	// Create a *named* pull consumer filtered to this daemon's subject, via
-	// CreateOrUpdateConsumer (idempotent) rather than an anonymous
-	// CreateConsumer. This matters because DAEMON_PENDING_COMMANDS uses
-	// WorkQueue retention, which permits only ONE consumer per filter subject.
-	// With an anonymous consumer, a fast disconnect→reconnect would collide
-	// with the previous, not-yet-reaped consumer (InactiveThreshold below is
-	// 1 minute) — CreateConsumer would fail with an overlapping-filter error
-	// and the drain would be skipped, stranding the queued command. A
-	// deterministic name is simply re-attached on reconnect, and it preserves
-	// per-message NumDelivered so the bounded-retry guard below actually
-	// bounds across reconnects. Explicit ack policy is required (ordered
-	// consumers force AckNone and fail with "consumer in pull mode requires
-	// ack policy").
+	if !hasPendingCommands(ctx, stream, subject) {
+		return
+	}
+
 	consumerName := "pending-drain-" + sanitizePendingSubjectToken(daemonID)
-	consumer, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		Name:              consumerName,
-		Durable:           consumerName,
-		FilterSubject:     subject,
-		AckPolicy:         jetstream.AckExplicitPolicy,
-		DeliverPolicy:     jetstream.DeliverAllPolicy,
-		AckWait:           30 * time.Second,
-		InactiveThreshold: 1 * time.Minute,
-	})
+	consumer, err := pendingDrainConsumer(ctx, stream, consumerName, subject)
 	if err != nil {
 		logging.Warn("[NATSToolBridge] Failed to create pending commands consumer",
 			"daemonID", daemonID, "consumer", consumerName, "error", err)
 		return
 	}
-	// drainClean stays true only if we ack'd everything we saw. If any message
-	// was Nak'd for redelivery, we intentionally leave the named consumer in
-	// place so its NumDelivered accounting survives — InactiveThreshold reaps
-	// it later. Deleting it here would reset the redelivery count and defeat
-	// the poison-message guard.
-	drainClean := true
-	defer func() {
-		if !drainClean {
-			return
-		}
-		// Best-effort cleanup — InactiveThreshold above is the fallback.
-		if delErr := stream.DeleteConsumer(ctx, consumerName); delErr != nil &&
-			!errors.Is(delErr, jetstream.ErrConsumerNotFound) {
-			logging.Debug("[NATSToolBridge] Pending commands consumer cleanup failed (InactiveThreshold will reap)",
-				"daemonID", daemonID, "consumer", consumerName, "error", delErr)
-		}
-	}()
 
 	// fetchCtx bounds ONLY the loop below that pulls already-queued messages
 	// off the stream — we want to drain what's queued, not block waiting for
@@ -1121,7 +1154,6 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 					"daemonID", daemonID, "commandType", envelope.CommandType,
 					"requestID", envelope.RequestID, "numDelivered", numDelivered, "error", err)
 				_ = msg.NakWithDelay(pendingCommandRedeliveryDelay)
-				drainClean = false
 				continue
 			}
 			_ = msg.Ack()
