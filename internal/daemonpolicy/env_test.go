@@ -16,11 +16,11 @@ func TestChildEnv_ForgeCredentialHelperIsFirstPartyOnly(t *testing.T) {
 	const helper = `["/opt/reliant/bin/reliant","auth","forge-credential","--daemon-server","https://api.example.com"]`
 	t.Setenv("FORGE_CREDENTIAL_HELPER", helper)
 
-	confined := ChildEnv(NewContext(context.Background(), &Policy{GrantID: "grant-1"}), nil)
+	confined := ChildEnv(NewContext(context.Background(), &Policy{GrantID: "grant-1"}), nil, CredentialsInherit)
 	if slices.ContainsFunc(confined, func(kv string) bool { return len(kv) >= 24 && kv[:24] == "FORGE_CREDENTIAL_HELPER=" }) {
 		t.Fatal("a confined (connector) child inherited forge's credential helper")
 	}
-	if !slices.Contains(ChildEnv(context.Background(), nil), "FORGE_CREDENTIAL_HELPER="+helper) {
+	if !slices.Contains(ChildEnv(context.Background(), nil, CredentialsInherit), "FORGE_CREDENTIAL_HELPER="+helper) {
 		t.Fatal("a first-party child (the user's agent) must inherit forge's credential helper")
 	}
 }
@@ -36,7 +36,7 @@ func TestChildEnv_FirstPartyOmitsDaemonConnectionSettings(t *testing.T) {
 	t.Setenv("RELIANT_AUTH_KEY", "sb_publishable_dev")
 	t.Setenv("RELIANT_TEST_KEEP", "kept")
 
-	env := ChildEnv(context.Background(), map[string]string{"RELIANT_SERVER_URL": "https://explicit.example.com"})
+	env := ChildEnv(context.Background(), map[string]string{"RELIANT_SERVER_URL": "https://explicit.example.com"}, CredentialsInherit)
 
 	for _, name := range []string{"RELIANT_GATEWAY_URL", "RELIANT_AUTH_URL", "RELIANT_AUTH_KEY"} {
 		if slices.ContainsFunc(env, func(kv string) bool { return len(kv) > len(name) && kv[:len(name)+1] == name+"=" }) {
@@ -60,10 +60,10 @@ func TestChildEnv_FirstPartyOmitsDaemonConnectionSettings(t *testing.T) {
 func TestChildEnv_MarksAgentShells(t *testing.T) {
 	confined := NewContext(context.Background(), &Policy{GrantID: "grant-1"})
 	for name, ctx := range map[string]context.Context{"first-party": context.Background(), "confined": confined} {
-		if !slices.Contains(ChildEnv(ctx, nil), AgentShellEnv+"=1") {
+		if !slices.Contains(ChildEnv(ctx, nil, CredentialsInherit), AgentShellEnv+"=1") {
 			t.Errorf("%s: child env lacks %s", name, AgentShellEnv)
 		}
-		if !slices.Contains(ChildEnv(ctx, map[string]string{AgentShellEnv: ""}), AgentShellEnv+"=1") {
+		if !slices.Contains(ChildEnv(ctx, map[string]string{AgentShellEnv: ""}, CredentialsInherit), AgentShellEnv+"=1") {
 			t.Errorf("%s: a request cleared %s", name, AgentShellEnv)
 		}
 	}

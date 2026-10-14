@@ -334,6 +334,9 @@ type StartProcessOptions struct {
 	// callers; see BackgroundProcess.GrantID.
 	GrantID string
 	Env     map[string]string
+	// Credentials is daemonpolicy.CredentialsNone to start the process with no
+	// GitHub, git, ssh or cloud credentials.
+	Credentials string
 	// Argv, when set, runs the command with no shell (see
 	// daemon.RunCommandRequest.Argv). Command is used for display only.
 	Argv []string
@@ -394,7 +397,7 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	for key, value := range opts.Env {
 		env[key] = value
 	}
-	cmd.Env = daemonpolicy.ChildEnv(ctx, env)
+	cmd.Env = daemonpolicy.ChildEnv(ctx, env, opts.Credentials)
 
 	// Create buffers for output
 	stdout := &bytes.Buffer{}

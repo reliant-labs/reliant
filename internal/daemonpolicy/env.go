@@ -102,7 +102,19 @@ const AgentShellEnv = "RELIANT_AGENT_SHELL"
 //
 // extra is applied on top; callers are expected to have validated it (see
 // Policy.checkExec), and it is not filtered again here.
-func ChildEnv(ctx context.Context, extra map[string]string) []string {
+//
+// credentials is the request's `credentials` setting (ParseCredentials).
+// CredentialsNone strips every credential variable from the result, extra
+// included: see WithoutCredentials for what that does and does not cover.
+func ChildEnv(ctx context.Context, extra map[string]string, credentials string) []string {
+	env := childEnv(ctx, extra)
+	if credentials == CredentialsNone {
+		return WithoutCredentials(env)
+	}
+	return env
+}
+
+func childEnv(ctx context.Context, extra map[string]string) []string {
 	base := os.Environ()
 	extra = withAgentShellMarker(extra)
 

@@ -224,6 +224,11 @@ type RunCommandRequest struct {
 	Env map[string]string `json:"env,omitempty"`
 	// TimeoutMs is the maximum execution time in milliseconds. 0 means default timeout.
 	TimeoutMs int `json:"timeout_ms,omitempty"`
+	// Credentials is "none" to run the command with no GitHub, git, ssh or
+	// cloud credentials (daemonpolicy.CredentialsNone), or "" for the daemon's
+	// own environment. It is a seatbelt for what Reliant hands out, not a
+	// sandbox: the daemon user's files stay readable.
+	Credentials string `json:"credentials,omitempty"`
 }
 
 // CommandResult is the result of a synchronous command execution.

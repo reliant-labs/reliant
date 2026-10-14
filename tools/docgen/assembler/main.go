@@ -210,6 +210,24 @@ read each other: chain two compute nodes. A failing expression fails the node.
     status: "{{ json.decode(nodes.start.stdout).?status.orValue('error') }}"
 ` + "```" + `
 
+### Shells without credentials
+
+` + "`credentials: none`" + ` removes GitHub, git, ssh and cloud credentials from a command's environment: no
+` + "`GH_TOKEN`/`GITHUB_TOKEN`" + `, no ssh agent, no cloud variables, no kubeconfig, git's credential helpers reset,
+` + "`GIT_TERMINAL_PROMPT=0`" + `, an empty ` + "`GH_CONFIG_DIR`" + `. A ` + "`git push`" + ` or ` + "`gh pr merge`" + ` from it fails to
+authenticate at once and never prompts. Set it for an agent's shell with ` + "`tools_config.tools.shell`" + ` (bound, so
+the model is never shown it) and on a ` + "`run`" + ` node with ` + "`credentials: none`" + `.
+
+` + "```yaml" + `
+tools_config:
+  tools:
+    shell: {credentials: none}
+` + "```" + `
+
+It is **not containment**: the command still runs as the daemon's Unix user and can read that user's files
+(` + "`~/.config/gh/hosts.yml`, `~/.git-credentials`, `~/.ssh`" + `). It stops an accidental push, not a command that goes
+looking. Never tell an agent to look elsewhere for a token.
+
 ### Threading
 
 Modes: ` + "`inherit`" + ` (default), ` + "`new`" + `, ` + "`fork`" + `

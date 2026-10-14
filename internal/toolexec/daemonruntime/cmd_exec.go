@@ -100,7 +100,11 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// deployment's internal URLs, and any allowlisted program can print its
 	// own environment straight back to the model. Unconfined callers inherit
 	// everything, as before.
-	cmd.Env = daemonpolicy.ChildEnv(ctx, req.Env)
+	credentials, err := daemonpolicy.ParseCredentials(req.Credentials)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Env = daemonpolicy.ChildEnv(ctx, req.Env, credentials)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
@@ -205,13 +209,18 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	req.WorkingDir = resolvedDir
+	credentials, err := daemonpolicy.ParseCredentials(req.Credentials)
+	if err != nil {
+		return nil, err
+	}
 
 	mgr := shell.GetBackgroundManager()
 	process, err := mgr.StartProcess(ctx, shell.StartProcessOptions{
-		Command:    req.Command,
-		Argv:       req.Argv,
-		WorkingDir: req.WorkingDir,
-		Env:        req.Env,
+		Command:     req.Command,
+		Argv:        req.Argv,
+		WorkingDir:  req.WorkingDir,
+		Env:         req.Env,
+		Credentials: credentials,
 		// Tag the process with the grant that started it, so a later
 		// bg_output/bg_kill from a different connector cannot reach it.
 		// Empty for first-party callers.

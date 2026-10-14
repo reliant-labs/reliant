@@ -16,6 +16,7 @@ import (
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/cmdutil"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/fileutil"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
@@ -774,10 +775,17 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 		cmd.Dir = req.WorkingDir
 	}
 
-	if len(req.Env) > 0 {
+	credentials, err := daemonpolicy.ParseCredentials(req.Credentials)
+	if err != nil {
+		return nil, err
+	}
+	if len(req.Env) > 0 || credentials == daemonpolicy.CredentialsNone {
 		cmd.Env = os.Environ()
 		for k, v := range req.Env {
 			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+		if credentials == daemonpolicy.CredentialsNone {
+			cmd.Env = daemonpolicy.WithoutCredentials(cmd.Env)
 		}
 	}
 
@@ -812,7 +820,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	oomSnap := localMemReader.SnapshotOOMKills()
 
 	start := time.Now()
-	err := cmd.Start()
+	err = cmd.Start()
 	if err == nil {
 		// Steer the kernel OOM killer toward the workload (and descendants,
 		// which inherit the score) rather than the daemon. No-op outside
@@ -883,11 +891,16 @@ func (c *LocalClient) StartBackground(ctx context.Context, req *RunCommandReques
 		return "", fmt.Errorf("command is required")
 	}
 
+	credentials, err := daemonpolicy.ParseCredentials(req.Credentials)
+	if err != nil {
+		return "", err
+	}
 	bgm := shell.GetBackgroundManager()
 	process, err := bgm.StartProcess(ctx, shell.StartProcessOptions{
-		Command:    req.Command,
-		WorkingDir: req.WorkingDir,
-		Env:        req.Env,
+		Command:     req.Command,
+		WorkingDir:  req.WorkingDir,
+		Env:         req.Env,
+		Credentials: credentials,
 	})
 	if err != nil {
 		return "", fmt.Errorf("starting background process: %w", err)

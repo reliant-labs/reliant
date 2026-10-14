@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -35,6 +36,9 @@ type ExecuteRunStepInput struct {
 	LoopIteration  int                      `json:"loop_iteration"`            // Loop context: iteration index (0-indexed)
 	DaemonSelector *toolexec.DaemonSelector `json:"daemon_selector,omitempty"` // Target daemon for execution
 	LogFile        string                   `json:"log_file,omitempty"`        // Redirect stdout+stderr to this file (daemon-side)
+	// Credentials is the node's `credentials` setting: "none" runs the command
+	// with no GitHub, git, ssh or cloud credentials.
+	Credentials string `json:"credentials,omitempty"`
 	// SaveMessage delegates the run node's save_message to the ActivityWrapper
 	// (see types.SaveMessageRequest). The handler never reads it.
 	SaveMessage *activitytypes.SaveMessageRequest `json:"save_message,omitempty" reliant:"-"`
@@ -155,6 +159,15 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	if input.DaemonSelector != nil {
 		execCtx.DaemonSelector = input.DaemonSelector
 	}
+	credentials, err := daemonpolicy.ParseCredentials(input.Credentials)
+	if err != nil {
+		// A typo must not run the command with credentials the author meant to
+		// withhold: fail the step as a command verdict, with no retry.
+		msg := "run node: " + err.Error()
+		return ExecuteRunStepOutput{Stderr: msg, Output: msg, ExitCode: -1,
+			Duration: time.Since(startTime).Milliseconds()}, nil
+	}
+	execCtx.Credentials = credentials
 
 	// Determine working directory
 	workingDir := execCtx.ProjectPath

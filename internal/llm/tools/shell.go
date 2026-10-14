@@ -10,6 +10,7 @@ import (
 
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -36,7 +37,12 @@ type ShellParams struct {
 	Env             map[string]string `json:"env,omitempty" jsonschema:"description=Environment variables to set for this command execution"`
 	MaxOutput       int               `json:"max_output,omitempty" jsonschema:"description=Maximum bytes of output to collect (default: 16000)"`
 	TailLines       int               `json:"tail_lines,omitempty" jsonschema:"description=Only return last N lines of output"`
-	Repo            string            `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo to run the command in: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Omit in single-repo projects. The system prompt lists available repos when this matters."`
+	// Credentials is "none" to run the command with no GitHub, git, ssh or
+	// cloud credentials. A workflow sets it with tools_config.tools.shell
+	// (bound, so the model is never shown it); "" is the daemon's own
+	// environment.
+	Credentials string `json:"credentials,omitempty" jsonschema:"enum=none,enum=inherit"`
+	Repo        string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo to run the command in: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Omit in single-repo projects. The system prompt lists available repos when this matters."`
 }
 
 // shellDescriptionParamDoc is the schema description for ShellParams.Description.
@@ -56,6 +62,10 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
 - git reset --hard origin/main → "Discard all local changes and match remote main"
 - curl -s url | jq '.data[]' → "Fetch JSON from URL and extract data array elements"`
 
+// shellCredentialsParamDoc is the schema description for ShellParams.Credentials.
+// It is prose with commas and apostrophes, which a struct tag would have to escape.
+const shellCredentialsParamDoc = "Set to 'none' to run this command with no GitHub, git, ssh or cloud credentials in its environment (git push, gh and kubectl then fail to authenticate, without prompting). Not a sandbox: files the daemon's user can read stay readable."
+
 // JSONSchemaExtend attaches the multi-line description doc after the reflector
 // has built the schema from the struct tags. invopop/jsonschema calls this for
 // any type implementing the hook, which is what lets the prose above keep its
@@ -66,6 +76,9 @@ func (ShellParams) JSONSchemaExtend(s *jsonschema.Schema) {
 	}
 	if prop, ok := s.Properties.Get("description"); ok {
 		prop.Description = shellDescriptionParamDoc
+	}
+	if prop, ok := s.Properties.Get("credentials"); ok {
+		prop.Description = shellCredentialsParamDoc
 	}
 }
 
@@ -390,11 +403,22 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 	}
 
 	// Build the daemon request
+	credentials, err := daemonpolicy.ParseCredentials(params.Credentials)
+	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
 	req := &daemon.RunCommandRequest{
-		Command:    params.Command,
-		WorkingDir: workingDir,
-		Env:        params.Env,
-		TimeoutMs:  params.Timeout,
+		Command:     params.Command,
+		WorkingDir:  workingDir,
+		Env:         params.Env,
+		TimeoutMs:   params.Timeout,
+		Credentials: credentials,
+	}
+	if credentials == daemonpolicy.CredentialsNone {
+		// A daemon older than the credentials field ignores it but applies env,
+		// so the neutral assignments keep it from failing open. A caller's own
+		// env cannot restore a credential: the daemon strips them again.
+		req.Env = neutralCredentialEnv(params.Env)
 	}
 
 	// Handle background execution
@@ -651,4 +675,18 @@ func shouldRunInBackground(command string) bool {
 	}
 
 	return true
+}
+
+// neutralCredentialEnv is a request env for a credentials-none command: the
+// caller's own variables, minus any that would carry a credential, then the
+// neutral assignments.
+func neutralCredentialEnv(own map[string]string) map[string]string {
+	env := daemonpolicy.NeutralEnv()
+	for k, v := range own {
+		if _, neutral := env[k]; neutral {
+			continue
+		}
+		env[k] = v
+	}
+	return env
 }

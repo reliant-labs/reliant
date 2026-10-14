@@ -275,6 +275,36 @@ cannot read each other, so chain two compute nodes when one feeds the next. A fa
 fails the node. In a scenario a compute node needs no mock event. The expressions it can use are
 listed in [CEL expressions](/reference/cel-expressions).
 
+**Shells without credentials.** A workflow that should never push, merge or deploy can say so for the
+shell its agents use and for its `run` nodes. With `credentials: none`, the command's environment has no
+`GH_TOKEN`, `GITHUB_TOKEN`, `GH_*`/`GITHUB_*`, `GIT_TOKEN`, no ssh agent socket or `GIT_SSH_COMMAND`, no
+cloud variables (`AWS_*`, `AZURE_*`, `GOOGLE_*`, `CLOUDSDK_*`), no kubeconfig and no forge credential
+helper. Reliant's git credential helper and any other helper are reset, `GIT_TERMINAL_PROMPT=0`, and
+`GH_CONFIG_DIR` points at an empty directory. A `git push` or `gh pr merge` from such a shell fails to
+authenticate and returns at once: it never prompts.
+
+```yaml
+- id: agent
+  type: workflow
+  ref: builtin://agent
+  args:
+    tools_config:
+      tools:
+        shell: {credentials: none}      # bound: the model is never shown this parameter
+
+- id: gate
+  type: run
+  credentials: none
+  command: make test
+```
+
+This is **not containment.** It removes what Reliant and the machine's environment hand a command. The
+command still runs as the daemon's Unix user, so it can read that user's files: `~/.config/gh/hosts.yml`,
+`~/.git-credentials`, `~/.ssh`, and the daemon's own credentials file. A command that goes looking can
+still find a login. Stopping that needs the shell to run as a different user or in a sandbox, which
+Reliant does not do yet. Treat `credentials: none` as the seatbelt that stops an accidental
+`git push`, not as a wall.
+
 **Loop nodes** repeat a sub-workflow while a condition is true:
 
 ```yaml

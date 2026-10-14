@@ -39,6 +39,9 @@ type RunExecutorContext struct {
 	DaemonSelector *toolexec.DaemonSelector // Target daemon for execution (optional)
 	// NoMachine is the chat's no-machine fact: a command has nowhere to run.
 	NoMachine bool
+	// Credentials is the run node's `credentials` setting ("none" strips
+	// GitHub, git, ssh and cloud credentials from the command's environment).
+	Credentials string
 }
 
 // RemoteRunExecutor routes shell commands through the daemon via ToolExecutor.
@@ -62,8 +65,9 @@ func (e *RemoteRunExecutor) SetContext(execCtx RunExecutorContext) {
 
 // shellInput is the JSON structure the shell tool expects.
 type shellInput struct {
-	Command string `json:"command"`
-	Timeout int    `json:"timeout,omitempty"` // timeout in milliseconds
+	Command     string `json:"command"`
+	Timeout     int    `json:"timeout,omitempty"` // timeout in milliseconds
+	Credentials string `json:"credentials,omitempty"`
 }
 
 // ExecuteCommand routes a shell command through the daemon's shell tool.
@@ -76,8 +80,9 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 ) (stdout, stderr string, exitCode int, interrupted bool, err error) {
 	// Build shell tool input
 	input := shellInput{
-		Command: command,
-		Timeout: timeoutMs,
+		Command:     command,
+		Timeout:     timeoutMs,
+		Credentials: e.execCtx.Credentials,
 	}
 	inputJSON, err := json.Marshal(input)
 	if err != nil {

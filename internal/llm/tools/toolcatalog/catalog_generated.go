@@ -758,6 +758,7 @@ var generatedToolParams = map[string]ToolParams{
 	"shell": {
 		Bindable: map[string]struct{}{
 			"command":           {},
+			"credentials":       {},
 			"description":       {},
 			"env":               {},
 			"max_output":        {},

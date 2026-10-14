@@ -3263,7 +3263,16 @@ type RunArgs struct {
 	// WorkDir sets the working directory. Defaults to project root.
 	WorkDir *CelString `protobuf:"bytes,3,opt,name=work_dir,json=workDir,proto3" json:"work_dir,omitempty"`
 	// LogFile redirects stdout+stderr to this file. Engine creates parent dirs. Overwrites.
-	LogFile       *CelString `protobuf:"bytes,4,opt,name=log_file,json=logFile,proto3" json:"log_file,omitempty"`
+	LogFile *CelString `protobuf:"bytes,4,opt,name=log_file,json=logFile,proto3" json:"log_file,omitempty"`
+	// Credentials is "none" to run the command with no GitHub, git, ssh or cloud
+	// credentials: no GH_TOKEN/GITHUB_TOKEN, no Reliant git credential helper, no
+	// ssh agent socket, GIT_TERMINAL_PROMPT=0 and an empty gh config directory.
+	// Empty (or "inherit") keeps the daemon's own environment.
+	//
+	// A guard rail against a command that pushes or merges when it should not,
+	// not containment: the command still runs as the daemon's Unix user and can
+	// read that user's files.
+	Credentials   string `protobuf:"bytes,5,opt,name=credentials,proto3" json:"credentials,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3324,6 +3333,13 @@ func (x *RunArgs) GetLogFile() *CelString {
 		return x.LogFile
 	}
 	return nil
+}
+
+func (x *RunArgs) GetCredentials() string {
+	if x != nil {
+		return x.Credentials
+	}
+	return ""
 }
 
 // SubWorkflowArgs configures a workflow node — invokes a sub-workflow.
@@ -7983,7 +7999,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"YExact paths from the project root to copy into the new worktree, such as untracked config\x82\x01\x18[.env, web/node_modules]\x8a\x01\rlist of pathsR\tcopyFiles\x12]\n" +
 	"\x05force\x18\x05 \x01(\v2\x13.reliant.v1.CelBoolB2\x82\xb5\x18.\n" +
 	",Force creation by deleting existing worktreeR\x05force:f\x8a\xb5\x18b\n" +
-	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\x98\x04\n" +
+	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\xe5\x05\n" +
 	"\aRunArgs\x12~\n" +
 	"\acommand\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBM\x82\xb5\x18I\n" +
 	"1The shell command to run in the project directoryp\x01\x82\x01\x11npm test -- --runR\acommand\x12M\n" +
@@ -7992,7 +8008,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\bwork_dir\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB/\x82\xb5\x18+\n" +
 	"'Working directory for command execution \x01R\aworkDir\x12]\n" +
 	"\blog_file\x18\x04 \x01(\v2\x15.reliant.v1.CelStringB+\x82\xb5\x18'\n" +
-	"#Redirect stdout+stderr to this file \x01R\alogFile\x1a6\n" +
+	"#Redirect stdout+stderr to this file \x01R\alogFile\x12\xca\x01\n" +
+	"\vcredentials\x18\x05 \x01(\tB\xa7\x01\x82\xb5\x18\xa2\x01\n" +
+	"\x8b\x01Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readableJ\vCredentials\x82\x01\x04noneR\vcredentials\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:D\x8a\xb5\x18@\n" +

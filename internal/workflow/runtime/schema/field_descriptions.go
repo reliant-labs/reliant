@@ -37,6 +37,7 @@ func init() {
 	FieldDescriptions["router.outputs"] = "Named outputs for this step, each an expression over the chosen workflow's outputs"
 	FieldDescriptions["router.system_prompt"] = "Instructions for the routing model, replacing the default routing prompt"
 	FieldDescriptions["run.command"] = "The shell command to run in the project directory"
+	FieldDescriptions["run.credentials"] = "Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readable"
 	FieldDescriptions["save_message.content"] = "The message text, usually a template over an earlier step's output"
 	FieldDescriptions["save_message.display_style"] = "UI display style hint"
 	FieldDescriptions["save_message.role"] = "Message role"

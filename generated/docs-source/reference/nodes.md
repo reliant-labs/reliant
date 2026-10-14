@@ -320,6 +320,7 @@ Execute a shell command
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `command` | string | No | - | The shell command to run in the project directory |
+| `credentials` | string | No | - | Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readable |
 
 ### Outputs
 

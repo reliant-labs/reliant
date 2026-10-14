@@ -1008,6 +1008,19 @@ message RunArgs {
     description: "Redirect stdout+stderr to this file"
     hidden: true
   }];
+  // Credentials is "none" to run the command with no GitHub, git, ssh or cloud
+  // credentials: no GH_TOKEN/GITHUB_TOKEN, no Reliant git credential helper, no
+  // ssh agent socket, GIT_TERMINAL_PROMPT=0 and an empty gh config directory.
+  // Empty (or "inherit") keeps the daemon's own environment.
+  //
+  // A guard rail against a command that pushes or merges when it should not,
+  // not containment: the command still runs as the daemon's Unix user and can
+  // read that user's files.
+  string credentials = 5 [(reliant) = {
+    description: "Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readable"
+    example: "none"
+    label: "Credentials"
+  }];
 }
 
 // SubWorkflowArgs configures a workflow node — invokes a sub-workflow.
