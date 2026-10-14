@@ -7911,14 +7911,14 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\tWithEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01:\\\x8a\xb5\x18X\n" +
-	"\x06action\x12\x06Action\x1a7Run an integration action (for example an HTTP request)*\autility2\x04PlugJ\x04\b\x04\x10\x05\"\xcd\x03\n" +
+	"\x06action\x12\x06Action\x1a7Run an integration action (for example an HTTP request)*\autility2\x04PlugJ\x04\b\x04\x10\x05\"\xc2\x06\n" +
 	"\vComputeArgs\x12\xfb\x01\n" +
 	"\aoutputs\x18\x01 \x03(\v2$.reliant.v1.ComputeArgs.OutputsEntryB\xba\x01\x82\xb5\x18\xb5\x01\n" +
 	"TNamed values, each a {{ }} expression (or a literal). Read them as nodes.<id>.<name>J\aOutputsZ\x05basicp\x01\x82\x01<{\"size\": \"{{ inputs.adds + inputs.dels < 60 ? 'S' : 'M' }}\"}\x8a\x01\vJSON objectR\aoutputs\x1aR\n" +
 	"\fOutputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
-	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01:l\x8a\xb5\x18h\n" +
-	"\acompute\x12\aCompute\x1a=Compute named values from CEL expressions: no model, no shell \x01*\autility2\n" +
+	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01:\xe0\x03\x8a\xb5\x18\xdb\x03\n" +
+	"\acompute\x12\aCompute\x1a\xaf\x03Compute named values from CEL expressions: no model, no shell, no worker round trip. Each output is {{ expr }} (or a literal); a value that is exactly one {{ }} keeps its type. Read them as nodes.<id>.<name>. Outputs cannot read each other: chain two compute nodes when one feeds the next. A failing expression fails the node. Use it for deterministic logic (labels, sizes, expiry, parsing a node's JSON stdout) instead of a script \x01*\autility2\n" +
 	"Calculator\"\x0f\n" +
 	"\rComputeOutput\"\xb7\x03\n" +
 	"\vCompactArgs\x12\xa9\x01\n" +

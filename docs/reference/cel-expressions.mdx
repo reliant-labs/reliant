@@ -80,6 +80,37 @@ type: call_llm
 content: This is a literal string with no expressions
 ```
 
+### Template Rules
+
+A `{{ }}` is read as CEL, not as text between braces, so these all work:
+
+```yaml
+# Braces inside a string literal are data
+is_json: "{{ nodes.run.stdout.startsWith('{') }}"
+closes:  "{{ inputs.s.contains('}}') }}"
+
+# A newline inside {{ }} is whitespace, in a folded (>-) or literal (|) scalar
+label: >-
+  {{ inputs.kind
+     + '-' + inputs.name }}
+
+# To write a literal {{ in text, make it an expression
+note: "use {{ '{{' }} to open a template"
+```
+
+A `{{` that never closes, an empty `{{ }}`, and an expression that does not parse are
+**validation errors** with the field path and the line and column inside the value. They are
+never treated as literal text: the runtime fails the node rather than send the source of the
+template to a model or a shell.
+
+```text
+nodes.[0](a).system_prompt: "{{" has no closing "}}" (an unbalanced { or an unclosed string
+inside the expression hides it) (line 1, column 7)
+```
+
+Raw-CEL fields (`condition`, `while`, a trigger `filter`) are not templates: write them without
+`{{ }}`. A `{{` inside a string literal there is data.
+
 ---
 
 ## Available Namespaces
@@ -399,6 +430,91 @@ tool_filter: "{{inputs.tools + [spawn(workflow.name, [])]}}"
 ```
 
 Returns a filter string like `spawn:builtin://agent(general,researcher)`. If the presets list is empty, returns an empty string (effectively disabling spawn).
+
+### Standard Libraries
+
+Every workflow expression, in the runtime, in validation and in trigger filters, has the CEL
+standard library plus these extensions:
+
+| Library | What it adds |
+|---------|--------------|
+| Strings | `trimPrefix`, `trimSuffix`, `split`, `join`, `replace`, `format`, `lowerAscii`, `upperAscii`, `trim`, `indexOf`, `substring`, `padLeft`, `padRight` |
+| Lists | `sort()`, `sortBy(x, key)`, `distinct()`, `flatten()`, `slice(a, b)`, `first()`, `last()`, `lists.range(n)` (at most 100,000) |
+| Sets | `sets.contains(a, b)`, `sets.intersects(a, b)`, `sets.equivalent(a, b)` |
+| Math | `math.greatest(...)`, `math.least(...)`, `math.abs`, `math.ceil`, `math.floor`, `math.round`, `math.sign` |
+| Encoders | `base64.encode(bytes)`, `base64.decode(string)` |
+| Bindings | `cel.bind(name, value, body)`: name an intermediate value once |
+| Regex | `regex.extract`, `regex.extractAll`, `regex.replace` (plus `string.matches(re)` from the standard library) |
+| Two-variable comprehensions | `m.all(k, v, ...)`, `m.exists(k, v, ...)`, `m.transformMap(k, v, ...)` |
+| Optional types | `x.?field`, `x[?key]`, `.orValue(d)`, `.hasValue()`, `.value()` |
+| Timestamps and durations | `timestamp('2026-10-14T03:00:00Z')`, `duration('45m')`, `ts + dur`, `ts1 - ts2`, `ts < ts2`, `ts.getHours()`, `dur.getMinutes()` |
+
+Evaluation is **cost-bounded**: one expression may do at most 1,000,000 units of work (about one
+per operation or per element a comprehension visits), and `parseJson`, `json.decode` and `toJson`
+are charged by the size of their text. An expression over the limit fails with
+`cost limit exceeded`; narrow the data it loops over.
+
+#### `json.decode(string)`
+
+Parses JSON without failing: the value as an optional, or `optional.none()` when the text is empty
+or is not exactly one JSON value. Use it on a node's stdout, which is often "not JSON yet" when a
+tool printed an error. `parseJson` is the strict form: bad input fails the step. Both keep JSON
+integers as integers (`225976313` stays `225976313`, not `2.25976313e+08`), and both refuse text
+over 8 MiB.
+
+```yaml
+status: "{{ json.decode(nodes.start.stdout).?status.orValue('error') }}"
+```
+
+### Logic a script usually carries
+
+These replace the data logic of a bash helper in a workflow, as a `compute` node's outputs or in a
+`condition`. Each is tested (`internal/workflow/cel/helper_logic_test.go`).
+
+| Need | Expression |
+|------|------------|
+| Has a label | `'agent:ready' in inputs.labels` |
+| Has any of several | `sets.intersects(inputs.labels, ['skip-review', 'wip'])` |
+| Text carries our marker | `inputs.body.contains('<!-- autopilot')` |
+| Valid repo from an allowlist | `['org/a', 'org/b'].exists(r, r == inputs.repo)` |
+| Positive integer id | `inputs.num.matches('^[1-9][0-9]{0,9}$')` |
+| Safe run id (no shell characters) | `inputs.run.matches('^[A-Za-z0-9._:-]{1,128}$')` |
+| Hex fingerprint | `inputs.fp.matches('^[0-9a-fA-F]{6,64}$')` |
+| Lease still live | `timestamp(inputs.expires) > timestamp(now())` |
+| Lease expiry, TTL from now | `string(timestamp(now()) + duration('45m'))` |
+| Minutes left on a lease | `int((timestamp(inputs.expires) - timestamp(now())).getMinutes())` |
+| Expires within 15 minutes | `timestamp(inputs.expires) - timestamp(now()) < duration('15m')` |
+| Read a JSON field, tolerantly | `json.decode(nodes.start.stdout).?status.orValue('error')` |
+| Size label from additions + deletions | `inputs.adds + inputs.dels < 60 ? 'size:S' : (inputs.adds + inputs.dels < 400 ? 'size:M' : 'size:L')` |
+| Map an alert's service to a repo | `cel.bind(svc, inputs.service.lowerAscii(), svc.matches('^(reliant-)?(api-server\|temporal-worker\|daemon)$') ? 'org/reliant' : (svc.matches('^forge($\|[-_])') ? 'org/forge' : 'org/control-plane'))` |
+| Earliest held lease (oldest, then lowest id) | `cel.bind(held, inputs.leases.filter(l, l.state == 'held'), cel.bind(first, held.map(l, l.created_at).sort()[0], held.filter(l, l.created_at == first).sortBy(l, l.id)[0].run))` |
+| Earliest expiry among held leases | `inputs.leases.filter(l, l.state == 'held').map(l, timestamp(l.expires)).sort()[0]` |
+
+(In a markdown table the `|` of a regex alternation is escaped as `\|`; write a plain `|` in YAML.)
+
+Chain several of these in one `compute` node (see [Nodes](/reference/nodes)).
+
+### Testing an expression
+
+Try an expression, a filter or an input mapping without running the workflow:
+
+```bash
+# A trigger filter against the payload GitHub declares for issues.opened
+reliant workflow eval --integration github --event issues.opened --scope trigger \
+  "!('wontfix' in trigger.payload.data.issue.labels)"
+
+# Override just the fields the expression reads
+reliant workflow eval --integration github --event issues.opened \
+  --trigger-payload '{"data":{"issue":{"number":42}}}' "Triage #{{ trigger.payload.data.issue.number }}"
+
+# Dry-run every declared trigger of a workflow against a sample event
+reliant workflow validate triage.yaml --trigger-payload @event.json
+```
+
+It prints the value and its CEL type, or the error with its phase (`syntax`, `compile`, `eval`) and
+position. A read the integration's declared payload rules out is reported too, because a filter
+that passes on a sample can still fail on a real event. Agents get the same thing as the
+`cel_eval` tool.
 
 ### Response Tool Data Access
 

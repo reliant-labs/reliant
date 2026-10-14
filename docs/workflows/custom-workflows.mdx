@@ -234,6 +234,47 @@ Nodes are the execution units. Each node has an `id` and a type that determines 
   command: npm test
 ```
 
+**Compute nodes** turn CEL into named values inside the workflow: no model, no shell, no worker.
+Use one for deterministic logic (a label check, a size bucket, a lease expiry, parsing the JSON a
+command printed) instead of a script:
+
+```yaml
+name: size-the-change
+inputs:
+  adds: {type: integer, default: 40}
+  dels: {type: integer, default: 30}
+  labels: {type: array, default: ["agent:ready"]}
+entry: [diffstat]
+nodes:
+  - id: diffstat
+    type: run
+    command: "echo '{\"status\":\"ready\"}'"
+  - id: facts
+    type: compute
+    outputs:
+      size: "{{ inputs.adds + inputs.dels < 60 ? 'size:S' : (inputs.adds + inputs.dels < 400 ? 'size:M' : 'size:L') }}"
+      ready: "{{ 'agent:ready' in inputs.labels }}"            # a pure {{ }} keeps its type: a bool
+      status: "{{ json.decode(nodes.diffstat.stdout).?status.orValue('error') }}"
+      lease_until: "{{ string(timestamp(now()) + duration('45m')) }}"
+  - id: report
+    type: save_message
+    condition: "nodes.facts.ready == true"
+    args:
+      role: assistant
+      content: "{{ nodes.facts.size }} change, status {{ nodes.facts.status }}"
+edges:
+  - from: diffstat
+    default: facts
+  - from: facts
+    default: report
+```
+
+Outputs are read as `nodes.<id>.<name>`; validation checks the names. Their values are dynamically typed, so a boolean output used as a `condition` is compared: `nodes.facts.ready == true`. A value that is exactly one
+`{{ }}` keeps its type; text around it makes a string; a non-string value is a literal. Outputs
+cannot read each other, so chain two compute nodes when one feeds the next. A failing expression
+fails the node. In a scenario a compute node needs no mock event. The expressions it can use are
+listed in [CEL expressions](/reference/cel-expressions).
+
 **Loop nodes** repeat a sub-workflow while a condition is true:
 
 ```yaml

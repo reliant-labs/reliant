@@ -180,6 +180,36 @@ Two syntax modes:
 
 Always use ` + "`has()`" + ` or safe navigation (` + "`object.?field`" + `) before accessing optional fields.
 
+**Template rules.** A ` + "`{{ }}`" + ` is read as CEL, so a brace inside a string literal is data
+(` + "`{{ x.startsWith('{') }}`" + ` works) and a newline inside it is whitespace (a folded ` + "`>-`" + ` scalar is fine). A ` + "`{{`" + `
+that never closes, an empty ` + "`{{ }}`" + ` and an expression that does not parse are validation errors with the
+field path and line/column, never literal text; write a literal ` + "`{{`" + ` as ` + "`{{ '{{' }}`" + `. Raw-CEL fields
+(` + "`condition`" + `, ` + "`while`" + `, a trigger ` + "`filter`" + `) take no ` + "`{{ }}`" + `. Inside an inline ` + "`type: workflow`" + ` body, templates are
+evaluated in the BODY's scope when it runs (its own ` + "`inputs`" + ` and ` + "`nodes`" + `), not the parent's.
+
+**Deterministic logic belongs in the workflow, not a script.** Use a ` + "`type: compute`" + ` node (below) for
+labels, size buckets, lease expiry, id validation and parsing a node's JSON stdout. Expressions have
+Strings, Lists, Sets, Math, Encoders, Bindings, Regex, optional types, timestamps and durations, and
+` + "`json.decode(s)`" + ` (tolerant: an optional, ` + "`.?status.orValue('error')`" + `) beside the strict ` + "`parseJson(s)`" + `. Evaluation is
+cost-bounded (a runaway expression fails with ` + "`cost limit exceeded`" + `). The CEL reference has a table of
+worked helper expressions. **Test an expression with ` + "`cel_eval`" + ` before writing it into a workflow.**
+
+### Compute node
+
+` + "`type: compute`" + ` computes named outputs from CEL in the workflow: no model, no shell, no worker, no mock needed in a
+scenario. ` + "`outputs:`" + ` maps a name to a value; a value that is exactly one ` + "`{{ }}`" + ` keeps its type, text around it makes a
+string, a non-string is a literal. Read them as ` + "`nodes.<id>.<name>`" + ` (validation checks the names; values are dyn, so compare a boolean output in a ` + "`condition`" + `: ` + "`nodes.facts.ready == true`" + `). Outputs cannot
+read each other: chain two compute nodes. A failing expression fails the node.
+
+` + "```yaml" + `
+- id: facts
+  type: compute
+  outputs:
+    size: "{{ inputs.adds + inputs.dels < 60 ? 'size:S' : 'size:M' }}"
+    ready: "{{ 'agent:ready' in inputs.labels }}"
+    status: "{{ json.decode(nodes.start.stdout).?status.orValue('error') }}"
+` + "```" + `
+
 ### Threading
 
 Modes: ` + "`inherit`" + ` (default), ` + "`new`" + `, ` + "`fork`" + `
@@ -326,6 +356,10 @@ triggers:
     schedule: {cron: ["0 9 * * 1-5"], timezone: America/New_York}   # 5-field cron, or interval: 1h
   - name: deploy-hook
     webhook: {}                     # POST <api>/hooks/<trigger id>; add hmac: {...} to verify signatures
+  - name: alertmanager
+    webhook: {}
+    dedupe_key: "{{ trigger.payload.body.groupKey }}:{{ trigger.payload.body.status }}"   # see below
+    dedupe_window: 4h
   - name: after-review-fails
     workflow_event: {workflows: [code-review], outcomes: [failed]}  # finished | failed | blocked
 entry: [triage]
@@ -341,6 +375,21 @@ over the activation's params (activation refuses a param it would override).
 **` + bt + `prompt` + bt + `** is the message every run the trigger starts begins from, a ` + bt + `{{ }}` + bt + ` template over ` + bt + `trigger` + bt + ` like
 ` + bt + `inputs` + bt + `. Write it so activating needs no prompt: an activation's own ` + bt + `message` + bt + ` overrides it, and with
 neither, activation is refused. The event is still attached after it as untrusted data.
+
+**` + bt + `dedupe_key` + bt + `** (webhook triggers only) is a ` + bt + `{{ }}` + bt + ` template over ` + bt + `trigger` + bt + ` that names the event a delivery is about. Use
+it for a sender with no idempotency header, such as Alertmanager, which re-sends a group with a changed body: the
+default key (an idempotency header, else the body hash within one minute) would make every repeat a new run. Deliveries
+whose keys render the same within one ` + bt + `dedupe_window` + bt + ` are ONE event (the first starts a run; the rest are recorded as
+duplicates). The window is a fixed UTC-aligned clock bucket, default 1h, at most 24h, so it is the longest a repeat is
+suppressed, not a sliding guarantee. A key that cannot render for a delivery falls back to the default key. It needs a
+` + bt + `{{ }}` + bt + `, and ` + bt + `dedupe_window` + bt + ` needs a ` + bt + `dedupe_key` + bt + `.
+
+**Test a trigger before activating it.** ` + bt + `cel_eval` + bt + ` with ` + bt + `integration` + bt + ` + ` + bt + `event` + bt + ` generates ` + bt + `trigger.payload` + bt + ` from the payload that
+event declares (add ` + bt + `trigger_payload` + bt + ` to override only the fields your expression reads), and ` + bt + `scope: trigger` + bt + ` gives a
+filter's, inputs mapping's or prompt's view (only ` + bt + `trigger` + bt + `). It returns the value and its type, or the error with its
+phase and position, plus ` + bt + `findings` + bt + ` for reads the declared payload rules out. Do this instead of activating and waiting
+for an event. ` + bt + `reliant workflow eval` + bt + ` is the same on the command line, and ` + bt + `reliant workflow validate --trigger-payload` + bt + `
+dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a sample event.
 
 **Chat is a trigger too, on by default.** Set top-level ` + bt + `automation_only: true` + bt + ` for a workflow only its
 ` + bt + `triggers:` + bt + ` should start: chat pickers stop offering it and starting it from a chat is refused
@@ -428,7 +477,7 @@ func generateAvailableTools() string {
 
 Granted by ` + "`tag:workflow`" + ` — no ` + "`load_tool`" + ` needed in a workflow-building chat. All take the
 required ` + "`id`" + ` (UUID/slug/name) described above except ` + "`create_workflow`" + `, which mints one, and
-the discovery/reference tools (` + "`list_workflows`" + `, ` + "`list_presets`" + `, ` + "`get_preset`" + `, ` + "`get_schema`" + `, ` + "`get_cel_reference`" + `, ` + "`get_workflow_suggestions`" + `).
+the discovery/reference tools (` + "`list_workflows`" + `, ` + "`list_presets`" + `, ` + "`get_preset`" + `, ` + "`get_schema`" + `, ` + "`get_cel_reference`" + `, ` + "`cel_eval`" + `, ` + "`get_workflow_suggestions`" + `).
 
 | Tool | Purpose |
 |------|---------|
@@ -438,6 +487,7 @@ the discovery/reference tools (` + "`list_workflows`" + `, ` + "`list_presets`" 
 | ` + "`write_workflow`" + ` | Full workflow rewrite |
 | ` + "`get_schema`" + ` | Get full field documentation for any node/input/shared type |
 | ` + "`get_cel_reference`" + ` | Authoritative CEL reference (namespaces, functions, types) |
+| ` + "`cel_eval`" + ` | Evaluate a CEL expression or template against a sample trigger (generated from an integration event's declared payload), inputs and node outputs: value and type, or a precise error. Test a filter in one call |
 | ` + "`search_integrations`" + ` | Find an integration action ref (GitHub, Slack, HTTP, ...) for a ` + "`type: action`" + ` node's ` + "`uses:`" + ` |
 | ` + "`get_integration_schema`" + ` | Read one integration action's params (` + "`with:`" + `) and output (` + "`nodes.<id>.data`" + `) schemas |
 | ` + "`activate_trigger`" + ` | Activate a trigger the workflow declares, for the user (project, daemon, connection); returns its id, and a webhook's URL and one-time token |

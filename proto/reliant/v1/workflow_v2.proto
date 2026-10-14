@@ -743,7 +743,7 @@ message ComputeArgs {
   option (node_meta) = {
     node_type: "compute"
     display_name: "Compute"
-    description: "Compute named values from CEL expressions: no model, no shell"
+    description: "Compute named values from CEL expressions: no model, no shell, no worker round trip. Each output is {{ expr }} (or a literal); a value that is exactly one {{ }} keeps its type. Read them as nodes.<id>.<name>. Outputs cannot read each other: chain two compute nodes when one feeds the next. A failing expression fails the node. Use it for deterministic logic (labels, sizes, expiry, parsing a node's JSON stdout) instead of a script"
     is_structural: true
     category: "utility"
     icon: "Calculator"

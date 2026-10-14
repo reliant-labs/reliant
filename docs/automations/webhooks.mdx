@@ -51,6 +51,32 @@ The token is stored hashed and shown once. If it leaks, **rotate** it from the a
 
 Deliveries are de-duplicated so a sender's retry does not start a second run. The key is the first of `Idempotency-Key`, `X-Idempotency-Key`, `X-Request-Id` or `X-Delivery-Id` that you send. With none, an identical body within the same minute counts as a retry.
 
+### Deduplicating by what the event is about
+
+A sender with no idempotency header, such as Alertmanager, re-sends the same alert group on every `repeat_interval`, with a body that has changed, so the default key counts each repeat as a new event. A workflow that declares the webhook can name the event itself:
+
+```yaml
+triggers:
+  - name: alertmanager
+    webhook: {}
+    dedupe_key: "{{ trigger.payload.body.groupKey }}:{{ trigger.payload.body.status }}"
+    dedupe_window: 4h
+```
+
+`dedupe_key` is a template over `trigger`, the same root a filter reads. It replaces the header-or-body default for this trigger. Deliveries that render the same key within one `dedupe_window` are **one event**: the first starts a run, and the rest are recorded in the automation's history as duplicates and start nothing. Here a re-sent `firing` notification for a group is one run, while its `resolved` notification (a different key) is another.
+
+The window is explicit:
+
+- **Default 1 hour, at most 24 hours** (at least one second). Write it as a duration: `30m`, `4h`.
+- It is a **fixed clock bucket** aligned to UTC, not a sliding window. Two deliveries that straddle a bucket boundary are two events, so the window is the *longest* a repeat can be suppressed, and may be shorter. An alert that is still firing after the window is reported again, which is usually what you want.
+- It needs a `dedupe_key`, and applies to webhook triggers only. Integration, schedule and workflow-event triggers already dedupe by their own event id.
+
+A key that cannot be rendered for a delivery (the payload has no `groupKey`, or it renders empty) falls back to the default key for that delivery, so a key that does not fit the payload never drops or merges events. Save-time validation checks that the template compiles, has a `{{ }}`, and that the window is a duration in range. To see what a key renders to before you activate anything:
+
+```bash
+reliant workflow validate alerts.yaml --trigger-payload '{"body":{"groupKey":"{}:{alertname=\"HighLatency\"}","status":"firing"}}'
+```
+
 ## Testing
 
 Send a request with `curl`, then read the result in the automation's history, which records each delivery and what it did:

@@ -87,6 +87,18 @@ Do's and don'ts distilled from every builtin workflow.
 
 **Don't** send mechanical check failures to a reviewer. If lint/test/build fail, short-circuit past review and loop back to implement — reviewing broken builds wastes context.
 
+## Deterministic Logic
+
+**Do** put pure data logic in the workflow with `type: compute` (named outputs from CEL: no model, no shell, no worker): label checks, size buckets, lease and expiry arithmetic, id and regex validation, picking the earliest of a list, parsing a node's JSON stdout with `json.decode(...).?field.orValue(...)`. It is typed, checked by validation, needs no scenario mock, and its result is visible in the run.
+
+**Do** test an expression or a trigger filter with `cel_eval` (or `reliant workflow eval`) before writing it in; give it `integration` + `event` and the trigger payload is generated from the event's declared schema. `reliant workflow validate --trigger-payload` dry-runs every declared trigger.
+
+**Do** let a `run` node do only what needs a machine (git, build, test); decide what its output MEANS in a `compute` node and a `condition`, not in the script.
+
+**Don't** write a bash helper for logic CEL can express, and don't build a single-pass loop just to get a computed `outputs:` block: that is what `compute` is for.
+
+**Don't** put `{{ }}` in `condition` / `while` / a trigger `filter` (raw CEL), and don't rely on a malformed `{{` being passed through as text: it is a validation error.
+
 ## Input Design
 
 **Do** use `ui: toolbar` for frequently adjusted inputs (mode, ask, model). Use `ui: hidden` for plumbing (system_prompt, passthrough inputs).
