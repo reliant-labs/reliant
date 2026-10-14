@@ -9,6 +9,12 @@ import (
 
 func newForgeCmd() *cobra.Command {
 	root := forgecli.NewRootCmd()
+	// forge's command carries its own Version line but no template, so cobra
+	// resolves the template up the tree and finds reliant's, which renders an
+	// annotation only reliant's root has: `reliant forge --version` printed
+	// nothing and exited 0.
+	root.SetVersionTemplate(`{{with .DisplayName}}{{printf "%s " .}}{{end}}{{printf "version %s" .Version}}
+`)
 	// `reliant forge …` is signed in wherever Reliant is: point forge's
 	// credential helper at this binary before any forge command runs. Done
 	// in the hook, not here — this constructor runs for EVERY reliant

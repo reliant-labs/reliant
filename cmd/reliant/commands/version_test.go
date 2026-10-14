@@ -124,3 +124,51 @@ func TestVersionTextReportsDirtyState(t *testing.T) {
 		})
 	}
 }
+
+// `reliant forge --version` printed nothing and exited 0: forge's command has no
+// version template of its own, so cobra inherited reliant's, which renders an
+// annotation only the reliant root carries.
+func TestForgeVersionFlagPrintsTheForgeVersionLine(t *testing.T) {
+	withBuildInfo(t, "1.2.3", "abc1234", "2026-01-01")
+
+	forge, _, err := NewRootCmd().Find([]string{"forge"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := forge.Version
+	if want == "" {
+		t.Fatal("forge command has no Version; --version would not exist")
+	}
+
+	var out bytes.Buffer
+	root := NewRootCmd()
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"forge", "--version"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("reliant forge --version: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, want) {
+		t.Errorf("reliant forge --version = %q, want it to contain the forge version %q", got, want)
+	}
+	if !strings.HasPrefix(got, "forge version ") {
+		t.Errorf("reliant forge --version = %q, want it to start with %q", got, "forge version ")
+	}
+	if strings.Contains(got, "commit:") {
+		t.Errorf("reliant forge --version printed reliant's block: %q", got)
+	}
+
+	// reliant's own flag is unchanged.
+	out.Reset()
+	root = NewRootCmd()
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"--version"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out.String(), "reliant version 1.2.3") {
+		t.Errorf("reliant --version = %q", out.String())
+	}
+}
