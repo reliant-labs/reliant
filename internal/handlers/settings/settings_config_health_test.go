@@ -1,4 +1,4 @@
-package services
+package settings
 
 import (
 	"context"
@@ -23,7 +23,7 @@ func TestGetConfigHealth_ReportsStaleReliantKey(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	find := func() *reliantv1.ConfigError {
@@ -61,7 +61,7 @@ func TestGetConfigHealth_HealsLegacyKeyAndReportsOnlyOnFailure(t *testing.T) {
 	defer cleanup()
 	t.Cleanup(func() { drivers.SetReliantKeyHealer(nil) })
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 	reliantError := func() *reliantv1.ConfigError {
 		resp, err := svc.GetConfigHealth(ctx, connect.NewRequest(&reliantv1.GetConfigHealthRequest{}))

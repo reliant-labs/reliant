@@ -22941,6 +22941,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.CreateSettingRequest",
           "OutputTypeFQ": "reliant.v1.CreateSettingResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
@@ -22954,6 +22955,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListSettingsRequest",
           "OutputTypeFQ": "reliant.v1.ListSettingsResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
@@ -22967,6 +22969,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.GetSettingRequest",
           "OutputTypeFQ": "reliant.v1.GetSettingResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
@@ -22980,6 +22983,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.UpdateSettingRequest",
           "OutputTypeFQ": "reliant.v1.UpdateSettingResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
@@ -22993,6 +22997,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.DeleteSettingRequest",
           "OutputTypeFQ": "reliant.v1.DeleteSettingResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
@@ -25764,8 +25769,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "SkillSourceType"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "StreamingService",
@@ -34013,5 +34017,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "ce87970b2eefb8b2a8bb65f2a1c0f5dbcf86740be6758d303620a0b0f93c8a27"
+  "source_hash": "ded0849c9c1799029357c0da0720e85b2af58fa889a510e9f9ae51c6a8ffab10"
 }

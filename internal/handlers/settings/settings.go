@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package settings
 
 import (
 	"context"
@@ -21,7 +21,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
@@ -32,45 +31,9 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/logging"
 
-	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/validation"
 	"github.com/reliant-labs/reliant/internal/workflow"
 )
-
-// SettingsService implements the SettingsService RPC handlers
-type SettingsService struct {
-	reliantv1connect.UnimplementedSettingsServiceHandler
-	database           db.Repository
-	daemonRouter       toolexec.DaemonRouter
-	controlPlaneClient controlplane.Client
-	// exchangeClaudeCode trades a Claude OAuth authorization code for tokens.
-	// A field rather than a direct call so tests can drive CompleteClaudeOAuth
-	// without reaching Anthropic's token endpoint.
-	exchangeClaudeCode func(code, codeVerifier, redirectURI, state string) (*claude.ClaudeTokens, error)
-}
-
-// NewSettingsService creates a new SettingsService
-func NewSettingsService(database db.Repository, daemonRouter toolexec.DaemonRouter) *SettingsService {
-	return &SettingsService{
-		database:           database,
-		daemonRouter:       daemonRouter,
-		controlPlaneClient: controlplane.NewClient(""),
-		exchangeClaudeCode: claude.ExchangeClaudeAuthorizationCode,
-	}
-}
-
-// WithControlPlaneClient replaces the default (local) control-plane client: the
-// server gives it the deployment's, and tests a fake.
-func (s *SettingsService) WithControlPlaneClient(client controlplane.Client) *SettingsService {
-	s.controlPlaneClient = client
-	return s
-}
-
-// WithClaudeCodeExchange overrides the Claude OAuth code exchange. Intended for tests.
-func (s *SettingsService) WithClaudeCodeExchange(exchange func(code, codeVerifier, redirectURI, state string) (*claude.ClaudeTokens, error)) *SettingsService {
-	s.exchangeClaudeCode = exchange
-	return s
-}
 
 // ============================================================================
 // Helper Methods
@@ -93,8 +56,8 @@ func settingToProto(s *db.Setting) *reliantv1.Setting {
 }
 
 // upsertSetting creates or updates a setting
-func (s *SettingsService) upsertSetting(ctx context.Context, userID string, projectID *string, key, value string) error {
-	setting, err := s.database.GetSetting(ctx, userID, projectID, key)
+func (s *Service) upsertSetting(ctx context.Context, userID string, projectID *string, key, value string) error {
+	setting, err := s.deps.Repo.GetSetting(ctx, userID, projectID, key)
 	if err != nil {
 		if !isSettingNotFoundError(err) {
 			return err
@@ -111,13 +74,13 @@ func (s *SettingsService) upsertSetting(ctx context.Context, userID string, proj
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
 		}
-		return s.database.CreateSetting(ctx, newSetting)
+		return s.deps.Repo.CreateSetting(ctx, newSetting)
 	}
 
 	// Setting exists, update it
 	setting.Value = value
 	setting.UpdatedAt = time.Now().UTC()
-	return s.database.UpdateSetting(ctx, setting)
+	return s.deps.Repo.UpdateSetting(ctx, setting)
 }
 
 func isSettingNotFoundError(err error) bool {
@@ -131,7 +94,7 @@ func isSettingNotFoundError(err error) bool {
 }
 
 // validateAPIKey validates an API key for a provider
-func (s *SettingsService) validateAPIKey(ctx context.Context, provider models.Family, apiKey string) (bool, string) {
+func (s *Service) validateAPIKey(ctx context.Context, provider models.Family, apiKey string) (bool, string) {
 	registry := models.MustGetRegistry()
 	providerDefs := registry.ListModelsByProvider(string(provider))
 	if len(providerDefs) == 0 {
@@ -181,7 +144,7 @@ func (s *SettingsService) validateAPIKey(ctx context.Context, provider models.Fa
 // ============================================================================
 
 // CreateSetting creates a new setting
-func (s *SettingsService) CreateSetting(ctx context.Context, req *connect.Request[reliantv1.CreateSettingRequest]) (*connect.Response[reliantv1.CreateSettingResponse], error) {
+func (s *Service) CreateSetting(ctx context.Context, req *connect.Request[reliantv1.CreateSettingRequest]) (*connect.Response[reliantv1.CreateSettingResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.Key == "" {
@@ -213,12 +176,12 @@ func (s *SettingsService) CreateSetting(ctx context.Context, req *connect.Reques
 		UpdatedAt: now,
 	}
 
-	if err := s.database.CreateSetting(ctx, setting); err != nil {
+	if err := s.deps.Repo.CreateSetting(ctx, setting); err != nil {
 		logging.Error("Failed to create setting", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create setting"))
 	}
 
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
 		logging.Warn("Failed to emit config_health refetch after CreateSetting", "error", err)
 	}
 
@@ -228,7 +191,7 @@ func (s *SettingsService) CreateSetting(ctx context.Context, req *connect.Reques
 }
 
 // ListSettings lists all settings for the current user
-func (s *SettingsService) ListSettings(ctx context.Context, req *connect.Request[reliantv1.ListSettingsRequest]) (*connect.Response[reliantv1.ListSettingsResponse], error) {
+func (s *Service) ListSettings(ctx context.Context, req *connect.Request[reliantv1.ListSettingsRequest]) (*connect.Response[reliantv1.ListSettingsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	var projectID *string
@@ -236,7 +199,7 @@ func (s *SettingsService) ListSettings(ctx context.Context, req *connect.Request
 		projectID = req.Msg.ProjectId
 	}
 
-	settings, err := s.database.ListSettings(ctx, userID, projectID)
+	settings, err := s.deps.Repo.ListSettings(ctx, userID, projectID)
 	if err != nil {
 		logging.Error("Failed to list settings", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list settings"))
@@ -254,7 +217,7 @@ func (s *SettingsService) ListSettings(ctx context.Context, req *connect.Request
 }
 
 // GetSetting retrieves a setting by key
-func (s *SettingsService) GetSetting(ctx context.Context, req *connect.Request[reliantv1.GetSettingRequest]) (*connect.Response[reliantv1.GetSettingResponse], error) {
+func (s *Service) GetSetting(ctx context.Context, req *connect.Request[reliantv1.GetSettingRequest]) (*connect.Response[reliantv1.GetSettingResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.Key == "" {
@@ -266,7 +229,7 @@ func (s *SettingsService) GetSetting(ctx context.Context, req *connect.Request[r
 		projectID = req.Msg.ProjectId
 	}
 
-	setting, err := s.database.GetSetting(ctx, userID, projectID, req.Msg.Key)
+	setting, err := s.deps.Repo.GetSetting(ctx, userID, projectID, req.Msg.Key)
 	if err != nil {
 		// Return empty response instead of error for missing settings.
 		// This prevents frontend callers from throwing when a setting
@@ -282,7 +245,7 @@ func (s *SettingsService) GetSetting(ctx context.Context, req *connect.Request[r
 }
 
 // UpdateSetting updates an existing setting
-func (s *SettingsService) UpdateSetting(ctx context.Context, req *connect.Request[reliantv1.UpdateSettingRequest]) (*connect.Response[reliantv1.UpdateSettingResponse], error) {
+func (s *Service) UpdateSetting(ctx context.Context, req *connect.Request[reliantv1.UpdateSettingRequest]) (*connect.Response[reliantv1.UpdateSettingResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.Key == "" {
@@ -294,7 +257,7 @@ func (s *SettingsService) UpdateSetting(ctx context.Context, req *connect.Reques
 		projectID = req.Msg.ProjectId
 	}
 
-	setting, err := s.database.GetSetting(ctx, userID, projectID, req.Msg.Key)
+	setting, err := s.deps.Repo.GetSetting(ctx, userID, projectID, req.Msg.Key)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("setting not found"))
 	}
@@ -307,12 +270,12 @@ func (s *SettingsService) UpdateSetting(ctx context.Context, req *connect.Reques
 	}
 	setting.UpdatedAt = time.Now().UTC()
 
-	if err := s.database.UpdateSetting(ctx, setting); err != nil {
+	if err := s.deps.Repo.UpdateSetting(ctx, setting); err != nil {
 		logging.Error("Failed to update setting", "error", err, "key", req.Msg.Key)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update setting"))
 	}
 
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
 		logging.Warn("Failed to emit config_health refetch after UpdateSetting", "error", err)
 	}
 
@@ -328,7 +291,7 @@ func (s *SettingsService) UpdateSetting(ctx context.Context, req *connect.Reques
 // know which keys already exist. One refetch is emitted for the whole batch
 // rather than one per key — the fan-out this RPC exists to remove would
 // otherwise just reappear on the event side.
-func (s *SettingsService) BatchUpsertSettings(ctx context.Context, req *connect.Request[reliantv1.BatchUpsertSettingsRequest]) (*connect.Response[reliantv1.BatchUpsertSettingsResponse], error) {
+func (s *Service) BatchUpsertSettings(ctx context.Context, req *connect.Request[reliantv1.BatchUpsertSettingsRequest]) (*connect.Response[reliantv1.BatchUpsertSettingsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	var projectID *string
@@ -362,7 +325,7 @@ func (s *SettingsService) BatchUpsertSettings(ctx context.Context, req *connect.
 			UpdatedAt: now,
 		}
 
-		if err := s.database.CreateSetting(ctx, setting); err != nil {
+		if err := s.deps.Repo.CreateSetting(ctx, setting); err != nil {
 			logging.Error("Failed to upsert setting in batch", "error", err, "key", write.GetKey())
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to upsert setting %q", write.GetKey()))
 		}
@@ -371,7 +334,7 @@ func (s *SettingsService) BatchUpsertSettings(ctx context.Context, req *connect.
 	}
 
 	if len(written) > 0 {
-		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
+		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
 			logging.Warn("Failed to emit config_health refetch after BatchUpsertSettings", "error", err)
 		}
 	}
@@ -382,7 +345,7 @@ func (s *SettingsService) BatchUpsertSettings(ctx context.Context, req *connect.
 }
 
 // DeleteSetting deletes a setting by key
-func (s *SettingsService) DeleteSetting(ctx context.Context, req *connect.Request[reliantv1.DeleteSettingRequest]) (*connect.Response[reliantv1.DeleteSettingResponse], error) {
+func (s *Service) DeleteSetting(ctx context.Context, req *connect.Request[reliantv1.DeleteSettingRequest]) (*connect.Response[reliantv1.DeleteSettingResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.Key == "" {
@@ -394,17 +357,17 @@ func (s *SettingsService) DeleteSetting(ctx context.Context, req *connect.Reques
 		projectID = req.Msg.ProjectId
 	}
 
-	setting, err := s.database.GetSetting(ctx, userID, projectID, req.Msg.Key)
+	setting, err := s.deps.Repo.GetSetting(ctx, userID, projectID, req.Msg.Key)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("setting not found"))
 	}
 
-	if err := s.database.DeleteSetting(ctx, setting.ID); err != nil {
+	if err := s.deps.Repo.DeleteSetting(ctx, setting.ID); err != nil {
 		logging.Error("Failed to delete setting", "error", err, "key", req.Msg.Key)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete setting"))
 	}
 
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
 		logging.Warn("Failed to emit config_health refetch after DeleteSetting", "error", err)
 	}
 
@@ -419,10 +382,10 @@ func (s *SettingsService) DeleteSetting(ctx context.Context, req *connect.Reques
 // ============================================================================
 
 // GetShortcuts retrieves user keyboard shortcuts
-func (s *SettingsService) GetShortcuts(ctx context.Context, req *connect.Request[reliantv1.GetShortcutsRequest]) (*connect.Response[reliantv1.GetShortcutsResponse], error) {
+func (s *Service) GetShortcuts(ctx context.Context, req *connect.Request[reliantv1.GetShortcutsRequest]) (*connect.Response[reliantv1.GetShortcutsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	setting, err := s.database.GetSetting(ctx, userID, nil, "shortcuts")
+	setting, err := s.deps.Repo.GetSetting(ctx, userID, nil, "shortcuts")
 	if err != nil {
 		// Return empty shortcuts if not found (frontend will use defaults)
 		return connect.NewResponse(&reliantv1.GetShortcutsResponse{
@@ -436,7 +399,7 @@ func (s *SettingsService) GetShortcuts(ctx context.Context, req *connect.Request
 }
 
 // UpdateShortcuts updates user keyboard shortcuts
-func (s *SettingsService) UpdateShortcuts(ctx context.Context, req *connect.Request[reliantv1.UpdateShortcutsRequest]) (*connect.Response[reliantv1.UpdateShortcutsResponse], error) {
+func (s *Service) UpdateShortcuts(ctx context.Context, req *connect.Request[reliantv1.UpdateShortcutsRequest]) (*connect.Response[reliantv1.UpdateShortcutsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	if err := s.upsertSetting(ctx, userID, nil, "shortcuts", req.Msg.Shortcuts); err != nil {
@@ -451,7 +414,7 @@ func (s *SettingsService) UpdateShortcuts(ctx context.Context, req *connect.Requ
 }
 
 // GetPreferences retrieves user preferences
-func (s *SettingsService) GetPreferences(ctx context.Context, req *connect.Request[reliantv1.GetPreferencesRequest]) (*connect.Response[reliantv1.GetPreferencesResponse], error) {
+func (s *Service) GetPreferences(ctx context.Context, req *connect.Request[reliantv1.GetPreferencesRequest]) (*connect.Response[reliantv1.GetPreferencesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Every preference below lives in the same user-global scope
@@ -468,7 +431,7 @@ func (s *SettingsService) GetPreferences(ctx context.Context, req *connect.Reque
 		"default_auto_approve":  true,
 	}
 
-	allSettings, err := s.database.ListSettings(ctx, userID, nil)
+	allSettings, err := s.deps.Repo.ListSettings(ctx, userID, nil)
 	if err == nil {
 		for _, setting := range allSettings {
 			// ListSettings orders by (key, updated_at), so on the off chance a
@@ -547,7 +510,7 @@ func (s *SettingsService) GetPreferences(ctx context.Context, req *connect.Reque
 }
 
 // UpdatePreferences updates user preferences
-func (s *SettingsService) UpdatePreferences(ctx context.Context, req *connect.Request[reliantv1.UpdatePreferencesRequest]) (*connect.Response[reliantv1.UpdatePreferencesResponse], error) {
+func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[reliantv1.UpdatePreferencesRequest]) (*connect.Response[reliantv1.UpdatePreferencesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	analyticsClient := analytics.GetClientForUser(ctx, userID)
 	changedKeys := make([]string, 0, 8)
@@ -696,7 +659,7 @@ func (s *SettingsService) UpdatePreferences(ctx context.Context, req *connect.Re
 		})
 	}
 
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 		logging.Warn("Failed to emit config_health refetch after UpdatePreferences", "error", err)
 	}
 
@@ -707,7 +670,7 @@ func (s *SettingsService) UpdatePreferences(ctx context.Context, req *connect.Re
 }
 
 // SetHiddenItem toggles the hidden state of a workflow or preset
-func (s *SettingsService) SetHiddenItem(ctx context.Context, req *connect.Request[reliantv1.SetHiddenItemRequest]) (*connect.Response[reliantv1.SetHiddenItemResponse], error) {
+func (s *Service) SetHiddenItem(ctx context.Context, req *connect.Request[reliantv1.SetHiddenItemRequest]) (*connect.Response[reliantv1.SetHiddenItemResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Validate item type
@@ -723,7 +686,7 @@ func (s *SettingsService) SetHiddenItem(ctx context.Context, req *connect.Reques
 	// Update visibility override
 	// hidden=true means is_visible=false, hidden=false means is_visible=true
 	isVisible := !req.Msg.Hidden
-	if err := s.database.SetVisibilityOverride(ctx, userID, int32(req.Msg.ItemType), req.Msg.Slug, isVisible); err != nil {
+	if err := s.deps.Repo.SetVisibilityOverride(ctx, userID, int32(req.Msg.ItemType), req.Msg.Slug, isVisible); err != nil {
 		logging.Error("Failed to set visibility override", "error", err, "type", req.Msg.ItemType, "slug", req.Msg.Slug)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update hidden state"))
 	}
@@ -741,11 +704,11 @@ func (s *SettingsService) SetHiddenItem(ctx context.Context, req *connect.Reques
 
 // getEffectiveHiddenItems computes the list of hidden items for a user.
 // This combines system defaults (items hidden by default) with user overrides.
-func (s *SettingsService) getEffectiveHiddenItems(ctx context.Context, userID string, itemType int32) ([]string, error) {
+func (s *Service) getEffectiveHiddenItems(ctx context.Context, userID string, itemType int32) ([]string, error) {
 	hiddenSet := make(map[string]bool)
 
 	// Start with items hidden by default
-	defaults, err := s.database.ListHiddenItemDefaults(ctx, itemType)
+	defaults, err := s.deps.Repo.ListHiddenItemDefaults(ctx, itemType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list hidden item defaults: %w", err)
 	}
@@ -754,7 +717,7 @@ func (s *SettingsService) getEffectiveHiddenItems(ctx context.Context, userID st
 	}
 
 	// Apply user overrides
-	overrides, err := s.database.ListVisibilityOverrides(ctx, userID, itemType)
+	overrides, err := s.deps.Repo.ListVisibilityOverrides(ctx, userID, itemType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list visibility overrides: %w", err)
 	}
@@ -781,10 +744,10 @@ func (s *SettingsService) getEffectiveHiddenItems(ctx context.Context, userID st
 // ============================================================================
 
 // GetPrompts retrieves global user prompts
-func (s *SettingsService) GetPrompts(ctx context.Context, req *connect.Request[reliantv1.GetPromptsRequest]) (*connect.Response[reliantv1.GetPromptsResponse], error) {
+func (s *Service) GetPrompts(ctx context.Context, req *connect.Request[reliantv1.GetPromptsRequest]) (*connect.Response[reliantv1.GetPromptsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	setting, err := s.database.GetSetting(ctx, userID, nil, "global.prompts")
+	setting, err := s.deps.Repo.GetSetting(ctx, userID, nil, "global.prompts")
 	if err != nil {
 		// Return empty prompts if not found
 		return connect.NewResponse(&reliantv1.GetPromptsResponse{
@@ -826,7 +789,7 @@ func (s *SettingsService) GetPrompts(ctx context.Context, req *connect.Request[r
 }
 
 // SavePrompts saves global user prompts
-func (s *SettingsService) SavePrompts(ctx context.Context, req *connect.Request[reliantv1.SavePromptsRequest]) (*connect.Response[reliantv1.SavePromptsResponse], error) {
+func (s *Service) SavePrompts(ctx context.Context, req *connect.Request[reliantv1.SavePromptsRequest]) (*connect.Response[reliantv1.SavePromptsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Convert proto prompts to JSON-serializable struct
@@ -859,7 +822,7 @@ func (s *SettingsService) SavePrompts(ctx context.Context, req *connect.Request[
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save prompts"))
 	}
 
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 		logging.Warn("Failed to emit config_health refetch after SavePrompts", "error", err)
 	}
 
@@ -914,11 +877,11 @@ func providerOutputModalities(provider string) []string {
 }
 
 // GetProviderStatuses retrieves configuration status of all providers
-func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.Request[reliantv1.GetProviderStatusesRequest]) (*connect.Response[reliantv1.GetProviderStatusesResponse], error) {
+func (s *Service) GetProviderStatuses(ctx context.Context, req *connect.Request[reliantv1.GetProviderStatusesRequest]) (*connect.Response[reliantv1.GetProviderStatusesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Get all API keys from dedicated table
-	keys, err := s.database.GetProviderAPIKeys(ctx, userID)
+	keys, err := s.deps.Repo.GetProviderAPIKeys(ctx, userID)
 	if err != nil {
 		logging.Error("Failed to get provider API keys", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get provider statuses"))
@@ -970,7 +933,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 		// Claude uses OAuth tokens persisted by Reliant.
 		switch provider {
 		case "claude":
-			tokens, tokenErr := s.database.GetClaudeAuthTokens(ctx, userID)
+			tokens, tokenErr := s.deps.Repo.GetClaudeAuthTokens(ctx, userID)
 			if tokenErr != nil {
 				logging.Warn("Failed to load Claude auth tokens", "error", tokenErr)
 			}
@@ -994,7 +957,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 			// Don't set MaskedKey for Claude - no API key to display
 		case "codex":
 			// Codex uses OAuth tokens persisted by Reliant.
-			tokens, tokenErr := s.database.GetCodexAuthTokens(ctx, userID)
+			tokens, tokenErr := s.deps.Repo.GetCodexAuthTokens(ctx, userID)
 			if tokenErr != nil {
 				logging.Warn("Failed to load Codex auth tokens", "error", tokenErr)
 			}
@@ -1014,7 +977,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 			// expiry is stored (Google's token is opaque), and the transport
 			// refreshes it, so an expired token with a refresh token still
 			// counts as connected — the same rule Claude uses.
-			tokens, tokenErr := s.database.GetAntigravityAuthTokens(ctx, userID)
+			tokens, tokenErr := s.deps.Repo.GetAntigravityAuthTokens(ctx, userID)
 			if tokenErr != nil {
 				logging.Warn("Failed to load Antigravity auth tokens", "error", tokenErr)
 			}
@@ -1031,7 +994,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 			// Don't set MaskedKey for Antigravity - no API key to display
 		case "copilot":
 			// Copilot uses GitHub device-flow OAuth tokens persisted by Reliant.
-			tokens, tokenErr := s.database.GetCopilotAuthTokens(ctx, userID)
+			tokens, tokenErr := s.deps.Repo.GetCopilotAuthTokens(ctx, userID)
 			if tokenErr != nil {
 				logging.Warn("Failed to load Copilot auth tokens", "error", tokenErr)
 			}
@@ -1075,7 +1038,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 }
 
 // UpdateProviderAPIKey updates or deletes an API key for a provider
-func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect.Request[reliantv1.UpdateProviderAPIKeyRequest]) (*connect.Response[reliantv1.UpdateProviderAPIKeyResponse], error) {
+func (s *Service) UpdateProviderAPIKey(ctx context.Context, req *connect.Request[reliantv1.UpdateProviderAPIKeyRequest]) (*connect.Response[reliantv1.UpdateProviderAPIKeyResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	provider := req.Msg.Provider
 	analyticsClient := analytics.GetClientForUser(ctx, userID)
@@ -1088,7 +1051,7 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 
 		// Also fire api_key_configured for connect/update actions
 		if action == "connected" || action == "updated" {
-			existingKeys, err := s.database.GetProviderAPIKeys(ctx, userID)
+			existingKeys, err := s.deps.Repo.GetProviderAPIKeys(ctx, userID)
 			totalProviders := 0
 			if err == nil {
 				for _, v := range existingKeys {
@@ -1128,18 +1091,18 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("claude does not use manual API keys; use Login with Claude in Settings"))
 		}
 
-		if err := s.database.DeleteClaudeAuthTokens(ctx, userID); err != nil {
+		if err := s.deps.Repo.DeleteClaudeAuthTokens(ctx, userID); err != nil {
 			logging.Error("Failed to delete Claude auth tokens", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Claude"))
 		}
 
-		if err := s.database.DeleteProviderAPIKey(ctx, userID, "claude"); err != nil {
+		if err := s.deps.Repo.DeleteProviderAPIKey(ctx, userID, "claude"); err != nil {
 			logging.Warn("Failed to remove Claude provider marker", "error", err)
 		}
 
 		trackProviderEvent("disconnected", "oauth")
 
-		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 			logging.Warn("Failed to emit config_health refetch after Claude disconnect", "error", err)
 		}
 
@@ -1154,17 +1117,17 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("codex does not use manual API keys. Use Login with Codex in Settings"))
 		}
 
-		if err := s.database.DeleteCodexAuthTokens(ctx, userID); err != nil {
+		if err := s.deps.Repo.DeleteCodexAuthTokens(ctx, userID); err != nil {
 			logging.Error("Failed to delete Codex auth tokens", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Codex"))
 		}
-		if err := s.database.DeleteProviderAPIKey(ctx, userID, "codex"); err != nil {
+		if err := s.deps.Repo.DeleteProviderAPIKey(ctx, userID, "codex"); err != nil {
 			logging.Error("Failed to delete codex provider marker", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Codex"))
 		}
 		trackProviderEvent("disconnected", "oauth")
 
-		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 			logging.Warn("Failed to emit config_health refetch after codex disconnect", "error", err)
 		}
 
@@ -1179,17 +1142,17 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("copilot does not use manual API keys. Use Connect GitHub Copilot in Settings"))
 		}
 
-		if err := s.database.DeleteCopilotAuthTokens(ctx, userID); err != nil {
+		if err := s.deps.Repo.DeleteCopilotAuthTokens(ctx, userID); err != nil {
 			logging.Error("Failed to delete Copilot auth tokens", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from GitHub Copilot"))
 		}
-		if err := s.database.DeleteProviderAPIKey(ctx, userID, "copilot"); err != nil {
+		if err := s.deps.Repo.DeleteProviderAPIKey(ctx, userID, "copilot"); err != nil {
 			logging.Error("Failed to delete copilot provider marker", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from GitHub Copilot"))
 		}
 		trackProviderEvent("disconnected", "oauth")
 
-		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 			logging.Warn("Failed to emit config_health refetch after copilot disconnect", "error", err)
 		}
 
@@ -1204,17 +1167,17 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("antigravity does not use manual API keys. Use Login with Antigravity in Settings"))
 		}
 
-		if err := s.database.DeleteAntigravityAuthTokens(ctx, userID); err != nil {
+		if err := s.deps.Repo.DeleteAntigravityAuthTokens(ctx, userID); err != nil {
 			logging.Error("Failed to delete Antigravity auth tokens", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Antigravity"))
 		}
-		if err := s.database.DeleteProviderAPIKey(ctx, userID, antigravity.DriverID); err != nil {
+		if err := s.deps.Repo.DeleteProviderAPIKey(ctx, userID, antigravity.DriverID); err != nil {
 			logging.Error("Failed to delete Antigravity provider marker", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Antigravity"))
 		}
 		trackProviderEvent("disconnected", "oauth")
 
-		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 			logging.Warn("Failed to emit config_health refetch after Antigravity disconnect", "error", err)
 		}
 
@@ -1226,7 +1189,7 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 
 	if len(req.Msg.ApiKey) == 0 {
 		// Delete the API key
-		if err := s.database.DeleteProviderAPIKey(ctx, userID, provider); err != nil {
+		if err := s.deps.Repo.DeleteProviderAPIKey(ctx, userID, provider); err != nil {
 			logging.Error("Failed to delete provider API key", "provider", provider, "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete API key"))
 		}
@@ -1239,14 +1202,14 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 		}
 
 		// Save the API key to dedicated table
-		if err := s.database.SetProviderAPIKey(ctx, userID, provider, req.Msg.ApiKey); err != nil {
+		if err := s.deps.Repo.SetProviderAPIKey(ctx, userID, provider, req.Msg.ApiKey); err != nil {
 			logging.Error("Failed to set provider API key", "provider", provider, "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save API key"))
 		}
 		trackProviderEvent("updated", "api_key")
 	}
 
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 		logging.Warn("Failed to emit config_health refetch after UpdateProviderAPIKey", "error", err)
 	}
 
@@ -1257,12 +1220,12 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 }
 
 // ValidateProviderAPIKey validates an API key for a provider
-func (s *SettingsService) ValidateProviderAPIKey(ctx context.Context, req *connect.Request[reliantv1.ValidateProviderAPIKeyRequest]) (*connect.Response[reliantv1.ValidateProviderAPIKeyResponse], error) {
+func (s *Service) ValidateProviderAPIKey(ctx context.Context, req *connect.Request[reliantv1.ValidateProviderAPIKeyRequest]) (*connect.Response[reliantv1.ValidateProviderAPIKeyResponse], error) {
 	provider := models.Family(req.Msg.Provider)
 	userID := auth.MustGetUserID(ctx)
 
 	if provider == "claude" {
-		tokens, err := s.database.GetClaudeAuthTokens(ctx, userID)
+		tokens, err := s.deps.Repo.GetClaudeAuthTokens(ctx, userID)
 		if err != nil {
 			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
 				Valid:   false,
@@ -1292,7 +1255,7 @@ func (s *SettingsService) ValidateProviderAPIKey(ctx context.Context, req *conne
 	}
 
 	if provider == "codex" {
-		tokens, err := s.database.GetCodexAuthTokens(ctx, userID)
+		tokens, err := s.deps.Repo.GetCodexAuthTokens(ctx, userID)
 		if err != nil {
 			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
 				Valid:   false,
@@ -1318,7 +1281,7 @@ func (s *SettingsService) ValidateProviderAPIKey(ctx context.Context, req *conne
 	}
 
 	if provider == "copilot" {
-		tokens, err := s.database.GetCopilotAuthTokens(ctx, userID)
+		tokens, err := s.deps.Repo.GetCopilotAuthTokens(ctx, userID)
 		if err != nil {
 			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
 				Valid:   false,
@@ -1345,7 +1308,7 @@ func (s *SettingsService) ValidateProviderAPIKey(ctx context.Context, req *conne
 	}), nil
 }
 
-func (s *SettingsService) CompleteCodexOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteCodexOAuthRequest]) (*connect.Response[reliantv1.CompleteCodexOAuthResponse], error) {
+func (s *Service) CompleteCodexOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteCodexOAuthRequest]) (*connect.Response[reliantv1.CompleteCodexOAuthResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	code := strings.TrimSpace(req.Msg.Code)
 	codeVerifier := strings.TrimSpace(req.Msg.CodeVerifier)
@@ -1367,7 +1330,7 @@ func (s *SettingsService) CompleteCodexOAuth(ctx context.Context, req *connect.R
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Codex OAuth: %w", err))
 	}
 
-	if err := s.database.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
+	if err := s.deps.Repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		IDToken:      tokens.IDToken,
@@ -1377,7 +1340,7 @@ func (s *SettingsService) CompleteCodexOAuth(ctx context.Context, req *connect.R
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save Codex credentials"))
 	}
 
-	if err := s.database.SetProviderAPIKey(ctx, userID, "codex", db.ProviderOAuthMarker); err != nil {
+	if err := s.deps.Repo.SetProviderAPIKey(ctx, userID, "codex", db.ProviderOAuthMarker); err != nil {
 		logging.Error("Failed to set Codex provider marker", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect Codex provider"))
 	}
@@ -1388,7 +1351,7 @@ func (s *SettingsService) CompleteCodexOAuth(ctx context.Context, req *connect.R
 		AuthMethod: "oauth",
 	})
 
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 		logging.Warn("Failed to emit config_health refetch after Codex OAuth connect", "error", err)
 	}
 
@@ -1404,7 +1367,7 @@ func (s *SettingsService) CompleteCodexOAuth(ctx context.Context, req *connect.R
 // Unlike CompleteClaudeOAuth there is no state parameter: Google's token
 // endpoint does not require it echoed back. The frontend still generates and
 // verifies state — it just never reaches the backend.
-func (s *SettingsService) CompleteAntigravityOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteAntigravityOAuthRequest]) (*connect.Response[reliantv1.CompleteAntigravityOAuthResponse], error) {
+func (s *Service) CompleteAntigravityOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteAntigravityOAuthRequest]) (*connect.Response[reliantv1.CompleteAntigravityOAuthResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	code := strings.TrimSpace(req.Msg.Code)
 	codeVerifier := strings.TrimSpace(req.Msg.CodeVerifier)
@@ -1426,7 +1389,7 @@ func (s *SettingsService) CompleteAntigravityOAuth(ctx context.Context, req *con
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Antigravity OAuth: %w", err))
 	}
 
-	if err := s.database.SetAntigravityAuthTokens(ctx, userID, db.AntigravityAuthTokens{
+	if err := s.deps.Repo.SetAntigravityAuthTokens(ctx, userID, db.AntigravityAuthTokens{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		ExpiresAt:    tokens.ExpiresAt,
@@ -1437,7 +1400,7 @@ func (s *SettingsService) CompleteAntigravityOAuth(ctx context.Context, req *con
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save Antigravity credentials"))
 	}
 
-	if err := s.database.SetProviderAPIKey(ctx, userID, antigravity.DriverID, db.ProviderOAuthMarker); err != nil {
+	if err := s.deps.Repo.SetProviderAPIKey(ctx, userID, antigravity.DriverID, db.ProviderOAuthMarker); err != nil {
 		logging.Error("Failed to set Antigravity provider marker", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect Antigravity provider"))
 	}
@@ -1448,7 +1411,7 @@ func (s *SettingsService) CompleteAntigravityOAuth(ctx context.Context, req *con
 		AuthMethod: "oauth",
 	})
 
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 		logging.Warn("Failed to emit config_health refetch after Antigravity OAuth connect", "error", err)
 	}
 
@@ -1460,7 +1423,7 @@ func (s *SettingsService) CompleteAntigravityOAuth(ctx context.Context, req *con
 
 // StartCopilotDeviceAuth begins the GitHub Copilot device-authorization flow and
 // returns the user code + verification URI for the client to present.
-func (s *SettingsService) StartCopilotDeviceAuth(ctx context.Context, req *connect.Request[reliantv1.StartCopilotDeviceAuthRequest]) (*connect.Response[reliantv1.StartCopilotDeviceAuthResponse], error) {
+func (s *Service) StartCopilotDeviceAuth(ctx context.Context, req *connect.Request[reliantv1.StartCopilotDeviceAuthRequest]) (*connect.Response[reliantv1.StartCopilotDeviceAuthResponse], error) {
 	// userID is not required to start the flow, but require an authenticated
 	// caller for parity with the other provider handlers.
 	_ = auth.MustGetUserID(ctx)
@@ -1483,7 +1446,7 @@ func (s *SettingsService) StartCopilotDeviceAuth(ctx context.Context, req *conne
 // PollCopilotDeviceAuth performs a single poll of the GitHub device flow. On
 // success it persists the GitHub OAuth token + selected tier and marks the
 // copilot provider as connected.
-func (s *SettingsService) PollCopilotDeviceAuth(ctx context.Context, req *connect.Request[reliantv1.PollCopilotDeviceAuthRequest]) (*connect.Response[reliantv1.PollCopilotDeviceAuthResponse], error) {
+func (s *Service) PollCopilotDeviceAuth(ctx context.Context, req *connect.Request[reliantv1.PollCopilotDeviceAuthRequest]) (*connect.Response[reliantv1.PollCopilotDeviceAuthResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	deviceCode := strings.TrimSpace(req.Msg.DeviceCode)
@@ -1521,7 +1484,7 @@ func (s *SettingsService) PollCopilotDeviceAuth(ctx context.Context, req *connec
 		}
 	}
 
-	if err := s.database.SetCopilotAuthTokens(ctx, userID, db.CopilotAuthTokens{
+	if err := s.deps.Repo.SetCopilotAuthTokens(ctx, userID, db.CopilotAuthTokens{
 		UserID:            userID,
 		GitHubAccessToken: tokens.AccessToken,
 		Tier:              tier,
@@ -1530,7 +1493,7 @@ func (s *SettingsService) PollCopilotDeviceAuth(ctx context.Context, req *connec
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save GitHub Copilot credentials"))
 	}
 
-	if err := s.database.SetProviderAPIKey(ctx, userID, "copilot", db.ProviderOAuthMarker); err != nil {
+	if err := s.deps.Repo.SetProviderAPIKey(ctx, userID, "copilot", db.ProviderOAuthMarker); err != nil {
 		logging.Error("Failed to set Copilot provider marker", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect GitHub Copilot provider"))
 	}
@@ -1545,7 +1508,7 @@ func (s *SettingsService) PollCopilotDeviceAuth(ctx context.Context, req *connec
 		AuthMethod: "oauth",
 	})
 
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 		logging.Warn("Failed to emit config_health refetch after Copilot OAuth connect", "error", err)
 	}
 
@@ -1554,7 +1517,7 @@ func (s *SettingsService) PollCopilotDeviceAuth(ctx context.Context, req *connec
 	}), nil
 }
 
-func (s *SettingsService) CompleteClaudeOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteClaudeOAuthRequest]) (*connect.Response[reliantv1.CompleteClaudeOAuthResponse], error) {
+func (s *Service) CompleteClaudeOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteClaudeOAuthRequest]) (*connect.Response[reliantv1.CompleteClaudeOAuthResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	code := strings.TrimSpace(req.Msg.Code)
 	codeVerifier := strings.TrimSpace(req.Msg.CodeVerifier)
@@ -1571,13 +1534,13 @@ func (s *SettingsService) CompleteClaudeOAuth(ctx context.Context, req *connect.
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("redirect_uri is required"))
 	}
 
-	tokens, err := s.exchangeClaudeCode(code, codeVerifier, redirectURI, state)
+	tokens, err := s.deps.ExchangeClaudeCode(code, codeVerifier, redirectURI, state)
 	if err != nil {
 		logging.Error("Claude OAuth code exchange failed", "error", err)
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Claude OAuth: %w", err))
 	}
 
-	if err := s.database.SetClaudeAuthTokens(ctx, userID, db.ClaudeAuthTokens{
+	if err := s.deps.Repo.SetClaudeAuthTokens(ctx, userID, db.ClaudeAuthTokens{
 		AccessToken:      tokens.AccessToken,
 		RefreshToken:     tokens.RefreshToken,
 		ExpiresAt:        tokens.ExpiresAt,
@@ -1591,7 +1554,7 @@ func (s *SettingsService) CompleteClaudeOAuth(ctx context.Context, req *connect.
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save Claude credentials"))
 	}
 
-	if err := s.database.SetProviderAPIKey(ctx, userID, "claude", db.ProviderOAuthMarker); err != nil {
+	if err := s.deps.Repo.SetProviderAPIKey(ctx, userID, "claude", db.ProviderOAuthMarker); err != nil {
 		logging.Error("Failed to set Claude provider marker", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect Claude provider"))
 	}
@@ -1602,7 +1565,7 @@ func (s *SettingsService) CompleteClaudeOAuth(ctx context.Context, req *connect.
 		AuthMethod: "oauth",
 	})
 
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 		logging.Warn("Failed to emit config_health refetch after Claude OAuth connect", "error", err)
 	}
 
@@ -1620,10 +1583,10 @@ func (s *SettingsService) CompleteClaudeOAuth(ctx context.Context, req *connect.
 // plaintext on every call and revokes this device's previous key in the same
 // transaction — it never re-serves a stored plaintext — so created/rotated
 // come from whether a previous key was replaced, not from comparing strings.
-func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.Request[reliantv1.SyncReliantProviderRequest]) (*connect.Response[reliantv1.SyncReliantProviderResponse], error) {
+func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[reliantv1.SyncReliantProviderRequest]) (*connect.Response[reliantv1.SyncReliantProviderResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if s.controlPlaneClient == nil {
+	if s.deps.ControlPlane == nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("control-plane client not configured"))
 	}
 
@@ -1632,7 +1595,7 @@ func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("missing user JWT for control-plane call"))
 	}
 
-	key, err := s.controlPlaneClient.MintLLMKey(ctx, jwt, controlplane.ReliantProviderKeyName)
+	key, err := s.deps.ControlPlane.MintLLMKey(ctx, jwt, controlplane.ReliantProviderKeyName)
 	if err != nil {
 		logging.Error("Failed to mint Reliant LLM key via control-plane", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to mint Reliant LLM key: %w", err))
@@ -1642,12 +1605,12 @@ func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("control-plane returned an empty Reliant LLM key"))
 	}
 
-	if err := s.database.SetProviderAPIKey(ctx, userID, "reliant", plaintext); err != nil {
+	if err := s.deps.Repo.SetProviderAPIKey(ctx, userID, "reliant", plaintext); err != nil {
 		logging.Error("Failed to persist Reliant provider API key", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to persist Reliant API key"))
 	}
 
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 		logging.Warn("Failed to emit config_health refetch after SyncReliantProvider", "error", err)
 	}
 
@@ -1682,10 +1645,10 @@ func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.
 // ============================================================================
 
 // GetPrivacySettings retrieves user privacy settings
-func (s *SettingsService) GetPrivacySettings(ctx context.Context, req *connect.Request[reliantv1.GetPrivacySettingsRequest]) (*connect.Response[reliantv1.GetPrivacySettingsResponse], error) {
+func (s *Service) GetPrivacySettings(ctx context.Context, req *connect.Request[reliantv1.GetPrivacySettingsRequest]) (*connect.Response[reliantv1.GetPrivacySettingsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	analyticsEnabled, crashReportingEnabled, err := s.database.GetPrivacySettings(ctx, userID)
+	analyticsEnabled, crashReportingEnabled, err := s.deps.Repo.GetPrivacySettings(ctx, userID)
 	if err != nil {
 		logging.Error("Failed to get privacy settings", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get privacy settings"))
@@ -1698,11 +1661,11 @@ func (s *SettingsService) GetPrivacySettings(ctx context.Context, req *connect.R
 }
 
 // UpdatePrivacySettings updates user privacy settings
-func (s *SettingsService) UpdatePrivacySettings(ctx context.Context, req *connect.Request[reliantv1.UpdatePrivacySettingsRequest]) (*connect.Response[reliantv1.UpdatePrivacySettingsResponse], error) {
+func (s *Service) UpdatePrivacySettings(ctx context.Context, req *connect.Request[reliantv1.UpdatePrivacySettingsRequest]) (*connect.Response[reliantv1.UpdatePrivacySettingsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Get current settings
-	analyticsEnabled, crashReportingEnabled, err := s.database.GetPrivacySettings(ctx, userID)
+	analyticsEnabled, crashReportingEnabled, err := s.deps.Repo.GetPrivacySettings(ctx, userID)
 	if err != nil {
 		logging.Error("Failed to get current privacy settings", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update privacy settings"))
@@ -1717,7 +1680,7 @@ func (s *SettingsService) UpdatePrivacySettings(ctx context.Context, req *connec
 	}
 
 	// Save the updated settings
-	if err := s.database.SetPrivacySettings(ctx, userID, analyticsEnabled, crashReportingEnabled); err != nil {
+	if err := s.deps.Repo.SetPrivacySettings(ctx, userID, analyticsEnabled, crashReportingEnabled); err != nil {
 		logging.Error("Failed to save privacy settings", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save privacy settings"))
 	}
@@ -1734,7 +1697,7 @@ func (s *SettingsService) UpdatePrivacySettings(ctx context.Context, req *connec
 }
 
 // TrackPageVisited tracks a page visit for analytics
-func (s *SettingsService) TrackPageVisited(ctx context.Context, req *connect.Request[reliantv1.TrackPageVisitedRequest]) (*connect.Response[reliantv1.TrackPageVisitedResponse], error) {
+func (s *Service) TrackPageVisited(ctx context.Context, req *connect.Request[reliantv1.TrackPageVisitedRequest]) (*connect.Response[reliantv1.TrackPageVisitedResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Get analytics client that respects user's privacy settings
@@ -1757,7 +1720,7 @@ func (s *SettingsService) TrackPageVisited(ctx context.Context, req *connect.Req
 // TrackOnboardingEvent tracks an onboarding flow event for analytics.
 // TODO: Uncomment after running `buf generate` to regenerate proto types.
 //
-// func (s *SettingsService) TrackOnboardingEvent(ctx context.Context, req *connect.Request[reliantv1.TrackOnboardingEventRequest]) (*connect.Response[reliantv1.TrackOnboardingEventResponse], error) {
+// func (s *Service) TrackOnboardingEvent(ctx context.Context, req *connect.Request[reliantv1.TrackOnboardingEventRequest]) (*connect.Response[reliantv1.TrackOnboardingEventResponse], error) {
 // 	userID := auth.MustGetUserID(ctx)
 // 	analyticsClient := analytics.GetClientForUser(ctx, userID)
 //
@@ -1799,7 +1762,7 @@ func (s *SettingsService) TrackPageVisited(ctx context.Context, req *connect.Req
 
 // GetConfigHealth retrieves configuration errors and warnings.
 // Collects errors from preset, workflow, and MCP loading.
-func (s *SettingsService) GetConfigHealth(
+func (s *Service) GetConfigHealth(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetConfigHealthRequest],
 ) (*connect.Response[reliantv1.GetConfigHealthResponse], error) {
@@ -1811,7 +1774,7 @@ func (s *SettingsService) GetConfigHealth(
 	// Credential health is per-user, so it is computed here rather than held in
 	// the process-global collector.
 	if userID, ok := auth.GetUserIDFromContext(ctx); ok {
-		if stale, err := drivers.HasStaleReliantKey(ctx, s.database, userID); err == nil && stale {
+		if stale, err := drivers.HasStaleReliantKey(ctx, s.deps.Repo, userID); err == nil && stale {
 			// Heal first: the message is only true if the replacement failed.
 			if _, configured, healErr := drivers.HealReliantKey(ctx, userID); healErr != nil {
 				errors = append(errors, validation.NewError(validation.CategoryConfig,

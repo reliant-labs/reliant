@@ -1,4 +1,4 @@
-package services
+package settings
 
 import (
 	"context"
@@ -124,7 +124,7 @@ func withoutProvider(credentials map[string]string, provider string) map[string]
 func TestSettingsService_DisconnectingOneProviderLeavesEveryOtherProviderIntact(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 
 	for _, target := range isolationProviders {
 		t.Run(target, func(t *testing.T) {
@@ -155,15 +155,17 @@ func TestSettingsService_CompleteClaudeOAuth_LeavesCodexConnected(t *testing.T) 
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil).WithClaudeCodeExchange(
-		func(code, codeVerifier, redirectURI, state string) (*claude.ClaudeTokens, error) {
+	svc := newTestService(t, Deps{
+		Repo: repo,
+		ExchangeClaudeCode: func(code, codeVerifier, redirectURI, state string) (*claude.ClaudeTokens, error) {
 			return &claude.ClaudeTokens{
 				AccessToken:  "sk-ant-oat01-new-claude-access",
 				RefreshToken: "new-claude-refresh",
 				ExpiresAt:    time.Now().Add(time.Hour),
 				AccountEmail: "user@example.com",
 			}, nil
-		})
+		},
+	})
 
 	// Codex-only before the sign-in (prod's user), and every provider but
 	// Claude (a user with more connected than Codex).

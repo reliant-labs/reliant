@@ -64,6 +64,10 @@
         "rpc_service": "reliant.v1.RunService"
       },
       {
+        "name": "settings",
+        "rpc_service": "reliant.v1.SettingsService"
+      },
+      {
         "name": "streaming",
         "rpc_service": "reliant.v1.StreamingService"
       },

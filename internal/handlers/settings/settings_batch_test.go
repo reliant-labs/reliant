@@ -1,4 +1,4 @@
-package services
+package settings
 
 import (
 	"testing"
@@ -18,7 +18,7 @@ func TestSettingsService_BatchUpsertSettings_WritesAllKeysInOneCall(t *testing.T
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	resp, err := svc.BatchUpsertSettings(ctx, connect.NewRequest(&reliantv1.BatchUpsertSettingsRequest{
@@ -46,7 +46,7 @@ func TestSettingsService_BatchUpsertSettings_ReplacesExistingValues(t *testing.T
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	write := func(value string) {
@@ -74,7 +74,7 @@ func TestSettingsService_BatchUpsertSettings_DefaultsValueTypeToString(t *testin
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	_, err := svc.BatchUpsertSettings(ctx, connect.NewRequest(&reliantv1.BatchUpsertSettingsRequest{
@@ -98,7 +98,7 @@ func TestSettingsService_BatchUpsertSettings_RejectsEmptyKey(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	_, err := svc.BatchUpsertSettings(ctx, connect.NewRequest(&reliantv1.BatchUpsertSettingsRequest{
@@ -120,7 +120,7 @@ func TestSettingsService_BatchUpsertSettings_EmptyBatchIsANoOp(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	resp, err := svc.BatchUpsertSettings(ctx, connect.NewRequest(&reliantv1.BatchUpsertSettingsRequest{}))

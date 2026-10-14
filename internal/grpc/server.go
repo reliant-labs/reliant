@@ -51,6 +51,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
+	"github.com/reliant-labs/reliant/internal/handlers/settings"
 	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/handlers/task"
@@ -59,6 +60,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/tool_call"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
@@ -295,8 +297,16 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("message service: %w", err)
 	}
-	settingsService := services.NewSettingsService(database, router).
-		WithControlPlaneClient(controlplane.NewClient(cfg.ControlPlane.URL))
+	settingsService, err := settings.New(settings.Deps{
+		Logger:             handlerLogger,
+		Config:             handlerConfig,
+		Repo:               database,
+		ControlPlane:       controlplane.NewClient(cfg.ControlPlane.URL),
+		ExchangeClaudeCode: claude.ExchangeClaudeAuthorizationCode,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("settings service: %w", err)
+	}
 	mcpService := services.NewMCPService(database, router)
 	workflowService := services.NewWorkflowService(database, router)
 	scenarioService := services.NewScenarioService(database, router)

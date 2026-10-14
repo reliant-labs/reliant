@@ -1,4 +1,4 @@
-package services
+package settings
 
 import (
 	"context"
@@ -15,6 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// fakeControlPlaneClient is the controlplane.Client the settings tests drive.
+// internal/grpc/services keeps a copy for the Trigger tests until Trigger
+// moves; neither leaves _test.go (research/forge-migration/06-p3b-recipe.md
+// §3.7).
 type fakeControlPlaneClient struct {
 	issueKey       string
 	issueRotated   bool
@@ -59,7 +63,7 @@ func TestSettingsService_SyncReliantProvider_PersistsKeyAndEmitsRefetch(t *testi
 	auth.SetUserJWT(userID, jwt)
 
 	fake := &fakeControlPlaneClient{issueKey: "rlat_abcdef0123456789abcdef0123456789"}
-	svc := NewSettingsService(repo, nil).WithControlPlaneClient(fake)
+	svc := newTestService(t, Deps{Repo: repo, ControlPlane: fake})
 
 	ctx := newSettingsServiceTestContext()
 
@@ -96,7 +100,7 @@ func TestSettingsService_SyncReliantProvider_RotationComesFromControlPlane(t *te
 	require.NoError(t, repo.SetProviderAPIKey(context.Background(), userID, "reliant", "rlat_previous0000000000000000000000000"))
 
 	fake := &fakeControlPlaneClient{issueKey: "rlat_next000000000000000000000000000000", issueRotated: true}
-	svc := NewSettingsService(repo, nil).WithControlPlaneClient(fake)
+	svc := newTestService(t, Deps{Repo: repo, ControlPlane: fake})
 	resp, err := svc.SyncReliantProvider(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.RotatedKey)
@@ -123,7 +127,7 @@ func TestSettingsService_SyncReliantProvider_MissingJWTUnauthenticated(t *testin
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-without-jwt")
 
 	fake := &fakeControlPlaneClient{issueKey: "rlat_should_not_be_used"}
-	svc := NewSettingsService(repo, nil).WithControlPlaneClient(fake)
+	svc := newTestService(t, Deps{Repo: repo, ControlPlane: fake})
 
 	_, err := svc.SyncReliantProvider(ctx, connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
 	require.Error(t, err)
@@ -139,7 +143,7 @@ func TestSettingsService_SyncReliantProvider_ControlPlaneErrorPropagates(t *test
 	auth.SetUserJWT(userID, "test-jwt")
 
 	fake := &fakeControlPlaneClient{issueErr: errors.New("boom")}
-	svc := NewSettingsService(repo, nil).WithControlPlaneClient(fake)
+	svc := newTestService(t, Deps{Repo: repo, ControlPlane: fake})
 
 	_, err := svc.SyncReliantProvider(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
 	require.Error(t, err)

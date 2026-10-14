@@ -1,4 +1,4 @@
-package services
+package settings
 
 import (
 	"context"
@@ -38,7 +38,7 @@ func (r *antigravityDisconnectRepo) EmitUserRefetch(_ context.Context, _ string,
 
 func TestSettingsService_UpdateProviderAPIKey_AntigravityDisconnectRemovesMarkerAndTokens(t *testing.T) {
 	repo := &antigravityDisconnectRepo{}
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	resp, err := svc.UpdateProviderAPIKey(ctx, connect.NewRequest(&reliantv1.UpdateProviderAPIKeyRequest{

@@ -1,4 +1,4 @@
-package services
+package settings
 
 import (
 	"context"
@@ -61,7 +61,7 @@ func TestSettingsService_GetPreferences_ReturnsDefaultsWhenNothingIsStored(t *te
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	resp, err := svc.GetPreferences(ctx, connect.NewRequest(&reliantv1.GetPreferencesRequest{}))
@@ -84,7 +84,7 @@ func TestSettingsService_GetPreferences_ReturnsStoredValues(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	writeUserSetting(t, ctx, repo, "features.streaming_enabled", "false")
@@ -118,7 +118,7 @@ func TestSettingsService_GetPreferences_UnparseableValuesFallBackToDefaults(t *t
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	writeUserSetting(t, ctx, repo, "config.default_mcp_scope", "NOT_A_SCOPE")
@@ -145,7 +145,7 @@ func TestSettingsService_GetPreferences_AdditionalStripsPrefixAndExcludesDedicat
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	writeUserSetting(t, ctx, repo, "preference.theme", "dark")
@@ -169,7 +169,7 @@ func TestSettingsService_GetPreferences_IgnoresProjectScopedRows(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	projectID := "test-project"
@@ -191,7 +191,7 @@ func TestSettingsService_GetPreferences_ReadsSettingsInOneQuery(t *testing.T) {
 	defer cleanup()
 
 	repo := &countingSettingsRepo{Repository: base}
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	writeUserSetting(t, ctx, base, "features.streaming_enabled", "false")

@@ -8,9 +8,6 @@ import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // SettingsService handles user settings and preferences
 service SettingsService {
   // ============================================
@@ -18,18 +15,23 @@ service SettingsService {
   // ============================================
   
   // CreateSetting creates a new setting
+  // forge:custom — an upsert keyed by the caller, project and key, which notifies config health
   rpc CreateSetting(CreateSettingRequest) returns (CreateSettingResponse) {}
   
   // ListSettings lists all settings for the current user
+  // forge:custom — scoped to the caller and an optional project, never a table-wide list
   rpc ListSettings(ListSettingsRequest) returns (ListSettingsResponse) {}
   
   // GetSetting retrieves a setting by key
+  // forge:custom — looks a key up in the caller's scope, and answers an empty response when it is unset
   rpc GetSetting(GetSettingRequest) returns (GetSettingResponse) {}
   
   // UpdateSetting updates an existing setting
+  // forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
   rpc UpdateSetting(UpdateSettingRequest) returns (UpdateSettingResponse) {}
   
   // DeleteSetting deletes a setting by key
+  // forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
   rpc DeleteSetting(DeleteSettingRequest) returns (DeleteSettingResponse) {}
 
   // BatchUpsertSettings writes many settings in one round trip.

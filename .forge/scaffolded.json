@@ -234,6 +234,105 @@
     "internal/handlers/run/handlers_scaffold_start_run_test.go": {
       "scaffolded_at": "2026-10-13T12:25:31Z"
     },
+    "internal/handlers/settings/handlers_scaffold_batch_upsert_settings_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_complete_antigravity_o_auth_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_complete_claude_o_auth_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_complete_codex_o_auth_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_create_setting_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_delete_global_skill_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_delete_setting_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_get_config_health_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_get_installed_skill_definition_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_get_preferences_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_get_privacy_settings_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_get_prompts_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_get_provider_statuses_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_get_setting_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_get_shortcuts_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_install_skill_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_list_installed_skills_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_list_recommended_skills_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_list_settings_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_poll_copilot_device_auth_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_save_prompts_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_set_hidden_item_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_set_skill_enabled_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_start_copilot_device_auth_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_sync_reliant_provider_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_track_onboarding_event_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_track_page_visited_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_update_preferences_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_update_privacy_settings_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_update_provider_api_key_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_update_setting_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_update_shortcuts_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
+    "internal/handlers/settings/handlers_scaffold_validate_provider_api_key_test.go": {
+      "scaffolded_at": "2026-10-14T05:33:36Z"
+    },
     "internal/handlers/streaming/handlers_scaffold_stream_user_updates_test.go": {
       "scaffolded_at": "2026-10-13T14:36:02Z"
     },
@@ -352,6 +451,21 @@
     "internal/handlers/preset/handlers_scaffold_list_presets_for_workflow_test.go",
     "internal/handlers/preset/handlers_scaffold_list_presets_test.go",
     "internal/handlers/preset/handlers_scaffold_update_preset_test.go",
+    "internal/handlers/settings/handlers_scaffold_batch_upsert_settings_test.go",
+    "internal/handlers/settings/handlers_scaffold_complete_claude_o_auth_test.go",
+    "internal/handlers/settings/handlers_scaffold_delete_global_skill_test.go",
+    "internal/handlers/settings/handlers_scaffold_get_config_health_test.go",
+    "internal/handlers/settings/handlers_scaffold_get_installed_skill_definition_test.go",
+    "internal/handlers/settings/handlers_scaffold_get_preferences_test.go",
+    "internal/handlers/settings/handlers_scaffold_get_provider_statuses_test.go",
+    "internal/handlers/settings/handlers_scaffold_install_skill_test.go",
+    "internal/handlers/settings/handlers_scaffold_list_installed_skills_test.go",
+    "internal/handlers/settings/handlers_scaffold_list_recommended_skills_test.go",
+    "internal/handlers/settings/handlers_scaffold_set_skill_enabled_test.go",
+    "internal/handlers/settings/handlers_scaffold_sync_reliant_provider_test.go",
+    "internal/handlers/settings/handlers_scaffold_track_onboarding_event_test.go",
+    "internal/handlers/settings/handlers_scaffold_update_provider_api_key_test.go",
+    "internal/handlers/settings/handlers_scaffold_validate_provider_api_key_test.go",
     "internal/handlers/token/handlers_scaffold_create_token_test.go",
     "internal/handlers/token/handlers_scaffold_exchange_token_test.go",
     "internal/handlers/token/handlers_scaffold_get_git_token_test.go",

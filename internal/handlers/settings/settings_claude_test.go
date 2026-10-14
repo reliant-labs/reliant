@@ -1,4 +1,4 @@
-package services
+package settings
 
 import (
 	"context"
@@ -50,18 +50,18 @@ func (r *claudeTokenRepo) GetProviderAPIKeys(context.Context, string) (map[strin
 	return r.apiKeys, nil
 }
 
-func newClaudeSettingsService(tokens *db.ClaudeAuthTokens) *SettingsService {
-	return NewSettingsService(&claudeTokenRepo{
+func newClaudeSettingsService(t *testing.T, tokens *db.ClaudeAuthTokens) *Service {
+	return newTestService(t, Deps{Repo: &claudeTokenRepo{
 		claudeTokens: tokens,
 		apiKeys:      map[string]string{"claude": "oauth"},
-	}, nil)
+	}})
 }
 
 // claudeStatus runs GetProviderStatuses and returns the Claude entry.
 func claudeStatus(t *testing.T, tokens *db.ClaudeAuthTokens) *reliantv1.ProviderStatus {
 	t.Helper()
 
-	svc := newClaudeSettingsService(tokens)
+	svc := newClaudeSettingsService(t, tokens)
 	resp, err := svc.GetProviderStatuses(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.GetProviderStatusesRequest{}))
 	require.NoError(t, err)
 	return findProviderStatus(t, resp.Msg.Providers, "claude")
@@ -147,7 +147,7 @@ func TestSettingsService_ValidateProviderAPIKey_ClaudeMatchesConfiguredSemantics
 	validate := func(t *testing.T, tokens *db.ClaudeAuthTokens) *reliantv1.ValidateProviderAPIKeyResponse {
 		t.Helper()
 
-		svc := newClaudeSettingsService(tokens)
+		svc := newClaudeSettingsService(t, tokens)
 		resp, err := svc.ValidateProviderAPIKey(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.ValidateProviderAPIKeyRequest{
 			Provider: "claude",
 		}))

@@ -2435,6 +2435,7 @@ export const SkillSourceTypeSchema: GenEnum<SkillSourceType> = /*@__PURE__*/
 export const SettingsService: GenService<{
   /**
    * CreateSetting creates a new setting
+   * forge:custom — an upsert keyed by the caller, project and key, which notifies config health
    *
    * @generated from rpc reliant.v1.SettingsService.CreateSetting
    */
@@ -2445,6 +2446,7 @@ export const SettingsService: GenService<{
   },
   /**
    * ListSettings lists all settings for the current user
+   * forge:custom — scoped to the caller and an optional project, never a table-wide list
    *
    * @generated from rpc reliant.v1.SettingsService.ListSettings
    */
@@ -2455,6 +2457,7 @@ export const SettingsService: GenService<{
   },
   /**
    * GetSetting retrieves a setting by key
+   * forge:custom — looks a key up in the caller's scope, and answers an empty response when it is unset
    *
    * @generated from rpc reliant.v1.SettingsService.GetSetting
    */
@@ -2465,6 +2468,7 @@ export const SettingsService: GenService<{
   },
   /**
    * UpdateSetting updates an existing setting
+   * forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
    *
    * @generated from rpc reliant.v1.SettingsService.UpdateSetting
    */
@@ -2475,6 +2479,7 @@ export const SettingsService: GenService<{
   },
   /**
    * DeleteSetting deletes a setting by key
+   * forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
    *
    * @generated from rpc reliant.v1.SettingsService.DeleteSetting
    */

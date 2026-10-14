@@ -39,19 +39,6 @@ func fileChangeStatusFromString(s string) reliantv1.FileChangeStatus {
 	}
 }
 
-// --- ConfigSeverity ---
-
-func configSeverityFromString(s string) reliantv1.ConfigSeverity {
-	switch s {
-	case "error":
-		return reliantv1.ConfigSeverity_CONFIG_SEVERITY_ERROR
-	case "warning":
-		return reliantv1.ConfigSeverity_CONFIG_SEVERITY_WARNING
-	default:
-		return reliantv1.ConfigSeverity_CONFIG_SEVERITY_UNSPECIFIED
-	}
-}
-
 // --- WorktreeStatus ---
 
 func worktreeStatusFromInt32(v int32) reliantv1.WorktreeStatus {

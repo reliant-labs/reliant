@@ -1,4 +1,4 @@
-package services
+package settings
 
 import (
 	"context"
@@ -52,7 +52,7 @@ func TestSettingsService_UpdateProviderAPIKey_CodexRejectsManualKey(t *testing.T
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
 	_, err := svc.UpdateProviderAPIKey(ctx, connect.NewRequest(&reliantv1.UpdateProviderAPIKeyRequest{
@@ -68,7 +68,7 @@ func TestSettingsService_UpdateProviderAPIKey_CodexDisconnectRemovesMarkerAndTok
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 	userID := "test-user"
 
@@ -102,7 +102,7 @@ func TestSettingsService_ValidateProviderAPIKey_CodexStatusFromPersistedTokens(t
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 	userID := "test-user"
 
@@ -149,7 +149,7 @@ func TestSettingsService_GetProviderStatuses_CodexUsesPersistedTokenExpiry(t *te
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 	userID := "test-user"
 

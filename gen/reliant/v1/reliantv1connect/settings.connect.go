@@ -139,14 +139,19 @@ const (
 // SettingsServiceClient is a client for the reliant.v1.SettingsService service.
 type SettingsServiceClient interface {
 	// CreateSetting creates a new setting
+	// forge:custom — an upsert keyed by the caller, project and key, which notifies config health
 	CreateSetting(context.Context, *connect.Request[v1.CreateSettingRequest]) (*connect.Response[v1.CreateSettingResponse], error)
 	// ListSettings lists all settings for the current user
+	// forge:custom — scoped to the caller and an optional project, never a table-wide list
 	ListSettings(context.Context, *connect.Request[v1.ListSettingsRequest]) (*connect.Response[v1.ListSettingsResponse], error)
 	// GetSetting retrieves a setting by key
+	// forge:custom — looks a key up in the caller's scope, and answers an empty response when it is unset
 	GetSetting(context.Context, *connect.Request[v1.GetSettingRequest]) (*connect.Response[v1.GetSettingResponse], error)
 	// UpdateSetting updates an existing setting
+	// forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
 	UpdateSetting(context.Context, *connect.Request[v1.UpdateSettingRequest]) (*connect.Response[v1.UpdateSettingResponse], error)
 	// DeleteSetting deletes a setting by key
+	// forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
 	DeleteSetting(context.Context, *connect.Request[v1.DeleteSettingRequest]) (*connect.Response[v1.DeleteSettingResponse], error)
 	// BatchUpsertSettings writes many settings in one round trip.
 	//
@@ -635,14 +640,19 @@ func (c *settingsServiceClient) GetConfigHealth(ctx context.Context, req *connec
 // SettingsServiceHandler is an implementation of the reliant.v1.SettingsService service.
 type SettingsServiceHandler interface {
 	// CreateSetting creates a new setting
+	// forge:custom — an upsert keyed by the caller, project and key, which notifies config health
 	CreateSetting(context.Context, *connect.Request[v1.CreateSettingRequest]) (*connect.Response[v1.CreateSettingResponse], error)
 	// ListSettings lists all settings for the current user
+	// forge:custom — scoped to the caller and an optional project, never a table-wide list
 	ListSettings(context.Context, *connect.Request[v1.ListSettingsRequest]) (*connect.Response[v1.ListSettingsResponse], error)
 	// GetSetting retrieves a setting by key
+	// forge:custom — looks a key up in the caller's scope, and answers an empty response when it is unset
 	GetSetting(context.Context, *connect.Request[v1.GetSettingRequest]) (*connect.Response[v1.GetSettingResponse], error)
 	// UpdateSetting updates an existing setting
+	// forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
 	UpdateSetting(context.Context, *connect.Request[v1.UpdateSettingRequest]) (*connect.Response[v1.UpdateSettingResponse], error)
 	// DeleteSetting deletes a setting by key
+	// forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
 	DeleteSetting(context.Context, *connect.Request[v1.DeleteSettingRequest]) (*connect.Response[v1.DeleteSettingResponse], error)
 	// BatchUpsertSettings writes many settings in one round trip.
 	//
