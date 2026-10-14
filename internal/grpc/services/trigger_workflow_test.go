@@ -227,6 +227,24 @@ nodes:
 	assert.Equal(t, "Shared.", resultFor(resp, "bare").Activation.GetMessage())
 }
 
+// The workflow's params are what filters read as activation.params, so one that
+// names no input or has the wrong type is refused for every trigger, and
+// nothing is written.
+func TestEnableWorkflowRefusesBadParamsWithoutWriting(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", enableWorkflowYAML)
+	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
+
+	resp := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.ConnectionIds = map[string]string{"test": conn.ID}
+		r.Params = map[string]*structpb.Value{"nope": structpb.NewStringValue("x")}
+	}))
+
+	assert.False(t, resp.Enabled)
+	assert.Contains(t, resultFor(resp, "nightly").Message, `"nope" is not an input of this workflow`)
+	assert.Empty(t, env.storedTriggers(t))
+}
+
 func resultFor(resp *reliantv1.EnableWorkflowResponse, trigger string) *reliantv1.WorkflowTriggerResult {
 	for _, r := range resp.Results {
 		if r.Trigger == trigger {

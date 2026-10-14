@@ -265,8 +265,8 @@ neither, enabling is refused. The event is still attached after it as untrusted 
 
 **`trigger.activation`** is the activation the event fires for, readable in a `filter`, `inputs`, `prompt` and `dedupe_key` (not in nodes, which read `inputs`):
 `trigger.activation.params.<input>`, `.id`, `.owner.user_id`, and `.owner.github_id` (the GitHub user id of the connection it listens through, a string; empty without one). Use it so one declaration serves many activations instead of pasting
-a repo list into the filter: declare `repos: {type: array, default: []}` as an input and write `filter: "trigger.payload.attributes.repository in trigger.activation.params.repos"`; each activation sets its own
-`params: {repos: [...]}`. `params` holds the workflow's inputs except those this trigger's `inputs` map from the event, with defaults applied and declared types, so an unset list is `[]`.
+a repo list into the filter: declare `repos: {type: array, default: []}` as an input and write `filter: "trigger.payload.attributes.repository in trigger.activation.params.repos"`; whoever enables the workflow fills in
+`repos` in the Enable dialog's inputs (each activation keeps its own). `params` holds the workflow's inputs except those this trigger's `inputs` map from the event, with defaults applied and declared types, so an unset list is `[]`.
 Validation types it from the workflow's inputs: `trigger.activation.params.repo` for a `repos` input is an error when you save. Trust is a filter, not a table: ids are strings, so
 `trigger.sender.verified && (trigger.sender.id == trigger.activation.owner.github_id || trigger.sender.id in trigger.activation.params.trusted_ids)` admits you and the quoted ids in a `trusted_ids` array input.
 
