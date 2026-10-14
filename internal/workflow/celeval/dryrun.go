@@ -25,6 +25,10 @@ type TriggerRun struct {
 	InputErrors []string       `json:"input_errors,omitempty"`
 	Prompt      string         `json:"prompt,omitempty"`
 	PromptError string         `json:"prompt_error,omitempty"`
+	// DedupeKey is the rendered dedupe_key (webhook triggers that declare one),
+	// the text deliveries are grouped by; empty when none is declared.
+	DedupeKey   string `json:"dedupe_key,omitempty"`
+	DedupeError string `json:"dedupe_error,omitempty"`
 	// Findings are reads the integration's declared payload rules out.
 	Findings []string `json:"findings,omitempty"`
 }
@@ -42,6 +46,9 @@ func (r TriggerRun) Errors() []string {
 	}
 	if r.PromptError != "" {
 		out = append(out, prefix+"prompt: "+r.PromptError)
+	}
+	if r.DedupeError != "" {
+		out = append(out, prefix+"dedupe_key: "+r.DedupeError)
 	}
 	for _, f := range r.Findings {
 		out = append(out, prefix+f)
@@ -110,6 +117,15 @@ func DryRunTrigger(wt *reliantv1.WorkflowTrigger, payload, sender map[string]any
 			run.InputErrors = append(run.InputErrors, ierr.Error())
 		} else {
 			run.Inputs = inputs
+		}
+	}
+	if key := wt.GetDedupeKey(); key != "" {
+		if cerr := triggerspec.CompileDedupe(key, wt.GetDedupeWindow()); cerr != nil {
+			run.DedupeError = cerr.Error()
+		} else if rendered, rerr := triggerspec.RenderDedupeKey(key, trigger); rerr != nil {
+			run.DedupeError = rerr.Error()
+		} else {
+			run.DedupeKey = rendered
 		}
 	}
 	if prompt := wt.GetPrompt(); prompt != "" {

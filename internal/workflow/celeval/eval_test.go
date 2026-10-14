@@ -283,3 +283,26 @@ func mustParse(t *testing.T, src string) *reliantv1.Workflow {
 	require.NoError(t, err)
 	return wf
 }
+
+func TestDryRunTrigger_RendersTheDedupeKey(t *testing.T) {
+	wf := mustParse(t, `
+name: dd
+triggers:
+  - name: am
+    webhook: {}
+    dedupe_key: "{{ trigger.payload.body.groupKey }}:{{ trigger.payload.body.status }}"
+    dedupe_window: 2h
+entry: [a]
+nodes:
+  - id: a
+    type: save_message
+    args: {role: assistant, content: x}
+`)
+	run := DryRunTrigger(wf.GetTriggers()[0], map[string]any{"body": map[string]any{"groupKey": "g1", "status": "firing"}}, nil)
+	assert.Empty(t, run.Errors())
+	assert.Equal(t, "g1:firing", run.DedupeKey)
+
+	run = DryRunTrigger(wf.GetTriggers()[0], map[string]any{"body": map[string]any{"status": "firing"}}, nil)
+	require.NotEmpty(t, run.Errors())
+	assert.Contains(t, run.Errors()[0], "dedupe_key")
+}

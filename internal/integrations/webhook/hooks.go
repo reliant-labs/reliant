@@ -252,6 +252,11 @@ func VerifyHMAC(cfg *core.WebhookHMACConfig, secret, body []byte, signature stri
 // idempotency key when it gives one, else the body's hash within a
 // one-minute bucket — so a sender retrying the same body is one event, and
 // the same body sent again later is another.
+//
+// It is the DEFAULT. A trigger whose declaration sets dedupe_key has the
+// intake replace it with a key rendered from the payload
+// (triggers.Intake.declaredDedupeKey), for senders such as Alertmanager that
+// send no idempotency header and repeat the same event with a changed body.
 func deliveryKey(header http.Header, body []byte, now time.Time) string {
 	for _, name := range idempotencyHeaders {
 		if key := strings.TrimSpace(header.Get(name)); key != "" {

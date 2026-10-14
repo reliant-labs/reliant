@@ -59,6 +59,9 @@ type Declaration struct {
 	// Prompt is the declaration's prompt template over `trigger`; empty when
 	// every activation writes its own (see SeedPrompt).
 	Prompt string
+	// DedupeKey and DedupeWindow are a webhook declaration's dedupe settings
+	// (see triggerspec.CompileDedupe); empty means the receiver's default key.
+	DedupeKey, DedupeWindow string
 }
 
 // WorkflowResolver loads the workflow a run of a ref executes, as run start
@@ -138,6 +141,15 @@ func DeclarationIn(wf *reliantv1.Workflow, t *core.Trigger) (*Declaration, error
 	if err := triggerspec.CompilePrompt(prompt); err != nil {
 		return nil, broken("the declaration's " + err.Error())
 	}
+	dedupeKey, dedupeWindow := strings.TrimSpace(wt.GetDedupeKey()), strings.TrimSpace(wt.GetDedupeWindow())
+	if dedupeKey != "" || dedupeWindow != "" {
+		if src.Kind != core.TriggerKindWebhook {
+			return nil, broken("dedupe_key applies to webhook triggers only; " + kindNoun(src.Kind) + " triggers dedupe by their own event id")
+		}
+		if err := triggerspec.CompileDedupe(dedupeKey, dedupeWindow); err != nil {
+			return nil, broken("the declaration's " + err.Error())
+		}
+	}
 
 	// What this activation was created for and cannot follow: a webhook's
 	// token, an integration's connection, a schedule's Temporal schedule all
@@ -151,7 +163,7 @@ func DeclarationIn(wf *reliantv1.Workflow, t *core.Trigger) (*Declaration, error
 			return nil, broken(fmt.Sprintf("it now listens to %s, and this activation's connection is for %s; activate it again", src.Integration, prev.Integration))
 		}
 	}
-	return &Declaration{Name: name, Source: src, Filter: filter, Inputs: wt.GetInputs(), Prompt: prompt}, nil
+	return &Declaration{Name: name, Source: src, Filter: filter, Inputs: wt.GetInputs(), Prompt: prompt, DedupeKey: dedupeKey, DedupeWindow: dedupeWindow}, nil
 }
 
 // SeedPrompt is the prompt a run t launches starts from: the activation's own

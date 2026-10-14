@@ -919,6 +919,21 @@ type WorkflowTrigger struct {
 	// activation's own message overrides it; an activation with no message
 	// uses it. Empty means every activation writes its own.
 	Prompt string `protobuf:"bytes,5,opt,name=prompt,proto3" json:"prompt,omitempty"`
+	// Webhook triggers only: a template over `trigger` that names the real-world
+	// event a delivery is about, e.g.
+	// "{{ trigger.payload.body.groupKey }}:{{ trigger.payload.body.status }}".
+	// Deliveries that render the same key within dedupe_window are ONE event:
+	// the first launches a run, the rest are recorded as duplicates. It replaces
+	// the default (the sender's Idempotency-Key header, else the body's hash
+	// within one minute) for a sender that has no idempotency header, such as
+	// Alertmanager. A key that fails to render or renders empty falls back to
+	// the default for that delivery.
+	DedupeKey string `protobuf:"bytes,6,opt,name=dedupe_key,json=dedupeKey,proto3" json:"dedupe_key,omitempty"`
+	// How long a dedupe_key holds, as a duration ("30m", "4h"); default 1h, at
+	// most 24h. The window is a fixed clock bucket, not a sliding one: two
+	// deliveries that straddle a bucket boundary are two events, so the window
+	// is the longest a repeat can be suppressed, and may be shorter.
+	DedupeWindow string `protobuf:"bytes,7,opt,name=dedupe_window,json=dedupeWindow,proto3" json:"dedupe_window,omitempty"`
 	// What makes it fire.
 	//
 	// Types that are valid to be assigned to Source:
@@ -993,6 +1008,20 @@ func (x *WorkflowTrigger) GetInputs() map[string]string {
 func (x *WorkflowTrigger) GetPrompt() string {
 	if x != nil {
 		return x.Prompt
+	}
+	return ""
+}
+
+func (x *WorkflowTrigger) GetDedupeKey() string {
+	if x != nil {
+		return x.DedupeKey
+	}
+	return ""
+}
+
+func (x *WorkflowTrigger) GetDedupeWindow() string {
+	if x != nil {
+		return x.DedupeWindow
 	}
 	return ""
 }
@@ -3193,13 +3222,16 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"O\n" +
 	"\x13WorkflowEventSource\x12\x1c\n" +
 	"\tworkflows\x18\x01 \x03(\tR\tworkflows\x12\x1a\n" +
-	"\boutcomes\x18\x02 \x03(\tR\boutcomes\"\xfb\x03\n" +
+	"\boutcomes\x18\x02 \x03(\tR\boutcomes\"\xbf\x04\n" +
 	"\x0fWorkflowTrigger\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x16\n" +
 	"\x06filter\x18\x03 \x01(\tR\x06filter\x12?\n" +
 	"\x06inputs\x18\x04 \x03(\v2'.reliant.v1.WorkflowTrigger.InputsEntryR\x06inputs\x12\x16\n" +
-	"\x06prompt\x18\x05 \x01(\tR\x06prompt\x128\n" +
+	"\x06prompt\x18\x05 \x01(\tR\x06prompt\x12\x1d\n" +
+	"\n" +
+	"dedupe_key\x18\x06 \x01(\tR\tdedupeKey\x12#\n" +
+	"\rdedupe_window\x18\a \x01(\tR\fdedupeWindow\x128\n" +
 	"\bschedule\x18\x14 \x01(\v2\x1a.reliant.v1.ScheduleSourceH\x00R\bschedule\x125\n" +
 	"\awebhook\x18\x15 \x01(\v2\x19.reliant.v1.WebhookSourceH\x00R\awebhook\x12A\n" +
 	"\vintegration\x18\x16 \x01(\v2\x1d.reliant.v1.IntegrationSourceH\x00R\vintegration\x12H\n" +

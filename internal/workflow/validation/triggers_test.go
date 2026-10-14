@@ -348,3 +348,28 @@ func (f fakeIntegrationIndex) TriggerTypes(integration string) ([]string, []stri
 }
 
 func (f fakeIntegrationIndex) PayloadSchemas(string, string) []map[string]any { return nil }
+
+func TestTriggerDedupeKeyValidation(t *testing.T) {
+	const head = "name: dk\nentry: [a]\nnodes:\n  - id: a\n    type: save_message\n    args: {role: assistant, content: x}\ntriggers:\n"
+	findings := func(trigger string) []string {
+		wf, err := wfyaml.ParseWorkflow([]byte(head + trigger))
+		require.NoError(t, err)
+		return messages(StaticAnalysisWithOptions(wf, &ValidationOptions{}).Errors())
+	}
+
+	assert.Empty(t, findings("  - name: am\n    webhook: {}\n    dedupe_key: \"{{ trigger.payload.body.groupKey }}:{{ trigger.payload.body.status }}\"\n    dedupe_window: 4h\n"))
+
+	bad := map[string]string{
+		"  - name: am\n    webhook: {}\n    dedupe_key: constant\n":                                        "no {{ }} expression",
+		"  - name: am\n    webhook: {}\n    dedupe_key: \"{{ trigger.payload.body.x\"\n":                   `no closing "}}"`,
+		"  - name: am\n    webhook: {}\n    dedupe_key: \"{{ inputs.x }}\"\n":                              "undeclared reference",
+		"  - name: am\n    webhook: {}\n    dedupe_key: \"{{ trigger.kind }}\"\n    dedupe_window: 99h\n":  "outside",
+		"  - name: am\n    webhook: {}\n    dedupe_window: 1h\n":                                           "needs a dedupe_key",
+		"  - name: nightly\n    schedule: {cron: \"0 9 * * *\"}\n    dedupe_key: \"{{ trigger.kind }}\"\n": "webhook triggers only",
+	}
+	for src, want := range bad {
+		got := strings.Join(findings(src), "\n")
+		assert.Contains(t, got, want, src)
+		assert.Contains(t, got, "triggers[0](", "reported at the trigger's path: %s", src)
+	}
+}

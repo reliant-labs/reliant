@@ -151,12 +151,13 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		outcome, detail = in.applyFilter(filter, trigger, ev, occurredAt)
 	}
 
+	dedupeKey := in.declaredDedupeKey(trigger, decl, ev, occurredAt)
 	row := &core.TriggerEvent{
 		ID:            uuid.NewString(),
 		TriggerID:     &trigger.ID,
 		UserID:        trigger.UserID,
 		Kind:          ev.Kind,
-		DedupeKey:     ev.DedupeKey,
+		DedupeKey:     dedupeKey,
 		OccurredAt:    occurredAt,
 		Payload:       ev.Payload,
 		Sender:        ev.Sender,
@@ -164,6 +165,7 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		OutcomeDetail: detail,
 		CreatedAt:     in.now().UTC(),
 	}
+	ev.DedupeKey = dedupeKey
 	created, err := in.repo.CreateTriggerEvent(ctx, row)
 	if err != nil {
 		return nil, fmt.Errorf("record %s event for trigger %s: %w", ev.Kind, trigger.ID, err)

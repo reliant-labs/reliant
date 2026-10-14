@@ -149,6 +149,7 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 		if ev := wt.GetWorkflowEvent(); ev != nil && opts != nil && opts.WorkflowLoader != nil {
 			validateWorkflowEventRefs(ev, path, opts.WorkflowLoader, result)
 		}
+		validateTriggerDedupe(wt, path, result)
 		validateTriggerInputs(wt.GetInputs(), declaredInputs, path, shape, result)
 		warnUnmappedRequiredInputs(wt.GetInputs(), declaredInputs, path, result)
 		if err := triggerspec.CompilePrompt(wt.GetPrompt()); err != nil {
@@ -453,4 +454,24 @@ func declaredInputsHint(declared map[string]*reliantv1.Input) string {
 	}
 	sort.Strings(names)
 	return "declared inputs: " + strings.Join(names, ", ")
+}
+
+// validateTriggerDedupe checks dedupe_key and dedupe_window: webhook triggers
+// only (every other source has its own event id), the key a template over
+// `trigger` that compiles, the window a duration within bounds.
+func validateTriggerDedupe(wt *reliantv1.WorkflowTrigger, path []string, result *Result) {
+	key, window := strings.TrimSpace(wt.GetDedupeKey()), strings.TrimSpace(wt.GetDedupeWindow())
+	if key == "" && window == "" {
+		return
+	}
+	if wt.GetWebhook() == nil {
+		result.AddErrorWithSuggestion(CategoryTrigger, path, "dedupe_key",
+			"dedupe_key applies to webhook triggers only",
+			"integration, schedule and workflow_event triggers dedupe by their own event id")
+		return
+	}
+	if err := triggerspec.CompileDedupe(key, window); err != nil {
+		result.AddErrorWithSuggestion(CategoryTrigger, path, "dedupe_key", strings.TrimPrefix(err.Error(), "dedupe: "),
+			"a dedupe_key is a template over `trigger`, e.g. {{ trigger.payload.body.groupKey }}:{{ trigger.payload.body.status }}; dedupe_window is a duration such as 4h (default 1h, at most 24h)")
+	}
 }

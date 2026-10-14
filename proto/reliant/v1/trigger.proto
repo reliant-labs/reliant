@@ -357,6 +357,23 @@ message WorkflowTrigger {
   // uses it. Empty means every activation writes its own.
   string prompt = 5;
 
+  // Webhook triggers only: a template over `trigger` that names the real-world
+  // event a delivery is about, e.g.
+  // "{{ trigger.payload.body.groupKey }}:{{ trigger.payload.body.status }}".
+  // Deliveries that render the same key within dedupe_window are ONE event:
+  // the first launches a run, the rest are recorded as duplicates. It replaces
+  // the default (the sender's Idempotency-Key header, else the body's hash
+  // within one minute) for a sender that has no idempotency header, such as
+  // Alertmanager. A key that fails to render or renders empty falls back to
+  // the default for that delivery.
+  string dedupe_key = 6;
+
+  // How long a dedupe_key holds, as a duration ("30m", "4h"); default 1h, at
+  // most 24h. The window is a fixed clock bucket, not a sliding one: two
+  // deliveries that straddle a bucket boundary are two events, so the window
+  // is the longest a repeat can be suppressed, and may be shorter.
+  string dedupe_window = 7;
+
   // What makes it fire.
   oneof source {
     ScheduleSource schedule = 20;
