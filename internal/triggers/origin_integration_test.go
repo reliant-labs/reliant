@@ -39,7 +39,7 @@ type scenario struct {
 	starter  *flakyStarter
 	intake   *Intake
 	firer    *EventFirer
-	recorder *writeledger.Recorder
+	recorder writeledger.Service
 	trigger  *core.Trigger
 	userID   string
 	chats    map[string]string

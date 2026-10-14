@@ -14,6 +14,8 @@
 // MaxDepth is a HARD guard. trigger.origin_filter decides which echoes a
 // workflow wants, and may say "all of them"; no expression reaches this cap, so
 // a pair of workflows that deliberately re-trigger each other still stops.
+//
+//forge:exclude-contract: pure value type and functions over core types, shared by the workflow-event dispatcher and the integration intake, which must not import each other; no state, no I/O, no substitution point
 package lineage
 
 import (
