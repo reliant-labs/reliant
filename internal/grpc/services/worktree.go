@@ -1174,11 +1174,7 @@ func (s *WorktreeService) ImportWorktree(
 	}
 	payload := map[string]any{"repos": []discoverRepoRef{{RepoID: repo.ID, Path: repoPath}}, "exclude_roots": exclude}
 	if err := s.sendToMachine(ctx, userID, placement, "worktree.discover_repos", payload, &found, worktreeReadCommandTimeoutMs); err != nil {
-		if machinewake.IsWaking(err) {
-			return nil, err
-		}
-		logging.Error("Failed to validate import path via daemon", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to validate path"))
+		return nil, importWorktreeError("validate path", err, "Failed to validate import path via daemon")
 	}
 	want := filepath.Clean(req.Msg.Path)
 	var entry *discoveredEntry
@@ -1232,12 +1228,8 @@ func (s *WorktreeService) ImportWorktree(
 		}
 		if err := workspacecreate.Finish(ctx, s.database, machine, createReq, worktree); err != nil {
 			s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
-			// The user's to fix (a branch checked out elsewhere): its code
-			// and the sentence saying what to change. Ours: Finish logged it.
-			if svcerr.IsUserError(err) {
-				return nil, svcerr.Wrap(err)
-			}
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to import worktree"))
+			// Finish logged it.
+			return nil, importWorktreeError("import worktree", err, "")
 		}
 		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
 		return connect.NewResponse(&reliantv1.ImportWorktreeResponse{Worktree: worktreeToProto(worktree)}), nil
@@ -1267,11 +1259,7 @@ func (s *WorktreeService) ImportWorktree(
 		}
 		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
 		if moveErr != nil {
-			if machinewake.IsWaking(moveErr) {
-				return nil, moveErr
-			}
-			logging.Error("adopt_move failed", "error", moveErr)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to move the worktree"))
+			return nil, importWorktreeError("move the worktree", moveErr, "adopt_move failed")
 		}
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("could not move %s: %s", entry.Path, moved.Error))
 	}
@@ -1288,6 +1276,38 @@ func (s *WorktreeService) ImportWorktree(
 		s.finishWorktreeCreate(bgCtx, userID, createReq, &pending)
 	}()
 	return connect.NewResponse(&reliantv1.ImportWorktreeResponse{Worktree: worktreeToProto(worktree)}), nil
+}
+
+// importWorktreeError maps a failed ImportWorktree step onto the Connect
+// error for what went wrong:
+//
+//   - a machine found asleep is being woken (machinewake): returned as it is,
+//     for the client to retry once the machine is up;
+//   - the machine's state explains it — none, starting, not connected, not
+//     answering — so the state picks the code, wrapped with what was being
+//     done (daemonerr.MachineStateConnectError);
+//   - the user's to fix (a branch checked out elsewhere, a base that does
+//     not exist): its own code and the sentence saying what to change;
+//   - anything else is ours: Internal, saying only that doing failed — the
+//     cause stays off the wire. logMsg logs it with the cause; it is empty
+//     when the step has logged it already (Finish does).
+//
+// The machine states used to be Internal too, so a user with no machine
+// connected was told the server had failed.
+func importWorktreeError(doing string, err error, logMsg string) error {
+	if machinewake.IsWaking(err) {
+		return err
+	}
+	if cerr, ok := daemonerr.MachineStateConnectError(doing, err); ok {
+		return cerr
+	}
+	if svcerr.IsUserError(err) {
+		return svcerr.Wrap(err)
+	}
+	if logMsg != "" {
+		logging.Error(logMsg, "error", err)
+	}
+	return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to %s", doing))
 }
 
 // workspaceMoveTimeoutMs bounds adopt_move: a rename on one filesystem, but

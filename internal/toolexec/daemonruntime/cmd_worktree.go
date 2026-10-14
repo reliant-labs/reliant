@@ -133,6 +133,10 @@ type worktreeCreateResponse struct {
 	ErrorDetail string `json:"error_detail,omitempty"`
 }
 
+// worktreeBaseFetchTimeout bounds fetching a base branch this clone has not
+// seen from origin, inside worktree.create's own budget.
+const worktreeBaseFetchTimeout = 30 * time.Second
+
 func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	var req worktreeCreateRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
@@ -175,6 +179,30 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 
+	// Decide what the branch is made from BEFORE anything touches disk, so a
+	// base that cannot be found fails with nothing to roll back. Adopt mode
+	// checks out an existing local branch as it is and needs no base.
+	reuseLocal := false
+	if req.ReuseBranch {
+		localBranch := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", "refs/heads/"+req.Branch)
+		localBranch.Dir = req.ProjectPath
+		reuseLocal = localBranch.Run() == nil
+	}
+	var startPoint string
+	if !reuseLocal {
+		var found bool
+		if startPoint, found = resolveWorktreeStartPoint(ctx, req.ProjectPath, req.BaseBranch); !found {
+			// Diagnosed as a refused `git worktree add` would be: a base the
+			// caller named is theirs to fix, one detected above is our bug.
+			code, detail := diagnoseWorktreeAdd(ctx, req.ProjectPath, req.Branch, req.BaseBranch, baseSupplied)
+			return json.Marshal(worktreeCreateResponse{
+				Error:       fmt.Sprintf("base branch '%s' does not exist, locally or on origin", req.BaseBranch),
+				ErrorCode:   code,
+				ErrorDetail: detail,
+			})
+		}
+	}
+
 	// Resolve the on-disk worktree path:
 	//   <HOME>/.reliant/worktrees/<workspace_id>[/<sub_path>]
 	// A sub_path of "" puts the checkout at the workspace root itself
@@ -204,24 +232,19 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	branchCheckCmd.Dir = req.ProjectPath
 	branchExists := branchCheckCmd.Run() == nil
 
-	// Create the git worktree
+	// Create the git worktree. A new branch starts from the resolved start
+	// point with --no-track: a base taken from origin is a starting commit,
+	// not the branch's upstream, exactly as a local base is.
 	var worktreeCmd *exec.Cmd
-	usesBase := true
-	if req.ReuseBranch {
-		localBranch := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", "refs/heads/"+req.Branch)
-		localBranch.Dir = req.ProjectPath
-		if localBranch.Run() == nil {
-			// No -B and no --force: git itself refuses when the branch is
-			// checked out in another worktree.
-			worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", worktreePath, req.Branch)
-			usesBase = false
-		} else {
-			worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "-b", req.Branch, worktreePath, req.BaseBranch)
-		}
-	} else if branchExists || req.Force {
-		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "-B", req.Branch, worktreePath, req.BaseBranch)
-	} else {
-		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "-b", req.Branch, worktreePath, req.BaseBranch)
+	switch {
+	case reuseLocal:
+		// No -B and no --force: git itself refuses when the branch is
+		// checked out in another worktree.
+		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", worktreePath, req.Branch)
+	case !req.ReuseBranch && (branchExists || req.Force):
+		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "--no-track", "-B", req.Branch, worktreePath, startPoint)
+	default:
+		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "--no-track", "-b", req.Branch, worktreePath, startPoint)
 	}
 	worktreeCmd.Dir = req.ProjectPath
 
@@ -270,7 +293,8 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		if parent := filepath.Dir(worktreePath); parent != worktreePath {
 			removeIfEmpty(parent)
 		}
-		code, detail := diagnoseWorktreeAdd(ctx, req.ProjectPath, req.Branch, req.BaseBranch, baseSupplied && usesBase)
+		// The base resolved above (or was not used), so it is not the reason.
+		code, detail := diagnoseWorktreeAdd(ctx, req.ProjectPath, req.Branch, "", false)
 		return json.Marshal(worktreeCreateResponse{
 			Error:       string(output),
 			ErrorCode:   code,
@@ -294,22 +318,26 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	// logs its own time).
 	logging.Info("worktree checked out",
 		"worktree_path", worktreePath,
+		"base_branch", req.BaseBranch,
+		"start_point", startPoint,
 		"elapsed", time.Since(checkoutStart).Round(time.Millisecond).String())
 
 	return json.Marshal(worktreeCreateResponse{Success: true, WorktreePath: worktreePath, BaseBranch: req.BaseBranch})
 }
 
-// diagnoseWorktreeAdd says why `git worktree add` just failed, when the
-// reason is the caller's to fix, by asking the repository about the inputs —
-// never by reading git's output, whose wording changes between git versions
-// and is translated under a non-English locale (see internal/worktreeerr). It
-// runs only after a failure, so a create that succeeds pays nothing.
+// diagnoseWorktreeAdd says why a create just failed — its base resolved to
+// nothing (resolveWorktreeStartPoint), or `git worktree add` refused — when
+// the reason is the caller's to fix, by asking the repository about the
+// inputs — never by reading git's output, whose wording changes between git
+// versions and is translated under a non-English locale (see
+// internal/worktreeerr). It runs only after a failure, so a create that
+// succeeds pays nothing.
 //
 // The first check that holds is the answer; the empty Reason is the answer
 // for everything else (git crashed, the disk is full, the destination is
 // taken), which the server reports as its own fault. checkBase is false when
-// the base was detected rather than named, or the command did not use one:
-// only a base the caller named is theirs to fix.
+// the base was detected rather than named, or already resolved: only a base
+// the caller named is theirs to fix.
 func diagnoseWorktreeAdd(ctx context.Context, repoPath, branch, base string, checkBase bool) (worktreeerr.Reason, string) {
 	git := func(args ...string) ([]byte, int) {
 		cmd := exec.CommandContext(ctx, "git", args...)
@@ -332,6 +360,10 @@ func diagnoseWorktreeAdd(ctx context.Context, repoPath, branch, base string, che
 	}
 	// With --quiet, "resolves to nothing" is exit 1; anything worse is 128.
 	if checkBase {
+		// No ref starts with a dash, and git would read one as an option.
+		if strings.HasPrefix(base, "-") {
+			return worktreeerr.BaseNotFound, base
+		}
 		if _, code := git("rev-parse", "--verify", "--quiet", base+"^{commit}"); code == 1 {
 			return worktreeerr.BaseNotFound, base
 		}
@@ -362,6 +394,91 @@ func diagnoseWorktreeAdd(ctx context.Context, repoPath, branch, base string, che
 		}
 	}
 	return "", ""
+}
+
+// resolveWorktreeStartPoint returns what `git worktree add` branches from for
+// base: a full ref or a commit id, never a name git has to interpret.
+//
+// git does interpret one. Given a start point that names no commit but
+// matches exactly one remote-tracking branch, `git worktree add -b <new>
+// <path> feat/x` (git 2.43) creates and checks out a tracking branch named
+// feat/x instead of <new>, and succeeds: the worktree row records <new>, a
+// branch that was never made. So base is resolved here, in order:
+//
+//  1. refs/heads/<base>, the local branch;
+//  2. refs/remotes/origin/<base>, origin's copy;
+//  3. anything else that names a commit — a tag, a sha, an explicit remote
+//     ref — as the commit id it names;
+//  4. origin's <base>, fetched (that one ref) when this clone has never seen
+//     it: an agent or user naming a branch that exists on GitHub expects it
+//     to be found.
+//
+// found is false when none does — the base names no commit here or on origin.
+func resolveWorktreeStartPoint(ctx context.Context, repoPath, base string) (startPoint string, found bool) {
+	// A leading dash would be read as an option; no ref starts with one.
+	if base == "" || strings.HasPrefix(base, "-") {
+		return "", false
+	}
+	// Only a valid branch name is looked up — or put in a refspec — as one.
+	isBranch := gitRefFormatValid(ctx, repoPath, "refs/heads/"+base)
+	local, remote := "refs/heads/"+base, "refs/remotes/origin/"+base
+	if isBranch {
+		if gitRefExists(ctx, repoPath, local) {
+			return local, true
+		}
+		if gitRefExists(ctx, repoPath, remote) {
+			return remote, true
+		}
+	}
+	commit := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", base+"^{commit}")
+	commit.Dir = repoPath
+	if out, err := commit.Output(); err == nil {
+		if sha := strings.TrimSpace(string(out)); sha != "" {
+			return sha, true
+		}
+	}
+	if isBranch && fetchOriginBranch(ctx, repoPath, base) && gitRefExists(ctx, repoPath, remote) {
+		return remote, true
+	}
+	return "", false
+}
+
+// gitRefFormatValid reports whether ref is a well-formed full ref name.
+func gitRefFormatValid(ctx context.Context, repoPath, ref string) bool {
+	cmd := exec.CommandContext(ctx, "git", "check-ref-format", ref)
+	cmd.Dir = repoPath
+	return cmd.Run() == nil
+}
+
+// gitRefExists reports whether the full ref exists.
+func gitRefExists(ctx context.Context, repoPath, ref string) bool {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", ref)
+	cmd.Dir = repoPath
+	return cmd.Run() == nil
+}
+
+// fetchOriginBranch fetches origin's branch into refs/remotes/origin/<branch>,
+// bounded by worktreeBaseFetchTimeout. false when the repo has no origin or
+// the fetch fails: no such branch there, offline, or no access.
+func fetchOriginBranch(ctx context.Context, repoPath, branch string) bool {
+	hasOrigin := exec.CommandContext(ctx, "git", "config", "--get", "remote.origin.url")
+	hasOrigin.Dir = repoPath
+	if hasOrigin.Run() != nil {
+		return false
+	}
+	fetchCtx, cancel := context.WithTimeout(ctx, worktreeBaseFetchTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(fetchCtx, "git", "fetch", "--quiet", "--no-tags", "origin",
+		"+refs/heads/"+branch+":refs/remotes/origin/"+branch)
+	cmd.Dir = repoPath
+	cmd.Env = gitCredentialEnv(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		logging.Info("worktree base branch not found on origin",
+			"repo_path", repoPath, "base_branch", branch, "output", strings.TrimSpace(string(out)), "error", err)
+		return false
+	}
+	logging.Info("fetched worktree base branch from origin", "repo_path", repoPath, "base_branch", branch)
+	return true
 }
 
 // =============================================================================
