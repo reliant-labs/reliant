@@ -42,7 +42,7 @@ Tools are organized by tags for filtering:
 - [Planning & Task Management](#planning--task-management) (10 tools)
 - [File Operations](#file-operations) (8 tools)
 - [Information Retrieval](#information-retrieval) (6 tools)
-- [Workflow Management](#workflow-management) (20 tools)
+- [Workflow Management](#workflow-management) (21 tools)
 - [System & Execution](#system--execution) (4 tools)
 - [Other Tools](#other-tools) (66 tools)
 
@@ -1332,6 +1332,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | Tool | Tags | Description |
 |------|------|-------------|
 | [`activate_trigger`](#activate_trigger) | workflow | Activate a trigger a workflow declares, for the user you are working for, so the workflow starts ... |
+| [`cel_eval`](#cel_eval) | workflow, readonly | Evaluates a CEL expression or {{ }} template against a context you supply, exactly as a workflow ... |
 | [`create_workflow`](#create_workflow) | workflow | Create a new workflow. |
 | [`delete_scenario`](#delete_scenario) | workflow | Delete a test scenario. |
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
@@ -1367,6 +1368,30 @@ Runs it starts are unattended: nobody answers questions or approvals.
 RETURNS the trigger id; for a webhook trigger, its URL and token (the token is shown ONCE — give it to the user now).
 
 Before activating, check the workflow validates (get_workflow) and, for an integration trigger, that the user has a connection for it.
+
+---
+
+### cel_eval
+
+**Tags:** `workflow`, `readonly`
+
+Evaluates a CEL expression or {{ }} template against a context you supply, exactly as a workflow would, and returns the value and its type, or a precise error.
+
+WHEN TO USE:
+- To test a trigger filter, an input mapping or a condition in ONE call, instead of activating the trigger and waiting for an event
+- To check what a template produces, and what type (a pure {{ }} keeps its type: a number stays a number)
+- To find out why an expression fails (the error says whether it is syntax, compile or evaluation, and where)
+
+CONTEXT:
+- integration + event: trigger.payload is GENERATED from the payload that integration declares for the event (the same schema workflow validation checks filters against). Supply trigger_payload to override just the fields your expression depends on; it is merged over the sample.
+- trigger_payload alone: a webhook or other source you describe yourself.
+- inputs / nodes: values for inputs.* and nodes.<id>.* (scope run).
+- With no expression, returns the trigger the event delivers, so you can see what there is to write against.
+
+RETURNS:
+JSON: value, type, kind (expression|template), and findings (reads the declared payload rules out, which a loose sample can hide: a filter that passes here can still fail on a real event if it reads a field the payload never has). On failure, error: phase (syntax|compile|eval|request), message, line, column, hint.
+
+Evaluation is bounded (CEL cost limit) and has no side effects.
 
 ---
 

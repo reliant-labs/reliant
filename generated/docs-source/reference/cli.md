@@ -256,6 +256,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant version`](#reliant-version) | Print version information |
 | [`reliant workflow`](#reliant-workflow) | Manage and validate workflows |
 | [`reliant workflow answer`](#reliant-workflow-answer) | Answer a pending question on a workflow execution |
+| [`reliant workflow eval`](#reliant-workflow-eval) | Evaluate a CEL expression or {{ }} template against a sample context |
 | [`reliant workflow follow`](#reliant-workflow-follow) | Follow a workflow execution and stream NDJSON lifecycle events |
 | [`reliant workflow list`](#reliant-workflow-list) | List available workflows |
 | [`reliant workflow pause`](#reliant-workflow-pause) | Pause a running workflow execution (keeps it resumable) |
@@ -8641,6 +8642,7 @@ reliant workflow
 | Command | Description |
 |---------|-------------|
 | [`answer`](#reliant-workflow-answer) | Answer a pending question on a workflow execution |
+| [`eval`](#reliant-workflow-eval) | Evaluate a CEL expression or {{ }} template against a sample context |
 | [`follow`](#reliant-workflow-follow) | Follow a workflow execution and stream NDJSON lifecycle events |
 | [`list`](#reliant-workflow-list) | List available workflows |
 | [`pause`](#reliant-workflow-pause) | Pause a running workflow execution (keeps it resumable) |
@@ -8699,6 +8701,65 @@ reliant workflow answer <execution-id> [flags]
 | `--question` | `string` | - | Question id to answer (default: the pending question) |
 | `--select` | `stringArray` | `[]` | Option label to select (repeatable, one per sub-question) |
 | `--text` | `string` | - | Free-text answer/feedback |
+
+---
+
+### reliant workflow eval
+
+Evaluate a CEL expression or {{ }} template against a sample context
+
+Evaluates a CEL expression or {{ }} template the way a workflow would, against a
+context you supply, and prints the value and its type, or a precise error. Use it
+to try a trigger filter, an input mapping or a condition in one command, instead
+of activating a trigger and waiting for an event.
+
+The expression is the argument, or standard input when the argument is "-".
+
+Context:
+  --integration github --event issues.opened   trigger.payload is GENERATED from the
+                                               payload that integration declares for
+                                               the event (the schema validation checks
+                                               filters against)
+  --trigger-payload '{"data":{...}}'           trigger.payload; with --integration it
+                                               is merged over the generated sample, so
+                                               give only what the expression reads
+                                               (a JSON string, or @file.json)
+  --trigger-sender '{"id":"583231","verified":true}'
+  --inputs '{"n":1}', --input k=v              inputs.*
+  --nodes '{"start":{"stdout":"{}"}}'          nodes.<id>.*
+
+With no expression, prints the trigger the event delivers.
+
+Scope: --scope trigger (a trigger's filter, inputs mapping, prompt) sees only
+trigger; the default, run, is a node's field and also sees inputs and nodes.
+
+Examples:
+  reliant workflow eval --integration github --event issues.opened \
+      "!('wontfix' in trigger.payload.data.issue.labels)"
+  reliant workflow eval --scope trigger --trigger-payload '{"body":{"status":"firing"}}' \
+      "{{ trigger.payload.body.status == 'firing' }}"
+
+Exit code 0 when it evaluated, 1 when it did not.
+
+```
+reliant workflow eval [expression] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--event` | `string` | - | The integration event to generate trigger.payload for, e.g. issues.opened |
+| `--input` | `stringArray` | `[]` | One input as key=value (repeatable; the value is JSON when it parses, else a string) |
+| `--inputs` | `string` | - | inputs.* as JSON, or @file.json |
+| `--integration` | `string` | - | Generate trigger.payload from this integration's declared payload (with --event) |
+| `--json` | `bool` | - | Print the result as JSON |
+| `--kind` | `string` | - | How to read the expression: expression (raw CEL) or template ({{ }}); default: template when it has a {{ outside a string literal |
+| `--nodes` | `string` | - | nodes.<id>.* as JSON keyed by node id, or @file.json |
+| `--scope` | `string` | - | What it can see: run (default; a node's field) or trigger (a trigger's filter, inputs mapping or prompt) |
+| `--trigger-kind` | `string` | - | trigger.kind: webhook, integration, schedule or workflow_event |
+| `--trigger-payload` | `string` | - | trigger.payload as JSON, or @file.json; merged over the generated sample |
+| `--trigger-sender` | `string` | - | trigger.sender as JSON: kind, id, display_name, verified |
 
 ---
 
@@ -9036,6 +9097,13 @@ input/output type verification, and cross-workflow contract validation.
 If a specific file path is given, validates that file only. Otherwise,
 validates all *.yaml files in the workflow directory.
 
+With --trigger-payload, each declared trigger is also run against that sample
+event: its filter, its inputs mapping and its prompt are evaluated the way a
+real firing would, and anything that fails (or that the integration's declared
+payload rules out) is reported as an error. For an integration trigger the
+payload is merged over a sample generated from the event's declared payload, so
+give only the fields your expressions read. The JSON may be a file: @event.json.
+
 Exit code 0 if all workflows are valid, 1 if any errors are found.
 
 ```
@@ -9050,6 +9118,8 @@ reliant workflow validate [path] [flags]
 | `--fail-fast` | `bool` | - | Stop on first validation error |
 | `--include-builtins` | `bool` | - | Also validate builtin workflows |
 | `--json` | `bool` | - | Output in JSON format (for CI) |
+| `--trigger-payload` | `string` | - | Sample trigger.payload (JSON or @file.json): also run each declared trigger's filter, inputs and prompt against it |
+| `--trigger-sender` | `string` | - | Sample trigger.sender (JSON: kind, id, display_name, verified), used with --trigger-payload |
 | `--verbose`, `-V` | `bool` | - | Show detailed output for each workflow |
 
 ---
