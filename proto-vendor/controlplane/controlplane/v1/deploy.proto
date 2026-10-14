@@ -1495,6 +1495,13 @@ message DeploySourceProvenance {
   // token — handing a token back out would make every reader of the ledger a
   // holder of a credential.
   DeploySourceAttestation attestation = 9;
+
+  // When `commit` was made: the committer date, as forge read it from git.
+  // Unset for a dirty tree (the built bytes are no commit's) and for an
+  // unknown commit. A CLAIM, like branch and dirty, recorded as one; it is
+  // what turns DeliveryInsightsService's lead time from unknown into a figure.
+  // A producer that predates it sends nothing, which reads as "not recorded".
+  google.protobuf.Timestamp commit_time = 10;
 }
 
 // DeployWorktree identifies one checkout on one machine.

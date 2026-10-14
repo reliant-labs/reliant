@@ -465,9 +465,16 @@ type GetDoraMetricsResponse struct {
 	DeploymentFrequency *DeploymentFrequency `protobuf:"bytes,5,opt,name=deployment_frequency,json=deploymentFrequency,proto3" json:"deployment_frequency,omitempty"`
 	LeadTime            *LeadTime            `protobuf:"bytes,6,opt,name=lead_time,json=leadTime,proto3" json:"lead_time,omitempty"`
 	ChangeFailureRate   *ChangeFailureRate   `protobuf:"bytes,7,opt,name=change_failure_rate,json=changeFailureRate,proto3" json:"change_failure_rate,omitempty"`
-	TimeToRestore       *TimeToRestore       `protobuf:"bytes,8,opt,name=time_to_restore,json=timeToRestore,proto3" json:"time_to_restore,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// The release-ledger figure (source "release_ledger"): failed change ->
+	// the rollback that restored it.
+	TimeToRestore *TimeToRestore `protobuf:"bytes,8,opt,name=time_to_restore,json=timeToRestore,proto3" json:"time_to_restore,omitempty"`
+	// The alert-based figure (source "alert_events"): a platform DeployFailed
+	// alert firing -> resolved, from alert history. A separate measurement, not
+	// a replacement for time_to_restore. Unset when alert history is not wired
+	// on this deployment; set (with zero counts) when it is and nothing fired.
+	AlertTimeToRestore *TimeToRestore `protobuf:"bytes,9,opt,name=alert_time_to_restore,json=alertTimeToRestore,proto3" json:"alert_time_to_restore,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *GetDoraMetricsResponse) Reset() {
@@ -552,6 +559,13 @@ func (x *GetDoraMetricsResponse) GetChangeFailureRate() *ChangeFailureRate {
 func (x *GetDoraMetricsResponse) GetTimeToRestore() *TimeToRestore {
 	if x != nil {
 		return x.TimeToRestore
+	}
+	return nil
+}
+
+func (x *GetDoraMetricsResponse) GetAlertTimeToRestore() *TimeToRestore {
+	if x != nil {
+		return x.AlertTimeToRestore
 	}
 	return nil
 }
@@ -643,8 +657,10 @@ type LeadTime struct {
 	// Deployments with a known commit time; the statistics cover these only.
 	MeasuredChanges int32 `protobuf:"varint,2,opt,name=measured_changes,json=measuredChanges,proto3" json:"measured_changes,omitempty"`
 	// Deployments whose commit time is unknown, and how many distinct releases
-	// that is. Today the ledger records the commit id but not its time, so every
-	// deployment is unknown until the producers record one; nothing is inferred.
+	// that is. A release records its commit time when forge cut it from a clean
+	// checkout; a dirty or non-git build, an older forge and every release cut
+	// before it was recorded are unknown. Nothing is inferred, so a window can be
+	// partly measured and partly unknown.
 	UnknownChanges  int32 `protobuf:"varint,3,opt,name=unknown_changes,json=unknownChanges,proto3" json:"unknown_changes,omitempty"`
 	UnknownReleases int32 `protobuf:"varint,4,opt,name=unknown_releases,json=unknownReleases,proto3" json:"unknown_releases,omitempty"`
 	// Unset when measured_changes is 0.
@@ -800,16 +816,22 @@ func (x *ChangeFailureRate) GetRate() float64 {
 type TimeToRestore struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Definition string                 `protobuf:"bytes,1,opt,name=definition,proto3" json:"definition,omitempty"`
-	// Where the figure comes from: "release_ledger" here. The alert-based MTTR
-	// that alerting (A8) will compute from alert_events is a separate figure with
-	// its own source, reserved below on the response, not a replacement for this.
+	// Where the figure comes from: "release_ledger" (failed change -> rollback)
+	// or "alert_events" (alert firing -> resolved). The two are different
+	// measurements of different events and are never blended.
 	Source string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
-	// Failed changes in the window (the same set ChangeFailureRate counts); each
-	// one is restored by the promotion that rolled it back.
+	// Restored incidents in the window: for "release_ledger" the failed changes
+	// (the same set ChangeFailureRate counts), each restored by the promotion that
+	// rolled it back; for "alert_events" the alert incidents that started in the
+	// window and have resolved.
 	Failures int32 `protobuf:"varint,3,opt,name=failures,proto3" json:"failures,omitempty"`
-	// Unset when failures is 0.
-	Median        *durationpb.Duration `protobuf:"bytes,4,opt,name=median,proto3" json:"median,omitempty"`
-	Mean          *durationpb.Duration `protobuf:"bytes,5,opt,name=mean,proto3" json:"mean,omitempty"`
+	// Unset when failures is 0. Ongoing incidents are not in these.
+	Median *durationpb.Duration `protobuf:"bytes,4,opt,name=median,proto3" json:"median,omitempty"`
+	Mean   *durationpb.Duration `protobuf:"bytes,5,opt,name=mean,proto3" json:"mean,omitempty"`
+	// "alert_events" only: incidents that started in the window and have not
+	// resolved yet. They have no restore time, so they are counted here and in
+	// neither the median nor the mean. Always 0 for "release_ledger".
+	Ongoing       int32 `protobuf:"varint,6,opt,name=ongoing,proto3" json:"ongoing,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -879,6 +901,13 @@ func (x *TimeToRestore) GetMean() *durationpb.Duration {
 	return nil
 }
 
+func (x *TimeToRestore) GetOngoing() int32 {
+	if x != nil {
+		return x.Ongoing
+	}
+	return 0
+}
+
 var File_services_delivery_insights_v1_delivery_insights_proto protoreflect.FileDescriptor
 
 const file_services_delivery_insights_v1_delivery_insights_proto_rawDesc = "" +
@@ -920,7 +949,7 @@ const file_services_delivery_insights_v1_delivery_insights_proto_rawDesc = "" +
 	"\x04kind\x18\v \x01(\tR\x04kind\"\x7f\n" +
 	"\x15GetDoraMetricsRequest\x124\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1e.controlplane.v1.DeliveryScopeR\x05scope\x120\n" +
-	"\x14failure_window_hours\x18\x02 \x01(\x05R\x12failureWindowHours\"\xa4\x04\n" +
+	"\x14failure_window_hours\x18\x02 \x01(\x05R\x12failureWindowHours\"\xf1\x04\n" +
 	"\x16GetDoraMetricsResponse\x12=\n" +
 	"\fwindow_start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vwindowStart\x129\n" +
 	"\n" +
@@ -930,8 +959,8 @@ const file_services_delivery_insights_v1_delivery_insights_proto_rawDesc = "" +
 	"\x14deployment_frequency\x18\x05 \x01(\v2$.controlplane.v1.DeploymentFrequencyR\x13deploymentFrequency\x126\n" +
 	"\tlead_time\x18\x06 \x01(\v2\x19.controlplane.v1.LeadTimeR\bleadTime\x12R\n" +
 	"\x13change_failure_rate\x18\a \x01(\v2\".controlplane.v1.ChangeFailureRateR\x11changeFailureRate\x12F\n" +
-	"\x0ftime_to_restore\x18\b \x01(\v2\x1e.controlplane.v1.TimeToRestoreR\rtimeToRestoreJ\x04\b\t\x10\n" +
-	"\"\xac\x01\n" +
+	"\x0ftime_to_restore\x18\b \x01(\v2\x1e.controlplane.v1.TimeToRestoreR\rtimeToRestore\x12Q\n" +
+	"\x15alert_time_to_restore\x18\t \x01(\v2\x1e.controlplane.v1.TimeToRestoreR\x12alertTimeToRestore\"\xac\x01\n" +
 	"\x13DeploymentFrequency\x12\x1e\n" +
 	"\n" +
 	"definition\x18\x01 \x01(\tR\n" +
@@ -956,7 +985,7 @@ const file_services_delivery_insights_v1_delivery_insights_proto_rawDesc = "" +
 	"\achanges\x18\x02 \x01(\x05R\achanges\x12%\n" +
 	"\x0efailed_changes\x18\x03 \x01(\x05R\rfailedChanges\x12\x17\n" +
 	"\x04rate\x18\x04 \x01(\x01H\x00R\x04rate\x88\x01\x01B\a\n" +
-	"\x05_rate\"\xc5\x01\n" +
+	"\x05_rate\"\xdf\x01\n" +
 	"\rTimeToRestore\x12\x1e\n" +
 	"\n" +
 	"definition\x18\x01 \x01(\tR\n" +
@@ -964,7 +993,8 @@ const file_services_delivery_insights_v1_delivery_insights_proto_rawDesc = "" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x1a\n" +
 	"\bfailures\x18\x03 \x01(\x05R\bfailures\x121\n" +
 	"\x06median\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x06median\x12-\n" +
-	"\x04mean\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x04mean2\xd9\x01\n" +
+	"\x04mean\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x04mean\x12\x18\n" +
+	"\aongoing\x18\x06 \x01(\x05R\aongoing2\xd9\x01\n" +
 	"\x17DeliveryInsightsService\x12[\n" +
 	"\fListReleases\x12$.controlplane.v1.ListReleasesRequest\x1a%.controlplane.v1.ListReleasesResponse\x12a\n" +
 	"\x0eGetDoraMetrics\x12&.controlplane.v1.GetDoraMetricsRequest\x1a'.controlplane.v1.GetDoraMetricsResponseB\xe8\x01\n" +
@@ -1012,19 +1042,20 @@ var file_services_delivery_insights_v1_delivery_insights_proto_depIdxs = []int32
 	8,  // 10: controlplane.v1.GetDoraMetricsResponse.lead_time:type_name -> controlplane.v1.LeadTime
 	9,  // 11: controlplane.v1.GetDoraMetricsResponse.change_failure_rate:type_name -> controlplane.v1.ChangeFailureRate
 	10, // 12: controlplane.v1.GetDoraMetricsResponse.time_to_restore:type_name -> controlplane.v1.TimeToRestore
-	12, // 13: controlplane.v1.LeadTime.median:type_name -> google.protobuf.Duration
-	12, // 14: controlplane.v1.LeadTime.mean:type_name -> google.protobuf.Duration
-	12, // 15: controlplane.v1.TimeToRestore.median:type_name -> google.protobuf.Duration
-	12, // 16: controlplane.v1.TimeToRestore.mean:type_name -> google.protobuf.Duration
-	2,  // 17: controlplane.v1.DeliveryInsightsService.ListReleases:input_type -> controlplane.v1.ListReleasesRequest
-	5,  // 18: controlplane.v1.DeliveryInsightsService.GetDoraMetrics:input_type -> controlplane.v1.GetDoraMetricsRequest
-	3,  // 19: controlplane.v1.DeliveryInsightsService.ListReleases:output_type -> controlplane.v1.ListReleasesResponse
-	6,  // 20: controlplane.v1.DeliveryInsightsService.GetDoraMetrics:output_type -> controlplane.v1.GetDoraMetricsResponse
-	19, // [19:21] is the sub-list for method output_type
-	17, // [17:19] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	10, // 13: controlplane.v1.GetDoraMetricsResponse.alert_time_to_restore:type_name -> controlplane.v1.TimeToRestore
+	12, // 14: controlplane.v1.LeadTime.median:type_name -> google.protobuf.Duration
+	12, // 15: controlplane.v1.LeadTime.mean:type_name -> google.protobuf.Duration
+	12, // 16: controlplane.v1.TimeToRestore.median:type_name -> google.protobuf.Duration
+	12, // 17: controlplane.v1.TimeToRestore.mean:type_name -> google.protobuf.Duration
+	2,  // 18: controlplane.v1.DeliveryInsightsService.ListReleases:input_type -> controlplane.v1.ListReleasesRequest
+	5,  // 19: controlplane.v1.DeliveryInsightsService.GetDoraMetrics:input_type -> controlplane.v1.GetDoraMetricsRequest
+	3,  // 20: controlplane.v1.DeliveryInsightsService.ListReleases:output_type -> controlplane.v1.ListReleasesResponse
+	6,  // 21: controlplane.v1.DeliveryInsightsService.GetDoraMetrics:output_type -> controlplane.v1.GetDoraMetricsResponse
+	20, // [20:22] is the sub-list for method output_type
+	18, // [18:20] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_services_delivery_insights_v1_delivery_insights_proto_init() }

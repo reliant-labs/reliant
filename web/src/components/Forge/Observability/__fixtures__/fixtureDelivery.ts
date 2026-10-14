@@ -39,8 +39,8 @@ export interface DeliveryFixtureOptions {
   releaseLimit?: number;
   /** Some releases recorded a commit time (a future ledger): lead time partly measured. */
   leadTime?: "unknown" | "partial";
-  /** Fill the reserved alert-based time to restore (A8), to show where it goes. */
-  alertMttr?: boolean;
+  /** Alert-based time to restore (A8): absent is unset (no figure); true resolved only; "ongoing" adds open incidents; "quiet" is set with zero counts. */
+  alertMttr?: boolean | "ongoing" | "quiet";
 }
 
 /** A stable 40-hex "commit" for a version. */
@@ -148,6 +148,16 @@ export const DEFINITIONS = {
     `Time from a failed change's promotion to the rollback that restored the previous release, over the failed changes in the window (a failed change is one rolled back within ${goHours(h)} of being promoted). Measured from the release ledger; it does not use alerts.`,
 };
 
+const ALERT_DEFINITION = "Time from a DeployFailed alert firing to it resolving, over the incidents that started in the window. Measured from alert history.";
+
+/** `undefined`/`false`: the server leaves field 9 unset. `quiet`: alert history is wired and nothing fired. */
+function fixtureAlertRestore(mode: DeliveryFixtureOptions["alertMttr"]): TimeToRestore | null {
+  if (!mode) return null;
+  const base = { definition: ALERT_DEFINITION, source: "alert_events" };
+  if (mode === "quiet") return { ...base, failures: 0, ongoing: 0, medianMs: null, meanMs: null };
+  return { ...base, failures: 4, ongoing: mode === "ongoing" ? 2 : 0, medianMs: 38 * 60_000, meanMs: 52 * 60_000 };
+}
+
 /** DORA over `window` for `envIds` (empty: all), computed from the fixture ledger. */
 export function fixtureDora(ledger: readonly Promotion[], envIds: string[], window: TimeWindow, failureHours: number, options: DeliveryFixtureOptions = {}): DoraMetrics {
   const inScope = (p: Promotion) => !envIds.length || envIds.includes(p.envId);
@@ -172,6 +182,7 @@ export function fixtureDora(ledger: readonly Promotion[], envIds: string[], wind
     definition: DEFINITIONS.timeToRestore(failureHours),
     source: "release_ledger",
     failures: failed,
+    ongoing: 0,
     medianMs: median(restores),
     meanMs: mean(restores),
   };
@@ -202,15 +213,7 @@ export function fixtureDora(ledger: readonly Promotion[], envIds: string[], wind
       rate: deployments.length ? failed / deployments.length : null,
     },
     timeToRestore: ttr,
-    alertTimeToRestore: options.alertMttr
-      ? {
-          definition: "Time from an alert firing in an environment to it resolving, over the alerts in the window. Measured from alert history.",
-          source: "alerts",
-          failures: 4,
-          medianMs: 38 * 60_000,
-          meanMs: 52 * 60_000,
-        }
-      : null,
+    alertTimeToRestore: fixtureAlertRestore(options.alertMttr),
   };
 }
 

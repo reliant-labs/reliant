@@ -16,9 +16,10 @@
  * so, with how many deployments that leaves unmeasured, rather than hiding
  * the metric or inventing one.
  *
- * Time to restore is measured from rollbacks in the ledger. An alert-based
- * figure (from alert history) is reserved on the response; the card shows it
- * beside the ledger's when it arrives (`DoraMetrics.alertTimeToRestore`).
+ * Time to restore is measured from rollbacks in the ledger. The alert-based
+ * figure (from alert history) is a separate measurement shown beside it, with
+ * the count of incidents still ongoing. When the server leaves it unset the
+ * card shows no alert figure at all: unset is "no figure", not "no incidents".
  */
 
 import { useId, useMemo, type ReactNode } from "react";
@@ -377,8 +378,16 @@ function RestoreCard({ metrics }: { metrics: DoraMetrics }) {
       </p>
       {alerts && (
         <div className="space-y-0.5 border-t border-border/60 pt-1.5" data-testid="obs-dora-restore-alerts">
-          <p className="font-medium text-foreground">From alerts: {alerts.failures === 0 ? "nothing resolved" : formatSpan(alerts.medianMs)}</p>
-          {alerts.failures > 0 && <p>{restoreLine(alerts)}</p>}
+          <p className="font-medium text-foreground" data-testid="obs-dora-restore-alerts-value">
+            From alerts: {alerts.failures === 0 ? "nothing resolved" : formatSpan(alerts.medianMs)}
+          </p>
+          {alerts.failures > 0 && <p>{restoreLine(alerts).replace("failed change", "resolved incident")}</p>}
+          {alerts.ongoing > 0 && (
+            <p className="text-warning" data-testid="obs-dora-restore-ongoing">
+              {plural(alerts.ongoing, "ongoing incident")}, not yet resolved and left out of the median and mean.
+            </p>
+          )}
+          {alerts.failures === 0 && alerts.ongoing === 0 && <p data-testid="obs-dora-restore-alerts-quiet">No deploy-failure alert fired in this window.</p>}
           {alerts.definition && <p className="text-2xs">{alerts.definition}</p>}
         </div>
       )}

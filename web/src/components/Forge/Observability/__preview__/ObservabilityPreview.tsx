@@ -72,6 +72,8 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "delivery-truncated", label: "releases: truncated (limit 5)", options: { releaseLimit: 5 } },
   { id: "delivery-lead-partial", label: "delivery: lead time partly known", options: { leadTime: "partial" } },
   { id: "delivery-alert-mttr", label: "delivery: alert-based MTTR filled", options: { alertMttr: true } },
+  { id: "delivery-alert-mttr-ongoing", label: "delivery: alert-based MTTR with ongoing incidents", options: { alertMttr: "ongoing" } },
+  { id: "delivery-alert-mttr-quiet", label: "delivery: alert history wired, nothing fired", options: { alertMttr: "quiet" } },
 ];
 
 const LIST_KEYS = new Set(["envs", "f", "groupBy"]);

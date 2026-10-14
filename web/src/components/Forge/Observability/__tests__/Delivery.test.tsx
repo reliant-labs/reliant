@@ -239,6 +239,24 @@ describe("Delivery: DORA from the release ledger", () => {
     renderPanel(createFixtureApi({ alertMttr: true }), { view: "delivery" }, PROJECT_PLACE);
     const alerts = await screen.findByTestId("obs-dora-restore-alerts");
     expect(alerts).toHaveTextContent("From alerts: 38m");
+    expect(alerts).toHaveTextContent("median over 4 resolved incidents");
+    expect(screen.queryByTestId("obs-dora-restore-ongoing")).not.toBeInTheDocument();
     expect(screen.getByTestId("obs-dora-restore-value")).toHaveTextContent("3h");
+  });
+
+  it("counts ongoing incidents beside the resolved ones, without folding them into the figure", async () => {
+    renderPanel(createFixtureApi({ alertMttr: "ongoing" }), { view: "delivery" }, PROJECT_PLACE);
+    const ongoing = await screen.findByTestId("obs-dora-restore-ongoing");
+    expect(ongoing).toHaveTextContent("2 ongoing incidents");
+    expect(screen.getByTestId("obs-dora-restore-alerts-value")).toHaveTextContent("From alerts: 38m");
+    expect(screen.getByTestId("obs-dora-restore-value")).toHaveTextContent("3h");
+  });
+
+  it("says a quiet alert history is zero incidents, which is not the same as no alert figure", async () => {
+    renderPanel(createFixtureApi({ alertMttr: "quiet" }), { view: "delivery" }, PROJECT_PLACE);
+    await screen.findByTestId("obs-dora-restore-alerts");
+    expect(screen.getByTestId("obs-dora-restore-alerts-value")).toHaveTextContent("From alerts: nothing resolved");
+    expect(screen.getByTestId("obs-dora-restore-alerts-quiet")).toBeInTheDocument();
+    expect(screen.queryByTestId("obs-dora-restore-ongoing")).not.toBeInTheDocument();
   });
 });

@@ -151,9 +151,14 @@ message GetDoraMetricsResponse {
   DeploymentFrequency deployment_frequency = 5;
   LeadTime lead_time = 6;
   ChangeFailureRate change_failure_rate = 7;
+  // The release-ledger figure (source "release_ledger"): failed change ->
+  // the rollback that restored it.
   TimeToRestore time_to_restore = 8;
-  // Reserved for the alert-based MTTR (alerting A8, from alert_events).
-  reserved 9;
+  // The alert-based figure (source "alert_events"): a platform DeployFailed
+  // alert firing -> resolved, from alert history. A separate measurement, not
+  // a replacement for time_to_restore. Unset when alert history is not wired
+  // on this deployment; set (with zero counts) when it is and nothing fired.
+  TimeToRestore alert_time_to_restore = 9;
 }
 
 message DeploymentFrequency {
@@ -174,8 +179,10 @@ message LeadTime {
   // Deployments with a known commit time; the statistics cover these only.
   int32 measured_changes = 2;
   // Deployments whose commit time is unknown, and how many distinct releases
-  // that is. Today the ledger records the commit id but not its time, so every
-  // deployment is unknown until the producers record one; nothing is inferred.
+  // that is. A release records its commit time when forge cut it from a clean
+  // checkout; a dirty or non-git build, an older forge and every release cut
+  // before it was recorded are unknown. Nothing is inferred, so a window can be
+  // partly measured and partly unknown.
   int32 unknown_changes = 3;
   int32 unknown_releases = 4;
   // Unset when measured_changes is 0.
@@ -195,14 +202,20 @@ message ChangeFailureRate {
 
 message TimeToRestore {
   string definition = 1;
-  // Where the figure comes from: "release_ledger" here. The alert-based MTTR
-  // that alerting (A8) will compute from alert_events is a separate figure with
-  // its own source, reserved below on the response, not a replacement for this.
+  // Where the figure comes from: "release_ledger" (failed change -> rollback)
+  // or "alert_events" (alert firing -> resolved). The two are different
+  // measurements of different events and are never blended.
   string source = 2;
-  // Failed changes in the window (the same set ChangeFailureRate counts); each
-  // one is restored by the promotion that rolled it back.
+  // Restored incidents in the window: for "release_ledger" the failed changes
+  // (the same set ChangeFailureRate counts), each restored by the promotion that
+  // rolled it back; for "alert_events" the alert incidents that started in the
+  // window and have resolved.
   int32 failures = 3;
-  // Unset when failures is 0.
+  // Unset when failures is 0. Ongoing incidents are not in these.
   google.protobuf.Duration median = 4;
   google.protobuf.Duration mean = 5;
+  // "alert_events" only: incidents that started in the window and have not
+  // resolved yet. They have no restore time, so they are counted here and in
+  // neither the median nor the mean. Always 0 for "release_ledger".
+  int32 ongoing = 6;
 }

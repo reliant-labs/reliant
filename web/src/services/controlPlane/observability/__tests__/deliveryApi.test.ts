@@ -107,9 +107,34 @@ describe("GetDoraMetrics", () => {
     expect(m.timeToRestore).toMatchObject({ source: "release_ledger", medianMs: 3 * 3_600_000 });
     expect(m.deploymentFrequency).toMatchObject({ deployments: 13, rollbacks: 1, reapplies: 1 });
     expect(m).toMatchObject({ windowStartMs: T - 30 * 86_400_000, windowEndMs: T, environmentCount: 3 });
-    // Field 9 is reserved for the alert-based MTTR; nothing fills it yet.
+    expect(m.timeToRestore.ongoing).toBe(0);
     expect(m.alertTimeToRestore).toBeNull();
     expect(durationMs(undefined)).toBeNull();
+  });
+
+  describe("alert-based time to restore (field 9)", () => {
+    const alerts = (t: object) => ({ definition: "alerts", source: "alert_events", ...t });
+
+    it("maps an unset field 9 to null: no figure, not zero incidents", async () => {
+      client.getDoraMetrics.mockResolvedValue({ timeToRestore: { definition: "ttr", source: "release_ledger", failures: 1, median: dur(3_600_000) } });
+      expect((await getDoraMetrics({ orgId: "org-1", envIds: [] })).alertTimeToRestore).toBeNull();
+    });
+
+    it("maps a set field 9 with zero counts to a figure of zero incidents, with no durations", async () => {
+      client.getDoraMetrics.mockResolvedValue({ alertTimeToRestore: alerts({ failures: 0, ongoing: 0 }) });
+      const m = await getDoraMetrics({ orgId: "org-1", envIds: [] });
+      expect(m.alertTimeToRestore).toEqual({ definition: "alerts", source: "alert_events", failures: 0, ongoing: 0, medianMs: null, meanMs: null });
+    });
+
+    it("maps resolved incidents with some still ongoing, beside an untouched ledger figure", async () => {
+      client.getDoraMetrics.mockResolvedValue({
+        timeToRestore: { definition: "ttr", source: "release_ledger", failures: 1, median: dur(3_600_000), mean: dur(3_600_000) },
+        alertTimeToRestore: alerts({ failures: 3, ongoing: 2, median: dur(38 * 60_000), mean: dur(52 * 60_000) }),
+      });
+      const m = await getDoraMetrics({ orgId: "org-1", envIds: [] });
+      expect(m.alertTimeToRestore).toEqual({ definition: "alerts", source: "alert_events", failures: 3, ongoing: 2, medianMs: 38 * 60_000, meanMs: 52 * 60_000 });
+      expect(m.timeToRestore).toMatchObject({ source: "release_ledger", failures: 1, ongoing: 0, medianMs: 3_600_000 });
+    });
   });
 });
 

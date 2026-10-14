@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/delivery_insights/v1/delivery_insights.proto.
  */
 export const file_services_delivery_insights_v1_delivery_insights: GenFile = /*@__PURE__*/
-  fileDesc("CjVzZXJ2aWNlcy9kZWxpdmVyeV9pbnNpZ2h0cy92MS9kZWxpdmVyeV9pbnNpZ2h0cy5wcm90bxIPY29udHJvbHBsYW5lLnYxIncKEURlbGl2ZXJ5VGltZVJhbmdlEjEKBXN0YXJ0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEIGukgDyAEBEi8KA2VuZBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCBrpIA8gBASLaAQoNRGVsaXZlcnlTY29wZRIXCgZvcmdfaWQYASABKAlCB7pIBHICEAESNgoKdGltZV9yYW5nZRgEIAEoCzIiLmNvbnRyb2xwbGFuZS52MS5EZWxpdmVyeVRpbWVSYW5nZRIhCgpwcm9qZWN0X2lkGAUgASgJQgi6SAVyAxiAAUgAiAEBEhkKB2Vudl9pZHMYBiADKAlCCLpIBZIBAhAyQg0KC19wcm9qZWN0X2lkSgQIAhADSgQIAxAESgQIBxAIUgZlbnZfaWRSCHNlcnZpY2VzUgdmaWx0ZXJzImcKE0xpc3RSZWxlYXNlc1JlcXVlc3QSNQoFc2NvcGUYASABKAsyHi5jb250cm9scGxhbmUudjEuRGVsaXZlcnlTY29wZUIGukgDyAEBEhkKBWxpbWl0GAIgASgFQgq6SAcaBRjQDygAIlsKFExpc3RSZWxlYXNlc1Jlc3BvbnNlEjAKCHJlbGVhc2VzGAEgAygLMh4uY29udHJvbHBsYW5lLnYxLlJlbGVhc2VNYXJrZXISEQoJdHJ1bmNhdGVkGAIgASgIIpICCg1SZWxlYXNlTWFya2VyEhQKDHByb21vdGlvbl9pZBgBIAEoCRIWCg5lbnZpcm9ubWVudF9pZBgCIAEoCRIYChBlbnZpcm9ubWVudF9uYW1lGAMgASgJEhIKCnJlbGVhc2VfaWQYBCABKAkSDwoHdmVyc2lvbhgFIAEoCRISCgpnaXRfY29tbWl0GAYgASgJEg8KB2dpdF90YWcYByABKAkSLwoLcHJvbW90ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC3Byb21vdGVkX2J5GAkgASgJEhsKE3Byb21vdGVkX2J5X3VzZXJfaWQYCiABKAkSDAoEa2luZBgLIAEoCSJ4ChVHZXREb3JhTWV0cmljc1JlcXVlc3QSNQoFc2NvcGUYASABKAsyHi5jb250cm9scGxhbmUudjEuRGVsaXZlcnlTY29wZUIGukgDyAEBEigKFGZhaWx1cmVfd2luZG93X2hvdXJzGAIgASgFQgq6SAcaBRioASgAIqUDChZHZXREb3JhTWV0cmljc1Jlc3BvbnNlEjAKDHdpbmRvd19zdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKd2luZG93X2VuZBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASHAoUZmFpbHVyZV93aW5kb3dfaG91cnMYAyABKAUSGQoRZW52aXJvbm1lbnRfY291bnQYBCABKAUSQgoUZGVwbG95bWVudF9mcmVxdWVuY3kYBSABKAsyJC5jb250cm9scGxhbmUudjEuRGVwbG95bWVudEZyZXF1ZW5jeRIsCglsZWFkX3RpbWUYBiABKAsyGS5jb250cm9scGxhbmUudjEuTGVhZFRpbWUSPwoTY2hhbmdlX2ZhaWx1cmVfcmF0ZRgHIAEoCzIiLmNvbnRyb2xwbGFuZS52MS5DaGFuZ2VGYWlsdXJlUmF0ZRI3Cg90aW1lX3RvX3Jlc3RvcmUYCCABKAsyHi5jb250cm9scGxhbmUudjEuVGltZVRvUmVzdG9yZUoECAkQCiJ1ChNEZXBsb3ltZW50RnJlcXVlbmN5EhIKCmRlZmluaXRpb24YASABKAkSEwoLZGVwbG95bWVudHMYAiABKAUSDwoHcGVyX2RheRgDIAEoARIRCglyb2xsYmFja3MYBCABKAUSEQoJcmVhcHBsaWVzGAUgASgFIr8BCghMZWFkVGltZRISCgpkZWZpbml0aW9uGAEgASgJEhgKEG1lYXN1cmVkX2NoYW5nZXMYAiABKAUSFwoPdW5rbm93bl9jaGFuZ2VzGAMgASgFEhgKEHVua25vd25fcmVsZWFzZXMYBCABKAUSKQoGbWVkaWFuGAUgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEicKBG1lYW4YBiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24ibAoRQ2hhbmdlRmFpbHVyZVJhdGUSEgoKZGVmaW5pdGlvbhgBIAEoCRIPCgdjaGFuZ2VzGAIgASgFEhYKDmZhaWxlZF9jaGFuZ2VzGAMgASgFEhEKBHJhdGUYBCABKAFIAIgBAUIHCgVfcmF0ZSKZAQoNVGltZVRvUmVzdG9yZRISCgpkZWZpbml0aW9uGAEgASgJEg4KBnNvdXJjZRgCIAEoCRIQCghmYWlsdXJlcxgDIAEoBRIpCgZtZWRpYW4YBCABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SJwoEbWVhbhgFIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbjLPAgoXRGVsaXZlcnlJbnNpZ2h0c1NlcnZpY2USZQoMTGlzdFJlbGVhc2VzEiQuY29udHJvbHBsYW5lLnYxLkxpc3RSZWxlYXNlc1JlcXVlc3QaJS5jb250cm9scGxhbmUudjEuTGlzdFJlbGVhc2VzUmVzcG9uc2UiCKK7GAQIARgBEmsKDkdldERvcmFNZXRyaWNzEiYuY29udHJvbHBsYW5lLnYxLkdldERvcmFNZXRyaWNzUmVxdWVzdBonLmNvbnRyb2xwbGFuZS52MS5HZXREb3JhTWV0cmljc1Jlc3BvbnNlIgiiuxgECAEYARpggrUYXAoXRGVsaXZlcnlJbnNpZ2h0c1NlcnZpY2USBTEuMC4wGjpSZWxlYXNlcyBhbmQgRE9SQSBkZWxpdmVyeSBtZXRyaWNzIG92ZXIgdGhlIHJlbGVhc2UgbGVkZ2VyQugBChNjb20uY29udHJvbHBsYW5lLnYxQhVEZWxpdmVyeUluc2lnaHRzUHJvdG9QAVpdZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2RlbGl2ZXJ5X2luc2lnaHRzL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_duration, file_google_protobuf_timestamp]);
+  fileDesc("CjVzZXJ2aWNlcy9kZWxpdmVyeV9pbnNpZ2h0cy92MS9kZWxpdmVyeV9pbnNpZ2h0cy5wcm90bxIPY29udHJvbHBsYW5lLnYxIncKEURlbGl2ZXJ5VGltZVJhbmdlEjEKBXN0YXJ0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEIGukgDyAEBEi8KA2VuZBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCBrpIA8gBASLaAQoNRGVsaXZlcnlTY29wZRIXCgZvcmdfaWQYASABKAlCB7pIBHICEAESNgoKdGltZV9yYW5nZRgEIAEoCzIiLmNvbnRyb2xwbGFuZS52MS5EZWxpdmVyeVRpbWVSYW5nZRIhCgpwcm9qZWN0X2lkGAUgASgJQgi6SAVyAxiAAUgAiAEBEhkKB2Vudl9pZHMYBiADKAlCCLpIBZIBAhAyQg0KC19wcm9qZWN0X2lkSgQIAhADSgQIAxAESgQIBxAIUgZlbnZfaWRSCHNlcnZpY2VzUgdmaWx0ZXJzImcKE0xpc3RSZWxlYXNlc1JlcXVlc3QSNQoFc2NvcGUYASABKAsyHi5jb250cm9scGxhbmUudjEuRGVsaXZlcnlTY29wZUIGukgDyAEBEhkKBWxpbWl0GAIgASgFQgq6SAcaBRjQDygAIlsKFExpc3RSZWxlYXNlc1Jlc3BvbnNlEjAKCHJlbGVhc2VzGAEgAygLMh4uY29udHJvbHBsYW5lLnYxLlJlbGVhc2VNYXJrZXISEQoJdHJ1bmNhdGVkGAIgASgIIpICCg1SZWxlYXNlTWFya2VyEhQKDHByb21vdGlvbl9pZBgBIAEoCRIWCg5lbnZpcm9ubWVudF9pZBgCIAEoCRIYChBlbnZpcm9ubWVudF9uYW1lGAMgASgJEhIKCnJlbGVhc2VfaWQYBCABKAkSDwoHdmVyc2lvbhgFIAEoCRISCgpnaXRfY29tbWl0GAYgASgJEg8KB2dpdF90YWcYByABKAkSLwoLcHJvbW90ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC3Byb21vdGVkX2J5GAkgASgJEhsKE3Byb21vdGVkX2J5X3VzZXJfaWQYCiABKAkSDAoEa2luZBgLIAEoCSJ4ChVHZXREb3JhTWV0cmljc1JlcXVlc3QSNQoFc2NvcGUYASABKAsyHi5jb250cm9scGxhbmUudjEuRGVsaXZlcnlTY29wZUIGukgDyAEBEigKFGZhaWx1cmVfd2luZG93X2hvdXJzGAIgASgFQgq6SAcaBRioASgAIt4DChZHZXREb3JhTWV0cmljc1Jlc3BvbnNlEjAKDHdpbmRvd19zdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKd2luZG93X2VuZBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASHAoUZmFpbHVyZV93aW5kb3dfaG91cnMYAyABKAUSGQoRZW52aXJvbm1lbnRfY291bnQYBCABKAUSQgoUZGVwbG95bWVudF9mcmVxdWVuY3kYBSABKAsyJC5jb250cm9scGxhbmUudjEuRGVwbG95bWVudEZyZXF1ZW5jeRIsCglsZWFkX3RpbWUYBiABKAsyGS5jb250cm9scGxhbmUudjEuTGVhZFRpbWUSPwoTY2hhbmdlX2ZhaWx1cmVfcmF0ZRgHIAEoCzIiLmNvbnRyb2xwbGFuZS52MS5DaGFuZ2VGYWlsdXJlUmF0ZRI3Cg90aW1lX3RvX3Jlc3RvcmUYCCABKAsyHi5jb250cm9scGxhbmUudjEuVGltZVRvUmVzdG9yZRI9ChVhbGVydF90aW1lX3RvX3Jlc3RvcmUYCSABKAsyHi5jb250cm9scGxhbmUudjEuVGltZVRvUmVzdG9yZSJ1ChNEZXBsb3ltZW50RnJlcXVlbmN5EhIKCmRlZmluaXRpb24YASABKAkSEwoLZGVwbG95bWVudHMYAiABKAUSDwoHcGVyX2RheRgDIAEoARIRCglyb2xsYmFja3MYBCABKAUSEQoJcmVhcHBsaWVzGAUgASgFIr8BCghMZWFkVGltZRISCgpkZWZpbml0aW9uGAEgASgJEhgKEG1lYXN1cmVkX2NoYW5nZXMYAiABKAUSFwoPdW5rbm93bl9jaGFuZ2VzGAMgASgFEhgKEHVua25vd25fcmVsZWFzZXMYBCABKAUSKQoGbWVkaWFuGAUgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEicKBG1lYW4YBiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24ibAoRQ2hhbmdlRmFpbHVyZVJhdGUSEgoKZGVmaW5pdGlvbhgBIAEoCRIPCgdjaGFuZ2VzGAIgASgFEhYKDmZhaWxlZF9jaGFuZ2VzGAMgASgFEhEKBHJhdGUYBCABKAFIAIgBAUIHCgVfcmF0ZSKqAQoNVGltZVRvUmVzdG9yZRISCgpkZWZpbml0aW9uGAEgASgJEg4KBnNvdXJjZRgCIAEoCRIQCghmYWlsdXJlcxgDIAEoBRIpCgZtZWRpYW4YBCABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SJwoEbWVhbhgFIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIPCgdvbmdvaW5nGAYgASgFMs8CChdEZWxpdmVyeUluc2lnaHRzU2VydmljZRJlCgxMaXN0UmVsZWFzZXMSJC5jb250cm9scGxhbmUudjEuTGlzdFJlbGVhc2VzUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5MaXN0UmVsZWFzZXNSZXNwb25zZSIIorsYBAgBGAESawoOR2V0RG9yYU1ldHJpY3MSJi5jb250cm9scGxhbmUudjEuR2V0RG9yYU1ldHJpY3NSZXF1ZXN0GicuY29udHJvbHBsYW5lLnYxLkdldERvcmFNZXRyaWNzUmVzcG9uc2UiCKK7GAQIARgBGmCCtRhcChdEZWxpdmVyeUluc2lnaHRzU2VydmljZRIFMS4wLjAaOlJlbGVhc2VzIGFuZCBET1JBIGRlbGl2ZXJ5IG1ldHJpY3Mgb3ZlciB0aGUgcmVsZWFzZSBsZWRnZXJC6AEKE2NvbS5jb250cm9scGxhbmUudjFCFURlbGl2ZXJ5SW5zaWdodHNQcm90b1ABWl1naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvZGVsaXZlcnlfaW5zaWdodHMvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_duration, file_google_protobuf_timestamp]);
 
 /**
  * DeliveryTimeRange is a half-open range [start, end). Both ends are required
@@ -296,9 +296,22 @@ export type GetDoraMetricsResponse = Message<"controlplane.v1.GetDoraMetricsResp
   changeFailureRate?: ChangeFailureRate | undefined;
 
   /**
+   * The release-ledger figure (source "release_ledger"): failed change ->
+   * the rollback that restored it.
+   *
    * @generated from field: controlplane.v1.TimeToRestore time_to_restore = 8;
    */
   timeToRestore?: TimeToRestore | undefined;
+
+  /**
+   * The alert-based figure (source "alert_events"): a platform DeployFailed
+   * alert firing -> resolved, from alert history. A separate measurement, not
+   * a replacement for time_to_restore. Unset when alert history is not wired
+   * on this deployment; set (with zero counts) when it is and nothing fired.
+   *
+   * @generated from field: controlplane.v1.TimeToRestore alert_time_to_restore = 9;
+   */
+  alertTimeToRestore?: TimeToRestore | undefined;
 };
 
 /**
@@ -372,8 +385,10 @@ export type LeadTime = Message<"controlplane.v1.LeadTime"> & {
 
   /**
    * Deployments whose commit time is unknown, and how many distinct releases
-   * that is. Today the ledger records the commit id but not its time, so every
-   * deployment is unknown until the producers record one; nothing is inferred.
+   * that is. A release records its commit time when forge cut it from a clean
+   * checkout; a dirty or non-git build, an older forge and every release cut
+   * before it was recorded are unknown. Nothing is inferred, so a window can be
+   * partly measured and partly unknown.
    *
    * @generated from field: int32 unknown_changes = 3;
    */
@@ -452,24 +467,26 @@ export type TimeToRestore = Message<"controlplane.v1.TimeToRestore"> & {
   definition: string;
 
   /**
-   * Where the figure comes from: "release_ledger" here. The alert-based MTTR
-   * that alerting (A8) will compute from alert_events is a separate figure with
-   * its own source, reserved below on the response, not a replacement for this.
+   * Where the figure comes from: "release_ledger" (failed change -> rollback)
+   * or "alert_events" (alert firing -> resolved). The two are different
+   * measurements of different events and are never blended.
    *
    * @generated from field: string source = 2;
    */
   source: string;
 
   /**
-   * Failed changes in the window (the same set ChangeFailureRate counts); each
-   * one is restored by the promotion that rolled it back.
+   * Restored incidents in the window: for "release_ledger" the failed changes
+   * (the same set ChangeFailureRate counts), each restored by the promotion that
+   * rolled it back; for "alert_events" the alert incidents that started in the
+   * window and have resolved.
    *
    * @generated from field: int32 failures = 3;
    */
   failures: number;
 
   /**
-   * Unset when failures is 0.
+   * Unset when failures is 0. Ongoing incidents are not in these.
    *
    * @generated from field: google.protobuf.Duration median = 4;
    */
@@ -479,6 +496,15 @@ export type TimeToRestore = Message<"controlplane.v1.TimeToRestore"> & {
    * @generated from field: google.protobuf.Duration mean = 5;
    */
   mean?: Duration | undefined;
+
+  /**
+   * "alert_events" only: incidents that started in the window and have not
+   * resolved yet. They have no restore time, so they are counted here and in
+   * neither the median nor the mean. Always 0 for "release_ledger".
+   *
+   * @generated from field: int32 ongoing = 6;
+   */
+  ongoing: number;
 };
 
 /**

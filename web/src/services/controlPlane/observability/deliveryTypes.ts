@@ -79,9 +79,12 @@ export interface ChangeFailureRate {
 
 export interface TimeToRestore {
   definition: string;
-  /** "release_ledger" for rollback-based MTTR; the alert-based figure will say otherwise. */
+  /** "release_ledger" for rollback-based MTTR; "alert_events" for the alert-based one. */
   source: string;
+  /** Restored incidents: the ones the median and mean cover. */
   failures: number;
+  /** Alert-based only: incidents that started in the window and have not resolved. In neither median nor mean; always 0 for the ledger. */
+  ongoing: number;
   medianMs: number | null;
   meanMs: number | null;
 }
@@ -97,9 +100,10 @@ export interface DoraMetrics {
   /** Failed change → the rollback that restored service, from the release ledger. */
   timeToRestore: TimeToRestore;
   /**
-   * Alert → resolution, from alert history (A8). The response reserves field 9
-   * for it; until control-plane fills it this is always null, and the view
-   * shows the ledger figure alone. Wiring it is the mapping in deliveryApi.ts.
+   * Alert → resolution, from alert history (A8), a separate measurement from
+   * the ledger's. Null when the server leaves field 9 unset (alert history not
+   * wired, or unreadable): "no alert-based figure", never "zero incidents" —
+   * a set figure with zero counts means alert history was read and nothing fired.
    */
   alertTimeToRestore: TimeToRestore | null;
 }

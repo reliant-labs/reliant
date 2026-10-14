@@ -90,6 +90,7 @@ export async function getDoraMetrics(req: DeliveryScope & { window?: TimeWindow;
     failures: t?.failures ?? 0,
     medianMs: durationMs(t?.median),
     meanMs: durationMs(t?.mean),
+    ongoing: t?.ongoing ?? 0,
   });
   return {
     windowStartMs: msOf(res.windowStart),
@@ -118,7 +119,7 @@ export async function getDoraMetrics(req: DeliveryScope & { window?: TimeWindow;
       rate: cfr?.rate ?? null,
     },
     timeToRestore: restore(ttr),
-    // Field 9 (alert-based MTTR, A8) is reserved on the wire and not sent yet.
-    alertTimeToRestore: null,
+    // Unset is "no figure", not zero incidents: only a present message is mapped.
+    alertTimeToRestore: res.alertTimeToRestore ? restore(res.alertTimeToRestore) : null,
   };
 }
