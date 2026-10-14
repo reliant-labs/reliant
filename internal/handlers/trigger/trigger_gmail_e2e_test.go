@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -141,9 +141,11 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, registry.RegisterPoller(gmail.ID, poller))
 	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
-	svc := NewTriggerServiceFor(repo, temporalClient, taskQueue).
-		WithPolledIntegrations(registry.IsPolled).
-		WithInbound(InboundOptions{PublicURL: "https://reliant.example", Catalog: registry, Intake: intake})
+	syncer, fires := TemporalBackend(temporalClient, repo, taskQueue, registry.IsPolled)
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{
+		Repo: repo, Syncer: syncer, Fires: fires,
+		PublicURL: "https://reliant.example", Catalog: registry, Intake: intake,
+	}))
 
 	// --- the worker: poll workflow + activity, event fire, launcher -------
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,

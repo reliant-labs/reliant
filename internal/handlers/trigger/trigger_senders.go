@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -38,16 +38,9 @@ type ResolvedSender struct {
 	DisplayName string
 }
 
-// WithSenderDirectories enables ResolveTriggerSenders for the integrations
-// named, keyed by integration id.
-func (s *TriggerService) WithSenderDirectories(dirs map[string]SenderDirectory) *TriggerService {
-	s.senders = dirs
-	return s
-}
-
 // ResolveTriggerSenders looks people up for "Only from". It reads nothing of
 // the caller's triggers: it asks the provider, as the caller, about people.
-func (s *TriggerService) ResolveTriggerSenders(
+func (s *Service) ResolveTriggerSenders(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ResolveTriggerSendersRequest],
 ) (*connect.Response[reliantv1.ResolveTriggerSendersResponse], error) {
@@ -57,7 +50,10 @@ func (s *TriggerService) ResolveTriggerSenders(
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("looking people up is only available for GitHub, not %q", integration))
 	}
-	dir := s.senders[integration]
+	var dir SenderDirectory
+	if s.deps.Senders != nil {
+		dir, _ = s.deps.Senders.Directory(integration)
+	}
 	if dir == nil {
 		return nil, connect.NewError(connect.CodeUnavailable,
 			errors.New("GitHub triggers are not set up on this server, so GitHub people cannot be looked up"))

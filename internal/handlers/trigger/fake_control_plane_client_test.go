@@ -1,4 +1,4 @@
-package services
+package trigger
 
 import (
 	"context"
@@ -7,11 +7,10 @@ import (
 )
 
 // fakeControlPlaneClient is the controlplane.Client trigger_automation_test.go
-// drives. SettingsService moved to internal/handlers/settings with its own
-// copy (research/forge-migration/06-p3b-recipe.md §3.7): a shared fake would
-// have to leave _test.go, which gives controlplane.Client a second
-// implementation and makes forge refuse controlplane's
-// //forge:exclude-contract. The Trigger lane takes this file with it.
+// drives. internal/handlers/settings keeps its own copy
+// (research/forge-migration/06-p3b-recipe.md §3.7): a shared fake would have
+// to leave _test.go, which gives controlplane.Client a second implementation
+// and makes forge refuse controlplane's //forge:exclude-contract.
 type fakeControlPlaneClient struct {
 	issueKey       string
 	issueRotated   bool

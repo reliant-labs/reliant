@@ -27,9 +27,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/drain"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
+	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -355,16 +355,23 @@ func Run(ctx context.Context, opts Options) error {
 	// provider registry (which integrations deliver events here) and the
 	// vault (signed webhooks). PUBLIC_URL is read when the worker has it;
 	// without it a webhook's URL is reported as a bare path.
-	triggerService := services.NewTriggerServiceFor(repo, temporalClient, v2workflow.SharedTaskQueue).
-		WithInbound(services.InboundOptions{
-			PublicURL: strings.TrimSpace(os.Getenv("PUBLIC_URL")),
-			Sealer:    vaultKeys,
-			Catalog:   triggerPollers,
-			Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
-				WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
-				WithEnrichers(triggers.OriginEnricherFromEnv(repo.IntegrationWrites(), repo, os.Getenv)),
-		}).
-		WithPolledIntegrations(triggerPollers.IsPolled)
+	triggerSyncer, triggerFires := trigger.TemporalBackend(temporalClient, repo, v2workflow.SharedTaskQueue, triggerPollers.IsPolled)
+	triggerService, err := trigger.New(trigger.Deps{
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      repo,
+		Syncer:    triggerSyncer,
+		Fires:     triggerFires,
+		PublicURL: strings.TrimSpace(os.Getenv("PUBLIC_URL")),
+		Sealer:    vaultKeys,
+		Catalog:   triggerPollers,
+		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
+			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
+			WithEnrichers(triggers.OriginEnricherFromEnv(repo.IntegrationWrites(), repo, os.Getenv)),
+	})
+	if err != nil {
+		return fmt.Errorf("trigger service: %w", err)
+	}
 
 	runMachine := toolexec.NewRunMachine(router)
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{

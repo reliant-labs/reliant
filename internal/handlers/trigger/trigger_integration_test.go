@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -78,7 +78,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 
 	// The real service, over the real schedule and workflow clients.
 	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
-	svc := NewTriggerService(repo, backend, backend)
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -219,7 +219,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	defer w.Stop()
 
 	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
-	svc := NewTriggerService(repo, backend, backend)
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -310,7 +310,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 	defer w.Stop()
 
 	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
-	svc := NewTriggerService(repo, backend, backend)
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()

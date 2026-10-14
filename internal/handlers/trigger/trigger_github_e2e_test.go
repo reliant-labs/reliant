@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -152,10 +152,10 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	svc := NewTriggerService(repo, nil, nil).WithInbound(InboundOptions{
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo,
 		PublicURL: publicURL, Catalog: registry, Intake: intake,
-		Access: map[string]IntegrationAccess{"github": e2eGitHubAccess{refresher}},
-	})
+		Access: AccessByIntegration{"github": e2eGitHubAccess{refresher}},
+	}))
 
 	// --- two users, one project each ---------------------------------------
 	now := time.Now().UTC()

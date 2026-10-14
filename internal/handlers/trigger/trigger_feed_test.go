@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -190,7 +190,7 @@ func TestListTriggersUsesConstantQueries(t *testing.T) {
 		env.seedFiring(t, trig.Id, time.Now().UTC(), core.TriggerEventLaunched, &done)
 	}
 	counting := &triggerQueryCounter{Repository: env.repo}
-	svc := NewTriggerService(counting, env.backend, env.backend)
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: counting, Syncer: env.backend, Fires: env.backend}))
 	resp, err := svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Triggers, 6)

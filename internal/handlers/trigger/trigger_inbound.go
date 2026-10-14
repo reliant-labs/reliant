@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -23,15 +23,15 @@ import (
 // what differs is that they have no Temporal schedule to converge, and that
 // they carry credentials (a webhook token, an HMAC secret) or a connection.
 
-// webhookSealer seals a webhook trigger's HMAC secret under its owner's
+// WebhookSealer seals a webhook trigger's HMAC secret under its owner's
 // tenant. Satisfied by vault.Service.
-type webhookSealer interface {
+type WebhookSealer interface {
 	Seal(ctx context.Context, tenant vault.Tenant, plaintext, aad []byte) ([]byte, error)
 }
 
-// integrationCatalog says which integrations can deliver events. The provider
+// IntegrationCatalog says which integrations can deliver events. The provider
 // registry (internal/integrations/webhook) satisfies it.
-type integrationCatalog interface {
+type IntegrationCatalog interface {
 	HasInboundSource(integration string) bool
 }
 
@@ -43,9 +43,9 @@ type userConfiguredCatalog interface {
 	UserConfiguredURL(integration string) bool
 }
 
-// eventIntake records a manual fire of an inbound trigger. Satisfied by
+// EventIntake records a manual fire of an inbound trigger. Satisfied by
 // *triggers.Intake.
-type eventIntake interface {
+type EventIntake interface {
 	Accept(ctx context.Context, trigger *core.Trigger, ev triggers.InboundEvent, opts triggers.AcceptOptions) (*triggers.AcceptResult, error)
 }
 
@@ -61,27 +61,13 @@ type IntegrationAccess interface {
 	IsPermanent(err error) bool
 }
 
-// InboundOptions wires the inbound kinds into TriggerService. Each field is
-// optional; a kind whose dependency is missing is rejected with Unavailable
-// at write time rather than stored unable to fire.
-type InboundOptions struct {
-	// PublicURL is this server's externally reachable base, used to render
-	// webhook URLs.
-	PublicURL string
-	Sealer    webhookSealer
-	Catalog   integrationCatalog
-	Intake    eventIntake
-	// Access names the integrations whose events are access-gated, keyed by
-	// integration id. A trigger of one needs no saved connection (its token
-	// may be delegated), and writing or re-enabling it refreshes the owner's
-	// access so the first event routes. See webhook.Event.ResourceKey.
-	Access map[string]IntegrationAccess
-}
-
-// WithInbound enables webhook, integration and workflow-event triggers.
-func (s *TriggerService) WithInbound(opts InboundOptions) *TriggerService {
-	s.inbound = opts
-	return s
+// accessGate is the access refresher of integration, and whether its events
+// are access-gated on this server.
+func (s *Service) accessGate(integration string) (IntegrationAccess, bool) {
+	if s.deps.Access == nil {
+		return nil, false
+	}
+	return s.deps.Access.Gate(integration)
 }
 
 // inboundUnavailable reports a kind this deployment cannot serve.
@@ -92,7 +78,7 @@ func inboundUnavailable(what string) error {
 // applyInboundDefinition fills the kind-specific fields of an inbound
 // trigger from def, validating what the source needs. existing is the stored
 // row on update.
-func (s *TriggerService) applyInboundDefinition(ctx context.Context, userID string, def *reliantv1.TriggerDefinition, src *triggers.Source, trigger *core.Trigger, existing *core.Trigger) error {
+func (s *Service) applyInboundDefinition(ctx context.Context, userID string, def *reliantv1.TriggerDefinition, src *triggers.Source, trigger *core.Trigger, existing *core.Trigger) error {
 	if strings.TrimSpace(def.Filter) != "" {
 		if _, err := triggers.CompileFilter(def.Filter); err != nil {
 			var fe *triggers.FilterError
@@ -106,10 +92,10 @@ func (s *TriggerService) applyInboundDefinition(ctx context.Context, userID stri
 
 	switch src.Kind {
 	case core.TriggerKindWebhook:
-		if s.inbound.Intake == nil {
+		if s.deps.Intake == nil {
 			return inboundUnavailable("webhook")
 		}
-		if src.HMAC && s.inbound.Sealer == nil {
+		if src.HMAC && s.deps.Sealer == nil {
 			return inboundUnavailable("signed webhook")
 		}
 		hasSecret := existing != nil && existing.Kind == core.TriggerKindWebhook && s.storedSecret(ctx, existing.ID)
@@ -118,14 +104,14 @@ func (s *TriggerService) applyInboundDefinition(ctx context.Context, userID stri
 				errors.New("webhook_hmac_secret is required to verify signatures"))
 		}
 	case core.TriggerKindIntegration:
-		if s.inbound.Intake == nil || s.inbound.Catalog == nil {
+		if s.deps.Intake == nil || s.deps.Catalog == nil {
 			return inboundUnavailable("integration")
 		}
-		if !s.inbound.Catalog.HasInboundSource(src.Integration) {
+		if !s.deps.Catalog.HasInboundSource(src.Integration) {
 			return connect.NewError(connect.CodeInvalidArgument,
 				fmt.Errorf("integration %q does not deliver events on this server", src.Integration))
 		}
-		if _, gated := s.inbound.Access[src.Integration]; gated {
+		if _, gated := s.accessGate(src.Integration); gated {
 			// Access-gated: events route by the owner's own access, so a
 			// connection is bound when one exists (and a named one must be
 			// the caller's) but is not required — hosted GitHub's token is
@@ -152,7 +138,7 @@ func (s *TriggerService) applyInboundDefinition(ctx context.Context, userID stri
 // through: the named one, which must be the caller's and for this
 // integration, or the caller's default for it. A foreign id is NotFound,
 // exactly like a missing one.
-func (s *TriggerService) resolveTriggerConnection(ctx context.Context, userID, integration string, requested *string) (string, error) {
+func (s *Service) resolveTriggerConnection(ctx context.Context, userID, integration string, requested *string) (string, error) {
 	store := s.connections()
 	if store == nil {
 		return "", inboundUnavailable("integration")
@@ -187,7 +173,7 @@ func (s *TriggerService) resolveTriggerConnection(ctx context.Context, userID, i
 // access-gated integration: a named connection must resolve exactly as
 // there, but with none named, the caller's default is bound when it exists
 // and nil is returned when it does not.
-func (s *TriggerService) resolveOptionalTriggerConnection(ctx context.Context, userID, integration string, requested *string) (*string, error) {
+func (s *Service) resolveOptionalTriggerConnection(ctx context.Context, userID, integration string, requested *string) (*string, error) {
 	if requested != nil && *requested != "" {
 		id, err := s.resolveTriggerConnection(ctx, userID, integration, requested)
 		if err != nil {
@@ -210,7 +196,7 @@ func (s *TriggerService) resolveOptionalTriggerConnection(ctx context.Context, u
 // integration trigger that is (being made) enabled, so its first event
 // routes, and so a trigger the owner cannot actually listen through is
 // refused with the reason instead of silently never firing.
-func (s *TriggerService) refreshTriggerAccess(ctx context.Context, trigger *core.Trigger) error {
+func (s *Service) refreshTriggerAccess(ctx context.Context, trigger *core.Trigger) error {
 	if trigger == nil || trigger.Kind != core.TriggerKindIntegration || !trigger.Enabled {
 		return nil
 	}
@@ -218,7 +204,7 @@ func (s *TriggerService) refreshTriggerAccess(ctx context.Context, trigger *core
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
-	access, ok := s.inbound.Access[cfg.Integration]
+	access, ok := s.accessGate(cfg.Integration)
 	if !ok || access == nil {
 		return nil
 	}
@@ -234,15 +220,15 @@ func (s *TriggerService) refreshTriggerAccess(ctx context.Context, trigger *core
 	return nil
 }
 
-func (s *TriggerService) storedSecret(ctx context.Context, triggerID string) bool {
-	creds, err := s.database.GetTriggerWebhookCredentials(ctx, triggerID)
+func (s *Service) storedSecret(ctx context.Context, triggerID string) bool {
+	creds, err := s.deps.Repo.GetTriggerWebhookCredentials(ctx, triggerID)
 	return err == nil && len(creds.SecretSealed) > 0
 }
 
 // writeWebhookCredentials issues a token for a new webhook trigger and
 // stores its HMAC secret. It runs after the row exists, because the secret's
 // sealing is bound to the trigger id.
-func (s *TriggerService) writeWebhookCredentials(ctx context.Context, trigger *core.Trigger, def *reliantv1.TriggerDefinition, issueToken bool) (*reliantv1.WebhookCredential, error) {
+func (s *Service) writeWebhookCredentials(ctx context.Context, trigger *core.Trigger, def *reliantv1.TriggerDefinition, issueToken bool) (*reliantv1.WebhookCredential, error) {
 	var cred *reliantv1.WebhookCredential
 	if issueToken {
 		var err error
@@ -258,41 +244,46 @@ func (s *TriggerService) writeWebhookCredentials(ctx context.Context, trigger *c
 	switch {
 	case cfg.HMAC == nil:
 		// Signatures off: drop any secret left from an earlier definition.
-		if err := s.database.SetTriggerWebhookSecret(ctx, trigger.ID, nil); err != nil {
+		if err := s.deps.Repo.SetTriggerWebhookSecret(ctx, trigger.ID, nil); err != nil {
 			return nil, triggerDBError("clear webhook secret", err)
 		}
 	case def.WebhookHmacSecret != nil:
 		if *def.WebhookHmacSecret == "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("webhook_hmac_secret must not be empty"))
 		}
-		sealed, err := s.inbound.Sealer.Seal(ctx, vault.UserTenant(trigger.UserID),
+		// applyInboundDefinition already refused a signed webhook without
+		// a sealer; this keeps the dereference safe on its own.
+		if s.deps.Sealer == nil {
+			return nil, inboundUnavailable("signed webhook")
+		}
+		sealed, err := s.deps.Sealer.Seal(ctx, vault.UserTenant(trigger.UserID),
 			[]byte(*def.WebhookHmacSecret), triggers.WebhookSecretAAD(trigger.ID))
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("seal webhook secret: %w", err))
 		}
-		if err := s.database.SetTriggerWebhookSecret(ctx, trigger.ID, sealed); err != nil {
+		if err := s.deps.Repo.SetTriggerWebhookSecret(ctx, trigger.ID, sealed); err != nil {
 			return nil, triggerDBError("set webhook secret", err)
 		}
 	}
 	return cred, nil
 }
 
-func (s *TriggerService) issueWebhookToken(ctx context.Context, triggerID string) (*reliantv1.WebhookCredential, error) {
+func (s *Service) issueWebhookToken(ctx context.Context, triggerID string) (*reliantv1.WebhookCredential, error) {
 	token, hash, err := triggers.NewWebhookToken()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	if err := s.database.SetTriggerWebhookTokenHash(ctx, triggerID, hash); err != nil {
+	if err := s.deps.Repo.SetTriggerWebhookTokenHash(ctx, triggerID, hash); err != nil {
 		return nil, triggerDBError("set webhook token", err)
 	}
 	return &reliantv1.WebhookCredential{
 		Token: token,
-		Url:   triggers.WebhookURL(s.inbound.PublicURL, triggerID) + "/" + token,
+		Url:   triggers.WebhookURL(s.deps.PublicURL, triggerID) + "/" + token,
 	}, nil
 }
 
 // RotateWebhookToken replaces a webhook trigger's token.
-func (s *TriggerService) RotateWebhookToken(
+func (s *Service) RotateWebhookToken(
 	ctx context.Context,
 	req *connect.Request[reliantv1.RotateWebhookTokenRequest],
 ) (*connect.Response[reliantv1.RotateWebhookTokenResponse], error) {
@@ -316,12 +307,12 @@ func (s *TriggerService) RotateWebhookToken(
 
 // fireInbound is "run now" for an inbound trigger: a manual event with an
 // empty payload except the marker, recorded and launched like any delivery.
-func (s *TriggerService) fireInbound(ctx context.Context, trigger *core.Trigger) (string, error) {
-	if s.inbound.Intake == nil {
+func (s *Service) fireInbound(ctx context.Context, trigger *core.Trigger) (string, error) {
+	if s.deps.Intake == nil {
 		return "", inboundUnavailable(string(trigger.Kind))
 	}
 	requester := auth.MustGetUserID(ctx)
-	res, err := s.inbound.Intake.Accept(ctx, trigger, triggers.InboundEvent{
+	res, err := s.deps.Intake.Accept(ctx, trigger, triggers.InboundEvent{
 		Kind:      trigger.Kind.EventKind(),
 		DedupeKey: trigger.ID + ":manual-" + uuid.NewString(),
 		Payload:   map[string]any{"manual": true, "requested_by": requester},

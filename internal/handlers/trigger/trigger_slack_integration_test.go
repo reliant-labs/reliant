@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -117,7 +117,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	inbound.Register(func(p string, h http.Handler) { mux.Handle(p, h) })
 	server := httptest.NewServer(mux)
 	defer server.Close()
-	svc := NewTriggerService(repo, nil, nil).WithInbound(InboundOptions{PublicURL: publicURL, Catalog: registry, Intake: intake})
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, PublicURL: publicURL, Catalog: registry, Intake: intake}))
 
 	// --- two users, two workspaces ---------------------------------------
 	type tenant struct {

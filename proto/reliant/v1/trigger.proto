@@ -10,9 +10,6 @@ import "reliant/v1/run.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // TriggerService manages standing instructions that start runs without a human
 // typing: "every weekday at 9am, run workflow W in project P with prompt M".
 //
@@ -32,22 +29,27 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // connection and daemon.
 service TriggerService {
   // CreateTrigger stores a new trigger and converges its schedule.
+  // forge:custom — validates the definition against its source and workflow, then converges its schedule
   rpc CreateTrigger(CreateTriggerRequest) returns (CreateTriggerResponse) {}
 
   // GetTrigger returns one trigger, including its read-only next fire time
   // and most recent firing.
+  // forge:custom — owner-scoped, rendered with its next fire time and most recent firing
   rpc GetTrigger(GetTriggerRequest) returns (GetTriggerResponse) {}
 
   // ListTriggers returns the caller's triggers, optionally narrowed to one
   // project.
+  // forge:custom — the caller's triggers, rendered with their schedules and recent firings
   rpc ListTriggers(ListTriggersRequest) returns (ListTriggersResponse) {}
 
   // UpdateTrigger replaces a trigger's definition and reconverges its
   // schedule. The owner and kind are not updatable.
+  // forge:custom — replaces an owned trigger's definition and reconverges its schedule
   rpc UpdateTrigger(UpdateTriggerRequest) returns (UpdateTriggerResponse) {}
 
   // DeleteTrigger removes a trigger and its schedule. Its firing history
   // survives, with trigger_id cleared — the runs it started still exist.
+  // forge:custom — also removes the schedule and releases the trigger's automation credential
   rpc DeleteTrigger(DeleteTriggerRequest) returns (DeleteTriggerResponse) {}
 
   // SetTriggerEnabled pauses or resumes a trigger. Disabling pauses the
@@ -61,6 +63,7 @@ service TriggerService {
 
   // ListTriggerEvents returns a trigger's firings, newest first, paged by a
   // keyset cursor. Each launched firing carries the state of the run it started.
+  // forge:custom — pages one owned trigger's firings by a keyset cursor, with each run's state
   rpc ListTriggerEvents(ListTriggerEventsRequest) returns (ListTriggerEventsResponse) {}
 
   // GetLaunchEvent returns the event that launched a chat: its kind, the

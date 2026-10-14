@@ -735,6 +735,45 @@
     "internal/handlers/tools_daemon/handlers_scaffold_who_am_i_test.go": {
       "scaffolded_at": "2026-10-13T16:47:15Z"
     },
+    "internal/handlers/trigger/handlers_scaffold_create_trigger_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
+    "internal/handlers/trigger/handlers_scaffold_delete_trigger_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
+    "internal/handlers/trigger/handlers_scaffold_disable_workflow_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
+    "internal/handlers/trigger/handlers_scaffold_enable_workflow_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
+    "internal/handlers/trigger/handlers_scaffold_fire_trigger_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
+    "internal/handlers/trigger/handlers_scaffold_get_launch_event_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
+    "internal/handlers/trigger/handlers_scaffold_get_trigger_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
+    "internal/handlers/trigger/handlers_scaffold_list_trigger_events_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
+    "internal/handlers/trigger/handlers_scaffold_list_triggers_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
+    "internal/handlers/trigger/handlers_scaffold_resolve_trigger_senders_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
+    "internal/handlers/trigger/handlers_scaffold_rotate_webhook_token_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
+    "internal/handlers/trigger/handlers_scaffold_set_trigger_enabled_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
+    "internal/handlers/trigger/handlers_scaffold_update_trigger_test.go": {
+      "scaffolded_at": "2026-10-14T19:47:45Z"
+    },
     "internal/handlers/worktree/handlers_scaffold_archive_worktree_test.go": {
       "scaffolded_at": "2026-10-14T18:43:31Z"
     },
@@ -898,6 +937,19 @@
     "internal/handlers/token/handlers_scaffold_update_token_test.go",
     "internal/handlers/tools_daemon/handlers_scaffold_connect_daemon_test.go",
     "internal/handlers/tools_daemon/handlers_scaffold_who_am_i_test.go",
+    "internal/handlers/trigger/handlers_scaffold_create_trigger_test.go",
+    "internal/handlers/trigger/handlers_scaffold_delete_trigger_test.go",
+    "internal/handlers/trigger/handlers_scaffold_disable_workflow_test.go",
+    "internal/handlers/trigger/handlers_scaffold_enable_workflow_test.go",
+    "internal/handlers/trigger/handlers_scaffold_fire_trigger_test.go",
+    "internal/handlers/trigger/handlers_scaffold_get_launch_event_test.go",
+    "internal/handlers/trigger/handlers_scaffold_get_trigger_test.go",
+    "internal/handlers/trigger/handlers_scaffold_list_trigger_events_test.go",
+    "internal/handlers/trigger/handlers_scaffold_list_triggers_test.go",
+    "internal/handlers/trigger/handlers_scaffold_resolve_trigger_senders_test.go",
+    "internal/handlers/trigger/handlers_scaffold_rotate_webhook_token_test.go",
+    "internal/handlers/trigger/handlers_scaffold_set_trigger_enabled_test.go",
+    "internal/handlers/trigger/handlers_scaffold_update_trigger_test.go",
     "internal/handlers/worktree/handlers_scaffold_create_worktree_test.go",
     "internal/handlers/worktree/handlers_scaffold_delete_worktree_test.go",
     "internal/handlers/worktree/handlers_scaffold_discover_worktrees_test.go",

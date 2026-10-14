@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -45,12 +45,12 @@ func setupAccessTriggerTest(t *testing.T) (*triggerTestEnv, *fakeAccess) {
 	t.Helper()
 	env, _ := setupInboundTriggerTest(t)
 	access := &fakeAccess{}
-	env.svc.WithInbound(InboundOptions{
-		PublicURL: "https://api.example.com/",
-		Sealer:    fakeSealer{},
-		Catalog:   fakeCatalog{"test": true, "gh": true},
-		Intake:    &fakeIntake{},
-		Access:    map[string]IntegrationAccess{"gh": access},
+	env.configure(t, func(d *Deps) {
+		d.PublicURL = "https://api.example.com/"
+		d.Sealer = fakeSealer{}
+		d.Catalog = fakeCatalog{"test": true, "gh": true}
+		d.Intake = &fakeIntake{}
+		d.Access = AccessByIntegration{"gh": access}
 	})
 	return env, access
 }

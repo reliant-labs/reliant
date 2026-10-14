@@ -2321,6 +2321,7 @@ export const WorkflowTriggerOutcomeSchema: GenEnum<WorkflowTriggerOutcome> = /*@
 export const TriggerService: GenService<{
   /**
    * CreateTrigger stores a new trigger and converges its schedule.
+   * forge:custom — validates the definition against its source and workflow, then converges its schedule
    *
    * @generated from rpc reliant.v1.TriggerService.CreateTrigger
    */
@@ -2332,6 +2333,7 @@ export const TriggerService: GenService<{
   /**
    * GetTrigger returns one trigger, including its read-only next fire time
    * and most recent firing.
+   * forge:custom — owner-scoped, rendered with its next fire time and most recent firing
    *
    * @generated from rpc reliant.v1.TriggerService.GetTrigger
    */
@@ -2343,6 +2345,7 @@ export const TriggerService: GenService<{
   /**
    * ListTriggers returns the caller's triggers, optionally narrowed to one
    * project.
+   * forge:custom — the caller's triggers, rendered with their schedules and recent firings
    *
    * @generated from rpc reliant.v1.TriggerService.ListTriggers
    */
@@ -2354,6 +2357,7 @@ export const TriggerService: GenService<{
   /**
    * UpdateTrigger replaces a trigger's definition and reconverges its
    * schedule. The owner and kind are not updatable.
+   * forge:custom — replaces an owned trigger's definition and reconverges its schedule
    *
    * @generated from rpc reliant.v1.TriggerService.UpdateTrigger
    */
@@ -2365,6 +2369,7 @@ export const TriggerService: GenService<{
   /**
    * DeleteTrigger removes a trigger and its schedule. Its firing history
    * survives, with trigger_id cleared — the runs it started still exist.
+   * forge:custom — also removes the schedule and releases the trigger's automation credential
    *
    * @generated from rpc reliant.v1.TriggerService.DeleteTrigger
    */
@@ -2399,6 +2404,7 @@ export const TriggerService: GenService<{
   /**
    * ListTriggerEvents returns a trigger's firings, newest first, paged by a
    * keyset cursor. Each launched firing carries the state of the run it started.
+   * forge:custom — pages one owned trigger's firings by a keyset cursor, with each run's state
    *
    * @generated from rpc reliant.v1.TriggerService.ListTriggerEvents
    */

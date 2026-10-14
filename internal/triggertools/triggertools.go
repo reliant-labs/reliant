@@ -27,8 +27,8 @@ import (
 )
 
 // TriggerAPI is the slice of the trigger service the tool reads. It is
-// satisfied by *services.TriggerService, whose handlers authorize the caller
-// from the request context.
+// satisfied by *trigger.Service (internal/handlers/trigger), whose handlers
+// authorize the caller from the request context.
 type TriggerAPI interface {
 	ListTriggers(context.Context, *connect.Request[reliantv1.ListTriggersRequest]) (*connect.Response[reliantv1.ListTriggersResponse], error)
 }

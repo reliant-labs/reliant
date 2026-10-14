@@ -32,10 +32,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
+	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -151,7 +151,7 @@ type Harness struct {
 	ApprovalSvc *approval.Service
 	// TriggerSvc is the production TriggerService over the story's Temporal:
 	// a fire goes through the real fire workflow, Firer and launcher.
-	TriggerSvc *services.TriggerService
+	TriggerSvc *trigger.Service
 	Pause      *workflow.PauseService
 
 	// Ctx carries the story's user identity, exactly as the auth interceptor
@@ -302,7 +302,15 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Signals: pause,
 	})
 	require.NoError(t, err, "approval service")
-	triggerSvc := services.NewTriggerServiceFor(s.Repo, s.Temporal, taskQueue)
+	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, s.Repo, taskQueue, nil)
+	triggerSvc, err := trigger.New(trigger.Deps{
+		Logger: slog.Default(),
+		Config: &typedconfig.Config{},
+		Repo:   s.Repo,
+		Syncer: triggerSyncer,
+		Fires:  triggerFires,
+	})
+	require.NoError(t, err, "trigger service")
 
 	return &Harness{
 		TriggerSvc:  triggerSvc,

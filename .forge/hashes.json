@@ -1,7 +1,7 @@
 {
   "files": {
-    "deploy/observability/alert-defaults_gen.json": "a26acd7a16b375801c62f6aa23a6d97fa3f0ca0b68bd31389bdc86c4fda9d923",
-    "deploy/observability/dashboard-spec_gen.json": "f505ff1fad9551c5ae5ff5a90aef5b9025545843ac354ad4a516c983f028a578",
+    "deploy/observability/alert-defaults_gen.json": "22748794c74d660e4bfea39f30c0121bf51b2be962870dd75c25b3f5ec094cdf",
+    "deploy/observability/dashboard-spec_gen.json": "06f9679d35ca477956e85203cd36c21aff01c8ef519c330648b02ce377f1a06a",
     "deploy/observability/dashboards/reliant-overview_gen.json": "fcde7a5086fafae9f668ee7414a7c0cbfa9a767cdac4ca48727c63a26ff0a6c1",
     "deploy/observability/dashboards/reliant-service-account_gen.json": "557de124096572349119e70a18b6b97e0950a7c95240ad72fa3832bc07f8036b",
     "deploy/observability/dashboards/reliant-service-approval_gen.json": "5abaada958d43780089e315ac9fa157dcc9e819111fff70f81dde98f08f18d91",
@@ -34,7 +34,8 @@
     "deploy/observability/dashboards/reliant-service-token_gen.json": "fcf30d5d780860851a87c92fff2e3ec73d2ec03bec2d17ea8dc1be4d174f3019",
     "deploy/observability/dashboards/reliant-service-tool_call_gen.json": "1d0ec334c776ffb19691d08042d8c682f09d6b0dd758e8d1187348656059c622",
     "deploy/observability/dashboards/reliant-service-tools_daemon_gen.json": "71549ff886368657bafa0bd65a3956f894c3453fccd8c116f4597dec76ae1091",
+    "deploy/observability/dashboards/reliant-service-trigger_gen.json": "9ffd66458290ac2d9f1d2a228611238b5fcfda9b96e33a14d2225875ed2305b8",
     "deploy/observability/dashboards/reliant-service-worktree_gen.json": "93fd7f38c01a8f73261fdc83ad29c045f71e955e8b0214e693845a338be953b6",
-    "deploy/observability/dashboards/saved-searches_gen.ndjson": "e8deefceacd092b5423c61b143f21e75f935cc6ff2cf0633cced15e71d5340c4"
+    "deploy/observability/dashboards/saved-searches_gen.ndjson": "a4657fb35e34376914f429cea242038dd39de842a4bbb873b2236665ca1795e9"
   }
 }

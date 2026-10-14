@@ -128,6 +128,10 @@
         "rpc_service": "reliant.v1.ToolsDaemonService"
       },
       {
+        "name": "trigger",
+        "rpc_service": "reliant.v1.TriggerService"
+      },
+      {
         "name": "worktree",
         "rpc_service": "reliant.v1.WorktreeService"
       }

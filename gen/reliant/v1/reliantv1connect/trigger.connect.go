@@ -79,18 +79,23 @@ const (
 // TriggerServiceClient is a client for the reliant.v1.TriggerService service.
 type TriggerServiceClient interface {
 	// CreateTrigger stores a new trigger and converges its schedule.
+	// forge:custom — validates the definition against its source and workflow, then converges its schedule
 	CreateTrigger(context.Context, *connect.Request[v1.CreateTriggerRequest]) (*connect.Response[v1.CreateTriggerResponse], error)
 	// GetTrigger returns one trigger, including its read-only next fire time
 	// and most recent firing.
+	// forge:custom — owner-scoped, rendered with its next fire time and most recent firing
 	GetTrigger(context.Context, *connect.Request[v1.GetTriggerRequest]) (*connect.Response[v1.GetTriggerResponse], error)
 	// ListTriggers returns the caller's triggers, optionally narrowed to one
 	// project.
+	// forge:custom — the caller's triggers, rendered with their schedules and recent firings
 	ListTriggers(context.Context, *connect.Request[v1.ListTriggersRequest]) (*connect.Response[v1.ListTriggersResponse], error)
 	// UpdateTrigger replaces a trigger's definition and reconverges its
 	// schedule. The owner and kind are not updatable.
+	// forge:custom — replaces an owned trigger's definition and reconverges its schedule
 	UpdateTrigger(context.Context, *connect.Request[v1.UpdateTriggerRequest]) (*connect.Response[v1.UpdateTriggerResponse], error)
 	// DeleteTrigger removes a trigger and its schedule. Its firing history
 	// survives, with trigger_id cleared — the runs it started still exist.
+	// forge:custom — also removes the schedule and releases the trigger's automation credential
 	DeleteTrigger(context.Context, *connect.Request[v1.DeleteTriggerRequest]) (*connect.Response[v1.DeleteTriggerResponse], error)
 	// SetTriggerEnabled pauses or resumes a trigger. Disabling pauses the
 	// schedule rather than deleting it, so re-enabling needs no re-derivation.
@@ -101,6 +106,7 @@ type TriggerServiceClient interface {
 	FireTrigger(context.Context, *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error)
 	// ListTriggerEvents returns a trigger's firings, newest first, paged by a
 	// keyset cursor. Each launched firing carries the state of the run it started.
+	// forge:custom — pages one owned trigger's firings by a keyset cursor, with each run's state
 	ListTriggerEvents(context.Context, *connect.Request[v1.ListTriggerEventsRequest]) (*connect.Response[v1.ListTriggerEventsResponse], error)
 	// GetLaunchEvent returns the event that launched a chat: its kind, the
 	// scheduled slot and manual flag for a schedule, the parent chat for an
@@ -313,18 +319,23 @@ func (c *triggerServiceClient) ResolveTriggerSenders(ctx context.Context, req *c
 // TriggerServiceHandler is an implementation of the reliant.v1.TriggerService service.
 type TriggerServiceHandler interface {
 	// CreateTrigger stores a new trigger and converges its schedule.
+	// forge:custom — validates the definition against its source and workflow, then converges its schedule
 	CreateTrigger(context.Context, *connect.Request[v1.CreateTriggerRequest]) (*connect.Response[v1.CreateTriggerResponse], error)
 	// GetTrigger returns one trigger, including its read-only next fire time
 	// and most recent firing.
+	// forge:custom — owner-scoped, rendered with its next fire time and most recent firing
 	GetTrigger(context.Context, *connect.Request[v1.GetTriggerRequest]) (*connect.Response[v1.GetTriggerResponse], error)
 	// ListTriggers returns the caller's triggers, optionally narrowed to one
 	// project.
+	// forge:custom — the caller's triggers, rendered with their schedules and recent firings
 	ListTriggers(context.Context, *connect.Request[v1.ListTriggersRequest]) (*connect.Response[v1.ListTriggersResponse], error)
 	// UpdateTrigger replaces a trigger's definition and reconverges its
 	// schedule. The owner and kind are not updatable.
+	// forge:custom — replaces an owned trigger's definition and reconverges its schedule
 	UpdateTrigger(context.Context, *connect.Request[v1.UpdateTriggerRequest]) (*connect.Response[v1.UpdateTriggerResponse], error)
 	// DeleteTrigger removes a trigger and its schedule. Its firing history
 	// survives, with trigger_id cleared — the runs it started still exist.
+	// forge:custom — also removes the schedule and releases the trigger's automation credential
 	DeleteTrigger(context.Context, *connect.Request[v1.DeleteTriggerRequest]) (*connect.Response[v1.DeleteTriggerResponse], error)
 	// SetTriggerEnabled pauses or resumes a trigger. Disabling pauses the
 	// schedule rather than deleting it, so re-enabling needs no re-derivation.
@@ -335,6 +346,7 @@ type TriggerServiceHandler interface {
 	FireTrigger(context.Context, *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error)
 	// ListTriggerEvents returns a trigger's firings, newest first, paged by a
 	// keyset cursor. Each launched firing carries the state of the run it started.
+	// forge:custom — pages one owned trigger's firings by a keyset cursor, with each run's state
 	ListTriggerEvents(context.Context, *connect.Request[v1.ListTriggerEventsRequest]) (*connect.Response[v1.ListTriggerEventsResponse], error)
 	// GetLaunchEvent returns the event that launched a chat: its kind, the
 	// scheduled slot and manual flag for a schedule, the parent chat for an

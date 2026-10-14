@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -88,7 +88,8 @@ func (b *fakeTriggerBackend) syncCount() int {
 
 // triggerTestEnv is a service over a real test database with a fake backend.
 type triggerTestEnv struct {
-	svc       *TriggerService
+	svc       *Service
+	deps      Deps
 	backend   *fakeTriggerBackend
 	repo      *db.Repo
 	userID    string
@@ -119,8 +120,10 @@ func setupTriggerTest(t *testing.T) *triggerTestEnv {
 	daemonID := uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{ID: daemonID, UserID: userID}))
 
+	deps := Deps{Repo: repo, Syncer: backend, Fires: backend}
 	return &triggerTestEnv{
-		svc:       NewTriggerService(repo, backend, backend),
+		svc:       NewTestTrigger(t, WithTriggerDeps(deps)),
+		deps:      deps,
 		daemonID:  daemonID,
 		backend:   backend,
 		repo:      repo,
@@ -128,6 +131,14 @@ func setupTriggerTest(t *testing.T) *triggerTestEnv {
 		projectID: projectID,
 		ctx:       context.WithValue(context.Background(), auth.UserIDContextKey, userID),
 	}
+}
+
+// configure rebuilds env.svc with set's additions to the dependencies it
+// already has: the inbound kinds, sender directories, a control plane.
+func (e *triggerTestEnv) configure(t *testing.T, set func(*Deps)) {
+	t.Helper()
+	set(&e.deps)
+	e.svc = NewTestTrigger(t, WithTriggerDeps(e.deps))
 }
 
 func (e *triggerTestEnv) definition(mutate func(*reliantv1.TriggerDefinition)) *reliantv1.TriggerDefinition {
@@ -298,7 +309,7 @@ func TestCreateTriggerRejectsAnotherUsersProject(t *testing.T) {
 // create must fail rather than store one that silently never runs.
 func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
 	env := setupTriggerTest(t)
-	svc := NewTriggerService(env.repo, nil, nil)
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: env.repo}))
 
 	_, err := svc.CreateTrigger(env.ctx,
 		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
@@ -306,17 +317,26 @@ func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
 	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 }
 
-// NewTriggerServiceFor is what the server uses. A nil Temporal client must
-// produce a service whose nil checks actually fire — a nil *triggers.Backend
-// in an interface is NOT nil, and would panic here instead.
-func TestNewTriggerServiceForWithoutTemporalDoesNotPanic(t *testing.T) {
+// TemporalBackend is what the server builds the backend with. A nil Temporal
+// client must produce a service whose nil checks actually fire — a nil
+// *triggers.Backend in an interface is NOT nil, and would panic here instead.
+// New reads one a composition passes itself the same way.
+func TestServiceWithoutTemporalDoesNotPanic(t *testing.T) {
 	env := setupTriggerTest(t)
-	svc := NewTriggerServiceFor(env.repo, nil, "")
-
-	_, err := svc.CreateTrigger(env.ctx,
-		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	syncer, fires := TemporalBackend(nil, env.repo, "", nil)
+	var noBackend *triggers.Backend
+	for name, deps := range map[string]Deps{
+		"TemporalBackend without a client": {Repo: env.repo, Syncer: syncer, Fires: fires},
+		"a nil *triggers.Backend":          {Repo: env.repo, Syncer: noBackend, Fires: noBackend},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc := NewTestTrigger(t, WithTriggerDeps(deps))
+			_, err := svc.CreateTrigger(env.ctx,
+				connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+		})
+	}
 }
 
 func TestGetTriggerHidesOtherUsersTriggers(t *testing.T) {

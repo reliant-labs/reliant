@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -32,7 +32,7 @@ type enableStep struct {
 }
 
 // EnableWorkflow enables every trigger a workflow declares, or none of them.
-func (s *TriggerService) EnableWorkflow(
+func (s *Service) EnableWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.EnableWorkflowRequest],
 ) (*connect.Response[reliantv1.EnableWorkflowResponse], error) {
@@ -45,7 +45,7 @@ func (s *TriggerService) EnableWorkflow(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("project_id is required"))
 	}
 
-	wf, err := launch.ResolveRunWorkflow(ctx, s.database, userID, msg.Workflow, msg.ProjectId)
+	wf, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, msg.Workflow, msg.ProjectId)
 	if err != nil {
 		var lookup *launch.WorkflowLookupError
 		if errors.As(err, &lookup) {
@@ -60,7 +60,7 @@ func (s *TriggerService) EnableWorkflow(
 			fmt.Errorf("workflow %q declares no triggers, so there is nothing to enable", msg.Workflow))
 	}
 
-	mine, err := s.database.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: &msg.ProjectId})
+	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: &msg.ProjectId})
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
 	}
@@ -158,7 +158,7 @@ func (s *TriggerService) EnableWorkflow(
 	return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Enabled: true, Results: results}), nil
 }
 
-func (s *TriggerService) applyEnableStep(ctx context.Context, step *enableStep, result *reliantv1.WorkflowTriggerResult, undo *[]func(context.Context) error) error {
+func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result *reliantv1.WorkflowTriggerResult, undo *[]func(context.Context) error) error {
 	if step.existing != nil {
 		resp, err := s.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: step.existing.ID, Enabled: true}))
 		if err != nil {
@@ -194,7 +194,7 @@ func (s *TriggerService) applyEnableStep(ctx context.Context, step *enableStep, 
 // undoEnable reverses what phase 2 wrote, newest first, and records on each
 // result what became of it. An undo that fails leaves that trigger running and
 // says so: that is the one outcome the user must act on.
-func (s *TriggerService) undoEnable(ctx context.Context, steps []*enableStep, results []*reliantv1.WorkflowTriggerResult, undo []func(context.Context) error) {
+func (s *Service) undoEnable(ctx context.Context, steps []*enableStep, results []*reliantv1.WorkflowTriggerResult, undo []func(context.Context) error) {
 	written := make([]int, 0, len(undo))
 	for i, r := range results {
 		switch r.Outcome {
@@ -227,7 +227,7 @@ func (s *TriggerService) undoEnable(ctx context.Context, steps []*enableStep, re
 
 // workflowActivationDefinition is the definition of one declared trigger's
 // activation: the request's shared choices, then the trigger's override.
-func (s *TriggerService) workflowActivationDefinition(
+func (s *Service) workflowActivationDefinition(
 	wt *reliantv1.WorkflowTrigger,
 	msg *reliantv1.EnableWorkflowRequest,
 	override *reliantv1.WorkflowTriggerOverride,
@@ -298,7 +298,7 @@ func (s *TriggerService) workflowActivationDefinition(
 }
 
 // DisableWorkflow pauses every activation of a workflow.
-func (s *TriggerService) DisableWorkflow(
+func (s *Service) DisableWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DisableWorkflowRequest],
 ) (*connect.Response[reliantv1.DisableWorkflowResponse], error) {
@@ -306,7 +306,7 @@ func (s *TriggerService) DisableWorkflow(
 	if strings.TrimSpace(req.Msg.Workflow) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("workflow is required"))
 	}
-	mine, err := s.database.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId})
+	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId})
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
 	}

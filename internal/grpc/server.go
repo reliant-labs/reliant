@@ -66,6 +66,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/terminal"
 	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/handlers/tool_call"
+	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
@@ -184,7 +185,7 @@ type Config struct {
 
 	// TriggerSenders backs TriggerService.ResolveTriggerSenders, keyed by
 	// integration id ("github"). nil leaves it answering Unavailable.
-	TriggerSenders map[string]services.SenderDirectory
+	TriggerSenders map[string]trigger.SenderDirectory
 }
 
 // NewServer creates a new Connect/gRPC server.
@@ -588,25 +589,42 @@ func NewServer(cfg *Config) (*Server, error) {
 	// nil *triggers.Backend assigned to an interface is NOT nil — the
 	// handler's own nil checks would pass and it would panic on the first
 	// write. NewTriggerServiceFor keeps that conversion in one place.
-	triggerService := services.NewTriggerServiceFor(database, cfg.TemporalClient, cfg.SharedTaskQueue)
-	if cfg.ControlPlane.Hosted() {
-		triggerService.WithControlPlaneClient(controlplane.NewClient(cfg.ControlPlane.URL))
-	}
-	if in := cfg.TriggerInbound; in != nil {
-		opts := services.InboundOptions{PublicURL: in.PublicURL, Catalog: in.Registry, Intake: in.Intake}
-		if in.Vault != nil {
-			opts.Sealer = in.Vault
-		}
-		if len(in.Access) > 0 {
-			opts.Access = make(map[string]services.IntegrationAccess, len(in.Access))
-			for id, a := range in.Access {
-				opts.Access[id] = a
-			}
-		}
-		triggerService.WithInbound(opts).WithPolledIntegrations(in.Registry.IsPolled)
+	// The schedule backend exists only with a Temporal client; an inbound
+	// configuration also polls the integrations its registry polls.
+	triggerDeps := trigger.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
 	}
 	if len(cfg.TriggerSenders) > 0 {
-		triggerService.WithSenderDirectories(cfg.TriggerSenders)
+		triggerDeps.Senders = trigger.SendersByIntegration(cfg.TriggerSenders)
+	}
+	var polled func(integration string) bool
+	if in := cfg.TriggerInbound; in != nil {
+		triggerDeps.PublicURL = in.PublicURL
+		triggerDeps.Intake = in.Intake
+		if in.Registry != nil {
+			triggerDeps.Catalog = in.Registry
+			polled = in.Registry.IsPolled
+		}
+		if in.Vault != nil {
+			triggerDeps.Sealer = in.Vault
+		}
+		if len(in.Access) > 0 {
+			access := make(trigger.AccessByIntegration, len(in.Access))
+			for id, a := range in.Access {
+				access[id] = a
+			}
+			triggerDeps.Access = access
+		}
+	}
+	triggerDeps.Syncer, triggerDeps.Fires = trigger.TemporalBackend(cfg.TemporalClient, database, cfg.SharedTaskQueue, polled)
+	if cfg.ControlPlane.Hosted() {
+		triggerDeps.ControlPlane = controlplane.NewClient(cfg.ControlPlane.URL)
+	}
+	triggerService, err := trigger.New(triggerDeps)
+	if err != nil {
+		return nil, fmt.Errorf("trigger service: %w", err)
 	}
 	// worktreeSweeper is nil without a daemon router. A nil *Sweeper stored
 	// in the interface would not be nil, so assign it only when it is set.

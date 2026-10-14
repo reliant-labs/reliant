@@ -13578,6 +13578,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.CreateTriggerRequest",
           "OutputTypeFQ": "reliant.v1.CreateTriggerResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
@@ -13591,6 +13592,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.GetTriggerRequest",
           "OutputTypeFQ": "reliant.v1.GetTriggerResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
@@ -13604,6 +13606,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListTriggersRequest",
           "OutputTypeFQ": "reliant.v1.ListTriggersResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
@@ -13617,6 +13620,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.UpdateTriggerRequest",
           "OutputTypeFQ": "reliant.v1.UpdateTriggerResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
@@ -13630,6 +13634,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.DeleteTriggerRequest",
           "OutputTypeFQ": "reliant.v1.DeleteTriggerResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
@@ -13669,6 +13674,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListTriggerEventsRequest",
           "OutputTypeFQ": "reliant.v1.ListTriggerEventsResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
@@ -15077,8 +15083,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "WorkflowTriggerOutcome"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "InboxService",
@@ -34430,5 +34435,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "6240e663bb5bb5f696d23be882fd6d3699f6557273085adacec59e3dfb7aa83a"
+  "source_hash": "64bce29505181e12cb78fbebbf6816596e95fef75b2dc9a4133c9ecfcdbe6a07"
 }

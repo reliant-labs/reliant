@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -51,7 +51,7 @@ func TestResolveTriggerSendersAsksAsTheCaller(t *testing.T) {
 		{Query: "@octocat", ID: "583231", DisplayName: "octocat"},
 		{Query: "7", ID: "7", DisplayName: "hubot"},
 	}}
-	env.svc.WithSenderDirectories(map[string]SenderDirectory{"github": dir})
+	env.configure(t, func(d *Deps) { d.Senders = SendersByIntegration{"github": dir} })
 
 	got, err := resolveSenders(env, "github", []string{"@octocat"}, []string{"7"})
 	require.NoError(t, err)
@@ -82,7 +82,7 @@ func TestResolveTriggerSendersErrors(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			env.svc.WithSenderDirectories(map[string]SenderDirectory{"github": tc.dir})
+			env.configure(t, func(d *Deps) { d.Senders = SendersByIntegration{"github": tc.dir} })
 			_, err := resolveSenders(env, "github", []string{"octocat"}, nil)
 			require.Error(t, err)
 			assert.Equal(t, tc.code, connect.CodeOf(err))

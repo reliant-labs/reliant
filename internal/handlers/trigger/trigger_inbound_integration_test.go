@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -66,9 +67,9 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	svc := NewTriggerService(repo, nil, nil).WithInbound(InboundOptions{
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo,
 		PublicURL: publicURL, Catalog: registry, Intake: intake,
-	})
+	}))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -132,7 +133,7 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 	// --- app-level integration events ------------------------------------
 	mine := &core.Connection{
 		ID: uuid.NewString(), OwnerKind: core.ConnectionOwnerUser, UserID: userID, IntegrationID: "test",
-		AuthKind: "none", Name: "test", ExternalAccountID: strPtr("acct-1"), Status: core.ConnectionStatusActive,
+		AuthKind: "none", Name: "test", ExternalAccountID: ptr.Of("acct-1"), Status: core.ConnectionStatusActive,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	require.NoError(t, repo.Connections().CreateConnection(ctx, mine, nil,

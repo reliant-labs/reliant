@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -53,11 +53,11 @@ func setupInboundTriggerTest(t *testing.T) (*triggerTestEnv, *fakeIntake) {
 	t.Helper()
 	env := setupTriggerTest(t)
 	intake := &fakeIntake{}
-	env.svc.WithInbound(InboundOptions{
-		PublicURL: "https://api.example.com/",
-		Sealer:    fakeSealer{},
-		Catalog:   fakeCatalog{"test": true},
-		Intake:    intake,
+	env.configure(t, func(d *Deps) {
+		d.PublicURL = "https://api.example.com/"
+		d.Sealer = fakeSealer{}
+		d.Catalog = fakeCatalog{"test": true}
+		d.Intake = intake
 	})
 	return env, intake
 }
@@ -295,11 +295,11 @@ func (texterCatalog) UserConfiguredURL(integration string) bool { return integra
 // webhook the operator registers does not.
 func TestIntegrationTriggerShowsTheWebhookURLTheUserMustConfigure(t *testing.T) {
 	env := setupTriggerTest(t)
-	env.svc.WithInbound(InboundOptions{
-		PublicURL: "https://api.example.com/",
-		Sealer:    fakeSealer{},
-		Catalog:   texterCatalog{fakeCatalog{"texter": true, "test": true}},
-		Intake:    &fakeIntake{},
+	env.configure(t, func(d *Deps) {
+		d.PublicURL = "https://api.example.com/"
+		d.Sealer = fakeSealer{}
+		d.Catalog = texterCatalog{fakeCatalog{"texter": true, "test": true}}
+		d.Intake = &fakeIntake{}
 	})
 	env.createConnection(t, env.userID, "texter", "AC0001", core.ConnectionStatusActive)
 	env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -12,14 +12,10 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"go.temporal.io/sdk/client"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -38,33 +34,6 @@ const defaultTriggerEventLimit = 50
 // maxTriggerEventLimit caps what a caller can ask for.
 const maxTriggerEventLimit = 500
 
-// triggerSyncer is the schedule backend this handler converges onto. Declared
-// here, at the consumer, so the handler can be tested without Temporal.
-type triggerSyncer interface {
-	Sync(ctx context.Context, triggerID string) error
-	Delete(ctx context.Context, triggerID string) error
-	NextFireAt(ctx context.Context, triggerID string) (*time.Time, error)
-}
-
-// triggerFireStarter starts a manual fire. Separate from triggerSyncer because
-// it needs a workflow client rather than a schedule client, and because a
-// deployment could in principle converge schedules without allowing run-now.
-type triggerFireStarter interface {
-	StartManualFire(ctx context.Context, triggerID string) (string, error)
-}
-
-// TriggerService implements the gRPC TriggerService.
-type TriggerService struct {
-	reliantv1connect.UnimplementedTriggerServiceHandler
-	database db.Repository
-	syncer   triggerSyncer
-	fires    triggerFireStarter
-	grants   *automationGrants
-	inbound  InboundOptions
-	// senders looks people up for "Only from", keyed by integration id.
-	senders map[string]SenderDirectory
-}
-
 // triggerConnections is the slice of the connection store an integration
 // trigger's write path reads.
 type triggerConnections interface {
@@ -73,39 +42,11 @@ type triggerConnections interface {
 }
 
 // connections returns the connection store, when the repository has one.
-func (s *TriggerService) connections() triggerConnections {
-	if repo, ok := s.database.(interface{ Connections() core.ConnectionStore }); ok {
+func (s *Service) connections() triggerConnections {
+	if repo, ok := s.deps.Repo.(interface{ Connections() core.ConnectionStore }); ok {
 		return repo.Connections()
 	}
 	return nil
-}
-
-// WithControlPlaneClient enables delegated automation credentials: while a
-// user has an enabled trigger for a daemon, a daemon-bound daemon:resume token
-// is held so an unattended fire can wake exactly that daemon. Without it
-// (self-hosted) nothing is minted.
-func (s *TriggerService) WithControlPlaneClient(client controlplane.Client) *TriggerService {
-	s.grants = &automationGrants{client: client, keys: s.database, triggers: s.database}
-	return s
-}
-
-// NewTriggerService creates a new TriggerService.
-//
-// syncer and fires may be nil in a deployment with no Temporal client, in
-// which case write paths fail loudly rather than storing triggers that can
-// never fire.
-func NewTriggerService(database db.Repository, syncer triggerSyncer, fires triggerFireStarter) *TriggerService {
-	return &TriggerService{database: database, syncer: syncer, fires: fires}
-}
-
-// WithPolledIntegrations makes the schedule backend converge a poll schedule
-// for integration triggers whose integration is polled. Must be called
-// before the service handles a request.
-func (s *TriggerService) WithPolledIntegrations(polled func(integration string) bool) *TriggerService {
-	if backend, ok := s.syncer.(*triggers.Backend); ok && backend != nil {
-		backend.WithPolledIntegrations(polled)
-	}
-	return s
 }
 
 // syncs reports whether a trigger is converged onto a Temporal Schedule:
@@ -116,32 +57,6 @@ func syncs(kind core.TriggerKind) bool {
 	return kind == core.TriggerKindSchedule || kind == core.TriggerKindIntegration
 }
 
-// NewTriggerServiceFor builds the service over a Temporal client, which may be
-// nil in a deployment without Temporal.
-//
-// This exists so the nil case is handled in ONE place. A nil *triggers.Backend
-// assigned to the triggerSyncer interface is a non-nil interface holding a nil
-// pointer, so `s.syncer == nil` would be false and the first write would
-// panic — a trap the call site cannot see. Here the interface fields are only
-// ever assigned a real backend.
-func NewTriggerServiceFor(database db.Repository, temporalClient client.Client, taskQueue string) *TriggerService {
-	var svc *TriggerService
-	if temporalClient == nil {
-		svc = &TriggerService{database: database}
-	} else {
-		backend := triggers.NewBackend(
-			temporalClient.ScheduleClient(),
-			temporalClient,
-			database,
-			taskQueue,
-		)
-		svc = &TriggerService{database: database, syncer: backend, fires: backend}
-	}
-	// Delegated automation credentials exist only against a control plane:
-	// the server gives it one with WithControlPlaneClient when it has one.
-	return svc
-}
-
 // CreateTrigger stores the trigger, then converges its schedule.
 //
 // The row is written first because it is the truth; Temporal is a projection
@@ -150,7 +65,7 @@ func NewTriggerServiceFor(database db.Repository, temporalClient client.Client, 
 // no way to tell that apart from one that is working. Update does not roll
 // back: the previous definition is already live, and a failed converge there
 // is drift that SyncAll repairs.
-func (s *TriggerService) CreateTrigger(
+func (s *Service) CreateTrigger(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateTriggerRequest],
 ) (*connect.Response[reliantv1.CreateTriggerResponse], error) {
@@ -165,7 +80,7 @@ func (s *TriggerService) CreateTrigger(
 	if err != nil {
 		return nil, err
 	}
-	if trigger.Kind == core.TriggerKindSchedule && s.syncer == nil {
+	if trigger.Kind == core.TriggerKindSchedule && s.deps.Syncer == nil {
 		return nil, connect.NewError(connect.CodeUnavailable,
 			errors.New("the schedule backend is unavailable; cannot create a trigger that would never fire"))
 	}
@@ -179,7 +94,7 @@ func (s *TriggerService) CreateTrigger(
 		return nil, err
 	}
 
-	if err := s.database.CreateTrigger(ctx, trigger); err != nil {
+	if err := s.deps.Repo.CreateTrigger(ctx, trigger); err != nil {
 		return nil, triggerDBError("create trigger", err)
 	}
 
@@ -191,7 +106,7 @@ func (s *TriggerService) CreateTrigger(
 	if trigger.Kind == core.TriggerKindWebhook {
 		cred, err = s.writeWebhookCredentials(ctx, trigger, def, true)
 		if err != nil {
-			if delErr := s.database.DeleteTrigger(ctx, trigger.ID); delErr != nil {
+			if delErr := s.deps.Repo.DeleteTrigger(ctx, trigger.ID); delErr != nil {
 				logging.Error("failed to remove a webhook trigger whose credentials could not be written",
 					"trigger_id", trigger.ID, "error", err, "delete_error", delErr)
 			}
@@ -203,11 +118,14 @@ func (s *TriggerService) CreateTrigger(
 		// Remove the schedule Sync may have half-created, then the row we
 		// just wrote. Leaving either would mean an API that reported failure
 		// for a trigger that still fires, or success for one with no schedule.
-		if schedErr := s.syncer.Delete(ctx, trigger.ID); schedErr != nil {
-			logging.Error("failed to remove the schedule of a trigger that could not be created",
-				"trigger_id", trigger.ID, "sync_error", err, "delete_error", schedErr)
+		// sync fails only through a Syncer, so there is one to ask.
+		if s.deps.Syncer != nil {
+			if schedErr := s.deps.Syncer.Delete(ctx, trigger.ID); schedErr != nil {
+				logging.Error("failed to remove the schedule of a trigger that could not be created",
+					"trigger_id", trigger.ID, "sync_error", err, "delete_error", schedErr)
+			}
 		}
-		if delErr := s.database.DeleteTrigger(ctx, trigger.ID); delErr != nil {
+		if delErr := s.deps.Repo.DeleteTrigger(ctx, trigger.ID); delErr != nil {
 			logging.Error("failed to remove a trigger whose schedule could not be created",
 				"trigger_id", trigger.ID, "sync_error", err, "delete_error", delErr)
 		}
@@ -227,15 +145,15 @@ func (s *TriggerService) CreateTrigger(
 // trigger without a backend was refused before it was stored; an
 // integration trigger without one is a pushed-only deployment, where there
 // is nothing to converge.
-func (s *TriggerService) sync(ctx context.Context, kind core.TriggerKind, id string) error {
-	if !syncs(kind) || s.syncer == nil {
+func (s *Service) sync(ctx context.Context, kind core.TriggerKind, id string) error {
+	if !syncs(kind) || s.deps.Syncer == nil {
 		return nil
 	}
-	return s.syncer.Sync(ctx, id)
+	return s.deps.Syncer.Sync(ctx, id)
 }
 
 // GetTrigger returns one trigger with its read-only projections.
-func (s *TriggerService) GetTrigger(
+func (s *Service) GetTrigger(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetTriggerRequest],
 ) (*connect.Response[reliantv1.GetTriggerResponse], error) {
@@ -249,7 +167,7 @@ func (s *TriggerService) GetTrigger(
 }
 
 // ListTriggers returns the caller's triggers.
-func (s *TriggerService) ListTriggers(
+func (s *Service) ListTriggers(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListTriggersRequest],
 ) (*connect.Response[reliantv1.ListTriggersResponse], error) {
@@ -258,7 +176,7 @@ func (s *TriggerService) ListTriggers(
 	// The filter carries the caller's id, so this can never return another
 	// user's triggers regardless of what project id was asked for.
 	filters := core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId}
-	stored, err := s.database.ListTriggers(ctx, filters)
+	stored, err := s.deps.Repo.ListTriggers(ctx, filters)
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
 	}
@@ -269,19 +187,19 @@ func (s *TriggerService) ListTriggers(
 	for i, t := range stored {
 		ids[i] = t.ID
 	}
-	recent, err := s.database.RecentTriggerFirings(ctx, userID, ids, triggers.HealthWindow)
+	recent, err := s.deps.Repo.RecentTriggerFirings(ctx, userID, ids, triggers.HealthWindow)
 	if err != nil {
 		logging.Warn("could not resolve triggers' recent firings", "error", err)
 		recent = nil
 	}
 	// And one for every polled trigger's source state, which health folds in.
-	regs, err := s.database.ListTriggerRegistrations(ctx, userID, ids)
+	regs, err := s.deps.Repo.ListTriggerRegistrations(ctx, userID, ids)
 	if err != nil {
 		logging.Warn("could not resolve triggers' source state", "error", err)
 		regs = nil
 	}
 
-	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.database})
+	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.deps.Repo})
 	out := make([]*reliantv1.Trigger, 0, len(stored))
 	for _, t := range stored {
 		out = append(out, s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], workflows))
@@ -291,7 +209,7 @@ func (s *TriggerService) ListTriggers(
 
 // UpdateTrigger replaces the definition and reconverges the schedule. The id,
 // owner and kind are not updatable.
-func (s *TriggerService) UpdateTrigger(
+func (s *Service) UpdateTrigger(
 	ctx context.Context,
 	req *connect.Request[reliantv1.UpdateTriggerRequest],
 ) (*connect.Response[reliantv1.UpdateTriggerResponse], error) {
@@ -309,7 +227,7 @@ func (s *TriggerService) UpdateTrigger(
 	if err != nil {
 		return nil, err
 	}
-	if updated.Kind == core.TriggerKindSchedule && s.syncer == nil {
+	if updated.Kind == core.TriggerKindSchedule && s.deps.Syncer == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("the schedule backend is unavailable"))
 	}
 	updated.ID = existing.ID
@@ -324,7 +242,7 @@ func (s *TriggerService) UpdateTrigger(
 		return nil, err
 	}
 
-	if err := s.database.UpdateTrigger(ctx, updated); err != nil {
+	if err := s.deps.Repo.UpdateTrigger(ctx, updated); err != nil {
 		return nil, triggerDBError("update trigger", err)
 	}
 
@@ -355,7 +273,7 @@ func (s *TriggerService) UpdateTrigger(
 }
 
 // DeleteTrigger removes the trigger and its schedule.
-func (s *TriggerService) DeleteTrigger(
+func (s *Service) DeleteTrigger(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DeleteTriggerRequest],
 ) (*connect.Response[reliantv1.DeleteTriggerResponse], error) {
@@ -367,12 +285,12 @@ func (s *TriggerService) DeleteTrigger(
 	// Drop the schedule FIRST. A schedule outliving its row keeps firing for a
 	// trigger nobody can see or stop; a row outliving its schedule merely
 	// stops firing, and the next Sync fixes it.
-	if s.syncer != nil && syncs(trigger.Kind) {
-		if err := s.syncer.Delete(ctx, trigger.ID); err != nil {
+	if s.deps.Syncer != nil && syncs(trigger.Kind) {
+		if err := s.deps.Syncer.Delete(ctx, trigger.ID); err != nil {
 			return nil, triggerSyncError(err)
 		}
 	}
-	if err := s.database.DeleteTrigger(ctx, trigger.ID); err != nil {
+	if err := s.deps.Repo.DeleteTrigger(ctx, trigger.ID); err != nil {
 		return nil, triggerDBError("delete trigger", err)
 	}
 	s.grants.releaseIfUnused(ctx, trigger.UserID, trigger.DaemonID)
@@ -380,7 +298,7 @@ func (s *TriggerService) DeleteTrigger(
 }
 
 // SetTriggerEnabled pauses or resumes a trigger.
-func (s *TriggerService) SetTriggerEnabled(
+func (s *Service) SetTriggerEnabled(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SetTriggerEnabledRequest],
 ) (*connect.Response[reliantv1.SetTriggerEnabledResponse], error) {
@@ -388,7 +306,7 @@ func (s *TriggerService) SetTriggerEnabled(
 	if err != nil {
 		return nil, err
 	}
-	if trigger.Kind == core.TriggerKindSchedule && s.syncer == nil {
+	if trigger.Kind == core.TriggerKindSchedule && s.deps.Syncer == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("the schedule backend is unavailable"))
 	}
 	if req.Msg.Enabled {
@@ -399,7 +317,7 @@ func (s *TriggerService) SetTriggerEnabled(
 		}
 	}
 
-	if err := s.database.SetTriggerEnabled(ctx, trigger.ID, req.Msg.Enabled); err != nil {
+	if err := s.deps.Repo.SetTriggerEnabled(ctx, trigger.ID, req.Msg.Enabled); err != nil {
 		return nil, triggerDBError("set trigger enabled", err)
 	}
 	trigger.Enabled = req.Msg.Enabled
@@ -422,7 +340,7 @@ func (s *TriggerService) SetTriggerEnabled(
 
 // FireTrigger runs a trigger now. The firing is asynchronous: this returns the
 // fire workflow id, and the outcome shows up in ListTriggerEvents.
-func (s *TriggerService) FireTrigger(
+func (s *Service) FireTrigger(
 	ctx context.Context,
 	req *connect.Request[reliantv1.FireTriggerRequest],
 ) (*connect.Response[reliantv1.FireTriggerResponse], error) {
@@ -437,11 +355,11 @@ func (s *TriggerService) FireTrigger(
 		}
 		return connect.NewResponse(&reliantv1.FireTriggerResponse{FireWorkflowId: fireID}), nil
 	}
-	if s.fires == nil {
+	if s.deps.Fires == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("the schedule backend is unavailable"))
 	}
 
-	fireID, err := s.fires.StartManualFire(ctx, trigger.ID)
+	fireID, err := s.deps.Fires.StartManualFire(ctx, trigger.ID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("start fire: %w", err))
 	}
@@ -456,7 +374,7 @@ func (s *TriggerService) FireTrigger(
 // (workflow, presets, params), the seed fingerprint and the source's own
 // fields; the caller's JWT is never part of it (it travels in the in-memory
 // Spec), so owner-only access is the whole boundary.
-func (s *TriggerService) GetLaunchEvent(
+func (s *Service) GetLaunchEvent(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetLaunchEventRequest],
 ) (*connect.Response[reliantv1.GetLaunchEventResponse], error) {
@@ -464,11 +382,11 @@ func (s *TriggerService) GetLaunchEvent(
 	if req.Msg.ChatId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("chat_id is required"))
 	}
-	chat, err := s.database.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil || chat == nil || chat.UserID != userID {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("chat not found"))
 	}
-	ev, err := s.database.GetTriggerEventByChatID(ctx, chat.ID)
+	ev, err := s.deps.Repo.GetTriggerEventByChatID(ctx, chat.ID)
 	if err != nil {
 		if errors.Is(err, core.ErrTriggerEventNotFound) {
 			return connect.NewResponse(&reliantv1.GetLaunchEventResponse{}), nil
@@ -486,7 +404,7 @@ func (s *TriggerService) GetLaunchEvent(
 }
 
 // ListTriggerEvents returns a trigger's firings, newest first.
-func (s *TriggerService) ListTriggerEvents(
+func (s *Service) ListTriggerEvents(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListTriggerEventsRequest],
 ) (*connect.Response[reliantv1.ListTriggerEventsResponse], error) {
@@ -525,7 +443,7 @@ func (s *TriggerService) ListTriggerEvents(
 		filters.After = cursor
 	}
 
-	stored, hasMore, err := s.database.ListTriggerEvents(ctx, filters)
+	stored, hasMore, err := s.deps.Repo.ListTriggerEvents(ctx, filters)
 	if err != nil {
 		return nil, triggerDBError("list trigger events", err)
 	}
@@ -587,13 +505,13 @@ func triggerOutcomeFromProto(o reliantv1.TriggerEventOutcome) (core.TriggerEvent
 // Another user's trigger is NotFound, not PermissionDenied: telling a caller
 // that an id exists but is not theirs leaks the existence of other users'
 // triggers for nothing.
-func (s *TriggerService) ownedTrigger(ctx context.Context, id string) (*core.Trigger, error) {
+func (s *Service) ownedTrigger(ctx context.Context, id string) (*core.Trigger, error) {
 	if id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
 	}
 	userID := auth.MustGetUserID(ctx)
 
-	trigger, err := s.database.GetTrigger(ctx, id)
+	trigger, err := s.deps.Repo.GetTrigger(ctx, id)
 	if err != nil {
 		if errors.Is(err, core.ErrTriggerNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("trigger not found"))
@@ -608,7 +526,7 @@ func (s *TriggerService) ownedTrigger(ctx context.Context, id string) (*core.Tri
 
 // triggerFromDefinition validates a wire definition into a storable row.
 // existing is the current row on update and nil on create.
-func (s *TriggerService) triggerFromDefinition(
+func (s *Service) triggerFromDefinition(
 	ctx context.Context,
 	userID string,
 	def *reliantv1.TriggerDefinition,
@@ -640,7 +558,7 @@ func (s *TriggerService) triggerFromDefinition(
 			errors.New("daemon_id is required: a trigger must name the daemon its runs execute on, or set no_machine"))
 	}
 
-	if _, err := s.database.GetProjectWithUserCheck(ctx, def.ProjectId, userID); err != nil {
+	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, def.ProjectId, userID); err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("project not found"))
 	}
 
@@ -653,7 +571,7 @@ func (s *TriggerService) triggerFromDefinition(
 	}
 
 	if def.WorktreeId != nil && *def.WorktreeId != "" {
-		worktree, err := s.database.GetWorktree(ctx, *def.WorktreeId)
+		worktree, err := s.deps.Repo.GetWorktree(ctx, *def.WorktreeId)
 		if err != nil || worktree == nil {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("worktree not found"))
 		}
@@ -748,7 +666,7 @@ func (s *TriggerService) triggerFromDefinition(
 // resolveActivation reads the declaration a definition activates and checks
 // what the activation itself may set. The returned declaration's source is
 // then validated and stored like an inline one.
-func (s *TriggerService) resolveActivation(ctx context.Context, userID string, def *reliantv1.TriggerDefinition, name string) (*triggers.Declaration, error) {
+func (s *Service) resolveActivation(ctx context.Context, userID string, def *reliantv1.TriggerDefinition, name string) (*triggers.Declaration, error) {
 	if strings.TrimSpace(def.Workflow) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("workflow is required: a declared trigger is activated from the workflow that declares it"))
@@ -757,7 +675,7 @@ func (s *TriggerService) resolveActivation(ctx context.Context, userID string, d
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("filter: an activation's filter is its declaration's; edit the workflow's triggers: block to change it"))
 	}
-	wf, err := launch.ResolveRunWorkflow(ctx, s.database, userID, def.Workflow, def.ProjectId)
+	wf, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, def.Workflow, def.ProjectId)
 	if err != nil {
 		var lookup *launch.WorkflowLookupError
 		if errors.As(err, &lookup) {
@@ -813,8 +731,8 @@ func (s *TriggerService) resolveActivation(ctx context.Context, userID string, d
 //
 // Another user's daemon is NotFound, identical to a missing one, so a caller
 // cannot probe which daemon ids exist.
-func (s *TriggerService) validateTriggerDaemon(ctx context.Context, userID, projectID, daemonID string) error {
-	return daemonchoice.Validate(ctx, s.database, userID, projectID, daemonID)
+func (s *Service) validateTriggerDaemon(ctx context.Context, userID, projectID, daemonID string) error {
+	return daemonchoice.Validate(ctx, s.deps.Repo, userID, projectID, daemonID)
 }
 
 // validateNoMachineWorkflow refuses a no-machine trigger whose workflow will not
@@ -824,12 +742,12 @@ func (s *TriggerService) validateTriggerDaemon(ctx context.Context, userID, proj
 // unattended run "it quietly had fewer tools than you configured" is a silent
 // downgrade. The trigger's params are what the run will start with, so a
 // builtin agent with tools: ["tag:web"] passes. See research/DAEMONLESS_RUNS.md.
-func (s *TriggerService) validateNoMachineWorkflow(ctx context.Context, userID string, def *reliantv1.TriggerDefinition) error {
+func (s *Service) validateNoMachineWorkflow(ctx context.Context, userID string, def *reliantv1.TriggerDefinition) error {
 	workflowName := def.Workflow
 	if workflowName == "" {
 		workflowName = workflow.DefaultWorkflow
 	}
-	wf, err := launch.ResolveRunWorkflow(ctx, s.database, userID, workflowName, def.ProjectId)
+	wf, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, workflowName, def.ProjectId)
 	if err != nil {
 		var lookup *launch.WorkflowLookupError
 		if errors.As(err, &lookup) {
@@ -840,7 +758,7 @@ func (s *TriggerService) validateNoMachineWorkflow(ctx context.Context, userID s
 		return nil
 	}
 	loader := func(ref string) (*reliantv1.Workflow, error) {
-		return launch.ResolveRunWorkflow(ctx, s.database, userID, ref, def.ProjectId)
+		return launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, ref, def.ProjectId)
 	}
 	req := v2.MachineRequirements(wf, triggers.ParamsFromProto(def.Params), loader, tools.PreflightConfig())
 	if req.None() {
@@ -857,28 +775,28 @@ func (s *TriggerService) validateNoMachineWorkflow(ctx context.Context, userID s
 // Temporal and last_event from a second query, and a trigger the caller cannot
 // see at all is a worse outcome than one whose next fire time is momentarily
 // absent.
-func (s *TriggerService) render(ctx context.Context, t *core.Trigger) *reliantv1.Trigger {
+func (s *Service) render(ctx context.Context, t *core.Trigger) *reliantv1.Trigger {
 	// The write paths hand over the row they just stored, which has no joined
 	// names; re-read it so every response carries them.
-	if fresh, err := s.database.GetTrigger(ctx, t.ID); err == nil {
+	if fresh, err := s.deps.Repo.GetTrigger(ctx, t.ID); err == nil {
 		t = fresh
 	}
-	recent, err := s.database.RecentTriggerFirings(ctx, t.UserID, []string{t.ID}, triggers.HealthWindow)
+	recent, err := s.deps.Repo.RecentTriggerFirings(ctx, t.UserID, []string{t.ID}, triggers.HealthWindow)
 	if err != nil {
 		logging.Warn("could not resolve a trigger's recent firings", "trigger_id", t.ID, "error", err)
 	}
-	regs, err := s.database.ListTriggerRegistrations(ctx, t.UserID, []string{t.ID})
+	regs, err := s.deps.Repo.ListTriggerRegistrations(ctx, t.UserID, []string{t.ID})
 	if err != nil {
 		logging.Warn("could not resolve a trigger's source state", "trigger_id", t.ID, "error", err)
 	}
-	return s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], triggers.LaunchWorkflows{Repo: s.database})
+	return s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], triggers.LaunchWorkflows{Repo: s.deps.Repo})
 }
 
 // renderWithWorkflows renders a trigger, resolving an activation's
 // declaration through workflows so that a broken one reports BROKEN health.
 // It is computed on read, from the workflow as it is now: a stored verdict
 // would go stale the moment someone fixed the YAML.
-func (s *TriggerService) renderWithWorkflows(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration, workflows triggers.WorkflowResolver) *reliantv1.Trigger {
+func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration, workflows triggers.WorkflowResolver) *reliantv1.Trigger {
 	proto := s.renderFirings(ctx, t, firings, reg)
 	if t.WorkflowTrigger == nil {
 		return proto
@@ -898,10 +816,10 @@ func (s *TriggerService) renderWithWorkflows(ctx context.Context, t *core.Trigge
 
 // renderFirings renders a trigger from its row, recent firings and (for a
 // polled trigger) its source state.
-func (s *TriggerService) renderFirings(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration) *reliantv1.Trigger {
+func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration) *reliantv1.Trigger {
 	var nextFireAt *time.Time
-	if s.syncer != nil && syncs(t.Kind) {
-		next, err := s.syncer.NextFireAt(ctx, t.ID)
+	if s.deps.Syncer != nil && syncs(t.Kind) {
+		next, err := s.deps.Syncer.NextFireAt(ctx, t.ID)
 		if err != nil {
 			logging.Warn("could not resolve a trigger's next fire time", "trigger_id", t.ID, "error", err)
 		} else {
@@ -918,15 +836,15 @@ func (s *TriggerService) renderFirings(ctx context.Context, t *core.Trigger, fir
 	}
 	switch t.Kind {
 	case core.TriggerKindWebhook:
-		webhookURL := triggers.WebhookURL(s.inbound.PublicURL, t.ID)
+		webhookURL := triggers.WebhookURL(s.deps.PublicURL, t.ID)
 		proto.WebhookUrl = &webhookURL
 	case core.TriggerKindIntegration:
 		// A provider whose webhook each user sets on their own resources
 		// (Twilio's per-number "A message comes in" URL) needs the user to
 		// know it; an operator-registered app webhook does not.
-		if uc, ok := s.inbound.Catalog.(userConfiguredCatalog); ok {
+		if uc, ok := s.deps.Catalog.(userConfiguredCatalog); ok {
 			if cfg, err := triggers.IntegrationConfigFor(t); err == nil && uc.UserConfiguredURL(cfg.Integration) {
-				eventsURL := triggers.IntegrationEventsURL(s.inbound.PublicURL, cfg.Integration)
+				eventsURL := triggers.IntegrationEventsURL(s.deps.PublicURL, cfg.Integration)
 				proto.WebhookUrl = &eventsURL
 			}
 		}

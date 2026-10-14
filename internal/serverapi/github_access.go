@@ -15,7 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/integrations/ghusers"
@@ -23,24 +23,24 @@ import (
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
-// gitHubAccess adapts *ghaccess.Refresher to services.IntegrationAccess.
+// gitHubAccess adapts *ghaccess.Refresher to trigger.IntegrationAccess.
 type gitHubAccess struct{ *ghaccess.Refresher }
 
 func (gitHubAccess) IsPermanent(err error) bool { return ghaccess.IsPermanent(err) }
 
-// gitHubSenders adapts ghusers.Service to services.SenderDirectory. It
+// gitHubSenders adapts ghusers.Service to trigger.SenderDirectory. It
 // asks GitHub with the same token source the access refresher uses: the
 // caller's own GitHub token, delegated by control-plane when hosted.
 type gitHubSenders struct{ dir ghusers.Service }
 
-func (g gitHubSenders) Resolve(ctx context.Context, userID string, handles, ids []string) ([]services.ResolvedSender, error) {
+func (g gitHubSenders) Resolve(ctx context.Context, userID string, handles, ids []string) ([]trigger.ResolvedSender, error) {
 	found, err := g.dir.Resolve(ctx, userID, handles, ids)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]services.ResolvedSender, 0, len(found))
+	out := make([]trigger.ResolvedSender, 0, len(found))
 	for _, f := range found {
-		out = append(out, services.ResolvedSender{Query: f.Query, ID: f.User.ID, DisplayName: f.User.Login})
+		out = append(out, trigger.ResolvedSender{Query: f.Query, ID: f.User.ID, DisplayName: f.User.Login})
 	}
 	return out, nil
 }
@@ -54,7 +54,7 @@ func (gitHubSenders) IsInvalid(err error) bool { return errors.Is(err, ghusers.E
 // wireGitHubSenders builds the GitHub people lookup behind "Only from", or
 // nil under the same condition as wireGitHubAccess: a deployment that
 // receives no GitHub webhooks has no GitHub triggers to restrict.
-func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp controlplane.Endpoint, getenv func(string) string) (map[string]services.SenderDirectory, error) {
+func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp controlplane.Endpoint, getenv func(string) string) (map[string]trigger.SenderDirectory, error) {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
@@ -65,7 +65,7 @@ func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp controlplane.Endpoi
 	if err != nil {
 		return nil, err
 	}
-	return map[string]services.SenderDirectory{
+	return map[string]trigger.SenderDirectory{
 		ghusers.IntegrationID: gitHubSenders{dir: ghusers.New(ghusers.Deps{Tokens: tokens})},
 	}, nil
 }

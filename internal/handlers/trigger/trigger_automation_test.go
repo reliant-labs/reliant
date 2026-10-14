@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"errors"
@@ -33,7 +33,7 @@ func TestTriggerCreateMintsDaemonBoundResumeToken(t *testing.T) {
 	auth.SetUserJWT(env.userID, "jwt-1")
 	t.Cleanup(func() { auth.SetUserJWT(env.userID, "") })
 	cp := &fakeControlPlaneClient{}
-	env.svc.WithControlPlaneClient(cp)
+	env.configure(t, func(d *Deps) { d.ControlPlane = cp })
 
 	env.createNamed(t, "a")
 
@@ -62,7 +62,7 @@ func TestTriggerCreateSurvivesMintFailure(t *testing.T) {
 	env := setupTriggerTest(t)
 	auth.SetUserJWT(env.userID, "jwt-1")
 	t.Cleanup(func() { auth.SetUserJWT(env.userID, "") })
-	env.svc.WithControlPlaneClient(&fakeControlPlaneClient{mintErr: errors.New("unknown scope")})
+	env.configure(t, func(d *Deps) { d.ControlPlane = &fakeControlPlaneClient{mintErr: errors.New("unknown scope")} })
 	id := env.createNamed(t, "a") // must not fail
 	tr, err := env.repo.GetTrigger(env.ctx, id)
 	require.NoError(t, err)
@@ -74,7 +74,7 @@ func TestTriggerRevokesOnlyWhenNoEnabledTriggerRemains(t *testing.T) {
 	auth.SetUserJWT(env.userID, "jwt-1")
 	t.Cleanup(func() { auth.SetUserJWT(env.userID, "") })
 	cp := &fakeControlPlaneClient{}
-	env.svc.WithControlPlaneClient(cp)
+	env.configure(t, func(d *Deps) { d.ControlPlane = cp })
 
 	first := env.createNamed(t, "a")
 	second := env.createNamed(t, "b")
@@ -95,7 +95,7 @@ func TestTriggerDisableRevokes(t *testing.T) {
 	auth.SetUserJWT(env.userID, "jwt-1")
 	t.Cleanup(func() { auth.SetUserJWT(env.userID, "") })
 	cp := &fakeControlPlaneClient{}
-	env.svc.WithControlPlaneClient(cp)
+	env.configure(t, func(d *Deps) { d.ControlPlane = cp })
 	id := env.createNamed(t, "a")
 
 	_, err := env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))

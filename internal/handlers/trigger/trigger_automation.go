@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/automationcred"
-	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -20,7 +19,7 @@ import (
 // signed in. A failure is logged and never fails the trigger write: the trigger
 // still exists, and its fire reports "automation access not granted" instead.
 type automationGrants struct {
-	client controlplane.Client
+	client AutomationTokens
 	keys   interface {
 		SetProviderAPIKey(ctx context.Context, userID, provider, apiKey string) error
 		DeleteProviderAPIKey(ctx context.Context, userID, provider string) error

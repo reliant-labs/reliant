@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
 // triage declares one trigger of each stored kind that does not need a provider
@@ -264,7 +265,7 @@ func TestEnableWorkflowOverridesOneTrigger(t *testing.T) {
 		r.ConnectionIds = map[string]string{"test": conn.ID}
 		r.Overrides = []*reliantv1.WorkflowTriggerOverride{
 			{Trigger: "new-issue", ConnectionId: &other.ID},
-			{Trigger: "nightly", Name: &name, Message: strPtr("Custom prompt")},
+			{Trigger: "nightly", Name: &name, Message: ptr.Of("Custom prompt")},
 		}
 	}))
 	require.True(t, resp.Enabled, "%v", resp.Results)

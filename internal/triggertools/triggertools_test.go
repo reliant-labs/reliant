@@ -4,6 +4,7 @@ package triggertools_test
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"reflect"
 	"slices"
 	"strings"
@@ -20,11 +21,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggertools"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
 // The tools end to end: the agent's tool call, the adapter, the real
@@ -84,7 +86,7 @@ func (fakeCatalog) HasInboundSource(string) bool { return true }
 
 type env struct {
 	repo      *db.Repo
-	svc       *services.TriggerService
+	svc       *trigger.Service
 	list      tools.Tool
 	backend   *fakeBackend
 	userID    string
@@ -111,9 +113,12 @@ func setup(t *testing.T, publicURL string) *env {
 		Name: "triage", Slug: "triage", Definition: toolWorkflowYAML, Status: db.WorkflowDraftStatusComplete,
 		CreatedAt: now, UpdatedAt: now}))
 
-	svc := services.NewTriggerService(repo, e.backend, e.backend).WithInbound(services.InboundOptions{
+	svc, err := trigger.New(trigger.Deps{
+		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo,
+		Syncer: e.backend, Fires: e.backend,
 		PublicURL: publicURL, Catalog: fakeCatalog{}, Intake: fakeIntake{},
 	})
+	require.NoError(t, err)
 	e.svc = svc
 	e.list = tools.NewListTriggersTool(repo, triggertools.New(svc))
 	return e

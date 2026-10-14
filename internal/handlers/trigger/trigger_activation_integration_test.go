@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package trigger
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -103,9 +104,9 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	defer server.Close()
 
 	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
-	svc := NewTriggerService(repo, backend, backend).WithInbound(InboundOptions{
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Syncer: backend, Fires: backend,
 		PublicURL: publicURL, Catalog: registry, Intake: intake,
-	})
+	}))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -157,7 +158,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	// --- integration ------------------------------------------------------
 	conn := &core.Connection{
 		ID: uuid.NewString(), OwnerKind: core.ConnectionOwnerUser, UserID: userID, IntegrationID: "test",
-		AuthKind: "none", Name: "test", ExternalAccountID: strPtr("acct-1"), Status: core.ConnectionStatusActive,
+		AuthKind: "none", Name: "test", ExternalAccountID: ptr.Of("acct-1"), Status: core.ConnectionStatusActive,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	require.NoError(t, repo.Connections().CreateConnection(ctx, conn, nil,
