@@ -402,8 +402,11 @@ func celParseJsonFunction() cel.EnvOption {
 // Usage in CEL: toJson(value) or value.toJson()
 func celToJsonFunction() cel.EnvOption {
 	toJsonImpl := func(val ref.Val) ref.Val {
-		nativeVal := val.Value()
-		jsonBytes, err := json.Marshal(nativeVal)
+		native, err := celValueToJSON(val)
+		if err != nil {
+			return types.NewErr("toJson() failed to convert value: %v", err)
+		}
+		jsonBytes, err := json.Marshal(native)
 		if err != nil {
 			return types.NewErr("toJson() failed to marshal: %v", err)
 		}
@@ -424,6 +427,59 @@ func celToJsonFunction() cel.EnvOption {
 			cel.UnaryBinding(toJsonImpl),
 		),
 	)
+}
+
+// celValueToJSON converts a CEL value into plain Go values that json.Marshal
+// renders as JSON. Lists and maps built inside CEL (literals, map(), filter(),
+// merge()) are cel-go adapter types whose Value() marshals as {"Adapter":{}},
+// and null's Value() is a structpb enum that marshals as 0, so containers are
+// walked element by element rather than trusting Value(). Integers stay
+// integers; a map key must be a string.
+func celValueToJSON(val ref.Val) (any, error) {
+	switch v := val.(type) {
+	case types.Null:
+		return nil, nil
+	case types.Bool, types.Int, types.Uint, types.Double, types.String, types.Bytes:
+		return v.Value(), nil
+	case types.Duration:
+		return v.ConvertToType(types.StringType).Value(), nil
+	case *types.Optional:
+		if !v.HasValue() {
+			return nil, nil
+		}
+		return celValueToJSON(v.GetValue())
+	}
+	if lister, ok := val.(traits.Lister); ok {
+		out := []any{}
+		for it := lister.Iterator(); it.HasNext() == types.True; {
+			item, err := celValueToJSON(it.Next())
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, item)
+		}
+		return out, nil
+	}
+	if mapper, ok := val.(traits.Mapper); ok {
+		out := map[string]any{}
+		for it := mapper.Iterator(); it.HasNext() == types.True; {
+			key := it.Next()
+			name, ok := key.Value().(string)
+			if !ok {
+				return nil, fmt.Errorf("map key %v is %s; JSON object keys must be strings", key, key.Type().TypeName())
+			}
+			item, err := celValueToJSON(mapper.Get(key))
+			if err != nil {
+				return nil, err
+			}
+			out[name] = item
+		}
+		return out, nil
+	}
+	if types.IsError(val) {
+		return nil, fmt.Errorf("%v", val)
+	}
+	return ConvertToNative(val.Value()), nil
 }
 
 // celCoalesceFunction returns the first non-null value.
