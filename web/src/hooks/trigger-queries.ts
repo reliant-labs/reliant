@@ -171,6 +171,18 @@ export function useSetTriggerEnabled() {
   });
 }
 
+/** Pause every activation of a workflow. Partial failure is in the result, not thrown. */
+export function useDisableWorkflow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workflow, projectId }: { workflow: string; projectId?: string }) =>
+      triggerGrpc.disableWorkflow(workflow, projectId),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: triggerKeys.lists() });
+    },
+  });
+}
+
 export function useDeleteTrigger() {
   const queryClient = useQueryClient();
   return useMutation({

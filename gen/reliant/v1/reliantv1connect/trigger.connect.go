@@ -65,6 +65,12 @@ const (
 	// TriggerServiceRotateWebhookTokenProcedure is the fully-qualified name of the TriggerService's
 	// RotateWebhookToken RPC.
 	TriggerServiceRotateWebhookTokenProcedure = "/reliant.v1.TriggerService/RotateWebhookToken"
+	// TriggerServiceEnableWorkflowProcedure is the fully-qualified name of the TriggerService's
+	// EnableWorkflow RPC.
+	TriggerServiceEnableWorkflowProcedure = "/reliant.v1.TriggerService/EnableWorkflow"
+	// TriggerServiceDisableWorkflowProcedure is the fully-qualified name of the TriggerService's
+	// DisableWorkflow RPC.
+	TriggerServiceDisableWorkflowProcedure = "/reliant.v1.TriggerService/DisableWorkflow"
 	// TriggerServiceResolveTriggerSendersProcedure is the fully-qualified name of the TriggerService's
 	// ResolveTriggerSenders RPC.
 	TriggerServiceResolveTriggerSendersProcedure = "/reliant.v1.TriggerService/ResolveTriggerSenders"
@@ -107,6 +113,21 @@ type TriggerServiceClient interface {
 	// RotateWebhookToken replaces a webhook trigger's token. The old token
 	// stops working immediately; the new one is returned once and never again.
 	RotateWebhookToken(context.Context, *connect.Request[v1.RotateWebhookTokenRequest]) (*connect.Response[v1.RotateWebhookTokenResponse], error)
+	// EnableWorkflow turns on every trigger a workflow declares, as one act:
+	// the user's choice of project, machine and connected accounts, applied to
+	// all of them. It is the one way a workflow's triggers start running; no
+	// agent tool can do it.
+	//
+	// All or nothing. Every declared trigger is validated before anything is
+	// written, so a missing connection on one of them refuses the lot and
+	// names it; the response says per trigger what happened, and when it is
+	// not `enabled` nothing new is running. A trigger the user already has an
+	// activation of (in this project) keeps its settings and is only resumed.
+	EnableWorkflow(context.Context, *connect.Request[v1.EnableWorkflowRequest]) (*connect.Response[v1.EnableWorkflowResponse], error)
+	// DisableWorkflow pauses every activation of a workflow. Unlike enabling it
+	// is not all-or-nothing: a pause that fails must not stop the others from
+	// pausing, so it reports each failure and pauses the rest.
+	DisableWorkflow(context.Context, *connect.Request[v1.DisableWorkflowRequest]) (*connect.Response[v1.DisableWorkflowResponse], error)
 	// ResolveTriggerSenders looks people up for a trigger's "Only from": a
 	// handle (a GitHub login) to the id trigger.sender.id carries, and an id
 	// back to the person's current name. It asks the provider with the
@@ -186,6 +207,18 @@ func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(triggerServiceMethods.ByName("RotateWebhookToken")),
 			connect.WithClientOptions(opts...),
 		),
+		enableWorkflow: connect.NewClient[v1.EnableWorkflowRequest, v1.EnableWorkflowResponse](
+			httpClient,
+			baseURL+TriggerServiceEnableWorkflowProcedure,
+			connect.WithSchema(triggerServiceMethods.ByName("EnableWorkflow")),
+			connect.WithClientOptions(opts...),
+		),
+		disableWorkflow: connect.NewClient[v1.DisableWorkflowRequest, v1.DisableWorkflowResponse](
+			httpClient,
+			baseURL+TriggerServiceDisableWorkflowProcedure,
+			connect.WithSchema(triggerServiceMethods.ByName("DisableWorkflow")),
+			connect.WithClientOptions(opts...),
+		),
 		resolveTriggerSenders: connect.NewClient[v1.ResolveTriggerSendersRequest, v1.ResolveTriggerSendersResponse](
 			httpClient,
 			baseURL+TriggerServiceResolveTriggerSendersProcedure,
@@ -207,6 +240,8 @@ type triggerServiceClient struct {
 	listTriggerEvents     *connect.Client[v1.ListTriggerEventsRequest, v1.ListTriggerEventsResponse]
 	getLaunchEvent        *connect.Client[v1.GetLaunchEventRequest, v1.GetLaunchEventResponse]
 	rotateWebhookToken    *connect.Client[v1.RotateWebhookTokenRequest, v1.RotateWebhookTokenResponse]
+	enableWorkflow        *connect.Client[v1.EnableWorkflowRequest, v1.EnableWorkflowResponse]
+	disableWorkflow       *connect.Client[v1.DisableWorkflowRequest, v1.DisableWorkflowResponse]
 	resolveTriggerSenders *connect.Client[v1.ResolveTriggerSendersRequest, v1.ResolveTriggerSendersResponse]
 }
 
@@ -260,6 +295,16 @@ func (c *triggerServiceClient) RotateWebhookToken(ctx context.Context, req *conn
 	return c.rotateWebhookToken.CallUnary(ctx, req)
 }
 
+// EnableWorkflow calls reliant.v1.TriggerService.EnableWorkflow.
+func (c *triggerServiceClient) EnableWorkflow(ctx context.Context, req *connect.Request[v1.EnableWorkflowRequest]) (*connect.Response[v1.EnableWorkflowResponse], error) {
+	return c.enableWorkflow.CallUnary(ctx, req)
+}
+
+// DisableWorkflow calls reliant.v1.TriggerService.DisableWorkflow.
+func (c *triggerServiceClient) DisableWorkflow(ctx context.Context, req *connect.Request[v1.DisableWorkflowRequest]) (*connect.Response[v1.DisableWorkflowResponse], error) {
+	return c.disableWorkflow.CallUnary(ctx, req)
+}
+
 // ResolveTriggerSenders calls reliant.v1.TriggerService.ResolveTriggerSenders.
 func (c *triggerServiceClient) ResolveTriggerSenders(ctx context.Context, req *connect.Request[v1.ResolveTriggerSendersRequest]) (*connect.Response[v1.ResolveTriggerSendersResponse], error) {
 	return c.resolveTriggerSenders.CallUnary(ctx, req)
@@ -302,6 +347,21 @@ type TriggerServiceHandler interface {
 	// RotateWebhookToken replaces a webhook trigger's token. The old token
 	// stops working immediately; the new one is returned once and never again.
 	RotateWebhookToken(context.Context, *connect.Request[v1.RotateWebhookTokenRequest]) (*connect.Response[v1.RotateWebhookTokenResponse], error)
+	// EnableWorkflow turns on every trigger a workflow declares, as one act:
+	// the user's choice of project, machine and connected accounts, applied to
+	// all of them. It is the one way a workflow's triggers start running; no
+	// agent tool can do it.
+	//
+	// All or nothing. Every declared trigger is validated before anything is
+	// written, so a missing connection on one of them refuses the lot and
+	// names it; the response says per trigger what happened, and when it is
+	// not `enabled` nothing new is running. A trigger the user already has an
+	// activation of (in this project) keeps its settings and is only resumed.
+	EnableWorkflow(context.Context, *connect.Request[v1.EnableWorkflowRequest]) (*connect.Response[v1.EnableWorkflowResponse], error)
+	// DisableWorkflow pauses every activation of a workflow. Unlike enabling it
+	// is not all-or-nothing: a pause that fails must not stop the others from
+	// pausing, so it reports each failure and pauses the rest.
+	DisableWorkflow(context.Context, *connect.Request[v1.DisableWorkflowRequest]) (*connect.Response[v1.DisableWorkflowResponse], error)
 	// ResolveTriggerSenders looks people up for a trigger's "Only from": a
 	// handle (a GitHub login) to the id trigger.sender.id carries, and an id
 	// back to the person's current name. It asks the provider with the
@@ -377,6 +437,18 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 		connect.WithSchema(triggerServiceMethods.ByName("RotateWebhookToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	triggerServiceEnableWorkflowHandler := connect.NewUnaryHandler(
+		TriggerServiceEnableWorkflowProcedure,
+		svc.EnableWorkflow,
+		connect.WithSchema(triggerServiceMethods.ByName("EnableWorkflow")),
+		connect.WithHandlerOptions(opts...),
+	)
+	triggerServiceDisableWorkflowHandler := connect.NewUnaryHandler(
+		TriggerServiceDisableWorkflowProcedure,
+		svc.DisableWorkflow,
+		connect.WithSchema(triggerServiceMethods.ByName("DisableWorkflow")),
+		connect.WithHandlerOptions(opts...),
+	)
 	triggerServiceResolveTriggerSendersHandler := connect.NewUnaryHandler(
 		TriggerServiceResolveTriggerSendersProcedure,
 		svc.ResolveTriggerSenders,
@@ -405,6 +477,10 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 			triggerServiceGetLaunchEventHandler.ServeHTTP(w, r)
 		case TriggerServiceRotateWebhookTokenProcedure:
 			triggerServiceRotateWebhookTokenHandler.ServeHTTP(w, r)
+		case TriggerServiceEnableWorkflowProcedure:
+			triggerServiceEnableWorkflowHandler.ServeHTTP(w, r)
+		case TriggerServiceDisableWorkflowProcedure:
+			triggerServiceDisableWorkflowHandler.ServeHTTP(w, r)
 		case TriggerServiceResolveTriggerSendersProcedure:
 			triggerServiceResolveTriggerSendersHandler.ServeHTTP(w, r)
 		default:
@@ -454,6 +530,14 @@ func (UnimplementedTriggerServiceHandler) GetLaunchEvent(context.Context, *conne
 
 func (UnimplementedTriggerServiceHandler) RotateWebhookToken(context.Context, *connect.Request[v1.RotateWebhookTokenRequest]) (*connect.Response[v1.RotateWebhookTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.RotateWebhookToken is not implemented"))
+}
+
+func (UnimplementedTriggerServiceHandler) EnableWorkflow(context.Context, *connect.Request[v1.EnableWorkflowRequest]) (*connect.Response[v1.EnableWorkflowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.EnableWorkflow is not implemented"))
+}
+
+func (UnimplementedTriggerServiceHandler) DisableWorkflow(context.Context, *connect.Request[v1.DisableWorkflowRequest]) (*connect.Response[v1.DisableWorkflowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.DisableWorkflow is not implemented"))
 }
 
 func (UnimplementedTriggerServiceHandler) ResolveTriggerSenders(context.Context, *connect.Request[v1.ResolveTriggerSendersRequest]) (*connect.Response[v1.ResolveTriggerSendersResponse], error) {

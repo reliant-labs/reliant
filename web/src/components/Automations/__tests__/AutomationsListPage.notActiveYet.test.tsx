@@ -1,10 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Automations page lists what the library's workflows DECLARE and nothing
- * activates yet ("Not active yet", with Activate), even when no automation
+ * The Automations page lists the workflows that DECLARE triggers nothing runs
+ * yet ("Not enabled yet", one Enable per workflow), even when no automation
  * exists at all — and a draft's declarations are left out, since a draft
- * cannot be activated.
+ * cannot be enabled.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,13 +54,14 @@ beforeEach(() => {
   });
 });
 
-describe("AutomationsListPage: declared but not active", () => {
-  it("lists a complete workflow's inactive declaration with Activate, beside the empty state", async () => {
+describe("AutomationsListPage: declared but not enabled", () => {
+  it("lists a complete workflow with Enable, beside the empty state", async () => {
     renderAtRoute(<AutomationsListPage />);
-    const section = await screen.findByRole("region", { name: "Not active yet" });
-    expect(within(section).getByText("Digest · nightly")).toBeInTheDocument();
-    expect(within(section).getByText("Every weekday at 9:00 AM UTC · Not active")).toBeInTheDocument();
-    expect(within(section).getByRole("button", { name: "Activate Digest · nightly" })).toBeInTheDocument();
+    const section = await screen.findByRole("region", { name: "Not enabled yet" });
+    expect(within(section).getByText("Digest")).toBeInTheDocument();
+    expect(within(section).getByText("Every weekday at 9:00 AM UTC · Not enabled")).toBeInTheDocument();
+    expect(within(section).getByRole("button", { name: "Enable Digest" })).toBeInTheDocument();
+    expect(within(section).queryByRole("button", { name: /Activate/ })).toBeNull();
     expect(within(section).queryByText(/half-done/)).toBeNull();
     // Still the empty state: nothing runs on its own yet.
     expect(screen.getByText("Nothing runs on its own yet")).toBeInTheDocument();

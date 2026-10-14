@@ -15,9 +15,9 @@ An **integration** connects Reliant to an outside service. Once connected, a wor
 
 ## Connecting an account
 
-A **connection** is an account you have authorised, such as your GitHub login or a Slack workspace. You make one without leaving what you are doing: the workflow builder has a **Connect** dialog when you add an integration step, and the **Activate** dialog for an integration automation asks which connection it should listen through. Depending on the integration you either sign in through the service's own consent screen (GitHub, Gmail, Slack) or paste credentials (Twilio's Account SID and Auth Token, or an API key for the HTTP integration). Reliant checks the connection works before saving it and labels it with the account's name, such as the Slack workspace or Gmail address.
+A **connection** is an account you have authorised, such as your GitHub login or a Slack workspace. You make one without leaving what you are doing: the workflow builder has a **Connect** dialog when you add an integration step, and the **Enable** dialog for a workflow with integration triggers asks which connection they should listen through. Depending on the integration you either sign in through the service's own consent screen (GitHub, Gmail, Slack) or paste credentials (Twilio's Account SID and Auth Token, or an API key for the HTTP integration). Reliant checks the connection works before saving it and labels it with the account's name, such as the Slack workspace or Gmail address.
 
-You can keep several connections to one integration, for example two Slack workspaces. A step names the one it wants with `connection:`; leave it out to use your default for that integration. An integration trigger only receives events that arrive through the connection it was activated with.
+You can keep several connections to one integration, for example two Slack workspaces. A step names the one it wants with `connection:`; leave it out to use your default for that integration. An integration trigger only receives events that arrive through the connection it was enabled with.
 
 ## Using an integration in a workflow
 

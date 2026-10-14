@@ -76,6 +76,23 @@ service TriggerService {
   // stops working immediately; the new one is returned once and never again.
   rpc RotateWebhookToken(RotateWebhookTokenRequest) returns (RotateWebhookTokenResponse) {}
 
+  // EnableWorkflow turns on every trigger a workflow declares, as one act:
+  // the user's choice of project, machine and connected accounts, applied to
+  // all of them. It is the one way a workflow's triggers start running; no
+  // agent tool can do it.
+  //
+  // All or nothing. Every declared trigger is validated before anything is
+  // written, so a missing connection on one of them refuses the lot and
+  // names it; the response says per trigger what happened, and when it is
+  // not `enabled` nothing new is running. A trigger the user already has an
+  // activation of (in this project) keeps its settings and is only resumed.
+  rpc EnableWorkflow(EnableWorkflowRequest) returns (EnableWorkflowResponse) {}
+
+  // DisableWorkflow pauses every activation of a workflow. Unlike enabling it
+  // is not all-or-nothing: a pause that fails must not stop the others from
+  // pausing, so it reports each failure and pauses the rest.
+  rpc DisableWorkflow(DisableWorkflowRequest) returns (DisableWorkflowResponse) {}
+
   // ResolveTriggerSenders looks people up for a trigger's "Only from": a
   // handle (a GitHub login) to the id trigger.sender.id carries, and an id
   // back to the person's current name. It asks the provider with the
@@ -764,6 +781,152 @@ message SetTriggerEnabledRequest {
 message SetTriggerEnabledResponse {
   // The trigger after the change, including its recomputed next fire time.
   Trigger trigger = 1;
+}
+
+// EnableWorkflowRequest is the request for EnableWorkflow. The choices here
+// are shared by every trigger the workflow declares; overrides carry the
+// exceptions.
+message EnableWorkflowRequest {
+  // The workflow, written as a trigger names it (TriggerDefinition.workflow):
+  // a slug, or builtin://<name>. It must declare at least one trigger.
+  string workflow = 1;
+
+  // Project the runs execute in.
+  string project_id = 2;
+
+  // Worktree the runs execute in. Unset means the project's main worktree.
+  optional string worktree_id = 3;
+
+  // The machine the runs execute on: daemon_id, or no_machine, exactly as in
+  // TriggerDefinition. One of the two is required.
+  string daemon_id = 4;
+  bool no_machine = 5;
+
+  // The connection each integration trigger listens through, keyed by
+  // integration id (e.g. "github"). One entry serves every trigger of that
+  // integration. An integration with no entry uses the user's default
+  // connection for it; with none, that trigger is refused.
+  map<string, string> connection_ids = 6;
+
+  // Workflow inputs the activations set on every run, as
+  // TriggerDefinition.params. A trigger's own `inputs` mapping wins over
+  // these, so an input it maps is dropped for that trigger rather than
+  // refused.
+  map<string, google.protobuf.Value> params = 7;
+
+  // Preset assignments, as TriggerDefinition.presets.
+  map<string, string> presets = 8;
+
+  // Notify the owner when a run completes, as TriggerDefinition.notify_on_complete.
+  bool notify_on_complete = 9;
+
+  // The prompt for a trigger whose declaration has none (TriggerDefinition.message).
+  // A declaration's own prompt is used when this is empty.
+  string message = 10;
+
+  // Names the activations "<name_prefix> · <trigger>". Empty uses the
+  // workflow ref.
+  string name_prefix = 11;
+
+  // Per-trigger exceptions to the shared choices above.
+  repeated WorkflowTriggerOverride overrides = 12;
+}
+
+// WorkflowTriggerOverride changes one declared trigger's activation away from
+// the shared choices of an EnableWorkflowRequest.
+message WorkflowTriggerOverride {
+  // The declared trigger's name (WorkflowTrigger.name).
+  string trigger = 1;
+
+  // Replaces the activation's name.
+  optional string name = 2;
+
+  // Replaces the shared machine for this trigger: a daemon, or no machine.
+  optional string daemon_id = 3;
+  optional bool no_machine = 4;
+
+  // Replaces the shared connection for this integration trigger.
+  optional string connection_id = 5;
+
+  // Replaces the shared prompt for this trigger.
+  optional string message = 6;
+
+  // Merged over the shared params for this trigger.
+  map<string, google.protobuf.Value> params = 7;
+}
+
+// WorkflowTriggerOutcome is what EnableWorkflow did for one declared trigger.
+enum WorkflowTriggerOutcome {
+  WORKFLOW_TRIGGER_OUTCOME_UNSPECIFIED = 0;
+  // ENABLED: a new activation was created and is running.
+  WORKFLOW_TRIGGER_OUTCOME_ENABLED = 1;
+  // RESUMED: the user's paused activation of it was turned back on, with the
+  // settings it already had.
+  WORKFLOW_TRIGGER_OUTCOME_RESUMED = 2;
+  // ALREADY_ENABLED: an enabled activation already existed; nothing changed.
+  WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED = 3;
+  // FAILED: this trigger could not be enabled; message says why. Because
+  // enabling is all-or-nothing, it is also why no other trigger was.
+  WORKFLOW_TRIGGER_OUTCOME_FAILED = 4;
+  // NOT_ENABLED: nothing was written for this trigger because another
+  // trigger failed, or what was written for it was undone.
+  WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED = 5;
+  // LEFT_ENABLED: the call failed but this trigger's activation could not be
+  // undone and is still running; disable it. message says why.
+  WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED = 6;
+}
+
+// WorkflowTriggerResult is one declared trigger's part of an EnableWorkflow.
+message WorkflowTriggerResult {
+  // The declared trigger's name.
+  string trigger = 1;
+
+  WorkflowTriggerOutcome outcome = 2;
+
+  // For FAILED, NOT_ENABLED and LEFT_ENABLED: why, in words a person can act
+  // on ("connect GitHub first: ...").
+  string message = 3;
+
+  // The activation, for ENABLED, RESUMED and ALREADY_ENABLED.
+  Trigger activation = 4;
+
+  // A webhook trigger's token, for ENABLED only. Shown once, never again.
+  WebhookCredential webhook = 5;
+}
+
+// EnableWorkflowResponse is the response for EnableWorkflow.
+message EnableWorkflowResponse {
+  // True only when every declared trigger is now running.
+  bool enabled = 1;
+
+  // One entry per declared trigger, in declaration order.
+  repeated WorkflowTriggerResult results = 2;
+}
+
+// DisableWorkflowRequest is the request for DisableWorkflow.
+message DisableWorkflowRequest {
+  // The workflow, written as in EnableWorkflowRequest.
+  string workflow = 1;
+
+  // Narrows to the activations in one project. Unset pauses them in every
+  // project.
+  optional string project_id = 2;
+}
+
+// DisableWorkflowResponse is the response for DisableWorkflow.
+message DisableWorkflowResponse {
+  // The activations that are paused now, including ones that already were.
+  repeated Trigger paused = 1;
+
+  // The activations that could not be paused, which are still running.
+  repeated TriggerFailure failed = 2;
+}
+
+// TriggerFailure is one trigger an operation could not change.
+message TriggerFailure {
+  string trigger_id = 1;
+  string name = 2;
+  string message = 3;
 }
 
 // FireTriggerRequest is the request for FireTrigger.

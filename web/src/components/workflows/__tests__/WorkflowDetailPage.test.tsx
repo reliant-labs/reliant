@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { CelStringSchema, NodeSchema, SubWorkflowArgsSchema, WorkflowSchema } from "@/gen/reliant/v1/workflow_v2_pb";
 import { GetWorkflowResponseSchema } from "@/gen/reliant/v1/workflow_pb";
-import { ScheduleSourceSchema, WorkflowTriggerSchema } from "@/gen/reliant/v1/trigger_pb";
+import { DisableWorkflowResponseSchema, ScheduleSourceSchema, TriggerFailureSchema, TriggerSchema, WorkflowTriggerSchema } from "@/gen/reliant/v1/trigger_pb";
 import { getWorkflowByName, presetsResponse } from "../../workflow/run/__tests__/runFormFixtures";
 import { libraryResponse, protoRun, protoTrigger, renderWorkflowsPage } from "./workflowsTestUtils";
 
@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   getWorkflow: vi.fn(),
   listRuns: vi.fn(),
   listTriggers: vi.fn(),
+  disableWorkflow: vi.fn(),
   listPresetsForWorkflow: vi.fn(),
   getDefaultPresetsBatch: vi.fn(),
   getDefaultPresets: vi.fn(),
@@ -39,7 +40,7 @@ vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     workflow: () => ({ listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow }),
     run: () => ({ listRuns: mocks.listRuns }),
-    trigger: () => ({ listTriggers: mocks.listTriggers }),
+    trigger: () => ({ listTriggers: mocks.listTriggers, disableWorkflow: mocks.disableWorkflow }),
     preset: () => ({
       listPresetsForWorkflow: mocks.listPresetsForWorkflow,
       getDefaultPresetsBatch: mocks.getDefaultPresetsBatch,
@@ -153,8 +154,11 @@ describe("WorkflowDetailPage", () => {
     renderDetail();
 
     const declared = await screen.findByTestId("workflow-detail-declared-triggers");
-    expect(within(declared).getByText("Declared in the workflow · not active")).toBeInTheDocument();
-    expect(within(declared).getByRole("button", { name: "Activate" })).toBeInTheDocument();
+    expect(within(declared).getByText("weekday-morning")).toBeInTheDocument();
+    expect(within(declared).getByText("Not enabled")).toBeInTheDocument();
+    // One Enable for the workflow, not one Activate per trigger.
+    expect(screen.getAllByRole("button", { name: "Enable" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Activate" })).toBeNull();
     expect(screen.queryByText("Nothing runs this workflow on its own.")).toBeNull();
   });
 
@@ -254,5 +258,127 @@ describe("WorkflowDetailPage", () => {
     renderDetail("gone");
     expect(await screen.findByText("This workflow no longer exists.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to library" })).toHaveAttribute("href", "/workflows/library");
+  });
+
+  describe("enabling", () => {
+    const declaresTwo = (request: { name: string }) =>
+      request.name === "triage"
+        ? create(GetWorkflowResponseSchema, {
+            source: "project",
+            workflow: create(WorkflowSchema, {
+              name: "triage",
+              inputs: {},
+              triggers: [
+                create(WorkflowTriggerSchema, { name: "morning", source: { case: "schedule", value: create(ScheduleSourceSchema, { cron: ["0 6 * * *"], timezone: "UTC" }) } }),
+                create(WorkflowTriggerSchema, { name: "evening", source: { case: "schedule", value: create(ScheduleSourceSchema, { cron: ["0 18 * * *"], timezone: "UTC" }) } }),
+              ],
+            }),
+          })
+        : getWorkflowByName(request);
+
+    const activation = (id: string, declared: string, enabled: boolean) => {
+      const t = protoTrigger(id, "triage", `Triage · ${declared}`);
+      t.workflowTrigger = declared;
+      t.enabled = enabled;
+      return t;
+    };
+
+    it("offers one Enable for a workflow that declares triggers, and opens the dialog that turns on all of them", async () => {
+      const user = userEvent.setup();
+      mocks.listTriggers.mockResolvedValue({ triggers: [] });
+      mocks.getWorkflow.mockImplementation(async (request: { name: string }) => declaresTwo(request));
+      renderDetail();
+
+      const header = await screen.findByRole("heading", { level: 1, name: "Triage" });
+      expect(header).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Disable" })).toBeNull();
+      await user.click((await screen.findAllByRole("button", { name: "Enable" }))[0]!);
+      const dialog = await screen.findByRole("form", { name: "Enable Triage" });
+      expect(within(dialog).getByText(/all 2 triggers/)).toBeInTheDocument();
+    });
+
+    it("shows Disable, not Enable, once every declared trigger is running, with each one's state", async () => {
+      mocks.listTriggers.mockResolvedValue({ triggers: [activation("a1", "morning", true), activation("a2", "evening", true)] });
+      mocks.getWorkflow.mockImplementation(async (request: { name: string }) => declaresTwo(request));
+      renderDetail();
+
+      const declared = await screen.findByTestId("workflow-detail-declared-triggers");
+      expect(within(declared).getAllByText(/^Enabled/)).toHaveLength(2);
+      expect(await screen.findByRole("button", { name: "Disable" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Enable" })).toBeNull();
+    });
+
+    it("offers to enable the rest when a trigger was added since, and to disable what runs", async () => {
+      mocks.listTriggers.mockResolvedValue({ triggers: [activation("a1", "morning", true)] });
+      mocks.getWorkflow.mockImplementation(async (request: { name: string }) => declaresTwo(request));
+      renderDetail();
+
+      await screen.findByTestId("workflow-detail-declared-triggers");
+      expect(await screen.findByRole("button", { name: "Enable the rest" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Disable" })).toBeInTheDocument();
+    });
+
+    it("Disable pauses the workflow's activations in one call", async () => {
+      const user = userEvent.setup();
+      mocks.listTriggers.mockResolvedValue({ triggers: [activation("a1", "morning", true), activation("a2", "evening", true)] });
+      mocks.getWorkflow.mockImplementation(async (request: { name: string }) => declaresTwo(request));
+      mocks.disableWorkflow.mockResolvedValue(create(DisableWorkflowResponseSchema, { paused: [create(TriggerSchema, { id: "a1" }), create(TriggerSchema, { id: "a2" })] }));
+      renderDetail();
+
+      await user.click(await screen.findByRole("button", { name: "Disable" }));
+      await waitFor(() => expect(mocks.disableWorkflow).toHaveBeenCalledTimes(1));
+      expect(mocks.disableWorkflow.mock.calls[0]![0]).toMatchObject({ workflow: "triage", projectId: "proj-1" });
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("says which triggers could not be paused and are still running", async () => {
+      const user = userEvent.setup();
+      mocks.listTriggers.mockResolvedValue({ triggers: [activation("a1", "morning", true), activation("a2", "evening", true)] });
+      mocks.getWorkflow.mockImplementation(async (request: { name: string }) => declaresTwo(request));
+      mocks.disableWorkflow.mockResolvedValue(
+        create(DisableWorkflowResponseSchema, {
+          paused: [create(TriggerSchema, { id: "a1" })],
+          failed: [create(TriggerFailureSchema, { triggerId: "a2", name: "Triage · evening", message: "schedule backend: temporal is down" })],
+        }),
+      );
+      renderDetail();
+
+      await user.click(await screen.findByRole("button", { name: "Disable" }));
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("One trigger could not be paused and is still running");
+      expect(alert).toHaveTextContent("Triage · evening (schedule backend: temporal is down)");
+    });
+
+    it("says nothing was paused when the request itself fails", async () => {
+      const user = userEvent.setup();
+      mocks.listTriggers.mockResolvedValue({ triggers: [activation("a1", "morning", true), activation("a2", "evening", true)] });
+      mocks.getWorkflow.mockImplementation(async (request: { name: string }) => declaresTwo(request));
+      mocks.disableWorkflow.mockRejectedValue(new Error("the server is unreachable"));
+      renderDetail();
+
+      await user.click(await screen.findByRole("button", { name: "Disable" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Nothing was paused: the server is unreachable");
+    });
+
+    it("shows a broken activation as broken, with why, and offers no Enable that would not fix it", async () => {
+      const broken = activation("a1", "morning", true);
+      broken.health = create((await import("@/gen/reliant/v1/trigger_pb")).TriggerHealthSchema, {
+        status: (await import("@/gen/reliant/v1/trigger_pb")).TriggerHealthStatus.BROKEN,
+        lastFailureDetail: "the workflow no longer declares a trigger named morning",
+      });
+      mocks.listTriggers.mockResolvedValue({ triggers: [broken] });
+      mocks.getWorkflow.mockImplementation(async (request: { name: string }) => declaresTwo(request));
+      renderDetail();
+
+      const declared = await screen.findByTestId("workflow-detail-declared-triggers");
+      expect(within(declared).getByText(/Broken/)).toBeInTheDocument();
+    });
+
+    it("does not offer Enable on a workflow that declares nothing, or on a draft", async () => {
+      mocks.listTriggers.mockResolvedValue({ triggers: [] });
+      renderDetail();
+      await screen.findByRole("heading", { level: 1, name: "Triage" });
+      expect(screen.queryByRole("button", { name: "Enable" })).toBeNull();
+    });
   });
 });

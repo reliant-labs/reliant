@@ -14,7 +14,7 @@ triggers:
 
 ## Calling it
 
-When you activate the trigger, the app shows its **Webhook URL** and a token, once. Three ways in; any one is enough:
+When you enable the workflow, the app shows its **Webhook URL** and a token, once. Three ways in; any one is enough:
 
 1. **Token in the path:** `POST <your Reliant URL>/hooks/<trigger id>/<token>`. This is for senders that cannot set headers, such as Zapier. Treat the whole URL like the token.
 2. **Bearer token:** `POST <your Reliant URL>/hooks/<trigger id>` with `Authorization: Bearer <token>`.
@@ -31,7 +31,7 @@ triggers:
         encoding: hex
 ```
 
-The signature is an HMAC of the raw body under a shared secret you set when activating, so the definition can be shared without it. `header` defaults to `X-Signature-256`, `algorithm` to `sha256` (`sha1` and `sha512` also work), `encoding` to `hex` (or `base64`). Configuring HMAC adds a way in; the token still works.
+The signature is an HMAC of the raw body under a shared secret you set when enabling, so the definition can be shared without it. `header` defaults to `X-Signature-256`, `algorithm` to `sha256` (`sha1` and `sha512` also work), `encoding` to `hex` (or `base64`). Configuring HMAC adds a way in; the token still works.
 
 The token is stored hashed and shown once. If it leaks, **rotate** it from the automation's page: the old token stops working immediately.
 
@@ -71,7 +71,7 @@ The window is explicit:
 - It is a **fixed clock bucket** aligned to UTC, not a sliding window. Two deliveries that straddle a bucket boundary are two events, so the window is the *longest* a repeat can be suppressed, and may be shorter. An alert that is still firing after the window is reported again, which is usually what you want.
 - It needs a `dedupe_key`, and applies to webhook triggers only. Integration, schedule and workflow-event triggers already dedupe by their own event id.
 
-A key that cannot be rendered for a delivery (the payload has no `groupKey`, or it renders empty) falls back to the default key for that delivery, so a key that does not fit the payload never drops or merges events. Save-time validation checks that the template compiles, has a `{{ }}`, and that the window is a duration in range. To see what a key renders to before you activate anything:
+A key that cannot be rendered for a delivery (the payload has no `groupKey`, or it renders empty) falls back to the default key for that delivery, so a key that does not fit the payload never drops or merges events. Save-time validation checks that the template compiles, has a `{{ }}`, and that the window is a duration in range. To see what a key renders to before you enable anything:
 
 ```bash
 reliant workflow validate alerts.yaml --trigger-payload '{"body":{"groupKey":"{}:{alertname=\"HighLatency\"}","status":"firing"}}'

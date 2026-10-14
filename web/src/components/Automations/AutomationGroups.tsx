@@ -15,7 +15,9 @@ import type { Trigger } from "@/api/trigger-grpc";
 import { cn } from "@/lib/utils";
 import { AutomationListHeader, AutomationRow } from "./AutomationRow";
 import {
+  GROUP_STATE_LABEL,
   groupAutomations,
+  groupState,
   groupSummary,
   type AutomationGroup,
   type AutomationGroupBy,
@@ -49,7 +51,17 @@ function GroupPanel({ group, attention = false }: { group: AutomationGroup; atte
             {attention && <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
             {group.label}
           </h2>
-          <span className="shrink-0 text-xs text-muted-foreground">{groupSummary(group.entries)}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {!attention && (
+              <span
+                data-testid="group-state"
+                className={cn("mr-2 font-medium", groupState(group.entries) === "broken" ? "text-destructive-ink" : "text-foreground")}
+              >
+                {GROUP_STATE_LABEL[groupState(group.entries)]}
+              </span>
+            )}
+            {groupSummary(group.entries)}
+          </span>
         </div>
         <AutomationListHeader />
         <ul aria-labelledby={headingId} className="divide-y divide-border/60">

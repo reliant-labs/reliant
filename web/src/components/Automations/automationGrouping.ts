@@ -96,6 +96,28 @@ export function groupAutomations(triggers: Trigger[], by: AutomationGroupBy): Gr
   };
 }
 
+export type GroupStateKind = "enabled" | "disabled" | "broken" | "mixed";
+
+/**
+ * A group's one-word state for its header: Broken if any automation in it is
+ * broken (the worst news wins), else Enabled if all are on, Disabled if none
+ * are, Mixed if some are. The Needs attention group is a mixture by
+ * construction and has no state.
+ */
+export function groupState(entries: AutomationListEntry[]): GroupStateKind {
+  if (entries.some((entry) => entry.health.key === "broken")) return "broken";
+  const on = entries.filter((entry) => entry.trigger.enabled).length;
+  if (on === entries.length) return "enabled";
+  return on === 0 ? "disabled" : "mixed";
+}
+
+export const GROUP_STATE_LABEL: Record<GroupStateKind, string> = {
+  enabled: "Enabled",
+  disabled: "Disabled",
+  broken: "Broken",
+  mixed: "Partly enabled",
+};
+
 /** "3 automations · 2 on". */
 export function groupSummary(entries: AutomationListEntry[]): string {
   const on = entries.filter((entry) => entry.trigger.enabled).length;

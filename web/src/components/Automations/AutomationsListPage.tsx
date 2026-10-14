@@ -20,7 +20,7 @@ import { Button } from "../ui/Button";
 import { triggerErrorMessage } from "@/api/trigger-grpc";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
-import { inactiveDeclaredTriggers, type InactiveDeclaredTrigger } from "@/lib/triggerRail";
+import { inactiveWorkflows, type InactiveWorkflow } from "@/lib/triggerRail";
 import { useProjectStore } from "@/store/projectStore";
 import { InactiveDeclaredTriggers } from "./InactiveDeclaredTriggers";
 import { AutomationFormDialog } from "./AutomationFormDialog";
@@ -42,7 +42,7 @@ export function AutomationsListPage() {
   const inactive = useMemo(
     () =>
       triggersQuery.data && library.data
-        ? inactiveDeclaredTriggers(library.data.workflows.filter((w) => w.status !== "draft"), triggersQuery.data)
+        ? inactiveWorkflows(library.data.workflows.filter((w) => w.status !== "draft"), triggersQuery.data)
         : [],
     [triggersQuery.data, library.data],
   );
@@ -101,16 +101,16 @@ export function AutomationsListPage() {
   );
 }
 
-/** The workflows' declared triggers nothing activates yet, each with Activate. */
-function NotActiveYet({ items, projectId }: { items: InactiveDeclaredTrigger[]; projectId?: string }) {
+/** The workflows that declare triggers nothing runs yet, each with Enable. */
+function NotActiveYet({ items, projectId }: { items: InactiveWorkflow[]; projectId?: string }) {
   if (items.length === 0) return null;
   return (
-    <section aria-label="Not active yet">
+    <section aria-label="Not enabled yet">
       <Card padding="none" className="overflow-hidden">
         <div className="border-b border-border/60 px-4 py-2.5">
-          <h2 className="text-sm font-semibold text-foreground">Not active yet</h2>
+          <h2 className="text-sm font-semibold text-foreground">Not enabled yet</h2>
           <p className="text-xs text-muted-foreground">
-            Triggers your workflows declare. Declaring one fires nothing; activate it to choose the project, machine and connection its runs use.
+            Workflows that declare when they should run. Declaring fires nothing: enable a workflow to choose the project, machine and connected accounts its runs use.
           </p>
         </div>
         <InactiveDeclaredTriggers items={items} defaultProjectId={projectId} />

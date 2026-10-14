@@ -9,13 +9,25 @@ An **automation** starts a run without anyone typing. "Every weekday at 9, revie
   <img src="/images/v2/p2-automations-schedule-webhook-github.png" alt="The Automations list showing a schedule, a webhook and a GitHub automation" />
 </Frame>
 
-## Declare, then activate
+## Declare in YAML, enable in the app
 
 Automations have two halves, and keeping them apart is what makes a workflow shareable.
 
-A workflow **declares when it should run** in a `triggers:` block of its YAML. The declaration says the source (a schedule, a webhook, an integration event, another workflow's outcome), an optional filter, and how the event's data becomes the workflow's inputs. Declaring a trigger fires nothing.
+A workflow **declares when it should run** in a `triggers:` block of its YAML. The declaration says the source (a schedule, a webhook, an integration event, another workflow's outcome), an optional filter, and how the event's data becomes the workflow's inputs. Declaring a trigger fires nothing, and an agent that writes the YAML for you cannot change that: only you turn a workflow on.
 
-You then **activate** it, which says as whom and where: your account, a project, the [machine](/machines/overview) whose tools the run uses (or no machine), and, for an integration event, which connected account it listens through. In the app, a workflow's detail page lists its declared triggers with an **Activate** button. The activation re-reads the declaration every time it fires, so editing the workflow's `triggers:` block changes the automation. If you rename or remove the declaration, the activation is marked **broken** and fires nothing until you restore it.
+You **enable** it in the app. Open **Workflows → Library**, open the workflow and choose **Enable**. One dialog turns on every trigger the workflow declares, and asks once for what belongs to you:
+
+- the **project** and workspace its runs use;
+- the [machine](/machines/overview) whose tools they use, or **No machine**;
+- for an integration event, which **connected account** it listens through, once per integration;
+- the workflow's own **inputs**, set on every run;
+- a **prompt**, for any trigger whose author wrote none.
+
+A trigger that needs something different (another machine, another account, a prompt of its own) can be changed under **Advanced: per trigger**.
+
+Enabling is all or nothing. If one trigger cannot be turned on, say because a GitHub connection is missing, nothing is turned on, and the dialog names that trigger and why. A webhook's URL and token are shown once when it is enabled. **Disable** on the same page pauses all of the workflow's triggers; enabling again resumes them with the settings they had.
+
+The enabled trigger re-reads the declaration every time it fires, so editing the workflow's `triggers:` block changes the automation. If you rename or remove the declaration, the automation is marked **broken** and fires nothing until you restore it.
 
 ```yaml
 name: issue-triage
@@ -60,12 +72,12 @@ Each entry has a unique `name` and exactly one source. The fields around the sou
 
 | Field | Purpose |
 |-------|---------|
-| `name` | Unique within the workflow; what an activation refers to |
-| `description` | Shown to whoever chooses what to activate |
+| `name` | Unique within the workflow; what an enabled automation refers to |
+| `description` | Shown to whoever enables the workflow |
 | `filter` | A [CEL](/reference/cel-expressions) expression over `trigger`; the event fires only if it is true. Not allowed on schedules |
 | `origin_filter` | A CEL expression over `trigger`, evaluated before `filter`, that decides by *who caused the event*. The default ignores the workflow's own echoes. See [Telling your own writes apart](#telling-your-own-writes-apart). Not allowed on schedules |
 | `inputs` | Sets workflow inputs from the event: input name to a template over `trigger` |
-| `prompt` | The first message of the run, as a template over `trigger`. An activation's own message overrides it |
+| `prompt` | The first message of the run, as a template over `trigger`. The prompt you write when enabling overrides it |
 
 Inside templates and filters, `trigger.payload` is the event's data and `trigger.kind` says what fired. Unknown keys in a `triggers:` block are errors, not ignored: a mistyped `filtr:` would otherwise mean a trigger that fires on everything.
 
@@ -225,14 +237,14 @@ A workflow that should only ever start from its triggers, never from a chat, can
 
 ## Watching your automations
 
-**Workflows → Automations** lists every automation across your projects, with a "coming up" timeline of the next 24 hours of scheduled runs and each automation's health, computed from its last ten firings:
+**Workflows → Automations** lists every automation across your projects, grouped by workflow, with each group's state (enabled, disabled, partly enabled or broken), a "coming up" timeline of the next 24 hours of scheduled runs, and each automation's health, computed from its last ten firings. Workflows that declare triggers nothing runs yet are listed above, each with an **Enable**:
 
 | Health | Meaning |
 |--------|---------|
 | Healthy | No failure recently and at least one completed run |
 | Degraded | A failure in the window, or three skipped scheduled fires in a row |
 | Failing | The two most recent resolved firings both failed |
-| Broken | The workflow it activates is gone, renamed its trigger, or changed kind |
+| Broken | The workflow it runs is gone, renamed its trigger, or changed kind |
 | Unknown | Never fired, or nothing has resolved yet |
 
 A run that launched and then failed counts as a failure, not just a launch that errored. Opening an automation shows its history: each firing, what it did (launched, skipped, failed) and a link to the run it started.

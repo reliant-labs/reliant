@@ -150,3 +150,31 @@ export function inactiveDeclaredTriggers(
   }
   return out;
 }
+
+/** A workflow that declares triggers and has none of them running anywhere. */
+export interface InactiveWorkflow {
+  workflowRef: string;
+  workflowTitle: string;
+  declared: DeclaredTrigger[];
+}
+
+/**
+ * The workflows to offer "Enable" for: those that declare triggers none of
+ * which the caller has an activation of. A workflow with some activations is
+ * already in the list below, grouped, with its own state.
+ */
+export function inactiveWorkflows(
+  workflows: ReadonlyArray<{ name: string; title?: string; triggers?: readonly DeclaredTrigger[] }>,
+  triggers: readonly Trigger[],
+): InactiveWorkflow[] {
+  const byWorkflow = new Map<string, InactiveWorkflow>();
+  for (const item of inactiveDeclaredTriggers(workflows, triggers)) {
+    const key = normalizeWorkflowRef(item.workflowRef).trim().toLowerCase();
+    const source = workflows.find((w) => normalizeWorkflowRef(w.name).trim().toLowerCase() === key);
+    if (!source?.triggers?.length) continue;
+    const mine = triggers.some((t) => t.workflowTrigger && triggerRunsWorkflow(t, item.workflowRef));
+    if (mine) continue;
+    if (!byWorkflow.has(key)) byWorkflow.set(key, { workflowRef: item.workflowRef, workflowTitle: item.workflowTitle, declared: [...source.triggers] });
+  }
+  return [...byWorkflow.values()].sort((a, b) => a.workflowTitle.localeCompare(b.workflowTitle));
+}

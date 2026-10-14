@@ -21,12 +21,12 @@
 
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { CalendarClock, Pencil, Play } from "lucide-react";
+import { CalendarClock, Pencil, Play, Power, PowerOff } from "lucide-react";
 
 import type { Trigger } from "@/api/trigger-grpc";
 import type { WorkflowResponse } from "@/api/workflow-grpc";
 import { useRunList } from "@/hooks/run-queries";
-import { useTriggers } from "@/hooks/trigger-queries";
+import { useDisableWorkflow, useTriggers } from "@/hooks/trigger-queries";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import { formatInputDefault } from "@/lib/inputDefaultDisplay";
 import { getInputDefault, getInputDescription } from "@/lib/inputHelpers";
@@ -47,10 +47,13 @@ import { useWorkflowDefinition } from "../../workflow/useWorkflowDefinition";
 import { DRAFT_NOT_RUNNABLE } from "../../workflow/workflowDraftStatus";
 import { WorkflowBadge, WorkflowSourceBadge } from "../WorkflowSourceBadge";
 import { WorkflowPresetsSection } from "./WorkflowPresetsSection";
-import { ActivateTriggerDialog } from "../../Automations/ActivateTriggerDialog";
+import { EnableWorkflowDialog } from "../../Automations/EnableWorkflowDialog";
+import { workflowEnableState } from "../../Automations/enableWorkflow";
+import { triggerErrorMessage } from "@/api/trigger-grpc";
 import { declaredTriggers, describeDeclaredSource, type DeclaredTrigger } from "@/lib/declaredTriggers";
+import { automationHealth } from "@/lib/automationHealth";
 import { useIntegrationEventNaming } from "@/hooks/connection-queries";
-import { declaredRailLines } from "@/lib/triggerRail";
+import { declaredRailLines, type DeclaredRailLine } from "@/lib/triggerRail";
 import { describeSchedule } from "@/lib/cronText";
 import { workflowsUsing } from "./workflowUsedBy";
 
@@ -76,6 +79,10 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
   const defaultWorkflow = usePreferencesStore((state) => state.preferences?.defaultWorkflow);
   const [running, setRunning] = useState(false);
   const [creatingAutomation, setCreatingAutomation] = useState(false);
+  const [enabling, setEnabling] = useState(false);
+  const [disableError, setDisableError] = useState<string | null>(null);
+  const triggers = useTriggers(projectId);
+  const disableWorkflow = useDisableWorkflow();
 
   const listing = library.data?.workflows.find((w) => w.name === workflowRef);
   const invalid = library.data?.invalidWorkflows.find((w) => w.name === workflowRef);
@@ -98,6 +105,30 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
           : null;
   const openBuilder = () =>
     void navigate({ to: "/workflow/$workflowName", params: { workflowName: workflowRef } });
+  const declared = definition.workflowDef ? declaredTriggers(definition.workflowDef) : [];
+  const activations = (triggers.data ?? []).filter(
+    (trigger) => trigger.workflowTrigger && normalizeWorkflowRef(trigger.workflow) === normalizeWorkflowRef(workflowRef),
+  );
+  const enableState = workflowEnableState(declared.map((d) => d.name ?? ""), activations);
+  const enableBlockedReason = invalid
+    ? "This workflow failed to load, so its triggers cannot be enabled."
+    : isDraft
+      ? "This workflow is a draft. Open it in the editor to publish it, then enable its triggers."
+      : null;
+  const disable = async () => {
+    setDisableError(null);
+    try {
+      const result = await disableWorkflow.mutateAsync({ workflow: workflowRef, projectId });
+      if (result.failed.length > 0) {
+        setDisableError(
+          `${result.failed.length === 1 ? "One trigger" : `${result.failed.length} triggers`} could not be paused and ${result.failed.length === 1 ? "is" : "are"} still running: ` +
+            result.failed.map((f) => `${f.name} (${f.message})`).join("; "),
+        );
+      }
+    } catch (error) {
+      setDisableError(`Nothing was paused: ${triggerErrorMessage(error)}`);
+    }
+  };
   const libraryHref = project ? `${WORKFLOWS_LIBRARY_PATH}?project=${encodeURIComponent(project)}` : WORKFLOWS_LIBRARY_PATH;
 
   return (
@@ -115,11 +146,14 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
             </>
           }
           subtitle={
-            listing?.description || runBlockedReason ? (
+            listing?.description || runBlockedReason || (declared.length > 0 && enableBlockedReason) ? (
               <>
                 {listing?.description && <span className="block max-w-3xl">{listing.description}</span>}
                 {/* The reason is text, not only a tooltip (§2.3). */}
                 {runBlockedReason && <span className="mt-1 block text-warning-ink">{runBlockedReason}</span>}
+                {!runBlockedReason && declared.length > 0 && enableBlockedReason && (
+                  <span className="mt-1 block text-warning-ink">{enableBlockedReason}</span>
+                )}
               </>
             ) : undefined
           }
@@ -131,6 +165,32 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
               icon: <CalendarClock className="h-4 w-4" aria-hidden="true" />,
               onClick: () => setCreatingAutomation(true),
             },
+            ...(declared.length === 0
+              ? []
+              : [
+                  ...(enableState !== "on"
+                    ? [
+                        {
+                          label: enableState === "partial" ? "Enable the rest" : "Enable",
+                          variant: "secondary" as const,
+                          icon: <Power className="h-4 w-4" aria-hidden="true" />,
+                          onClick: () => setEnabling(true),
+                          disabled: !!enableBlockedReason,
+                        },
+                      ]
+                    : []),
+                  ...(enableState === "on" || enableState === "partial"
+                    ? [
+                        {
+                          label: "Disable",
+                          variant: "secondary" as const,
+                          icon: <PowerOff className="h-4 w-4" aria-hidden="true" />,
+                          onClick: () => void disable(),
+                          disabled: disableWorkflow.isPending,
+                        },
+                      ]
+                    : []),
+                ]),
             {
               label: "Run…",
               variant: "primary",
@@ -141,6 +201,12 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
           ]}
         />
       </div>
+
+      {disableError && (
+        <p role="alert" className="rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger-ink">
+          {disableError}
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="min-w-0 space-y-4">
@@ -153,8 +219,8 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
           <AutomationsCard
             projectId={projectId}
             workflowRef={workflowRef}
-            workflowTitle={listing?.title}
-            declared={definition.workflowDef ? declaredTriggers(definition.workflowDef) : []}
+            declared={declared}
+            onEnable={enableBlockedReason ? undefined : () => setEnabling(true)}
           />
           <DefinitionCard
             projectId={projectId}
@@ -178,6 +244,14 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
         </aside>
       </div>
 
+      <EnableWorkflowDialog
+        open={enabling}
+        onClose={() => setEnabling(false)}
+        workflowRef={workflowRef}
+        workflowTitle={displayName}
+        declared={declared}
+        defaultProjectId={projectId}
+      />
       <RunWorkflowDialog open={running} onClose={() => setRunning(false)} projectId={projectId} workflowRef={workflowRef} />
       <AutomationFormDialog
         open={creatingAutomation}
@@ -298,20 +372,21 @@ function RecentRunsCard({
  * The automations that run this workflow. "New automation" is the page header's.
  *
  * A workflow can also DECLARE its triggers in its own YAML (`triggers:`). A
- * declaration does nothing until someone activates it, so one that nobody has
- * activated is listed here as such, with Activate — saying "nothing runs this
- * workflow" beside a YAML that plainly declares a schedule reads as a bug.
+ * declaration does nothing until the user enables the workflow, so what it
+ * declares is listed here with where it stands: running, paused, broken or
+ * not on. There is one Enable for the whole workflow (the header's, repeated
+ * here when nothing runs yet); a single trigger is not turned on by itself.
  */
 function AutomationsCard({
   projectId,
   workflowRef,
-  workflowTitle,
   declared,
+  onEnable,
 }: {
   projectId: string;
   workflowRef: string;
-  workflowTitle?: string;
   declared: DeclaredTrigger[];
+  onEnable?: () => void;
 }) {
   const triggers = useTriggers(projectId);
   const naming = useIntegrationEventNaming();
@@ -322,14 +397,12 @@ function AutomationsCard({
       ),
     [triggers.data, workflowRef],
   );
-  const inactiveDeclared = useMemo(
-    () =>
-      declaredRailLines(declared, triggers.data ?? [], workflowRef)
-        .lines.filter((line) => line.state === "inactive")
-        .map((line) => line.declared),
+  const lines = useMemo(
+    () => declaredRailLines(declared, triggers.data ?? [], workflowRef),
     [declared, triggers.data, workflowRef],
   );
-  const [activating, setActivating] = useState<DeclaredTrigger | null>(null);
+  const notOn = lines.lines.filter((line) => line.state === "inactive");
+  const adHoc = usingThis.filter((trigger) => !trigger.workflowTrigger);
 
   return (
     <section aria-label="Automations">
@@ -339,51 +412,90 @@ function AutomationsCard({
         </div>
         {triggers.isLoading ? (
           <p className="px-4 py-3 text-sm text-muted-foreground" aria-busy="true">Loading automations…</p>
-        ) : usingThis.length === 0 && inactiveDeclared.length === 0 ? (
+        ) : triggers.isError ? (
+          <p className="px-4 py-3 text-sm text-muted-foreground" role="alert">Automations could not be loaded.</p>
+        ) : usingThis.length === 0 && declared.length === 0 ? (
           <p className="px-4 py-3 text-sm text-muted-foreground">Nothing runs this workflow on its own.</p>
         ) : (
           <>
-            {usingThis.length > 0 && (
-              <ul aria-label="Automations using this workflow" className="divide-y divide-border/60" data-testid="workflow-detail-automations">
-                {usingThis.map((trigger) => (
+            {declared.length > 0 && (
+              <ul aria-label="Triggers declared in this workflow" className="divide-y divide-border/60" data-testid="workflow-detail-declared-triggers">
+                {lines.lines.map((line) => (
+                  <DeclaredLine key={line.declared.name} line={line} naming={naming} />
+                ))}
+              </ul>
+            )}
+            {declared.length > 0 && notOn.length === declared.length && onEnable && (
+              <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-2.5">
+                <p className="text-xs text-muted-foreground">
+                  Declaring {declared.length === 1 ? "this trigger" : "these triggers"} fires nothing. Enable the workflow to choose where its runs happen.
+                </p>
+                <Button variant="outline" size="sm" onClick={onEnable}>
+                  Enable
+                </Button>
+              </div>
+            )}
+            {lines.orphans.length > 0 && (
+              <ul aria-label="Activations whose trigger was removed" className="divide-y divide-border/60 border-t border-border/60">
+                {lines.orphans.map((trigger) => (
                   <AutomationRow key={trigger.id} trigger={trigger} />
                 ))}
               </ul>
             )}
-            {inactiveDeclared.length > 0 && (
+            {adHoc.length > 0 && (
               <ul
-                aria-label="Triggers declared in this workflow"
-                className={`divide-y divide-border/60 ${usingThis.length > 0 ? "border-t border-border/60" : ""}`}
-                data-testid="workflow-detail-declared-triggers"
+                aria-label="Automations using this workflow"
+                className={`divide-y divide-border/60 ${declared.length > 0 ? "border-t border-border/60" : ""}`}
+                data-testid="workflow-detail-automations"
               >
-                {inactiveDeclared.map((trigger) => (
-                  <li key={trigger.name} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-foreground">{describeDeclaredSource(trigger, describeSchedule, naming)}</p>
-                      <p className="text-xs text-muted-foreground">Declared in the workflow · not active</p>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => setActivating(trigger)}>
-                      Activate
-                    </Button>
-                  </li>
+                {adHoc.map((trigger) => (
+                  <AutomationRow key={trigger.id} trigger={trigger} />
                 ))}
               </ul>
             )}
           </>
         )}
       </Card>
-      {activating && (
-        <ActivateTriggerDialog
-          open
-          onClose={() => setActivating(null)}
-          workflowRef={workflowRef}
-          workflowTitle={workflowTitle}
-          declared={activating}
-          defaultProjectId={projectId}
-          onActivated={() => setActivating(null)}
-        />
-      )}
     </section>
+  );
+}
+
+const DECLARED_STATE_TEXT: Record<DeclaredRailLine["state"], string> = {
+  inactive: "Not enabled",
+  active: "Enabled",
+  paused: "Paused",
+  failing: "Failing",
+  broken: "Broken",
+};
+
+/** One declared trigger and where it stands, with a link to its activation when it has one. */
+function DeclaredLine({ line, naming }: { line: DeclaredRailLine; naming: ReturnType<typeof useIntegrationEventNaming> }) {
+  const activation = line.activations[0];
+  const health = activation ? automationHealth(activation) : undefined;
+  const tone = line.state === "broken" || line.state === "failing" ? "text-destructive-ink" : "text-muted-foreground";
+  return (
+    <li className="flex items-center justify-between gap-3 px-4 py-2.5">
+      <div className="min-w-0">
+        <p className="truncate text-sm text-foreground">
+          <span className="font-mono">{line.declared.name}</span>
+          <span className="text-muted-foreground"> · {describeDeclaredSource(line.declared, describeSchedule, naming)}</span>
+        </p>
+        <p className={`text-xs ${tone}`}>
+          {DECLARED_STATE_TEXT[line.state]}
+          {health && line.state !== "inactive" && health.key !== "paused" ? ` · ${health.label}` : ""}
+          {health?.detail && (line.state === "broken" || line.state === "failing") ? ` — ${health.detail}` : ""}
+        </p>
+      </div>
+      {activation && (
+        <Link
+          to="/workflows/automations/$triggerId"
+          params={{ triggerId: activation.id }}
+          className="shrink-0 rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          Open
+        </Link>
+      )}
+    </li>
   );
 }
 

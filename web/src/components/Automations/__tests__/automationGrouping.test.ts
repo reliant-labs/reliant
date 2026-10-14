@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Trigger, TriggerHealth } from "@/api/trigger-grpc";
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
-import { groupAutomations, groupSummary } from "../automationGrouping";
+import { GROUP_STATE_LABEL, groupAutomations, groupState, groupSummary } from "../automationGrouping";
 
 const NOW = Date.parse("2026-10-02T08:00:00Z");
 const inMinutes = (minutes: number) => new Date(NOW + minutes * 60_000).toISOString();
@@ -145,5 +145,30 @@ describe("groupSummary", () => {
     );
     expect(groupSummary(groups[0]!.entries)).toBe("3 automations · 2 on");
     expect(groupSummary(groups[0]!.entries.slice(0, 1))).toBe("1 automation · 1 on");
+  });
+});
+
+describe("groupState", () => {
+  const entriesOf = (...overrides: Array<Partial<Trigger> & Pick<Trigger, "id">>) =>
+    groupAutomations(overrides.map((o) => trigger(o)), "workflow").groups.flatMap((g) => g.entries);
+
+  it("is Enabled when every automation in the group is on", () => {
+    expect(groupState(entriesOf({ id: "a" }, { id: "b" }))).toBe("enabled");
+    expect(GROUP_STATE_LABEL.enabled).toBe("Enabled");
+  });
+
+  it("is Disabled when none are", () => {
+    expect(groupState(entriesOf({ id: "a", enabled: false }, { id: "b", enabled: false }))).toBe("disabled");
+  });
+
+  it("is Partly enabled when some are", () => {
+    expect(groupState(entriesOf({ id: "a" }, { id: "b", enabled: false }))).toBe("mixed");
+  });
+
+  it("is Broken as soon as one is broken, whatever else is on", () => {
+    const broken = { id: "x", health: health("broken", { lastFailureDetail: "the workflow no longer declares it" }) };
+    // A broken automation is pinned under Needs attention, so build the entry directly.
+    const entries = [...entriesOf({ id: "a" }), { trigger: trigger(broken), health: { key: "broken" } as never }];
+    expect(groupState(entries)).toBe("broken");
   });
 });

@@ -20,7 +20,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/trigger.proto.
  */
 export const file_reliant_v1_trigger: GenFile = /*@__PURE__*/
-  fileDesc("ChhyZWxpYW50L3YxL3RyaWdnZXIucHJvdG8SCnJlbGlhbnQudjEilgEKDVRyaWdnZXJIZWFsdGgSLwoGc3RhdHVzGAEgASgOMh8ucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoU3RhdHVzEhwKFGNvbnNlY3V0aXZlX2ZhaWx1cmVzGAIgASgFEhkKEWNvbnNlY3V0aXZlX3NraXBzGAMgASgFEhsKE2xhc3RfZmFpbHVyZV9kZXRhaWwYBCABKAkiswEKD1RyaWdnZXJFdmVudFJ1bhIyCg1kaXNwbGF5X3N0YXRlGAEgASgOMhsucmVsaWFudC52MS5SdW5EaXNwbGF5U3RhdGUSDQoFdGl0bGUYAiABKAkSKAoFc3RhdGUYAyABKA4yGS5yZWxpYW50LnYxLldvcmtmbG93U3RhdGUSMwoLc3RvcF9yZWFzb24YBCABKA4yHi5yZWxpYW50LnYxLldvcmtmbG93U3RvcFJlYXNvbiK3AQoOU2NoZWR1bGVTb3VyY2USDAoEY3JvbhgBIAMoCRIVCghpbnRlcnZhbBgCIAEoCUgAiAEBEhAKCHRpbWV6b25lGAMgASgJEjEKB292ZXJsYXAYBCABKA4yIC5yZWxpYW50LnYxLlRyaWdnZXJPdmVybGFwUG9saWN5EhsKDmNhdGNodXBfd2luZG93GAUgASgJSAGIAQFCCwoJX2ludGVydmFsQhEKD19jYXRjaHVwX3dpbmRvdyI2Cg1XZWJob29rU291cmNlEiUKBGhtYWMYASABKAsyFy5yZWxpYW50LnYxLldlYmhvb2tIbWFjIlIKC1dlYmhvb2tIbWFjEg4KBmhlYWRlchgBIAEoCRIRCglhbGdvcml0aG0YAiABKAkSDgoGcHJlZml4GAMgASgJEhAKCGVuY29kaW5nGAQgASgJIrYBChFJbnRlZ3JhdGlvblNvdXJjZRITCgtpbnRlZ3JhdGlvbhgBIAEoCRIOCgZldmVudHMYAiADKAkSNwoFbWF0Y2gYAyADKAsyKC5yZWxpYW50LnYxLkludGVncmF0aW9uU291cmNlLk1hdGNoRW50cnkSFQoNcG9sbF9pbnRlcnZhbBgEIAEoCRosCgpNYXRjaEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiOgoTV29ya2Zsb3dFdmVudFNvdXJjZRIRCgl3b3JrZmxvd3MYASADKAkSEAoIb3V0Y29tZXMYAiADKAki1wMKD1dvcmtmbG93VHJpZ2dlchIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEg4KBmZpbHRlchgDIAEoCRI3CgZpbnB1dHMYBCADKAsyJy5yZWxpYW50LnYxLldvcmtmbG93VHJpZ2dlci5JbnB1dHNFbnRyeRIOCgZwcm9tcHQYBSABKAkSEgoKZGVkdXBlX2tleRgGIAEoCRIVCg1kZWR1cGVfd2luZG93GAcgASgJEhUKDW9yaWdpbl9maWx0ZXIYCCABKAkSLgoIc2NoZWR1bGUYFCABKAsyGi5yZWxpYW50LnYxLlNjaGVkdWxlU291cmNlSAASLAoHd2ViaG9vaxgVIAEoCzIZLnJlbGlhbnQudjEuV2ViaG9va1NvdXJjZUgAEjQKC2ludGVncmF0aW9uGBYgASgLMh0ucmVsaWFudC52MS5JbnRlZ3JhdGlvblNvdXJjZUgAEjkKDndvcmtmbG93X2V2ZW50GBcgASgLMh8ucmVsaWFudC52MS5Xb3JrZmxvd0V2ZW50U291cmNlSAAaLQoLSW5wdXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUIICgZzb3VyY2UilAgKB1RyaWdnZXISCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRISCgpwcm9qZWN0X2lkGAMgASgJEhgKC3dvcmt0cmVlX2lkGAQgASgJSAGIAQESDwoHZW5hYmxlZBgFIAEoCBIQCgh3b3JrZmxvdxgGIAEoCRIxCgdwcmVzZXRzGAcgAygLMiAucmVsaWFudC52MS5UcmlnZ2VyLlByZXNldHNFbnRyeRIvCgZwYXJhbXMYCCADKAsyHy5yZWxpYW50LnYxLlRyaWdnZXIuUGFyYW1zRW50cnkSDwoHbWVzc2FnZRgJIAEoCRISCgpjcmVhdGVkX2F0GAogASgJEhIKCnVwZGF0ZWRfYXQYCyABKAkSGQoMbmV4dF9maXJlX2F0GAwgASgJSAKIAQESMQoKbGFzdF9ldmVudBgNIAEoCzIYLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50SAOIAQESEQoJZGFlbW9uX2lkGA4gASgJEhIKCm5vX21hY2hpbmUYGyABKAgSKQoGaGVhbHRoGA8gASgLMhkucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoEhQKDHByb2plY3RfbmFtZRgQIAEoCRITCgtkYWVtb25fbmFtZRgRIAEoCRIaChJub3RpZnlfb25fY29tcGxldGUYEiABKAgSDgoGZmlsdGVyGBMgASgJEi4KCHNjaGVkdWxlGBQgASgLMhoucmVsaWFudC52MS5TY2hlZHVsZVNvdXJjZUgAEiwKB3dlYmhvb2sYFSABKAsyGS5yZWxpYW50LnYxLldlYmhvb2tTb3VyY2VIABI0CgtpbnRlZ3JhdGlvbhgWIAEoCzIdLnJlbGlhbnQudjEuSW50ZWdyYXRpb25Tb3VyY2VIABI5Cg53b3JrZmxvd19ldmVudBgXIAEoCzIfLnJlbGlhbnQudjEuV29ya2Zsb3dFdmVudFNvdXJjZUgAEhoKDWNvbm5lY3Rpb25faWQYGCABKAlIBIgBARIYCgt3ZWJob29rX3VybBgZIAEoCUgFiAEBEh0KEHdvcmtmbG93X3RyaWdnZXIYGiABKAlIBogBARouCgxQcmVzZXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARpFCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSJQoFdmFsdWUYAiABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWU6AjgBQggKBnNvdXJjZUIOCgxfd29ya3RyZWVfaWRCDwoNX25leHRfZmlyZV9hdEINCgtfbGFzdF9ldmVudEIQCg5fY29ubmVjdGlvbl9pZEIOCgxfd2ViaG9va191cmxCEwoRX3dvcmtmbG93X3RyaWdnZXIiiwMKDFRyaWdnZXJFdmVudBIKCgJpZBgBIAEoCRIXCgp0cmlnZ2VyX2lkGAIgASgJSACIAQESKgoEa2luZBgDIAEoDjIcLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50S2luZBITCgtvY2N1cnJlZF9hdBgEIAEoCRIwCgdvdXRjb21lGAUgASgOMh8ucmVsaWFudC52MS5UcmlnZ2VyRXZlbnRPdXRjb21lEhYKDm91dGNvbWVfZGV0YWlsGAYgASgJEhQKB2NoYXRfaWQYByABKAlIAYgBARIoCgdwYXlsb2FkGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBItCgNydW4YCSABKAsyGy5yZWxpYW50LnYxLlRyaWdnZXJFdmVudFJ1bkgCiAEBEi4KBnNlbmRlchgKIAEoCzIZLnJlbGlhbnQudjEuVHJpZ2dlclNlbmRlckgDiAEBQg0KC190cmlnZ2VyX2lkQgoKCF9jaGF0X2lkQgYKBF9ydW5CCQoHX3NlbmRlciJRCg1UcmlnZ2VyU2VuZGVyEgwKBGtpbmQYASABKAkSCgoCaWQYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEhAKCHZlcmlmaWVkGAQgASgIIsMGChFUcmlnZ2VyRGVmaW5pdGlvbhIMCgRuYW1lGAEgASgJEhIKCnByb2plY3RfaWQYAiABKAkSGAoLd29ya3RyZWVfaWQYAyABKAlIAYgBARIUCgdlbmFibGVkGAQgASgISAKIAQESEAoId29ya2Zsb3cYBSABKAkSOwoHcHJlc2V0cxgGIAMoCzIqLnJlbGlhbnQudjEuVHJpZ2dlckRlZmluaXRpb24uUHJlc2V0c0VudHJ5EjkKBnBhcmFtcxgHIAMoCzIpLnJlbGlhbnQudjEuVHJpZ2dlckRlZmluaXRpb24uUGFyYW1zRW50cnkSDwoHbWVzc2FnZRgIIAEoCRIRCglkYWVtb25faWQYCSABKAkSEgoKbm9fbWFjaGluZRgOIAEoCBIaChJub3RpZnlfb25fY29tcGxldGUYCiABKAgSDgoGZmlsdGVyGAsgASgJEhoKDWNvbm5lY3Rpb25faWQYDCABKAlIA4gBARIgChN3ZWJob29rX2htYWNfc2VjcmV0GA0gASgJSASIAQESLgoIc2NoZWR1bGUYFCABKAsyGi5yZWxpYW50LnYxLlNjaGVkdWxlU291cmNlSAASLAoHd2ViaG9vaxgVIAEoCzIZLnJlbGlhbnQudjEuV2ViaG9va1NvdXJjZUgAEjQKC2ludGVncmF0aW9uGBYgASgLMh0ucmVsaWFudC52MS5JbnRlZ3JhdGlvblNvdXJjZUgAEjkKDndvcmtmbG93X2V2ZW50GBcgASgLMh8ucmVsaWFudC52MS5Xb3JrZmxvd0V2ZW50U291cmNlSAASGgoQd29ya2Zsb3dfdHJpZ2dlchgYIAEoCUgAGi4KDFByZXNldHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGkUKC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAFCCAoGc291cmNlQg4KDF93b3JrdHJlZV9pZEIKCghfZW5hYmxlZEIQCg5fY29ubmVjdGlvbl9pZEIWChRfd2ViaG9va19obWFjX3NlY3JldCIvChFXZWJob29rQ3JlZGVudGlhbBINCgV0b2tlbhgBIAEoCRILCgN1cmwYAiABKAkiRgoUQ3JlYXRlVHJpZ2dlclJlcXVlc3QSLgoHdHJpZ2dlchgBIAEoCzIdLnJlbGlhbnQudjEuVHJpZ2dlckRlZmluaXRpb24ibQoVQ3JlYXRlVHJpZ2dlclJlc3BvbnNlEiQKB3RyaWdnZXIYASABKAsyEy5yZWxpYW50LnYxLlRyaWdnZXISLgoHd2ViaG9vaxgCIAEoCzIdLnJlbGlhbnQudjEuV2ViaG9va0NyZWRlbnRpYWwiJwoZUm90YXRlV2ViaG9va1Rva2VuUmVxdWVzdBIKCgJpZBgBIAEoCSJyChpSb3RhdGVXZWJob29rVG9rZW5SZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyEi4KB3dlYmhvb2sYAiABKAsyHS5yZWxpYW50LnYxLldlYmhvb2tDcmVkZW50aWFsIh8KEUdldFRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJIjoKEkdldFRyaWdnZXJSZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyIj0KE0xpc3RUcmlnZ2Vyc1JlcXVlc3QSFwoKcHJvamVjdF9pZBgBIAEoCUgAiAEBQg0KC19wcm9qZWN0X2lkIj0KFExpc3RUcmlnZ2Vyc1Jlc3BvbnNlEiUKCHRyaWdnZXJzGAEgAygLMhMucmVsaWFudC52MS5UcmlnZ2VyIlIKFFVwZGF0ZVRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJEi4KB3RyaWdnZXIYAiABKAsyHS5yZWxpYW50LnYxLlRyaWdnZXJEZWZpbml0aW9uIj0KFVVwZGF0ZVRyaWdnZXJSZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyIiIKFERlbGV0ZVRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJIhcKFURlbGV0ZVRyaWdnZXJSZXNwb25zZSI3ChhTZXRUcmlnZ2VyRW5hYmxlZFJlcXVlc3QSCgoCaWQYASABKAkSDwoHZW5hYmxlZBgCIAEoCCJBChlTZXRUcmlnZ2VyRW5hYmxlZFJlc3BvbnNlEiQKB3RyaWdnZXIYASABKAsyEy5yZWxpYW50LnYxLlRyaWdnZXIiIAoSRmlyZVRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJIi8KE0ZpcmVUcmlnZ2VyUmVzcG9uc2USGAoQZmlyZV93b3JrZmxvd19pZBgBIAEoCSKgAQoYTGlzdFRyaWdnZXJFdmVudHNSZXF1ZXN0EhoKCnRyaWdnZXJfaWQYASABKAlCBrpIA8gBARINCgVsaW1pdBgCIAEoBRIXCgpwYWdlX3Rva2VuGAMgASgJSACIAQESMQoIb3V0Y29tZXMYBCADKA4yHy5yZWxpYW50LnYxLlRyaWdnZXJFdmVudE91dGNvbWVCDQoLX3BhZ2VfdG9rZW4iXgoZTGlzdFRyaWdnZXJFdmVudHNSZXNwb25zZRIoCgZldmVudHMYASADKAsyGC5yZWxpYW50LnYxLlRyaWdnZXJFdmVudBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiKAoVR2V0TGF1bmNoRXZlbnRSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkiUAoWR2V0TGF1bmNoRXZlbnRSZXNwb25zZRIsCgVldmVudBgBIAEoCzIYLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50SACIAQFCCAoGX2V2ZW50IlgKHFJlc29sdmVUcmlnZ2VyU2VuZGVyc1JlcXVlc3QSEwoLaW50ZWdyYXRpb24YASABKAkSDwoHaGFuZGxlcxgCIAMoCRISCgpzZW5kZXJfaWRzGAMgAygJIk8KFVJlc29sdmVkVHJpZ2dlclNlbmRlchINCgVxdWVyeRgBIAEoCRIRCglzZW5kZXJfaWQYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJIlMKHVJlc29sdmVUcmlnZ2VyU2VuZGVyc1Jlc3BvbnNlEjIKB3NlbmRlcnMYASADKAsyIS5yZWxpYW50LnYxLlJlc29sdmVkVHJpZ2dlclNlbmRlciqfAQoLVHJpZ2dlcktpbmQSHAoYVFJJR0dFUl9LSU5EX1VOU1BFQ0lGSUVEEAASGQoVVFJJR0dFUl9LSU5EX1NDSEVEVUxFEAESGAoUVFJJR0dFUl9LSU5EX1dFQkhPT0sQAhIcChhUUklHR0VSX0tJTkRfSU5URUdSQVRJT04QAxIfChtUUklHR0VSX0tJTkRfV09SS0ZMT1dfRVZFTlQQBCqyAgoQVHJpZ2dlckV2ZW50S2luZBIiCh5UUklHR0VSX0VWRU5UX0tJTkRfVU5TUEVDSUZJRUQQABIhCh1UUklHR0VSX0VWRU5UX0tJTkRfQ0hBVF9TVEFSVBABEh8KG1RSSUdHRVJfRVZFTlRfS0lORF9TQ0hFRFVMRRACEiYKIlRSSUdHRVJfRVZFTlRfS0lORF9BR0VOVF9TVEFSVF9SVU4QAxIjCh9UUklHR0VSX0VWRU5UX0tJTkRfQlVJTERFUl9URVNUEAQSHgoaVFJJR0dFUl9FVkVOVF9LSU5EX1dFQkhPT0sQBRIiCh5UUklHR0VSX0VWRU5UX0tJTkRfSU5URUdSQVRJT04QBhIlCiFUUklHR0VSX0VWRU5UX0tJTkRfV09SS0ZMT1dfRVZFTlQQByrIAQoTVHJpZ2dlckV2ZW50T3V0Y29tZRIlCiFUUklHR0VSX0VWRU5UX09VVENPTUVfVU5TUEVDSUZJRUQQABIiCh5UUklHR0VSX0VWRU5UX09VVENPTUVfTEFVTkNIRUQQARIhCh1UUklHR0VSX0VWRU5UX09VVENPTUVfU0tJUFBFRBACEiAKHFRSSUdHRVJfRVZFTlRfT1VUQ09NRV9GQUlMRUQQAxIhCh1UUklHR0VSX0VWRU5UX09VVENPTUVfUEVORElORxAEKoEBChRUcmlnZ2VyT3ZlcmxhcFBvbGljeRImCiJUUklHR0VSX09WRVJMQVBfUE9MSUNZX1VOU1BFQ0lGSUVEEAASHwobVFJJR0dFUl9PVkVSTEFQX1BPTElDWV9TS0lQEAESIAocVFJJR0dFUl9PVkVSTEFQX1BPTElDWV9BTExPVxACKusBChNUcmlnZ2VySGVhbHRoU3RhdHVzEiUKIVRSSUdHRVJfSEVBTFRIX1NUQVRVU19VTlNQRUNJRklFRBAAEiEKHVRSSUdHRVJfSEVBTFRIX1NUQVRVU19IRUFMVEhZEAESIgoeVFJJR0dFUl9IRUFMVEhfU1RBVFVTX0RFR1JBREVEEAISIQodVFJJR0dFUl9IRUFMVEhfU1RBVFVTX0ZBSUxJTkcQAxIhCh1UUklHR0VSX0hFQUxUSF9TVEFUVVNfVU5LTk9XThAEEiAKHFRSSUdHRVJfSEVBTFRIX1NUQVRVU19CUk9LRU4QBTKICAoOVHJpZ2dlclNlcnZpY2USVgoNQ3JlYXRlVHJpZ2dlchIgLnJlbGlhbnQudjEuQ3JlYXRlVHJpZ2dlclJlcXVlc3QaIS5yZWxpYW50LnYxLkNyZWF0ZVRyaWdnZXJSZXNwb25zZSIAEk0KCkdldFRyaWdnZXISHS5yZWxpYW50LnYxLkdldFRyaWdnZXJSZXF1ZXN0Gh4ucmVsaWFudC52MS5HZXRUcmlnZ2VyUmVzcG9uc2UiABJTCgxMaXN0VHJpZ2dlcnMSHy5yZWxpYW50LnYxLkxpc3RUcmlnZ2Vyc1JlcXVlc3QaIC5yZWxpYW50LnYxLkxpc3RUcmlnZ2Vyc1Jlc3BvbnNlIgASVgoNVXBkYXRlVHJpZ2dlchIgLnJlbGlhbnQudjEuVXBkYXRlVHJpZ2dlclJlcXVlc3QaIS5yZWxpYW50LnYxLlVwZGF0ZVRyaWdnZXJSZXNwb25zZSIAElYKDURlbGV0ZVRyaWdnZXISIC5yZWxpYW50LnYxLkRlbGV0ZVRyaWdnZXJSZXF1ZXN0GiEucmVsaWFudC52MS5EZWxldGVUcmlnZ2VyUmVzcG9uc2UiABJiChFTZXRUcmlnZ2VyRW5hYmxlZBIkLnJlbGlhbnQudjEuU2V0VHJpZ2dlckVuYWJsZWRSZXF1ZXN0GiUucmVsaWFudC52MS5TZXRUcmlnZ2VyRW5hYmxlZFJlc3BvbnNlIgASUAoLRmlyZVRyaWdnZXISHi5yZWxpYW50LnYxLkZpcmVUcmlnZ2VyUmVxdWVzdBofLnJlbGlhbnQudjEuRmlyZVRyaWdnZXJSZXNwb25zZSIAEmIKEUxpc3RUcmlnZ2VyRXZlbnRzEiQucmVsaWFudC52MS5MaXN0VHJpZ2dlckV2ZW50c1JlcXVlc3QaJS5yZWxpYW50LnYxLkxpc3RUcmlnZ2VyRXZlbnRzUmVzcG9uc2UiABJZCg5HZXRMYXVuY2hFdmVudBIhLnJlbGlhbnQudjEuR2V0TGF1bmNoRXZlbnRSZXF1ZXN0GiIucmVsaWFudC52MS5HZXRMYXVuY2hFdmVudFJlc3BvbnNlIgASZQoSUm90YXRlV2ViaG9va1Rva2VuEiUucmVsaWFudC52MS5Sb3RhdGVXZWJob29rVG9rZW5SZXF1ZXN0GiYucmVsaWFudC52MS5Sb3RhdGVXZWJob29rVG9rZW5SZXNwb25zZSIAEm4KFVJlc29sdmVUcmlnZ2VyU2VuZGVycxIoLnJlbGlhbnQudjEuUmVzb2x2ZVRyaWdnZXJTZW5kZXJzUmVxdWVzdBopLnJlbGlhbnQudjEuUmVzb2x2ZVRyaWdnZXJTZW5kZXJzUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_struct, file_reliant_v1_chat, file_reliant_v1_run]);
+  fileDesc("ChhyZWxpYW50L3YxL3RyaWdnZXIucHJvdG8SCnJlbGlhbnQudjEilgEKDVRyaWdnZXJIZWFsdGgSLwoGc3RhdHVzGAEgASgOMh8ucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoU3RhdHVzEhwKFGNvbnNlY3V0aXZlX2ZhaWx1cmVzGAIgASgFEhkKEWNvbnNlY3V0aXZlX3NraXBzGAMgASgFEhsKE2xhc3RfZmFpbHVyZV9kZXRhaWwYBCABKAkiswEKD1RyaWdnZXJFdmVudFJ1bhIyCg1kaXNwbGF5X3N0YXRlGAEgASgOMhsucmVsaWFudC52MS5SdW5EaXNwbGF5U3RhdGUSDQoFdGl0bGUYAiABKAkSKAoFc3RhdGUYAyABKA4yGS5yZWxpYW50LnYxLldvcmtmbG93U3RhdGUSMwoLc3RvcF9yZWFzb24YBCABKA4yHi5yZWxpYW50LnYxLldvcmtmbG93U3RvcFJlYXNvbiK3AQoOU2NoZWR1bGVTb3VyY2USDAoEY3JvbhgBIAMoCRIVCghpbnRlcnZhbBgCIAEoCUgAiAEBEhAKCHRpbWV6b25lGAMgASgJEjEKB292ZXJsYXAYBCABKA4yIC5yZWxpYW50LnYxLlRyaWdnZXJPdmVybGFwUG9saWN5EhsKDmNhdGNodXBfd2luZG93GAUgASgJSAGIAQFCCwoJX2ludGVydmFsQhEKD19jYXRjaHVwX3dpbmRvdyI2Cg1XZWJob29rU291cmNlEiUKBGhtYWMYASABKAsyFy5yZWxpYW50LnYxLldlYmhvb2tIbWFjIlIKC1dlYmhvb2tIbWFjEg4KBmhlYWRlchgBIAEoCRIRCglhbGdvcml0aG0YAiABKAkSDgoGcHJlZml4GAMgASgJEhAKCGVuY29kaW5nGAQgASgJIrYBChFJbnRlZ3JhdGlvblNvdXJjZRITCgtpbnRlZ3JhdGlvbhgBIAEoCRIOCgZldmVudHMYAiADKAkSNwoFbWF0Y2gYAyADKAsyKC5yZWxpYW50LnYxLkludGVncmF0aW9uU291cmNlLk1hdGNoRW50cnkSFQoNcG9sbF9pbnRlcnZhbBgEIAEoCRosCgpNYXRjaEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiOgoTV29ya2Zsb3dFdmVudFNvdXJjZRIRCgl3b3JrZmxvd3MYASADKAkSEAoIb3V0Y29tZXMYAiADKAki1wMKD1dvcmtmbG93VHJpZ2dlchIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEg4KBmZpbHRlchgDIAEoCRI3CgZpbnB1dHMYBCADKAsyJy5yZWxpYW50LnYxLldvcmtmbG93VHJpZ2dlci5JbnB1dHNFbnRyeRIOCgZwcm9tcHQYBSABKAkSEgoKZGVkdXBlX2tleRgGIAEoCRIVCg1kZWR1cGVfd2luZG93GAcgASgJEhUKDW9yaWdpbl9maWx0ZXIYCCABKAkSLgoIc2NoZWR1bGUYFCABKAsyGi5yZWxpYW50LnYxLlNjaGVkdWxlU291cmNlSAASLAoHd2ViaG9vaxgVIAEoCzIZLnJlbGlhbnQudjEuV2ViaG9va1NvdXJjZUgAEjQKC2ludGVncmF0aW9uGBYgASgLMh0ucmVsaWFudC52MS5JbnRlZ3JhdGlvblNvdXJjZUgAEjkKDndvcmtmbG93X2V2ZW50GBcgASgLMh8ucmVsaWFudC52MS5Xb3JrZmxvd0V2ZW50U291cmNlSAAaLQoLSW5wdXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUIICgZzb3VyY2UilAgKB1RyaWdnZXISCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRISCgpwcm9qZWN0X2lkGAMgASgJEhgKC3dvcmt0cmVlX2lkGAQgASgJSAGIAQESDwoHZW5hYmxlZBgFIAEoCBIQCgh3b3JrZmxvdxgGIAEoCRIxCgdwcmVzZXRzGAcgAygLMiAucmVsaWFudC52MS5UcmlnZ2VyLlByZXNldHNFbnRyeRIvCgZwYXJhbXMYCCADKAsyHy5yZWxpYW50LnYxLlRyaWdnZXIuUGFyYW1zRW50cnkSDwoHbWVzc2FnZRgJIAEoCRISCgpjcmVhdGVkX2F0GAogASgJEhIKCnVwZGF0ZWRfYXQYCyABKAkSGQoMbmV4dF9maXJlX2F0GAwgASgJSAKIAQESMQoKbGFzdF9ldmVudBgNIAEoCzIYLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50SAOIAQESEQoJZGFlbW9uX2lkGA4gASgJEhIKCm5vX21hY2hpbmUYGyABKAgSKQoGaGVhbHRoGA8gASgLMhkucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoEhQKDHByb2plY3RfbmFtZRgQIAEoCRITCgtkYWVtb25fbmFtZRgRIAEoCRIaChJub3RpZnlfb25fY29tcGxldGUYEiABKAgSDgoGZmlsdGVyGBMgASgJEi4KCHNjaGVkdWxlGBQgASgLMhoucmVsaWFudC52MS5TY2hlZHVsZVNvdXJjZUgAEiwKB3dlYmhvb2sYFSABKAsyGS5yZWxpYW50LnYxLldlYmhvb2tTb3VyY2VIABI0CgtpbnRlZ3JhdGlvbhgWIAEoCzIdLnJlbGlhbnQudjEuSW50ZWdyYXRpb25Tb3VyY2VIABI5Cg53b3JrZmxvd19ldmVudBgXIAEoCzIfLnJlbGlhbnQudjEuV29ya2Zsb3dFdmVudFNvdXJjZUgAEhoKDWNvbm5lY3Rpb25faWQYGCABKAlIBIgBARIYCgt3ZWJob29rX3VybBgZIAEoCUgFiAEBEh0KEHdvcmtmbG93X3RyaWdnZXIYGiABKAlIBogBARouCgxQcmVzZXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARpFCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSJQoFdmFsdWUYAiABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWU6AjgBQggKBnNvdXJjZUIOCgxfd29ya3RyZWVfaWRCDwoNX25leHRfZmlyZV9hdEINCgtfbGFzdF9ldmVudEIQCg5fY29ubmVjdGlvbl9pZEIOCgxfd2ViaG9va191cmxCEwoRX3dvcmtmbG93X3RyaWdnZXIiiwMKDFRyaWdnZXJFdmVudBIKCgJpZBgBIAEoCRIXCgp0cmlnZ2VyX2lkGAIgASgJSACIAQESKgoEa2luZBgDIAEoDjIcLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50S2luZBITCgtvY2N1cnJlZF9hdBgEIAEoCRIwCgdvdXRjb21lGAUgASgOMh8ucmVsaWFudC52MS5UcmlnZ2VyRXZlbnRPdXRjb21lEhYKDm91dGNvbWVfZGV0YWlsGAYgASgJEhQKB2NoYXRfaWQYByABKAlIAYgBARIoCgdwYXlsb2FkGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBItCgNydW4YCSABKAsyGy5yZWxpYW50LnYxLlRyaWdnZXJFdmVudFJ1bkgCiAEBEi4KBnNlbmRlchgKIAEoCzIZLnJlbGlhbnQudjEuVHJpZ2dlclNlbmRlckgDiAEBQg0KC190cmlnZ2VyX2lkQgoKCF9jaGF0X2lkQgYKBF9ydW5CCQoHX3NlbmRlciJRCg1UcmlnZ2VyU2VuZGVyEgwKBGtpbmQYASABKAkSCgoCaWQYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEhAKCHZlcmlmaWVkGAQgASgIIsMGChFUcmlnZ2VyRGVmaW5pdGlvbhIMCgRuYW1lGAEgASgJEhIKCnByb2plY3RfaWQYAiABKAkSGAoLd29ya3RyZWVfaWQYAyABKAlIAYgBARIUCgdlbmFibGVkGAQgASgISAKIAQESEAoId29ya2Zsb3cYBSABKAkSOwoHcHJlc2V0cxgGIAMoCzIqLnJlbGlhbnQudjEuVHJpZ2dlckRlZmluaXRpb24uUHJlc2V0c0VudHJ5EjkKBnBhcmFtcxgHIAMoCzIpLnJlbGlhbnQudjEuVHJpZ2dlckRlZmluaXRpb24uUGFyYW1zRW50cnkSDwoHbWVzc2FnZRgIIAEoCRIRCglkYWVtb25faWQYCSABKAkSEgoKbm9fbWFjaGluZRgOIAEoCBIaChJub3RpZnlfb25fY29tcGxldGUYCiABKAgSDgoGZmlsdGVyGAsgASgJEhoKDWNvbm5lY3Rpb25faWQYDCABKAlIA4gBARIgChN3ZWJob29rX2htYWNfc2VjcmV0GA0gASgJSASIAQESLgoIc2NoZWR1bGUYFCABKAsyGi5yZWxpYW50LnYxLlNjaGVkdWxlU291cmNlSAASLAoHd2ViaG9vaxgVIAEoCzIZLnJlbGlhbnQudjEuV2ViaG9va1NvdXJjZUgAEjQKC2ludGVncmF0aW9uGBYgASgLMh0ucmVsaWFudC52MS5JbnRlZ3JhdGlvblNvdXJjZUgAEjkKDndvcmtmbG93X2V2ZW50GBcgASgLMh8ucmVsaWFudC52MS5Xb3JrZmxvd0V2ZW50U291cmNlSAASGgoQd29ya2Zsb3dfdHJpZ2dlchgYIAEoCUgAGi4KDFByZXNldHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGkUKC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAFCCAoGc291cmNlQg4KDF93b3JrdHJlZV9pZEIKCghfZW5hYmxlZEIQCg5fY29ubmVjdGlvbl9pZEIWChRfd2ViaG9va19obWFjX3NlY3JldCIvChFXZWJob29rQ3JlZGVudGlhbBINCgV0b2tlbhgBIAEoCRILCgN1cmwYAiABKAkiRgoUQ3JlYXRlVHJpZ2dlclJlcXVlc3QSLgoHdHJpZ2dlchgBIAEoCzIdLnJlbGlhbnQudjEuVHJpZ2dlckRlZmluaXRpb24ibQoVQ3JlYXRlVHJpZ2dlclJlc3BvbnNlEiQKB3RyaWdnZXIYASABKAsyEy5yZWxpYW50LnYxLlRyaWdnZXISLgoHd2ViaG9vaxgCIAEoCzIdLnJlbGlhbnQudjEuV2ViaG9va0NyZWRlbnRpYWwiJwoZUm90YXRlV2ViaG9va1Rva2VuUmVxdWVzdBIKCgJpZBgBIAEoCSJyChpSb3RhdGVXZWJob29rVG9rZW5SZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyEi4KB3dlYmhvb2sYAiABKAsyHS5yZWxpYW50LnYxLldlYmhvb2tDcmVkZW50aWFsIh8KEUdldFRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJIjoKEkdldFRyaWdnZXJSZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyIj0KE0xpc3RUcmlnZ2Vyc1JlcXVlc3QSFwoKcHJvamVjdF9pZBgBIAEoCUgAiAEBQg0KC19wcm9qZWN0X2lkIj0KFExpc3RUcmlnZ2Vyc1Jlc3BvbnNlEiUKCHRyaWdnZXJzGAEgAygLMhMucmVsaWFudC52MS5UcmlnZ2VyIlIKFFVwZGF0ZVRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJEi4KB3RyaWdnZXIYAiABKAsyHS5yZWxpYW50LnYxLlRyaWdnZXJEZWZpbml0aW9uIj0KFVVwZGF0ZVRyaWdnZXJSZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyIiIKFERlbGV0ZVRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJIhcKFURlbGV0ZVRyaWdnZXJSZXNwb25zZSI3ChhTZXRUcmlnZ2VyRW5hYmxlZFJlcXVlc3QSCgoCaWQYASABKAkSDwoHZW5hYmxlZBgCIAEoCCJBChlTZXRUcmlnZ2VyRW5hYmxlZFJlc3BvbnNlEiQKB3RyaWdnZXIYASABKAsyEy5yZWxpYW50LnYxLlRyaWdnZXIigwUKFUVuYWJsZVdvcmtmbG93UmVxdWVzdBIQCgh3b3JrZmxvdxgBIAEoCRISCgpwcm9qZWN0X2lkGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESEQoJZGFlbW9uX2lkGAQgASgJEhIKCm5vX21hY2hpbmUYBSABKAgSTAoOY29ubmVjdGlvbl9pZHMYBiADKAsyNC5yZWxpYW50LnYxLkVuYWJsZVdvcmtmbG93UmVxdWVzdC5Db25uZWN0aW9uSWRzRW50cnkSPQoGcGFyYW1zGAcgAygLMi0ucmVsaWFudC52MS5FbmFibGVXb3JrZmxvd1JlcXVlc3QuUGFyYW1zRW50cnkSPwoHcHJlc2V0cxgIIAMoCzIuLnJlbGlhbnQudjEuRW5hYmxlV29ya2Zsb3dSZXF1ZXN0LlByZXNldHNFbnRyeRIaChJub3RpZnlfb25fY29tcGxldGUYCSABKAgSDwoHbWVzc2FnZRgKIAEoCRITCgtuYW1lX3ByZWZpeBgLIAEoCRI2CglvdmVycmlkZXMYDCADKAsyIy5yZWxpYW50LnYxLldvcmtmbG93VHJpZ2dlck92ZXJyaWRlGjQKEkNvbm5lY3Rpb25JZHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGkUKC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAEaLgoMUHJlc2V0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFCDgoMX3dvcmt0cmVlX2lkIuwCChdXb3JrZmxvd1RyaWdnZXJPdmVycmlkZRIPCgd0cmlnZ2VyGAEgASgJEhEKBG5hbWUYAiABKAlIAIgBARIWCglkYWVtb25faWQYAyABKAlIAYgBARIXCgpub19tYWNoaW5lGAQgASgISAKIAQESGgoNY29ubmVjdGlvbl9pZBgFIAEoCUgDiAEBEhQKB21lc3NhZ2UYBiABKAlIBIgBARI/CgZwYXJhbXMYByADKAsyLy5yZWxpYW50LnYxLldvcmtmbG93VHJpZ2dlck92ZXJyaWRlLlBhcmFtc0VudHJ5GkUKC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAFCBwoFX25hbWVCDAoKX2RhZW1vbl9pZEINCgtfbm9fbWFjaGluZUIQCg5fY29ubmVjdGlvbl9pZEIKCghfbWVzc2FnZSLHAQoVV29ya2Zsb3dUcmlnZ2VyUmVzdWx0Eg8KB3RyaWdnZXIYASABKAkSMwoHb3V0Y29tZRgCIAEoDjIiLnJlbGlhbnQudjEuV29ya2Zsb3dUcmlnZ2VyT3V0Y29tZRIPCgdtZXNzYWdlGAMgASgJEicKCmFjdGl2YXRpb24YBCABKAsyEy5yZWxpYW50LnYxLlRyaWdnZXISLgoHd2ViaG9vaxgFIAEoCzIdLnJlbGlhbnQudjEuV2ViaG9va0NyZWRlbnRpYWwiXQoWRW5hYmxlV29ya2Zsb3dSZXNwb25zZRIPCgdlbmFibGVkGAEgASgIEjIKB3Jlc3VsdHMYAiADKAsyIS5yZWxpYW50LnYxLldvcmtmbG93VHJpZ2dlclJlc3VsdCJSChZEaXNhYmxlV29ya2Zsb3dSZXF1ZXN0EhAKCHdvcmtmbG93GAEgASgJEhcKCnByb2plY3RfaWQYAiABKAlIAIgBAUINCgtfcHJvamVjdF9pZCJqChdEaXNhYmxlV29ya2Zsb3dSZXNwb25zZRIjCgZwYXVzZWQYASADKAsyEy5yZWxpYW50LnYxLlRyaWdnZXISKgoGZmFpbGVkGAIgAygLMhoucmVsaWFudC52MS5UcmlnZ2VyRmFpbHVyZSJDCg5UcmlnZ2VyRmFpbHVyZRISCgp0cmlnZ2VyX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHbWVzc2FnZRgDIAEoCSIgChJGaXJlVHJpZ2dlclJlcXVlc3QSCgoCaWQYASABKAkiLwoTRmlyZVRyaWdnZXJSZXNwb25zZRIYChBmaXJlX3dvcmtmbG93X2lkGAEgASgJIqABChhMaXN0VHJpZ2dlckV2ZW50c1JlcXVlc3QSGgoKdHJpZ2dlcl9pZBgBIAEoCUIGukgDyAEBEg0KBWxpbWl0GAIgASgFEhcKCnBhZ2VfdG9rZW4YAyABKAlIAIgBARIxCghvdXRjb21lcxgEIAMoDjIfLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50T3V0Y29tZUINCgtfcGFnZV90b2tlbiJeChlMaXN0VHJpZ2dlckV2ZW50c1Jlc3BvbnNlEigKBmV2ZW50cxgBIAMoCzIYLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSIoChVHZXRMYXVuY2hFdmVudFJlcXVlc3QSDwoHY2hhdF9pZBgBIAEoCSJQChZHZXRMYXVuY2hFdmVudFJlc3BvbnNlEiwKBWV2ZW50GAEgASgLMhgucmVsaWFudC52MS5UcmlnZ2VyRXZlbnRIAIgBAUIICgZfZXZlbnQiWAocUmVzb2x2ZVRyaWdnZXJTZW5kZXJzUmVxdWVzdBITCgtpbnRlZ3JhdGlvbhgBIAEoCRIPCgdoYW5kbGVzGAIgAygJEhIKCnNlbmRlcl9pZHMYAyADKAkiTwoVUmVzb2x2ZWRUcmlnZ2VyU2VuZGVyEg0KBXF1ZXJ5GAEgASgJEhEKCXNlbmRlcl9pZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkiUwodUmVzb2x2ZVRyaWdnZXJTZW5kZXJzUmVzcG9uc2USMgoHc2VuZGVycxgBIAMoCzIhLnJlbGlhbnQudjEuUmVzb2x2ZWRUcmlnZ2VyU2VuZGVyKp8BCgtUcmlnZ2VyS2luZBIcChhUUklHR0VSX0tJTkRfVU5TUEVDSUZJRUQQABIZChVUUklHR0VSX0tJTkRfU0NIRURVTEUQARIYChRUUklHR0VSX0tJTkRfV0VCSE9PSxACEhwKGFRSSUdHRVJfS0lORF9JTlRFR1JBVElPThADEh8KG1RSSUdHRVJfS0lORF9XT1JLRkxPV19FVkVOVBAEKrICChBUcmlnZ2VyRXZlbnRLaW5kEiIKHlRSSUdHRVJfRVZFTlRfS0lORF9VTlNQRUNJRklFRBAAEiEKHVRSSUdHRVJfRVZFTlRfS0lORF9DSEFUX1NUQVJUEAESHwobVFJJR0dFUl9FVkVOVF9LSU5EX1NDSEVEVUxFEAISJgoiVFJJR0dFUl9FVkVOVF9LSU5EX0FHRU5UX1NUQVJUX1JVThADEiMKH1RSSUdHRVJfRVZFTlRfS0lORF9CVUlMREVSX1RFU1QQBBIeChpUUklHR0VSX0VWRU5UX0tJTkRfV0VCSE9PSxAFEiIKHlRSSUdHRVJfRVZFTlRfS0lORF9JTlRFR1JBVElPThAGEiUKIVRSSUdHRVJfRVZFTlRfS0lORF9XT1JLRkxPV19FVkVOVBAHKsgBChNUcmlnZ2VyRXZlbnRPdXRjb21lEiUKIVRSSUdHRVJfRVZFTlRfT1VUQ09NRV9VTlNQRUNJRklFRBAAEiIKHlRSSUdHRVJfRVZFTlRfT1VUQ09NRV9MQVVOQ0hFRBABEiEKHVRSSUdHRVJfRVZFTlRfT1VUQ09NRV9TS0lQUEVEEAISIAocVFJJR0dFUl9FVkVOVF9PVVRDT01FX0ZBSUxFRBADEiEKHVRSSUdHRVJfRVZFTlRfT1VUQ09NRV9QRU5ESU5HEAQqgQEKFFRyaWdnZXJPdmVybGFwUG9saWN5EiYKIlRSSUdHRVJfT1ZFUkxBUF9QT0xJQ1lfVU5TUEVDSUZJRUQQABIfChtUUklHR0VSX09WRVJMQVBfUE9MSUNZX1NLSVAQARIgChxUUklHR0VSX09WRVJMQVBfUE9MSUNZX0FMTE9XEAIq6wEKE1RyaWdnZXJIZWFsdGhTdGF0dXMSJQohVFJJR0dFUl9IRUFMVEhfU1RBVFVTX1VOU1BFQ0lGSUVEEAASIQodVFJJR0dFUl9IRUFMVEhfU1RBVFVTX0hFQUxUSFkQARIiCh5UUklHR0VSX0hFQUxUSF9TVEFUVVNfREVHUkFERUQQAhIhCh1UUklHR0VSX0hFQUxUSF9TVEFUVVNfRkFJTElORxADEiEKHVRSSUdHRVJfSEVBTFRIX1NUQVRVU19VTktOT1dOEAQSIAocVFJJR0dFUl9IRUFMVEhfU1RBVFVTX0JST0tFThAFKrYCChZXb3JrZmxvd1RyaWdnZXJPdXRjb21lEigKJFdPUktGTE9XX1RSSUdHRVJfT1VUQ09NRV9VTlNQRUNJRklFRBAAEiQKIFdPUktGTE9XX1RSSUdHRVJfT1VUQ09NRV9FTkFCTEVEEAESJAogV09SS0ZMT1dfVFJJR0dFUl9PVVRDT01FX1JFU1VNRUQQAhIsCihXT1JLRkxPV19UUklHR0VSX09VVENPTUVfQUxSRUFEWV9FTkFCTEVEEAMSIwofV09SS0ZMT1dfVFJJR0dFUl9PVVRDT01FX0ZBSUxFRBAEEigKJFdPUktGTE9XX1RSSUdHRVJfT1VUQ09NRV9OT1RfRU5BQkxFRBAFEikKJVdPUktGTE9XX1RSSUdHRVJfT1VUQ09NRV9MRUZUX0VOQUJMRUQQBjLBCQoOVHJpZ2dlclNlcnZpY2USVgoNQ3JlYXRlVHJpZ2dlchIgLnJlbGlhbnQudjEuQ3JlYXRlVHJpZ2dlclJlcXVlc3QaIS5yZWxpYW50LnYxLkNyZWF0ZVRyaWdnZXJSZXNwb25zZSIAEk0KCkdldFRyaWdnZXISHS5yZWxpYW50LnYxLkdldFRyaWdnZXJSZXF1ZXN0Gh4ucmVsaWFudC52MS5HZXRUcmlnZ2VyUmVzcG9uc2UiABJTCgxMaXN0VHJpZ2dlcnMSHy5yZWxpYW50LnYxLkxpc3RUcmlnZ2Vyc1JlcXVlc3QaIC5yZWxpYW50LnYxLkxpc3RUcmlnZ2Vyc1Jlc3BvbnNlIgASVgoNVXBkYXRlVHJpZ2dlchIgLnJlbGlhbnQudjEuVXBkYXRlVHJpZ2dlclJlcXVlc3QaIS5yZWxpYW50LnYxLlVwZGF0ZVRyaWdnZXJSZXNwb25zZSIAElYKDURlbGV0ZVRyaWdnZXISIC5yZWxpYW50LnYxLkRlbGV0ZVRyaWdnZXJSZXF1ZXN0GiEucmVsaWFudC52MS5EZWxldGVUcmlnZ2VyUmVzcG9uc2UiABJiChFTZXRUcmlnZ2VyRW5hYmxlZBIkLnJlbGlhbnQudjEuU2V0VHJpZ2dlckVuYWJsZWRSZXF1ZXN0GiUucmVsaWFudC52MS5TZXRUcmlnZ2VyRW5hYmxlZFJlc3BvbnNlIgASUAoLRmlyZVRyaWdnZXISHi5yZWxpYW50LnYxLkZpcmVUcmlnZ2VyUmVxdWVzdBofLnJlbGlhbnQudjEuRmlyZVRyaWdnZXJSZXNwb25zZSIAEmIKEUxpc3RUcmlnZ2VyRXZlbnRzEiQucmVsaWFudC52MS5MaXN0VHJpZ2dlckV2ZW50c1JlcXVlc3QaJS5yZWxpYW50LnYxLkxpc3RUcmlnZ2VyRXZlbnRzUmVzcG9uc2UiABJZCg5HZXRMYXVuY2hFdmVudBIhLnJlbGlhbnQudjEuR2V0TGF1bmNoRXZlbnRSZXF1ZXN0GiIucmVsaWFudC52MS5HZXRMYXVuY2hFdmVudFJlc3BvbnNlIgASZQoSUm90YXRlV2ViaG9va1Rva2VuEiUucmVsaWFudC52MS5Sb3RhdGVXZWJob29rVG9rZW5SZXF1ZXN0GiYucmVsaWFudC52MS5Sb3RhdGVXZWJob29rVG9rZW5SZXNwb25zZSIAElkKDkVuYWJsZVdvcmtmbG93EiEucmVsaWFudC52MS5FbmFibGVXb3JrZmxvd1JlcXVlc3QaIi5yZWxpYW50LnYxLkVuYWJsZVdvcmtmbG93UmVzcG9uc2UiABJcCg9EaXNhYmxlV29ya2Zsb3cSIi5yZWxpYW50LnYxLkRpc2FibGVXb3JrZmxvd1JlcXVlc3QaIy5yZWxpYW50LnYxLkRpc2FibGVXb3JrZmxvd1Jlc3BvbnNlIgASbgoVUmVzb2x2ZVRyaWdnZXJTZW5kZXJzEigucmVsaWFudC52MS5SZXNvbHZlVHJpZ2dlclNlbmRlcnNSZXF1ZXN0GikucmVsaWFudC52MS5SZXNvbHZlVHJpZ2dlclNlbmRlcnNSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_struct, file_reliant_v1_chat, file_reliant_v1_run]);
 
 /**
  * TriggerHealth is the read-only health summary of a trigger. See
@@ -1378,6 +1378,338 @@ export const SetTriggerEnabledResponseSchema: GenMessage<SetTriggerEnabledRespon
   messageDesc(file_reliant_v1_trigger, 26);
 
 /**
+ * EnableWorkflowRequest is the request for EnableWorkflow. The choices here
+ * are shared by every trigger the workflow declares; overrides carry the
+ * exceptions.
+ *
+ * @generated from message reliant.v1.EnableWorkflowRequest
+ */
+export type EnableWorkflowRequest = Message<"reliant.v1.EnableWorkflowRequest"> & {
+  /**
+   * The workflow, written as a trigger names it (TriggerDefinition.workflow):
+   * a slug, or builtin://<name>. It must declare at least one trigger.
+   *
+   * @generated from field: string workflow = 1;
+   */
+  workflow: string;
+
+  /**
+   * Project the runs execute in.
+   *
+   * @generated from field: string project_id = 2;
+   */
+  projectId: string;
+
+  /**
+   * Worktree the runs execute in. Unset means the project's main worktree.
+   *
+   * @generated from field: optional string worktree_id = 3;
+   */
+  worktreeId?: string | undefined;
+
+  /**
+   * The machine the runs execute on: daemon_id, or no_machine, exactly as in
+   * TriggerDefinition. One of the two is required.
+   *
+   * @generated from field: string daemon_id = 4;
+   */
+  daemonId: string;
+
+  /**
+   * @generated from field: bool no_machine = 5;
+   */
+  noMachine: boolean;
+
+  /**
+   * The connection each integration trigger listens through, keyed by
+   * integration id (e.g. "github"). One entry serves every trigger of that
+   * integration. An integration with no entry uses the user's default
+   * connection for it; with none, that trigger is refused.
+   *
+   * @generated from field: map<string, string> connection_ids = 6;
+   */
+  connectionIds: { [key: string]: string };
+
+  /**
+   * Workflow inputs the activations set on every run, as
+   * TriggerDefinition.params. A trigger's own `inputs` mapping wins over
+   * these, so an input it maps is dropped for that trigger rather than
+   * refused.
+   *
+   * @generated from field: map<string, google.protobuf.Value> params = 7;
+   */
+  params: { [key: string]: Value };
+
+  /**
+   * Preset assignments, as TriggerDefinition.presets.
+   *
+   * @generated from field: map<string, string> presets = 8;
+   */
+  presets: { [key: string]: string };
+
+  /**
+   * Notify the owner when a run completes, as TriggerDefinition.notify_on_complete.
+   *
+   * @generated from field: bool notify_on_complete = 9;
+   */
+  notifyOnComplete: boolean;
+
+  /**
+   * The prompt for a trigger whose declaration has none (TriggerDefinition.message).
+   * A declaration's own prompt is used when this is empty.
+   *
+   * @generated from field: string message = 10;
+   */
+  message: string;
+
+  /**
+   * Names the activations "<name_prefix> · <trigger>". Empty uses the
+   * workflow ref.
+   *
+   * @generated from field: string name_prefix = 11;
+   */
+  namePrefix: string;
+
+  /**
+   * Per-trigger exceptions to the shared choices above.
+   *
+   * @generated from field: repeated reliant.v1.WorkflowTriggerOverride overrides = 12;
+   */
+  overrides: WorkflowTriggerOverride[];
+};
+
+/**
+ * Describes the message reliant.v1.EnableWorkflowRequest.
+ * Use `create(EnableWorkflowRequestSchema)` to create a new message.
+ */
+export const EnableWorkflowRequestSchema: GenMessage<EnableWorkflowRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 27);
+
+/**
+ * WorkflowTriggerOverride changes one declared trigger's activation away from
+ * the shared choices of an EnableWorkflowRequest.
+ *
+ * @generated from message reliant.v1.WorkflowTriggerOverride
+ */
+export type WorkflowTriggerOverride = Message<"reliant.v1.WorkflowTriggerOverride"> & {
+  /**
+   * The declared trigger's name (WorkflowTrigger.name).
+   *
+   * @generated from field: string trigger = 1;
+   */
+  trigger: string;
+
+  /**
+   * Replaces the activation's name.
+   *
+   * @generated from field: optional string name = 2;
+   */
+  name?: string | undefined;
+
+  /**
+   * Replaces the shared machine for this trigger: a daemon, or no machine.
+   *
+   * @generated from field: optional string daemon_id = 3;
+   */
+  daemonId?: string | undefined;
+
+  /**
+   * @generated from field: optional bool no_machine = 4;
+   */
+  noMachine?: boolean | undefined;
+
+  /**
+   * Replaces the shared connection for this integration trigger.
+   *
+   * @generated from field: optional string connection_id = 5;
+   */
+  connectionId?: string | undefined;
+
+  /**
+   * Replaces the shared prompt for this trigger.
+   *
+   * @generated from field: optional string message = 6;
+   */
+  message?: string | undefined;
+
+  /**
+   * Merged over the shared params for this trigger.
+   *
+   * @generated from field: map<string, google.protobuf.Value> params = 7;
+   */
+  params: { [key: string]: Value };
+};
+
+/**
+ * Describes the message reliant.v1.WorkflowTriggerOverride.
+ * Use `create(WorkflowTriggerOverrideSchema)` to create a new message.
+ */
+export const WorkflowTriggerOverrideSchema: GenMessage<WorkflowTriggerOverride> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 28);
+
+/**
+ * WorkflowTriggerResult is one declared trigger's part of an EnableWorkflow.
+ *
+ * @generated from message reliant.v1.WorkflowTriggerResult
+ */
+export type WorkflowTriggerResult = Message<"reliant.v1.WorkflowTriggerResult"> & {
+  /**
+   * The declared trigger's name.
+   *
+   * @generated from field: string trigger = 1;
+   */
+  trigger: string;
+
+  /**
+   * @generated from field: reliant.v1.WorkflowTriggerOutcome outcome = 2;
+   */
+  outcome: WorkflowTriggerOutcome;
+
+  /**
+   * For FAILED, NOT_ENABLED and LEFT_ENABLED: why, in words a person can act
+   * on ("connect GitHub first: ...").
+   *
+   * @generated from field: string message = 3;
+   */
+  message: string;
+
+  /**
+   * The activation, for ENABLED, RESUMED and ALREADY_ENABLED.
+   *
+   * @generated from field: reliant.v1.Trigger activation = 4;
+   */
+  activation?: Trigger | undefined;
+
+  /**
+   * A webhook trigger's token, for ENABLED only. Shown once, never again.
+   *
+   * @generated from field: reliant.v1.WebhookCredential webhook = 5;
+   */
+  webhook?: WebhookCredential | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.WorkflowTriggerResult.
+ * Use `create(WorkflowTriggerResultSchema)` to create a new message.
+ */
+export const WorkflowTriggerResultSchema: GenMessage<WorkflowTriggerResult> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 29);
+
+/**
+ * EnableWorkflowResponse is the response for EnableWorkflow.
+ *
+ * @generated from message reliant.v1.EnableWorkflowResponse
+ */
+export type EnableWorkflowResponse = Message<"reliant.v1.EnableWorkflowResponse"> & {
+  /**
+   * True only when every declared trigger is now running.
+   *
+   * @generated from field: bool enabled = 1;
+   */
+  enabled: boolean;
+
+  /**
+   * One entry per declared trigger, in declaration order.
+   *
+   * @generated from field: repeated reliant.v1.WorkflowTriggerResult results = 2;
+   */
+  results: WorkflowTriggerResult[];
+};
+
+/**
+ * Describes the message reliant.v1.EnableWorkflowResponse.
+ * Use `create(EnableWorkflowResponseSchema)` to create a new message.
+ */
+export const EnableWorkflowResponseSchema: GenMessage<EnableWorkflowResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 30);
+
+/**
+ * DisableWorkflowRequest is the request for DisableWorkflow.
+ *
+ * @generated from message reliant.v1.DisableWorkflowRequest
+ */
+export type DisableWorkflowRequest = Message<"reliant.v1.DisableWorkflowRequest"> & {
+  /**
+   * The workflow, written as in EnableWorkflowRequest.
+   *
+   * @generated from field: string workflow = 1;
+   */
+  workflow: string;
+
+  /**
+   * Narrows to the activations in one project. Unset pauses them in every
+   * project.
+   *
+   * @generated from field: optional string project_id = 2;
+   */
+  projectId?: string | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.DisableWorkflowRequest.
+ * Use `create(DisableWorkflowRequestSchema)` to create a new message.
+ */
+export const DisableWorkflowRequestSchema: GenMessage<DisableWorkflowRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 31);
+
+/**
+ * DisableWorkflowResponse is the response for DisableWorkflow.
+ *
+ * @generated from message reliant.v1.DisableWorkflowResponse
+ */
+export type DisableWorkflowResponse = Message<"reliant.v1.DisableWorkflowResponse"> & {
+  /**
+   * The activations that are paused now, including ones that already were.
+   *
+   * @generated from field: repeated reliant.v1.Trigger paused = 1;
+   */
+  paused: Trigger[];
+
+  /**
+   * The activations that could not be paused, which are still running.
+   *
+   * @generated from field: repeated reliant.v1.TriggerFailure failed = 2;
+   */
+  failed: TriggerFailure[];
+};
+
+/**
+ * Describes the message reliant.v1.DisableWorkflowResponse.
+ * Use `create(DisableWorkflowResponseSchema)` to create a new message.
+ */
+export const DisableWorkflowResponseSchema: GenMessage<DisableWorkflowResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 32);
+
+/**
+ * TriggerFailure is one trigger an operation could not change.
+ *
+ * @generated from message reliant.v1.TriggerFailure
+ */
+export type TriggerFailure = Message<"reliant.v1.TriggerFailure"> & {
+  /**
+   * @generated from field: string trigger_id = 1;
+   */
+  triggerId: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string message = 3;
+   */
+  message: string;
+};
+
+/**
+ * Describes the message reliant.v1.TriggerFailure.
+ * Use `create(TriggerFailureSchema)` to create a new message.
+ */
+export const TriggerFailureSchema: GenMessage<TriggerFailure> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 33);
+
+/**
  * FireTriggerRequest is the request for FireTrigger.
  *
  * @generated from message reliant.v1.FireTriggerRequest
@@ -1396,7 +1728,7 @@ export type FireTriggerRequest = Message<"reliant.v1.FireTriggerRequest"> & {
  * Use `create(FireTriggerRequestSchema)` to create a new message.
  */
 export const FireTriggerRequestSchema: GenMessage<FireTriggerRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 27);
+  messageDesc(file_reliant_v1_trigger, 34);
 
 /**
  * FireTriggerResponse is the response for FireTrigger.
@@ -1418,7 +1750,7 @@ export type FireTriggerResponse = Message<"reliant.v1.FireTriggerResponse"> & {
  * Use `create(FireTriggerResponseSchema)` to create a new message.
  */
 export const FireTriggerResponseSchema: GenMessage<FireTriggerResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 28);
+  messageDesc(file_reliant_v1_trigger, 35);
 
 /**
  * ListTriggerEventsRequest is the request for ListTriggerEvents.
@@ -1462,7 +1794,7 @@ export type ListTriggerEventsRequest = Message<"reliant.v1.ListTriggerEventsRequ
  * Use `create(ListTriggerEventsRequestSchema)` to create a new message.
  */
 export const ListTriggerEventsRequestSchema: GenMessage<ListTriggerEventsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 29);
+  messageDesc(file_reliant_v1_trigger, 36);
 
 /**
  * ListTriggerEventsResponse is the response for ListTriggerEvents.
@@ -1490,7 +1822,7 @@ export type ListTriggerEventsResponse = Message<"reliant.v1.ListTriggerEventsRes
  * Use `create(ListTriggerEventsResponseSchema)` to create a new message.
  */
 export const ListTriggerEventsResponseSchema: GenMessage<ListTriggerEventsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 30);
+  messageDesc(file_reliant_v1_trigger, 37);
 
 /**
  * @generated from message reliant.v1.GetLaunchEventRequest
@@ -1507,7 +1839,7 @@ export type GetLaunchEventRequest = Message<"reliant.v1.GetLaunchEventRequest"> 
  * Use `create(GetLaunchEventRequestSchema)` to create a new message.
  */
 export const GetLaunchEventRequestSchema: GenMessage<GetLaunchEventRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 31);
+  messageDesc(file_reliant_v1_trigger, 38);
 
 /**
  * @generated from message reliant.v1.GetLaunchEventResponse
@@ -1526,7 +1858,7 @@ export type GetLaunchEventResponse = Message<"reliant.v1.GetLaunchEventResponse"
  * Use `create(GetLaunchEventResponseSchema)` to create a new message.
  */
 export const GetLaunchEventResponseSchema: GenMessage<GetLaunchEventResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 32);
+  messageDesc(file_reliant_v1_trigger, 39);
 
 /**
  * ResolveTriggerSendersRequest is the request for ResolveTriggerSenders.
@@ -1561,7 +1893,7 @@ export type ResolveTriggerSendersRequest = Message<"reliant.v1.ResolveTriggerSen
  * Use `create(ResolveTriggerSendersRequestSchema)` to create a new message.
  */
 export const ResolveTriggerSendersRequestSchema: GenMessage<ResolveTriggerSendersRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 33);
+  messageDesc(file_reliant_v1_trigger, 40);
 
 /**
  * ResolvedTriggerSender is one person ResolveTriggerSenders found.
@@ -1597,7 +1929,7 @@ export type ResolvedTriggerSender = Message<"reliant.v1.ResolvedTriggerSender"> 
  * Use `create(ResolvedTriggerSenderSchema)` to create a new message.
  */
 export const ResolvedTriggerSenderSchema: GenMessage<ResolvedTriggerSender> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 34);
+  messageDesc(file_reliant_v1_trigger, 41);
 
 /**
  * ResolveTriggerSendersResponse is the response for ResolveTriggerSenders.
@@ -1619,7 +1951,7 @@ export type ResolveTriggerSendersResponse = Message<"reliant.v1.ResolveTriggerSe
  * Use `create(ResolveTriggerSendersResponseSchema)` to create a new message.
  */
 export const ResolveTriggerSendersResponseSchema: GenMessage<ResolveTriggerSendersResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 35);
+  messageDesc(file_reliant_v1_trigger, 42);
 
 /**
  * TriggerKind is the source a stored trigger listens to.
@@ -1902,6 +2234,70 @@ export const TriggerHealthStatusSchema: GenEnum<TriggerHealthStatus> = /*@__PURE
   enumDesc(file_reliant_v1_trigger, 4);
 
 /**
+ * WorkflowTriggerOutcome is what EnableWorkflow did for one declared trigger.
+ *
+ * @generated from enum reliant.v1.WorkflowTriggerOutcome
+ */
+export enum WorkflowTriggerOutcome {
+  /**
+   * @generated from enum value: WORKFLOW_TRIGGER_OUTCOME_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * ENABLED: a new activation was created and is running.
+   *
+   * @generated from enum value: WORKFLOW_TRIGGER_OUTCOME_ENABLED = 1;
+   */
+  ENABLED = 1,
+
+  /**
+   * RESUMED: the user's paused activation of it was turned back on, with the
+   * settings it already had.
+   *
+   * @generated from enum value: WORKFLOW_TRIGGER_OUTCOME_RESUMED = 2;
+   */
+  RESUMED = 2,
+
+  /**
+   * ALREADY_ENABLED: an enabled activation already existed; nothing changed.
+   *
+   * @generated from enum value: WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED = 3;
+   */
+  ALREADY_ENABLED = 3,
+
+  /**
+   * FAILED: this trigger could not be enabled; message says why. Because
+   * enabling is all-or-nothing, it is also why no other trigger was.
+   *
+   * @generated from enum value: WORKFLOW_TRIGGER_OUTCOME_FAILED = 4;
+   */
+  FAILED = 4,
+
+  /**
+   * NOT_ENABLED: nothing was written for this trigger because another
+   * trigger failed, or what was written for it was undone.
+   *
+   * @generated from enum value: WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED = 5;
+   */
+  NOT_ENABLED = 5,
+
+  /**
+   * LEFT_ENABLED: the call failed but this trigger's activation could not be
+   * undone and is still running; disable it. message says why.
+   *
+   * @generated from enum value: WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED = 6;
+   */
+  LEFT_ENABLED = 6,
+}
+
+/**
+ * Describes the enum reliant.v1.WorkflowTriggerOutcome.
+ */
+export const WorkflowTriggerOutcomeSchema: GenEnum<WorkflowTriggerOutcome> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_trigger, 5);
+
+/**
  * TriggerService manages standing instructions that start runs without a human
  * typing: "every weekday at 9am, run workflow W in project P with prompt M".
  *
@@ -2037,6 +2433,37 @@ export const TriggerService: GenService<{
     methodKind: "unary";
     input: typeof RotateWebhookTokenRequestSchema;
     output: typeof RotateWebhookTokenResponseSchema;
+  },
+  /**
+   * EnableWorkflow turns on every trigger a workflow declares, as one act:
+   * the user's choice of project, machine and connected accounts, applied to
+   * all of them. It is the one way a workflow's triggers start running; no
+   * agent tool can do it.
+   *
+   * All or nothing. Every declared trigger is validated before anything is
+   * written, so a missing connection on one of them refuses the lot and
+   * names it; the response says per trigger what happened, and when it is
+   * not `enabled` nothing new is running. A trigger the user already has an
+   * activation of (in this project) keeps its settings and is only resumed.
+   *
+   * @generated from rpc reliant.v1.TriggerService.EnableWorkflow
+   */
+  enableWorkflow: {
+    methodKind: "unary";
+    input: typeof EnableWorkflowRequestSchema;
+    output: typeof EnableWorkflowResponseSchema;
+  },
+  /**
+   * DisableWorkflow pauses every activation of a workflow. Unlike enabling it
+   * is not all-or-nothing: a pause that fails must not stop the others from
+   * pausing, so it reports each failure and pauses the rest.
+   *
+   * @generated from rpc reliant.v1.TriggerService.DisableWorkflow
+   */
+  disableWorkflow: {
+    methodKind: "unary";
+    input: typeof DisableWorkflowRequestSchema;
+    output: typeof DisableWorkflowResponseSchema;
   },
   /**
    * ResolveTriggerSenders looks people up for a trigger's "Only from": a

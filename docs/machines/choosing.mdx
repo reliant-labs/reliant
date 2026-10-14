@@ -3,7 +3,7 @@ title: "Choosing a machine in workflows"
 description: "How Reliant decides which machine runs a chat or a workflow, and how to pin one with daemon:"
 ---
 
-A project can be installed on several machines, and each chat has its own machine: you pick it on the new-chat screen, or change it later with **Connect a machine**. A chat with no machine pinned runs on your default machine, and a branched chat runs on the machine that holds its worktree. An automation picks its own machine when you activate it, and a `daemon:` in a workflow can send work somewhere else again.
+A project can be installed on several machines, and each chat has its own machine: you pick it on the new-chat screen, or change it later with **Connect a machine**. A chat with no machine pinned runs on your default machine, and a branched chat runs on the machine that holds its worktree. An automation picks its own machine when you enable it, and a `daemon:` in a workflow can send work somewhere else again.
 
 When a workflow run has to choose, Reliant resolves it in a fixed order, from the most specific instruction to the least:
 
@@ -15,7 +15,7 @@ A `daemon:` on a single node wins over a `daemon:` on the whole workflow, which 
 
 ## Automations
 
-When you activate an [automation](/automations/overview) you choose its machine, or **No machine** if the workflow allows it. The runs it starts use that machine's tools, whichever machines your chats use. If you leave it unset for a project that has several candidates, you are asked to choose; an unattended run is never sent somewhere by guesswork.
+When you enable an [automation](/automations/overview) you choose its machine, or **No machine** if the workflow allows it. The runs it starts use that machine's tools, whichever machines your chats use. If you leave it unset for a project that has several candidates, you are asked to choose; an unattended run is never sent somewhere by guesswork.
 
 ## The `daemon:` field
 

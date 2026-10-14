@@ -28,6 +28,8 @@ import { jsToProtoValue, protoValueToJs } from "./proto-utils";
 import {
   CreateTriggerRequestSchema,
   DeleteTriggerRequestSchema,
+  DisableWorkflowRequestSchema,
+  EnableWorkflowRequestSchema,
   FireTriggerRequestSchema,
   GetTriggerRequestSchema,
   ListTriggerEventsRequestSchema,
@@ -41,6 +43,7 @@ import {
   TriggerHealthStatus,
   TriggerOverlapPolicy,
   UpdateTriggerRequestSchema,
+  WorkflowTriggerOutcome,
   IntegrationSourceSchema,
   WebhookSourceSchema,
   WorkflowEventSourceSchema,
@@ -569,6 +572,79 @@ export function isTriggerNotFound(error: unknown): boolean {
 // Client
 // ============================================
 
+// ============================================
+// Workflow-level enable
+// ============================================
+
+/** What EnableWorkflow did for one declared trigger. */
+export type WorkflowTriggerOutcomeKind =
+  | "enabled"
+  | "resumed"
+  | "alreadyEnabled"
+  | "failed"
+  | "notEnabled"
+  | "leftEnabled";
+
+export interface WorkflowTriggerResult {
+  trigger: string;
+  outcome: WorkflowTriggerOutcomeKind;
+  message: string;
+  activation?: Trigger;
+  /** A webhook's token: shown once, for a newly enabled webhook trigger. */
+  webhook?: WebhookCredential;
+}
+
+export interface EnableWorkflowResult {
+  /** True only when every declared trigger is now running. */
+  enabled: boolean;
+  results: WorkflowTriggerResult[];
+}
+
+export interface WorkflowTriggerOverrideInput {
+  trigger: string;
+  name?: string;
+  /** A daemon id, or `noMachine`. Setting either replaces the shared machine. */
+  daemonId?: string;
+  noMachine?: boolean;
+  connectionId?: string;
+  message?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface EnableWorkflowInput {
+  workflow: string;
+  projectId: string;
+  worktreeId?: string;
+  daemonId?: string;
+  noMachine?: boolean;
+  /** integration id -> connection id */
+  connectionIds?: Record<string, string>;
+  params?: Record<string, unknown>;
+  presets?: Record<string, string>;
+  notifyOnComplete?: boolean;
+  message?: string;
+  namePrefix?: string;
+  overrides?: WorkflowTriggerOverrideInput[];
+}
+
+export interface DisableWorkflowResult {
+  paused: Trigger[];
+  failed: Array<{ triggerId: string; name: string; message: string }>;
+}
+
+const OUTCOME_KIND: Partial<Record<WorkflowTriggerOutcome, WorkflowTriggerOutcomeKind>> = {
+  [WorkflowTriggerOutcome.ENABLED]: "enabled",
+  [WorkflowTriggerOutcome.RESUMED]: "resumed",
+  [WorkflowTriggerOutcome.ALREADY_ENABLED]: "alreadyEnabled",
+  [WorkflowTriggerOutcome.FAILED]: "failed",
+  [WorkflowTriggerOutcome.NOT_ENABLED]: "notEnabled",
+  [WorkflowTriggerOutcome.LEFT_ENABLED]: "leftEnabled",
+};
+
+function paramsToProto(params: Record<string, unknown> | undefined) {
+  return Object.fromEntries(Object.entries(params ?? {}).map(([key, value]) => [key, jsToProtoValue(value)]));
+}
+
 export const triggerGrpc = {
   async list(projectId?: string): Promise<Trigger[]> {
     const response = await grpcClient
@@ -625,6 +701,57 @@ export const triggerGrpc = {
       .setTriggerEnabled(create(SetTriggerEnabledRequestSchema, { id, enabled }));
     if (!response.trigger) throw new Error("No trigger in response");
     return triggerFromProto(response.trigger);
+  },
+
+  /**
+   * Turn on every trigger a workflow declares, all or none. A refusal is a
+   * normal response (`enabled: false`) whose `results` say which trigger
+   * failed and why; only a malformed request or an unreachable server throws.
+   */
+  async enableWorkflow(input: EnableWorkflowInput): Promise<EnableWorkflowResult> {
+    const response = await grpcClient.trigger().enableWorkflow(
+      create(EnableWorkflowRequestSchema, {
+        workflow: input.workflow,
+        projectId: input.projectId,
+        worktreeId: input.worktreeId,
+        daemonId: input.daemonId ?? "",
+        noMachine: input.noMachine ?? false,
+        connectionIds: input.connectionIds ?? {},
+        params: paramsToProto(input.params),
+        presets: input.presets ?? {},
+        notifyOnComplete: input.notifyOnComplete ?? false,
+        message: input.message ?? "",
+        namePrefix: input.namePrefix ?? "",
+        overrides: (input.overrides ?? []).map((o) => ({
+          trigger: o.trigger,
+          name: o.name,
+          daemonId: o.daemonId,
+          noMachine: o.noMachine,
+          connectionId: o.connectionId,
+          message: o.message,
+          params: paramsToProto(o.params),
+        })),
+      }),
+    );
+    return {
+      enabled: response.enabled,
+      results: response.results.map((r) => ({
+        trigger: r.trigger,
+        outcome: OUTCOME_KIND[r.outcome] ?? "failed",
+        message: r.message,
+        activation: r.activation ? triggerFromProto(r.activation) : undefined,
+        webhook: credentialFromProto(r.webhook),
+      })),
+    };
+  },
+
+  /** Pause every activation of a workflow, in one project or all. Partial failure is reported, not thrown. */
+  async disableWorkflow(workflow: string, projectId?: string): Promise<DisableWorkflowResult> {
+    const response = await grpcClient.trigger().disableWorkflow(create(DisableWorkflowRequestSchema, { workflow, projectId }));
+    return {
+      paused: response.paused.map(triggerFromProto),
+      failed: response.failed.map((f) => ({ triggerId: f.triggerId, name: f.name, message: f.message })),
+    };
   },
 
   /** Starts a fire and returns its workflow id. The outcome lands in the event list. */

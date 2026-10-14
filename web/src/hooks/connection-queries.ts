@@ -120,6 +120,19 @@ export function useIntegrationEventNaming(): IntegrationEventNaming {
  * handful) and picks the one whose events cover the declaration's.
  */
 export function useDeclaredTriggerRef(integration: string | undefined, events: readonly string[], knownRef?: string): string | undefined {
+  return useDeclaredTriggerRefState(integration, events, knownRef).ref;
+}
+
+/**
+ * useDeclaredTriggerRef, plus whether the answer is still on its way: `ref` is
+ * undefined both while the catalog is being searched and when nothing in it
+ * matches, and a caller that shows a message has to tell those apart.
+ */
+export function useDeclaredTriggerRefState(
+  integration: string | undefined,
+  events: readonly string[],
+  knownRef?: string,
+): { ref: string | undefined; loading: boolean } {
   const search = useQuery({
     queryKey: ["catalogSearch", "trigger-types", integration ?? ""],
     queryFn: () => catalogSearchGrpc.search({ query: "", kinds: ["trigger"], integration, pageSize: 100 }),
@@ -135,13 +148,14 @@ export function useDeclaredTriggerRef(integration: string | undefined, events: r
       enabled: !knownRef && events.length > 0,
     })),
   });
-  if (knownRef) return knownRef;
-  if (candidates.length === 1) return candidates[0]!.ref;
+  if (knownRef) return { ref: knownRef, loading: false };
+  const loading = search.isLoading || (search.data !== undefined && entries.some((entry) => entry.isLoading));
+  if (candidates.length === 1) return { ref: candidates[0]!.ref, loading: false };
   for (let i = 0; i < candidates.length; i += 1) {
     const offered = (entries[i]?.data?.payloadSchema?.properties?.event?.enum ?? []) as unknown[];
     if (events.length > 0 && events.every((event) => offered.includes(event) || offered.some((o) => event.endsWith(".*") && String(o).startsWith(event.slice(0, -1))))) {
-      return candidates[i]!.ref;
+      return { ref: candidates[i]!.ref, loading: false };
     }
   }
-  return undefined;
+  return { ref: undefined, loading };
 }
