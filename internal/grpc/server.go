@@ -35,11 +35,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
 	"github.com/reliant-labs/reliant/internal/handlers/attachment"
 	"github.com/reliant-labs/reliant/internal/handlers/background"
+	"github.com/reliant-labs/reliant/internal/handlers/catalog"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/connection"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
@@ -72,6 +72,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
@@ -267,9 +268,28 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("task service: %w", err)
 	}
-	catalogService := services.NewCatalogService(cfg.ToolsFactory).WithTagPrefs(database)
+	// cfg.ToolsFactory and cfg.CatalogSearch are pointers: only a non-nil one
+	// may reach an interface field, or a typed nil would pass the handlers'
+	// nil checks.
+	var catalogTools catalog.ToolBuilder
+	if cfg.ToolsFactory != nil {
+		catalogTools = cfg.ToolsFactory
+	}
+	var catalogSearch catalog.Searcher
 	if cfg.CatalogSearch != nil {
-		catalogService.WithCatalogSearch(cfg.CatalogSearch, services.IntegrationMethodsFrom(cfg.Connections))
+		catalogSearch = cfg.CatalogSearch
+	}
+	catalogService, err := catalog.New(catalog.Deps{
+		Logger:             handlerLogger,
+		Config:             handlerConfig,
+		Tools:              catalogTools,
+		TagPrefs:           database,
+		LocalModels:        local.NewRepoDirectory(database),
+		Search:             catalogSearch,
+		IntegrationMethods: catalog.IntegrationMethodsFrom(cfg.Connections),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("catalog service: %w", err)
 	}
 	// Only a deployment WITH a control plane can clone from GitHub on the
 	// user's behalf; self-hosted leaves ControlPlane nil.

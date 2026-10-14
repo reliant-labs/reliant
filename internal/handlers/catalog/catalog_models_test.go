@@ -1,4 +1,4 @@
-package services
+package catalog
 
 import (
 	"context"
@@ -55,7 +55,7 @@ func TestCatalogService_ListModels_ReliantOnlyExposesCuratedAllowlist(t *testing
 	// credential and is skipped by BuildAvailableDrivers.
 	require.NoError(t, repo.SetProviderAPIKey(context.Background(), "test-user", "reliant", "rlat_abcdef0123456789abcdef0123456789"))
 
-	svc := NewCatalogService(nil)
+	svc := NewTestCatalog(t)
 	resp, err := svc.ListModels(ctx, connect.NewRequest(&reliantv1.ListModelsRequest{}))
 	require.NoError(t, err)
 
@@ -74,7 +74,7 @@ func TestCatalogService_ListModels_ReliantOnlyExposesCuratedAllowlist(t *testing
 }
 
 func TestCatalogService_ListModelsByProvider_ReliantOnlyExposesCuratedAllowlist(t *testing.T) {
-	svc := NewCatalogService(nil)
+	svc := NewTestCatalog(t)
 	resp, err := svc.ListModelsByProvider(context.Background(), connect.NewRequest(&reliantv1.ListModelsByProviderRequest{Provider: "reliant"}))
 	require.NoError(t, err)
 
@@ -111,7 +111,7 @@ func TestCatalogService_ListModels_HidesUnregisteredDriversAndReportsTemperature
 	require.NoError(t, repo.SetProviderAPIKey(context.Background(), "test-user", "xai", "xai-test-key"))
 	require.NoError(t, repo.SetProviderAPIKey(context.Background(), "test-user", "openrouter", "sk-or-test"))
 
-	resp, err := NewCatalogService(nil).ListModels(ctx, connect.NewRequest(&reliantv1.ListModelsRequest{}))
+	resp, err := NewTestCatalog(t).ListModels(ctx, connect.NewRequest(&reliantv1.ListModelsRequest{}))
 	require.NoError(t, err)
 
 	sawOpenRouter := false

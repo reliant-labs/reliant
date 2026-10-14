@@ -1,0 +1,1270 @@
+{
+  "name": "reliant: catalog service",
+  "tags": [
+    "forge",
+    "generated"
+  ],
+  "tiles": [
+    {
+      "id": "t-requests",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 4,
+      "config": {
+        "name": "Requests",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND startsWith(SpanName, 'reliant.v1.CatalogService/')",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-errors",
+      "x": 8,
+      "y": 0,
+      "w": 8,
+      "h": 4,
+      "config": {
+        "name": "Server errors",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "errors"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND startsWith(SpanName, 'reliant.v1.CatalogService/') AND lower(StatusCode) = 'error'",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-p95",
+      "x": 16,
+      "y": 0,
+      "w": 8,
+      "h": 4,
+      "config": {
+        "name": "p95 latency",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND startsWith(SpanName, 'reliant.v1.CatalogService/')",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-red-by-rpc",
+      "x": 0,
+      "y": 4,
+      "w": 24,
+      "h": 8,
+      "config": {
+        "name": "Rate, errors and latency by rpc",
+        "source": "Traces",
+        "displayType": "table",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND startsWith(SpanName, 'reliant.v1.CatalogService/')",
+        "whereLanguage": "sql",
+        "groupBy": "SpanName"
+      }
+    },
+    {
+      "id": "t-rpc-GetCELCompletions-rate",
+      "x": 0,
+      "y": 12,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetCELCompletions: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/GetCELCompletions'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetCELCompletions-errors",
+      "x": 8,
+      "y": 12,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetCELCompletions: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/GetCELCompletions'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetCELCompletions-latency",
+      "x": 16,
+      "y": 12,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetCELCompletions: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/GetCELCompletions'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetCatalogEntry-rate",
+      "x": 0,
+      "y": 18,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetCatalogEntry: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/GetCatalogEntry'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetCatalogEntry-errors",
+      "x": 8,
+      "y": 18,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetCatalogEntry: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/GetCatalogEntry'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetCatalogEntry-latency",
+      "x": 16,
+      "y": 18,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetCatalogEntry: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/GetCatalogEntry'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListAvailableModels-rate",
+      "x": 0,
+      "y": 24,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListAvailableModels: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListAvailableModels'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListAvailableModels-errors",
+      "x": 8,
+      "y": 24,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListAvailableModels: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListAvailableModels'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListAvailableModels-latency",
+      "x": 16,
+      "y": 24,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListAvailableModels: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListAvailableModels'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListCatalogIntegrations-rate",
+      "x": 0,
+      "y": 30,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListCatalogIntegrations: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListCatalogIntegrations'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListCatalogIntegrations-errors",
+      "x": 8,
+      "y": 30,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListCatalogIntegrations: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListCatalogIntegrations'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListCatalogIntegrations-latency",
+      "x": 16,
+      "y": 30,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListCatalogIntegrations: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListCatalogIntegrations'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListModels-rate",
+      "x": 0,
+      "y": 36,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListModels: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListModels'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListModels-errors",
+      "x": 8,
+      "y": 36,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListModels: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListModels'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListModels-latency",
+      "x": 16,
+      "y": 36,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListModels: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListModels'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListModelsByProvider-rate",
+      "x": 0,
+      "y": 42,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListModelsByProvider: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListModelsByProvider'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListModelsByProvider-errors",
+      "x": 8,
+      "y": 42,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListModelsByProvider: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListModelsByProvider'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListModelsByProvider-latency",
+      "x": 16,
+      "y": 42,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListModelsByProvider: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListModelsByProvider'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListNodes-rate",
+      "x": 0,
+      "y": 48,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListNodes: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListNodes'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListNodes-errors",
+      "x": 8,
+      "y": 48,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListNodes: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListNodes'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListNodes-latency",
+      "x": 16,
+      "y": 48,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListNodes: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListNodes'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListTools-rate",
+      "x": 0,
+      "y": 54,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListTools: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListTools'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListTools-errors",
+      "x": 8,
+      "y": 54,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListTools: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListTools'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListTools-latency",
+      "x": 16,
+      "y": 54,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListTools: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/ListTools'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-SearchCatalog-rate",
+      "x": 0,
+      "y": 60,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "SearchCatalog: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/SearchCatalog'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-SearchCatalog-errors",
+      "x": 8,
+      "y": 60,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "SearchCatalog: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/SearchCatalog'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-SearchCatalog-latency",
+      "x": 16,
+      "y": 60,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "SearchCatalog: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.CatalogService/SearchCatalog'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-db-latency",
+      "x": 0,
+      "y": 66,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Database call latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Client', 'SPAN_KIND_CLIENT') AND SpanAttributes['db.system'] != ''",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-db-by-operation",
+      "x": 12,
+      "y": 66,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Database calls by operation",
+        "source": "Traces",
+        "displayType": "table",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "calls"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          }
+        ],
+        "where": "SpanKind IN ('Client', 'SPAN_KIND_CLIENT') AND SpanAttributes['db.system'] != ''",
+        "whereLanguage": "sql",
+        "groupBy": "SpanAttributes['db.operation']"
+      }
+    },
+    {
+      "id": "t-go-memory",
+      "x": 0,
+      "y": 73,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Go memory used",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "sum",
+            "valueExpression": "",
+            "alias": "used",
+            "metricName": "go.memory.used",
+            "metricType": "sum"
+          },
+          {
+            "aggFn": "avg",
+            "valueExpression": "",
+            "alias": "gc goal",
+            "metricName": "go.memory.gc.goal",
+            "metricType": "sum"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "byte",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-go-goroutines",
+      "x": 12,
+      "y": 73,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Goroutines",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "sum",
+            "valueExpression": "",
+            "alias": "goroutines",
+            "metricName": "go.goroutine.count",
+            "metricType": "sum"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-go-alloc",
+      "x": 0,
+      "y": 80,
+      "w": 24,
+      "h": 7,
+      "config": {
+        "name": "Heap allocation",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "sum",
+            "valueExpression": "",
+            "alias": "allocated",
+            "metricName": "go.memory.allocated",
+            "metricType": "sum"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "byte",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-error-logs",
+      "x": 0,
+      "y": 87,
+      "w": 24,
+      "h": 9,
+      "config": {
+        "name": "Error logs",
+        "source": "Logs",
+        "displayType": "search",
+        "select": "Timestamp, ServiceName, SeverityText, Body",
+        "where": "startsWith(LogAttributes['procedure'], '/reliant.v1.CatalogService/') AND lower(SeverityText) = 'error'",
+        "whereLanguage": "sql"
+      }
+    },
+    {
+      "id": "t-logs",
+      "x": 0,
+      "y": 96,
+      "w": 24,
+      "h": 9,
+      "config": {
+        "name": "Logs",
+        "source": "Logs",
+        "displayType": "search",
+        "select": "Timestamp, ServiceName, SeverityText, Body",
+        "where": "startsWith(LogAttributes['procedure'], '/reliant.v1.CatalogService/')",
+        "whereLanguage": "sql"
+      }
+    }
+  ],
+  "filters": [
+    {
+      "id": "filter-service",
+      "type": "QUERY_EXPRESSION",
+      "name": "service.name",
+      "expression": "ServiceName",
+      "source": "Traces",
+      "whereLanguage": "sql"
+    },
+    {
+      "id": "filter-env",
+      "type": "QUERY_EXPRESSION",
+      "name": "deployment.environment.name",
+      "expression": "ResourceAttributes['deployment.environment.name']",
+      "source": "Traces",
+      "whereLanguage": "sql"
+    }
+  ]
+}

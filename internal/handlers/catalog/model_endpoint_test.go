@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package catalog
 
 import (
 	"context"
@@ -134,7 +134,7 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 		_, err := svc.UpdateModelEndpoint(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.UpdateModelEndpointRequest{Id: ep.GetId(), Endpoint: upd}))
 		require.NoError(t, err)
 
-		catalog := NewCatalogService(nil).WithLocalModels(local.NewRepoDirectory(repo))
+		catalog := NewTestCatalog(t, WithCatalogDeps(Deps{LocalModels: local.NewRepoDirectory(repo)}))
 		infos := catalog.localModelInfos(ctxFor("svc-user-a"), "svc-user-a")
 		require.Len(t, infos, 1)
 		got := infos[0]

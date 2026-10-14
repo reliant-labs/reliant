@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package catalog
 
 import (
 	"context"
@@ -25,10 +25,10 @@ func TestLocalModelInfosListsOnlineAndOfflineChatModels(t *testing.T) {
 	endpoint := func(models ...*reliantv1.LocalModelInfo) *reliantv1.LocalModelInventory {
 		return &reliantv1.LocalModelInventory{Endpoints: []*reliantv1.LocalModelEndpoint{{Id: "ollama", Kind: "ollama", Models: models}}}
 	}
-	svc := NewCatalogService(nil).WithLocalModels(fakeLocalCatalogDirectory{daemons: []local.DaemonInventory{
+	svc := NewTestCatalog(t, WithCatalogDeps(Deps{LocalModels: fakeLocalCatalogDirectory{daemons: []local.DaemonInventory{
 		{DaemonID: "d-on", Machine: "GPU box", Online: true, Inventory: endpoint(qwen, embed)},
 		{DaemonID: "d-off", Machine: "Sean's MacBook", Online: false, Inventory: endpoint(qwen, vision)},
-	}})
+	}}}))
 
 	got := svc.localModelInfos(context.Background(), "u1")
 	require.Len(t, got, 3, "embedding model is not a chat model")
@@ -58,5 +58,5 @@ func TestLocalModelInfosListsOnlineAndOfflineChatModels(t *testing.T) {
 }
 
 func TestLocalModelInfosEmptyWithoutDirectory(t *testing.T) {
-	assert.Empty(t, NewCatalogService(nil).localModelInfos(context.Background(), "u1"))
+	assert.Empty(t, NewTestCatalog(t).localModelInfos(context.Background(), "u1"))
 }

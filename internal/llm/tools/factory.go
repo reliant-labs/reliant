@@ -128,6 +128,13 @@ func NewToolsFactory(opts *ToolsOptions) *ToolsFactory {
 	return f
 }
 
+// ToolFor builds def's tool through this factory. It is def.Factory(f) as a
+// method, so a consumer that only reads tools (the catalog) can depend on an
+// interface rather than on *ToolsFactory.
+func (f *ToolsFactory) ToolFor(def ToolDefinition) Tool {
+	return def.Factory(f)
+}
+
 // GetMCPTools returns MCP tools from this factory's provider using the given runtime.
 func (f *ToolsFactory) GetMCPTools(runtime MCPRuntime) []Tool {
 	if f.mcpProvider == nil {

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package catalog
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 // getCELCompletions is a test helper that calls GetCELCompletions on a fresh service instance.
 func getCELCompletions(t *testing.T) *reliantv1.GetCELCompletionsResponse {
 	t.Helper()
-	svc := NewCatalogService(nil) // GetCELCompletions uses no external deps
+	svc := NewTestCatalog(t) // GetCELCompletions uses no external deps
 	resp, err := svc.GetCELCompletions(context.Background(), connect.NewRequest(&reliantv1.GetCELCompletionsRequest{}))
 	require.NoError(t, err)
 	require.NotNil(t, resp)
@@ -130,7 +130,7 @@ func TestGetCELCompletions_NodeOutputSchemas(t *testing.T) {
 }
 
 func TestGetCELCompletions_Idempotent(t *testing.T) {
-	svc := NewCatalogService(nil)
+	svc := NewTestCatalog(t)
 	ctx := context.Background()
 	req := connect.NewRequest(&reliantv1.GetCELCompletionsRequest{})
 

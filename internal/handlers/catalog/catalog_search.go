@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package catalog
 
 import (
 	"context"
@@ -21,27 +21,6 @@ import (
 // picker), and integration actions and triggers are more things to pick. A
 // second discovery service would split one picker across two clients.
 
-// catalogSearcher is what the search RPCs need: the caller-aware index.
-type catalogSearcher interface {
-	Search(ctx context.Context, userID string, q catalogindex.Query) (*catalogindex.Result, error)
-	Get(ctx context.Context, userID, ref string) (*catalogindex.Entry, bool, error)
-	ListIntegrations(ctx context.Context, userID string, q catalogindex.IntegrationQuery) (*catalogindex.IntegrationResult, error)
-}
-
-// integrationMethods reports, for one integration, each declared auth method
-// with whether this deployment offers it (connections.Service.ListIntegrations
-// filtered to one id). nil reports every method as available with no detail.
-type integrationMethods = func(integrationID string) (connections.Integration, bool)
-
-// WithCatalogSearch enables SearchCatalog and GetCatalogEntry. Without it the
-// two RPCs answer Unimplemented, which only a composition with no index (a
-// test) does.
-func (s *CatalogService) WithCatalogSearch(search catalogSearcher, methods integrationMethods) *CatalogService {
-	s.search = search
-	s.integrationMethods = methods
-	return s
-}
-
 // IntegrationMethodsFrom adapts a connections service into the per-integration
 // method lookup GetCatalogEntry reports.
 func IntegrationMethodsFrom(svc *connections.Service) func(string) (connections.Integration, bool) {
@@ -58,12 +37,12 @@ func IntegrationMethodsFrom(svc *connections.Service) func(string) (connections.
 	}
 }
 
-func (s *CatalogService) SearchCatalog(ctx context.Context, req *connect.Request[reliantv1.SearchCatalogRequest]) (*connect.Response[reliantv1.SearchCatalogResponse], error) {
+func (s *Service) SearchCatalog(ctx context.Context, req *connect.Request[reliantv1.SearchCatalogRequest]) (*connect.Response[reliantv1.SearchCatalogResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if s.search == nil {
+	if s.deps.Search == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("integration catalog search is not configured"))
 	}
 	if req.Msg.GetPageSize() < 0 {
@@ -80,7 +59,7 @@ func (s *CatalogService) SearchCatalog(ctx context.Context, req *connect.Request
 		}
 		q.Kinds = append(q.Kinds, kind)
 	}
-	res, err := s.search.Search(ctx, userID, q)
+	res, err := s.deps.Search.Search(ctx, userID, q)
 	if err != nil {
 		return nil, catalogSearchError(err)
 	}
@@ -99,18 +78,18 @@ func (s *CatalogService) SearchCatalog(ctx context.Context, req *connect.Request
 	return connect.NewResponse(out), nil
 }
 
-func (s *CatalogService) GetCatalogEntry(ctx context.Context, req *connect.Request[reliantv1.GetCatalogEntryRequest]) (*connect.Response[reliantv1.GetCatalogEntryResponse], error) {
+func (s *Service) GetCatalogEntry(ctx context.Context, req *connect.Request[reliantv1.GetCatalogEntryRequest]) (*connect.Response[reliantv1.GetCatalogEntryResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if s.search == nil {
+	if s.deps.Search == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("integration catalog search is not configured"))
 	}
 	if req.Msg.GetRef() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("ref is required"))
 	}
-	e, connected, err := s.search.Get(ctx, userID, req.Msg.GetRef())
+	e, connected, err := s.deps.Search.Get(ctx, userID, req.Msg.GetRef())
 	if err != nil {
 		return nil, catalogSearchError(err)
 	}
@@ -119,8 +98,8 @@ func (s *CatalogService) GetCatalogEntry(ctx context.Context, req *connect.Reque
 		return nil, connect.NewError(connect.CodeInternal, errors.New("catalog entry schema could not be encoded"))
 	}
 	var methods *connections.Integration
-	if s.integrationMethods != nil {
-		if in, ok := s.integrationMethods(e.IntegrationID()); ok {
+	if s.deps.IntegrationMethods != nil {
+		if in, ok := s.deps.IntegrationMethods(e.IntegrationID()); ok {
 			methods = &in
 		}
 	}
@@ -128,12 +107,12 @@ func (s *CatalogService) GetCatalogEntry(ctx context.Context, req *connect.Reque
 	return connect.NewResponse(&reliantv1.GetCatalogEntryResponse{Entry: entry}), nil
 }
 
-func (s *CatalogService) ListCatalogIntegrations(ctx context.Context, req *connect.Request[reliantv1.ListCatalogIntegrationsRequest]) (*connect.Response[reliantv1.ListCatalogIntegrationsResponse], error) {
+func (s *Service) ListCatalogIntegrations(ctx context.Context, req *connect.Request[reliantv1.ListCatalogIntegrationsRequest]) (*connect.Response[reliantv1.ListCatalogIntegrationsResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if s.search == nil {
+	if s.deps.Search == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("integration catalog search is not configured"))
 	}
 	if req.Msg.GetPageSize() < 0 {
@@ -149,7 +128,7 @@ func (s *CatalogService) ListCatalogIntegrations(ctx context.Context, req *conne
 		}
 		q.Kinds = append(q.Kinds, kind)
 	}
-	res, err := s.search.ListIntegrations(ctx, userID, q)
+	res, err := s.deps.Search.ListIntegrations(ctx, userID, q)
 	if err != nil {
 		return nil, catalogSearchError(err)
 	}

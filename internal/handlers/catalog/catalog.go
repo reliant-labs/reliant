@@ -1,17 +1,15 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package catalog
 
 import (
 	"context"
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -24,52 +22,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
-// CatalogService implements the CatalogService RPC handlers
-type CatalogService struct {
-	reliantv1connect.UnimplementedCatalogServiceHandler
-	toolsFactory *tools.ToolsFactory
-	// tagPrefs supplies the user's model.tag_config.<tag> preferences so the
-	// tiers ListModels reports match what a tag selector actually runs on.
-	tagPrefs modelprefs.SettingsReader
-	// localDirectory supplies the user's daemons' published local model
-	// inventories; nil leaves local models out of the catalog.
-	localDirectory local.Directory
-
-	celCompletionsOnce sync.Once
-	celCompletionsResp *reliantv1.GetCELCompletionsResponse
-
-	// search and integrationMethods back SearchCatalog / GetCatalogEntry
-	// (catalog_search.go); set by WithCatalogSearch.
-	search             catalogSearcher
-	integrationMethods integrationMethods
-}
-
-// NewCatalogService creates a new CatalogService
-func NewCatalogService(toolsFactory *tools.ToolsFactory) *CatalogService {
-	return &CatalogService{
-		toolsFactory: toolsFactory,
-	}
-}
-
-// WithTagPrefs wires the settings reader that ListModels tiers consult.
-func (s *CatalogService) WithTagPrefs(reader modelprefs.SettingsReader) *CatalogService {
-	s.tagPrefs = reader
-	if src, ok := reader.(local.Source); ok && s.localDirectory == nil {
-		s.localDirectory = local.NewRepoDirectory(src)
-	}
-	return s
-}
-
-// WithLocalModels wires the source of per-daemon local model inventories.
-// WithTagPrefs also wires it when the reader is a db.Repository.
-func (s *CatalogService) WithLocalModels(dir local.Directory) *CatalogService {
-	s.localDirectory = dir
-	return s
-}
-
 // ListModels returns all available models filtered by user's configured API keys
 // Each model is returned once per available driver, allowing users to choose which API to use
-func (s *CatalogService) ListModels(
+func (s *Service) ListModels(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListModelsRequest],
 ) (*connect.Response[reliantv1.ListModelsResponse], error) {
@@ -186,7 +141,7 @@ func (s *CatalogService) ListModels(
 // including offline daemons' models (online=false) so the picker can show them
 // disabled. A directory failure omits local models rather than failing the
 // whole catalog.
-func (s *CatalogService) localModelInfos(ctx context.Context, userID string) []*reliantv1.ModelInfo {
+func (s *Service) localModelInfos(ctx context.Context, userID string) []*reliantv1.ModelInfo {
 	found := s.listLocalModels(ctx, userID)
 	infos := make([]*reliantv1.ModelInfo, 0, len(found))
 	for _, m := range found {
@@ -244,8 +199,8 @@ func localModelSource(m local.Model) *reliantv1.LocalModelSource {
 	}
 }
 
-func (s *CatalogService) listLocalModels(ctx context.Context, userID string) []local.Model {
-	found, err := local.ListModels(ctx, s.localDirectory, userID)
+func (s *Service) listLocalModels(ctx context.Context, userID string) []local.Model {
+	found, err := local.ListModels(ctx, s.deps.LocalModels, userID)
 	if err != nil {
 		logging.Warn("[ListModels] Could not list local models", "userID", userID, "error", err)
 		return nil
@@ -275,8 +230,8 @@ func configuredProviderIDs(availableDrivers models.AvailableDrivers) []string {
 	return providers
 }
 
-func (s *CatalogService) loadTagPrefs(ctx context.Context, userID string) map[string]modelprefs.TagPrefs {
-	prefs, err := modelprefs.LoadAll(ctx, s.tagPrefs, userID)
+func (s *Service) loadTagPrefs(ctx context.Context, userID string) map[string]modelprefs.TagPrefs {
+	prefs, err := modelprefs.LoadAll(ctx, s.deps.TagPrefs, userID)
 	if err != nil {
 		logging.Warn("[ListModels] Model tag preferences partially unreadable", "error", err)
 	}
@@ -449,7 +404,7 @@ func extractBaseModelID(id string) string {
 // report every model enabled; a dynamic provider (Copilot) reports its account's
 // per-model policy. Delegates to the drivers aggregator, which fails open per
 // provider so one flaky provider never blanks the list.
-func (s *CatalogService) ListAvailableModels(
+func (s *Service) ListAvailableModels(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListAvailableModelsRequest],
 ) (*connect.Response[reliantv1.ListAvailableModelsResponse], error) {
@@ -484,7 +439,7 @@ func (s *CatalogService) ListAvailableModels(
 }
 
 // ListModelsByProvider returns all models for a specific provider
-func (s *CatalogService) ListModelsByProvider(
+func (s *Service) ListModelsByProvider(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListModelsByProviderRequest],
 ) (*connect.Response[reliantv1.ListModelsByProviderResponse], error) {
@@ -525,17 +480,18 @@ func (s *CatalogService) ListModelsByProvider(
 }
 
 // ListTools returns all available tools
-func (s *CatalogService) ListTools(
+func (s *Service) ListTools(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListToolsRequest],
 ) (*connect.Response[reliantv1.ListToolsResponse], error) {
 	// Get all available tools from the tools registry
 	toolRegistry := tools.GetToolRegistry()
 
+	builder := s.toolBuilder()
 	var toolList []*reliantv1.ToolInfo
 	for _, toolDef := range toolRegistry {
 		// Create tool instance to get its description
-		tool := toolDef.Factory(s.toolsFactory)
+		tool := builder.ToolFor(toolDef)
 		description := ""
 		if tool != nil {
 			description = tool.Description()
@@ -623,26 +579,31 @@ func outputFieldsToProto(fields []schema.InputFieldInfo) []*reliantv1.NodeInputF
 // ((reliant).ui_hint in workflow_v2.proto). ListNodes fills its options.
 const uiHintNodeTool = "node_tool"
 
+// toolBuilder is what ListTools and ListNodes build tools through to read
+// their descriptions. A description is static text, so a bare factory (a
+// service built without Deps.Tools) is enough to read it.
+func (s *Service) toolBuilder() ToolBuilder {
+	if s.deps.Tools != nil {
+		return s.deps.Tools
+	}
+	return tools.NewToolsFactory(nil)
+}
+
 // nodeToolOptions are the tools an invoke_tool node may name — the ones that
 // opted in to node exposure — with the first sentence of each tool's own
 // description, for the editor's tool picker.
-func (s *CatalogService) nodeToolOptions() []*reliantv1.NodeFieldOption {
+func (s *Service) nodeToolOptions() []*reliantv1.NodeFieldOption {
 	registry := map[string]tools.ToolDefinition{}
 	for _, def := range tools.GetToolRegistry() {
 		registry[def.Name] = def
 	}
-	// A description is static text, so a bare factory (a service built
-	// without one) is enough to read it.
-	factory := s.toolsFactory
-	if factory == nil {
-		factory = tools.NewToolsFactory(nil)
-	}
+	builder := s.toolBuilder()
 	exposed := tools.NodeExposedTools()
 	options := make([]*reliantv1.NodeFieldOption, 0, len(exposed))
 	for _, exposure := range exposed {
 		option := &reliantv1.NodeFieldOption{Value: exposure.Tool}
 		if def, ok := registry[exposure.Tool]; ok {
-			if tool := def.Factory(factory); tool != nil {
+			if tool := builder.ToolFor(def); tool != nil {
 				option.Description = firstSentence(tool.Description())
 			}
 		}
@@ -665,7 +626,7 @@ func firstSentence(text string) string {
 }
 
 // ListNodes returns all workflow nodes available for the builder
-func (s *CatalogService) ListNodes(
+func (s *Service) ListNodes(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListNodesRequest],
 ) (*connect.Response[reliantv1.ListNodesResponse], error) {
@@ -779,7 +740,7 @@ func (s *CatalogService) ListNodes(
 
 // GetCELCompletions returns CEL expression completion data for the workflow builder.
 // The response is computed once and cached since the data is static.
-func (s *CatalogService) GetCELCompletions(
+func (s *Service) GetCELCompletions(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetCELCompletionsRequest],
 ) (*connect.Response[reliantv1.GetCELCompletionsResponse], error) {
@@ -790,7 +751,7 @@ func (s *CatalogService) GetCELCompletions(
 }
 
 // buildCELCompletionsResponse assembles CEL completion data from reference and type registry.
-func (s *CatalogService) buildCELCompletionsResponse() *reliantv1.GetCELCompletionsResponse {
+func (s *Service) buildCELCompletionsResponse() *reliantv1.GetCELCompletionsResponse {
 	resp := &reliantv1.GetCELCompletionsResponse{}
 
 	// 1. Map reference.CELNamespaces → CELNamespaceInfo protos

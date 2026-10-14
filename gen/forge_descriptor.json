@@ -3549,8 +3549,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "ConnectionAuthKind"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "ChatService",
@@ -34437,5 +34436,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "2cc62ec0c5068bc792f53644fa92dbbc3ab523fca1c62c8676dcc8e71393d09c"
+  "source_hash": "c61e28e87329320c84596958ec0a98bd7d094f0c691ab6ebd48e40e1953d58fc"
 }

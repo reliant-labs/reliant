@@ -48,6 +48,33 @@
     "internal/handlers/attachment/handlers_scaffold_upload_attachment_test.go": {
       "scaffolded_at": "2026-10-13T17:39:52Z"
     },
+    "internal/handlers/catalog/handlers_scaffold_get_catalog_entry_test.go": {
+      "scaffolded_at": "2026-10-14T18:20:48Z"
+    },
+    "internal/handlers/catalog/handlers_scaffold_get_cel_completions_test.go": {
+      "scaffolded_at": "2026-10-14T18:20:48Z"
+    },
+    "internal/handlers/catalog/handlers_scaffold_list_available_models_test.go": {
+      "scaffolded_at": "2026-10-14T18:20:48Z"
+    },
+    "internal/handlers/catalog/handlers_scaffold_list_catalog_integrations_test.go": {
+      "scaffolded_at": "2026-10-14T18:20:48Z"
+    },
+    "internal/handlers/catalog/handlers_scaffold_list_models_by_provider_test.go": {
+      "scaffolded_at": "2026-10-14T18:20:48Z"
+    },
+    "internal/handlers/catalog/handlers_scaffold_list_models_test.go": {
+      "scaffolded_at": "2026-10-14T18:20:48Z"
+    },
+    "internal/handlers/catalog/handlers_scaffold_list_nodes_test.go": {
+      "scaffolded_at": "2026-10-14T18:20:48Z"
+    },
+    "internal/handlers/catalog/handlers_scaffold_list_tools_test.go": {
+      "scaffolded_at": "2026-10-14T18:20:48Z"
+    },
+    "internal/handlers/catalog/handlers_scaffold_search_catalog_test.go": {
+      "scaffolded_at": "2026-10-14T18:20:48Z"
+    },
     "internal/handlers/chat/handlers_scaffold_adopt_chat_test.go": {
       "scaffolded_at": "2026-10-14T18:19:00Z"
     },
@@ -883,6 +910,12 @@
     ".github/workflows/deploy.yml",
     ".github/workflows/e2e.yml",
     ".github/workflows/proto-breaking.yml",
+    "internal/handlers/catalog/handlers_scaffold_get_catalog_entry_test.go",
+    "internal/handlers/catalog/handlers_scaffold_get_cel_completions_test.go",
+    "internal/handlers/catalog/handlers_scaffold_list_catalog_integrations_test.go",
+    "internal/handlers/catalog/handlers_scaffold_list_models_by_provider_test.go",
+    "internal/handlers/catalog/handlers_scaffold_list_nodes_test.go",
+    "internal/handlers/catalog/handlers_scaffold_search_catalog_test.go",
     "internal/handlers/chat/handlers_scaffold_adopt_chat_test.go",
     "internal/handlers/chat/handlers_scaffold_branch_chat_test.go",
     "internal/handlers/chat/handlers_scaffold_cancel_queued_agent_message_test.go",

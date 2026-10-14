@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package catalog
 
 import (
 	"context"
@@ -87,7 +87,7 @@ func (f fakeCatalogConnections) ListConnections(_ context.Context, userID, _ str
 	return f[userID], nil
 }
 
-func newCatalogSearchTestService(t *testing.T) *CatalogService {
+func newCatalogSearchTestService(t *testing.T) *Service {
 	t.Helper()
 	var ms []*reliantv1.IntegrationManifest
 	for _, d := range catalogSearchFixture {
@@ -108,7 +108,7 @@ func newCatalogSearchTestService(t *testing.T) *CatalogService {
 			{Kind: connections.MethodAPIKey, Available: true, FieldLabels: map[string]string{"api_key": "Acme key"}},
 		}}, true
 	}
-	return NewCatalogService(nil).WithCatalogSearch(catalogindex.NewService(idx, conns, nil), methods)
+	return NewTestCatalog(t, WithCatalogDeps(Deps{Search: catalogindex.NewService(idx, conns, nil), IntegrationMethods: methods}))
 }
 
 func asUser(user string) context.Context {
@@ -291,7 +291,7 @@ func TestListCatalogIntegrations_RejectsBadRequests(t *testing.T) {
 	}
 	_, err := svc.ListCatalogIntegrations(context.Background(), connect.NewRequest(&reliantv1.ListCatalogIntegrationsRequest{}))
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-	_, err = NewCatalogService(nil).ListCatalogIntegrations(asUser("bob"), connect.NewRequest(&reliantv1.ListCatalogIntegrationsRequest{}))
+	_, err = NewTestCatalog(t).ListCatalogIntegrations(asUser("bob"), connect.NewRequest(&reliantv1.ListCatalogIntegrationsRequest{}))
 	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
 }
 
@@ -304,7 +304,7 @@ func TestSearchCatalog_RequiresAUser(t *testing.T) {
 }
 
 func TestSearchCatalog_UnconfiguredIsUnimplemented(t *testing.T) {
-	svc := NewCatalogService(nil)
+	svc := NewTestCatalog(t)
 	_, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(&reliantv1.SearchCatalogRequest{}))
 	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
 }
@@ -365,7 +365,7 @@ func TestGetCatalogEntry_UnknownRefIsNotFound(t *testing.T) {
 // The embedded catalog is what production serves; its entries must convert.
 func TestGetCatalogEntry_EveryEmbeddedEntryConverts(t *testing.T) {
 	idx := catalogindex.MustBuiltin()
-	svc := NewCatalogService(nil).WithCatalogSearch(catalogindex.NewService(idx, nil, nil), nil)
+	svc := NewTestCatalog(t, WithCatalogDeps(Deps{Search: catalogindex.NewService(idx, nil, nil)}))
 	all, err := svc.SearchCatalog(asUser("u"), connect.NewRequest(&reliantv1.SearchCatalogRequest{PageSize: catalogindex.MaxPageSize}))
 	require.NoError(t, err)
 	require.NotEmpty(t, all.Msg.GetEntries())
@@ -419,7 +419,7 @@ func TestGetCatalogEntry_TriggerCarriesItsPayloadSchema(t *testing.T) {
 	require.NoError(t, err)
 	idx, err := catalogindex.Build([]*reliantv1.IntegrationManifest{m})
 	require.NoError(t, err)
-	svc := NewCatalogService(nil).WithCatalogSearch(catalogindex.NewService(idx, fakeCatalogConnections{}, nil), nil)
+	svc := NewTestCatalog(t, WithCatalogDeps(Deps{Search: catalogindex.NewService(idx, fakeCatalogConnections{}, nil)}))
 
 	list, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(&reliantv1.SearchCatalogRequest{
 		Kinds: []reliantv1.CatalogEntryKind{reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER},

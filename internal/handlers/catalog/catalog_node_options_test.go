@@ -1,4 +1,4 @@
-package services
+package catalog
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 // node exposure. Naming any other tool is an error, so offering the whole
 // registry would offer mostly wrong answers.
 func TestListNodes_InvokeToolOffersTheNodeExposedTools(t *testing.T) {
-	resp, err := NewCatalogService(nil).ListNodes(context.Background(), connect.NewRequest(&reliantv1.ListNodesRequest{}))
+	resp, err := NewTestCatalog(t).ListNodes(context.Background(), connect.NewRequest(&reliantv1.ListNodesRequest{}))
 	require.NoError(t, err)
 
 	var tool *reliantv1.NodeInputField

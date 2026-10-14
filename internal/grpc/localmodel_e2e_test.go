@@ -40,7 +40,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/handlers/catalog"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -100,8 +100,13 @@ func e2eAPI(t *testing.T, repo *db.Repo, router toolexec.DaemonRouter) (reliantv
 	require.NoError(t, err)
 	p1, h1 := reliantv1connect.NewDaemonRegistryServiceHandler(registry, asUser)
 	mux.Handle(p1, h1)
-	p2, h2 := reliantv1connect.NewCatalogServiceHandler(
-		services.NewCatalogService(nil).WithLocalModels(local.NewRepoDirectory(repo)), asUser)
+	catalogService, err := catalog.New(catalog.Deps{
+		Logger:      slog.Default(),
+		Config:      &typedconfig.Config{},
+		LocalModels: local.NewRepoDirectory(repo),
+	})
+	require.NoError(t, err)
+	p2, h2 := reliantv1connect.NewCatalogServiceHandler(catalogService, asUser)
 	mux.Handle(p2, h2)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
