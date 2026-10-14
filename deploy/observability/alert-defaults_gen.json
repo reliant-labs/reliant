@@ -64,6 +64,10 @@
         "rpc_service": "reliant.v1.QuestionService"
       },
       {
+        "name": "repo",
+        "rpc_service": "reliant.v1.RepoService"
+      },
+      {
         "name": "run",
         "rpc_service": "reliant.v1.RunService"
       },

@@ -51,6 +51,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
+	"github.com/reliant-labs/reliant/internal/handlers/repo"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/scenario"
 	"github.com/reliant-labs/reliant/internal/handlers/settings"
@@ -271,7 +272,15 @@ func NewServer(cfg *Config) (*Server, error) {
 		worktreeSweeper = worktreesweep.New(database, router).WithKeepFiles(worktreesweep.KeepSetting{R: database})
 		worktreeService.WithSettler(worktreeSweeper)
 	}
-	repoService := services.NewRepoService(database, router)
+	repoService, err := repo.New(repo.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+		Router: router,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("repo service: %w", err)
+	}
 	approvalService, err := approval.New(approval.Deps{
 		Logger:  handlerLogger,
 		Config:  handlerConfig,

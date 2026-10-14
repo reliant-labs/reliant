@@ -328,6 +328,8 @@ export const RepoService: GenService<{
     output: typeof DiscoverReposResponseSchema;
   },
   /**
+   * forge:custom — lists one project's repos after checking the caller owns the project
+   *
    * @generated from rpc reliant.v1.RepoService.ListRepos
    */
   listRepos: {

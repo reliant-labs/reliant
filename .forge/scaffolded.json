@@ -240,6 +240,21 @@
     "internal/handlers/question/handlers_scaffold_resolve_question_test.go": {
       "scaffolded_at": "2026-10-13T07:28:55Z"
     },
+    "internal/handlers/repo/handlers_scaffold_add_repo_test.go": {
+      "scaffolded_at": "2026-10-14T13:33:05Z"
+    },
+    "internal/handlers/repo/handlers_scaffold_discover_repos_test.go": {
+      "scaffolded_at": "2026-10-14T13:33:05Z"
+    },
+    "internal/handlers/repo/handlers_scaffold_get_repo_git_info_test.go": {
+      "scaffolded_at": "2026-10-14T13:33:05Z"
+    },
+    "internal/handlers/repo/handlers_scaffold_list_repos_test.go": {
+      "scaffolded_at": "2026-10-14T13:33:05Z"
+    },
+    "internal/handlers/repo/handlers_scaffold_remove_repo_test.go": {
+      "scaffolded_at": "2026-10-14T13:33:05Z"
+    },
     "internal/handlers/run/handlers_scaffold_cancel_run_test.go": {
       "scaffolded_at": "2026-10-13T12:25:31Z"
     },

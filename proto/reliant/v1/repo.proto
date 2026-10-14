@@ -7,14 +7,12 @@ import "buf/validate/validate.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // RepoService manages git repositories nested inside a project.
 // A project may contain 0..N repos. A repo with relative_path == "" is
 // a single-repo project at the project root (the legacy shape).
 service RepoService {
   rpc DiscoverRepos(DiscoverReposRequest) returns (DiscoverReposResponse) {}
+  // forge:custom — lists one project's repos after checking the caller owns the project
   rpc ListRepos(ListReposRequest) returns (ListReposResponse) {}
   rpc AddRepo(AddRepoRequest) returns (AddRepoResponse) {}
   rpc RemoveRepo(RemoveRepoRequest) returns (RemoveRepoResponse) {}

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package repo
 
 import (
 	"context"
@@ -13,33 +13,22 @@ import (
 	"github.com/google/uuid"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-// RepoService handles RPCs for nested git repositories within a project.
-type RepoService struct {
-	reliantv1connect.UnimplementedRepoServiceHandler
-	database     db.Repository
-	daemonRouter toolexec.DaemonRouter
-}
-
-// NewRepoService creates a new RepoService.
-func NewRepoService(database db.Repository, daemonRouter toolexec.DaemonRouter) *RepoService {
-	return &RepoService{database: database, daemonRouter: daemonRouter}
-}
-
 // sendDaemonCommand forwards a JSON command to the user's daemon.
-func (s *RepoService) sendDaemonCommand(ctx context.Context, userID, commandType string, payload, resp interface{}) error {
+func (s *Service) sendDaemonCommand(ctx context.Context, userID, commandType string, payload, resp interface{}) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
-	respBytes, err := s.daemonRouter.SendDaemonCommand(ctx, userID, commandType, payloadBytes, 30_000)
+	if s.deps.Router == nil {
+		return fmt.Errorf("daemon command %s: no daemon router", commandType)
+	}
+	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, commandType, payloadBytes, 30_000)
 	if err != nil {
 		return fmt.Errorf("daemon command %s: %w", commandType, err)
 	}
@@ -52,12 +41,12 @@ func (s *RepoService) sendDaemonCommand(ctx context.Context, userID, commandType
 }
 
 // authorizeRepo loads a repo and verifies the caller owns its parent project.
-func (s *RepoService) authorizeRepo(ctx context.Context, repoID, userID string) (*core.Repo, *db.Project, error) {
-	repo, err := s.database.GetRepo(ctx, repoID)
+func (s *Service) authorizeRepo(ctx context.Context, repoID, userID string) (*core.Repo, *db.Project, error) {
+	repo, err := s.deps.Repo.GetRepo(ctx, repoID)
 	if err != nil {
 		return nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("repo not found"))
 	}
-	project, err := s.database.GetProjectWithUserCheck(ctx, repo.ProjectID, userID)
+	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, repo.ProjectID, userID)
 	if err != nil {
 		return nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("repo not found"))
 	}
@@ -65,8 +54,8 @@ func (s *RepoService) authorizeRepo(ctx context.Context, repoID, userID string) 
 }
 
 // authorizeProject verifies the caller owns the named project.
-func (s *RepoService) authorizeProject(ctx context.Context, projectID, userID string) (*db.Project, error) {
-	project, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+func (s *Service) authorizeProject(ctx context.Context, projectID, userID string) (*db.Project, error) {
+	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
@@ -96,7 +85,7 @@ func repoToProto(r *core.Repo) *reliantv1.Repo {
 // Results are NOT persisted — the caller decides which to add via AddRepo.
 // =============================================================================
 
-func (s *RepoService) DiscoverRepos(
+func (s *Service) DiscoverRepos(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DiscoverReposRequest],
 ) (*connect.Response[reliantv1.DiscoverReposResponse], error) {
@@ -142,7 +131,7 @@ func (s *RepoService) DiscoverRepos(
 // ListRepos: returns persisted repos for a project.
 // =============================================================================
 
-func (s *RepoService) ListRepos(
+func (s *Service) ListRepos(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListReposRequest],
 ) (*connect.Response[reliantv1.ListReposResponse], error) {
@@ -151,7 +140,7 @@ func (s *RepoService) ListRepos(
 		return nil, err
 	}
 
-	repos, err := s.database.ListReposByProject(ctx, req.Msg.ProjectId)
+	repos, err := s.deps.Repo.ListReposByProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		logging.Error("Failed to list repos", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos"))
@@ -171,7 +160,7 @@ func (s *RepoService) ListRepos(
 // remote URL opportunistically. Rejects duplicates by (project_id, relative_path).
 // =============================================================================
 
-func (s *RepoService) AddRepo(
+func (s *Service) AddRepo(
 	ctx context.Context,
 	req *connect.Request[reliantv1.AddRepoRequest],
 ) (*connect.Response[reliantv1.AddRepoResponse], error) {
@@ -218,7 +207,7 @@ func (s *RepoService) AddRepo(
 	}
 
 	// Reject duplicates.
-	if existing, err := s.database.GetRepoByProjectAndPath(ctx, project.ID, relPath); err == nil && existing != nil {
+	if existing, err := s.deps.Repo.GetRepoByProjectAndPath(ctx, project.ID, relPath); err == nil && existing != nil {
 		return nil, connect.NewError(connect.CodeAlreadyExists,
 			fmt.Errorf("repo at %q already registered for this project", relPath))
 	}
@@ -244,7 +233,7 @@ func (s *RepoService) AddRepo(
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
-	if err := s.database.CreateRepo(ctx, record); err != nil {
+	if err := s.deps.Repo.CreateRepo(ctx, record); err != nil {
 		logging.Error("Failed to persist repo", "error", err, "projectID", project.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to add repo"))
 	}
@@ -254,7 +243,7 @@ func (s *RepoService) AddRepo(
 	if !project.IsGitRepo {
 		project.IsGitRepo = true
 		project.UpdatedAt = now
-		if err := s.database.UpdateProject(ctx, project, userID); err != nil {
+		if err := s.deps.Repo.UpdateProject(ctx, project, userID); err != nil {
 			logging.Warn("Failed to flip project.is_git_repo", "error", err, "projectID", project.ID)
 		}
 	}
@@ -269,7 +258,7 @@ func (s *RepoService) AddRepo(
 // preserve them must move them to another repo first.
 // =============================================================================
 
-func (s *RepoService) RemoveRepo(
+func (s *Service) RemoveRepo(
 	ctx context.Context,
 	req *connect.Request[reliantv1.RemoveRepoRequest],
 ) (*connect.Response[reliantv1.RemoveRepoResponse], error) {
@@ -279,7 +268,7 @@ func (s *RepoService) RemoveRepo(
 		return nil, err
 	}
 
-	if err := s.database.DeleteRepo(ctx, repo.ID); err != nil {
+	if err := s.deps.Repo.DeleteRepo(ctx, repo.ID); err != nil {
 		logging.Error("Failed to delete repo", "error", err, "repoID", repo.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete repo"))
 	}
@@ -301,7 +290,7 @@ func (s *RepoService) RemoveRepo(
 // is already path-parameterized, so we just point it at the repo's absolute path.
 // =============================================================================
 
-func (s *RepoService) GetRepoGitInfo(
+func (s *Service) GetRepoGitInfo(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetRepoGitInfoRequest],
 ) (*connect.Response[reliantv1.GetRepoGitInfoResponse], error) {

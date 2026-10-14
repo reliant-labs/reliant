@@ -52,6 +52,7 @@ const (
 // RepoServiceClient is a client for the reliant.v1.RepoService service.
 type RepoServiceClient interface {
 	DiscoverRepos(context.Context, *connect.Request[v1.DiscoverReposRequest]) (*connect.Response[v1.DiscoverReposResponse], error)
+	// forge:custom — lists one project's repos after checking the caller owns the project
 	ListRepos(context.Context, *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error)
 	AddRepo(context.Context, *connect.Request[v1.AddRepoRequest]) (*connect.Response[v1.AddRepoResponse], error)
 	RemoveRepo(context.Context, *connect.Request[v1.RemoveRepoRequest]) (*connect.Response[v1.RemoveRepoResponse], error)
@@ -139,6 +140,7 @@ func (c *repoServiceClient) GetRepoGitInfo(ctx context.Context, req *connect.Req
 // RepoServiceHandler is an implementation of the reliant.v1.RepoService service.
 type RepoServiceHandler interface {
 	DiscoverRepos(context.Context, *connect.Request[v1.DiscoverReposRequest]) (*connect.Response[v1.DiscoverReposResponse], error)
+	// forge:custom — lists one project's repos after checking the caller owns the project
 	ListRepos(context.Context, *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error)
 	AddRepo(context.Context, *connect.Request[v1.AddRepoRequest]) (*connect.Response[v1.AddRepoResponse], error)
 	RemoveRepo(context.Context, *connect.Request[v1.RemoveRepoRequest]) (*connect.Response[v1.RemoveRepoResponse], error)
