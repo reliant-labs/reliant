@@ -1,6 +1,7 @@
 package run_test
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -9,6 +10,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	run "github.com/reliant-labs/reliant/internal/handlers/run"
 )
 
@@ -17,8 +19,13 @@ import (
 func TestLastRunPerWorkflow_Generated(t *testing.T) {
 	t.Parallel()
 
-	// The generated harness stubs Repo, so the caller has no runs.
-	svc := run.NewTestRun(t)
+	// The caller has no runs. The harness's auto-stub refuses an
+	// unprogrammed call, so the one query this rpc makes is programmed.
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.StubRepo{
+		LastRunPerWorkflowFunc: func(context.Context, db.RunListFilters) ([]*db.RunListItem, error) {
+			return nil, nil
+		},
+	}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.LastRunPerWorkflowRequest, pb.LastRunPerWorkflowResponse]{
 		{

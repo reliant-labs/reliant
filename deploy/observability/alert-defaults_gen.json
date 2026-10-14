@@ -154,6 +154,134 @@
           "doc": "of the previous 24h, the hours the service must have served requests in to count as steady (a quiet staging service never pages)"
         }
       ]
+    },
+    {
+      "id": "crash-loop",
+      "alert": "WorkloadCrashLooping",
+      "title": "A container keeps restarting",
+      "severity": "critical",
+      "for": "0s",
+      "interval": "1m",
+      "signal": "metadata",
+      "requires": "metadata",
+      "params": [
+        {
+          "name": "min_restarts",
+          "default": 3,
+          "doc": "restarts in the window that fire (the agent reports restarts every 5 minutes)"
+        },
+        {
+          "name": "window_minutes",
+          "default": 10,
+          "doc": "minutes the restart growth is measured over"
+        }
+      ]
+    },
+    {
+      "id": "oom-killed",
+      "alert": "WorkloadOOMKilled",
+      "title": "A container was killed for running out of memory",
+      "severity": "critical",
+      "for": "0s",
+      "interval": "1m",
+      "signal": "metadata",
+      "requires": "metadata",
+      "params": [
+        {
+          "name": "window_minutes",
+          "default": 10,
+          "doc": "minutes a fresh OOM kill stays visible (a container that restarted in the window and last died of OOMKilled)"
+        }
+      ]
+    },
+    {
+      "id": "memory-near-limit",
+      "alert": "WorkloadMemoryNearLimit",
+      "title": "A container is close to its memory limit",
+      "severity": "warning",
+      "for": "10m",
+      "interval": "1m",
+      "signal": "metadata",
+      "requires": "metadata",
+      "params": [
+        {
+          "name": "threshold",
+          "default": 0.9,
+          "doc": "memory / limit ratio (0..1) that fires"
+        },
+        {
+          "name": "window_minutes",
+          "default": 5,
+          "doc": "minutes the ratio is averaged over, so a spike does not fire"
+        }
+      ]
+    },
+    {
+      "id": "image-pull-failed",
+      "alert": "WorkloadImagePullFailed",
+      "title": "A workload cannot pull its image",
+      "severity": "warning",
+      "for": "5m",
+      "interval": "1m",
+      "signal": "metadata",
+      "requires": "metadata",
+      "params": [
+        {
+          "name": "min_events",
+          "default": 1,
+          "doc": "pull-failure events in the window that fire"
+        },
+        {
+          "name": "window_minutes",
+          "default": 15,
+          "doc": "minutes of events considered"
+        }
+      ]
+    },
+    {
+      "id": "evicted",
+      "alert": "WorkloadEvicted",
+      "title": "A pod was evicted",
+      "severity": "warning",
+      "for": "0s",
+      "interval": "1m",
+      "signal": "metadata",
+      "requires": "metadata",
+      "params": [
+        {
+          "name": "min_events",
+          "default": 1,
+          "doc": "eviction events in the window that fire"
+        },
+        {
+          "name": "window_minutes",
+          "default": 15,
+          "doc": "minutes of events considered"
+        }
+      ]
+    },
+    {
+      "id": "deploy-failed",
+      "alert": "DeployFailed",
+      "title": "A promoted release did not converge",
+      "severity": "critical",
+      "for": "5m",
+      "interval": "1m",
+      "signal": "platform",
+      "params": []
+    },
+    {
+      "id": "observability-quota",
+      "alert": "ObservabilityQuotaOver100",
+      "title": "Observability usage is at or over its monthly allowance (warning from 100%, critical from 150%)",
+      "severity": "warning",
+      "for": "0s",
+      "interval": "1m",
+      "signal": "platform",
+      "alert_names": [
+        "ObservabilityQuotaOver150"
+      ],
+      "params": []
     }
   ]
 }

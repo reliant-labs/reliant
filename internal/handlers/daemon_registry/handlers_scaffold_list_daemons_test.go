@@ -3,6 +3,7 @@ package daemon_registry_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -10,6 +11,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	daemon_registry "github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 )
 
@@ -21,7 +23,16 @@ import (
 func TestListDaemons_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := daemon_registry.NewTestDaemonRegistry(t)
+	// The caller has no daemons. The harness's auto-stub refuses an
+	// unprogrammed call, so the one listing this rpc makes is programmed.
+	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{
+		Repo: &daemon_registry.StubRepo{
+			ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return nil, nil },
+			ListFreshDaemonAttachmentsForUserFunc: func(context.Context, string, time.Duration) ([]*db.DaemonAttachment, error) {
+				return nil, nil
+			},
+		},
+	}))
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListDaemonsRequest, pb.ListDaemonsResponse]{
 		{
 			Name:    "unauthenticated caller is rejected",
