@@ -581,17 +581,3 @@ export interface WorkloadDetail {
   stepSeconds: number;
   truncated: boolean;
 }
-
-// ── Release markers (contract K5, DeliveryInsightsService.ListReleases) ──────
-
-/** One promotion of a release into an environment: a marker on the time-series charts. */
-export interface ReleaseMarker {
-  envId: string;
-  envName: string;
-  releaseId: string;
-  version: string;
-  promotedAtMs: number;
-  promotedBy: string;
-  /** "promote", "rollback"… as the ledger records it. */
-  kind: string;
-}

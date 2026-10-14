@@ -86,3 +86,28 @@ export function alertingRetry(failureCount: number, error: unknown): boolean {
   if (kind !== "unavailable") return false;
   return failureCount < 1;
 }
+
+/**
+ * What a DeliveryInsightsService failure means. Both of its refusals are
+ * PermissionDenied, and they ask for different things of the reader:
+ *
+ *   not-member       "not a member of this organization": the org itself is
+ *                    closed to the caller; no narrowing helps.
+ *   env-unavailable  "one or more environments are not available to this
+ *                    organization": an env id in scope is missing, deleted or
+ *                    another org's (the server words all three the same, so
+ *                    as not to reveal another org's environments). Widening to
+ *                    every environment does help.
+ *
+ * Everything else reads as obsErrorKind does.
+ */
+export type DeliveryErrorKind = ObsErrorKind | "not-member" | "env-unavailable";
+
+export function deliveryErrorKind(error: unknown): DeliveryErrorKind {
+  if (error instanceof ConnectError && error.code === Code.PermissionDenied) {
+    const message = error.rawMessage || error.message;
+    if (/not a member/i.test(message)) return "not-member";
+    if (/environments? .*not available/i.test(message)) return "env-unavailable";
+  }
+  return obsErrorKind(error);
+}

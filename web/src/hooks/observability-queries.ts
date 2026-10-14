@@ -17,6 +17,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import type { DeliveryScope } from "@/services/controlPlane/observability/deliveryTypes";
 import { alertingRetry, obsRetry } from "@/services/controlPlane/observability/errors";
 import type {
   ObsScope,
@@ -416,5 +417,53 @@ export function useAlertingMutation<TArgs, TResult>(orgId: string | null, run: (
   return useMutation({
     mutationFn: (args: TArgs) => run(api, orgId as string, args),
     onSettled: () => queryClient.invalidateQueries({ queryKey: alertKeys.all(orgId) }),
+  });
+}
+
+// ── Delivery (DeliveryInsightsService) ───────────────────────────────────────
+
+/**
+ * The release ledger and DORA, keyed by the delivery scope (org, project,
+ * environments) — not the telemetry scope: attribute filters mean nothing to
+ * the ledger beyond the environments they name (deliveryScope.ts).
+ */
+export const deliveryKeys = {
+  root: () => ["observability", "delivery"] as const,
+  all: (scope: DeliveryScope | null) => [...deliveryKeys.root(), scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? []] as const,
+};
+
+/**
+ * Promotions over a window resolved when the query runs (`window()`), cached
+ * under `windowKey` ("range:1h", "days:30", "around:<promotion>"…) so a preset
+ * stays one entry rather than one per millisecond.
+ */
+export function useReleases(
+  scope: DeliveryScope | null,
+  windowKey: string,
+  window: () => TimeWindow,
+  options: { enabled?: boolean; limit?: number } = {}
+) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: [...deliveryKeys.all(scope), "releases", windowKey, options.limit ?? 0] as const,
+    queryFn: () => api.listReleases({ ...(scope as DeliveryScope), window: window(), limit: options.limit }),
+    enabled: !!scope && (options.enabled ?? true),
+    staleTime: 60_000,
+    retry: obsRetry,
+  });
+}
+
+/** DORA over the last `days`, failing a deployment rolled back within `failureHours`. */
+export function useDoraMetrics(scope: DeliveryScope | null, days: number, failureHours: number) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: [...deliveryKeys.all(scope), "dora", days, failureHours] as const,
+    queryFn: () => {
+      const end = Date.now();
+      return api.getDoraMetrics({ ...(scope as DeliveryScope), window: { startMs: end - days * 86_400_000, endMs: end }, failureWindowHours: failureHours });
+    },
+    enabled: !!scope,
+    staleTime: 60_000,
+    retry: obsRetry,
   });
 }

@@ -104,18 +104,23 @@ describe("DashboardsView: dashboards from the release (K4)", () => {
     expect(await screen.findByTestId("obs-dashboard-origin")).toHaveAttribute("data-origin", "synthesized");
   });
 
-  it("draws the release markers a dashboard declares, and says so when the ledger is not there", async () => {
+  it("draws the release markers a dashboard declares, and opens the list on the Releases dashboard", async () => {
     renderPanel(createFixtureApi({ dashboards: "release" }), { view: "dashboards", dashboard: "releases" });
-    await waitFor(() => expect(screen.getByTestId("obs-release-markers")).toHaveAttribute("data-status", "ready"));
-    expect(screen.getByTestId("obs-release-markers")).toHaveTextContent(/promotions? in this window/);
+    await waitFor(() => expect(screen.getByTestId("obs-releases")).toHaveAttribute("data-status", "ready"));
+    expect(screen.getByTestId("obs-releases-toggle")).toHaveAttribute("aria-expanded", "true");
+    const rate = await screen.findByTestId("obs-panel-request-rate-by-version");
+    await waitFor(() => expect(rate.querySelector("figcaption")).toHaveTextContent("Marked: v1.8.3 (commit"));
+    expect(rate.querySelector("figcaption")).toHaveTextContent("promoted to prod by Ada Lovelace");
   });
 
-  it("without a release ledger, keeps the dashboard and says no markers are drawn", async () => {
-    renderPanel(createFixtureApi({ dashboards: "release", releaseMarkers: false }), { view: "dashboards", dashboard: "releases" });
-    const note = await screen.findByTestId("obs-release-markers");
-    expect(note).toHaveAttribute("data-status", "unavailable");
-    expect(note).toHaveTextContent("Release history isn't available here yet");
-    expect(await screen.findByTestId("obs-panel-request-rate-by-version")).toBeInTheDocument();
+  it("draws none on a dashboard whose file declares no releases annotation, and says so", async () => {
+    renderPanel(createFixtureApi(), { view: "dashboards" });
+    expect(await screen.findByTestId("obs-dashboard-no-release-markers")).toBeInTheDocument();
+    const rate = await screen.findByTestId("obs-panel-request-rate");
+    await waitFor(() => expect(rate.querySelector("figcaption")).toBeInTheDocument());
+    expect(rate.querySelector("figcaption")?.textContent).not.toContain("Marked:");
+    // The list beside the charts still names the promotions in the window.
+    await waitFor(() => expect(screen.getByTestId("obs-releases")).toHaveAttribute("data-status", "ready"));
   });
 
   it("reads a dashboard filter's values from the signal it names", async () => {

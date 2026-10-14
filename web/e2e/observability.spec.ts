@@ -192,6 +192,48 @@ test.describe('observability console', () => {
     await expect(page.getByTestId('obs-rules')).toBeVisible();
   });
 
+  test('release markers open a before/after comparison; Delivery shows DORA with lead time unknown', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+
+    // The env tab (prod): v1.8.3 was promoted 40 minutes ago, inside the default hour.
+    await openHarness(page);
+    const strip = page.getByTestId('obs-releases');
+    await expect(strip).toHaveAttribute('data-status', 'ready');
+    await page.getByTestId('obs-releases-toggle').click();
+    await expect(strip.locator('li').first()).toContainText('v1.8.3');
+    await expect(strip.locator('li').first()).toContainText('by Ada Lovelace');
+    await strip.locator('li').first().getByRole('button', { name: 'Compare before / after' }).click();
+    await expect(page.getByTestId('obs-compare')).toHaveAttribute('data-state', 'ready');
+    await expect(page.getByTestId('obs-compare-header')).toContainText('Before and after v1.8.3 in prod');
+    await expect(page.getByTestId('obs-compare-p95-api')).toHaveAttribute('data-movement', 'up-bad');
+    await shot(page, 'release-compare');
+    await page.getByTestId('obs-compare-back').click();
+    await expect(page.getByTestId('obs-overview')).toBeVisible();
+
+    // Delivery over the project: four metrics, each with its definition; lead time is unknown, not zero.
+    await openHarness(page, '?place=project&view=delivery');
+    await expect(page.getByTestId('obs-delivery')).toHaveAttribute('data-state', 'ready');
+    await expect(page.getByTestId('obs-dora-lead-time-value')).toHaveText('Unknown');
+    await expect(page.getByTestId('obs-dora-lead-time-unknown')).toContainText('13 deployments across 5 releases');
+    await expect(page.getByTestId('obs-dora-failure-rate-value')).toHaveText('7.7%');
+    await expect(page.getByTestId('obs-dora-frequency-definition')).toContainText('Deployments per day');
+    await page.getByTestId('obs-delivery-failure-hours').selectOption('1');
+    await expect(page.getByTestId('obs-dora-failure-rate-value')).toHaveText('0%');
+    await shot(page, 'delivery');
+
+    expect(errors).toEqual([]);
+  });
+
+  test('delivery explains a non-member and an environment it will not name', async ({ page }) => {
+    await openHarness(page, '?place=project&view=delivery&case=delivery-not-member');
+    await expect(page.getByTestId('obs-delivery-not-member')).toBeVisible();
+    await openHarness(page, '?place=project&view=delivery&envs=prod&case=delivery-env-denied');
+    await expect(page.getByTestId('obs-delivery-env-unavailable')).toBeVisible();
+    await page.getByTestId('obs-delivery-show-all-envs').click();
+    await expect(page.getByTestId('obs-delivery')).toHaveAttribute('data-state', 'ready');
+  });
+
   test('an org without observability gets the set-up explanation, once', async ({ page }) => {
     await openHarness(page, '?case=not-set-up');
     await expect(page.getByTestId('obs-not-set-up')).toHaveCount(1);

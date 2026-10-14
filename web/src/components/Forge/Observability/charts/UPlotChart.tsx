@@ -21,8 +21,8 @@
  *
  * ── MARKERS ─────────────────────────────────────────────────────────────────
  *
- * A marker is a moment on the time axis — a version first seen, and (phase 2)
- * a release promoted, from control-plane DeliveryInsightsService.ListReleases.
+ * A marker is a moment on the time axis — a version first seen, or a release
+ * promoted, from control-plane DeliveryInsightsService.ListReleases.
  * Each is drawn as a dashed vertical rule with a short label, and named in the
  * caption. A chart takes them from its `markers` prop or, absent that, from
  * the nearest ObsChartMarkersProvider — the seam that lets one provider put
@@ -74,6 +74,11 @@ export function ObsChartMarkersProvider({ markers, children }: { markers: readon
   return <ObsChartMarkersContext.Provider value={markers}>{children}</ObsChartMarkersContext.Provider>;
 }
 
+/** The markers the nearest provider puts on charts — for a chart that adds its own to them. */
+export function useInheritedChartMarkers(): readonly ChartMarker[] {
+  return useContext(ObsChartMarkersContext);
+}
+
 export interface UPlotChartProps {
   /** Epoch seconds, shared by every series. */
   timestamps: number[];
@@ -117,7 +122,18 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
       pxAlign: false,
       cursor: compact ? { show: false } : { drag: { x: false, y: false } },
       legend: { show: !compact },
-      scales: { x: { time: true } },
+      // The x axis reaches a marker in the last (or first) bucket's span: a
+      // promotion 10 minutes ago is in the window even when the newest
+      // bucket starts 20 minutes ago.
+      scales: {
+        x: {
+          time: true,
+          range: (_u, min, max) => [
+            Math.min(min, ...markers.map((m) => m.timeSec)),
+            Math.max(max, ...markers.map((m) => m.timeSec)),
+          ],
+        },
+      },
       hooks: markers.length ? { draw: [(u: uPlot) => drawMarkers(u, markers, palette)] } : undefined,
       axes: compact
         ? [{ show: false }, { show: false }]
@@ -194,12 +210,17 @@ export function describeSeries(series: ChartSeries[], unit: ValueUnit | undefine
     .join(" ");
 }
 
-/** The markers inside the chart's x range, oldest first. */
+/**
+ * The markers inside the chart's time span, oldest first. A bucket's timestamp
+ * is its start, so the span runs one bucket past the last one: a marker in the
+ * newest bucket belongs on the chart.
+ */
 export function visibleMarkers(markers: readonly ChartMarker[], timestamps: number[]): ChartMarker[] {
   if (timestamps.length === 0) return [];
   const first = timestamps[0];
   const last = timestamps[timestamps.length - 1];
-  return markers.filter((m) => m.timeSec >= first && m.timeSec <= last).sort((a, b) => a.timeSec - b.timeSec);
+  const step = timestamps.length > 1 ? timestamps[1] - timestamps[0] : 0;
+  return markers.filter((m) => m.timeSec >= first && m.timeSec <= last + step).sort((a, b) => a.timeSec - b.timeSec);
 }
 
 /** "Marked: v1.8.2 at 14:05." */

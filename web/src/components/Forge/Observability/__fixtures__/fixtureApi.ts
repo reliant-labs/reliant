@@ -16,6 +16,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import forgeSpecRaw from "./forge-dashboard-spec.json?raw";
 import { createAlertingFixture, type AlertingFixtureOptions } from "./fixtureAlerting";
+import { createDeliveryFixture, versionAt, type DeliveryFixtureOptions } from "./fixtureDelivery";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type {
@@ -388,6 +389,53 @@ export function fixtureSpeedscope(): string {
 }
 
 /**
+ * The release comparison's tables (ReleaseComparison COMPARE_PANELS): each
+ * side's version is the one the fixture ledger says was running then, and
+ * v1.8.3 is a mild regression — slower and more errors on `api`, more memory —
+ * so a comparison of the newest prod release has something to find.
+ */
+export function fixtureComparePanel(panel: Panel, window: TimeWindow, envIds: string[], ledger: Parameters<typeof versionAt>[0]): PanelResult {
+  const side = panel.id.endsWith("-after") ? "after" : "before";
+  const envId = envIds[0] ?? "env-prod";
+  const seconds = (window.endMs - window.startMs) / 1000;
+  const running = versionAt(ledger, envId, side === "after" ? window.startMs + 1 : window.endMs - 1) ?? "v1.8.2";
+  const replaced = versionAt(ledger, envId, window.startMs - 1);
+  const regress = side === "after" && running === "v1.8.3";
+  const base = { kind: "table", unit: panel.unit ?? "", stepSeconds: 0, truncated: false, series: [] as PanelResult["series"] };
+  const columns = panel.series.map((s) => s.label);
+  const service = (name: string, rate: number, errorShare: number, p95: number) => {
+    const requests = Math.round(rate * seconds);
+    const values: Record<string, number> = { requests, errors: Math.round(requests * errorShare), p95 };
+    return { group: { "service.name": name }, values: columns.map((c) => values[c] ?? null) };
+  };
+  if (panel.id.startsWith("compare-red")) {
+    return {
+      ...base,
+      columns,
+      rows: [service("api", regress ? 12.1 : 11.5, regress ? 0.016 : 0.004, regress ? 171 : 118), service("worker", 3.2, 0.002, side === "after" ? 236 : 240)],
+    };
+  }
+  if (panel.id.startsWith("compare-versions")) {
+    const rows = ["api", "worker"].flatMap((name) => {
+      const total = Math.round((name === "api" ? 11.5 : 3.2) * seconds);
+      // During a rollout the old pods still serve a little of the after side.
+      const tail = side === "after" && replaced && replaced !== running ? Math.round(total * 0.03) : 0;
+      return [
+        { group: { "service.name": name, "resource.attr.service.version": running }, values: [total - tail] },
+        ...(tail ? [{ group: { "service.name": name, "resource.attr.service.version": replaced! }, values: [tail] }] : []),
+      ];
+    });
+    return { ...base, columns, rows };
+  }
+  const workload = (name: string, cpu: number, memory: number) => ({ group: { "resource.attr.k8s.workload.name": name }, values: [cpu, memory] });
+  return {
+    ...base,
+    columns,
+    rows: [workload("api", regress ? 0.24 : 0.21, regress ? 216 * 2 ** 20 : 182 * 2 ** 20), workload("worker", 0.08, 96 * 2 ** 20)],
+  };
+}
+
+/**
  * What QueryPanel would answer for a panel over the fixture app: one value per
  * series intent, shaped by the panel's kind and group-by.
  */
@@ -647,7 +695,7 @@ export function fixtureWorkloadDetail(scope: Pick<ObsScope, "envIds">, workload:
   return { series, events, imageChanges, versionChanges, stepSeconds: Math.round((window.endMs - window.startMs) / 1000 / 40), truncated: false };
 }
 
-export interface FixtureOptions extends AlertingFixtureOptions {
+export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureOptions {
   /**
    * Where GetDashboards says its set came from. "release" serves forge's
    * generated set (with the K4 workloads and releases dashboards) and one the
@@ -655,8 +703,6 @@ export interface FixtureOptions extends AlertingFixtureOptions {
    * release bundle gets.
    */
   dashboards?: "release" | "synthesized";
-  /** False: no release ledger (the real console before K5). Default: a few promotions per environment. */
-  releaseMarkers?: boolean;
   /** Overrides on the usage fixture, to put the page in a given state. */
   usage?: Partial<ObservabilityUsage>;
   /** Every call fails with this (FailedPrecondition is the "not set up" org). */
@@ -677,6 +723,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
     }
     return answer();
   };
+  const delivery = createDeliveryFixture(options, call);
   return {
     currentOrgId: async () => FIXTURE_ORG,
     getServiceOverview: (req) =>
@@ -740,6 +787,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         if (unsupported) {
           throw new ConnectError(`aggregation "count_distinct" is not supported on field ${unsupported.field}`, Code.InvalidArgument);
         }
+        if (panel.id.startsWith("compare-")) return fixtureComparePanel(panel, req.window, req.envIds, delivery.ledger);
         return fixturePanel(panel, req.window, req.services, req.groupBy, req);
       }),
     getFlamegraph: (req): Promise<Flamegraph> =>
@@ -758,20 +806,8 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         return options.empty ? { ...spec, dashboards: [] } : spec;
       }),
     ...createAlertingFixture(options, call),
-    ...(options.releaseMarkers === false
-      ? {}
-      : {
-          listReleaseMarkers: (req: ObsScope & { window: TimeWindow }) =>
-            call("ListReleases", req, () => {
-              const span = req.window.endMs - req.window.startMs;
-              return envsOf(req).flatMap((env, i) => [
-                { envId: env.id, envName: env.name, releaseId: `rel-${i}a`, version: VERSIONS[0], promotedAtMs: req.window.startMs + span * (0.2 + i * 0.05), promotedBy: "ada@example.com", kind: "promote" },
-                ...(env.name === "prod" || env.name === "staging"
-                  ? [{ envId: env.id, envName: env.name, releaseId: `rel-${i}b`, version: VERSIONS[1], promotedAtMs: req.window.startMs + span * (0.62 + i * 0.04), promotedBy: "ci", kind: "promote" }]
-                  : []),
-              ]);
-            }),
-        }),
+    listReleases: delivery.listReleases,
+    getDoraMetrics: delivery.getDoraMetrics,
     listAttributeValues: (req) =>
       call("ListAttributeValues", req, () => {
         const values: AttributeValueCount[] = valuesOf(req.key, req)

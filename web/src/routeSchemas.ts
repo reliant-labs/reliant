@@ -14,6 +14,7 @@
 import { z } from "zod";
 import { ONBOARDING_STEP_IDS } from "./components/Onboarding/constants";
 import type { LaunchPlan } from "./components/OnboardingFlow/types";
+import { COMPARE_WINDOWS, DORA_WINDOWS } from "./components/Forge/Observability/deliveryScope";
 import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
 import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
 
@@ -528,6 +529,10 @@ export const obsSearchShape = {
   edit: z.record(z.string(), obsPanelSchema.nullable()).optional().catch(undefined),
   alerts: z.enum(ALERTS_TABS).optional().catch(undefined),
   rule: z.string().optional().catch(undefined),
+  compare: z.string().optional().catch(undefined),
+  cmpWindow: z.enum(COMPARE_WINDOWS).optional().catch(undefined),
+  doraWindow: z.enum(DORA_WINDOWS).optional().catch(undefined),
+  failureHours: z.number().int().min(1).max(168).optional().catch(undefined),
 };
 
 /** Every ObsSearch key has a schema entry and vice versa (the launchPlan drift guard, for the same reason). */

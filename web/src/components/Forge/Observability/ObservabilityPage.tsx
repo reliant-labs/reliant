@@ -75,11 +75,11 @@ export function ForgeObservabilityPage() {
       subtitle={
         project ? (
           <>
-            Logs, traces, dashboards, workloads and alerts across every environment of <span className="font-mono">{project}</span>.
+            Logs, traces, dashboards, workloads, alerts and releases across every environment of <span className="font-mono">{project}</span>.
             Narrow to some, or group by environment to compare them.
           </>
         ) : (
-          "Logs, traces, dashboards, workloads and alerts across this project's environments."
+          "Logs, traces, dashboards, workloads, alerts and releases across this project's environments."
         )
       }
     />

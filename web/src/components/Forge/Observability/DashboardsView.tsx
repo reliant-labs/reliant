@@ -22,7 +22,7 @@
  * no server-side dashboard store.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ArrowRight, EyeOff, FileCode2, Info, Pencil, Plus, RotateCcw, Undo2 } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
@@ -34,7 +34,7 @@ import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { attributeLabel, ENV_KEY, isAttributeKeyShaped } from "./attributes";
-import { ObsChartMarkersProvider, UPlotChart } from "./charts/UPlotChart";
+import { ObsChartMarkersProvider, UPlotChart, type ChartMarker } from "./charts/UPlotChart";
 import { formatValue } from "./format";
 import { ServiceSelect } from "./LogsView";
 import { applyEdits, editKey, editsFor, newPanelId, type PanelEdits } from "./obsdashSpec";
@@ -42,7 +42,6 @@ import { filterParam, groupLabel, scopeFiltersOf, type FilterToken } from "./obs
 import type { ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
 import { PanelEditor } from "./PanelEditor";
-import { useReleaseMarkers, type ReleaseMarkers } from "./releaseMarkers";
 import { SaveAsCodeDialog } from "./SaveAsCodeDialog";
 
 const SERVICE_FIELD = "service.name";
@@ -88,8 +87,9 @@ export function DashboardsView({
   const base = pickDashboard(dashboards, dashboardId, service);
   const shown = useMemo(() => (base ? applyEdits(base, edits) : undefined), [base, edits]);
   const scopeFilters = useMemo(() => scopeFiltersOf(filterTokens), [filterTokens]);
+  // Release markers come from the panel (ObservabilityPanel); a dashboard that
+  // declares no releases annotation opts out of them (contract K4).
   const releaseAnnotation = shown?.annotations?.find((a) => a.source === "releases");
-  const releases = useReleaseMarkers(scope, range, !!releaseAnnotation);
 
   if (spec.isLoading) return <ObsLoadingRows testId="obs-dashboards-loading" />;
   if (spec.error) {
@@ -194,7 +194,11 @@ export function DashboardsView({
         </p>
       )}
 
-      {releaseAnnotation && <ReleaseMarkersNote label={releaseAnnotation.label || "Releases"} releases={releases} />}
+      {!releaseAnnotation && shown.panels.some((p) => p.kind === "line") && (
+        <p className="text-xs text-muted-foreground" data-testid="obs-dashboard-no-release-markers">
+          This dashboard doesn&apos;t mark releases on its charts: its file declares no <code className="font-mono">releases</code> annotation.
+        </p>
+      )}
 
       {changed && (
         <div
@@ -222,7 +226,7 @@ export function DashboardsView({
         </div>
       )}
 
-      <ObsChartMarkersProvider markers={releases.markers}>
+      <MarkersIf on={!!releaseAnnotation}>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[repeat(24,minmax(0,1fr))]">
         {shown.panels.map((panel) => (
           <PanelCard
@@ -241,7 +245,7 @@ export function DashboardsView({
           />
         ))}
       </div>
-      </ObsChartMarkersProvider>
+      </MarkersIf>
       {editing && (
         <PanelEditor
           open
@@ -608,24 +612,11 @@ function DashboardOrigin({ specSource, dashboard }: { specSource: string; dashbo
   );
 }
 
-/** The release markers a dashboard declares, said in words: drawn, none in the window, or not available yet. */
-function ReleaseMarkersNote({ label, releases }: { label: string; releases: ReleaseMarkers }) {
-  const text =
-    releases.status === "ready"
-      ? releases.count
-        ? `${label}: ${releases.count} promotion${releases.count === 1 ? "" : "s"} in this window, marked on every time-series panel.`
-        : `${label}: nothing was promoted in this window.`
-      : releases.status === "unavailable"
-        ? `${label}: this dashboard marks every promotion on its charts. Release history isn't available here yet, so no markers are drawn.`
-        : releases.status === "error"
-          ? `${label}: the release history couldn't be loaded, so no markers are drawn.`
-          : `${label}: loading release history…`;
-  return (
-    <p className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="obs-release-markers" data-status={releases.status}>
-      <span className="inline-block h-3 w-0 border-l border-dashed border-current" aria-hidden="true" />
-      {text}
-    </p>
-  );
+const NO_MARKERS: readonly ChartMarker[] = [];
+
+/** The panel's release markers where the dashboard asks for them, none where it does not. */
+function MarkersIf({ on, children }: { on: boolean; children: ReactNode }) {
+  return on ? <>{children}</> : <ObsChartMarkersProvider markers={NO_MARKERS}>{children}</ObsChartMarkersProvider>;
 }
 
 /**

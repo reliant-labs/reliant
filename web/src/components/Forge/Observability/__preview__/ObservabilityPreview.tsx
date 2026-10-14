@@ -65,7 +65,13 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "alerting-quiet", label: "alerting: nothing firing", options: { alerting: "quiet" } },
   // Dashboards (view=dashboards): a recorded release bundle, with and without the release ledger.
   { id: "dashboards-release", label: "dashboards: from the release", options: { dashboards: "release" } },
-  { id: "dashboards-no-markers", label: "dashboards: release, no ledger", options: { dashboards: "release", releaseMarkers: false } },
+  // Delivery (view=delivery) and release markers: the ledger's answers.
+  { id: "delivery-empty", label: "delivery: nothing promoted", options: { delivery: "empty" } },
+  { id: "delivery-not-member", label: "delivery: not a member", options: { delivery: "not-member" } },
+  { id: "delivery-env-denied", label: "delivery: env from another org", options: { delivery: "env-denied" } },
+  { id: "delivery-truncated", label: "releases: truncated (limit 5)", options: { releaseLimit: 5 } },
+  { id: "delivery-lead-partial", label: "delivery: lead time partly known", options: { leadTime: "partial" } },
+  { id: "delivery-alert-mttr", label: "delivery: alert-based MTTR filled", options: { alertMttr: true } },
 ];
 
 const LIST_KEYS = new Set(["envs", "f", "groupBy"]);
@@ -83,6 +89,7 @@ function searchFromUrl(params: URLSearchParams): ObsSearch {
         // A malformed edit is dropped, as the real route's schema drops it.
       }
     } else if (key === "live" || key === "errors") out[key] = params.get(key) === "true";
+    else if (key === "failureHours") out[key] = Number(params.get(key));
     else out[key] = params.get(key);
   }
   return out as ObsSearch;
@@ -196,7 +203,7 @@ export default function ObservabilityPreview() {
             title="Observability"
             subtitle={
               <>
-                Logs, traces, dashboards, workloads and alerts across every environment of <span className="font-mono">{FIXTURE_PROJECT}</span>.
+                Logs, traces, dashboards, workloads, alerts and releases across every environment of <span className="font-mono">{FIXTURE_PROJECT}</span>.
                 Narrow to some, or group by environment to compare them.
               </>
             }

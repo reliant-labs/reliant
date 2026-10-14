@@ -36,7 +36,7 @@ import type {
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
-import { UPlotChart, type ChartMarker } from "./charts/UPlotChart";
+import { UPlotChart, useInheritedChartMarkers, type ChartMarker } from "./charts/UPlotChart";
 import { formatAgo, formatBytes, formatCores, formatCount, formatPercent, formatTimestamp, type ValueUnit } from "./format";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows, ObsNoCustomerMetadata } from "./ObsStates";
@@ -499,7 +499,9 @@ export function versionMarkers(detail: WorkloadDetail, envNames: Map<string, str
 }
 
 function WorkloadTelemetry({ detail, envNames, showEnv }: { detail: WorkloadDetail; envNames: Map<string, string>; showEnv: boolean }) {
-  const markers = useMemo(() => versionMarkers(detail, envNames, showEnv), [detail, envNames, showEnv]);
+  // The workload's own version changes, beside the panel's release promotions.
+  const releases = useInheritedChartMarkers();
+  const markers = useMemo(() => [...releases, ...versionMarkers(detail, envNames, showEnv)], [releases, detail, envNames, showEnv]);
   const containers = new Set(detail.series.map((s) => s.container));
   const envs = new Set(detail.series.map((s) => s.envId));
   const nameOf = (envId: string, container: string, metric: WorkloadMetric, metricsInChart: number) => {

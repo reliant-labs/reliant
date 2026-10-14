@@ -16,7 +16,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import { getWalletOverview } from "../reliantAI";
 import * as alerting from "./alertingApi";
 import * as rpc from "./api";
-import type { ObsScope, ReleaseMarker, TimeWindow } from "./types";
+import * as delivery from "./deliveryApi";
 
 export interface ObservabilityApi {
   /** The caller's current organization — what every request is scoped by. Null while it is still being provisioned. */
@@ -45,12 +45,9 @@ export interface ObservabilityApi {
   testReceiver: typeof alerting.testReceiver;
   listNotifications: typeof alerting.listNotifications;
   markNotificationsRead: typeof alerting.markNotificationsRead;
-  /**
-   * Release promotions in the scope, for chart markers (contract K5). Absent
-   * until DeliveryInsightsService is wired: dashboards that declare release
-   * annotations then say the markers are not available yet.
-   */
-  listReleaseMarkers?: (req: ObsScope & { window: TimeWindow }) => Promise<ReleaseMarker[]>;
+  // Delivery (DeliveryInsightsService, contract K5): the release ledger and DORA.
+  listReleases: typeof delivery.listReleases;
+  getDoraMetrics: typeof delivery.getDoraMetrics;
 }
 
 export const controlPlaneObservabilityApi: ObservabilityApi = {
@@ -79,6 +76,8 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   testReceiver: alerting.testReceiver,
   listNotifications: alerting.listNotifications,
   markNotificationsRead: alerting.markNotificationsRead,
+  listReleases: delivery.listReleases,
+  getDoraMetrics: delivery.getDoraMetrics,
 };
 
 const ObservabilityApiContext = createContext<ObservabilityApi>(controlPlaneObservabilityApi);

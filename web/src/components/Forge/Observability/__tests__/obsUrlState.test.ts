@@ -170,8 +170,20 @@ describe("the URL round trip", () => {
 
   it("lists every key the area owns, so leaving the tab clears them all", () => {
     expect([...OBS_SEARCH_KEYS].sort()).toEqual(
-      ["alerts", "container", "dashboard", "edit", "envs", "errors", "f", "groupBy", "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view", "workload"].sort()
+      [
+        "alerts", "cmpWindow", "compare", "container", "dashboard", "doraWindow", "edit", "envs", "errors", "f", "failureHours", "groupBy",
+        "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view", "workload",
+      ].sort()
     );
+  });
+
+  it("carries a release comparison and the delivery windows, and drops ones out of bounds", () => {
+    const { parsed } = throughTheUrl({ view: "delivery", compare: "env-prod~1760000000000~promo-031", cmpWindow: "1h", doraWindow: "90d", failureHours: 4 });
+    expect(parsed).toMatchObject({ view: "delivery", compare: "env-prod~1760000000000~promo-031", cmpWindow: "1h", doraWindow: "90d", failureHours: 4 });
+    const bad = throughTheUrl({ cmpWindow: "2y", doraWindow: "1d", failureHours: 500 }).parsed;
+    expect(bad.cmpWindow).toBeUndefined();
+    expect(bad.doraWindow).toBeUndefined();
+    expect(bad.failureHours).toBeUndefined();
   });
 
   it("carries the alerts tab and an open rule, and drops a tab it does not know", () => {

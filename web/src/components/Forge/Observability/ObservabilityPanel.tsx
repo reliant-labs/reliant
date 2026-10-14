@@ -3,8 +3,12 @@
 /**
  * The Observability area: Overview · Logs · Traces · Dashboards · Workloads ·
  * Profiles over one time window for one SCOPE, Alerts (what fires, the rules
- * each environment declares, silences and receivers) and Usage (the org's
- * allowance).
+ * each environment declares, silences and receivers), Delivery (releases and
+ * DORA, from the release ledger) and Usage (the org's allowance).
+ *
+ * Every time-series chart carries the release markers of its scope (one
+ * ListReleases per scope and window, through ObsChartMarkersProvider), and any
+ * promotion opens a before/after comparison over the current view.
  *
  * ── ENVIRONMENT IS A FILTER, NOT A PLACE (owner decision 1) ─────────────────
  *
@@ -36,7 +40,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
-import { obsKeys, useObservabilityOrg, useServiceOverview } from "@/hooks/observability-queries";
+import { deliveryKeys, obsKeys, useObservabilityOrg, useServiceOverview } from "@/hooks/observability-queries";
+import type { Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
 import { RANGE_LABELS, RANGE_PRESETS, rangeOf } from "@/services/controlPlane/observability/window";
@@ -44,7 +49,10 @@ import { cn } from "@/lib/utils";
 
 import { AlertNotifications } from "./AlertNotifications";
 import { AlertsView } from "./AlertsView";
+import { ObsChartMarkersProvider } from "./charts/UPlotChart";
 import { DashboardsView } from "./DashboardsView";
+import { compareParam, compareWindowOf, doraWindowOf, failureHoursOf, parseCompareParam } from "./deliveryScope";
+import { DeliveryView } from "./DeliveryView";
 import { LogsView } from "./LogsView";
 import { filterParam, filterTokensOf, groupByOf, groupByParam, scopeFiltersOf } from "./obsFilters";
 import {
@@ -63,11 +71,18 @@ import { ObsScopeBar } from "./ObsScopeBar";
 import { ObsError, ObsLoadingRows, ObsNotSetUp } from "./ObsStates";
 import { OverviewView } from "./OverviewView";
 import { ProfilesView } from "./ProfilesView";
+import { ReleaseComparison } from "./ReleaseComparison";
+import { useReleaseMarkers } from "./releaseMarkers";
+import { ReleaseStrip } from "./ReleaseStrip";
 import { TracesView } from "./TracesView";
 import { UsageView } from "./UsageView";
 import { WorkloadsView } from "./WorkloadsView";
 
 export type { ObsEnvironment, ObsPlace } from "./obsPlace";
+
+/** The views with time-series charts, where release markers are drawn and listed. */
+const MARKED_VIEWS: readonly ObsView[] = ["overview", "dashboards", "workloads"];
+const ENV_FILTER_KEYS = ["deployment.environment.name", "reliant.env.id"];
 
 export interface ObservabilityPanelProps {
   place: ObsPlace;
@@ -96,6 +111,22 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
   const overview = useServiceOverview(scope, range);
   const notSetUp = !!overview.error && obsErrorKind(overview.error) === "not-set-up";
   const groupable = (GROUPABLE_VIEWS as readonly ObsView[]).includes(view);
+  const environments = useMemo(() => placeEnvironments(place), [place]);
+  const comparing = parseCompareParam(search.compare);
+  const marked = !!scope && !notSetUp && !comparing && MARKED_VIEWS.includes(view);
+  const releases = useReleaseMarkers(scope, range, environments, marked);
+  /** A comparison opens over the view (Back returns to it); a push, so the browser's Back closes it too. */
+  const openCompare = (promotion: Promotion) => navigate({ compare: compareParam(promotion) });
+  const closeCompare = () => navigate({ compare: undefined, cmpWindow: undefined });
+  /** The project area's way out of "an environment in view isn't available": every environment, no environment filter. */
+  const showEveryEnvironment =
+    place.kind === "project"
+      ? () =>
+          navigate(
+            { envs: undefined, f: filterParam(filterTokens.filter((token) => !ENV_FILTER_KEYS.includes(token.key))) },
+            { replace: true }
+          )
+      : undefined;
 
   /**
    * A view switch keeps what a reader carries between views — the window, the
@@ -119,6 +150,10 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       container: undefined,
       alerts: undefined,
       rule: undefined,
+      compare: undefined,
+      cmpWindow: undefined,
+      doraWindow: undefined,
+      failureHours: undefined,
     });
   };
   const envName = (id: string) => placeEnvironments(place).find((env) => env.id === id)?.name;
@@ -161,26 +196,34 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
         </div>
         <div className="flex items-center gap-2">
           {org.orgId && <AlertNotifications orgId={org.orgId} envName={envName} onOpenAlerts={() => selectView("alerts")} />}
-          <label htmlFor="obs-range" className="sr-only">
-            Time range
-          </label>
-          <select
-            id="obs-range"
-            value={range}
-            onChange={(event) => navigate({ range: rangeOf(event.target.value) }, { replace: true })}
-            className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            data-testid="obs-range"
-          >
-            {RANGE_PRESETS.map((preset) => (
-              <option key={preset} value={preset}>
-                {RANGE_LABELS[preset]}
-              </option>
-            ))}
-          </select>
+          {/* Delivery has its own windows (days); a comparison its own (around the promotion). */}
+          {view !== "delivery" && !comparing && (
+            <>
+              <label htmlFor="obs-range" className="sr-only">
+                Time range
+              </label>
+              <select
+                id="obs-range"
+                value={range}
+                onChange={(event) => navigate({ range: rangeOf(event.target.value) }, { replace: true })}
+                className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                data-testid="obs-range"
+              >
+                {RANGE_PRESETS.map((preset) => (
+                  <option key={preset} value={preset}>
+                    {RANGE_LABELS[preset]}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => void queryClient.invalidateQueries({ queryKey: obsKeys.all(scope) })}
+            onClick={() => {
+              void queryClient.invalidateQueries({ queryKey: obsKeys.all(scope) });
+              void queryClient.invalidateQueries({ queryKey: deliveryKeys.root() });
+            }}
             leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
             data-testid="obs-refresh"
           >
@@ -190,8 +233,8 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       </div>
 
       {/* Usage is the org's allowance, not a query over the scope: nothing here would narrow it. */}
-      {/* Alerts keeps the environment picker; attribute filters and group-by mean nothing there. */}
-      {scope && (!notSetUp || view === "alerts") && view !== "usage" && (
+      {/* Alerts and Delivery keep the environment picker; attribute filters and group-by mean nothing there. */}
+      {scope && (!notSetUp || view === "alerts" || view === "delivery") && view !== "usage" && (
         <ObsScopeBar
           scope={scope}
           range={range}
@@ -205,11 +248,22 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
           groupBy={groupBy}
           onGroupByChange={(keys) => navigate({ groupBy: groupByParam(keys) }, { replace: true })}
           groupable={groupable}
-          filterable={view !== "alerts"}
+          filterable={view !== "alerts" && view !== "delivery"}
+        />
+      )}
+
+      {marked && (
+        <ReleaseStrip
+          key={search.dashboard ?? view}
+          releases={releases}
+          rangeLabel={RANGE_LABELS[range].toLowerCase()}
+          defaultOpen={view === "dashboards" && /(^|\/)releases$/.test(search.dashboard ?? "")}
+          onCompare={openCompare}
         />
       )}
 
       <div id="obs-view-panel" role="tabpanel" aria-labelledby={`obs-view-${view}`}>
+        <ObsChartMarkersProvider markers={releases.markers}>
         {!scope ? (
           org.isLoading ? (
             <ObsLoadingRows testId="obs-org-loading" />
@@ -235,6 +289,29 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             range={range}
             tab={alertsTabOf(search.alerts)}
             rule={search.rule}
+            navigate={navigate}
+          />
+        ) : comparing ? (
+          <ReleaseComparison
+            scope={scope}
+            subject={subject}
+            target={comparing}
+            width={compareWindowOf(search.cmpWindow)}
+            backLabel={OBS_VIEW_LABELS[view]}
+            onBack={closeCompare}
+            navigate={navigate}
+          />
+        ) : view === "delivery" ? (
+          // The release ledger is Postgres, not the telemetry store: Delivery
+          // answers before observability is set up, like Usage and Alerts.
+          <DeliveryView
+            scope={scope}
+            environments={environments}
+            subject={subject}
+            window={doraWindowOf(search.doraWindow)}
+            failureHours={failureHoursOf(search.failureHours)}
+            onShowEveryEnvironment={showEveryEnvironment}
+            onCompare={openCompare}
             navigate={navigate}
           />
         ) : notSetUp ? (
@@ -303,6 +380,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             navigate={navigate}
           />
         )}
+        </ObsChartMarkersProvider>
       </div>
     </div>
   );
