@@ -145,7 +145,7 @@ Every change ships as its own **small PR** that leaves everything that works tod
 | forge: fail-closed programmable harness stubs, `WithPlaceholderDeps`, stale-ledger rescue, runnable streaming scaffold tests, packages/workers without typed config, generic deps judged by declaration | forge #731–#735, #738 |
 | reliant: forge pins `6f9811cb` → `8d812662` | reliant #857, #885 |
 | reliant P2 follow-up: the 28 required list parents declare `buf.validate` required, so no service is blocked by P2 | reliant #856 |
-| reliant P3b: 23 services on forge's handler model — System, Question, Account, Connector, Preset, Token, Run, Streaming, ToolCall, Message, Attachment, FileSystem, PackageCommands, DaemonRegistry, ToolsDaemon, ModelEndpoint, Daemon, Background, Terminal (the dead local Background/Terminal/FileSystem implementations deleted); recipe `06-p3b-recipe.md` | reliant #844–#873 |
+| reliant P3b: 19 of 35 services on forge's handler model — System, Question, Account, Connector, Preset, Token, Run, Streaming, ToolCall, Message, Attachment, FileSystem, PackageCommands, DaemonRegistry, ToolsDaemon, ModelEndpoint, Daemon, Background, Terminal (the dead local Background/Terminal/FileSystem implementations deleted); recipe `06-p3b-recipe.md` | reliant #844–#873 |
 | reliant P4: typed root config (`RELIANT_LOG_LEVEL`, `LOG_FORMAT`, `RELIANT_CONFIG`), `ApiServerConfig`, `ControlPlaneConfig` (deprecated URL aliases), `RELIANT_ENV` (+ `NODE_ENV`), forbidigo patterns for the typed-access guardrail (advisory) | reliant #876–#882 |
 | reliant: main's test build fixed after #861 + #877 crossed (merges now vet the whole module) | reliant #884 |
 
