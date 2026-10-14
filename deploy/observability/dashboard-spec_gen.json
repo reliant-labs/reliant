@@ -351,6 +351,92 @@
           "height": 8
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "error-logs",
           "title": "Recent error logs",
           "kind": "search",
@@ -805,6 +891,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -1714,6 +1886,92 @@
           "height": 6
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "go-memory",
           "title": "Go memory used",
           "kind": "line",
@@ -2499,6 +2757,92 @@
           "height": 6
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "go-memory",
           "title": "Go memory used",
           "kind": "line",
@@ -3282,6 +3626,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -4923,6 +5353,92 @@
           "height": 6
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "go-memory",
           "title": "Go memory used",
           "kind": "line",
@@ -6196,6 +6712,92 @@
           "height": 6
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "go-memory",
           "title": "Go memory used",
           "kind": "line",
@@ -6857,6 +7459,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -8008,6 +8696,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -9893,6 +10667,92 @@
           "height": 6
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "go-memory",
           "title": "Go memory used",
           "kind": "line",
@@ -10310,6 +11170,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -11217,6 +12163,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -12492,6 +13524,92 @@
           "height": 6
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "go-memory",
           "title": "Go memory used",
           "kind": "line",
@@ -13641,6 +14759,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -15038,6 +16242,92 @@
           "height": 6
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "go-memory",
           "title": "Go memory used",
           "kind": "line",
@@ -15577,6 +16867,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -16484,6 +17860,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -17881,6 +19343,92 @@
           "height": 6
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "go-memory",
           "title": "Go memory used",
           "kind": "line",
@@ -18910,6 +20458,92 @@
           "height": 6
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "go-memory",
           "title": "Go memory used",
           "kind": "line",
@@ -19205,6 +20839,92 @@
           ],
           "width": 24,
           "height": 8
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -19624,6 +21344,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -20899,6 +22705,92 @@
           "height": 6
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "go-memory",
           "title": "Go memory used",
           "kind": "line",
@@ -22172,6 +24064,92 @@
           "height": 6
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "go-memory",
           "title": "Go memory used",
           "kind": "line",
@@ -22833,6 +24811,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -23864,6 +25928,92 @@
           "height": 6
         },
         {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
           "id": "go-memory",
           "title": "Go memory used",
           "kind": "line",
@@ -24403,6 +26553,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",
@@ -25188,6 +27424,92 @@
           "unit": "ms",
           "width": 8,
           "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
         },
         {
           "id": "go-memory",

@@ -643,9 +643,85 @@
       }
     },
     {
-      "id": "t-go-memory",
+      "id": "t-db-latency",
       "x": 0,
       "y": 42,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Database call latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Client', 'SPAN_KIND_CLIENT') AND SpanAttributes['db.system'] != ''",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-db-by-operation",
+      "x": 12,
+      "y": 42,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Database calls by operation",
+        "source": "Traces",
+        "displayType": "table",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "calls"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          }
+        ],
+        "where": "SpanKind IN ('Client', 'SPAN_KIND_CLIENT') AND SpanAttributes['db.system'] != ''",
+        "whereLanguage": "sql",
+        "groupBy": "SpanAttributes['db.operation']"
+      }
+    },
+    {
+      "id": "t-go-memory",
+      "x": 0,
+      "y": 49,
       "w": 12,
       "h": 7,
       "config": {
@@ -680,7 +756,7 @@
     {
       "id": "t-go-goroutines",
       "x": 12,
-      "y": 42,
+      "y": 49,
       "w": 12,
       "h": 7,
       "config": {
@@ -709,7 +785,7 @@
     {
       "id": "t-go-alloc",
       "x": 0,
-      "y": 49,
+      "y": 56,
       "w": 24,
       "h": 7,
       "config": {
@@ -737,7 +813,7 @@
     {
       "id": "t-error-logs",
       "x": 0,
-      "y": 56,
+      "y": 63,
       "w": 24,
       "h": 9,
       "config": {
@@ -752,7 +828,7 @@
     {
       "id": "t-logs",
       "x": 0,
-      "y": 65,
+      "y": 72,
       "w": 24,
       "h": 9,
       "config": {

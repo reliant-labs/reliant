@@ -11,7 +11,7 @@ to back (§6.0):
 
 | Branch | What | Changes a deployed DB? |
 |---|---|---|
-| `feat/p5a-forge-migrations-baseline-r2` | `db/migrations/20261014050404_baseline.up.sql` (goose's 155 migrations, squashed by `forge db squash --from-dsn`, with its `-- forge:adopts goose` list); `db/embed_gen.go`; tests that freeze goose's history by version AND content | No — nothing runs forge's migrator yet |
+| `feat/p5a-forge-migrations-baseline-r2` | `db/migrations/20261014050404_baseline.up.sql` (goose's 156 migrations, squashed by `forge db squash --from-dsn`, with its `-- forge:adopts goose` list); `db/embed_gen.go`; tests that freeze goose's history by version AND content | No — nothing runs forge's migrator yet |
 | `feat/p5a-migrate-up-migratekit-r2` | `db.Migrate`: the goose bridge, then `migratekit.Apply`; `db migrate status` as a read-only preview; `force`; the backward-compatible rule; sqlc reads `db/migrations` | **Yes — this is the cutover** |
 
 `chore/p5a-remove-goose` is **not** part of the cutover; §9 says what must be
@@ -37,9 +37,10 @@ true before goose can go.
    deliberately `-- reliant:breaks-rollback <why>`), enforced by
    `TestForgeMigrationsDeclareCompatibility`; `make migration` writes the
    default. That keeps "redeploy the last goose release" a working rollback.
-4. The baseline was re-cut for `20261013215013_worktree_failure_reason` (#861)
-   and `20261014055046_integration_writes` (#893): **155** goose migrations,
-   head `20261014055046`, cut from a database main `25d88aa7` built. It is now `forge db squash
+4. The baseline was re-cut for `20261013215013_worktree_failure_reason` (#861),
+   `20261014055046_integration_writes` (#893) and
+   `20261014142537_trigger_event_origin` (#909): **156** goose migrations,
+   head `20261014142537`, cut from a database main `111d67a5` built. It is now `forge db squash
    --from-dsn` output end to end (header, adoption list and body), and
    re-running the squash writes the same bytes.
 5. `db migrate up` prints what happened from `migratekit.Apply`'s `Result` and
@@ -84,8 +85,8 @@ opens a one-connection pool — one Postgres session for the whole run — and:
 | The database | What happens |
 |---|---|
 | fresh (no `goose_db_version`, no `schema_migrations`) | the baseline's SQL runs |
-| goose at its frozen head (exactly the 155 versions) | **adopted**: the baseline is recorded in `schema_migrations`, `schema_migrations_applied`, `schema_migrations_compat`; none of its SQL runs; `goose_db_version` untouched |
-| goose behind its head (a subset of the 155) | **goose catch-up, then adopt**: goose applies the missing versions (writing its own `goose_db_version` rows, as the next goose release would have), then the database is adopted |
+| goose at its frozen head (exactly the 156 versions) | **adopted**: the baseline is recorded in `schema_migrations`, `schema_migrations_applied`, `schema_migrations_compat`; none of its SQL runs; `goose_db_version` untouched |
+| goose behind its head (a subset of the 156) | **goose catch-up, then adopt**: goose applies the missing versions (writing its own `goose_db_version` rows, as the next goose release would have), then the database is adopted |
 | a goose version the frozen history does not hold | refused before anything runs: `NOTHING WAS APPLIED` |
 | a frozen version whose latest goose row is a rollback | refused before anything runs (goose would never re-run it) |
 | reliant's tables, but neither tool's history | refused before anything runs |
@@ -142,6 +143,12 @@ opens a one-connection pool — one Postgres session for the whole run — and:
 
 ## 4. Proof (throwaway Postgres 16.15; all passed)
 
+The matrix below ran on the 155-version cut. The re-cut for #909 (156
+versions) was checked at merge time: a database the last goose release
+(main `111d67a5`) built and a fresh one the baseline built have identical
+normalized `pg_dump --schema-only`, and the in-process `TestMigrate_*` matrix
+passed again against it.
+
 Every goose database was built by goose: (b) by the last goose release's
 binary (main `25d88aa7`), (c) by the release before #893 (`b90c9591^`), (d)
 (e) (f) by goose over the frozen files. All rows ran against the final branch
@@ -182,7 +189,7 @@ DATABASE_URL=<dsn> reliant db migrate status      # the NEW binary
 ```
 
 The first line is the verdict. For prod it should be `adopt: …`, or
-`goose catch-up N, then adopt` if the newest goose migrations (#861, #893)
+`goose catch-up N, then adopt` if the newest goose migrations (#861, #893, #909)
 never deployed there; both are fine.
 Anything starting `refuse:` is resolved first, with the user. Exit 1 means
 `up` would refuse.
@@ -228,7 +235,7 @@ export PGPASSWORD=<pw>; C=postgres://reliant@127.0.0.1:<port>/reliant_cp
 DATABASE_URL=$C reliant db migrate status                    # "adopt: …" (or "goose catch-up N, then adopt")
 pg_dump --schema-only --no-owner --no-privileges -T goose_db_version -T goose_db_version_id_seq -T 'schema_migrations*' "$C" > before.sql
 psql "$C" -tAc 'SELECT count(*) FROM goose_db_version' > goose-before.txt
-DATABASE_URL=$C reliant db migrate up                         # ADOPTED … (155 goose versions verified); schema is current (version 20261014050404)
+DATABASE_URL=$C reliant db migrate up                         # ADOPTED … (156 goose versions verified); schema is current (version 20261014050404)
 pg_dump --schema-only --no-owner --no-privileges -T goose_db_version -T goose_db_version_id_seq -T 'schema_migrations*' "$C" > after.sql
 diff before.sql after.sql                                     # empty for "adopt"; for a catch-up, only what the caught-up goose migrations add
 psql "$C" -tAc 'SELECT count(*) FROM goose_db_version'        # = goose-before.txt for "adopt" (+1 for a catch-up)
@@ -247,7 +254,7 @@ gcloud sql instances delete reliant-pg-p5a-rehearsal --project=reliant-labs-4758
 6. **Deploy.** The first new api-server pod adopts (under a second); the old
    pods keep serving untouched; new workers and gateways wait for it.
 7. **Verify:**
-   - an api-server log line `ADOPTED a database goose migrated: 20261014050404_baseline.up.sql recorded as applied without running its SQL (155 goose versions verified; …)` at WARN, on exactly one pod;
+   - an api-server log line `ADOPTED a database goose migrated: 20261014050404_baseline.up.sql recorded as applied without running its SQL (156 goose versions verified; …)` at WARN, on exactly one pod;
    - `SELECT version, dirty FROM schema_migrations` → `20261014050404 | f`;
    - `goose_db_version` row count equal to step 5's (N more if step 5 said `goose catch-up N`);
    - `reliant db migrate status` → `up to date (version 20261014050404)`;
