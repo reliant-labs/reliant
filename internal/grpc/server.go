@@ -40,6 +40,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
 	"github.com/reliant-labs/reliant/internal/handlers/attachment"
 	"github.com/reliant-labs/reliant/internal/handlers/background"
+	"github.com/reliant-labs/reliant/internal/handlers/connection"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
@@ -706,8 +707,15 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	if cfg.Connections != nil {
-		connectionPath, connectionHandler := reliantv1connect.NewConnectionServiceHandler(
-			services.NewConnectionService(cfg.Connections), opts...)
+		connectionService, err := connection.New(connection.Deps{
+			Logger:      handlerLogger,
+			Config:      handlerConfig,
+			Connections: cfg.Connections,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("connection service: %w", err)
+		}
+		connectionPath, connectionHandler := reliantv1connect.NewConnectionServiceHandler(connectionService, opts...)
 		mux.Handle(connectionPath, connectionHandler)
 	}
 	if cfg.OAuthRoutes != nil {

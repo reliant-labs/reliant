@@ -77,8 +77,10 @@ type ConnectionServiceClient interface {
 	// available = false rather than hidden, so the UI can say why.
 	ListIntegrations(context.Context, *connect.Request[v1.ListIntegrationsRequest]) (*connect.Response[v1.ListIntegrationsResponse], error)
 	// ListConnections returns the caller's connections. Metadata only.
+	// forge:custom — the caller's connections from connections.Service, metadata only
 	ListConnections(context.Context, *connect.Request[v1.ListConnectionsRequest]) (*connect.Response[v1.ListConnectionsResponse], error)
 	// GetConnection returns one connection's metadata.
+	// forge:custom — one of the caller's connections from connections.Service, metadata only, NotFound otherwise
 	GetConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.GetConnectionResponse], error)
 	// CreateApiKeyConnection saves a pasted API key or basic credential.
 	CreateApiKeyConnection(context.Context, *connect.Request[v1.CreateApiKeyConnectionRequest]) (*connect.Response[v1.CreateApiKeyConnectionResponse], error)
@@ -101,8 +103,10 @@ type ConnectionServiceClient interface {
 	SetDefaultConnection(context.Context, *connect.Request[v1.SetDefaultConnectionRequest]) (*connect.Response[v1.SetDefaultConnectionResponse], error)
 	// DeleteConnection revokes at the provider where an API exists (best
 	// effort), then soft-deletes the row and destroys its ciphertext.
+	// forge:custom — revokes at the provider, then soft-deletes the row and destroys its ciphertext
 	DeleteConnection(context.Context, *connect.Request[v1.DeleteConnectionRequest]) (*connect.Response[v1.DeleteConnectionResponse], error)
 	// ListConnectionEvents is the audit view, newest first.
+	// forge:custom — the caller's audit trail of one connection, served by connections.Service
 	ListConnectionEvents(context.Context, *connect.Request[v1.ListConnectionEventsRequest]) (*connect.Response[v1.ListConnectionEventsResponse], error)
 }
 
@@ -263,8 +267,10 @@ type ConnectionServiceHandler interface {
 	// available = false rather than hidden, so the UI can say why.
 	ListIntegrations(context.Context, *connect.Request[v1.ListIntegrationsRequest]) (*connect.Response[v1.ListIntegrationsResponse], error)
 	// ListConnections returns the caller's connections. Metadata only.
+	// forge:custom — the caller's connections from connections.Service, metadata only
 	ListConnections(context.Context, *connect.Request[v1.ListConnectionsRequest]) (*connect.Response[v1.ListConnectionsResponse], error)
 	// GetConnection returns one connection's metadata.
+	// forge:custom — one of the caller's connections from connections.Service, metadata only, NotFound otherwise
 	GetConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.GetConnectionResponse], error)
 	// CreateApiKeyConnection saves a pasted API key or basic credential.
 	CreateApiKeyConnection(context.Context, *connect.Request[v1.CreateApiKeyConnectionRequest]) (*connect.Response[v1.CreateApiKeyConnectionResponse], error)
@@ -287,8 +293,10 @@ type ConnectionServiceHandler interface {
 	SetDefaultConnection(context.Context, *connect.Request[v1.SetDefaultConnectionRequest]) (*connect.Response[v1.SetDefaultConnectionResponse], error)
 	// DeleteConnection revokes at the provider where an API exists (best
 	// effort), then soft-deletes the row and destroys its ciphertext.
+	// forge:custom — revokes at the provider, then soft-deletes the row and destroys its ciphertext
 	DeleteConnection(context.Context, *connect.Request[v1.DeleteConnectionRequest]) (*connect.Response[v1.DeleteConnectionResponse], error)
 	// ListConnectionEvents is the audit view, newest first.
+	// forge:custom — the caller's audit trail of one connection, served by connections.Service
 	ListConnectionEvents(context.Context, *connect.Request[v1.ListConnectionEventsRequest]) (*connect.Response[v1.ListConnectionEventsResponse], error)
 }
 

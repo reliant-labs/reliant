@@ -3392,6 +3392,1645 @@
       ]
     },
     {
+      "id": "service-connection",
+      "title": "reliant: connection service",
+      "description": "RED per rpc of reliant.v1.ConnectionService (server spans named reliant.v1.ConnectionService/\u003cMethod\u003e), Go runtime and logs. The Go runtime panels describe the PROCESS that serves this service: narrow with the service.name filter.",
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name"
+        },
+        {
+          "id": "env",
+          "label": "deployment.environment.name",
+          "field": "deployment.environment.name"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
+        }
+      ],
+      "panels": [
+        {
+          "id": "requests",
+          "title": "Requests",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "reliant.v1.ConnectionService/"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "id": "errors",
+          "title": "Server errors",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "reliant.v1.ConnectionService/"
+            },
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "id": "p95",
+          "title": "p95 latency",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "reliant.v1.ConnectionService/"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "id": "red-by-rpc",
+          "title": "Rate, errors and latency by rpc",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "reliant.v1.ConnectionService/"
+            }
+          ],
+          "groupBy": [
+            "span.name"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "id": "rpc-CompleteOAuth-rate",
+          "title": "CompleteOAuth: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/CompleteOAuth"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-CompleteOAuth-errors",
+          "title": "CompleteOAuth: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/CompleteOAuth"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-CompleteOAuth-latency",
+          "title": "CompleteOAuth: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/CompleteOAuth"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-CreateApiKeyConnection-rate",
+          "title": "CreateApiKeyConnection: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/CreateApiKeyConnection"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-CreateApiKeyConnection-errors",
+          "title": "CreateApiKeyConnection: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/CreateApiKeyConnection"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-CreateApiKeyConnection-latency",
+          "title": "CreateApiKeyConnection: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/CreateApiKeyConnection"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-DeleteConnection-rate",
+          "title": "DeleteConnection: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/DeleteConnection"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-DeleteConnection-errors",
+          "title": "DeleteConnection: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/DeleteConnection"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-DeleteConnection-latency",
+          "title": "DeleteConnection: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/DeleteConnection"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetConnection-rate",
+          "title": "GetConnection: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/GetConnection"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetConnection-errors",
+          "title": "GetConnection: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/GetConnection"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetConnection-latency",
+          "title": "GetConnection: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/GetConnection"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListConnectionEvents-rate",
+          "title": "ListConnectionEvents: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/ListConnectionEvents"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListConnectionEvents-errors",
+          "title": "ListConnectionEvents: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/ListConnectionEvents"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListConnectionEvents-latency",
+          "title": "ListConnectionEvents: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/ListConnectionEvents"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListConnections-rate",
+          "title": "ListConnections: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/ListConnections"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListConnections-errors",
+          "title": "ListConnections: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/ListConnections"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListConnections-latency",
+          "title": "ListConnections: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/ListConnections"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListIntegrations-rate",
+          "title": "ListIntegrations: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/ListIntegrations"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListIntegrations-errors",
+          "title": "ListIntegrations: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/ListIntegrations"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListIntegrations-latency",
+          "title": "ListIntegrations: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/ListIntegrations"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-RenameConnection-rate",
+          "title": "RenameConnection: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/RenameConnection"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-RenameConnection-errors",
+          "title": "RenameConnection: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/RenameConnection"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-RenameConnection-latency",
+          "title": "RenameConnection: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/RenameConnection"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-SetDefaultConnection-rate",
+          "title": "SetDefaultConnection: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/SetDefaultConnection"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-SetDefaultConnection-errors",
+          "title": "SetDefaultConnection: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/SetDefaultConnection"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-SetDefaultConnection-latency",
+          "title": "SetDefaultConnection: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/SetDefaultConnection"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-StartOAuth-rate",
+          "title": "StartOAuth: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/StartOAuth"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-StartOAuth-errors",
+          "title": "StartOAuth: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/StartOAuth"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-StartOAuth-latency",
+          "title": "StartOAuth: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/StartOAuth"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-TestConnection-rate",
+          "title": "TestConnection: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/TestConnection"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-TestConnection-errors",
+          "title": "TestConnection: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/TestConnection"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-TestConnection-latency",
+          "title": "TestConnection: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.ConnectionService/TestConnection"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "go-memory",
+          "title": "Go memory used",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "used",
+              "agg": "sum",
+              "field": "go.memory.used",
+              "metricType": "sum"
+            },
+            {
+              "label": "gc goal",
+              "agg": "avg",
+              "field": "go.memory.gc.goal",
+              "metricType": "sum"
+            }
+          ],
+          "unit": "bytes",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "go-goroutines",
+          "title": "Goroutines",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "goroutines",
+              "agg": "sum",
+              "field": "go.goroutine.count",
+              "metricType": "sum"
+            }
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "go-alloc",
+          "title": "Heap allocation",
+          "description": "Bytes allocated to the heap per time bucket: the rate the garbage collector has to keep up with.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "allocated",
+              "agg": "sum",
+              "field": "go.memory.allocated",
+              "metricType": "sum"
+            }
+          ],
+          "unit": "bytes",
+          "width": 24,
+          "height": 7
+        },
+        {
+          "id": "error-logs",
+          "title": "Error logs",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "log.attr.procedure",
+              "op": "prefix",
+              "value": "/reliant.v1.ConnectionService/"
+            },
+            {
+              "field": "log.severity",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "log.severity",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 9
+        },
+        {
+          "id": "logs",
+          "title": "Logs",
+          "description": "Every record whose rpc procedure belongs to this service.",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "log.attr.procedure",
+              "op": "prefix",
+              "value": "/reliant.v1.ConnectionService/"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "log.severity",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 9
+        }
+      ]
+    },
+    {
       "id": "service-connector",
       "title": "reliant: connector service",
       "description": "RED per rpc of reliant.v1.ConnectorService (server spans named reliant.v1.ConnectorService/\u003cMethod\u003e), Go runtime and logs. The Go runtime panels describe the PROCESS that serves this service: narrow with the service.name filter.",
@@ -23402,6 +25041,29 @@
           "field": "log.attr.procedure",
           "op": "prefix",
           "value": "/reliant.v1.BackgroundService/"
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ]
+    },
+    {
+      "id": "errors-connection",
+      "title": "connection: error logs",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "log.attr.procedure",
+          "op": "prefix",
+          "value": "/reliant.v1.ConnectionService/"
         },
         {
           "field": "log.severity",

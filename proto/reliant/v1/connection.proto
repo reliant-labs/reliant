@@ -7,9 +7,6 @@ import "buf/validate/validate.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // ConnectionService manages a user's saved logins to external services
 // (research/CONNECTIONS_VAULT.md §4.2).
 //
@@ -27,9 +24,11 @@ service ConnectionService {
   rpc ListIntegrations(ListIntegrationsRequest) returns (ListIntegrationsResponse) {}
 
   // ListConnections returns the caller's connections. Metadata only.
+  // forge:custom — the caller's connections from connections.Service, metadata only
   rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse) {}
 
   // GetConnection returns one connection's metadata.
+  // forge:custom — one of the caller's connections from connections.Service, metadata only, NotFound otherwise
   rpc GetConnection(GetConnectionRequest) returns (GetConnectionResponse) {}
 
   // CreateApiKeyConnection saves a pasted API key or basic credential.
@@ -59,9 +58,11 @@ service ConnectionService {
 
   // DeleteConnection revokes at the provider where an API exists (best
   // effort), then soft-deletes the row and destroys its ciphertext.
+  // forge:custom — revokes at the provider, then soft-deletes the row and destroys its ciphertext
   rpc DeleteConnection(DeleteConnectionRequest) returns (DeleteConnectionResponse) {}
 
   // ListConnectionEvents is the audit view, newest first.
+  // forge:custom — the caller's audit trail of one connection, served by connections.Service
   rpc ListConnectionEvents(ListConnectionEventsRequest) returns (ListConnectionEventsResponse) {}
 }
 

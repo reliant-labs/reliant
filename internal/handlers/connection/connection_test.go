@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package connection
 
 import (
 	"context"
@@ -180,7 +180,7 @@ func TestConnectionServiceRequestSecretsAreDebugRedacted(t *testing.T) {
 // ---- handler behaviour over a real DB ----
 
 type connectionFixture struct {
-	svc *ConnectionService
+	svc *Service
 	raw *sql.DB
 }
 
@@ -208,7 +208,8 @@ func newConnectionFixtureWithEnv(t *testing.T, getenv func(string) string) *conn
 	tokens := connections.NewTokenSource(store, v, providers, nil)
 	broker := connections.NewBroker(store, v, providers, nil, "https://api.reliant.example").
 		WithAppOrigins([]string{"https://app.reliant.example", "*", "app://bundle"})
-	return &connectionFixture{svc: NewConnectionService(connections.NewService(store, v, providers, tokens, broker, nil)), raw: raw}
+	svc := NewTestConnection(t, WithConnectionDeps(Deps{Connections: connections.NewService(store, v, providers, tokens, broker, nil)}))
+	return &connectionFixture{svc: svc, raw: raw}
 }
 
 // StartOAuth relays the provider's redirect back to the web app the request

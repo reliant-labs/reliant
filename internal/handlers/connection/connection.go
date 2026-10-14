@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package connection
 
 import (
 	"context"
@@ -9,24 +9,10 @@ import (
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/connectionrpc"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
-
-// ConnectionService implements reliantv1connect.ConnectionServiceHandler over
-// connections.Service. It validates the wire, extracts the caller, converts and
-// maps errors; no RPC here returns a secret value.
-type ConnectionService struct {
-	reliantv1connect.UnimplementedConnectionServiceHandler
-	svc *connections.Service
-}
-
-// NewConnectionService builds the handler.
-func NewConnectionService(svc *connections.Service) *ConnectionService {
-	return &ConnectionService{svc: svc}
-}
 
 // connectionError maps a domain error onto a Connect code. NotFound stays
 // NotFound (never PermissionDenied) so ids are not an oracle. Untyped errors
@@ -107,12 +93,12 @@ func connectionToProto(c *core.Connection) *reliantv1.Connection {
 	}
 }
 
-func (s *ConnectionService) ListIntegrations(ctx context.Context, _ *connect.Request[reliantv1.ListIntegrationsRequest]) (*connect.Response[reliantv1.ListIntegrationsResponse], error) {
+func (s *Service) ListIntegrations(ctx context.Context, _ *connect.Request[reliantv1.ListIntegrationsRequest]) (*connect.Response[reliantv1.ListIntegrationsResponse], error) {
 	if _, err := connectionrpc.Caller(ctx); err != nil {
 		return nil, err
 	}
 	out := []*reliantv1.Integration{}
-	for _, i := range s.svc.ListIntegrations() {
+	for _, i := range s.deps.Connections.ListIntegrations() {
 		in := &reliantv1.Integration{Id: i.ID, DisplayName: i.DisplayName}
 		for _, m := range i.Methods {
 			in.Methods = append(in.Methods, &reliantv1.IntegrationAuthMethod{
@@ -131,12 +117,12 @@ func (s *ConnectionService) ListIntegrations(ctx context.Context, _ *connect.Req
 	return connect.NewResponse(&reliantv1.ListIntegrationsResponse{Integrations: out}), nil
 }
 
-func (s *ConnectionService) ListConnections(ctx context.Context, req *connect.Request[reliantv1.ListConnectionsRequest]) (*connect.Response[reliantv1.ListConnectionsResponse], error) {
+func (s *Service) ListConnections(ctx context.Context, req *connect.Request[reliantv1.ListConnectionsRequest]) (*connect.Response[reliantv1.ListConnectionsResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	cs, err := s.svc.List(ctx, userID, req.Msg.GetIntegrationId())
+	cs, err := s.deps.Connections.List(ctx, userID, req.Msg.GetIntegrationId())
 	if err != nil {
 		return nil, connectionError(err)
 	}
@@ -147,19 +133,19 @@ func (s *ConnectionService) ListConnections(ctx context.Context, req *connect.Re
 	return connect.NewResponse(&reliantv1.ListConnectionsResponse{Connections: out}), nil
 }
 
-func (s *ConnectionService) GetConnection(ctx context.Context, req *connect.Request[reliantv1.GetConnectionRequest]) (*connect.Response[reliantv1.GetConnectionResponse], error) {
+func (s *Service) GetConnection(ctx context.Context, req *connect.Request[reliantv1.GetConnectionRequest]) (*connect.Response[reliantv1.GetConnectionResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	c, err := s.svc.Get(ctx, userID, req.Msg.GetId())
+	c, err := s.deps.Connections.Get(ctx, userID, req.Msg.GetId())
 	if err != nil {
 		return nil, connectionError(err)
 	}
 	return connect.NewResponse(&reliantv1.GetConnectionResponse{Connection: connectionToProto(c)}), nil
 }
 
-func (s *ConnectionService) CreateApiKeyConnection(ctx context.Context, req *connect.Request[reliantv1.CreateApiKeyConnectionRequest]) (*connect.Response[reliantv1.CreateApiKeyConnectionResponse], error) {
+func (s *Service) CreateApiKeyConnection(ctx context.Context, req *connect.Request[reliantv1.CreateApiKeyConnectionRequest]) (*connect.Response[reliantv1.CreateApiKeyConnectionResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
@@ -171,7 +157,7 @@ func (s *ConnectionService) CreateApiKeyConnection(ctx context.Context, req *con
 	case reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_BASIC:
 		kind = connections.APIKeyKindBasic
 	}
-	c, err := s.svc.CreateAPIKey(ctx, connections.CreateAPIKeyParams{
+	c, err := s.deps.Connections.CreateAPIKey(ctx, connections.CreateAPIKeyParams{
 		UserID: userID, IntegrationID: req.Msg.GetIntegrationId(), Name: req.Msg.GetName(),
 		Kind: kind, Fields: req.Msg.GetFields(), Params: req.Msg.GetParams(),
 	})
@@ -181,12 +167,12 @@ func (s *ConnectionService) CreateApiKeyConnection(ctx context.Context, req *con
 	return connect.NewResponse(&reliantv1.CreateApiKeyConnectionResponse{Connection: connectionToProto(c)}), nil
 }
 
-func (s *ConnectionService) StartOAuth(ctx context.Context, req *connect.Request[reliantv1.StartOAuthRequest]) (*connect.Response[reliantv1.StartOAuthResponse], error) {
+func (s *Service) StartOAuth(ctx context.Context, req *connect.Request[reliantv1.StartOAuthRequest]) (*connect.Response[reliantv1.StartOAuthResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	url, err := s.svc.StartOAuth(ctx, connections.StartParams{
+	url, err := s.deps.Connections.StartOAuth(ctx, connections.StartParams{
 		UserID: userID, IntegrationID: req.Msg.GetIntegrationId(), Name: req.Msg.GetName(),
 		ReconnectID: req.Msg.GetReconnectId(), RedirectAfter: req.Msg.GetRedirectAfter(),
 		Params: req.Msg.GetParams(),
@@ -201,12 +187,12 @@ func (s *ConnectionService) StartOAuth(ctx context.Context, req *connect.Request
 	return connect.NewResponse(&reliantv1.StartOAuthResponse{AuthorizeUrl: url}), nil
 }
 
-func (s *ConnectionService) CompleteOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteOAuthRequest]) (*connect.Response[reliantv1.CompleteOAuthResponse], error) {
+func (s *Service) CompleteOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteOAuthRequest]) (*connect.Response[reliantv1.CompleteOAuthResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	done, err := s.svc.CompleteOAuth(ctx, userID, req.Msg.GetState(), req.Msg.GetCode())
+	done, err := s.deps.Connections.CompleteOAuth(ctx, userID, req.Msg.GetState(), req.Msg.GetCode())
 	if err != nil {
 		return nil, connectionError(err)
 	}
@@ -215,12 +201,12 @@ func (s *ConnectionService) CompleteOAuth(ctx context.Context, req *connect.Requ
 	}), nil
 }
 
-func (s *ConnectionService) TestConnection(ctx context.Context, req *connect.Request[reliantv1.TestConnectionRequest]) (*connect.Response[reliantv1.TestConnectionResponse], error) {
+func (s *Service) TestConnection(ctx context.Context, req *connect.Request[reliantv1.TestConnectionRequest]) (*connect.Response[reliantv1.TestConnectionResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	r, err := s.svc.Test(ctx, userID, req.Msg.GetId())
+	r, err := s.deps.Connections.Test(ctx, userID, req.Msg.GetId())
 	if err != nil {
 		return nil, connectionError(err)
 	}
@@ -229,47 +215,47 @@ func (s *ConnectionService) TestConnection(ctx context.Context, req *connect.Req
 	}), nil
 }
 
-func (s *ConnectionService) RenameConnection(ctx context.Context, req *connect.Request[reliantv1.RenameConnectionRequest]) (*connect.Response[reliantv1.RenameConnectionResponse], error) {
+func (s *Service) RenameConnection(ctx context.Context, req *connect.Request[reliantv1.RenameConnectionRequest]) (*connect.Response[reliantv1.RenameConnectionResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	c, err := s.svc.Rename(ctx, userID, req.Msg.GetId(), req.Msg.GetName())
+	c, err := s.deps.Connections.Rename(ctx, userID, req.Msg.GetId(), req.Msg.GetName())
 	if err != nil {
 		return nil, connectionError(err)
 	}
 	return connect.NewResponse(&reliantv1.RenameConnectionResponse{Connection: connectionToProto(c)}), nil
 }
 
-func (s *ConnectionService) SetDefaultConnection(ctx context.Context, req *connect.Request[reliantv1.SetDefaultConnectionRequest]) (*connect.Response[reliantv1.SetDefaultConnectionResponse], error) {
+func (s *Service) SetDefaultConnection(ctx context.Context, req *connect.Request[reliantv1.SetDefaultConnectionRequest]) (*connect.Response[reliantv1.SetDefaultConnectionResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	c, err := s.svc.SetDefault(ctx, userID, req.Msg.GetId())
+	c, err := s.deps.Connections.SetDefault(ctx, userID, req.Msg.GetId())
 	if err != nil {
 		return nil, connectionError(err)
 	}
 	return connect.NewResponse(&reliantv1.SetDefaultConnectionResponse{Connection: connectionToProto(c)}), nil
 }
 
-func (s *ConnectionService) DeleteConnection(ctx context.Context, req *connect.Request[reliantv1.DeleteConnectionRequest]) (*connect.Response[reliantv1.DeleteConnectionResponse], error) {
+func (s *Service) DeleteConnection(ctx context.Context, req *connect.Request[reliantv1.DeleteConnectionRequest]) (*connect.Response[reliantv1.DeleteConnectionResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.svc.Delete(ctx, userID, req.Msg.GetId()); err != nil {
+	if err := s.deps.Connections.Delete(ctx, userID, req.Msg.GetId()); err != nil {
 		return nil, connectionError(err)
 	}
 	return connect.NewResponse(&reliantv1.DeleteConnectionResponse{}), nil
 }
 
-func (s *ConnectionService) ListConnectionEvents(ctx context.Context, req *connect.Request[reliantv1.ListConnectionEventsRequest]) (*connect.Response[reliantv1.ListConnectionEventsResponse], error) {
+func (s *Service) ListConnectionEvents(ctx context.Context, req *connect.Request[reliantv1.ListConnectionEventsRequest]) (*connect.Response[reliantv1.ListConnectionEventsResponse], error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	evs, err := s.svc.Events(ctx, userID, req.Msg.GetId(), int(req.Msg.GetLimit()), req.Msg.GetBeforeId())
+	evs, err := s.deps.Connections.Events(ctx, userID, req.Msg.GetId(), int(req.Msg.GetLimit()), req.Msg.GetBeforeId())
 	if err != nil {
 		return nil, connectionError(err)
 	}

@@ -929,6 +929,7 @@ export const ConnectionService: GenService<{
   },
   /**
    * ListConnections returns the caller's connections. Metadata only.
+   * forge:custom — the caller's connections from connections.Service, metadata only
    *
    * @generated from rpc reliant.v1.ConnectionService.ListConnections
    */
@@ -939,6 +940,7 @@ export const ConnectionService: GenService<{
   },
   /**
    * GetConnection returns one connection's metadata.
+   * forge:custom — one of the caller's connections from connections.Service, metadata only, NotFound otherwise
    *
    * @generated from rpc reliant.v1.ConnectionService.GetConnection
    */
@@ -1016,6 +1018,7 @@ export const ConnectionService: GenService<{
   /**
    * DeleteConnection revokes at the provider where an API exists (best
    * effort), then soft-deletes the row and destroys its ciphertext.
+   * forge:custom — revokes at the provider, then soft-deletes the row and destroys its ciphertext
    *
    * @generated from rpc reliant.v1.ConnectionService.DeleteConnection
    */
@@ -1026,6 +1029,7 @@ export const ConnectionService: GenService<{
   },
   /**
    * ListConnectionEvents is the audit view, newest first.
+   * forge:custom — the caller's audit trail of one connection, served by connections.Service
    *
    * @generated from rpc reliant.v1.ConnectionService.ListConnectionEvents
    */

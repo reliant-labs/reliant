@@ -48,6 +48,39 @@
     "internal/handlers/attachment/handlers_scaffold_upload_attachment_test.go": {
       "scaffolded_at": "2026-10-13T17:39:52Z"
     },
+    "internal/handlers/connection/handlers_scaffold_complete_o_auth_test.go": {
+      "scaffolded_at": "2026-10-14T06:03:02Z"
+    },
+    "internal/handlers/connection/handlers_scaffold_create_api_key_connection_test.go": {
+      "scaffolded_at": "2026-10-14T06:03:02Z"
+    },
+    "internal/handlers/connection/handlers_scaffold_delete_connection_test.go": {
+      "scaffolded_at": "2026-10-14T06:03:02Z"
+    },
+    "internal/handlers/connection/handlers_scaffold_get_connection_test.go": {
+      "scaffolded_at": "2026-10-14T06:03:02Z"
+    },
+    "internal/handlers/connection/handlers_scaffold_list_connection_events_test.go": {
+      "scaffolded_at": "2026-10-14T06:03:02Z"
+    },
+    "internal/handlers/connection/handlers_scaffold_list_connections_test.go": {
+      "scaffolded_at": "2026-10-14T06:03:02Z"
+    },
+    "internal/handlers/connection/handlers_scaffold_list_integrations_test.go": {
+      "scaffolded_at": "2026-10-14T06:03:02Z"
+    },
+    "internal/handlers/connection/handlers_scaffold_rename_connection_test.go": {
+      "scaffolded_at": "2026-10-14T06:03:02Z"
+    },
+    "internal/handlers/connection/handlers_scaffold_set_default_connection_test.go": {
+      "scaffolded_at": "2026-10-14T06:03:02Z"
+    },
+    "internal/handlers/connection/handlers_scaffold_start_o_auth_test.go": {
+      "scaffolded_at": "2026-10-14T06:03:02Z"
+    },
+    "internal/handlers/connection/handlers_scaffold_test_connection_test.go": {
+      "scaffolded_at": "2026-10-14T06:03:02Z"
+    },
     "internal/handlers/connector/handlers_scaffold_authorize_client_test.go": {
       "scaffolded_at": "2026-10-13T13:00:02Z"
     },

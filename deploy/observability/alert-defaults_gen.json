@@ -20,6 +20,10 @@
         "rpc_service": "reliant.v1.BackgroundService"
       },
       {
+        "name": "connection",
+        "rpc_service": "reliant.v1.ConnectionService"
+      },
+      {
         "name": "connector",
         "rpc_service": "reliant.v1.ConnectorService"
       },
