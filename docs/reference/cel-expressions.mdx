@@ -276,6 +276,49 @@ an empty `dir` becomes `rm -rf "/"`.
 When a value is genuinely optional, write an expression that says what empty
 means, for example `{{has(inputs.flags) ? inputs.flags : ''}}`.
 
+### trigger.*
+
+The event that started the run, fixed at launch. Also the only namespace a trigger's `filter`, `origin_filter`, `inputs` and `prompt` can read. A chat started by a person has `trigger.kind` of `chat.start`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `trigger.kind` | string | What fired the run: `integration`, `webhook`, `schedule`, `workflow_event` or `chat.start` |
+| `trigger.trigger_id`, `trigger.event_id` | string | The activation and the recorded event |
+| `trigger.occurred_at`, `trigger.scheduled_for` | string | RFC 3339 time of the event; the slot a schedule fired for |
+| `trigger.name` | string | The trigger's name |
+| `trigger.payload.*` | dynamic | The event's data. Untrusted input |
+| `trigger.sender.{kind,id,display_name,verified}` | string, bool | Who sent the event, as its source authenticated it |
+| `trigger.origin.*` | see below | Whether Reliant caused the event, and which run did |
+
+`trigger.origin` has eight fields, **all always present**, so an expression never fails with "no such key". An event nothing attributed reads `caused_by_reliant: false`, `confidence: 'none'`, empty strings, `same_workflow: false` and `lineage_depth: 0`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `trigger.origin.caused_by_reliant` | bool | Reliant wrote the thing the event reports, at any confidence |
+| `trigger.origin.confidence` | string | `exact`, `intent`, `app`, `claimed` or `none` |
+| `trigger.origin.run_id` | string | The run that made the write. Empty unless it is the trigger owner's own run |
+| `trigger.origin.workflow` | string | That run's workflow. Same rule |
+| `trigger.origin.trigger_name` | string | The declared trigger that launched that run |
+| `trigger.origin.same_workflow` | bool | That run is a run of the trigger's own workflow: the event is its own echo |
+| `trigger.origin.actor` | string | `app`, `owner` or `unknown` |
+| `trigger.origin.lineage_depth` | int | Event-driven hops that led to the run that wrote. Capped at 5 |
+
+```yaml
+# Ignore this workflow's own echoes (the default origin_filter)
+origin_filter: "!(trigger.origin.same_workflow && trigger.origin.confidence in ['exact', 'intent'])"
+
+# Hear everything
+origin_filter: "true"
+
+# Ignore this workflow's own echoes except one deliberate re-trigger
+origin_filter: "!trigger.origin.same_workflow || trigger.origin.trigger_name == 'responder-push'"
+
+# Only act on events a person caused
+filter: "!trigger.origin.caused_by_reliant && trigger.sender.verified"
+```
+
+`origin_filter` is evaluated before `filter`, in the same language and over the same root. See [Automations](/automations/overview#telling-your-own-writes-apart) for what each confidence means and how skipped events are recorded.
+
 ### iter.*
 
 Provides loop iteration context. Only available inside loop constructs.

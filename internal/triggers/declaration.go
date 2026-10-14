@@ -62,6 +62,9 @@ type Declaration struct {
 	// DedupeKey and DedupeWindow are a webhook declaration's dedupe settings
 	// (see triggerspec.CompileDedupe); empty means the receiver's default key.
 	DedupeKey, DedupeWindow string
+	// OriginFilter is the declared origin_filter, "" for the default
+	// (triggerspec.DefaultOriginFilter). It is evaluated before Filter.
+	OriginFilter string
 }
 
 // WorkflowResolver loads the workflow a run of a ref executes, as run start
@@ -151,6 +154,16 @@ func DeclarationIn(wf *reliantv1.Workflow, t *core.Trigger) (*Declaration, error
 		}
 	}
 
+	originFilter := strings.TrimSpace(wt.GetOriginFilter())
+	if originFilter != "" {
+		if !src.Kind.IsEventDriven() {
+			return nil, broken("origin_filter applies to event-driven triggers; a schedule has no event whose origin to read")
+		}
+		if _, err := triggerspec.CompileOriginFilter(originFilter); err != nil {
+			return nil, broken("the declaration's " + err.Error())
+		}
+	}
+
 	// What this activation was created for and cannot follow: a webhook's
 	// token, an integration's connection, a schedule's Temporal schedule all
 	// belong to one kind (and a connection to one integration). Re-activate
@@ -163,7 +176,7 @@ func DeclarationIn(wf *reliantv1.Workflow, t *core.Trigger) (*Declaration, error
 			return nil, broken(fmt.Sprintf("it now listens to %s, and this activation's connection is for %s; activate it again", src.Integration, prev.Integration))
 		}
 	}
-	return &Declaration{Name: name, Source: src, Filter: filter, Inputs: wt.GetInputs(), Prompt: prompt, DedupeKey: dedupeKey, DedupeWindow: dedupeWindow}, nil
+	return &Declaration{Name: name, Source: src, Filter: filter, Inputs: wt.GetInputs(), Prompt: prompt, DedupeKey: dedupeKey, DedupeWindow: dedupeWindow, OriginFilter: originFilter}, nil
 }
 
 // SeedPrompt is the prompt a run t launches starts from: the activation's own

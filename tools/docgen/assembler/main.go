@@ -427,6 +427,26 @@ Gmail's DMARC, or DKIM aligned with the From domain, passed), sms the From numbe
 certain people start runs, filter on it and require ` + bt + `verified` + bt + `:
 ` + bt + `trigger.sender.verified && trigger.sender.id in ["U123", "U456"]` + bt + `.
 
+**` + bt + `trigger.origin` + bt + `** says whether Reliant itself caused the event, so a workflow can tell its own echoes from other people's. Every
+key is always present (an unattributed event reads ` + bt + `caused_by_reliant: false, confidence: 'none'` + bt + `), in ` + bt + `filter` + bt + `, ` + bt + `inputs` + bt + ` and ` + bt + `prompt` + bt + `:
+
+| Key | Meaning |
+|-----|---------|
+| ` + bt + `caused_by_reliant` + bt + ` | Reliant wrote the thing the event reports (any confidence) |
+| ` + bt + `confidence` + bt + ` | ` + bt + `exact` + bt + ` (the event's own object id is one a run's write produced), ` + bt + `intent` + bt + ` (matches a recent write on target and content), ` + bt + `app` + bt + ` (from Reliant's GitHub App, run unknown), ` + bt + `claimed` + bt + ` (a ` + bt + `Reliant-Run:` + bt + ` commit trailer; anyone can write one, so it is only ever a reason to ignore), ` + bt + `none` + bt + ` |
+| ` + bt + `run_id` + bt + `, ` + bt + `workflow` + bt + `, ` + bt + `trigger_name` + bt + ` | The run that wrote, its workflow, and the declared trigger that launched it. Empty unless it is YOUR run |
+| ` + bt + `same_workflow` + bt + ` | That run is a run of this trigger's own workflow: the event is its own echo |
+| ` + bt + `actor` + bt + ` | Who the write was made as: ` + bt + `app` + bt + `, ` + bt + `owner` + bt + ` or ` + bt + `unknown` + bt + ` |
+| ` + bt + `lineage_depth` + bt + ` | How many event-driven hops led to the run that wrote (a chain stops at 5) |
+
+A trigger's **` + bt + `origin_filter` + bt + `** is a raw CEL bool evaluated BEFORE ` + bt + `filter` + bt + `. Its default ignores a workflow's own echoes:
+` + bt + `!(trigger.origin.same_workflow && trigger.origin.confidence in ['exact', 'intent'])` + bt + `, so a reviewer does not re-run on its own
+review. ` + bt + `origin_filter: "true"` + bt + ` receives everything; ` + bt + `!trigger.origin.same_workflow || trigger.origin.trigger_name == 'responder-push'` + bt + `
+allows one deliberate re-trigger. A skipped event is recorded with the reason (` + bt + `origin_filter rejected: caused by run X of this
+workflow` + bt + `). The lineage depth cap (5) is a hard loop guard no expression overrides, so two workflows that re-trigger each other
+still stop. Only writes made through integration actions (` + bt + `type: action` + bt + ` nodes, integration tools) are attributed
+exactly; an agent's own shell ` + bt + `gh` + bt + `/` + bt + `git` + bt + ` writes look like the person who owns the machine.
+
 **The loop for an integration trigger:** ` + bt + `search_integrations(kind: trigger)` + bt + ` → ` + bt + `get_integration_schema` + bt + `
 (its events, the ` + bt + `match` + bt + ` attributes, the payload schema, and a ready ` + bt + `triggers:` + bt + ` block) → write it with
 ` + bt + `edit_workflow` + bt + ` (validation reports bad cron, filters, inputs, events and match keys like any other error) →

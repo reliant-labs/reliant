@@ -373,3 +373,34 @@ func TestTriggerDedupeKeyValidation(t *testing.T) {
 		assert.Contains(t, got, "triggers[0](", "reported at the trigger's path: %s", src)
 	}
 }
+
+func TestTriggerOriginFilterValidation(t *testing.T) {
+	const head = "name: of\nentry: [a]\nnodes:\n  - id: a\n    type: save_message\n    args: {role: assistant, content: x}\ntriggers:\n"
+	findings := func(trigger string) string {
+		wf, err := wfyaml.ParseWorkflow([]byte(head + trigger))
+		require.NoError(t, err)
+		return strings.Join(messages(StaticAnalysisWithOptions(wf, &ValidationOptions{}).Errors()), "\n")
+	}
+	const src = "  - name: on-push\n    integration: {integration: github, events: [pull_request.synchronize]}\n"
+
+	for _, ok := range []string{"true", "false", "!trigger.origin.same_workflow",
+		"!trigger.origin.same_workflow || trigger.origin.trigger_name == 'responder-push'",
+		"trigger.origin.lineage_depth < 3", "!(trigger.origin.same_workflow && trigger.origin.confidence in ['exact','intent'])"} {
+		assert.Empty(t, findings(src+"    origin_filter: \""+ok+"\"\n"), ok)
+	}
+
+	for expr, want := range map[string]string{
+		"trigger.origin.same_workflow &&": "Syntax error",
+		"{{ true }}":                      "without {{ }}",
+		"trigger.origin.same_workfow":     "same_workfow",
+		"trigger.origin.confidence":       "bool",
+		"inputs.x":                        "undeclared reference",
+	} {
+		got := findings(src + "    origin_filter: \"" + expr + "\"\n")
+		assert.Contains(t, got, want, expr)
+		assert.Contains(t, got, "triggers[0](on-push)", "reported at the trigger's path: %s", expr)
+	}
+
+	got := findings("  - name: nightly\n    schedule: {cron: \"0 9 * * *\"}\n    origin_filter: \"true\"\n")
+	assert.Contains(t, got, "no origin to filter on")
+}

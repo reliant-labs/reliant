@@ -146,6 +146,8 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 			}
 		}
 
+		validateTriggerOriginFilter(wt, src, path, shape, result)
+
 		if ev := wt.GetWorkflowEvent(); ev != nil && opts != nil && opts.WorkflowLoader != nil {
 			validateWorkflowEventRefs(ev, path, opts.WorkflowLoader, result)
 		}
@@ -473,5 +475,29 @@ func validateTriggerDedupe(wt *reliantv1.WorkflowTrigger, path []string, result 
 	if err := triggerspec.CompileDedupe(key, window); err != nil {
 		result.AddErrorWithSuggestion(CategoryTrigger, path, "dedupe_key", strings.TrimPrefix(err.Error(), "dedupe: "),
 			"a dedupe_key is a template over `trigger`, e.g. {{ trigger.payload.body.groupKey }}:{{ trigger.payload.body.status }}; dedupe_window is a duration such as 4h (default 1h, at most 24h)")
+	}
+}
+
+// validateTriggerOriginFilter compiles origin_filter. It is the same language
+// and root as `filter`, so it is checked the same way, including against the
+// payload's declared shape when the source has one.
+func validateTriggerOriginFilter(wt *reliantv1.WorkflowTrigger, src *triggerspec.Source, path []string, shape *payloadShape, result *Result) {
+	expr := strings.TrimSpace(wt.GetOriginFilter())
+	if expr == "" {
+		return
+	}
+	if src != nil && !src.Kind.IsEventDriven() {
+		result.AddErrorWithSuggestion(CategoryTrigger, path, "origin_filter",
+			"a schedule fires on time, not on an event, so there is no origin to filter on",
+			"remove the origin_filter")
+		return
+	}
+	if _, err := triggerspec.CompileOriginFilter(expr); err != nil {
+		result.AddErrorWithSuggestion(CategoryTrigger, path, "origin_filter", strings.TrimPrefix(err.Error(), "filter: origin_filter: "),
+			"an origin_filter is a raw CEL bool over `trigger` that decides who may fire this trigger by who caused the event, e.g. !trigger.origin.same_workflow || trigger.origin.trigger_name == 'responder-push'; write true to receive everything")
+		return
+	}
+	if shape != nil {
+		shape.report(result, path, "origin_filter", "", shape.CheckFilter(expr))
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/triggers/lineage"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -444,11 +445,11 @@ func TestDispatch_TwoTriggerCycleStopsWhenItWouldComeBackAround(t *testing.T) {
 	assert.Equal(t, 2, f.starter.count(), "A→B→A must stop before closing the cycle")
 }
 
-// A chain of DISTINCT triggers (no cycle) is still bounded by MaxChainDepth.
+// A chain of DISTINCT triggers (no cycle) is still bounded by lineage.MaxDepth.
 func TestDispatch_ChainDepthIsCapped(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	const hops = MaxChainDepth + 2
+	const hops = lineage.MaxDepth + 2
 	triggers := make([]*core.Trigger, hops)
 	for i := 0; i < hops; i++ {
 		triggers[i] = f.addTrigger(f.userID, f.projectID, "hop-"+string(rune('a'+i)),
@@ -456,15 +457,15 @@ func TestDispatch_ChainDepthIsCapped(t *testing.T) {
 	}
 
 	run := f.humanRun("wf-a")
-	for i := 0; i < MaxChainDepth; i++ {
+	for i := 0; i < lineage.MaxDepth; i++ {
 		results, err := f.dispatcher.Dispatch(ctx, f.finish(run, core.RunEventFinished))
 		require.NoError(t, err)
 		run = launchedChat(t, results, triggers[i].ID)
 	}
 	results, err := f.dispatcher.Dispatch(ctx, f.finish(run, core.RunEventFinished))
 	require.NoError(t, err)
-	got := resultFor(t, results, triggers[MaxChainDepth].ID)
+	got := resultFor(t, results, triggers[lineage.MaxDepth].ID)
 	assert.Equal(t, core.TriggerEventSkipped, got.Outcome)
 	assert.Contains(t, got.Detail, "deep")
-	assert.Equal(t, MaxChainDepth, f.starter.count())
+	assert.Equal(t, lineage.MaxDepth, f.starter.count())
 }

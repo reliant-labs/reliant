@@ -348,7 +348,8 @@ func Run(ctx context.Context, opts Options) error {
 			Sealer:    vaultKeys,
 			Catalog:   triggerPollers,
 			Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
-				WithWorkflows(triggers.LaunchWorkflows{Repo: repo}),
+				WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
+				WithEnrichers(triggers.OriginEnricherFromEnv(repo.IntegrationWrites(), repo, os.Getenv)),
 		}).
 		WithPolledIntegrations(triggerPollers.IsPolled)
 

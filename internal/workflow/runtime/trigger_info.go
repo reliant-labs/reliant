@@ -16,6 +16,9 @@ type TriggerInfo struct {
 	// Sender is who the event came from, as its source authenticated it;
 	// nil for a start a person made themselves.
 	Sender *core.TriggerSender `json:"sender,omitempty"`
+	// Origin says whether Reliant caused the event and which run did; nil reads
+	// as "not caused by Reliant" (OriginCELValue).
+	Origin *core.TriggerOrigin `json:"origin,omitempty"`
 }
 
 // CELValue is the `trigger` namespace: the envelope fields plus `name` and
@@ -41,6 +44,38 @@ func (t *TriggerInfo) CELValue() map[string]interface{} {
 		"name":          name,
 		"payload":       payload,
 		"sender":        SenderCELValue(t.Sender),
+		"origin":        OriginCELValue(t.Origin),
+	}
+}
+
+// OriginCELValue is `trigger.origin`. Every key is always present, so a filter
+// never fails with "no such key" and `trigger.origin.same_workflow && ...` is
+// simply false for an event nothing attributed. A nil origin is the
+// unattributed one.
+//
+// The run's own ids are filled only when the run belongs to the trigger's own
+// owner (core.TriggerOrigin.Foreign): another user's trigger sees that Reliant
+// caused the event and nothing about whose run.
+func OriginCELValue(o *core.TriggerOrigin) map[string]interface{} {
+	if o == nil {
+		o = &core.TriggerOrigin{Confidence: core.OriginNone, Actor: core.OriginActorUnknown}
+	}
+	confidence, actor := string(o.Confidence), o.Actor
+	if confidence == "" {
+		confidence = string(core.OriginNone)
+	}
+	if actor == "" {
+		actor = core.OriginActorUnknown
+	}
+	return map[string]interface{}{
+		"caused_by_reliant": o.CausedByReliant,
+		"confidence":        confidence,
+		"run_id":            o.RunID,
+		"workflow":          o.Workflow,
+		"trigger_name":      o.TriggerName,
+		"same_workflow":     o.SameWorkflow,
+		"actor":             actor,
+		"lineage_depth":     int64(o.LineageDepth()),
 	}
 }
 

@@ -83,6 +83,7 @@ type Intake struct {
 	starter   WorkflowStarter
 	taskQueue string
 	workflows WorkflowResolver
+	enrichers []Enricher
 	now       func() time.Time
 }
 
@@ -141,6 +142,9 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 
 	outcome, detail := core.TriggerEventPending, ""
 	decl, err := activationFor(ctx, in.workflows, trigger)
+	// Who caused the event is resolved BEFORE any filter, because the filters
+	// read it, and is frozen on the row so the history can explain a skip.
+	origin := in.enrich(ctx, trigger, &ev)
 	switch {
 	case err != nil && isVerdict(err):
 		// Recorded, not dropped: "why did my trigger stop firing?" must have
@@ -149,11 +153,14 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	case err != nil:
 		return nil, fmt.Errorf("resolve trigger %s's declaration: %w", trigger.ID, err)
 	case !opts.Manual:
-		filter := trigger.Filter
-		if decl != nil {
-			filter = decl.Filter
+		outcome, detail = in.applyOriginGuards(trigger, decl, ev, origin, occurredAt)
+		if outcome == core.TriggerEventPending {
+			filter := trigger.Filter
+			if decl != nil {
+				filter = decl.Filter
+			}
+			outcome, detail = in.applyFilter(filter, trigger, ev, origin, occurredAt)
 		}
-		outcome, detail = in.applyFilter(filter, trigger, ev, occurredAt)
 	}
 
 	dedupeKey := in.declaredDedupeKey(trigger, decl, ev, occurredAt)
@@ -166,6 +173,7 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		OccurredAt:    occurredAt,
 		Payload:       ev.Payload,
 		Sender:        ev.Sender,
+		Origin:        origin,
 		Outcome:       outcome,
 		OutcomeDetail: detail,
 		CreatedAt:     in.now().UTC(),
@@ -200,7 +208,7 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	return res, nil
 }
 
-func (in *Intake) applyFilter(expr string, trigger *core.Trigger, ev InboundEvent, occurredAt time.Time) (core.TriggerEventOutcome, string) {
+func (in *Intake) applyFilter(expr string, trigger *core.Trigger, ev InboundEvent, origin *core.TriggerOrigin, occurredAt time.Time) (core.TriggerEventOutcome, string) {
 	if strings.TrimSpace(expr) == "" {
 		return core.TriggerEventPending, ""
 	}
@@ -211,7 +219,7 @@ func (in *Intake) applyFilter(expr string, trigger *core.Trigger, ev InboundEven
 		return core.TriggerEventFailed, "the trigger's filter does not compile: " + err.Error()
 	}
 	hit, err := filter.Match(FilterInput{
-		Kind: string(ev.Kind), TriggerID: trigger.ID, OccurredAt: occurredAt, Payload: ev.Payload, Sender: ev.Sender,
+		Kind: string(ev.Kind), TriggerID: trigger.ID, OccurredAt: occurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: origin,
 	})
 	if err != nil {
 		return core.TriggerEventFailed, fmt.Sprintf(

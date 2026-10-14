@@ -386,7 +386,10 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	triggerInbound := webhook.NewInbound(repo,
 		triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
-			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}),
+			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
+			// Who caused an event is resolved against the write ledger before
+			// any filter reads it.
+			WithEnrichers(triggers.OriginEnricherFromEnv(repo.IntegrationWrites(), repo, os.Getenv)),
 		inboundRegistry, vaultKeys, strings.TrimSpace(os.Getenv("PUBLIC_URL"))).
 		WithConnectionSecrets(conns.tokens)
 	// GitHub events are access-gated: each owner's repository access is

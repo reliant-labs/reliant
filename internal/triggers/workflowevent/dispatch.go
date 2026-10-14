@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/lineage"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 )
 
@@ -32,7 +33,7 @@ var chatIDNamespace = uuid.MustParse("7d0f3a52-91c4-4b0e-a8f6-3c2e5b19d4a7")
 // Repo is the slice of the repository dispatch reads and writes. The
 // signatures match db.Repository, so *db.Repo satisfies it structurally.
 type Repo interface {
-	LaunchEventReader
+	lineage.LaunchEventReader
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
@@ -139,10 +140,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 	}
 
 	var (
-		lineage       Lineage
-		lineageLoaded bool
-		results       []Result
-		retryable     []error
+		chain       lineage.Lineage
+		chainLoaded bool
+		results     []Result
+		retryable   []error
 	)
 	for _, trigger := range candidates {
 		if trigger.Kind != runevents.TriggerKind || !trigger.Enabled || trigger.UserID != ev.UserID {
@@ -177,13 +178,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 			continue
 		}
 
-		if !lineageLoaded {
-			if lineage, err = LineageOf(ctx, d.repo, ev.ChatID); err != nil {
+		if !chainLoaded {
+			if chain, err = lineage.Of(ctx, d.repo, ev.ChatID); err != nil {
 				return results, err
 			}
-			lineageLoaded = true
+			chainLoaded = true
 		}
-		res, err := d.fire(ctx, trigger, spec, ev, lineage)
+		res, err := d.fire(ctx, trigger, spec, ev, chain)
 		results, retryable = appendResult(results, retryable, res, err)
 	}
 	return results, errors.Join(retryable...)
@@ -201,32 +202,26 @@ func appendResult(results []Result, errs []error, res *Result, err error) ([]Res
 
 // fire applies the loop guards and the filter to one matching trigger, then
 // launches.
-func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec, ev *core.RunEvent, lineage Lineage) (*Result, error) {
-	// A trigger never fires on a run it launched, nor on any descendant of one.
-	if lineage.Contains(trigger.ID) {
-		return d.record(ctx, trigger, ev, lineage, core.TriggerEventSkipped,
-			"loop guard: this run descends from a run this trigger launched")
-	}
-	if len(lineage) >= MaxChainDepth {
-		return d.record(ctx, trigger, ev, lineage, core.TriggerEventSkipped,
-			fmt.Sprintf("loop guard: launch chain is already %d workflow events deep (max %d)", len(lineage), MaxChainDepth))
+func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec, ev *core.RunEvent, chain lineage.Lineage) (*Result, error) {
+	if reason, blocked := chain.Blocked(trigger.ID); blocked {
+		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, reason)
 	}
 
-	next := lineage.Extend(trigger.ID, ev.ChatID)
+	next := chain.Extend(trigger.ID, ev.ChatID)
 	launchEv := d.buildEvent(trigger, ev, next)
 
 	// The filter sees exactly what the launched run would see as `trigger`.
 	pass, err := d.filter(spec.Filter, triggerRoot(launchEv))
 	if err != nil {
-		return d.record(ctx, trigger, ev, lineage, core.TriggerEventFailed, "filter error: "+err.Error())
+		return d.record(ctx, trigger, ev, chain, core.TriggerEventFailed, "filter error: "+err.Error())
 	}
 	if !pass {
-		return d.record(ctx, trigger, ev, lineage, core.TriggerEventSkipped, "filter did not match")
+		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, "filter did not match")
 	}
 
 	launchSpec, err := d.buildSpec(trigger, ev, launchEv, spec.Inputs)
 	if err != nil {
-		return d.record(ctx, trigger, ev, lineage, core.TriggerEventFailed, err.Error())
+		return d.record(ctx, trigger, ev, chain, core.TriggerEventFailed, err.Error())
 	}
 
 	res, launchErr := d.launcher.Launch(ctx, launchEv, launchSpec)
@@ -245,7 +240,7 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 	var validation *launch.ValidationError
 	if errors.As(launchErr, &validation) || errors.Is(launchErr, launch.ErrNotFound) {
 		// Retrying cannot fix a spec that can never launch; record why.
-		return d.record(ctx, trigger, ev, lineage, core.TriggerEventFailed, launchErr.Error())
+		return d.record(ctx, trigger, ev, chain, core.TriggerEventFailed, launchErr.Error())
 	}
 	return nil, fmt.Errorf("launch trigger %s for run event %s: %w", trigger.ID, ev.ID, launchErr)
 }
@@ -254,15 +249,15 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 func dedupeKey(triggerID, runEventID string) string { return triggerID + ":" + runEventID }
 
 // buildEvent is the trigger_events row a launch records: the source run's
-// description under payload, plus the lineage the loop guard reads.
-func (d *Dispatcher) buildEvent(trigger *core.Trigger, ev *core.RunEvent, lineage Lineage) launch.Event {
+// description under payload, plus the chain the loop guard reads.
+func (d *Dispatcher) buildEvent(trigger *core.Trigger, ev *core.RunEvent, chain lineage.Lineage) launch.Event {
 	payload := make(map[string]any, len(ev.Payload)+3)
 	for key, value := range ev.Payload {
 		payload[key] = value
 	}
 	payload["trigger_name"] = trigger.Name
 	payload["run_event_id"] = ev.ID
-	payload[payloadLineage] = lineage.toPayload()
+	payload[lineage.PayloadKey] = chain.ToPayload()
 	return launch.Event{
 		Kind:       runevents.TriggerEventKind,
 		TriggerID:  trigger.ID,
@@ -355,11 +350,11 @@ func (d *Dispatcher) record(
 	ctx context.Context,
 	trigger *core.Trigger,
 	ev *core.RunEvent,
-	lineage Lineage,
+	chain lineage.Lineage,
 	outcome core.TriggerEventOutcome,
 	detail string,
 ) (*Result, error) {
-	launchEv := d.buildEvent(trigger, ev, lineage)
+	launchEv := d.buildEvent(trigger, ev, chain)
 	row := &core.TriggerEvent{
 		ID:            uuid.NewString(),
 		TriggerID:     &trigger.ID,

@@ -28,6 +28,9 @@ type FilterInput struct {
 	Payload    map[string]any
 	// Sender is trigger.sender: who the source says sent the event.
 	Sender *core.TriggerSender
+	// Origin is trigger.origin: whether Reliant caused the event. nil reads as
+	// not caused by Reliant.
+	Origin *core.TriggerOrigin
 }
 
 // Root is the `trigger` CEL value for this event: what a filter and an
@@ -39,6 +42,7 @@ func (in FilterInput) Root() map[string]any {
 		EventID:   in.EventID,
 		Payload:   in.Payload,
 		Sender:    in.Sender,
+		Origin:    in.Origin,
 	}
 	if !in.OccurredAt.IsZero() {
 		info.OccurredAt = in.OccurredAt.UTC().Format(time.RFC3339)

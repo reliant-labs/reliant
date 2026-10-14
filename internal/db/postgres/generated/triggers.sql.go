@@ -126,9 +126,9 @@ func (q *Queries) CreateTrigger(ctx context.Context, arg CreateTriggerParams) er
 const createTriggerEvent = `-- name: CreateTriggerEvent :execrows
 INSERT INTO trigger_events (
     id, trigger_id, user_id, kind, dedupe_key, occurred_at,
-    payload, outcome, outcome_detail, chat_id, created_at, sender
+    payload, outcome, outcome_detail, chat_id, created_at, sender, origin
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
 ON CONFLICT (kind, dedupe_key) DO NOTHING
 `
@@ -146,6 +146,7 @@ type CreateTriggerEventParams struct {
 	ChatID        sql.NullString        `json:"chat_id"`
 	CreatedAt     time.Time             `json:"created_at"`
 	Sender        pqtype.NullRawMessage `json:"sender"`
+	Origin        pqtype.NullRawMessage `json:"origin"`
 }
 
 // DO NOTHING rather than DO UPDATE: the first row for a (kind, dedupe_key) is
@@ -166,6 +167,7 @@ func (q *Queries) CreateTriggerEvent(ctx context.Context, arg CreateTriggerEvent
 		arg.ChatID,
 		arg.CreatedAt,
 		arg.Sender,
+		arg.Origin,
 	)
 	if err != nil {
 		return 0, err
@@ -192,7 +194,7 @@ func (q *Queries) DeleteTriggerRegistration(ctx context.Context, triggerID strin
 }
 
 const getLatestTriggerEvent = `-- name: GetLatestTriggerEvent :one
-SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status, sender FROM trigger_events
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status, sender, origin FROM trigger_events
 WHERE
     trigger_id = $1::text
     AND ($2::text IS NULL OR outcome = $2::text)
@@ -225,6 +227,7 @@ func (q *Queries) GetLatestTriggerEvent(ctx context.Context, arg GetLatestTrigge
 		&i.CreatedAt,
 		&i.RunStatus,
 		&i.Sender,
+		&i.Origin,
 	)
 	return i, err
 }
@@ -282,7 +285,7 @@ func (q *Queries) GetTrigger(ctx context.Context, id string) (GetTriggerRow, err
 }
 
 const getTriggerEventByChat = `-- name: GetTriggerEventByChat :one
-SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status, sender FROM trigger_events
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status, sender, origin FROM trigger_events
 WHERE kind = $1 AND chat_id = $2
 ORDER BY occurred_at, id
 LIMIT 1
@@ -312,12 +315,13 @@ func (q *Queries) GetTriggerEventByChat(ctx context.Context, arg GetTriggerEvent
 		&i.CreatedAt,
 		&i.RunStatus,
 		&i.Sender,
+		&i.Origin,
 	)
 	return i, err
 }
 
 const getTriggerEventByChatID = `-- name: GetTriggerEventByChatID :one
-SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status, sender FROM trigger_events
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status, sender, origin FROM trigger_events
 WHERE chat_id = $1
 ORDER BY created_at ASC, id ASC
 LIMIT 1
@@ -342,12 +346,13 @@ func (q *Queries) GetTriggerEventByChatID(ctx context.Context, chatID sql.NullSt
 		&i.CreatedAt,
 		&i.RunStatus,
 		&i.Sender,
+		&i.Origin,
 	)
 	return i, err
 }
 
 const getTriggerEventByDedupe = `-- name: GetTriggerEventByDedupe :one
-SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status, sender FROM trigger_events WHERE kind = $1 AND dedupe_key = $2
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status, sender, origin FROM trigger_events WHERE kind = $1 AND dedupe_key = $2
 `
 
 type GetTriggerEventByDedupeParams struct {
@@ -372,6 +377,7 @@ func (q *Queries) GetTriggerEventByDedupe(ctx context.Context, arg GetTriggerEve
 		&i.CreatedAt,
 		&i.RunStatus,
 		&i.Sender,
+		&i.Origin,
 	)
 	return i, err
 }
@@ -540,7 +546,7 @@ WITH last_success AS (
         AND (s.id IS NULL OR (e.occurred_at, e.id) > (s.occurred_at, s.id))
 )
 SELECT
-    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at, e.run_status, e.sender,
+    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at, e.run_status, e.sender, e.origin,
     c.id AS run_chat_id,
     c.title AS run_title,
     rw.state AS run_root_state,
@@ -602,6 +608,7 @@ func (q *Queries) ListFiringsSinceLastSuccess(ctx context.Context, arg ListFirin
 			&i.TriggerEvent.CreatedAt,
 			&i.TriggerEvent.RunStatus,
 			&i.TriggerEvent.Sender,
+			&i.TriggerEvent.Origin,
 			&i.RunChatID,
 			&i.RunTitle,
 			&i.RunRootState,
@@ -707,7 +714,7 @@ WITH ranked AS (
         AND e.trigger_id = ANY($3::text[])
 )
 SELECT
-    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at, e.run_status, e.sender,
+    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at, e.run_status, e.sender, e.origin,
     c.id AS run_chat_id,
     c.title AS run_title,
     rw.state AS run_root_state,
@@ -764,6 +771,7 @@ func (q *Queries) ListRecentTriggerFirings(ctx context.Context, arg ListRecentTr
 			&i.TriggerEvent.CreatedAt,
 			&i.TriggerEvent.RunStatus,
 			&i.TriggerEvent.Sender,
+			&i.TriggerEvent.Origin,
 			&i.RunChatID,
 			&i.RunTitle,
 			&i.RunRootState,
@@ -784,7 +792,7 @@ func (q *Queries) ListRecentTriggerFirings(ctx context.Context, arg ListRecentTr
 }
 
 const listStalePendingTriggerEvents = `-- name: ListStalePendingTriggerEvents :many
-SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status, sender FROM trigger_events
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status, sender, origin FROM trigger_events
 WHERE outcome = 'pending' AND created_at < $1::timestamptz
 ORDER BY created_at
 LIMIT $2
@@ -821,6 +829,7 @@ func (q *Queries) ListStalePendingTriggerEvents(ctx context.Context, arg ListSta
 			&i.CreatedAt,
 			&i.RunStatus,
 			&i.Sender,
+			&i.Origin,
 		); err != nil {
 			return nil, err
 		}
@@ -837,7 +846,7 @@ func (q *Queries) ListStalePendingTriggerEvents(ctx context.Context, arg ListSta
 
 const listTriggerEvents = `-- name: ListTriggerEvents :many
 SELECT
-    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at, e.run_status, e.sender,
+    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at, e.run_status, e.sender, e.origin,
     c.id AS run_chat_id,
     c.title AS run_title,
     rw.state AS run_root_state,
@@ -910,6 +919,7 @@ func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsPa
 			&i.TriggerEvent.CreatedAt,
 			&i.TriggerEvent.RunStatus,
 			&i.TriggerEvent.Sender,
+			&i.TriggerEvent.Origin,
 			&i.RunChatID,
 			&i.RunTitle,
 			&i.RunRootState,

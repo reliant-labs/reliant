@@ -374,6 +374,20 @@ message WorkflowTrigger {
   // is the longest a repeat can be suppressed, and may be shorter.
   string dedupe_window = 7;
 
+  // CEL bool over `trigger`, evaluated BEFORE `filter`, that decides whether an
+  // event is wanted given WHO CAUSED IT: it reads trigger.origin, which says
+  // whether Reliant wrote the thing the event reports and which run did. A
+  // false records the event as skipped with the reason, so the firing history
+  // explains it.
+  //
+  // Empty means the default, which ignores a workflow's own echoes:
+  //   !(trigger.origin.same_workflow && trigger.origin.confidence in ['exact', 'intent'])
+  // Write "true" to receive everything. Event-driven triggers only.
+  //
+  // The lineage depth cap (5 hops) is a loop guard no expression overrides: a
+  // run whose chain is already that deep launches nothing, whatever this says.
+  string origin_filter = 8;
+
   // What makes it fire.
   oneof source {
     ScheduleSource schedule = 20;

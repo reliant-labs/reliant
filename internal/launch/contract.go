@@ -43,6 +43,9 @@ type Event struct {
 	// Sender is trigger.sender, as the source authenticated it. Nil for a
 	// start a person made themselves.
 	Sender *core.TriggerSender
+	// Origin is trigger.origin, resolved at intake. nil for a source with no
+	// attribution.
+	Origin *core.TriggerOrigin
 }
 
 // SeedMessage is one message written to the root thread before the run starts.

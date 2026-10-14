@@ -243,4 +243,13 @@ func TestFilterRootMatchesTheDeclaredShape(t *testing.T) {
 	for key := range sender {
 		assert.Empty(t, shape.CheckFilter("has(trigger.sender."+key+")"), "trigger.sender.%s is not declared", key)
 	}
+	origin, ok := root["origin"].(map[string]any)
+	require.True(t, ok, "trigger.origin is always present")
+	for key := range origin {
+		assert.Empty(t, shape.CheckFilter("has(trigger.origin."+key+")"), "trigger.origin.%s is not declared", key)
+	}
+	for _, key := range []string{"caused_by_reliant", "confidence", "run_id", "workflow", "trigger_name", "same_workflow", "actor", "lineage_depth"} {
+		assert.Contains(t, origin, key, "trigger.origin.%s is documented and must always be present", key)
+	}
+	assert.Len(t, origin, 8, "an undocumented key was added to trigger.origin")
 }

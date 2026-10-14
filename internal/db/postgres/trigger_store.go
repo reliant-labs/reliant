@@ -180,6 +180,11 @@ func (s *triggerStore) CreateTriggerEvent(ctx context.Context, ev *core.TriggerE
 		return false, fmt.Errorf("marshal trigger event sender: %w", err)
 	}
 
+	origin, err := triggerOriginToJSON(ev.Origin)
+	if err != nil {
+		return false, fmt.Errorf("marshal trigger event origin: %w", err)
+	}
+
 	affected, err := s.q.CreateTriggerEvent(ctx, pgdb.CreateTriggerEventParams{
 		ID:            ev.ID,
 		TriggerID:     triggerPtrToNullString(ev.TriggerID),
@@ -193,6 +198,7 @@ func (s *triggerStore) CreateTriggerEvent(ctx context.Context, ev *core.TriggerE
 		ChatID:        triggerPtrToNullString(ev.ChatID),
 		CreatedAt:     ev.CreatedAt,
 		Sender:        sender,
+		Origin:        origin,
 	})
 	if err != nil {
 		return false, fmt.Errorf("failed to create trigger event: %w", err)
@@ -714,6 +720,14 @@ func triggerEventFromPG(row pgdb.TriggerEvent) (*core.TriggerEvent, error) {
 		}
 	}
 
+	var origin *core.TriggerOrigin
+	if row.Origin.Valid && len(row.Origin.RawMessage) > 0 {
+		origin = &core.TriggerOrigin{}
+		if err := json.Unmarshal(row.Origin.RawMessage, origin); err != nil {
+			return nil, fmt.Errorf("unmarshal trigger event origin (event %s): %w", row.ID, err)
+		}
+	}
+
 	return &core.TriggerEvent{
 		ID:            row.ID,
 		TriggerID:     triggerNullStringToPtr(row.TriggerID),
@@ -728,6 +742,7 @@ func triggerEventFromPG(row pgdb.TriggerEvent) (*core.TriggerEvent, error) {
 		CreatedAt:     row.CreatedAt,
 		RunStatus:     row.RunStatus.String,
 		Sender:        sender,
+		Origin:        origin,
 	}, nil
 }
 
@@ -794,4 +809,16 @@ func triggerNullStringToPtr(ns sql.NullString) *string {
 		return &value
 	}
 	return nil
+}
+
+// triggerOriginToJSON is the origin column: NULL for no origin.
+func triggerOriginToJSON(origin *core.TriggerOrigin) (pqtype.NullRawMessage, error) {
+	if origin == nil {
+		return pqtype.NullRawMessage{}, nil
+	}
+	encoded, err := json.Marshal(origin)
+	if err != nil {
+		return pqtype.NullRawMessage{}, err
+	}
+	return pqtype.NullRawMessage{RawMessage: encoded, Valid: true}, nil
 }

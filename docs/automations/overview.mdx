@@ -63,12 +63,87 @@ Each entry has a unique `name` and exactly one source. The fields around the sou
 | `name` | Unique within the workflow; what an activation refers to |
 | `description` | Shown to whoever chooses what to activate |
 | `filter` | A [CEL](/reference/cel-expressions) expression over `trigger`; the event fires only if it is true. Not allowed on schedules |
+| `origin_filter` | A CEL expression over `trigger`, evaluated before `filter`, that decides by *who caused the event*. The default ignores the workflow's own echoes. See [Telling your own writes apart](#telling-your-own-writes-apart). Not allowed on schedules |
 | `inputs` | Sets workflow inputs from the event: input name to a template over `trigger` |
 | `prompt` | The first message of the run, as a template over `trigger`. An activation's own message overrides it |
 
 Inside templates and filters, `trigger.payload` is the event's data and `trigger.kind` says what fired. Unknown keys in a `triggers:` block are errors, not ignored: a mistyped `filtr:` would otherwise mean a trigger that fires on everything.
 
 For an integration trigger, validation also checks the filter, inputs and prompt against the payload the integration declares for its events, so a read that payload can never satisfy is an error before the trigger fires. For example, GitHub's `issue.labels` is a list of label names: write `!('wontfix' in trigger.payload.data.issue.labels)`, not `l.name`.
+
+## Telling your own writes apart
+
+An automation that writes to the thing it watches hears itself. A reviewer posts a review on a pull request and the review comes back as an `issue_comment.created`; a responder pushes a fix and the push comes back as `pull_request.synchronize`. Without a guard, a workflow that reacts to either would run forever.
+
+Reliant records every change an integration action makes on a run's behalf (a comment, review, label, pull request) *before* it makes it, and when a webhook arrives it checks whether one of those writes caused it. The answer is `trigger.origin`, available in `filter`, `inputs` and `prompt`:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `trigger.origin.caused_by_reliant` | bool | Reliant wrote the thing this event reports, at any confidence |
+| `trigger.origin.confidence` | string | `exact`: the event's own object id (a comment, review or pull request number) is one a run's write produced. `intent`: no id matched yet, but the event matches a recent write on the same target and content (the webhook can arrive before the write's own response does). `app`: it came from Reliant's GitHub App, run unknown. `claimed`: a push whose commit carries a `Reliant-Run:` trailer, which anyone can write, so it is only ever a reason to ignore, never to trust. `none`: nothing says Reliant caused it |
+| `trigger.origin.run_id` | string | The run (chat id) that made the write |
+| `trigger.origin.workflow` | string | The workflow that run executed |
+| `trigger.origin.trigger_name` | string | The declared trigger that launched that run, when one did |
+| `trigger.origin.same_workflow` | bool | That run is a run of *this trigger's own workflow*: the event is its own echo |
+| `trigger.origin.actor` | string | Who the write was made as: `app` (the GitHub App), `owner` (your own token) or `unknown` |
+| `trigger.origin.lineage_depth` | int | How many event-driven hops led to the run that made the write. A chain stops at 5 |
+
+Every field is always present. An event nothing attributed reads `caused_by_reliant: false`, `confidence: 'none'`, empty strings and `lineage_depth: 0`, so a filter never fails with "no such key". The run's own details (`run_id`, `workflow`, `trigger_name`) are filled only when the run is *yours*: a different user's trigger on the same repository learns that Reliant caused the event and nothing about whose run.
+
+### `origin_filter`
+
+`origin_filter` is a CEL bool, evaluated before `filter`. A false skips the event. When you do not write one, this is what runs:
+
+```yaml
+origin_filter: "!(trigger.origin.same_workflow && trigger.origin.confidence in ['exact', 'intent'])"
+```
+
+So a workflow ignores its own echoes by default, and only when Reliant is confident they are its own: an `app` or `claimed` origin says Reliant did it but not which run, so it is not treated as this workflow's. To change that, write your own:
+
+```yaml
+triggers:
+  - name: on-push
+    integration:
+      integration: github
+      events: [pull_request.synchronize]
+    # Hear everything, including this workflow's own writes.
+    origin_filter: "true"
+
+  - name: on-comment
+    integration:
+      integration: github
+      events: [issue_comment.created]
+    # Ignore this workflow's own echoes, except the ones a particular trigger of
+    # its own caused: one deliberate re-trigger.
+    origin_filter: "!trigger.origin.same_workflow || trigger.origin.trigger_name == 'responder-push'"
+```
+
+Validation compiles `origin_filter` and checks it against the same typed `trigger` the filter sees, so a misspelled field (`trigger.origin.same_workfow`) is an error when you save the workflow, not a trigger that quietly never matches.
+
+### Skipped events say why
+
+An event the `origin_filter` rejects is recorded as **skipped** with the reason, so the automation's history explains it:
+
+```text
+origin_filter rejected: caused by run 4f1c… of this workflow (exact match): !(trigger.origin.same_workflow && trigger.origin.confidence in ['exact', 'intent'])
+```
+
+### The loop cap
+
+Whatever `origin_filter` says, a chain of event-driven launches stops at **5 hops**. A run launched by an event that one of its ancestors' writes caused inherits that ancestor's chain plus one; a launch that would be the sixth is skipped with `loop guard: launch chain is already 5 hops deep (max 5)`. No expression can override it, so two workflows that deliberately re-trigger each other with `origin_filter: "true"` still stop. The cap counts other users' runs too.
+
+### What can and cannot be attributed
+
+Only writes Reliant makes itself are attributed: a `type: action` node, or an integration tool an agent calls. Those are recorded exactly. What an agent does through a **shell** is not:
+
+| Write | Attribution |
+|-------|-------------|
+| An integration action or tool (`issue.comment`, `pr.review.create`, `pr.create`, `issue.labels.add`, ...) | `exact` or `intent` |
+| A comment, review or pull request made through Reliant's GitHub App without a recorded write | `app` |
+| A `git push` whose commit message ends in a `Reliant-Run:` trailer | `claimed` |
+| `gh` or `git push` run by an agent in a shell with your own login | **Not attributable.** To GitHub it is you |
+
+If an agent in a shell can write to GitHub as you, give the writing to an action node, and keep the shell for work on the checkout.
 
 ## The four kinds
 

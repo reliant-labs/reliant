@@ -115,7 +115,31 @@ You can narrow a trigger with `match`. Every event carries `repository` (`owner/
 
 Boolean-like attributes are the strings `"true"` and `"false"`; quote them in YAML.
 
-Comments written by a GitHub App, including Reliant's own, never fire `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments or replies cannot trigger itself. Labels and other events are not filtered this way: a trigger on `pull_request.labeled` also fires when a run adds the label, so guard it with a `sender` check or a label the run does not add.
+Comments written by a GitHub App, including Reliant's own, never fire `issue_comment.created` or `pull_request_review_comment.created`.
+
+### Your workflow's own writes
+
+Every other event a run can cause (a label it adds, a pull request it opens, a review it submits, a push it makes) does reach your triggers, and a workflow that writes to what it watches would otherwise hear itself. Reliant records each mutating GitHub action a run makes before it makes it, then attributes the webhook that follows. That is `trigger.origin`, and by default a trigger ignores events its own workflow's runs caused:
+
+```yaml
+# The default, written out:
+origin_filter: "!(trigger.origin.same_workflow && trigger.origin.confidence in ['exact', 'intent'])"
+```
+
+What the webhook carries, and so what an event is matched on:
+
+| Event | Matched on |
+|-------|------------|
+| `issue_comment.created`, `pull_request_review.submitted`, `pull_request_review_comment.created` | The comment's or review's own id (`exact`), else the pull request or issue it is on plus a digest of its full body (`intent`) |
+| `pull_request.opened` | The head branch of a `pr.create` (`intent`), then the pull request's own number (`exact`) |
+| `issues.labeled`, `issues.unlabeled`, `pull_request.labeled`, `pull_request.unlabeled` | The issue or pull request and the label (`intent`) |
+| `pull_request.synchronize`, `push` | The pull request or branch and the head commit (`intent`), or a `Reliant-Run:` commit trailer (`claimed`) |
+
+The digest is of the whole body as written, before the recorded payload truncates long text, and ignores the line-ending and trailing-space changes GitHub makes. A write that provably failed (a 4xx) is not matched; one that may have been applied (a timeout, a 5xx) is.
+
+An event Reliant's GitHub App caused but no recorded write explains is `app`: Reliant did it, run unknown. It is not treated as the workflow's own, so the default lets it through; write `origin_filter: "!trigger.origin.caused_by_reliant"` to ignore it as well. See [Telling your own writes apart](/automations/overview#telling-your-own-writes-apart) for the full field list, `origin_filter` examples and the loop cap.
+
+Writes an agent makes through its shell (`gh`, `git push`) are not recorded and look, to GitHub, like you. Do the writing in an action node, or a push's `Reliant-Run:` trailer is the only thing marking it, and that can only be a reason to ignore an event, never to trust one.
 
 On a self-hosted deployment the GitHub App must be subscribed to the events you use (Pull request review comment, Check run, Check suite and so on) and the repository permissions that go with them.
 

@@ -796,6 +796,7 @@ type TriggerEvent struct {
 	CreatedAt     time.Time             `json:"created_at"`
 	RunStatus     sql.NullString        `json:"run_status"`
 	Sender        pqtype.NullRawMessage `json:"sender"`
+	Origin        pqtype.NullRawMessage `json:"origin"`
 }
 
 type TriggerRegistration struct {

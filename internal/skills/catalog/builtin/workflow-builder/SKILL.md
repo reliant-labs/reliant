@@ -313,6 +313,26 @@ Gmail's DMARC, or DKIM aligned with the From domain, passed), sms the From numbe
 certain people start runs, filter on it and require `verified`:
 `trigger.sender.verified && trigger.sender.id in ["U123", "U456"]`.
 
+**`trigger.origin`** says whether Reliant itself caused the event, so a workflow can tell its own echoes from other people's. Every
+key is always present (an unattributed event reads `caused_by_reliant: false, confidence: 'none'`), in `filter`, `inputs` and `prompt`:
+
+| Key | Meaning |
+|-----|---------|
+| `caused_by_reliant` | Reliant wrote the thing the event reports (any confidence) |
+| `confidence` | `exact` (the event's own object id is one a run's write produced), `intent` (matches a recent write on target and content), `app` (from Reliant's GitHub App, run unknown), `claimed` (a `Reliant-Run:` commit trailer; anyone can write one, so it is only ever a reason to ignore), `none` |
+| `run_id`, `workflow`, `trigger_name` | The run that wrote, its workflow, and the declared trigger that launched it. Empty unless it is YOUR run |
+| `same_workflow` | That run is a run of this trigger's own workflow: the event is its own echo |
+| `actor` | Who the write was made as: `app`, `owner` or `unknown` |
+| `lineage_depth` | How many event-driven hops led to the run that wrote (a chain stops at 5) |
+
+A trigger's **`origin_filter`** is a raw CEL bool evaluated BEFORE `filter`. Its default ignores a workflow's own echoes:
+`!(trigger.origin.same_workflow && trigger.origin.confidence in ['exact', 'intent'])`, so a reviewer does not re-run on its own
+review. `origin_filter: "true"` receives everything; `!trigger.origin.same_workflow || trigger.origin.trigger_name == 'responder-push'`
+allows one deliberate re-trigger. A skipped event is recorded with the reason (`origin_filter rejected: caused by run X of this
+workflow`). The lineage depth cap (5) is a hard loop guard no expression overrides, so two workflows that re-trigger each other
+still stop. Only writes made through integration actions (`type: action` nodes, integration tools) are attributed
+exactly; an agent's own shell `gh`/`git` writes look like the person who owns the machine.
+
 **The loop for an integration trigger:** `search_integrations(kind: trigger)` → `get_integration_schema`
 (its events, the `match` attributes, the payload schema, and a ready `triggers:` block) → write it with
 `edit_workflow` (validation reports bad cron, filters, inputs, events and match keys like any other error) →
@@ -417,7 +437,7 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 | `output.*` | Current activity output (for save_message context) | workflow-specific |
 | `outputs.*` | Loop iteration outputs for while condition evaluation | workflow-specific |
 | `thread.*` | Current thread context (token_count, message_count) | workflow-specific |
-| `trigger.*` | The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>, trigger.sender.{kind,id,display_name,verified}). Interactive chats have kind chat.start | workflow-specific |
+| `trigger.*` | The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>, trigger.sender.{kind,id,display_name,verified}, trigger.origin.{caused_by_reliant,confidence,run_id,workflow,trigger_name,same_workflow,actor,lineage_depth}). Interactive chats have kind chat.start | workflow-specific |
 | `workflow.*` | Workflow execution context (id, name, path, etc.) | `id`, `name`, `run_id`, `path`, `worktree_path`, `branch`, `mode` |
 
 #### `iter` fields

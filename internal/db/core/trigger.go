@@ -350,6 +350,10 @@ type TriggerEvent struct {
 	// it: set once at intake and never from the payload. Nil for a start a
 	// person made themselves (a chat, a builder test).
 	Sender *TriggerSender
+	// Origin says whether Reliant caused this event, and which run did: set once
+	// at intake from the write ledger (see TriggerOrigin). Nil for an event no
+	// enricher looked at; readers treat nil as "not caused by Reliant".
+	Origin *TriggerOrigin
 }
 
 // TriggerSenderKind is what kind of party sent the event that fired a
@@ -546,4 +550,84 @@ type TriggerStore interface {
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*TriggerRegistration, error)
 	UpsertTriggerRegistration(ctx context.Context, reg *TriggerRegistration) error
 	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
+}
+
+// OriginConfidence is how sure Reliant is that it caused an event.
+type OriginConfidence string
+
+const (
+	// OriginExact: the event's own object id is one a ledger entry recorded as
+	// created or touched by a run.
+	OriginExact OriginConfidence = "exact"
+	// OriginIntent: no id matched, but the event matches a recent ledger entry
+	// on target, action and content (a body digest, a label, a head sha).
+	OriginIntent OriginConfidence = "intent"
+	// OriginApp: the event came from Reliant's own GitHub App (its bot, or an
+	// object created through it), but no ledger entry says which run.
+	OriginApp OriginConfidence = "app"
+	// OriginClaimed: the event carries a Reliant-Run trailer. Anyone can write
+	// one, so a claim may only ever SUPPRESS an event, never authorize one.
+	OriginClaimed OriginConfidence = "claimed"
+	// OriginNone: nothing says Reliant caused it.
+	OriginNone OriginConfidence = "none"
+)
+
+// The people an event can be attributed to (trigger.origin.actor).
+const (
+	// OriginActorApp is Reliant's own app identity.
+	OriginActorApp = "app"
+	// OriginActorOwner is the person who owns the run that wrote.
+	OriginActorOwner = "owner"
+	// OriginActorUnknown is anyone else, or nobody.
+	OriginActorUnknown = "unknown"
+)
+
+// TriggerOrigin is trigger.origin: whether Reliant caused an event and which
+// run did, resolved at intake against the write ledger.
+//
+// The run that wrote is shown only to the trigger of the SAME owner: one event
+// fans out to many users' triggers, and a stranger's trigger learns that
+// Reliant caused it (CausedByReliant, Foreign) and nothing about whose run.
+type TriggerOrigin struct {
+	CausedByReliant bool             `json:"caused_by_reliant"`
+	Confidence      OriginConfidence `json:"confidence"`
+	// RunID is the chat of the run that wrote; Workflow its root workflow;
+	// TriggerName the declared trigger that launched it.
+	RunID       string `json:"run_id,omitempty"`
+	Workflow    string `json:"workflow,omitempty"`
+	TriggerName string `json:"trigger_name,omitempty"`
+	// SameWorkflow: the run that wrote is a run of the very workflow this
+	// trigger belongs to, for the same owner.
+	SameWorkflow bool `json:"same_workflow"`
+	// Actor is who the write was made as: OriginActorApp, OriginActorOwner or
+	// OriginActorUnknown.
+	Actor string `json:"actor,omitempty"`
+	// Foreign: Reliant caused it, but the run belongs to someone else, so its
+	// details are withheld.
+	Foreign bool `json:"foreign,omitempty"`
+	// Lineage is the chain of integration-event hops that led to the run that
+	// wrote, root first; LineageDepth is its length.
+	Lineage []OriginLink `json:"lineage,omitempty"`
+	// Depth is the number of hops that led to the run that wrote, kept even when
+	// Lineage is withheld (Foreign), so the loop cap still counts them.
+	Depth int `json:"depth,omitempty"`
+	// WriteID is the ledger entry that matched.
+	WriteID string `json:"write_id,omitempty"`
+}
+
+// OriginLink is one hop of a lineage: Trigger fired because SourceRun wrote.
+type OriginLink struct {
+	TriggerID   string `json:"trigger_id"`
+	SourceRunID string `json:"source_run_id,omitempty"`
+}
+
+// LineageDepth is how many hops led to the run that wrote.
+func (o *TriggerOrigin) LineageDepth() int {
+	if o == nil {
+		return 0
+	}
+	if o.Depth > len(o.Lineage) {
+		return o.Depth
+	}
+	return len(o.Lineage)
 }

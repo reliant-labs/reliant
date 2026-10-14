@@ -125,6 +125,29 @@ func rootSchema(payload map[string]any) map[string]any {
 					"verified":     map[string]any{"type": "boolean"},
 				},
 			},
+			"origin": originSchema(),
+		},
+	}
+}
+
+// originSchema is `trigger.origin` as runtime.OriginCELValue builds it: closed,
+// every key always present.
+func originSchema() map[string]any {
+	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
+	boolean := func(desc string) map[string]any { return map[string]any{"type": "boolean", "description": desc} }
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"description":          "Whether Reliant caused this event, and which run did.",
+		"properties": map[string]any{
+			"caused_by_reliant": boolean("Reliant wrote the thing this event reports (any confidence)."),
+			"confidence":        str("How sure: exact (the event's own object id is one a run's write produced), intent (matches a recent write on target and content), app (from Reliant's GitHub App, run unknown), claimed (carries a Reliant-Run trailer; spoofable, so only ever a reason to ignore), none."),
+			"run_id":            str("The run (chat id) that wrote; empty unless it is the same owner's run."),
+			"workflow":          str("The workflow that run executed; empty unless it is the same owner's run."),
+			"trigger_name":      str("The declared trigger that launched that run, when one did."),
+			"same_workflow":     boolean("That run is a run of this trigger's own workflow: this event is its own echo."),
+			"actor":             str("Who the write was made as: app, owner or unknown."),
+			"lineage_depth":     map[string]any{"type": "integer", "description": "How many event-driven hops led to the run that wrote; a chain stops at 5."},
 		},
 	}
 }

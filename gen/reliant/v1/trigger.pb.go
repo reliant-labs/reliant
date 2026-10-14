@@ -934,6 +934,19 @@ type WorkflowTrigger struct {
 	// deliveries that straddle a bucket boundary are two events, so the window
 	// is the longest a repeat can be suppressed, and may be shorter.
 	DedupeWindow string `protobuf:"bytes,7,opt,name=dedupe_window,json=dedupeWindow,proto3" json:"dedupe_window,omitempty"`
+	// CEL bool over `trigger`, evaluated BEFORE `filter`, that decides whether an
+	// event is wanted given WHO CAUSED IT: it reads trigger.origin, which says
+	// whether Reliant wrote the thing the event reports and which run did. A
+	// false records the event as skipped with the reason, so the firing history
+	// explains it.
+	//
+	// Empty means the default, which ignores a workflow's own echoes:
+	//   !(trigger.origin.same_workflow && trigger.origin.confidence in ['exact', 'intent'])
+	// Write "true" to receive everything. Event-driven triggers only.
+	//
+	// The lineage depth cap (5 hops) is a loop guard no expression overrides: a
+	// run whose chain is already that deep launches nothing, whatever this says.
+	OriginFilter string `protobuf:"bytes,8,opt,name=origin_filter,json=originFilter,proto3" json:"origin_filter,omitempty"`
 	// What makes it fire.
 	//
 	// Types that are valid to be assigned to Source:
@@ -1022,6 +1035,13 @@ func (x *WorkflowTrigger) GetDedupeKey() string {
 func (x *WorkflowTrigger) GetDedupeWindow() string {
 	if x != nil {
 		return x.DedupeWindow
+	}
+	return ""
+}
+
+func (x *WorkflowTrigger) GetOriginFilter() string {
+	if x != nil {
+		return x.OriginFilter
 	}
 	return ""
 }
@@ -3222,7 +3242,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"O\n" +
 	"\x13WorkflowEventSource\x12\x1c\n" +
 	"\tworkflows\x18\x01 \x03(\tR\tworkflows\x12\x1a\n" +
-	"\boutcomes\x18\x02 \x03(\tR\boutcomes\"\xbf\x04\n" +
+	"\boutcomes\x18\x02 \x03(\tR\boutcomes\"\xe4\x04\n" +
 	"\x0fWorkflowTrigger\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x16\n" +
@@ -3231,7 +3251,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x06prompt\x18\x05 \x01(\tR\x06prompt\x12\x1d\n" +
 	"\n" +
 	"dedupe_key\x18\x06 \x01(\tR\tdedupeKey\x12#\n" +
-	"\rdedupe_window\x18\a \x01(\tR\fdedupeWindow\x128\n" +
+	"\rdedupe_window\x18\a \x01(\tR\fdedupeWindow\x12#\n" +
+	"\rorigin_filter\x18\b \x01(\tR\foriginFilter\x128\n" +
 	"\bschedule\x18\x14 \x01(\v2\x1a.reliant.v1.ScheduleSourceH\x00R\bschedule\x125\n" +
 	"\awebhook\x18\x15 \x01(\v2\x19.reliant.v1.WebhookSourceH\x00R\awebhook\x12A\n" +
 	"\vintegration\x18\x16 \x01(\v2\x1d.reliant.v1.IntegrationSourceH\x00R\vintegration\x12H\n" +

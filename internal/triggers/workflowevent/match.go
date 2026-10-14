@@ -24,7 +24,7 @@
 //
 //   - a trigger never fires on a run it launched, nor on any descendant of
 //     such a run — its id is somewhere in the source run's lineage;
-//   - a chain never grows past MaxChainDepth links.
+//   - a chain never grows past lineage.MaxDepth hops (package lineage).
 //
 // Together they stop A→A (A's trigger is in its own run's lineage) and
 // A→B→A (A's trigger is in the lineage B inherited) after one hop, and bound
@@ -39,12 +39,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 )
-
-// MaxChainDepth caps how many workflow-event links may precede a launch. A
-// run started by a human has depth 0; the run its trigger starts has depth 1;
-// a run triggered by THAT run has depth 2, and so on. A launch that would sit
-// deeper is skipped.
-const MaxChainDepth = 5
 
 // Source is a workflow_event trigger's source spec. It mirrors
 // reliantv1.WorkflowEventSource field for field (and is the JSON shape of a

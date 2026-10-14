@@ -153,6 +153,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		OccurredAt: ev.OccurredAt,
 		Payload:    ev.Payload,
 		Sender:     ev.Sender,
+		Origin:     ev.Origin,
 	}, spec)
 
 	switch {
@@ -206,7 +207,7 @@ func (f *EventFirer) settle(ctx context.Context, ev *core.TriggerEvent, outcome 
 // labelled, untrusted data.
 func (f *EventFirer) buildSpec(trigger *core.Trigger, ev *core.TriggerEvent, decl *Declaration) (launch.Spec, error) {
 	values := trigger.Params
-	root := FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender}.Root()
+	root := FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root()
 	if decl != nil {
 		merged, err := MergeDeclaredInputs(trigger.Params, decl.Inputs, root)
 		if err != nil {
