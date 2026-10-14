@@ -125,6 +125,11 @@ func TestNoRawNodeTypeLiteralsInProductionFiles(t *testing.T) {
 		"runtime/context.go": {
 			"workflow": {},
 		},
+		// trigger.origin's `workflow` field (the workflow that caused the
+		// event), a CEL map key, not a node type.
+		"runtime/trigger_info.go": {
+			"workflow": {},
+		},
 		// JSON map key for router_decision serialization, not a node type.
 		"runtime/activities/handlers/workflow_status.go": {
 			"workflow": {},
