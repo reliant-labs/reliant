@@ -31461,6 +31461,10 @@
             "kind": "string"
           },
           {
+            "name": "origin_filter",
+            "kind": "string"
+          },
+          {
             "name": "schedule",
             "kind": "message",
             "type_name": "reliant.v1.ScheduleSource",
