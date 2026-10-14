@@ -297,12 +297,12 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		// A 3xx the caller asked to see (redirects: return) is the answer,
 		// not a failure: its status and Location are what they wanted.
 		returnedRedirect := opts.redirects == manifest.RedirectsReturn && pgResp.status >= 300 && pgResp.status < 400
-		if (pgResp.status < 200 || pgResp.status >= 300) && !returnedRedirect {
+		if (pgResp.status < 200 || pgResp.status >= 300) && !returnedRedirect && !acceptedError(req, pgResp) {
 			return errorResult(req, pgResp)
 		}
 		// A provider that reports failure in a 2xx body (Slack's ok:false)
 		// declares a guarded rule for it; any other 2xx is a success.
-		if rule := matchErrorRule(req, pgResp); rule != nil {
+		if rule := matchErrorRule(req, pgResp); rule != nil && !rule.GetAccept() {
 			return ruleResult(rule, pgResp), nil
 		}
 		if opts.responseFormat == manifest.ResponseFormatJSON && pgResp.jsonErr != nil && !returnedRedirect {
@@ -791,6 +791,13 @@ func errorResult(req *reliantv1.HttpRequestSpec, p *page) (*Result, error) {
 	}
 	return &Result{Content: defaultErrorMessage(p), IsError: true,
 		Retryable: p.status == http.StatusTooManyRequests || p.status >= 500, StatusCode: p.status}, nil
+}
+
+// acceptedError reports whether a non-2xx response matches a rule that
+// declares it a success (an "already exists" answer to an idempotent create).
+func acceptedError(req *reliantv1.HttpRequestSpec, p *page) bool {
+	rule := matchErrorRule(req, p)
+	return rule != nil && rule.GetAccept()
 }
 
 // matchErrorRule returns the first rule whose status (or range) and `when`

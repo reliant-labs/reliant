@@ -363,6 +363,13 @@ message ErrorRule {
   // (retryable) and a missing permission (permanent) with 403. A `when` that
   // fails to evaluate does not match.
   string when = 6;
+  // Accept turns a matching non-2xx response into a success: the request is
+  // done, and output.select runs over the response as usual (`status` tells
+  // the cases apart). It makes a create idempotent when the provider answers
+  // "already exists" with an error (GitHub's 422 for a label). The rule must
+  // carry a `when` that says which bodies mean that, and cannot cover a 2xx
+  // status. Retryable and message are unused.
+  bool accept = 7;
 }
 
 // OutputSpec selects what part of the response becomes the node's data.

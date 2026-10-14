@@ -251,7 +251,7 @@ GitHub is the fullest integration for automations. Besides `issues.opened` and t
 `pull_request.labeled`/`unlabeled`/`reopened` (`match: {label: ...}`), `pull_request_review_comment.created` (inline diff comments; `match` `is_reply`
 and `mentions_reliant`), and `check_run.completed` / `check_suite.completed` / `workflow_run.completed` (`conclusion`, `branch`, `app`).
 Its `type: action` nodes cover comments (`issue.comment`, `.update`, `.list`), atomic `issue.labels.add`/`remove` (prefer them to `issue.update`,
-which replaces the whole label list and races), `issue.search`, `pr.create`/`update`, `pr.reviews.list`, `pr.review_comments.list` and
+which replaces the whole label list and races), `issue.search`, `labels.create` (idempotent, for pack setup) / `labels.list`, `pr.create`/`update`, `pr.reviews.list`, `pr.review_comments.list` and
 `pr.review_comment.reply`. There is no merge action, on purpose. Actions that change GitHub are withheld from an unattended run unless the
 step names them in its `tools`. A trigger on a label event also fires for a label a run itself adds, so guard it.
 

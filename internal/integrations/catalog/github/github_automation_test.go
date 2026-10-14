@@ -25,7 +25,7 @@ func TestWritesReturnIDNodeIDAndURL(t *testing.T) {
 	resolved, err := catalog.MustBuiltin().Resolve("github/user.get@1")
 	require.NoError(t, err)
 	for _, a := range resolved.Manifest.GetActions() {
-		if !a.GetMutates() || a.GetId() == "workflow.dispatch" || strings.HasPrefix(a.GetId(), "issue.labels.") {
+		if !a.GetMutates() || a.GetId() == "workflow.dispatch" || strings.HasPrefix(a.GetId(), "issue.labels.") || a.GetId() == "labels.create" {
 			continue
 		}
 		props, _ := a.GetOutput().GetSchema().AsMap()["properties"].(map[string]any)
@@ -41,6 +41,7 @@ func TestMutatingClassification(t *testing.T) {
 	want := map[string]bool{
 		"issue.comment.update": true, "issue.comment.list": false,
 		"issue.labels.add": true, "issue.labels.remove": true, "issue.search": false,
+		"labels.create": true, "labels.list": false,
 		"pr.create": true, "pr.update": true, "pr.reviews.list": false,
 		"pr.review_comments.list": false, "pr.review_comment.reply": true,
 	}
@@ -455,4 +456,109 @@ func (f *fakeGitHub) only2(t *testing.T) []recorded {
 	got := f.requests()
 	require.Len(t, got, 2)
 	return got
+}
+
+// Setup creates its labels every time it runs, so a label the repository
+// already has must be a success that changes nothing.
+func TestLabelsCreateSendsNameColorAndDescription(t *testing.T) {
+	f := newFake(t)
+	f.on("POST", "/repos/acme/app/labels", jsonReply(201,
+		`{"id": 208045946, "node_id": "LA_1", "name": "agent:ready", "color": "0e8a16", "description": "An agent may pick this up", "default": false}`))
+	out := data(t, f.run("labels.create", map[string]any{
+		"owner": "acme", "repo": "app", "name": "agent:ready", "color": "0e8a16", "description": "An agent may pick this up",
+	}))
+
+	req := f.only()
+	assert.Equal(t, "POST", req.Method)
+	assert.Equal(t, "/repos/acme/app/labels", req.Path)
+	assertGitHubHeaders(t, req)
+	assert.Equal(t, map[string]any{"name": "agent:ready", "color": "0e8a16", "description": "An agent may pick this up"}, req.Body)
+	assert.Equal(t, map[string]any{
+		"name": "agent:ready", "color": "0e8a16", "description": "An agent may pick this up",
+		"id": 208045946.0, "node_id": "LA_1", "created": true,
+	}, out)
+}
+
+func TestLabelsCreateOmitsWhatWasNotGiven(t *testing.T) {
+	f := newFake(t)
+	f.on("POST", "/repos/acme/app/labels", jsonReply(201, `{"id": 1, "name": "triage", "color": "ededed", "description": null}`))
+	data(t, f.run("labels.create", map[string]any{"owner": "acme", "repo": "app", "name": "triage"}))
+	assert.Equal(t, map[string]any{"name": "triage"}, f.only().Body, "no null color or description is sent")
+}
+
+func TestLabelsCreateIsIdempotentWhenTheLabelExists(t *testing.T) {
+	f := newFake(t)
+	f.on("POST", "/repos/acme/app/labels", jsonReply(422,
+		`{"message":"Validation Failed","errors":[{"resource":"Label","code":"already_exists","field":"name"}],"documentation_url":"https://docs.github.com/rest/issues/labels#create-a-label","status":"422"}`))
+	res := f.run("labels.create", map[string]any{"owner": "acme", "repo": "app", "name": "Agent:Ready", "color": "0e8a16"})
+	require.False(t, res.IsError, res.Content)
+	assert.Equal(t, map[string]any{
+		"name": "Agent:Ready", "color": nil, "description": nil, "id": nil, "node_id": nil, "created": false,
+	}, data(t, res))
+	assert.Len(t, f.requests(), 1, "one request: no read, no update of the existing label")
+}
+
+func TestLabelsCreateStillFailsOnOtherErrors(t *testing.T) {
+	for name, tc := range map[string]struct {
+		status  int
+		body    string
+		wantErr string
+	}{
+		"invalid color":  {422, `{"message":"Validation Failed","errors":[{"resource":"Label","code":"invalid","field":"color"}],"status":"422"}`, "color"},
+		"422 w/o errors": {422, `{"message":"Validation Failed","status":"422"}`, "validation failed"},
+		"no permission":  {403, `{"message":"Resource not accessible by integration"}`, "refused"},
+		"not found":      {404, `{"message":"Not Found"}`, "not found"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFake(t)
+			f.on("POST", "/repos/acme/app/labels", jsonReply(tc.status, tc.body))
+			res := f.run("labels.create", map[string]any{"owner": "acme", "repo": "app", "name": "x"})
+			assert.True(t, res.IsError)
+			assert.Equal(t, tc.status, res.StatusCode)
+			assert.Contains(t, strings.ToLower(res.Content), tc.wantErr)
+		})
+	}
+}
+
+func TestLabelsCreateRefusesBadInput(t *testing.T) {
+	f := newFake(t)
+	for _, in := range []map[string]any{
+		{"owner": "acme", "repo": "app", "name": ""},
+		{"owner": "acme", "repo": "app", "name": "x", "color": "#0e8a16"},
+		{"owner": "acme", "repo": "app", "name": "x", "color": "green"},
+		{"owner": "acme", "repo": "app", "name": strings.Repeat("x", 51)},
+		{"owner": "acme", "repo": "app", "name": "x", "description": strings.Repeat("d", 101)},
+	} {
+		_, err := f.try("labels.create", in)
+		assert.Error(t, err, "%v", in)
+	}
+	assert.Empty(t, f.requests())
+}
+
+func TestLabelsListFollowsPagination(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/labels", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") != "2" {
+			w.Header().Set("Link", fmt.Sprintf(`<%s/repos/acme/app/labels?per_page=100&page=2>; rel="next"`, "https://"+r.Host))
+			_, _ = w.Write([]byte(`[{"id": 1, "node_id": "LA_1", "name": "bug", "color": "d73a4a", "description": "Something broken", "default": true}]`))
+			return
+		}
+		_, _ = w.Write([]byte(`[{"id": 2, "node_id": "LA_2", "name": "agent:ready", "color": "0e8a16", "description": null, "default": false}]`))
+	})
+	out := data(t, f.run("labels.list", map[string]any{"owner": "acme", "repo": "app"}))
+	assert.Equal(t, []any{
+		map[string]any{"id": 1.0, "node_id": "LA_1", "name": "bug", "color": "d73a4a", "description": "Something broken", "default": true},
+		map[string]any{"id": 2.0, "node_id": "LA_2", "name": "agent:ready", "color": "0e8a16", "description": nil, "default": false},
+	}, out["items"])
+	got := f.requests()
+	require.Len(t, got, 2)
+	assert.Equal(t, "per_page=100", got[0].Query)
+}
+
+func TestLabelsListOfARepositoryWithNoLabelsIsAnEmptyList(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/labels", jsonReply(200, `[]`))
+	out := data(t, f.run("labels.list", map[string]any{"owner": "acme", "repo": "app"}))
+	assert.Equal(t, []any{}, out["items"])
 }

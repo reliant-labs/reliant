@@ -256,6 +256,50 @@ func TestErrorRuleWhenThatErrorsDoesNotMatch(t *testing.T) {
 	}
 }
 
+// An accept rule turns the one failure it names into a success: output.select
+// runs over that response and sees its status, and a failure the guard does
+// not name is still an error.
+func TestErrorRuleAcceptTurnsAMatchingFailureIntoASuccess(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("bad") != "" {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"errors": [{"code": "invalid"}]}`))
+			return
+		}
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"errors": [{"code": "already_exists"}]}`))
+	}))
+	defer srv.Close()
+	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
+    request:
+      method: POST
+      path: /x
+      query_expr: '{?"bad": params.?bad}'
+      errors:
+        - status: 422
+          accept: true
+          when: "response.errors.exists(e, e.code == 'already_exists')"
+        - { status: 422, retryable: false, message: "invalid" }
+    output:
+      select: '{"created": status == 201}'
+`))
+	run := func(params map[string]any) *Result {
+		r := newRunner()
+		r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig
+		res, err := r.Run(context.Background(), m, a, params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	if res := run(nil); res.IsError || res.Data["created"] != false || res.StatusCode != 422 {
+		t.Errorf("the accepted 422 must be a success: %+v", res)
+	}
+	if res := run(map[string]any{"bad": "1"}); !res.IsError || res.Content != "invalid" {
+		t.Errorf("a 422 the guard does not name must still fail: %+v", res)
+	}
+}
+
 // Some providers report failure in a 2xx body: Slack answers HTTP 200 with
 // {"ok": false, "error": "not_in_channel"}. A rule whose range covers the 2xx
 // status, narrowed by `when`, turns that into an error result; a 2xx body the

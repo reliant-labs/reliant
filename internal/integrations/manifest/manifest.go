@@ -448,10 +448,17 @@ func validateRequest(req *reliantv1.HttpRequestSpec) error {
 			if err := tmpl.ValidateExpr(when); err != nil {
 				return fmt.Errorf("request.errors[%d].when: %w", i, err)
 			}
+		} else if rule.GetAccept() {
+			// An unguarded accept would turn every failure at its status
+			// into a success.
+			return fmt.Errorf("request.errors[%d] has accept and needs a when that says which responses it covers", i)
 		} else if ruleCovers2xx(rule) {
 			// A 2xx rule turns a success into a failure (Slack's 200 with
 			// ok:false); unguarded it would fail every call.
 			return fmt.Errorf("request.errors[%d] covers a 2xx status and needs a when that says which bodies are failures", i)
+		}
+		if rule.GetAccept() && ruleCovers2xx(rule) {
+			return fmt.Errorf("request.errors[%d] has accept on a 2xx status, which is already a success", i)
 		}
 	}
 	if p := req.GetPagination(); p != nil {

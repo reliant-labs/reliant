@@ -23,6 +23,8 @@ Reliant acts through the Reliant GitHub App, signed in as you. What it can do is
 | `issue.update` | Change state, title or body, or **replace** the label and assignee lists | yes |
 | `issue.labels.add` | Add one label, leaving the others alone | yes |
 | `issue.labels.remove` | Remove one label, leaving the others alone | yes |
+| `labels.create` | Create a repository label (name, color, description). Idempotent: a label that already exists is left as it is and the result says `created: false` | yes |
+| `labels.list` | The labels a repository defines, with color and description; follows pagination | no |
 | `pr.get` | Read a pull request: head and base, mergeability | no |
 | `pr.list_files` | The files a pull request changes, with diff hunks | no |
 | `pr.create` | Open a pull request from a pushed branch, as a draft or ready | yes |
@@ -45,6 +47,22 @@ Every action that creates or updates something returns the object's `id`, its Gr
 ### Labels: add and remove, don't replace
 
 `issue.update` sets the **whole** label list. Two runs that each read the labels, change them and write them back can undo each other. `issue.labels.add` and `issue.labels.remove` each send one request for one label and GitHub applies it on its own, so use them to claim a task (`agent:in-progress`) or release it. `issue.labels.remove` on a label the issue does not carry fails with *not found*.
+
+### Creating a pack's labels
+
+`issue.labels.add` creates a missing label, but with GitHub's default color and no description. To set a pack up, create its labels first with `labels.create`; it is safe to run on every setup because GitHub's "already exists" answer is treated as success and nothing about the existing label changes (use `labels.list` to read its color). Any other failure, such as a missing permission, still fails.
+
+```yaml
+- id: ensure_ready_label
+  type: action
+  uses: github/labels.create@1
+  with:
+    owner: acme
+    repo: app
+    name: "agent:ready"
+    color: "0e8a16"
+    description: An agent may pick this up
+```
 
 ### Pull requests are created without labels
 

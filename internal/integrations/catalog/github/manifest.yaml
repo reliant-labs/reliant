@@ -675,6 +675,178 @@ actions:
           number: { type: integer }
           html_url: { type: string }
 
+  - id: labels.create
+    display_name: Create a repository label
+    summary: Create a label in a repository, or leave it as it is when it already exists.
+    description: >-
+      Create a label in a repository with a name, a six-digit hex color and an
+      optional description. It is safe to run again: when the repository
+      already has a label of that name (matched without regard to case) nothing
+      is changed, not even its color or description, and the result says
+      created is false. A setup step can therefore ensure its labels exist
+      every time it runs. Creating a label needs write access to the
+      repository. Returns the label's name, color and description as they are
+      on GitHub when it was just created.
+    keywords: [label, labels, create, ensure, setup, color, repository, idempotent, triage]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, name]
+      properties:
+        owner: *owner
+        repo: *repo
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          title: Name
+          description: The label's name, exactly as it should be spelled on GitHub.
+          examples: ["agent:ready"]
+        color:
+          type: string
+          pattern: "^[0-9a-fA-F]{6}$"
+          title: Color
+          description: Six hex digits without the leading #. Omit for GitHub's default grey.
+          examples: ["0e8a16"]
+        description:
+          type: string
+          maxLength: 100
+          title: Description
+          description: A short description shown on hover.
+          examples: ["An agent may pick this up"]
+        connection: *connection
+    request:
+      method: POST
+      path: /repos/{{ params.owner }}/{{ params.repo }}/labels
+      body_expr: >-
+        {"name": params.name,
+         ?"color": params.?color,
+         ?"description": params.?description}
+      errors:
+        # GitHub answers a name the repository already has with 422 and an
+        # errors entry whose code is already_exists. That is the outcome
+        # asked for, so it is a success; any other 422 still fails.
+        - status: 422
+          accept: true
+          when: >-
+            type(response) == map && type(response.?errors.orValue(null)) == list &&
+            response.errors.exists(e, type(e) == map && e.?code.orValue(null) == 'already_exists')
+        - status: 401
+          retryable: false
+          message: "GitHub rejected the credential ({{ response.?message.orValue('bad credentials') }}): reconnect GitHub in Settings."
+        - status: 403
+          when: >-
+            headers[?'x-ratelimit-remaining'].orValue('') == '0' ||
+            headers[?'retry-after'].hasValue() ||
+            (type(response) == map && type(response.?message.orValue(null)) == string &&
+             response.message.matches('(?i)rate limit'))
+          retryable: true
+          message: *github_rate_limited
+        - status: 429
+          retryable: true
+          message: *github_rate_limited
+        - status: 403
+          retryable: false
+          message: >-
+            GitHub refused the request: {{ response.?message.orValue('forbidden') }}.
+            The connection lacks permission for this action (the GitHub App's
+            permissions, its installation, or your role on the repository).
+        - status: 404
+          retryable: false
+          message: >-
+            GitHub returned not found: the resource does not exist, or this
+            connection cannot see it (is the Reliant GitHub App installed on the
+            repository?).
+        - status: 410
+          retryable: false
+          message: "GitHub returned gone: {{ response.?message.orValue('this feature is disabled for the repository') }}."
+        - status: 422
+          retryable: false
+          message: >-
+            GitHub validation failed: {{ response.?message.orValue('Validation Failed') }}.
+            Errors: {{ type(response) == map && type(response.?errors.orValue(null)) == list ?
+              response.errors.map(e, type(e) == string ? e :
+                (type(e.?field.orValue(null)) == string ? e.field + ': ' : '') +
+                (type(e.?message.orValue(null)) == string ? e.message :
+                 type(e.?code.orValue(null)) == string ? e.code : 'invalid')) : [] }}
+    output:
+      select: >-
+        status == 201 ?
+          {"name": response.name,
+           "color": response.?color.orValue(null),
+           "description": response.?description.orValue(null),
+           "id": response.?id.orValue(null),
+           "node_id": response.?node_id.orValue(null),
+           "created": true}
+        : {"name": params.name,
+           "color": null,
+           "description": null,
+           "id": null,
+           "node_id": null,
+           "created": false}
+      schema:
+        type: object
+        properties:
+          name: { type: string }
+          color: { type: [string, "null"], description: "Null when the label already existed." }
+          description: { type: [string, "null"], description: "Null when the label already existed." }
+          id: { type: [integer, "null"] }
+          node_id: { type: [string, "null"] }
+          created: { type: boolean, description: "False when the label already existed and was left as it is." }
+
+  - id: labels.list
+    display_name: List repository labels
+    summary: Every label in a repository, with its color and description.
+    description: >-
+      List the labels defined in a repository (not the labels on one issue),
+      following GitHub's pagination up to 1000 labels. Use it to check which of
+      a set of labels already exist.
+    keywords: [label, labels, list, repository, existing, colors]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo]
+      properties:
+        owner: *owner
+        repo: *repo
+        connection: *connection
+    request:
+      method: GET
+      path: /repos/{{ params.owner }}/{{ params.repo }}/labels
+      query: { per_page: "100" }
+      pagination: { style: link_header, max_pages: 10 }
+      errors: *github_errors
+    output:
+      select: >-
+        response.map(l, {"id": l.?id.orValue(null),
+                         "node_id": l.?node_id.orValue(null),
+                         "name": l.name,
+                         "color": l.?color.orValue(null),
+                         "description": l.?description.orValue(null),
+                         "default": l.?default.orValue(false)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: [integer, "null"] }
+                node_id: { type: [string, "null"] }
+                name: { type: string }
+                color: { type: [string, "null"] }
+                description: { type: [string, "null"] }
+                default: { type: boolean, description: One of GitHub's default labels. }
+
   - id: issue.search
     display_name: Search issues and pull requests
     summary: Find issues and pull requests with GitHub search syntax, e.g. repo:acme/app is:open "marker".

@@ -911,6 +911,8 @@ var minimal = map[string]map[string]any{
 	"issue.labels.add":        {"owner": "acme", "repo": "app", "issue_number": 1, "label": "bug"},
 	"issue.labels.remove":     {"owner": "acme", "repo": "app", "issue_number": 1, "label": "bug"},
 	"issue.search":            {"q": "repo:acme/app is:open"},
+	"labels.create":           {"owner": "acme", "repo": "app", "name": "bug"},
+	"labels.list":             {"owner": "acme", "repo": "app"},
 	"pr.create":               {"owner": "acme", "repo": "app", "head": "fix", "base": "main", "title": "t"},
 	"pr.update":               {"owner": "acme", "repo": "app", "pull_number": 1, "title": "t"},
 	"pr.reviews.list":         {"owner": "acme", "repo": "app", "pull_number": 1},

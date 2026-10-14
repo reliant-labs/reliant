@@ -91,6 +91,27 @@ func TestErrorRuleOn2xxNeedsWhen(t *testing.T) {
 	}
 }
 
+// accept turns a failure into a success, so it must say which failures
+// (a `when`), and it has no meaning on a status that is already a success.
+func TestErrorRuleAcceptNeedsWhenAndAFailureStatus(t *testing.T) {
+	rule := func(r string) string {
+		return strings.Replace(validHTTP, "path: /things/{{ params.id }}",
+			"path: /things/{{ params.id }}\n      errors:\n        - "+r, 1)
+	}
+	for name, r := range map[string]string{
+		"no when":      `{ status: 422, accept: true }`,
+		"2xx":          `{ status: 200, accept: true, when: "response.ok == true" }`,
+		"range in 2xx": `{ status_min: 200, status_max: 299, accept: true, when: "response.ok == true" }`,
+	} {
+		if _, err := Parse([]byte(rule(r)), TrustCurated); err == nil || !strings.Contains(err.Error(), "accept") {
+			t.Errorf("%s: must fail to load naming accept, got %v", name, err)
+		}
+	}
+	if _, err := Parse([]byte(rule(`{ status: 422, accept: true, when: "response.?message.orValue('') == 'exists'" }`)), TrustCurated); err != nil {
+		t.Errorf("a guarded accept on a 4xx loads: %v", err)
+	}
+}
+
 func TestDuplicateYAMLKeyFails(t *testing.T) {
 	doc := strings.Replace(validHTTP, "version: 1", "version: 1\nversion: 2", 1)
 	if _, err := Parse([]byte(doc), TrustCurated); err == nil {

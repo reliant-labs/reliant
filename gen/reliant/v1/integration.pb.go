@@ -1572,7 +1572,14 @@ type ErrorRule struct {
 	// status that means two things: GitHub answers both an exhausted rate limit
 	// (retryable) and a missing permission (permanent) with 403. A `when` that
 	// fails to evaluate does not match.
-	When          string `protobuf:"bytes,6,opt,name=when,proto3" json:"when,omitempty"`
+	When string `protobuf:"bytes,6,opt,name=when,proto3" json:"when,omitempty"`
+	// Accept turns a matching non-2xx response into a success: the request is
+	// done, and output.select runs over the response as usual (`status` tells
+	// the cases apart). It makes a create idempotent when the provider answers
+	// "already exists" with an error (GitHub's 422 for a label). The rule must
+	// carry a `when` that says which bodies mean that, and cannot cover a 2xx
+	// status. Retryable and message are unused.
+	Accept        bool `protobuf:"varint,7,opt,name=accept,proto3" json:"accept,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1647,6 +1654,13 @@ func (x *ErrorRule) GetWhen() string {
 		return x.When
 	}
 	return ""
+}
+
+func (x *ErrorRule) GetAccept() bool {
+	if x != nil {
+		return x.Accept
+	}
+	return false
 }
 
 // OutputSpec selects what part of the response becomes the node's data.
@@ -2054,7 +2068,7 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"page_param\x18\x05 \x01(\tR\tpageParam\x12\x1d\n" +
 	"\n" +
 	"start_page\x18\x06 \x01(\x05R\tstartPage\x12\x19\n" +
-	"\bnext_url\x18\a \x01(\tR\anextUrl\"\xad\x01\n" +
+	"\bnext_url\x18\a \x01(\tR\anextUrl\"\xc5\x01\n" +
 	"\tErrorRule\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x1d\n" +
 	"\n" +
@@ -2063,7 +2077,8 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"status_max\x18\x03 \x01(\x05R\tstatusMax\x12\x1c\n" +
 	"\tretryable\x18\x04 \x01(\bR\tretryable\x12\x18\n" +
 	"\amessage\x18\x05 \x01(\tR\amessage\x12\x12\n" +
-	"\x04when\x18\x06 \x01(\tR\x04when\"U\n" +
+	"\x04when\x18\x06 \x01(\tR\x04when\x12\x16\n" +
+	"\x06accept\x18\a \x01(\bR\x06accept\"U\n" +
 	"\n" +
 	"OutputSpec\x12\x16\n" +
 	"\x06select\x18\x01 \x01(\tR\x06select\x12/\n" +

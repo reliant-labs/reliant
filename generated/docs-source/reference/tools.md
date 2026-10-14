@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (20 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (64 tools)
+- [Other Tools](#other-tools) (66 tools)
 
 ---
 
@@ -2058,6 +2058,8 @@ _Miscellaneous tools and utilities._
 | [`github__issue_labels_remove`](#github__issue_labels_remove) | integration | Remove a single label from an issue or pull request. This is one request that GitHub applies on i... |
 | [`github__issue_search`](#github__issue_search) | integration | Search issues and pull requests with GitHub's search syntax. Scope the query with repo:owner/name... |
 | [`github__issue_update`](#github__issue_update) | integration | Edit an issue (or a pull request's issue fields). Only the fields you pass change; pass at least ... |
+| [`github__labels_create`](#github__labels_create) | integration | Create a label in a repository with a name, a six-digit hex color and an optional description. It... |
+| [`github__labels_list`](#github__labels_list) | integration | List the labels defined in a repository (not the labels on one issue), following GitHub's paginat... |
 | [`github__pr_create`](#github__pr_create) | integration | Open a pull request merging head into base. The head branch must already be pushed (from a worksp... |
 | [`github__pr_get`](#github__pr_get) | integration | Return one pull request: title, body, state, draft and merged flags, the head and base refs (bran... |
 | [`github__pr_list_files`](#github__pr_list_files) | integration | List the files a pull request changes: filename, status (added, modified, removed, renamed, ...),... |
@@ -2355,6 +2357,22 @@ Search issues and pull requests with GitHub's search syntax. Scope the query wit
 **Tags:** `integration`
 
 Edit an issue (or a pull request's issue fields). Only the fields you pass change; pass at least one. labels and assignees REPLACE the current set; pass an empty list to clear them. Close with state closed and an optional state_reason.
+
+---
+
+### github__labels_create
+
+**Tags:** `integration`
+
+Create a label in a repository with a name, a six-digit hex color and an optional description. It is safe to run again: when the repository already has a label of that name (matched without regard to case) nothing is changed, not even its color or description, and the result says created is false. A setup step can therefore ensure its labels exist every time it runs. Creating a label needs write access to the repository. Returns the label's name, color and description as they are on GitHub when it was just created.
+
+---
+
+### github__labels_list
+
+**Tags:** `integration`
+
+List the labels defined in a repository (not the labels on one issue), following GitHub's pagination up to 1000 labels. Use it to check which of a set of labels already exist.
 
 ---
 

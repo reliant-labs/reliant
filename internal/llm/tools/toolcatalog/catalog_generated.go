@@ -348,6 +348,25 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"github__labels_create": {
+		Bindable: map[string]struct{}{
+			"color":       {},
+			"connection":  {},
+			"description": {},
+			"name":        {},
+			"owner":       {},
+			"repo":        {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__labels_list": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"owner":      {},
+			"repo":       {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"github__pr_create": {
 		Bindable: map[string]struct{}{
 			"base":       {},
