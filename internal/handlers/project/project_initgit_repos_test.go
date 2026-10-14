@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package project
 
 import (
 	"context"
@@ -77,7 +77,7 @@ func TestInitializeGitRepoDoesNotPolluteNestedRepos(t *testing.T) {
 	}
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	s := NewProjectService(repo, &initGitDaemonRouter{})
+	s := newProjectService(t, repo, &initGitDaemonRouter{})
 
 	_, err := s.InitializeGitRepo(ctx, connect.NewRequest(&reliantv1.InitializeGitRepoRequest{
 		ProjectId:     projectID,
@@ -105,7 +105,7 @@ func TestInitializeGitRepoRegistersRootRepoWhenNoneExist(t *testing.T) {
 	newInitGitProject(t, repo, userID, projectID)
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	s := NewProjectService(repo, &initGitDaemonRouter{})
+	s := newProjectService(t, repo, &initGitDaemonRouter{})
 
 	_, err := s.InitializeGitRepo(ctx, connect.NewRequest(&reliantv1.InitializeGitRepoRequest{
 		ProjectId:     projectID,

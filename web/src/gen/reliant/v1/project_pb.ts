@@ -1666,6 +1666,7 @@ export const ProjectInstallStateSchema: GenEnum<ProjectInstallState> = /*@__PURE
 export const ProjectService: GenService<{
   /**
    * CreateProject creates a new project
+   * forge:custom — find-or-create by path that provisions the directory, repos and main worktree on the caller's daemon
    *
    * @generated from rpc reliant.v1.ProjectService.CreateProject
    */
@@ -1676,6 +1677,7 @@ export const ProjectService: GenService<{
   },
   /**
    * ListProjects lists all projects for the current user
+   * forge:custom — scoped to the calling user's projects
    *
    * @generated from rpc reliant.v1.ProjectService.ListProjects
    */
@@ -1686,6 +1688,7 @@ export const ProjectService: GenService<{
   },
   /**
    * GetProject retrieves a project by ID
+   * forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
    *
    * @generated from rpc reliant.v1.ProjectService.GetProject
    */
@@ -1696,6 +1699,7 @@ export const ProjectService: GenService<{
   },
   /**
    * UpdateProject updates an existing project
+   * forge:custom — a partial update the caller's ownership check gates
    *
    * @generated from rpc reliant.v1.ProjectService.UpdateProject
    */
@@ -1706,6 +1710,7 @@ export const ProjectService: GenService<{
   },
   /**
    * DeleteProject deletes a project
+   * forge:custom — the caller's ownership check gates the delete
    *
    * @generated from rpc reliant.v1.ProjectService.DeleteProject
    */
@@ -1842,6 +1847,7 @@ export const ProjectService: GenService<{
    * *which* daemon(s) a project lives on (vs the leaner per-daemon view that
    * can only answer "installed here or not"). User-scoped: filtered to
    * projects owned by the calling user.
+   * forge:custom — joins project_daemons to the calling user's projects
    *
    * @generated from rpc reliant.v1.ProjectService.ListProjectDaemons
    */

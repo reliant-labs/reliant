@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package project
 
 import (
 	"context"
@@ -53,7 +53,7 @@ func TestCreateProjectAutoInitRegistersRootRepo(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
 	router := &createProjectDaemonRouter{}
-	s := NewProjectService(repo, router)
+	s := newProjectService(t, repo, router)
 
 	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 		Name: "fresh-project",

@@ -381,6 +381,78 @@
     "internal/handlers/preset/handlers_scaffold_update_preset_test.go": {
       "scaffolded_at": "2026-10-13T13:50:35Z"
     },
+    "internal/handlers/project/handlers_scaffold_create_project_from_repo_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_create_project_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_delete_project_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_get_project_changes_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_get_project_git_branches_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_get_project_git_info_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_get_project_init_status_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_get_project_metadata_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_get_project_prompts_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_get_project_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_initialize_git_repo_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_initialize_project_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_list_project_daemons_for_daemon_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_list_project_daemons_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_list_projects_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_list_repositories_for_daemon_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_mark_project_installed_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_pull_project_on_daemon_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_reclone_project_on_daemon_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_remove_project_from_daemon_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_save_project_prompts_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_touch_project_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_update_project_metadata_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
+    "internal/handlers/project/handlers_scaffold_update_project_test.go": {
+      "scaffolded_at": "2026-10-14T18:21:44Z"
+    },
     "internal/handlers/question/handlers_scaffold_get_pending_question_test.go": {
       "scaffolded_at": "2026-10-13T07:28:55Z"
     },
@@ -761,6 +833,9 @@
     "internal/handlers/preset/handlers_scaffold_list_presets_for_workflow_test.go",
     "internal/handlers/preset/handlers_scaffold_list_presets_test.go",
     "internal/handlers/preset/handlers_scaffold_update_preset_test.go",
+    "internal/handlers/project/handlers_scaffold_create_project_from_repo_test.go",
+    "internal/handlers/project/handlers_scaffold_create_project_test.go",
+    "internal/handlers/project/handlers_scaffold_initialize_git_repo_test.go",
     "internal/handlers/scenario/handlers_scaffold_run_scenario_test.go",
     "internal/handlers/settings/handlers_scaffold_batch_upsert_settings_test.go",
     "internal/handlers/settings/handlers_scaffold_complete_claude_o_auth_test.go",

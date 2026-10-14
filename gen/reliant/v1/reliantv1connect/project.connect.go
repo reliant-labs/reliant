@@ -112,14 +112,19 @@ const (
 // ProjectServiceClient is a client for the reliant.v1.ProjectService service.
 type ProjectServiceClient interface {
 	// CreateProject creates a new project
+	// forge:custom — find-or-create by path that provisions the directory, repos and main worktree on the caller's daemon
 	CreateProject(context.Context, *connect.Request[v1.CreateProjectRequest]) (*connect.Response[v1.CreateProjectResponse], error)
 	// ListProjects lists all projects for the current user
+	// forge:custom — scoped to the calling user's projects
 	ListProjects(context.Context, *connect.Request[v1.ListProjectsRequest]) (*connect.Response[v1.ListProjectsResponse], error)
 	// GetProject retrieves a project by ID
+	// forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
 	GetProject(context.Context, *connect.Request[v1.GetProjectRequest]) (*connect.Response[v1.GetProjectResponse], error)
 	// UpdateProject updates an existing project
+	// forge:custom — a partial update the caller's ownership check gates
 	UpdateProject(context.Context, *connect.Request[v1.UpdateProjectRequest]) (*connect.Response[v1.UpdateProjectResponse], error)
 	// DeleteProject deletes a project
+	// forge:custom — the caller's ownership check gates the delete
 	DeleteProject(context.Context, *connect.Request[v1.DeleteProjectRequest]) (*connect.Response[v1.DeleteProjectResponse], error)
 	// TouchProject updates the project's last_active timestamp
 	TouchProject(context.Context, *connect.Request[v1.TouchProjectRequest]) (*connect.Response[v1.TouchProjectResponse], error)
@@ -152,6 +157,7 @@ type ProjectServiceClient interface {
 	// *which* daemon(s) a project lives on (vs the leaner per-daemon view that
 	// can only answer "installed here or not"). User-scoped: filtered to
 	// projects owned by the calling user.
+	// forge:custom — joins project_daemons to the calling user's projects
 	ListProjectDaemons(context.Context, *connect.Request[v1.ListProjectDaemonsRequest]) (*connect.Response[v1.ListProjectDaemonsResponse], error)
 	// MarkProjectInstalled records that a project has a clone on a daemon.
 	// Idempotent — re-running with the same (project, daemon) updates the
@@ -507,14 +513,19 @@ func (c *projectServiceClient) RecloneProjectOnDaemon(ctx context.Context, req *
 // ProjectServiceHandler is an implementation of the reliant.v1.ProjectService service.
 type ProjectServiceHandler interface {
 	// CreateProject creates a new project
+	// forge:custom — find-or-create by path that provisions the directory, repos and main worktree on the caller's daemon
 	CreateProject(context.Context, *connect.Request[v1.CreateProjectRequest]) (*connect.Response[v1.CreateProjectResponse], error)
 	// ListProjects lists all projects for the current user
+	// forge:custom — scoped to the calling user's projects
 	ListProjects(context.Context, *connect.Request[v1.ListProjectsRequest]) (*connect.Response[v1.ListProjectsResponse], error)
 	// GetProject retrieves a project by ID
+	// forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
 	GetProject(context.Context, *connect.Request[v1.GetProjectRequest]) (*connect.Response[v1.GetProjectResponse], error)
 	// UpdateProject updates an existing project
+	// forge:custom — a partial update the caller's ownership check gates
 	UpdateProject(context.Context, *connect.Request[v1.UpdateProjectRequest]) (*connect.Response[v1.UpdateProjectResponse], error)
 	// DeleteProject deletes a project
+	// forge:custom — the caller's ownership check gates the delete
 	DeleteProject(context.Context, *connect.Request[v1.DeleteProjectRequest]) (*connect.Response[v1.DeleteProjectResponse], error)
 	// TouchProject updates the project's last_active timestamp
 	TouchProject(context.Context, *connect.Request[v1.TouchProjectRequest]) (*connect.Response[v1.TouchProjectResponse], error)
@@ -547,6 +558,7 @@ type ProjectServiceHandler interface {
 	// *which* daemon(s) a project lives on (vs the leaner per-daemon view that
 	// can only answer "installed here or not"). User-scoped: filtered to
 	// projects owned by the calling user.
+	// forge:custom — joins project_daemons to the calling user's projects
 	ListProjectDaemons(context.Context, *connect.Request[v1.ListProjectDaemonsRequest]) (*connect.Response[v1.ListProjectDaemonsResponse], error)
 	// MarkProjectInstalled records that a project has a clone on a daemon.
 	// Idempotent — re-running with the same (project, daemon) updates the

@@ -1,4 +1,4 @@
-package services
+package project
 
 import (
 	"context"
@@ -47,7 +47,7 @@ import (
 // project is created in its `installing` state and the response says
 // `queued`. Reporting it as cloned is the false success this design exists to
 // avoid.
-func (s *ProjectService) CreateProjectFromRepo(
+func (s *Service) CreateProjectFromRepo(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateProjectFromRepoRequest],
 ) (*connect.Response[reliantv1.CreateProjectFromRepoResponse], error) {
@@ -64,7 +64,7 @@ func (s *ProjectService) CreateProjectFromRepo(
 		// somewhere they did not ask for. The client defaults it visibly.
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id is required"))
 	}
-	if s.controlPlane == nil {
+	if s.deps.ControlPlane == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("cloning from GitHub requires a Reliant Cloud account"))
 	}
@@ -105,7 +105,7 @@ func (s *ProjectService) CreateProjectFromRepo(
 	// row. If this is going to be refused — no credential, machine failed,
 	// not the caller's daemon — it must fail with nothing persisted, rather
 	// than leaving a project the user then has to clean up by hand.
-	cloneResult, err := s.controlPlane.CloneRepoOntoDaemon(ctx, auth.BearerToken(req.Header().Get("Authorization")),
+	cloneResult, err := s.deps.ControlPlane.CloneRepoOntoDaemon(ctx, auth.BearerToken(req.Header().Get("Authorization")),
 		controlplane.CloneRepoRequest{
 			DaemonID:  daemonID,
 			CloneURL:  cloneURL,
@@ -144,7 +144,7 @@ func (s *ProjectService) CreateProjectFromRepo(
 	installState := core.ProjectInstallInstalled
 	if cloneResult.Queued {
 		installState = core.ProjectInstallInstalling
-		if err := s.database.UpsertQueuedProjectDaemon(
+		if err := s.deps.Repo.UpsertQueuedProjectDaemon(
 			ctx, project.ID, daemonID, clonedPath, branchPtr, requestID,
 		); err != nil {
 			logging.Error("CreateProjectFromRepo: failed to record queued install",
@@ -152,7 +152,7 @@ func (s *ProjectService) CreateProjectFromRepo(
 			return nil, connect.NewError(connect.CodeInternal,
 				fmt.Errorf("failed to record project installation"))
 		}
-	} else if err := s.database.UpsertProjectDaemon(ctx, project.ID, daemonID, clonedPath, branchPtr); err != nil {
+	} else if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, daemonID, clonedPath, branchPtr); err != nil {
 		logging.Error("CreateProjectFromRepo: failed to record install",
 			"error", err, "project_id", project.ID, "daemon_id", daemonID)
 		return nil, connect.NewError(connect.CodeInternal,
@@ -186,11 +186,11 @@ func (s *ProjectService) CreateProjectFromRepo(
 // putting it on a SECOND machine — so the add is find-or-create rather than an
 // error. Matching on remote URL first and path second mirrors how the old
 // client chain recovered from AlreadyExists.
-func (s *ProjectService) existingProjectForRepo(ctx context.Context, userID, path, cloneURL string) *core.Project {
-	if existing, err := s.database.GetProjectByRemoteURLAndUser(ctx, cloneURL, userID); err == nil && existing != nil {
+func (s *Service) existingProjectForRepo(ctx context.Context, userID, path, cloneURL string) *core.Project {
+	if existing, err := s.deps.Repo.GetProjectByRemoteURLAndUser(ctx, cloneURL, userID); err == nil && existing != nil {
 		return existing
 	}
-	if existing, err := s.database.GetProjectByPathAndUser(ctx, path, userID); err == nil && existing != nil {
+	if existing, err := s.deps.Repo.GetProjectByPathAndUser(ctx, path, userID); err == nil && existing != nil {
 		return existing
 	}
 	return nil
@@ -198,7 +198,7 @@ func (s *ProjectService) existingProjectForRepo(ctx context.Context, userID, pat
 
 // createProjectForRepo creates the project row for a repo being added, under
 // the id the clone's request id was already derived from.
-func (s *ProjectService) createProjectForRepo(
+func (s *Service) createProjectForRepo(
 	ctx context.Context, projectID, userID, name, path, cloneURL, branch string,
 ) (*core.Project, error) {
 	// The store writes these columns verbatim — they have no database
@@ -225,7 +225,7 @@ func (s *ProjectService) createProjectForRepo(
 	if branch != "" {
 		project.DefaultBranch = &branch
 	}
-	if err := s.database.CreateProject(ctx, project); err != nil {
+	if err := s.deps.Repo.CreateProject(ctx, project); err != nil {
 		logging.Error("CreateProjectFromRepo: failed to create project",
 			"error", err, "name", name, "path", path)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create project"))

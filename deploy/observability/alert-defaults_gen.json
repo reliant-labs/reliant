@@ -72,6 +72,10 @@
         "rpc_service": "reliant.v1.PresetService"
       },
       {
+        "name": "project",
+        "rpc_service": "reliant.v1.ProjectService"
+      },
+      {
         "name": "question",
         "rpc_service": "reliant.v1.QuestionService"
       },

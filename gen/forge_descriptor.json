@@ -20241,6 +20241,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.CreateProjectRequest",
           "OutputTypeFQ": "reliant.v1.CreateProjectResponse",
           "InputProtoFile": "reliant/v1/project.proto",
@@ -20254,6 +20255,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListProjectsRequest",
           "OutputTypeFQ": "reliant.v1.ListProjectsResponse",
           "InputProtoFile": "reliant/v1/project.proto",
@@ -20267,6 +20269,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.GetProjectRequest",
           "OutputTypeFQ": "reliant.v1.GetProjectResponse",
           "InputProtoFile": "reliant/v1/project.proto",
@@ -20280,6 +20283,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.UpdateProjectRequest",
           "OutputTypeFQ": "reliant.v1.UpdateProjectResponse",
           "InputProtoFile": "reliant/v1/project.proto",
@@ -20293,6 +20297,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.DeleteProjectRequest",
           "OutputTypeFQ": "reliant.v1.DeleteProjectResponse",
           "InputProtoFile": "reliant/v1/project.proto",
@@ -20462,6 +20467,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListProjectDaemonsRequest",
           "OutputTypeFQ": "reliant.v1.ListProjectDaemonsResponse",
           "InputProtoFile": "reliant/v1/project.proto",
@@ -22060,8 +22066,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "ProjectInstallState"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "QuestionService",
@@ -34424,5 +34429,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "4c724feab9c83daa8a9bcb8fa49e6228f0ccd019395a0213365fec8a2269f772"
+  "source_hash": "04a22202354684e3037a8ab28a6922cb9ba26104bee2719a397319f13258b710"
 }

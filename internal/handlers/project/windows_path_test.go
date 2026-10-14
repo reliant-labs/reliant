@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package project
 
 import (
 	"context"
@@ -38,7 +38,7 @@ func TestCreateProject_AcceptsWindowsDaemonPaths(t *testing.T) {
 
 			userID := "user-windows-project"
 			ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-			s := NewProjectService(repo, &createProjectDaemonRouter{})
+			s := newProjectService(t, repo, &createProjectDaemonRouter{})
 
 			resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 				Name: "proj",
@@ -58,7 +58,7 @@ func TestCreateProject_StillRejectsNonAbsolutePaths(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-windows-project-neg")
-	s := NewProjectService(repo, &createProjectDaemonRouter{})
+	s := newProjectService(t, repo, &createProjectDaemonRouter{})
 
 	for _, path := range []string{
 		"relative/path",

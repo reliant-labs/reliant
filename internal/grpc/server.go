@@ -53,6 +53,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
+	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/repo"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
@@ -94,7 +95,7 @@ type Server struct {
 
 	// ProjectService is exposed so callers can wire it to out-of-band
 	// inputs (e.g. the daemon-events JetStream consumer in serverapi.Run).
-	projectService *services.ProjectService
+	projectService *project.Service
 
 	// chatService is exposed so serverapi.Run can hand undelivered messages
 	// to it (queued delivery, the reconciler's wedge continuation).
@@ -267,9 +268,21 @@ func NewServer(cfg *Config) (*Server, error) {
 	if cfg.CatalogSearch != nil {
 		catalogService.WithCatalogSearch(cfg.CatalogSearch, services.IntegrationMethodsFrom(cfg.Connections))
 	}
-	projectService := services.NewProjectService(database, router)
+	// Only a deployment WITH a control plane can clone from GitHub on the
+	// user's behalf; self-hosted leaves ControlPlane nil.
+	var projectControlPlane project.CloneDispatcher
 	if cfg.ControlPlane.Hosted() {
-		projectService.WithControlPlaneClient(controlplane.NewClient(cfg.ControlPlane.URL))
+		projectControlPlane = controlplane.NewClient(cfg.ControlPlane.URL)
+	}
+	projectService, err := project.New(project.Deps{
+		Logger:       handlerLogger,
+		Config:       handlerConfig,
+		Repo:         database,
+		Router:       router,
+		ControlPlane: projectControlPlane,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("project service: %w", err)
 	}
 	var worktreeSweeper *worktreesweep.Sweeper
 	// worktreeSettler stays a nil interface without a router: a nil *Sweeper
@@ -957,7 +970,7 @@ func newCORSHandler(origins []string) func(http.Handler) http.Handler {
 
 // ProjectService returns the project service so callers can wire it to
 // out-of-band inputs (e.g. JetStream consumers in serverapi.Run).
-func (s *Server) ProjectService() *services.ProjectService {
+func (s *Server) ProjectService() *project.Service {
 	return s.projectService
 }
 

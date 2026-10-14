@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package project
 
 import (
 	"context"
@@ -65,7 +65,7 @@ func (*daemonDownError) Error() string { return "no daemon connected" }
 // returns its id. The router used here reports the directory as present.
 func seedProject(t *testing.T, repo db.Repository, ctx context.Context, path string) string {
 	t.Helper()
-	s := NewProjectService(repo, &stalePathRouter{dirExists: true})
+	s := newProjectService(t, repo, &stalePathRouter{dirExists: true})
 	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
 		Path: path,
@@ -95,7 +95,7 @@ func TestCreateProject_RefusesStaleProjectRowWhoseDirectoryIsGone(t *testing.T) 
 
 	// The directory is deleted out from under the row; the row survives.
 	router := &stalePathRouter{dirExists: false}
-	s := NewProjectService(repo, router)
+	s := newProjectService(t, repo, router)
 
 	_, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
@@ -122,7 +122,7 @@ func TestCreateProject_AcceptsExistingProjectWhoseDirectoryExists(t *testing.T) 
 
 	seedProject(t, repo, ctx, projectPath)
 
-	s := NewProjectService(repo, &stalePathRouter{dirExists: true})
+	s := newProjectService(t, repo, &stalePathRouter{dirExists: true})
 	_, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
 		Path: projectPath,
@@ -146,7 +146,7 @@ func TestCreateProject_UnreachableDaemonDoesNotRefuse(t *testing.T) {
 
 	seedProject(t, repo, ctx, projectPath)
 
-	s := NewProjectService(repo, &stalePathRouter{daemonDown: true})
+	s := newProjectService(t, repo, &stalePathRouter{daemonDown: true})
 	_, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
 		Path: projectPath,

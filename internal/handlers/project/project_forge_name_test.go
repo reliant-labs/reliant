@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package project
 
 import (
 	"context"
@@ -48,7 +48,7 @@ func TestCreateProject_PersistsForgeProjectName(t *testing.T) {
 
 	userID := "user-forge-name-" + uuid.New().String()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	s := NewProjectService(repo, &forgeDiscoverRouter{
+	s := newProjectService(t, repo, &forgeDiscoverRouter{
 		stalePathRouter:  stalePathRouter{dirExists: true},
 		forgeProjectName: "hounders",
 	})
@@ -75,7 +75,7 @@ func TestSetProjectForgeName_IdempotentAndOwnerScoped(t *testing.T) {
 
 	userID := "user-forge-name-" + uuid.New().String()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	s := NewProjectService(repo, &stalePathRouter{dirExists: true})
+	s := newProjectService(t, repo, &stalePathRouter{dirExists: true})
 	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 		Name: "legacy",
 		Path: "/home/workspace/projects/legacy-" + uuid.New().String(),

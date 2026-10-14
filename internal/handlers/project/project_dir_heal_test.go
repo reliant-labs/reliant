@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package project
 
 import (
 	"context"
@@ -68,7 +68,7 @@ func TestProjectDirHeal_NeverCreatesARepositoryProjectsDirectory(t *testing.T) {
 	require.NoError(t, repo.CreateProject(ctx, plain))
 
 	router := &mkdirRecordingRouter{}
-	svc := NewProjectService(repo, router)
+	svc := newProjectService(t, repo, router)
 	svc.ensureProjectDirsOnDaemon(userID, "daemon-1")
 
 	router.mu.Lock()

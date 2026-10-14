@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package project
 
 import (
 	"context"
@@ -45,18 +45,6 @@ type cloneStubControlPlane struct {
 	lastJWT string
 }
 
-func (s *cloneStubControlPlane) MintLLMKey(context.Context, string, string) (controlplane.LLMKey, error) {
-	return controlplane.LLMKey{}, nil
-}
-
-func (s *cloneStubControlPlane) DeleteCurrentUserAccount(context.Context, string) (*controlplane.AccountDeletionResult, error) {
-	return &controlplane.AccountDeletionResult{}, nil
-}
-
-func (s *cloneStubControlPlane) PreviewAccountDeletionWallet(context.Context, string) (*controlplane.AccountDeletionWalletQuote, error) {
-	return nil, nil
-}
-
 func (s *cloneStubControlPlane) CloneRepoOntoDaemon(
 	_ context.Context, jwt string, req controlplane.CloneRepoRequest,
 ) (controlplane.CloneRepoResult, error) {
@@ -69,11 +57,14 @@ func (s *cloneStubControlPlane) CloneRepoOntoDaemon(
 	return s.result, nil
 }
 
-func newFromRepoService(t *testing.T, cp *cloneStubControlPlane) (*ProjectService, db.Repository, func()) {
+func newFromRepoService(t *testing.T, cp *cloneStubControlPlane) (*Service, db.Repository, func()) {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
-	svc := NewProjectService(repo, &createProjectRowRouter{resolveID: "daemon-abc"}).
-		WithControlPlaneClient(cp)
+	svc := NewTestProject(t, WithProjectDeps(Deps{
+		Repo:         repo,
+		Router:       &createProjectRowRouter{resolveID: "daemon-abc"},
+		ControlPlane: cp,
+	}))
 	return svc, repo, cleanup
 }
 
@@ -380,12 +371,4 @@ func TestRepoNameFromCloneURL(t *testing.T) {
 	} {
 		assert.Equal(t, want, repoNameFromCloneURL(url), "clone url %q", url)
 	}
-}
-
-func (s *cloneStubControlPlane) MintDaemonResumeToken(context.Context, string, string, string) (controlplane.DaemonResumeToken, error) {
-	return controlplane.DaemonResumeToken{}, nil
-}
-
-func (s *cloneStubControlPlane) RevokeDaemonResumeTokens(context.Context, string, string) error {
-	return nil
 }

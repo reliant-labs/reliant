@@ -8,24 +8,26 @@ import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // ProjectService handles project-related operations
 service ProjectService {
   // CreateProject creates a new project
+  // forge:custom — find-or-create by path that provisions the directory, repos and main worktree on the caller's daemon
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse) {}
   
   // ListProjects lists all projects for the current user
+  // forge:custom — scoped to the calling user's projects
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {}
   
   // GetProject retrieves a project by ID
+  // forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {}
   
   // UpdateProject updates an existing project
+  // forge:custom — a partial update the caller's ownership check gates
   rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {}
   
   // DeleteProject deletes a project
+  // forge:custom — the caller's ownership check gates the delete
   rpc DeleteProject(DeleteProjectRequest) returns (DeleteProjectResponse) {}
   
   // TouchProject updates the project's last_active timestamp
@@ -71,6 +73,7 @@ service ProjectService {
   // *which* daemon(s) a project lives on (vs the leaner per-daemon view that
   // can only answer "installed here or not"). User-scoped: filtered to
   // projects owned by the calling user.
+  // forge:custom — joins project_daemons to the calling user's projects
   rpc ListProjectDaemons(ListProjectDaemonsRequest) returns (ListProjectDaemonsResponse) {}
 
   // MarkProjectInstalled records that a project has a clone on a daemon.
