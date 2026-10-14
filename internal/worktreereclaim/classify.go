@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -116,14 +117,14 @@ func dirtyPaths(ctx context.Context, checkout string, nested []string) ([]string
 
 // classifyCheckout decides whether a checkout's work is fully preserved
 // elsewhere: nothing differs from HEAD (per `git status`), no index entry hides
-// an edit behind skip-worktree or assume-unchanged, HEAD is reachable from a
-// remote-tracking ref or the base branch, and nothing the worktree alone
+// an edit behind skip-worktree or assume-unchanged, HEAD is on a remote ref or
+// its work is already in the base branch (headIsSafe), and nothing the worktree alone
 // references (its own reflog, refs/worktree, refs/bisect, pseudo-refs, a
 // detached HEAD) is on no branch, remote or tag. Anything git cannot answer is
 // unverified; it never guesses toward removal.
 //
 // worktreeID names the snapshot refs that count as "saved elsewhere".
-func classifyCheckout(ctx context.Context, checkout, baseBranch string, nested []string, worktreeID string) verdict {
+func classifyCheckout(ctx context.Context, checkout, baseBranch string, nested []string, worktreeID string, probe mergeProbe) verdict {
 	paths, err := dirtyPaths(ctx, checkout, nested)
 	if err != nil {
 		return verdict{ReasonUnverified, err.Error()}
@@ -139,12 +140,12 @@ func classifyCheckout(ctx context.Context, checkout, baseBranch string, nested [
 	if err != nil {
 		return verdict{ReasonUnverified, err.Error()}
 	}
-	pushed, err := headIsSafe(ctx, checkout, head, baseBranch)
+	pushed, err := headIsSafe(ctx, checkout, head, baseBranch, probe)
 	if err != nil {
 		return verdict{ReasonUnverified, err.Error()}
 	}
 	if !pushed {
-		return verdict{ReasonUnpushed, "HEAD is not on any remote branch and not merged into " + describeBase(baseBranch)}
+		return verdict{ReasonUnpushed, "HEAD is not on any remote branch and its work is not in " + describeBase(baseBranch) + " (neither as commits nor as an equivalent patch)"}
 	}
 
 	tips, err := orphanTips(ctx, checkout, worktreeID)
@@ -157,7 +158,35 @@ func classifyCheckout(ctx context.Context, checkout, baseBranch string, nested [
 	return verdict{}
 }
 
-func headIsSafe(ctx context.Context, checkout, head, baseBranch string) (bool, error) {
+// mergeProbe is the part of "is this work preserved" that needs the network. A
+// nil field is skipped, so a Reclaimer built without them decides from local
+// refs alone.
+type mergeProbe struct {
+	// prMerged reports whether a merged pull request of branch had exactly head
+	// as its head commit: everything HEAD holds was in that PR, so it is in the
+	// base. False when it cannot tell (no gh, no network, not GitHub).
+	prMerged func(ctx context.Context, checkout, branch, head string) bool
+	// fetchBase refreshes the remote-tracking copy of the base branch, which is
+	// where a merge made since this clone last fetched would appear.
+	fetchBase func(ctx context.Context, checkout, base string)
+}
+
+// headIsSafe reports whether HEAD's work is preserved somewhere other than this
+// worktree. It is, when HEAD is
+//
+//   - on any remote ref (a branch that was pushed);
+//   - an ancestor of the base branch (a fast-forward or merge-commit merge);
+//   - already in the base branch by content (patchesOnBase): what a squash or
+//     rebase merge leaves behind, the usual case once the PR branch is deleted
+//     after merging, when no remote ref names HEAD and it is an ancestor of
+//     nothing; or
+//   - the head commit of a merged pull request (probe.prMerged).
+//
+// The content check sees the base as this clone last fetched it, so when it
+// finds nothing the base is refreshed (probe.fetchBase) and checked once more.
+// A false return means the work exists only here. An error means git could not
+// say, and the caller holds the worktree.
+func headIsSafe(ctx context.Context, checkout, head, baseBranch string, probe mergeProbe) (bool, error) {
 	onRemote, err := git(ctx, checkout, nil, "for-each-ref", "--contains", head, "--count=1", "--format=%(refname)", "refs/remotes")
 	if err != nil {
 		return false, err
@@ -165,12 +194,147 @@ func headIsSafe(ctx context.Context, checkout, head, baseBranch string) (bool, e
 	if onRemote != "" {
 		return true, nil
 	}
-	for _, ref := range baseRefs(ctx, checkout, baseBranch) {
+	if merged, err := inBase(ctx, checkout, head, baseBranch); err != nil || merged {
+		return merged, err
+	}
+	if probe.prMerged != nil {
+		if branch, err := git(ctx, checkout, nil, "symbolic-ref", "--short", "-q", "HEAD"); err == nil && branch != "" && probe.prMerged(ctx, checkout, branch, head) {
+			return true, nil
+		}
+	}
+	if probe.fetchBase != nil && baseBranch != "" {
+		probe.fetchBase(ctx, checkout, baseBranch)
+		return inBase(ctx, checkout, head, baseBranch)
+	}
+	return false, nil
+}
+
+// inBase reports whether head's work is in the base branch as this clone has
+// it: head is an ancestor of it, or every change head makes is there by patch.
+func inBase(ctx context.Context, checkout, head, baseBranch string) (bool, error) {
+	refs := baseRefs(ctx, checkout, baseBranch)
+	for _, ref := range refs {
 		if _, err := git(ctx, checkout, nil, "merge-base", "--is-ancestor", head, ref); err == nil {
 			return true, nil
 		}
 	}
+	for _, ref := range refs {
+		merged, err := patchesOnBase(ctx, checkout, ref, head)
+		if err != nil {
+			return false, err
+		}
+		if merged {
+			return true, nil
+		}
+	}
 	return false, nil
+}
+
+// patchesOnBase reports whether head's changes are in base by patch, in either
+// of the two shapes a merge that rewrites commits leaves:
+//
+//   - a rebase merge: every commit base..head has a commit on base with the
+//     same patch-id (`git cherry` prints "-" for each such commit), or
+//   - a squash merge: head's whole change since it forked from base is the
+//     patch of one commit on base, which is what folding its commits into one
+//     produces.
+//
+// Either way what is compared is the change itself, so it holds whatever the
+// commits are called and wherever the PR branch has gone.
+//
+// It declines (false, so the worktree is held) whenever the comparison cannot
+// be trusted: a branch that touches a binary file, whose patch-id does not see
+// the bytes; a merge commit inside head, whose changes `git cherry` skips; or
+// histories with no common ancestor.
+func patchesOnBase(ctx context.Context, checkout, base, head string) (bool, error) {
+	mb, err := git(ctx, checkout, nil, "merge-base", base, head)
+	if err != nil || mb == "" {
+		return false, nil
+	}
+	if binary, err := touchesBinary(ctx, checkout, mb, head); err != nil || binary {
+		return false, err
+	}
+	merges, err := git(ctx, checkout, nil, "rev-list", "--merges", "--count", base+".."+head)
+	if err != nil {
+		return false, err
+	}
+	if merges == "0" {
+		out, err := git(ctx, checkout, nil, "cherry", base, head)
+		if err != nil {
+			return false, err
+		}
+		if out != "" && !strings.Contains("\n"+out, "\n+ ") {
+			return true, nil
+		}
+	}
+	return squashedOnto(ctx, checkout, base, head, mb)
+}
+
+// touchesBinary reports whether the change from..to includes a binary file
+// (numstat shows "-" for both counts).
+func touchesBinary(ctx context.Context, checkout, from, to string) (bool, error) {
+	out, err := git(ctx, checkout, nil, "diff", "--numstat", "--no-ext-diff", from, to)
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "-\t-\t") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// squashedOnto reports whether head's whole change against mb (its merge base
+// with base) is the patch of one commit on base made since the fork: what a
+// squash merge of head's branch produces. The base side is one `git log -p`
+// piped through one `git patch-id`, bounded to maxSquashScan commits so a busy
+// base is not scanned back to its root.
+func squashedOnto(ctx context.Context, checkout, base, head, mb string) (bool, error) {
+	diff, err := gitRaw(ctx, checkout, nil, "diff", "--no-ext-diff", mb, head)
+	if err != nil {
+		return false, err
+	}
+	if len(diff) == 0 {
+		return false, nil
+	}
+	want, err := patchID(ctx, checkout, diff)
+	if err != nil || want == "" {
+		return false, err
+	}
+	log, err := gitRaw(ctx, checkout, nil, "log", "-p", "--no-merges", "--no-ext-diff", "--max-count="+strconv.Itoa(maxSquashScan), mb+".."+base)
+	if err != nil {
+		return false, err
+	}
+	ids, err := gitStdin(ctx, checkout, string(log), "patch-id", "--stable")
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(ids, "\n") {
+		if f := strings.Fields(line); len(f) > 0 && f[0] == want {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// maxSquashScan bounds how many base commits since the fork are compared with
+// the branch's whole diff. A branch whose squash is further back than this is
+// reported unpushed, which only keeps the worktree.
+const maxSquashScan = 1000
+
+// patchID is the stable patch-id (`git patch-id --stable`) of a diff, or "" for
+// an empty one.
+func patchID(ctx context.Context, checkout string, diff []byte) (string, error) {
+	out, err := gitStdin(ctx, checkout, string(diff), "patch-id", "--stable")
+	if err != nil {
+		return "", err
+	}
+	f := strings.Fields(out)
+	if len(f) == 0 {
+		return "", nil
+	}
+	return f[0], nil
 }
 
 // orphanTips returns the minimal set of commits that only this worktree's own

@@ -141,7 +141,7 @@ ACTIONS:
 
 3. get - Required: name. Details, paths and owner of one worktree
 
-4. delete - Required: name. Archives the worktree; its directory is removed later, only when it is clean, pushed and unused. Refuses your own current worktree and any worktree a chat is using.
+4. delete - Required: name. Archives the worktree; its directory is removed later, only when it is clean, its work is pushed or already merged, and it is unused. Refuses your own current worktree and any worktree a chat is using.
 
 WORKING IN A WORKTREE:
 - Pass its name to spawn: spawn(worktree=<name>) runs the sub-agent inside it, so its shell and file tools work on that branch.
@@ -463,7 +463,7 @@ func (w *worktreeTool) handleDelete(ctx context.Context, p *WorktreeParams, rc *
 	}
 	w.emitChanged(ctx, userID, project.ID, row.ID)
 
-	content := fmt.Sprintf("Archived worktree '%s'. Its directory is removed later, only if it is clean, pushed and unused; otherwise it is kept and listed in the Reliant inbox.", p.Name)
+	content := fmt.Sprintf("Archived worktree '%s'. Its directory is removed later, only if it is clean, its work is pushed or already merged, and it is unused; otherwise it is kept and listed in the Reliant inbox.", p.Name)
 	return WithResponseMetadata(NewTextResponse(content), WorktreeResponseMetadata{Action: "delete", WorktreeID: row.ID}), nil
 }
 

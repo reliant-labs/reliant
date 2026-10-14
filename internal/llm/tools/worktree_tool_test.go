@@ -438,7 +438,7 @@ func TestWorktreeTool_Delete_ArchivesAndLeavesTheDirectoryToReclaim(t *testing.T
 	require.NoError(t, err)
 	assert.NotNil(t, got.DeletedAt, "archived")
 	assert.Empty(t, f.machine.sent, "no directory is removed directly")
-	assert.Contains(t, resp.Content, "clean, pushed and unused")
+	assert.Contains(t, resp.Content, "pushed or already merged")
 }
 
 func TestWorktreeTool_Delete_Refusals(t *testing.T) {

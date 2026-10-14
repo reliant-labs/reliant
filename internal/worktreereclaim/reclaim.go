@@ -51,6 +51,11 @@ type Reclaimer struct {
 	Budget time.Duration
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
+	// PRMerged and FetchBase are the network checks behind "its work was merged"
+	// (see mergeProbe). NewReclaimer sets them; nil skips the check, so a
+	// Reclaimer built as a literal decides from local refs alone.
+	PRMerged  func(ctx context.Context, checkout, branch, head string) bool
+	FetchBase func(ctx context.Context, checkout, base string)
 
 	mu       sync.Mutex
 	sizes    map[string]cachedSize
@@ -66,7 +71,8 @@ type cachedSize struct {
 
 // NewReclaimer returns a Reclaimer rooted at root.
 func NewReclaimer(root string) *Reclaimer {
-	return &Reclaimer{Root: root, Cwds: ProcessCwds, IdleFloor: DefaultIdleFloor, Budget: DefaultBudget}
+	return &Reclaimer{Root: root, Cwds: ProcessCwds, IdleFloor: DefaultIdleFloor, Budget: DefaultBudget,
+		PRMerged: GitHubPRMerged, FetchBase: FetchBaseBranch}
 }
 
 // DefaultRoot is where reliant creates worktrees on this machine.
@@ -76,6 +82,10 @@ func DefaultRoot() (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, ".reliant", "worktrees"), nil
+}
+
+func (r *Reclaimer) probe() mergeProbe {
+	return mergeProbe{prMerged: r.PRMerged, fetchBase: r.FetchBase}
 }
 
 func (r *Reclaimer) now() time.Time {
@@ -381,7 +391,7 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 		r.measure(ctx, hold, w.Path)
 		return *hold
 	}
-	if v := classifyAll(ctx, w, checkouts); !v.safe() {
+	if v := classifyAll(ctx, w, checkouts, r.probe()); !v.safe() {
 		res := held(w, v.Reason, v.Detail)
 		r.measure(ctx, &res, w.Path)
 		return res
@@ -418,16 +428,16 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 	if hold := r.inUse(ctx, w, true); hold != nil {
 		return *hold
 	}
-	if v := classifyAll(ctx, w, checkouts); !v.safe() {
+	if v := classifyAll(ctx, w, checkouts, r.probe()); !v.safe() {
 		return held(w, v.Reason, v.Detail)
 	}
 	return r.removeWorkspace(ctx, w, checkouts, false)
 }
 
-func classifyAll(ctx context.Context, w Worktree, checkouts []string) verdict {
+func classifyAll(ctx context.Context, w Worktree, checkouts []string, probe mergeProbe) verdict {
 	worst := verdict{}
 	for _, c := range checkouts {
-		v := classifyCheckout(ctx, c, baseFor(w, c), nestedOf(c, checkouts), w.ID)
+		v := classifyCheckout(ctx, c, baseFor(w, c), nestedOf(c, checkouts), w.ID, probe)
 		if !v.safe() {
 			worst = worse(worst, verdict{v.Reason, relDetail(w.Path, c, v.Detail)})
 		}
@@ -481,7 +491,7 @@ func (r *Reclaimer) confirmedPhase(ctx context.Context, w Worktree) Result {
 	for _, c := range checkouts {
 		nested := nestedOf(c, checkouts)
 		repo := commonDirOf(ctx, c)
-		v := classifyCheckout(ctx, c, baseFor(w, c), nested, w.ID)
+		v := classifyCheckout(ctx, c, baseFor(w, c), nested, w.ID, r.probe())
 		switch v.Reason {
 		case "", ReasonDirty, ReasonUnpushed, ReasonUnreachable:
 		default:
@@ -735,7 +745,7 @@ func (r *Reclaimer) removeOne(ctx context.Context, w Worktree, c string, remaini
 		}
 	}
 	if !force {
-		if v := classifyCheckout(ctx, q, baseFor(w, c), qNested, w.ID); !v.safe() && !(confirmed && v.Reason == ReasonUnreachable) {
+		if v := classifyCheckout(ctx, q, baseFor(w, c), qNested, w.ID, r.probe()); !v.safe() && !(confirmed && v.Reason == ReasonUnreachable) {
 			return putBack(v.Reason, "changed since it was checked: "+v.Detail)
 		}
 	}

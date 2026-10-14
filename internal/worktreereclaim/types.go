@@ -26,7 +26,9 @@ const (
 	// ReasonDirty: modified or untracked files, or edits hidden by
 	// skip-worktree / assume-unchanged.
 	ReasonDirty HeldReason = "dirty"
-	// ReasonUnpushed: HEAD is on no remote-tracking ref and not merged into base.
+	// ReasonUnpushed: HEAD is on no remote ref, and its work is not in base
+	// either as commits or as an equivalent patch (a squash or rebase merge),
+	// nor the head of a merged pull request.
 	ReasonUnpushed HeldReason = "unpushed"
 	// ReasonUnverified: git could not answer, so safety was not established.
 	ReasonUnverified HeldReason = "unverified"
