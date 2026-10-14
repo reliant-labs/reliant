@@ -165,6 +165,28 @@ enum TriggerEventOutcome {
   TRIGGER_EVENT_OUTCOME_PENDING = 4;
 }
 
+// ActingIdentity is who the integration writes of a trigger's runs speak as.
+//
+// It is chosen per activation, because the same declared trigger can be
+// activated by an owner who wants their own name on the comments and by an
+// owner who wants a bot's. It applies to every integration action the run
+// takes (a node's `action` and an agent's integration tools alike), and only to
+// a run the trigger fired: a person replying in that chat acts as themselves.
+enum ActingIdentity {
+  ACTING_IDENTITY_UNSPECIFIED = 0;
+  // OWNER: the activation's owner, through their own GitHub App user token. What
+  // every activation did before identities existed; the default.
+  ACTING_IDENTITY_OWNER = 1;
+  // APP: the GitHub App's bot (`reliant-labs[bot]`), through a per-repository
+  // installation token. control-plane mints it only when the owner's own token
+  // has push access to that repository, scopes it to that one repository and to
+  // issues, pull requests and contents, and bot-authored comments, reviews and
+  // pull requests end with a footer naming the automation and its owner. Needs
+  // a hosted deployment: a self-hosted one has no App key to mint from and
+  // refuses this value.
+  ACTING_IDENTITY_APP = 2;
+}
+
 // TriggerOverlapPolicy decides what a scheduled fire does when this trigger's
 // previous run has not finished.
 enum TriggerOverlapPolicy {
@@ -532,6 +554,11 @@ message Trigger {
   // workflow's `triggers:` changes every activation of it. The source above is
   // the declaration as of the last save, for display.
   optional string workflow_trigger = 26;
+
+  // Who the integration writes of this trigger's runs speak as. Never
+  // UNSPECIFIED on a stored trigger: an activation made before identities
+  // existed reads as OWNER.
+  ActingIdentity acting_identity = 28;
 }
 
 // TriggerEvent is one firing — the durable record of intent to launch, written
@@ -679,6 +706,13 @@ message TriggerDefinition {
     // `params` may not set an input the declaration's inputs map.
     string workflow_trigger = 24;
   }
+
+  // Who the integration writes of this trigger's runs speak as. UNSPECIFIED
+  // means OWNER on create and "unchanged" on update. APP is refused on a
+  // deployment with no control plane to mint installation tokens from, and
+  // for a trigger whose owner cannot push to a repository it writes to the
+  // write fails when it happens (never silently as the owner).
+  ActingIdentity acting_identity = 25;
 }
 
 // WebhookCredential is a webhook trigger's token, returned exactly once.

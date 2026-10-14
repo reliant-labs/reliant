@@ -106,6 +106,11 @@ var RuntimeInjectedInputs = map[string]bool{
 	// The run the chat's launch started, as opposed to one a person's reply
 	// started later (runtime.InputKeyLaunchRun). Injected by the launcher only.
 	"__launch_run": true,
+	// Who the run's integration writes speak as, and which automation it is
+	// (runtime.InputKeyActingIdentity / InputKeyAutomation). Injected by the
+	// launcher only; a reply's run never carries them.
+	"__acting_identity": true,
+	"__automation":      true,
 }
 
 // NewWorkflowID generates a new random UUID for a root workflow.

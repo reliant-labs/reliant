@@ -114,3 +114,66 @@ func TestActionNodeInputCarriesOnlyTheReference(t *testing.T) {
 	assert.Contains(t, string(raw), "conn_abc")
 	assert.NotContains(t, string(raw), "secret")
 }
+
+// The action node speaks as the run's acting identity: the activity reads it
+// off its own runtime context (set by the engine from the run's inputs) and the
+// call site hands it to the credential source, with the call's own action and
+// whether it writes, which is what a source scopes a bot token by.
+func TestActionNodeCarriesTheRunsActingIdentity(t *testing.T) {
+	run := func(identity, automation string) httpaction.CredentialRequest {
+		t.Helper()
+		src := &recordingSource{}
+		a := NewActionActivityWith(catalog.MustBuiltin(), httpaction.NewRunner(netguard.New()), src)
+		node := &reliantv1.Node{Id: "comment", Type: "action", Args: &reliantv1.Node_Action{Action: &reliantv1.ActionArgs{
+			Uses: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "github/issue.comment@1"}},
+			With: map[string]*structpb.Value{
+				"owner": structpb.NewStringValue("acme"), "repo": structpb.NewStringValue("widgets"),
+				"issue_number": structpb.NewNumberValue(7), "body": structpb.NewStringValue("hi"),
+			},
+		}}}
+		var suite temporaltest.WorkflowTestSuite
+		env := suite.NewTestActivityEnvironment()
+		env.RegisterActivity(a.Execute)
+		_, err := env.ExecuteActivity(a.Execute, types.ActivityInput{
+			Runtime: types.RuntimeContext{WorkflowID: "run-1", StepID: "comment", ActingIdentity: identity, Automation: automation},
+			Node:    node,
+		})
+		require.NoError(t, err)
+		require.Len(t, src.got, 1)
+		return src.got[0]
+	}
+
+	app := run("app", "pr-review")
+	assert.Equal(t, httpaction.IdentityApp, app.ActingIdentity)
+	assert.Equal(t, "pr-review", app.Automation)
+	assert.Equal(t, "issue.comment", app.ActionID)
+	assert.True(t, app.Mutates, "a comment writes, so the bot's token applies")
+	assert.Equal(t, "acme", app.Params["owner"], "the repository the token is scoped to is the call's own")
+	assert.Equal(t, "widgets", app.Params["repo"])
+
+	owner := run("", "")
+	assert.Empty(t, owner.ActingIdentity)
+	assert.Empty(t, owner.Automation)
+}
+
+// The node's `with:` cannot choose the identity either: it is only ever a param.
+func TestActionNodeWithCannotChooseTheIdentity(t *testing.T) {
+	src := &recordingSource{}
+	a := NewActionActivityWith(catalog.MustBuiltin(), httpaction.NewRunner(netguard.New()), src)
+	node := &reliantv1.Node{Id: "comment", Type: "action", Args: &reliantv1.Node_Action{Action: &reliantv1.ActionArgs{
+		Uses: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "github/issue.comment@1"}},
+		With: map[string]*structpb.Value{
+			"owner": structpb.NewStringValue("acme"), "repo": structpb.NewStringValue("widgets"),
+			"issue_number": structpb.NewNumberValue(7), "body": structpb.NewStringValue("hi"),
+			"acting_identity": structpb.NewStringValue("app"),
+		},
+	}}}
+	var suite temporaltest.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(a.Execute)
+	_, err := env.ExecuteActivity(a.Execute, types.ActivityInput{Runtime: types.RuntimeContext{WorkflowID: "run-1", StepID: "comment"}, Node: node})
+	require.NoError(t, err)
+	for _, got := range src.got {
+		assert.Empty(t, got.ActingIdentity)
+	}
+}

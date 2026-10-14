@@ -63,6 +63,49 @@ type Service interface {
 	// user acts (never retry). Anything else — transport, a control-plane
 	// outage, the provider unreachable during renewal — is transient.
 	UserAccessToken(ctx context.Context, externalUserID, provider string) (Token, error)
+
+	// MintInstallationToken returns a GitHub App installation token scoped to
+	// ONE repository, so an automation can write as the App's bot
+	// (`reliant-labs[bot]`) instead of as the user. control-plane first checks
+	// that the named user's own token has push access to the repository, so
+	// the bot is never a way past the user's own permissions.
+	//
+	// Errors, all permanent until someone acts unless noted: ErrAppNotConfigured
+	// (control-plane holds no App key: the caller may fall back to the user's
+	// own token), ErrAppNotInstalled, ErrAppPermissions, ErrOwnerCannotPush,
+	// ErrNotConnected / ErrNeedsReconnect (the user has no usable GitHub token
+	// to prove push access with). Anything else is transient.
+	MintInstallationToken(ctx context.Context, req InstallationRequest) (InstallationToken, error)
+}
+
+// InstallationRequest names what an installation token is for.
+type InstallationRequest struct {
+	// ExternalUserID is the EXTERNAL id of the user the automation acts for
+	// (the activation's owner). Their push access gates the mint.
+	ExternalUserID string
+	// Owner and Repo name the one repository the token is scoped to.
+	Owner string
+	Repo  string
+	// Permissions narrows the token (issues, pull_requests, contents ->
+	// read|write). Empty means control-plane's default: all three at write.
+	Permissions map[string]string
+}
+
+// InstallationToken is a minted installation token and who it speaks as.
+//
+// It holds plaintext; String/GoString/Format never print it.
+type InstallationToken struct {
+	Token Token
+	// ExpiresAt is when the token stops working (GitHub issues one-hour tokens).
+	ExpiresAt time.Time
+	// BotLogin is the login GitHub shows for writes made with the token,
+	// e.g. "reliant-labs[bot]".
+	BotLogin string
+	// ActingForLogin is the GitHub login of the user the token was minted for,
+	// so what the bot writes can name its owner.
+	ActingForLogin string
+	// Repository is "owner/name" as the token is scoped.
+	Repository string
 }
 
 // Signer mints the internal-service bearer for each call.
@@ -80,6 +123,21 @@ type Deps struct {
 
 // Typed outcomes. Both are FailedPrecondition at control-plane, told apart by
 // the X-Forge-Error-Reason header.
+var (
+	// ErrAppNotConfigured: control-plane holds no GitHub App private key (or
+	// it is unusable), so it cannot mint installation tokens.
+	ErrAppNotConfigured = errors.New("gitcredentialclient: the GitHub App is not configured on the control plane")
+	// ErrAppNotInstalled: the App is not installed on the repository, or its
+	// installation is suspended.
+	ErrAppNotInstalled = errors.New("gitcredentialclient: the GitHub App is not installed on the repository")
+	// ErrAppPermissions: the App has not been granted a permission the token
+	// needs; its owner must accept the updated permissions.
+	ErrAppPermissions = errors.New("gitcredentialclient: the GitHub App lacks a permission the token needs")
+	// ErrOwnerCannotPush: the user the automation acts for does not have push
+	// access to the repository.
+	ErrOwnerCannotPush = errors.New("gitcredentialclient: the owner cannot push to the repository")
+)
+
 var (
 	// ErrNotConnected: the user has no credential for the provider at
 	// control-plane (or control-plane does not know the user).

@@ -77,6 +77,7 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEven
 		Message:          t.Message,
 		DaemonId:         t.DaemonID,
 		NoMachine:        t.NoMachine,
+		ActingIdentity:   ActingIdentityToProto(t.ActingIdentity),
 		NotifyOnComplete: t.NotifyOnComplete,
 		ProjectName:      t.ProjectName,
 		DaemonName:       t.DaemonName,
@@ -200,4 +201,28 @@ func ParamsFromProto(params map[string]*structpb.Value) map[string]any {
 		out[k] = v.AsInterface()
 	}
 	return out
+}
+
+// ActingIdentityToProto maps a stored identity onto the wire. A stored row is
+// never empty, but an unset value (a fixture, a row read through a path that
+// predates the column) reads as the owner, which is what it has always meant.
+func ActingIdentityToProto(i core.ActingIdentity) reliantv1.ActingIdentity {
+	if i.OrOwner() == core.ActingIdentityApp {
+		return reliantv1.ActingIdentity_ACTING_IDENTITY_APP
+	}
+	return reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER
+}
+
+// ActingIdentityFromProto maps the wire value onto a stored identity.
+// UNSPECIFIED is "not chosen", reported as ok=false so a caller can apply its
+// own default (the owner on create, unchanged on update).
+func ActingIdentityFromProto(i reliantv1.ActingIdentity) (core.ActingIdentity, bool) {
+	switch i {
+	case reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER:
+		return core.ActingIdentityOwner, true
+	case reliantv1.ActingIdentity_ACTING_IDENTITY_APP:
+		return core.ActingIdentityApp, true
+	default:
+		return "", false
+	}
 }

@@ -37,12 +37,35 @@ type RejectableCredential interface {
 	Rejected(ctx context.Context) (Credential, error)
 }
 
+// IdentityApp is CredentialRequest.ActingIdentity for the GitHub App's bot.
+const IdentityApp = "app"
+
 // CredentialRequest names the connection a call wants. It carries references
 // only: the owner is looked up by the source from RunID, never supplied.
 type CredentialRequest struct {
 	RunID      string
 	NodeID     string
 	ToolCallID string
+	// ActingIdentity is who the call speaks as: "app" for the GitHub App's
+	// bot, empty for the run's owner. It is the RUN's fact (the activation's
+	// acting_identity), supplied by the call site, never by the workflow or
+	// the model: a params key named like it is just a param.
+	ActingIdentity string
+	// Automation names the trigger the run belongs to, for the footer on what
+	// the bot writes.
+	Automation string
+	// ActionID is the action being run (e.g. "issue.comment"), so a source can
+	// grant only what that action needs.
+	ActionID string
+	// Mutates is whether the action changes external state. A bot identity
+	// applies to writes only: a read authors nothing, so it keeps the owner's
+	// own (read) access.
+	Mutates bool
+	// Params are the action's parameters, read-only. A source that must scope
+	// a credential to what the call touches (an installation token to one
+	// repository) reads the target from here. They are the workflow's or the
+	// model's, so a source must validate what it takes from them.
+	Params map[string]any
 	// ConnectionID is the connection the call names; empty means the owner's
 	// default for the integration (or its delegated authority).
 	ConnectionID  string
@@ -68,6 +91,11 @@ const (
 	CodeNotFound           = "not_found"
 	CodeInvalidArgument    = "invalid_argument"
 	CodeInternal           = "internal"
+	// CodeIdentityUnavailable: the identity the run asked to act as cannot be
+	// had on this deployment (no App key to mint a bot token from). Distinct
+	// from a failure: a source may fall back to the owner for it, and only
+	// for it.
+	CodeIdentityUnavailable = "identity_unavailable"
 )
 
 // CredentialError is a typed failure to obtain a credential. Message is safe to
@@ -86,6 +114,9 @@ type CallSite struct {
 	RunID      string
 	NodeID     string
 	ToolCallID string
+	// ActingIdentity and Automation: see CredentialRequest.
+	ActingIdentity string
+	Automation     string
 }
 
 // ConnectionParam is the action parameter that names a saved connection.
@@ -119,6 +150,8 @@ func (r *Runner) RunAuthenticated(ctx context.Context, m *reliantv1.IntegrationM
 	placement := a.GetPlacement()
 	cred, err := src.Credential(ctx, CredentialRequest{
 		RunID: site.RunID, NodeID: site.NodeID, ToolCallID: site.ToolCallID,
+		ActingIdentity: site.ActingIdentity, Automation: site.Automation,
+		ActionID: a.GetId(), Mutates: a.GetMutates(), Params: params,
 		ConnectionID: ref, IntegrationID: m.GetId(), Connection: conn,
 		ServerPlaced: placement == manifest.PlacementServer || placement == manifest.PlacementAny,
 	})
@@ -175,4 +208,60 @@ func scrubResult(cred Credential, res *Result) {
 			}
 		}
 	}
+}
+
+// Attributing is a Credential that speaks as someone other than the person
+// whose automation this is, and so must say whose it is: what the GitHub App's
+// bot writes ends with a footer naming the automation and its owner, because a
+// bot-authored comment would otherwise read as a stranger's.
+type Attributing interface {
+	Credential
+	// Attribution says how to sign what an action writes, or nil when the
+	// action authors nothing (a label change, a read).
+	Attribution(integrationID, actionID string) *Attribution
+}
+
+// Attribution is the signature an action's authored text carries.
+type Attribution struct {
+	// Fields are the top-level JSON body fields that hold authored text.
+	Fields []string
+	// Footer is appended to each present field, after a blank line.
+	Footer string
+	// Ensure sets a field the call left out to the footer alone, for an action
+	// that creates something (a pull request opened with no description is
+	// still the bot's). A field absent from an update means "unchanged" and is
+	// never created.
+	Ensure bool
+}
+
+// applyAttribution signs a rendered JSON body. A body that is not a JSON
+// object is returned as it is: the signature is for the text the actions
+// declare, and a shape that is not recognised is never guessed at.
+func applyAttribution(body any, a *Attribution) any {
+	if a == nil || a.Footer == "" {
+		return body
+	}
+	obj, ok := body.(map[string]any)
+	if !ok {
+		return body
+	}
+	signed := make(map[string]any, len(obj)+len(a.Fields))
+	for k, v := range obj {
+		signed[k] = v
+	}
+	for _, field := range a.Fields {
+		switch v := signed[field].(type) {
+		case string:
+			if v == "" {
+				signed[field] = a.Footer
+			} else {
+				signed[field] = v + "\n\n" + a.Footer
+			}
+		case nil:
+			if a.Ensure {
+				signed[field] = a.Footer
+			}
+		}
+	}
+	return signed
 }

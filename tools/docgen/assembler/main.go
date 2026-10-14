@@ -511,7 +511,20 @@ have, ` + bt + `list_triggers` + bt + ` shows each activation's health (HEALTHY,
 each time it fires, so a new cron, filter or input mapping applies on the next event. Renaming or
 removing a declaration, or changing its source kind or integration, leaves its activations BROKEN:
 they fire nothing, report why in ` + bt + `list_triggers` + bt + `, and recover when the declaration is restored (or are
-enabled again by the user). Runs a trigger starts are unattended — nobody answers questions or approvals.`
+enabled again by the user). Runs a trigger starts are unattended — nobody answers questions or approvals.
+
+**Who the run writes as.** When the user enables an automation they choose ` + bt + `acting_identity` + bt + `: ` + bt + `owner` + bt + ` (default; GitHub
+comments, reviews and pull requests appear as the user) or ` + bt + `app` + bt + ` (they appear as the Reliant bot, ` + bt + `reliant-labs[bot]` + bt + `). It is the
+ACTIVATION's choice, made in the app, not the workflow's and not yours: nothing in the YAML, an ` + bt + `action` + bt + ` node's ` + bt + `with:` + bt + ` or a prompt can
+switch it, and a person typing in the run's chat acts as themselves. It covers every integration action the run takes, an
+` + bt + `action` + bt + ` node and an agent's integration tools alike, and only the writes: reads use the owner's access. Everything the bot
+authors ends with a footer naming the automation and its owner, so do not write your own signature. The bot only writes to a
+repository the owner can push to, scoped to that one repository; if the owner cannot push, the Reliant GitHub App is not
+installed there, or the App lacks a permission, the write FAILS with the reason (it never falls back to the owner's name),
+so a workflow that must keep going should handle the action's error output. When you hand a workflow to the user, say that
+a reviewer or triager can be enabled as the bot so the owner can approve and merge what it opens; otherwise the default is
+fine. A self-hosted deployment has no App and acts as the owner. Comments written by Reliant's own bot never fire
+` + bt + `issue_comment.created` + bt + ` or ` + bt + `pull_request_review_comment.created` + bt + `, so a run that comments cannot trigger itself; other bots' comments do.`
 }
 
 func generateGotchas() string {

@@ -320,7 +320,9 @@ func (f *Firer) buildSpec(ctx context.Context, trigger *core.Trigger, sched *Sch
 		Params:      params,
 		Messages:    messages,
 
-		Unattended: true,
+		Unattended:     true,
+		ActingIdentity: trigger.ActingIdentity,
+		Automation:     trigger.Name,
 		// The title is already derived from the trigger's name and the
 		// scheduled time, which is more useful for an automation run than an
 		// LLM's summary of its own prompt — and it costs no model call.

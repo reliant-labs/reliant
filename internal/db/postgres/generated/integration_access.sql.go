@@ -126,7 +126,7 @@ func (q *Queries) GetIntegrationAccessRefresh(ctx context.Context, arg GetIntegr
 }
 
 const listAccessRoutedTriggers = `-- name: ListAccessRoutedTriggers :many
-SELECT t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed, t.workflow_trigger, t.no_machine
+SELECT t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed, t.workflow_trigger, t.no_machine, t.acting_identity
 FROM triggers t
 JOIN integration_event_access a
     ON a.user_id = t.user_id
@@ -201,6 +201,7 @@ func (q *Queries) ListAccessRoutedTriggers(ctx context.Context, arg ListAccessRo
 			&i.Trigger.WebhookSecretSealed,
 			&i.Trigger.WorkflowTrigger,
 			&i.Trigger.NoMachine,
+			&i.Trigger.ActingIdentity,
 		); err != nil {
 			return nil, err
 		}

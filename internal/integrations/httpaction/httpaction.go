@@ -174,6 +174,13 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		}
 		hasBody = true
 	}
+	// A credential that speaks as someone else signs what it authors. Applied
+	// to the rendered body, so a model or workflow cannot leave the signature
+	// out, and only for JSON bodies the action declares authored fields for.
+	if attributing, ok := cred.(Attributing); ok {
+		rendered = applyAttribution(rendered, attributing.Attribution(m.GetId(), a.GetId()))
+		hasBody = hasBody || rendered != nil
+	}
 	var body []byte
 	bodyType := "application/json"
 	if hasBody {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/reliant-labs/reliant/internal/actingidentity"
 	"strings"
 	"time"
 
@@ -301,6 +302,9 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	// holds on whichever worker this lands — research/TOOL_CAPABILITIES.md.
 	caps := tools.CapabilitiesFromProto(protoArgs.GetCapabilities())
 	ctx = tools.WithCapabilities(ctx, caps)
+	// Who this run's integration tools write as: the run's own fact, carried
+	// to the call that resolves the credential. See package actingidentity.
+	ctx = actingidentity.With(ctx, actingidentity.Identity{Kind: rtx.ActingIdentity, Automation: rtx.Automation})
 
 	// Calls the workflow decided must not run, each answered with its reason.
 	// Only a run that recorded the removed integration action approval prompt

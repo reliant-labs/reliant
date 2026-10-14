@@ -21,6 +21,11 @@ const (
 	reasonHeader         = "X-Forge-Error-Reason"
 	reasonNotConnected   = "git_credential_not_connected"
 	reasonNeedsReconnect = "git_credential_needs_reconnect"
+
+	reasonAppNotConfigured = "github_app_not_configured"
+	reasonAppNotInstalled  = "github_app_not_installed"
+	reasonAppPermissions   = "github_app_permissions"
+	reasonOwnerCannotPush  = "github_owner_cannot_push"
 )
 
 // Client calls control-plane's GitCredentialInternalService.
@@ -61,23 +66,76 @@ func (c *Client) UserAccessToken(ctx context.Context, externalUserID, provider s
 	if strings.TrimSpace(externalUserID) == "" {
 		return Token{}, errors.New("gitcredentialclient: user id is required")
 	}
+	var out struct {
+		AccessToken string     `json:"accessToken"`
+		ExpiresAt   *time.Time `json:"expiresAt"`
+	}
+	if err := c.call(ctx, "GetUserAccessToken", map[string]string{"userId": externalUserID, "provider": provider}, &out); err != nil {
+		return Token{}, err
+	}
+	if out.AccessToken == "" {
+		return Token{}, errors.New("gitcredentialclient: control-plane returned an empty token")
+	}
+	return Token{accessToken: out.AccessToken, ExpiresAt: out.ExpiresAt}, nil
+}
+
+// MintInstallationToken asks control-plane for an installation token scoped to
+// one repository.
+func (c *Client) MintInstallationToken(ctx context.Context, req InstallationRequest) (InstallationToken, error) {
+	if strings.TrimSpace(req.ExternalUserID) == "" {
+		return InstallationToken{}, errors.New("gitcredentialclient: user id is required")
+	}
+	if strings.TrimSpace(req.Owner) == "" || strings.TrimSpace(req.Repo) == "" {
+		return InstallationToken{}, errors.New("gitcredentialclient: owner and repo are required")
+	}
+	body := map[string]any{"userId": req.ExternalUserID, "owner": req.Owner, "repo": req.Repo}
+	if len(req.Permissions) > 0 {
+		body["permissions"] = req.Permissions
+	}
+	var out struct {
+		Token          string    `json:"token"`
+		ExpiresAt      time.Time `json:"expiresAt"`
+		BotLogin       string    `json:"botLogin"`
+		ActingForLogin string    `json:"actingForLogin"`
+		Repository     string    `json:"repository"`
+	}
+	if err := c.call(ctx, "MintInstallationToken", body, &out); err != nil {
+		return InstallationToken{}, err
+	}
+	if out.Token == "" {
+		return InstallationToken{}, errors.New("gitcredentialclient: control-plane returned an empty installation token")
+	}
+	return InstallationToken{
+		Token:          Token{accessToken: out.Token, ExpiresAt: &out.ExpiresAt},
+		ExpiresAt:      out.ExpiresAt,
+		BotLogin:       out.BotLogin,
+		ActingForLogin: out.ActingForLogin,
+		Repository:     out.Repository,
+	}, nil
+}
+
+// call POSTs one Connect unary JSON request to the internal service and decodes
+// a 200 body into out. A non-200 becomes a typed error when control-plane's
+// X-Forge-Error-Reason names one, else an *RPCError. Neither the request nor
+// the response body is ever echoed into an error: a response carries a token.
+func (c *Client) call(ctx context.Context, method string, payload, out any) error {
 	if c.baseURL == "" {
-		return Token{}, errors.New("gitcredentialclient: control-plane URL is not configured")
+		return errors.New("gitcredentialclient: control-plane URL is not configured")
 	}
 	if c.sign == nil {
-		return Token{}, errors.New("gitcredentialclient: no internal-service signer configured")
+		return errors.New("gitcredentialclient: no internal-service signer configured")
 	}
 	bearer, err := c.sign()
 	if err != nil {
-		return Token{}, fmt.Errorf("gitcredentialclient: signing internal-service token: %w", err)
+		return fmt.Errorf("gitcredentialclient: signing internal-service token: %w", err)
 	}
-	payload, err := json.Marshal(map[string]string{"userId": externalUserID, "provider": provider})
+	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return Token{}, err
+		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+ServicePath+"GetUserAccessToken", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+ServicePath+method, bytes.NewReader(encoded))
 	if err != nil {
-		return Token{}, err
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Connect-Protocol-Version", "1")
@@ -87,36 +145,37 @@ func (c *Client) UserAccessToken(ctx context.Context, externalUserID, provider s
 	if err != nil {
 		// Never wrap the request: its URL is harmless, but keep the habit of
 		// errors that cannot carry a credential.
-		return Token{}, fmt.Errorf("gitcredentialclient: GetUserAccessToken: %w", err)
+		return fmt.Errorf("gitcredentialclient: %s: %w", method, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return Token{}, fmt.Errorf("gitcredentialclient: reading response: %w", err)
+		return fmt.Errorf("gitcredentialclient: reading response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		switch resp.Header.Get(reasonHeader) {
-		case reasonNotConnected:
-			return Token{}, ErrNotConnected
-		case reasonNeedsReconnect:
-			return Token{}, ErrNeedsReconnect
+		if typed, ok := reasonErrors[resp.Header.Get(reasonHeader)]; ok {
+			return typed
 		}
 		rpcErr := &RPCError{Code: http.StatusText(resp.StatusCode)}
 		_ = json.Unmarshal(body, rpcErr)
-		return Token{}, rpcErr
+		return rpcErr
 	}
-	var out struct {
-		AccessToken string     `json:"accessToken"`
-		ExpiresAt   *time.Time `json:"expiresAt"`
-	}
-	if err := json.Unmarshal(body, &out); err != nil {
+	if err := json.Unmarshal(body, out); err != nil {
 		// The body holds a token: do not echo it into the error.
-		return Token{}, errors.New("gitcredentialclient: decoding GetUserAccessToken response failed")
+		return fmt.Errorf("gitcredentialclient: decoding %s response failed", method)
 	}
-	if out.AccessToken == "" {
-		return Token{}, errors.New("gitcredentialclient: control-plane returned an empty token")
-	}
-	return Token{accessToken: out.AccessToken, ExpiresAt: out.ExpiresAt}, nil
+	return nil
+}
+
+// reasonErrors maps control-plane's X-Forge-Error-Reason values onto this
+// package's typed outcomes.
+var reasonErrors = map[string]error{
+	reasonNotConnected:     ErrNotConnected,
+	reasonNeedsReconnect:   ErrNeedsReconnect,
+	reasonAppNotConfigured: ErrAppNotConfigured,
+	reasonAppNotInstalled:  ErrAppNotInstalled,
+	reasonAppPermissions:   ErrAppPermissions,
+	reasonOwnerCannotPush:  ErrOwnerCannotPush,
 }
 
 // A Token holds plaintext by design, so it must not print it.

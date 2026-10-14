@@ -1107,6 +1107,10 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		rtx.Thread = e.execContext.Thread
 	}
 
+	// Who this run's integration writes speak as (see InputKeyActingIdentity).
+	rtx.ActingIdentity = ActingIdentity(e.workflowInputs)
+	rtx.Automation, _ = e.workflowInputs[InputKeyAutomation].(string)
+
 	// What load_tool has granted on this thread so far. call_llm offers it,
 	// within what the node declares; this is how a tool loaded on one turn is
 	// callable on the next, whichever worker runs either.

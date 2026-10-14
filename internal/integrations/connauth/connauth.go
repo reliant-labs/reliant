@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"sync"
@@ -101,6 +102,13 @@ func (s *source) Credential(ctx context.Context, req httpaction.CredentialReques
 	if !req.ServerPlaced {
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: connections.ErrDaemonPlacement.Error(), Err: connections.ErrDaemonPlacement}
 	}
+	// An automation that chose to act as the App's bot writes as the bot, and
+	// is asked before any saved connection: a saved GitHub connection is the
+	// OWNER's, and letting it win would put the owner's own name on a write
+	// the activation said the bot makes.
+	if cred, handled, err := s.actingCredential(ctx, req); handled {
+		return cred, err
+	}
 	resolved, err := s.resolver.ForCall(ctx,
 		connections.CallSite{RunID: req.RunID, NodeID: req.NodeID, ToolCallID: req.ToolCallID, Placement: connections.PlacementServer},
 		connections.Ref{ConnectionID: req.ConnectionID, IntegrationID: req.IntegrationID})
@@ -116,6 +124,53 @@ func (s *source) Credential(ctx context.Context, req httpaction.CredentialReques
 		}
 	}
 	return nil, mapError(err)
+}
+
+// actingCredential resolves a call that asked to act as a non-owner identity.
+// handled is false when the call is the owner's (the common case), and when the
+// identity is unavailable on this deployment, in which case the owner's own
+// resolution proceeds: a deployment with no App key keeps working exactly as
+// before, and says so once per call in its log rather than failing a run.
+//
+// Anything else is handled, including every failure: a write the activation
+// said the bot makes is never quietly made as the owner because minting failed
+// (the owner cannot push, the App is not installed, GitHub is down).
+func (s *source) actingCredential(ctx context.Context, req httpaction.CredentialRequest) (cred httpaction.Credential, handled bool, err error) {
+	if req.ActingIdentity != httpaction.IdentityApp || !req.Mutates || req.ConnectionID != "" {
+		// A read authors nothing, and a call that names a connection chose its
+		// own credential: neither is the bot's to make.
+		return nil, false, nil
+	}
+	broker, ok := s.delegatedBroker(req.Connection)
+	if !ok {
+		return nil, false, nil
+	}
+	acting, ok := broker.(ActingBroker)
+	if !ok {
+		return nil, false, nil
+	}
+	owner, err := s.resolver.OwnerOf(ctx, req.RunID)
+	if err != nil {
+		var ce *connections.Error
+		if errors.As(err, &ce) {
+			return nil, true, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: ce.Message, Err: err}
+		}
+		return nil, true, &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "could not resolve the run owner", Err: err}
+	}
+	cred, err = acting.ActingCredential(ctx, owner, req)
+	if err == nil {
+		return cred, true, nil
+	}
+	var ce *httpaction.CredentialError
+	if errors.As(err, &ce) {
+		if ce.Code == httpaction.CodeIdentityUnavailable {
+			slog.Warn("the automation asked to act as the GitHub App's bot, but this deployment cannot mint its token; acting as the owner instead",
+				"integration", req.IntegrationID, "automation", req.Automation, "reason", ce.Message)
+			return nil, false, nil
+		}
+		return nil, true, err
+	}
+	return nil, true, &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "the delegated authority failed", Err: err}
 }
 
 // UsableIntegrations implements Service.

@@ -1679,6 +1679,7 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 	}
 	// This run answers a person, not whatever launched the chat.
 	delete(inputs, v2.InputKeyLaunchRun)
+	v2.DropActingIdentity(inputs)
 	launch.InjectSessionDaemonID(inputs, chat)
 
 	if _, err := s.deps.Repo.ReviveThread(ctx, threadID); err != nil {

@@ -469,3 +469,21 @@ func TestDispatch_ChainDepthIsCapped(t *testing.T) {
 	assert.Contains(t, got.Detail, "deep")
 	assert.Equal(t, lineage.MaxDepth, f.starter.count())
 }
+
+// A workflow-event activation that chose the bot launches the run as the bot,
+// like every other trigger kind: this path builds its own launch spec.
+func TestDispatch_LaunchCarriesTheActivationsActingIdentity(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	tr := f.addTrigger(f.userID, f.projectID, "on-review-done", "builtin://agent",
+		Source{Workflows: []string{"code-review"}, Outcomes: []string{"finished"}})
+	tr.ActingIdentity = core.ActingIdentityApp
+	require.NoError(t, f.repo.UpdateTrigger(ctx, tr))
+
+	spec, err := f.dispatcher.buildSpec(tr, &core.RunEvent{WorkflowName: "code-review", Outcome: core.RunEventFinished},
+		launch.Event{DedupeKey: "d1"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, core.ActingIdentityApp, spec.ActingIdentity)
+	assert.Equal(t, "on-review-done", spec.Automation)
+	assert.True(t, spec.Unattended)
+}

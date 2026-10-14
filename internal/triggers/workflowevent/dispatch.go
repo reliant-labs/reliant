@@ -345,6 +345,8 @@ func (d *Dispatcher) buildSpec(trigger *core.Trigger, ev *core.RunEvent, launchE
 			},
 		},
 		Unattended:      true,
+		ActingIdentity:  trigger.ActingIdentity,
+		Automation:      trigger.Name,
 		GenerateTitle:   false,
 		GreenfieldProbe: false,
 	}, nil

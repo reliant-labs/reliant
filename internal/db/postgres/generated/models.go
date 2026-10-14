@@ -780,6 +780,7 @@ type Trigger struct {
 	WebhookSecretSealed []byte          `json:"webhook_secret_sealed"`
 	WorkflowTrigger     sql.NullString  `json:"workflow_trigger"`
 	NoMachine           bool            `json:"no_machine"`
+	ActingIdentity      string          `json:"acting_identity"`
 }
 
 type TriggerEvent struct {

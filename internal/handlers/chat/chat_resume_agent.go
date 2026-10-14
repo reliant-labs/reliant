@@ -235,6 +235,7 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 	inputs := s.runInputsForSend(ctx, workflowID, "")
 	if inputs != nil {
 		delete(inputs, v2.InputKeyLaunchRun)
+		v2.DropActingIdentity(inputs)
 	} else {
 		presets := make(map[string]string, len(chat.SelectedPresets))
 		for k, v := range chat.SelectedPresets {

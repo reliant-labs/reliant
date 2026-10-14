@@ -627,6 +627,11 @@ func (s *Service) triggerFromDefinition(
 			errors.New("filter: a schedule fires on time, not on an event, so there is nothing to filter"))
 	}
 
+	identity, err := s.actingIdentityFor(def, existing)
+	if err != nil {
+		return nil, err
+	}
+
 	now := time.Now().UTC()
 	trigger := &core.Trigger{
 		UserID:           userID,
@@ -640,6 +645,7 @@ func (s *Service) triggerFromDefinition(
 		Message:          def.Message,
 		DaemonID:         def.DaemonId,
 		NoMachine:        def.NoMachine,
+		ActingIdentity:   identity,
 		NotifyOnComplete: def.NotifyOnComplete,
 		Config:           src.Config,
 		CreatedAt:        now,
@@ -661,6 +667,29 @@ func (s *Service) triggerFromDefinition(
 		trigger.Filter = decl.Filter
 	}
 	return trigger, nil
+}
+
+// actingIdentityFor decides who a trigger's integration writes speak as.
+//
+// Unspecified means the owner on create and "unchanged" on update, so a client
+// that predates the field cannot flip an activation back to the owner by
+// omitting it. The app identity is refused where it could never work: with no
+// control plane there is no App key, and a write that would silently fall back
+// to the owner's own name is exactly what choosing a bot is meant to prevent.
+func (s *Service) actingIdentityFor(def *reliantv1.TriggerDefinition, existing *core.Trigger) (core.ActingIdentity, error) {
+	identity, chosen := triggers.ActingIdentityFromProto(def.ActingIdentity)
+	if !chosen {
+		if existing != nil {
+			return existing.ActingIdentity.OrOwner(), nil
+		}
+		return core.ActingIdentityOwner, nil
+	}
+	if identity == core.ActingIdentityApp && s.deps.ControlPlane == nil {
+		return "", connect.NewError(connect.CodeFailedPrecondition, errors.New(
+			"acting_identity: app needs a Reliant deployment with a control plane, which holds the GitHub App; "+
+				"this deployment has none, so its automations act as their owner"))
+	}
+	return identity, nil
 }
 
 // resolveActivation reads the declaration a definition activates and checks

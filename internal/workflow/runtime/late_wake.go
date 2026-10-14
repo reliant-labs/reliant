@@ -108,6 +108,7 @@ func continueAsNewForLateWake(ctx workflow.Context, input WorkflowInput, thread 
 func lateWakeSuccessorInput(input WorkflowInput) WorkflowInput {
 	inputs := maps.Clone(input.Inputs)
 	delete(inputs, InputKeyLaunchRun)
+	DropActingIdentity(inputs)
 	return WorkflowInput{
 		ChatID:       input.ChatID,
 		WorkflowName: input.WorkflowName,

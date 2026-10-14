@@ -29,8 +29,16 @@ import (
 )
 
 // Service is the delegated broker: it turns a run owner into a GitHub
-// credential pinned to APIHost. It satisfies connauth.DelegatedBroker.
+// credential pinned to APIHost. It satisfies connauth.DelegatedBroker, and
+// connauth.ActingBroker for the App's bot.
 type Service interface {
+	// ActingCredential returns the credential req.ActingIdentity speaks as.
+	// For the App's bot it mints an installation token scoped to the ONE
+	// repository req.Params names, after control-plane has checked that the
+	// owner can push there. Anything else is refused: the broker has exactly
+	// two identities, and an unknown one never falls through to the owner's.
+	ActingCredential(ctx context.Context, ownerUserID string, req httpaction.CredentialRequest) (httpaction.Credential, error)
+
 	// Credential fetches the owner's token from control-plane, every call.
 	// The token is not cached here: control-plane renews it under a lock and
 	// is the one place that knows whether it was revoked, and a GitHub call
@@ -44,10 +52,20 @@ type TokenSource interface {
 	UserAccessToken(ctx context.Context, externalUserID, provider string) (gitcredentialclient.Token, error)
 }
 
+// InstallationSource is what the broker needs from control-plane to act as the
+// App's bot. gitcredentialclient's client satisfies it.
+type InstallationSource interface {
+	MintInstallationToken(ctx context.Context, req gitcredentialclient.InstallationRequest) (gitcredentialclient.InstallationToken, error)
+}
+
 // Deps are the broker's collaborators.
 type Deps struct {
 	// Tokens fetches the owner's current GitHub App user token.
 	Tokens TokenSource
+	// Installations mints the App's installation tokens. nil makes the broker
+	// owner-only: asked to act as the bot, it answers identity-unavailable and
+	// the caller falls back to the owner (a self-hosted deployment).
+	Installations InstallationSource
 	// Logger receives transient control-plane failures. nil discards them.
 	Logger *slog.Logger
 }

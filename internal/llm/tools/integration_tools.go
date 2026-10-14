@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/reliant-labs/reliant/internal/actingidentity"
 	"sync"
 
 	"github.com/invopop/jsonschema"
@@ -324,7 +325,11 @@ func (t *integrationTool) Run(rc *rctx.ToolContext, call ToolCall) (ToolResponse
 	if ctx == nil {
 		return NewTextErrorResponse("no execution context"), nil
 	}
-	site := httpaction.CallSite{RunID: integrationRunID(rc.ChatID, rc.Thread), ToolCallID: call.ID}
+	who := actingidentity.From(ctx)
+	site := httpaction.CallSite{
+		RunID: integrationRunID(rc.ChatID, rc.Thread), ToolCallID: call.ID,
+		ActingIdentity: who.Kind, Automation: who.Automation,
+	}
 	var runner writeledger.Runner = sharedIntegrationRunner()
 	if t.ledger != nil {
 		runner = t.ledger.Wrap(runner)

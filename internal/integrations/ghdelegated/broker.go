@@ -24,18 +24,23 @@ const (
 	// a saved connection's: there is no row, but results and audit still need
 	// to say which credential authenticated the call.
 	ConnectionID = "controlplane:github"
+	// BotConnectionID is what a credential for the App's bot reports.
+	BotConnectionID = "controlplane:github-app"
 )
 
 // broker asks control-plane for the owner's current GitHub token.
 type broker struct {
-	tokens TokenSource
-	host   string
-	logger *slog.Logger
+	tokens        TokenSource
+	installations InstallationSource
+	host          string
+	logger        *slog.Logger
 }
 
 // New returns a broker that pins every credential to api.github.com.
 func New(deps Deps) Service {
-	return newBroker(deps.Tokens, APIHost, deps.Logger)
+	b := newBroker(deps.Tokens, APIHost, deps.Logger)
+	b.installations = deps.Installations
+	return b
 }
 
 // newBroker lets tests pin to an httptest host. Production code uses New.

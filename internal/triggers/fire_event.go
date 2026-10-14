@@ -257,7 +257,9 @@ func (f *EventFirer) buildSpec(ctx context.Context, trigger *core.Trigger, ev *c
 				DisplayStyle: &hidden,
 			},
 		},
-		Unattended: true,
+		Unattended:     true,
+		ActingIdentity: trigger.ActingIdentity,
+		Automation:     trigger.Name,
 	}, nil
 }
 

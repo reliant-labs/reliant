@@ -83,6 +83,16 @@ type RuntimeContext struct {
 	// capability set with it, so it is set on call_llm nodes only.
 	Unattended bool `json:"unattended,omitempty"`
 
+	// ActingIdentity is who this run's integration writes speak as, read off
+	// the run's inputs (runtime.ActingIdentity): "app" for the GitHub App's bot,
+	// empty for the owner. Set on every node, because an `action` node and an
+	// agent's integration tool both resolve their credential from it. Replay
+	// safe: it is a pure function of inputs the workflow already holds.
+	ActingIdentity string `json:"acting_identity,omitempty"`
+	// Automation names the trigger the run belongs to, for the footer on what
+	// the bot writes.
+	Automation string `json:"automation,omitempty"`
+
 	// SpeculativeTurn marks a call_llm turn the agent loop took on a hint
 	// rather than on known input: its loop-exit gate re-entered because a
 	// wake (a mailbox row or a user message) or a background spawn's report

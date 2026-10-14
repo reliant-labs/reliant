@@ -68,9 +68,10 @@ const createTrigger = `-- name: CreateTrigger :exec
 INSERT INTO triggers (
     id, user_id, project_id, worktree_id, name, kind, enabled,
     workflow, presets, params, message, config, created_at, updated_at,
-    daemon_id, notify_on_complete, filter, connection_id, workflow_trigger, no_machine
+    daemon_id, notify_on_complete, filter, connection_id, workflow_trigger, no_machine,
+    acting_identity
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
 )
 `
 
@@ -95,6 +96,7 @@ type CreateTriggerParams struct {
 	ConnectionID     sql.NullString  `json:"connection_id"`
 	WorkflowTrigger  sql.NullString  `json:"workflow_trigger"`
 	NoMachine        bool            `json:"no_machine"`
+	ActingIdentity   string          `json:"acting_identity"`
 }
 
 func (q *Queries) CreateTrigger(ctx context.Context, arg CreateTriggerParams) error {
@@ -119,6 +121,7 @@ func (q *Queries) CreateTrigger(ctx context.Context, arg CreateTriggerParams) er
 		arg.ConnectionID,
 		arg.WorkflowTrigger,
 		arg.NoMachine,
+		arg.ActingIdentity,
 	)
 	return err
 }
@@ -234,7 +237,7 @@ func (q *Queries) GetLatestTriggerEvent(ctx context.Context, arg GetLatestTrigge
 
 const getTrigger = `-- name: GetTrigger :one
 SELECT
-    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed, t.workflow_trigger, t.no_machine,
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed, t.workflow_trigger, t.no_machine, t.acting_identity,
     COALESCE(p.name, '')::text AS project_name,
     COALESCE(d.hostname, '')::text AS daemon_name
 FROM triggers t
@@ -278,6 +281,7 @@ func (q *Queries) GetTrigger(ctx context.Context, id string) (GetTriggerRow, err
 		&i.Trigger.WebhookSecretSealed,
 		&i.Trigger.WorkflowTrigger,
 		&i.Trigger.NoMachine,
+		&i.Trigger.ActingIdentity,
 		&i.ProjectName,
 		&i.DaemonName,
 	)
@@ -424,7 +428,7 @@ func (q *Queries) GetTriggerWebhookCredentials(ctx context.Context, id string) (
 }
 
 const listAllTriggers = `-- name: ListAllTriggers :many
-SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete, filter, connection_id, webhook_token_hash, webhook_secret_sealed, workflow_trigger, no_machine FROM triggers ORDER BY created_at DESC, id
+SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete, filter, connection_id, webhook_token_hash, webhook_secret_sealed, workflow_trigger, no_machine, acting_identity FROM triggers ORDER BY created_at DESC, id
 `
 
 // Every user's triggers. Only the schedule syncer's reconciliation calls this.
@@ -460,6 +464,7 @@ func (q *Queries) ListAllTriggers(ctx context.Context) ([]Trigger, error) {
 			&i.WebhookSecretSealed,
 			&i.WorkflowTrigger,
 			&i.NoMachine,
+			&i.ActingIdentity,
 		); err != nil {
 			return nil, err
 		}
@@ -475,7 +480,7 @@ func (q *Queries) ListAllTriggers(ctx context.Context) ([]Trigger, error) {
 }
 
 const listAllWorkflowTriggerActivations = `-- name: ListAllWorkflowTriggerActivations :many
-SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete, filter, connection_id, webhook_token_hash, webhook_secret_sealed, workflow_trigger, no_machine FROM triggers WHERE workflow_trigger IS NOT NULL ORDER BY id
+SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete, filter, connection_id, webhook_token_hash, webhook_secret_sealed, workflow_trigger, no_machine, acting_identity FROM triggers WHERE workflow_trigger IS NOT NULL ORDER BY id
 `
 
 // Every activation of a declared trigger, for the periodic reconcile.
@@ -511,6 +516,7 @@ func (q *Queries) ListAllWorkflowTriggerActivations(ctx context.Context) ([]Trig
 			&i.WebhookSecretSealed,
 			&i.WorkflowTrigger,
 			&i.NoMachine,
+			&i.ActingIdentity,
 		); err != nil {
 			return nil, err
 		}
@@ -630,7 +636,7 @@ func (q *Queries) ListFiringsSinceLastSuccess(ctx context.Context, arg ListFirin
 
 const listIntegrationTriggers = `-- name: ListIntegrationTriggers :many
 SELECT
-    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed, t.workflow_trigger, t.no_machine,
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed, t.workflow_trigger, t.no_machine, t.acting_identity,
     c.external_account_id AS connection_account,
     c.status AS connection_status
 FROM triggers t
@@ -688,6 +694,7 @@ func (q *Queries) ListIntegrationTriggers(ctx context.Context, integration strin
 			&i.Trigger.WebhookSecretSealed,
 			&i.Trigger.WorkflowTrigger,
 			&i.Trigger.NoMachine,
+			&i.Trigger.ActingIdentity,
 			&i.ConnectionAccount,
 			&i.ConnectionStatus,
 		); err != nil {
@@ -992,7 +999,7 @@ func (q *Queries) ListTriggerRegistrations(ctx context.Context, arg ListTriggerR
 
 const listTriggers = `-- name: ListTriggers :many
 SELECT
-    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed, t.workflow_trigger, t.no_machine,
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed, t.workflow_trigger, t.no_machine, t.acting_identity,
     COALESCE(p.name, '')::text AS project_name,
     COALESCE(d.hostname, '')::text AS daemon_name
 FROM triggers t
@@ -1049,6 +1056,7 @@ func (q *Queries) ListTriggers(ctx context.Context, arg ListTriggersParams) ([]L
 			&i.Trigger.WebhookSecretSealed,
 			&i.Trigger.WorkflowTrigger,
 			&i.Trigger.NoMachine,
+			&i.Trigger.ActingIdentity,
 			&i.ProjectName,
 			&i.DaemonName,
 		); err != nil {
@@ -1066,7 +1074,7 @@ func (q *Queries) ListTriggers(ctx context.Context, arg ListTriggersParams) ([]L
 }
 
 const listWorkflowTriggerActivations = `-- name: ListWorkflowTriggerActivations :many
-SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete, filter, connection_id, webhook_token_hash, webhook_secret_sealed, workflow_trigger, no_machine FROM triggers
+SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete, filter, connection_id, webhook_token_hash, webhook_secret_sealed, workflow_trigger, no_machine, acting_identity FROM triggers
 WHERE user_id = $1 AND workflow = $2 AND workflow_trigger IS NOT NULL
 ORDER BY created_at, id
 `
@@ -1111,6 +1119,7 @@ func (q *Queries) ListWorkflowTriggerActivations(ctx context.Context, arg ListWo
 			&i.WebhookSecretSealed,
 			&i.WorkflowTrigger,
 			&i.NoMachine,
+			&i.ActingIdentity,
 		); err != nil {
 			return nil, err
 		}
@@ -1281,8 +1290,9 @@ UPDATE triggers SET
     filter = $13,
     connection_id = $14,
     workflow_trigger = $15,
-    no_machine = $16
-WHERE id = $17
+    no_machine = $16,
+    acting_identity = $17
+WHERE id = $18
 `
 
 type UpdateTriggerParams struct {
@@ -1302,6 +1312,7 @@ type UpdateTriggerParams struct {
 	ConnectionID     sql.NullString  `json:"connection_id"`
 	WorkflowTrigger  sql.NullString  `json:"workflow_trigger"`
 	NoMachine        bool            `json:"no_machine"`
+	ActingIdentity   string          `json:"acting_identity"`
 	ID               string          `json:"id"`
 }
 
@@ -1326,6 +1337,7 @@ func (q *Queries) UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (i
 		arg.ConnectionID,
 		arg.WorkflowTrigger,
 		arg.NoMachine,
+		arg.ActingIdentity,
 		arg.ID,
 	)
 	if err != nil {

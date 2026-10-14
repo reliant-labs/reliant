@@ -14525,6 +14525,11 @@
             "name": "workflow_trigger",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "acting_identity",
+            "kind": "enum",
+            "type_name": "reliant.v1.ActingIdentity"
           }
         ],
         "reliant.v1.TriggerDefinition": [
@@ -14621,6 +14626,11 @@
             "name": "workflow_trigger",
             "kind": "string",
             "oneof": "source"
+          },
+          {
+            "name": "acting_identity",
+            "kind": "enum",
+            "type_name": "reliant.v1.ActingIdentity"
           }
         ],
         "reliant.v1.TriggerEvent": [
@@ -14920,6 +14930,11 @@
         "reliant.v1.WorkflowTriggerResult": "reliant/v1/trigger.proto"
       },
       "Enums": {
+        "reliant.v1.ActingIdentity": [
+          "ACTING_IDENTITY_UNSPECIFIED",
+          "ACTING_IDENTITY_OWNER",
+          "ACTING_IDENTITY_APP"
+        ],
         "reliant.v1.RunDisplayState": [
           "RUN_DISPLAY_STATE_UNSPECIFIED",
           "RUN_DISPLAY_STATE_QUEUED",
@@ -14985,6 +15000,11 @@
         ]
       },
       "EnumNumbers": {
+        "reliant.v1.ActingIdentity": [
+          0,
+          1,
+          2
+        ],
         "reliant.v1.RunDisplayState": [
           0,
           1,
@@ -15050,6 +15070,10 @@
         ]
       },
       "EnumGoRefs": {
+        "reliant.v1.ActingIdentity": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "ActingIdentity"
+        },
         "reliant.v1.RunDisplayState": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "RunDisplayState"

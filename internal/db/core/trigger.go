@@ -148,6 +148,31 @@ var ErrTriggerNotFound = errors.New("trigger not found")
 // ErrTriggerEventNotFound is returned when a trigger event lookup misses.
 var ErrTriggerEventNotFound = errors.New("trigger event not found")
 
+// ActingIdentity names who an automation's integration writes speak as.
+type ActingIdentity string
+
+const (
+	// ActingIdentityOwner: the activation's owner, through their own
+	// credential. What every activation did before identities existed, and the
+	// only identity a self-hosted deployment has.
+	ActingIdentityOwner ActingIdentity = "owner"
+	// ActingIdentityApp: the GitHub App's bot (`reliant-labs[bot]`), through a
+	// per-repository installation token.
+	ActingIdentityApp ActingIdentity = "app"
+)
+
+// Valid reports whether i is a stored identity.
+func (i ActingIdentity) Valid() bool { return i == ActingIdentityOwner || i == ActingIdentityApp }
+
+// OrOwner is i, or the owner identity when i is empty: the zero value means
+// "never chose", which is the owner.
+func (i ActingIdentity) OrOwner() ActingIdentity {
+	if i == "" {
+		return ActingIdentityOwner
+	}
+	return i
+}
+
 // Trigger is a stored trigger definition. UserID is the owner, and the
 // identity every run it launches executes as.
 type Trigger struct {
@@ -191,8 +216,14 @@ type Trigger struct {
 	// schedule syncer; the declaration is re-read and authoritative at fire
 	// time.
 	WorkflowTrigger *string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	// ActingIdentity is who the integration writes of every run this trigger
+	// launches speak as: ActingIdentityOwner (the owner, through their GitHub
+	// App user token) or ActingIdentityApp (the GitHub App's bot, through a
+	// per-repository installation token control-plane mints only when the
+	// owner can push). Never empty on a stored row.
+	ActingIdentity ActingIdentity
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 
 	// ProjectName and DaemonName are read-only display names joined in by
 	// GetTrigger and ListTriggers. Empty when the project or daemon row is

@@ -170,10 +170,20 @@ func TestMentionDetection(t *testing.T) {
 	}
 }
 
-// An App's own comment (ours included) comes back as an event. Dropping it
-// stops a trigger whose run comments from re-firing itself forever.
-func TestBotCommentsAreDropped(t *testing.T) {
+// OUR bot's comment comes back as an event. Dropping it stops a trigger whose
+// run comments as the bot from re-firing itself forever.
+func TestOurBotCommentsAreDropped(t *testing.T) {
 	assert.Empty(t, parseFixture(t, "issue_comment", "issue_comment.created.bot").Events)
+}
+
+// Another bot's comment is a legitimate event source. The earlier rule dropped
+// every Bot sender, which hid Dependabot, CI apps and review tools from every
+// trigger filter once automations began writing as a bot themselves.
+func TestOtherBotCommentsAreNotDropped(t *testing.T) {
+	ev := one(t, parseFixture(t, "issue_comment", "issue_comment.created.otherbot"))
+	assert.Equal(t, "issue_comment.created", ev.Type)
+	assert.Equal(t, "dependabot[bot]", ev.Attributes["sender"])
+	assert.Equal(t, "49699333", ev.Sender.ID, "the sender is identified by numeric id")
 }
 
 func TestPullRequestEvents(t *testing.T) {
@@ -438,9 +448,15 @@ func TestPullRequestReviewCommentReply(t *testing.T) {
 }
 
 // A responder that replies in a thread fires pull_request_review_comment
-// itself; dropping App comments stops it re-firing on its own reply.
-func TestBotReviewCommentsAreDropped(t *testing.T) {
+// itself; dropping our bot's comments stops it re-firing on its own reply.
+func TestOurBotReviewCommentsAreDropped(t *testing.T) {
 	assert.Empty(t, parseFixture(t, "pull_request_review_comment", "pull_request_review_comment.created.bot").Events)
+}
+
+func TestOtherBotReviewCommentsAreNotDropped(t *testing.T) {
+	ev := one(t, parseFixture(t, "pull_request_review_comment", "pull_request_review_comment.created.otherbot"))
+	assert.Equal(t, "pull_request_review_comment.created", ev.Type)
+	assert.Equal(t, "dependabot[bot]", ev.Attributes["sender"])
 }
 
 func TestCheckRunCompleted(t *testing.T) {

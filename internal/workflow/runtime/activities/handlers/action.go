@@ -100,7 +100,10 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 		params[httpaction.ConnectionParam] = connection
 	}
 
-	site := httpaction.CallSite{RunID: rtx.WorkflowID, NodeID: rtx.StepID, ToolCallID: invokeToolCallID(rtx.WorkflowID, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration)}
+	site := httpaction.CallSite{
+		RunID: rtx.WorkflowID, NodeID: rtx.StepID, ToolCallID: invokeToolCallID(rtx.WorkflowID, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration),
+		ActingIdentity: rtx.ActingIdentity, Automation: rtx.Automation,
+	}
 	result, runErr := a.runner.RunAuthenticated(ctx, resolved.Manifest, resolved.Spec, params, a.credentials, site)
 	out := &reliantv1.ActionOutput{Uses: uses}
 	if runErr != nil {

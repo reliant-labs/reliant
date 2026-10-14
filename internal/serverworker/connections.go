@@ -77,7 +77,7 @@ func newIntegrationCredentials(resolver *connections.Resolver, cp controlplane.E
 		BaseURL: cp.URL,
 		Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
-	broker := ghdelegated.New(ghdelegated.Deps{Tokens: client, Logger: slog.Default().With("component", "ghdelegated")})
+	broker := ghdelegated.New(ghdelegated.Deps{Tokens: client, Installations: client, Logger: slog.Default().With("component", "ghdelegated")})
 	if err := brokers.Register(ghdelegated.BrokerID, broker); err != nil {
 		return nil, fmt.Errorf("integrations: %w", err)
 	}

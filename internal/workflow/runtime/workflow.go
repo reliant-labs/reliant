@@ -3030,6 +3030,7 @@ func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]int
 	}
 
 	propagateUnattended(workflowInputs, childInputs)
+	propagateActingIdentity(workflowInputs, childInputs)
 	propagateTrigger(workflowInputs, childInputs)
 
 	// Derive parent_permission so child permission is capped to parent's level.

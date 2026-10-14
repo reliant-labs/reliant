@@ -83,6 +83,24 @@ type Resolver interface {
 	Usable(ctx context.Context, call connections.CallSite, refs []connections.Ref) (map[connections.Ref]error, error)
 }
 
+// ActingBroker is a DelegatedBroker that can also speak as an identity other
+// than the owner: the GitHub App's bot, for an automation whose activation
+// chose it. Optional, so a broker that has no second identity (every other
+// integration's) stays a plain DelegatedBroker.
+//
+// The request is the call itself, because what a non-owner credential may do
+// depends on what the call touches: an installation token is scoped to one
+// repository, which only the call's params name.
+type ActingBroker interface {
+	DelegatedBroker
+	// ActingCredential returns the credential for req.ActingIdentity, on
+	// behalf of ownerUserID. Errors are *httpaction.CredentialError; one with
+	// CodeIdentityUnavailable means this deployment cannot provide the
+	// identity at all (not that it failed to), and is the only case a caller
+	// may answer with the owner's own credential.
+	ActingCredential(ctx context.Context, ownerUserID string, req httpaction.CredentialRequest) (httpaction.Credential, error)
+}
+
 // DelegatedBroker turns a run owner into a credential obtained from an
 // external authority at call time. ownerUserID is reliant's user id for the
 // run's owner (the IdP subject). The returned credential must pin itself to

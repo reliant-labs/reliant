@@ -219,7 +219,7 @@ func events(event string, body *payload, receivedAt time.Time) []Event {
 	if body.Installation == nil || body.Installation.ID == 0 || body.Repository == nil || body.Repository.ID == 0 {
 		return nil
 	}
-	if isAppComment(event, body) {
+	if isOurComment(event, body) {
 		return nil
 	}
 	installation := strconv.FormatInt(body.Installation.ID, 10)
@@ -277,15 +277,22 @@ func sender(body *payload) *core.TriggerSender {
 	}
 }
 
-// isAppComment is a comment written by a GitHub App, ours included. A
-// trigger whose run comments would otherwise fire on its own comment,
-// forever. It covers inline diff comments too: a responder's reply in a
-// review thread is a pull_request_review_comment of its own.
-func isAppComment(event string, body *payload) bool {
+// isOurComment is a comment written by OUR App's bot. A trigger whose run
+// comments as the bot would otherwise fire on its own comment, forever. It
+// covers inline diff comments too: a responder's reply in a review thread is a
+// pull_request_review_comment of its own.
+//
+// Only our bot is dropped. Every other bot (Dependabot, a CI app, a review
+// tool) is a legitimate event source: a trigger that reviews what a bot opens
+// or answers what a bot says needs to see it, and the earlier "any Bot sender"
+// rule hid them all from every filter. Our own bot is told apart by the
+// numeric id GitHub assigned it, never by its login, which a rename could hand
+// to someone else (the same rule the sender allowlist keeps).
+func isOurComment(event string, body *payload) bool {
 	if event != "issue_comment" && event != "pull_request_review_comment" {
 		return false
 	}
-	return body.Sender != nil && body.Sender.Type == "Bot"
+	return body.Sender != nil && IsOurBot(body.Sender.Type, body.Sender.ID, body.Sender.Login)
 }
 
 func senderLogin(body *payload) string {

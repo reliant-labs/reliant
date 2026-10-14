@@ -2,9 +2,10 @@
 INSERT INTO triggers (
     id, user_id, project_id, worktree_id, name, kind, enabled,
     workflow, presets, params, message, config, created_at, updated_at,
-    daemon_id, notify_on_complete, filter, connection_id, workflow_trigger, no_machine
+    daemon_id, notify_on_complete, filter, connection_id, workflow_trigger, no_machine,
+    acting_identity
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
 );
 
 -- name: SetTriggerWebhookTokenHash :execrows
@@ -159,8 +160,9 @@ UPDATE triggers SET
     filter = $13,
     connection_id = $14,
     workflow_trigger = $15,
-    no_machine = $16
-WHERE id = $17;
+    no_machine = $16,
+    acting_identity = $17
+WHERE id = $18;
 
 -- name: DeleteTrigger :exec
 DELETE FROM triggers WHERE id = $1;

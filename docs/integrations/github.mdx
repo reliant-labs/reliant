@@ -9,6 +9,18 @@ The GitHub integration lets a workflow or agent act on GitHub as you, and start 
 
 Reliant acts through the Reliant GitHub App, signed in as you. What it can do is the intersection of the App's permissions and what you can see, and only in repositories where the App is installed. GitHub answers a repository the App cannot reach with "not found" rather than "forbidden", so a **not found** error on a repository you know exists usually means the App is not installed there. A fine-grained personal access token is also accepted as a connection.
 
+### Acting as the Reliant bot
+
+An [automation](/automations/overview#who-an-automation-acts-as) can instead write as `reliant-labs[bot]`, the App itself, by activating with `acting_identity: app`. The pull requests, comments and reviews then belong to the bot, so you can approve and merge what an agent opens. Reliant mints a token for the bot per call:
+
+1. It checks that **your own account has push access** to the repository (cached for ten minutes). The bot cannot do anything you could not.
+2. It looks up the App's installation for that one repository. If the App is not installed there, the write fails and says so.
+3. It mints an installation token scoped to **that repository** and to only what the action needs: `issues` for comments and labels, `pull_requests` for reviews and review replies, `pull_requests` plus read on `contents` for opening a pull request. It lasts an hour and is cached until shortly before it expires.
+
+Only writes use the bot. Reads use your own access. Every comment, review, pull request and issue the bot writes ends with a footer naming the automation and its owner. A write the bot cannot make (you cannot push, the App is not installed or lacks a permission) is an error, never a quiet fallback to your name. The one exception is a deployment that has no App key at all, which acts as the owner.
+
+On a self-hosted deployment there is no control plane to mint tokens, so `app` is refused when you activate; use your own connection, or a separate bot account saved as a connection and named in the action's `connection`.
+
 ## Actions
 
 | Action | What it does | Changes GitHub |
@@ -115,7 +127,7 @@ You can narrow a trigger with `match`. Every event carries `repository` (`owner/
 
 Boolean-like attributes are the strings `"true"` and `"false"`; quote them in YAML.
 
-Comments written by a GitHub App, including Reliant's own, never fire `issue_comment.created` or `pull_request_review_comment.created`.
+Comments written by **Reliant's own bot** never fire `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments or replies as the bot cannot trigger itself. Comments from any other bot (Dependabot, a CI app, a review tool) do fire them: filter on `trigger.sender` if you want to ignore one. The bot is recognised by its numeric GitHub id, never its login; a deployment with its own App sets `RELIANT_GITHUB_BOT_USER_ID` to that bot's id.
 
 ### Your workflow's own writes
 
@@ -141,7 +153,19 @@ An event Reliant's GitHub App caused but no recorded write explains is `app`: Re
 
 Writes an agent makes through its shell (`gh`, `git push`) are not recorded and look, to GitHub, like you. Do the writing in an action node, or a push's `Reliant-Run:` trailer is the only thing marking it, and that can only be a reason to ignore an event, never to trust one.
 
-On a self-hosted deployment the GitHub App must be subscribed to the events you use (Pull request review comment, Check run, Check suite and so on) and the repository permissions that go with them.
+### What the GitHub App needs
+
+These are the App's settings, made once by whoever owns it. On Reliant's hosted deployment that is Reliant.
+
+| Setting | Value |
+|---------|-------|
+| Repository permission: Metadata | Read |
+| Repository permission: Issues | Read and write |
+| Repository permission: Pull requests | Read and write |
+| Repository permission: Contents | Read and write |
+| Subscribe to events | Issues, Issue comment, Pull request, Pull request review, Pull request review comment, Push, Workflow run, Check run, Check suite |
+
+The `labeled`, `unlabeled`, `reopened` and `review_requested` actions arrive under the **Pull request** and **Issues** events, so they need no separate subscription. Without the Pull request review comment, Check run and Check suite subscriptions, those three triggers never fire; without Contents write, the bot cannot open a pull request. After changing permissions, every installation has to accept the update before it takes effect.
 
 ## Example: review each new pull request
 

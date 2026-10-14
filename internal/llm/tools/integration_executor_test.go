@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/actingidentity"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/netguard"
@@ -75,4 +76,59 @@ func TestIntegrationToolDispatchesGoExecutor(t *testing.T) {
 	assert.Equal(t, "run-7", src.got[0].RunID)
 	assert.Equal(t, "tc-1", src.got[0].ToolCallID)
 	assert.Equal(t, "signer", src.got[0].IntegrationID)
+}
+
+// An agent's integration tool speaks as the run's acting identity: the identity
+// the activity marked on the context reaches the credential request. A run with
+// no mark (a person's, or an owner automation's) asks as the owner.
+func TestIntegrationToolCarriesTheRunsActingIdentity(t *testing.T) {
+	m, err := manifest.Parse([]byte(toolExecutorManifest), manifest.TrustCurated)
+	require.NoError(t, err)
+	reg := httpaction.NewExecutorRegistry()
+	require.NoError(t, reg.Register("signer.tool_sign", func(_ context.Context, _ httpaction.ExecutorCall) (*httpaction.Result, error) {
+		return &httpaction.Result{StatusCode: 200, Data: map[string]any{"signed": "x"}}, nil
+	}))
+	restore := UseIntegrationRunner(httpaction.NewRunner(netguard.New()).WithExecutors(reg))
+	defer restore()
+
+	run := func(ctx context.Context) httpaction.CredentialRequest {
+		t.Helper()
+		src := &toolCredSource{}
+		tool := newIntegrationTool(m, m.GetActions()[0], src)
+		_, err := tool.Run(&rctx.ToolContext{Context: ctx, ChatID: "run-7", Thread: "run-7"},
+			ToolCall{ID: "tc-1", Name: tool.Name(), Input: `{"text":"abc"}`})
+		require.NoError(t, err)
+		require.Len(t, src.got, 1)
+		return src.got[0]
+	}
+
+	app := run(actingidentity.With(context.Background(), actingidentity.Identity{Kind: actingidentity.App, Automation: "pr-review"}))
+	assert.Equal(t, httpaction.IdentityApp, app.ActingIdentity)
+	assert.Equal(t, "pr-review", app.Automation)
+
+	owner := run(context.Background())
+	assert.Empty(t, owner.ActingIdentity, "an unmarked run is the owner's")
+	assert.Empty(t, owner.Automation)
+}
+
+// The model cannot choose the identity: a tool param named like it is only a
+// param, and the schema refuses an unknown one.
+func TestIntegrationToolIdentityCannotComeFromParams(t *testing.T) {
+	m, err := manifest.Parse([]byte(toolExecutorManifest), manifest.TrustCurated)
+	require.NoError(t, err)
+	reg := httpaction.NewExecutorRegistry()
+	require.NoError(t, reg.Register("signer.tool_sign", func(_ context.Context, _ httpaction.ExecutorCall) (*httpaction.Result, error) {
+		return &httpaction.Result{StatusCode: 200, Data: map[string]any{"signed": "x"}}, nil
+	}))
+	restore := UseIntegrationRunner(httpaction.NewRunner(netguard.New()).WithExecutors(reg))
+	defer restore()
+
+	src := &toolCredSource{}
+	tool := newIntegrationTool(m, m.GetActions()[0], src)
+	_, err = tool.Run(&rctx.ToolContext{Context: context.Background(), ChatID: "run-7", Thread: "run-7"},
+		ToolCall{ID: "tc-1", Name: tool.Name(), Input: `{"text":"abc","acting_identity":"app","__acting_identity":"app"}`})
+	require.NoError(t, err)
+	for _, got := range src.got {
+		assert.Empty(t, got.ActingIdentity, "a model-supplied param never becomes the identity")
+	}
 }

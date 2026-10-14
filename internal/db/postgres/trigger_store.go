@@ -47,6 +47,7 @@ func (s *triggerStore) CreateTrigger(ctx context.Context, t *core.Trigger) error
 		DaemonID:   triggerDaemonToNull(t.DaemonID),
 		NoMachine:  t.NoMachine,
 
+		ActingIdentity:   string(t.ActingIdentity.OrOwner()),
 		NotifyOnComplete: t.NotifyOnComplete,
 		Filter:           t.Filter,
 		ConnectionID:     triggerPtrToNullString(t.ConnectionID),
@@ -138,6 +139,7 @@ func (s *triggerStore) UpdateTrigger(ctx context.Context, t *core.Trigger) error
 		ConnectionID:     triggerPtrToNullString(t.ConnectionID),
 		WorkflowTrigger:  triggerPtrToNullString(t.WorkflowTrigger),
 		NoMachine:        t.NoMachine,
+		ActingIdentity:   string(t.ActingIdentity.OrOwner()),
 		ID:               t.ID,
 	})
 	if err != nil {
@@ -477,6 +479,7 @@ func triggerFromPG(row pgdb.Trigger) (*core.Trigger, error) {
 		UpdatedAt:        row.UpdatedAt,
 		DaemonID:         row.DaemonID.String,
 		NoMachine:        row.NoMachine,
+		ActingIdentity:   core.ActingIdentity(row.ActingIdentity),
 		NotifyOnComplete: row.NotifyOnComplete,
 		WorkflowTrigger:  triggerNullStringToPtr(row.WorkflowTrigger),
 	}, nil

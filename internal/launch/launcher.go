@@ -1064,6 +1064,16 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	if p.spec.Unattended {
 		initialData[v2.InputKeyUnattended] = true
 	}
+	// Who the integration writes speak as. Injected after validation like
+	// unattended, and only for an unattended launch: the bot is an
+	// automation's identity, so a person's own run can never carry it even if
+	// a caller set the field. Absent means the owner.
+	if p.spec.Unattended && p.spec.ActingIdentity.OrOwner() == core.ActingIdentityApp {
+		initialData[v2.InputKeyActingIdentity] = string(core.ActingIdentityApp)
+		if p.spec.Automation != "" {
+			initialData[v2.InputKeyAutomation] = p.spec.Automation
+		}
+	}
 	// This is the run the launch started; a reply's run never carries the mark,
 	// which is how the runtime tells the two apart (v2.InputKeyLaunchRun).
 	// Injected after validation for the same reason as unattended.

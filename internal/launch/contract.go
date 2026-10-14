@@ -102,6 +102,14 @@ type Spec struct {
 	// kind core.TriggerEventKind.Unattended reports, so a caller can add it
 	// and never remove it.
 	Unattended bool
+	// ActingIdentity is who the integration writes of this run speak as
+	// (core.ActingIdentityApp: the GitHub App's bot). Empty is the owner. Set
+	// from the trigger row by the fire paths; it is recorded on the run's
+	// inputs only for an unattended launch, because the bot is an automation's
+	// identity and a person's own chat start must never act as it.
+	ActingIdentity core.ActingIdentity
+	// Automation names the trigger, for the footer on what the bot writes.
+	Automation string
 	// UserJWT is the caller's JWT, carried on the run's execution context so a
 	// cloud-daemon chat's first run resolves the control-plane daemon the same
 	// way its later runs do. Interactive callers fill it; scheduled fires have

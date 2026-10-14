@@ -235,6 +235,29 @@ Nobody is watching an automation's run. The agent is told to decide and proceed 
 
 A workflow that should only ever start from its triggers, never from a chat, can set `automation_only: true`.
 
+## Who an automation acts as
+
+An automation's integration actions, a node's `action` and an agent's integration tools alike, write as one of two identities, chosen when you activate it:
+
+| Identity | Comments, reviews and pull requests appear as | When to choose it |
+|----------|-----------------------------------------------|-------------------|
+| `owner` (default) | You, through your own GitHub connection | The automation is you acting on a schedule |
+| `app` | `reliant-labs[bot]` | A reviewer, triager or worker that should read as its own participant: you can approve and merge what it opens, and a branch rule that wants "someone other than the last pusher" works |
+
+Everything a bot writes ends with a footer naming the automation and its owner, so nobody has to guess whose it is:
+
+> <sub>Posted by Reliant for pr-review, an automation of @alice.</sub>
+
+The bot is not a way around your own permissions. Before it writes, Reliant checks that **your own GitHub account can push to that repository**. The token it uses is scoped to that one repository and to what the action needs (issues, pull requests or contents), and lasts an hour. If you cannot push, if the Reliant GitHub App is not installed on the repository, or if the App has not been granted a permission, the write fails with the reason. It is never made as you instead.
+
+Three things stay as they are:
+
+- **Reads** use your own access. Only writes carry the bot's name.
+- **A person typing in the run's chat acts as themselves.** The bot identity belongs to the automation's own run, not to the chat.
+- **A deployment with no Reliant GitHub App** (self-hosted) acts as the owner. Choosing `app` there is refused when you activate, rather than silently doing something else.
+
+Comments the bot writes never fire a trigger on `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments cannot start itself. Another bot's comments (Dependabot, a CI app) do reach your filters.
+
 ## Watching your automations
 
 **Workflows → Automations** lists every automation across your projects, grouped by workflow, with each group's state (enabled, disabled, partly enabled or broken), a "coming up" timeline of the next 24 hours of scheduled runs, and each automation's health, computed from its last ten firings. Workflows that declare triggers nothing runs yet are listed above, each with an **Enable**:
