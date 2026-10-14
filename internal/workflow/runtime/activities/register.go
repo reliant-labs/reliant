@@ -172,7 +172,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// worker), not by re-reading the whole config row per call.
 	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider))
 	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider))
-	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections))
+	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger))
 
 	// ========================================================================
 	// CONTEXT MANAGEMENT ACTIVITIES

@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
+	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -44,6 +45,9 @@ type Activities struct {
 	// is self-hosted. It picks the dial policy for user-supplied model
 	// endpoint URLs (netguard.ForDeployment).
 	ControlPlaneURL string
+	// WriteLedger records the action node's mutating integration calls.
+	// Optional: nil records nothing.
+	WriteLedger *writeledger.Recorder
 }
 
 // NewActivities creates a new Activities container

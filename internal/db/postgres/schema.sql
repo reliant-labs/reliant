@@ -761,6 +761,37 @@ CREATE TABLE public.integration_event_access (
 );
 
 --
+-- Name: integration_writes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.integration_writes (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    chat_id text DEFAULT ''::text NOT NULL,
+    workflow text DEFAULT ''::text NOT NULL,
+    trigger_id text DEFAULT ''::text NOT NULL,
+    trigger_name text DEFAULT ''::text NOT NULL,
+    node_id text DEFAULT ''::text NOT NULL,
+    tool_call_id text DEFAULT ''::text NOT NULL,
+    integration text NOT NULL,
+    action text NOT NULL,
+    connection_id text DEFAULT ''::text NOT NULL,
+    actor text DEFAULT 'owner'::text NOT NULL,
+    scope text NOT NULL,
+    target text NOT NULL,
+    correlation jsonb DEFAULT '{}'::jsonb NOT NULL,
+    object_id text DEFAULT ''::text NOT NULL,
+    object_url text DEFAULT ''::text NOT NULL,
+    status text NOT NULL,
+    ambiguous boolean DEFAULT false NOT NULL,
+    error text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    completed_at timestamp with time zone,
+    CONSTRAINT integration_writes_actor_check CHECK ((actor = ANY (ARRAY['owner'::text, 'app'::text]))),
+    CONSTRAINT integration_writes_status_check CHECK ((status = ANY (ARRAY['intent'::text, 'done'::text, 'failed'::text])))
+);
+
+--
 -- Name: item_defaults; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1634,6 +1665,13 @@ ALTER TABLE ONLY public.integration_event_access
     ADD CONSTRAINT integration_event_access_pkey PRIMARY KEY (user_id, integration_id, account_key, resource_key);
 
 --
+-- Name: integration_writes integration_writes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.integration_writes
+    ADD CONSTRAINT integration_writes_pkey PRIMARY KEY (id);
+
+--
 -- Name: item_defaults item_defaults_item_type_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2290,6 +2328,24 @@ CREATE INDEX idx_integration_event_access_resource ON public.integration_event_a
 --
 
 CREATE INDEX idx_integration_event_access_subject ON public.integration_event_access USING btree (integration_id, subject_id) WHERE (subject_id <> ''::text);
+
+--
+-- Name: idx_integration_writes_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_integration_writes_created ON public.integration_writes USING btree (created_at);
+
+--
+-- Name: idx_integration_writes_object; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_integration_writes_object ON public.integration_writes USING btree (integration, scope, object_id) WHERE (object_id <> ''::text);
+
+--
+-- Name: idx_integration_writes_scope_recent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_integration_writes_scope_recent ON public.integration_writes USING btree (integration, scope, created_at DESC);
 
 --
 -- Name: idx_messages_chat_activity; Type: INDEX; Schema: public; Owner: -

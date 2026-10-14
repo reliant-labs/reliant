@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
+	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -202,8 +203,10 @@ func integrationToolDefinitions() []ToolDefinition {
 			}
 			m, a := m, a
 			defs = append(defs, ToolDefinition{
-				Name:      manifest.ToolName(m, a),
-				Factory:   func(f *ToolsFactory) Tool { return newIntegrationTool(m, a, f.integrationCredentials()) },
+				Name: manifest.ToolName(m, a),
+				Factory: func(f *ToolsFactory) Tool {
+					return newIntegrationTool(m, a, f.integrationCredentials(), f.integrationLedger())
+				},
 				Tags:      []ToolTag{TagIntegration},
 				Placement: Placement(a.GetPlacement()),
 			})
@@ -220,6 +223,8 @@ type integrationTool struct {
 	// owner is read from the run record by the source, never taken from the
 	// model's arguments.
 	credentials httpaction.CredentialSource
+	// ledger records a mutating call before it is made (nil records nothing).
+	ledger *writeledger.Recorder
 }
 
 var _ BindableTool = (*integrationTool)(nil)
@@ -245,8 +250,15 @@ func (t *integrationTool) WithBindings(bindings Bindings) (Tool, error) {
 
 func (t *integrationTool) Bindings() Bindings { return t.bindings }
 
-func newIntegrationTool(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, credentials httpaction.CredentialSource) Tool {
-	return &integrationTool{manifest: m, action: a, credentials: credentials}
+func newIntegrationTool(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, credentials httpaction.CredentialSource, ledger *writeledger.Recorder) Tool {
+	return &integrationTool{manifest: m, action: a, credentials: credentials, ledger: ledger}
+}
+
+func (f *ToolsFactory) integrationLedger() *writeledger.Recorder {
+	if f == nil || f.opts == nil {
+		return nil
+	}
+	return f.opts.WriteLedger
 }
 
 func (f *ToolsFactory) integrationCredentials() httpaction.CredentialSource {
@@ -313,7 +325,7 @@ func (t *integrationTool) Run(rc *rctx.ToolContext, call ToolCall) (ToolResponse
 		return NewTextErrorResponse("no execution context"), nil
 	}
 	site := httpaction.CallSite{RunID: integrationRunID(rc.ChatID, rc.Thread), ToolCallID: call.ID}
-	result, err := sharedIntegrationRunner().RunAuthenticated(ctx, t.manifest, t.action, params, t.credentials, site)
+	result, err := t.ledger.Wrap(sharedIntegrationRunner()).RunAuthenticated(ctx, t.manifest, t.action, params, t.credentials, site)
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}

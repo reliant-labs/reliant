@@ -408,6 +408,31 @@ type IntegrationEventAccess struct {
 	RefreshedAt   time.Time `json:"refreshed_at"`
 }
 
+type IntegrationWrite struct {
+	ID           string          `json:"id"`
+	UserID       string          `json:"user_id"`
+	ChatID       string          `json:"chat_id"`
+	Workflow     string          `json:"workflow"`
+	TriggerID    string          `json:"trigger_id"`
+	TriggerName  string          `json:"trigger_name"`
+	NodeID       string          `json:"node_id"`
+	ToolCallID   string          `json:"tool_call_id"`
+	Integration  string          `json:"integration"`
+	Action       string          `json:"action"`
+	ConnectionID string          `json:"connection_id"`
+	Actor        string          `json:"actor"`
+	Scope        string          `json:"scope"`
+	Target       string          `json:"target"`
+	Correlation  json.RawMessage `json:"correlation"`
+	ObjectID     string          `json:"object_id"`
+	ObjectUrl    string          `json:"object_url"`
+	Status       string          `json:"status"`
+	Ambiguous    bool            `json:"ambiguous"`
+	Error        string          `json:"error"`
+	CreatedAt    time.Time       `json:"created_at"`
+	CompletedAt  sql.NullTime    `json:"completed_at"`
+}
+
 type ItemDefault struct {
 	ID        string         `json:"id"`
 	ItemType  int32          `json:"item_type"`

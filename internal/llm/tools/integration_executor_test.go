@@ -64,7 +64,7 @@ func TestIntegrationToolDispatchesGoExecutor(t *testing.T) {
 	defer restore()
 
 	src := &toolCredSource{}
-	tool := newIntegrationTool(m, m.GetActions()[0], src)
+	tool := newIntegrationTool(m, m.GetActions()[0], src, nil)
 	input, _ := json.Marshal(map[string]any{"text": "abc"})
 	resp, err := tool.Run(&rctx.ToolContext{Context: context.Background(), ChatID: "run-7", Thread: "run-7"}, ToolCall{ID: "tc-1", Name: tool.Name(), Input: string(input)})
 	require.NoError(t, err)

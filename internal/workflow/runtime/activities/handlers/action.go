@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
+	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -31,8 +32,16 @@ import (
 // ActionActivity implements the action node type.
 type ActionActivity struct {
 	catalog     *catalog.Catalog
-	runner      *httpaction.Runner
+	runner      writeledger.Runner
 	credentials httpaction.CredentialSource
+}
+
+// WithLedger records every mutating call this activity makes in the write
+// ledger. A nil recorder changes nothing.
+func (a *ActionActivity) WithLedger(rec *writeledger.Recorder) *ActionActivity {
+	clone := *a
+	clone.runner = rec.Wrap(a.runner)
+	return &clone
 }
 
 // NewActionActivity builds the activity over the embedded catalog and a runner

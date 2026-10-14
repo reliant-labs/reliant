@@ -105,6 +105,9 @@ type Querier interface {
 	// for different reasons are different statuses, and a swap expecting one must
 	// not win against the other.
 	CompareAndSwapWorkflowStatus(ctx context.Context, arg CompareAndSwapWorkflowStatusParams) (Workflow, error)
+	// Settles an intent row. Only an intent row settles: a ledger entry is never
+	// rewritten after the fact, so a duplicate completion is a no-op.
+	CompleteIntegrationWrite(ctx context.Context, arg CompleteIntegrationWriteParams) (int64, error)
 	// Chats the user launched through this kind of event whose ROOT run is still
 	// live: pending (1), active (2), or stopped-because-paused (state 3, stop
 	// reason 3). The inner joins drop events whose chat was deleted or never got a
@@ -139,6 +142,11 @@ type Querier interface {
 	CreateContentBlock(ctx context.Context, arg CreateContentBlockParams) error
 	CreateContentBlockIfNotExists(ctx context.Context, arg CreateContentBlockIfNotExistsParams) error
 	CreateContextWindow(ctx context.Context, arg CreateContextWindowParams) (ContextWindow, error)
+	// The write ledger. See the migration 20261014055046_integration_writes.sql
+	// for the model: an intent row is written before an integration action's
+	// request, completed after, and read when an event arrives to say whether
+	// Reliant caused it.
+	CreateIntegrationWrite(ctx context.Context, arg CreateIntegrationWriteParams) error
 	CreateItemDefault(ctx context.Context, arg CreateItemDefaultParams) error
 	// Creates a message in the new schema (uses context_window_id, has display_style)
 	CreateMessage(ctx context.Context, arg CreateMessageParams) error
@@ -354,6 +362,9 @@ type Querier interface {
 	GetCurrentContextSequence(ctx context.Context, threadID string) (int64, error)
 	GetDefaultPresetAssignments(ctx context.Context, workflowName string) ([]GetDefaultPresetAssignmentsRow, error)
 	GetIntegrationAccessRefresh(ctx context.Context, arg GetIntegrationAccessRefreshParams) (IntegrationAccessRefresh, error)
+	// The write that created (or is) one object, newest first. Served by
+	// idx_integration_writes_object.
+	GetIntegrationWriteByObject(ctx context.Context, arg GetIntegrationWriteByObjectParams) (IntegrationWrite, error)
 	GetItemDefault(ctx context.Context, arg GetItemDefaultParams) (GetItemDefaultRow, error)
 	// Get the max context_window.sequence for a thread
 	GetLatestContextSequenceByThread(ctx context.Context, threadID string) (interface{}, error)
@@ -760,6 +771,11 @@ type Querier interface {
 	// Ordering is load-bearing: messages must be delivered in the order they
 	// were sent.
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]AgentMessage, error)
+	// Writes into one scope since a time, newest first, that could still be the
+	// cause of an arriving event: pending, completed, or failed with an unknown
+	// outcome. A definite rejection (a 4xx) changed nothing and so caused nothing.
+	// Served by idx_integration_writes_scope_recent.
+	ListRecentIntegrationWrites(ctx context.Context, arg ListRecentIntegrationWritesParams) ([]IntegrationWrite, error)
 	// Most recent N messages within a single thread. Returned DESC; reverse to
 	// restore ascending order.
 	ListRecentMessagesByThread(ctx context.Context, arg ListRecentMessagesByThreadParams) ([]Message, error)
@@ -1102,6 +1118,7 @@ type Querier interface {
 	// (routing requires a recent refresh) and their owner has no trigger left
 	// to refresh them for.
 	PruneIntegrationAccess(ctx context.Context, before time.Time) (int64, error)
+	PruneIntegrationWrites(ctx context.Context, before time.Time) (int64, error)
 	// Enforce the invariant CascadeTerminalStatusToThreadSubtree asserts from
 	// the other direction: a thread whose WORKFLOW is terminal is not running.
 	// The thread-status mirror of ReapOrphanedWorkflowDescendants (workflows.sql)

@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
+	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -193,6 +194,10 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	// Every mutating integration call, from the action node or an agent tool,
+	// is recorded before it is made, so the event it causes can be attributed.
+	writeLedger := writeledger.New(writeledger.Deps{Store: repo.IntegrationWrites(), Runs: repo})
+	go writeLedger.PruneLoop(ctx, repo.IntegrationWrites())
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
@@ -383,6 +388,7 @@ func Run(ctx context.Context, opts Options) error {
 		// source the action node uses: saved connections, plus GitHub tokens
 		// delegated by control-plane when one is configured.
 		IntegrationCredentials: integrationCredentials,
+		WriteLedger:            writeLedger,
 		// search_integrations / get_integration_schema execute here too, and
 		// read the run owner's connections to report what is connected.
 		CatalogSearch: catalogSearch,
@@ -420,6 +426,7 @@ func Run(ctx context.Context, opts Options) error {
 		ConfigProvider:         storedConfigProvider,
 		TriggerLauncher:        triggerLauncher,
 		IntegrationCredentials: integrationCredentials,
+		WriteLedger:            writeLedger,
 		TriggerPollers:         triggerPollers,
 		TriggerCredentials:     triggerCredentials(integrationCredentials),
 		ControlPlaneURL:        opts.ControlPlane.URL,

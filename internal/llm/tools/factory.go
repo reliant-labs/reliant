@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
+	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/netguard"
 
 	"github.com/reliant-labs/reliant/internal/config"
@@ -39,6 +40,9 @@ type ToolsOptions struct {
 	// (http__request's `connection`). Optional: nil makes a call that names a
 	// connection fail with a FailedPrecondition rather than run unauthenticated.
 	IntegrationCredentials httpaction.CredentialSource
+	// WriteLedger records the agent's mutating integration calls, so an event
+	// they cause can be attributed. Optional: nil records nothing.
+	WriteLedger *writeledger.Recorder
 	// CatalogSearch backs search_integrations / get_integration_schema with
 	// the caller's connection state. Optional: nil searches the embedded
 	// catalog with no connections, so refs and schemas are still found but

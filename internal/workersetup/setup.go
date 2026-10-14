@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
+	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -92,6 +93,9 @@ type Config struct {
 	// is self-hosted (the role config's ControlPlaneConfig). It decides which
 	// addresses a user-supplied model endpoint may resolve to.
 	ControlPlaneURL string
+	// WriteLedger records the action node's mutating integration calls, so an
+	// event they cause can be attributed. nil records nothing.
+	WriteLedger *writeledger.Recorder
 
 	// Optional overrides (for testing)
 	RunExecutorOverride handlers.RunExecutor
@@ -154,6 +158,7 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 
 	activityDeps.Connections = cfg.IntegrationCredentials
 	activityDeps.ControlPlaneURL = cfg.ControlPlaneURL
+	activityDeps.WriteLedger = cfg.WriteLedger
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)
