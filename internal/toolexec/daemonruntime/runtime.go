@@ -52,6 +52,10 @@ const (
 )
 
 type daemonClient struct {
+	// identityMu guards daemonID and userID: a registration ack on a new
+	// stream writes them while calls still running from a draining stream
+	// read them (gateway_session.go).
+	identityMu sync.RWMutex
 	daemonID   string
 	daemonName string
 	userID     string
@@ -155,6 +159,20 @@ type daemonClient struct {
 	// (session_liveness.go). Zero in production, meaning the defaults; tests
 	// shorten it.
 	timing sessionTiming
+}
+
+// currentDaemonID is the daemon's id as the gateway last assigned it.
+func (d *daemonClient) currentDaemonID() string {
+	d.identityMu.RLock()
+	defer d.identityMu.RUnlock()
+	return d.daemonID
+}
+
+// currentUserID is the account the gateway last said this daemon serves.
+func (d *daemonClient) currentUserID() string {
+	d.identityMu.RLock()
+	defer d.identityMu.RUnlock()
+	return d.userID
 }
 
 // projectSnapshot builds the config snapshot for projectPath.
@@ -508,7 +526,7 @@ func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
 	if d.foreignIDSetAside || !bootstrap.IsForeignDaemonIDError(err) {
 		return false
 	}
-	asserted := strings.TrimSpace(d.daemonID)
+	asserted := strings.TrimSpace(d.currentDaemonID())
 	dataDir := strings.TrimSpace(d.bootCfg.DataDir)
 	if asserted == "" || dataDir == "" || bootstrap.ReadDaemonID(dataDir) != asserted {
 		return false
@@ -521,7 +539,9 @@ func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
 		return false
 	}
 	d.foreignIDSetAside = true
+	d.identityMu.Lock()
 	d.daemonID = ""
+	d.identityMu.Unlock()
 	d.bootCfg.DaemonID = ""
 	SetDaemonIdentity("")
 	logging.SetDaemonID("")
@@ -889,7 +909,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			// registration). The gateway trusts it for unbound PATs so identity
 			// survives restarts and hostname changes instead of being re-derived
 			// from the (volatile) hostname.
-			DaemonId: d.daemonID,
+			DaemonId: d.currentDaemonID(),
 			// This daemon moves to another replica when its gateway drains,
 			// and holds tool results until they are acknowledged
 			// (gateway_session.go).
@@ -1088,19 +1108,23 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 			// Gateway derives both identities from the PAT used to authenticate
 			// the stream and tells us. Daemon stores them locally for downstream
 			// use (tool execution context, logging).
-			if m.RegistrationAck.DaemonId != "" {
-				d.daemonID = m.RegistrationAck.DaemonId
+			if id := m.RegistrationAck.DaemonId; id != "" {
+				d.identityMu.Lock()
+				d.daemonID = id
+				d.identityMu.Unlock()
 				// Publish to the process-wide identity so static command handlers
 				// (e.g. exec.bg_list) can stamp ProcessInfo.DaemonID for preview URLs.
-				SetDaemonIdentity(d.daemonID)
-				logging.SetDaemonID(d.daemonID)
-				logging.Info(logPrefix+" Daemon identity assigned by gateway", "daemonID", d.daemonID)
+				SetDaemonIdentity(id)
+				logging.SetDaemonID(id)
+				logging.Info(logPrefix+" Daemon identity assigned by gateway", "daemonID", id)
 				// Persist the assigned id per-origin so it survives restarts and
 				// hostname changes; next reconnect re-asserts it in Register.
 				d.persistDaemonID(m.RegistrationAck.DaemonId)
 			}
 			if m.RegistrationAck.UserId != "" {
+				d.identityMu.Lock()
 				d.userID = m.RegistrationAck.UserId
+				d.identityMu.Unlock()
 			}
 			// Watchers start here, in stream order, so a later
 			// Watch/UnwatchProjectConfigs for the same path cannot be
@@ -1227,7 +1251,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 
 	case *reliantv1.ServerMessage_LocalModelHttpRequest:
 		if m.LocalModelHttpRequest != nil {
-			d.handleLocalModelHTTPRequest(ctx, m.LocalModelHttpRequest)
+			d.handleLocalModelHTTPRequest(ctx, s, m.LocalModelHttpRequest)
 		}
 		return nil
 
@@ -1643,7 +1667,7 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		}
 	}
 	if contextMap["user_id"] == nil {
-		contextMap["user_id"] = d.userID
+		contextMap["user_id"] = d.currentUserID()
 	}
 
 	// The worktree or project this call works in: recorded the first time it

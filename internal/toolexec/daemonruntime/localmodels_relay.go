@@ -203,9 +203,21 @@ var localHopByHop = map[string]bool{
 // handleLocalModelHTTPRequest authorizes and starts a relay. It never blocks
 // the caller's message loop: all work, including waiting for a slot, happens
 // on a goroutine.
-func (d *daemonClient) handleLocalModelHTTPRequest(ctx context.Context, req *reliantv1.LocalModelHTTPRequest) {
+// handleLocalModelHTTPRequest relays one request that arrived on session s.
+// Its chunks go back on s, where the gateway holds the relay, and a draining
+// s is held open until the relay ends; if s ends first the relay is aborted,
+// since nothing could receive the rest.
+func (d *daemonClient) handleLocalModelHTTPRequest(ctx context.Context, s *gatewaySession, req *reliantv1.LocalModelHTTPRequest) {
 	m := d.localModelMgr()
-	go m.relay(ctx, d.send, req)
+	send := d.send
+	if s != nil {
+		send = s.send
+		s.inFlight.Add(1)
+	}
+	go func() {
+		defer d.requestDone(s)
+		m.relay(ctx, send, req)
+	}()
 }
 
 func (d *daemonClient) handleLocalModelHTTPCancel(c *reliantv1.LocalModelHTTPCancel) {
