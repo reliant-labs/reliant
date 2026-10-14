@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package forge
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemoncmd"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/version"
 )
 
@@ -219,33 +218,10 @@ const (
 	forgeErrCommandFailedMarker = "forge command failed"
 )
 
-// forgeProjectLookup is the only database capability this service needs:
-// resolve a project id to its row, enforcing that the caller owns it, and
-// record forge's name for the project when a topology report carries one.
-//
-// Declared here, at the CONSUMER, rather than depending on the whole
-// db.Repository surface. Two methods are all this service uses, and a narrow
-// dependency is what makes the handler testable without a database — which is
-// what lets the secret-safety and reachability tests below run as plain unit
-// tests. db.Repository satisfies this implicitly.
-type forgeProjectLookup interface {
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
-	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
-}
-
-// ForgeService serves forge project state to the web tier by forwarding to the
-// user's daemon.
-type ForgeService struct {
-	daemon   daemoncmd.Service
-	projects forgeProjectLookup
-}
-
-// NewForgeService creates a ForgeService bound to a daemon router and database.
-func NewForgeService(router toolexec.DaemonRouter, projects forgeProjectLookup) *ForgeService {
-	return &ForgeService{
-		daemon:   daemoncmd.New(daemoncmd.Deps{Sender: router}),
-		projects: projects,
-	}
+// daemon forwards a forge.* command to the caller's daemon, mapping every
+// failure onto a loud Connect error (daemoncmd).
+func (s *Service) daemon() daemoncmd.Service {
+	return daemoncmd.New(daemoncmd.Deps{Sender: s.deps.Router})
 }
 
 // forgeReportReply mirrors daemonruntime.forgeReportResponse.
@@ -286,7 +262,7 @@ func (r forgeReportReply) reportJSON() string {
 
 // forgeProjectPath resolves a project id to its path on the DAEMON's
 // filesystem, enforcing that the caller owns it.
-func (s *ForgeService) forgeProjectPath(ctx context.Context, projectID, userID string) (string, error) {
+func (s *Service) forgeProjectPath(ctx context.Context, projectID, userID string) (string, error) {
 	project, err := s.forgeProject(ctx, projectID, userID)
 	if err != nil {
 		return "", err
@@ -296,11 +272,11 @@ func (s *ForgeService) forgeProjectPath(ctx context.Context, projectID, userID s
 
 // forgeProject resolves a project id to its row, enforcing that the caller
 // owns it.
-func (s *ForgeService) forgeProject(ctx context.Context, projectID, userID string) (*db.Project, error) {
+func (s *Service) forgeProject(ctx context.Context, projectID, userID string) (*db.Project, error) {
 	if strings.TrimSpace(projectID) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
 	}
-	project, err := s.projects.GetProjectWithUserCheck(ctx, projectID, userID)
+	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
@@ -324,7 +300,7 @@ func (s *ForgeService) forgeProject(ctx context.Context, projectID, userID strin
 // This is the one field this layer reads out of forge's otherwise opaque
 // report. Only `project` is decoded, so a newer forge's additions still pass
 // through untouched.
-func (s *ForgeService) rememberForgeProjectName(ctx context.Context, project *db.Project, userID string, reply forgeReportReply) {
+func (s *Service) rememberForgeProjectName(ctx context.Context, project *db.Project, userID string, reply forgeReportReply) {
 	if !reply.IsForgeProject || !reply.Supported || len(reply.Report) == 0 {
 		return
 	}
@@ -341,7 +317,7 @@ func (s *ForgeService) rememberForgeProjectName(ctx context.Context, project *db
 	if project.IsForge && project.ForgeProjectName != nil && *project.ForgeProjectName == name {
 		return
 	}
-	if _, err := s.projects.SetProjectForgeName(ctx, project.ID, userID, name); err != nil {
+	if _, err := s.deps.Repo.SetProjectForgeName(ctx, project.ID, userID, name); err != nil {
 		logging.Warn("forge: failed to persist forge project name", "error", err, "project_id", project.ID)
 	}
 }
@@ -387,14 +363,14 @@ func forgeEnvArg(env string) (string, error) {
 // selects the timeout semantics above: when true, a timeout is a reachability
 // verdict (unreachable=true, no error); when false, a timeout is a real failure
 // and is returned as a Connect error.
-func (s *ForgeService) forgeDispatch(
+func (s *Service) forgeDispatch(
 	ctx context.Context,
 	userID, commandType string,
 	payload any,
 	timeoutMs int32,
 	readsCluster bool,
 ) (reply forgeReportReply, unreachableReason string, err error) {
-	if err := s.daemon.Dispatch(ctx, userID, commandType, payload, &reply, timeoutMs); err != nil {
+	if err := s.daemon().Dispatch(ctx, userID, commandType, payload, &reply, timeoutMs); err != nil {
 		if readsCluster && isForgeClusterReadTimeout(err) {
 			// Nobody answered in time on a path whose whole job is reading a
 			// remote cluster. Report UNKNOWN, not broken.
@@ -546,7 +522,7 @@ const forgeExitUnreachable = 2
 // =============================================================================
 
 // GetTopology returns the release/environment topology.
-func (s *ForgeService) GetTopology(
+func (s *Service) GetTopology(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetForgeTopologyRequest],
 ) (*connect.Response[reliantv1.GetForgeTopologyResponse], error) {
@@ -588,7 +564,7 @@ func (s *ForgeService) GetTopology(
 }
 
 // VerifyEnv reconciles one environment against its live cluster.
-func (s *ForgeService) VerifyEnv(
+func (s *Service) VerifyEnv(
 	ctx context.Context,
 	req *connect.Request[reliantv1.VerifyForgeEnvRequest],
 ) (*connect.Response[reliantv1.VerifyForgeEnvResponse], error) {
@@ -636,7 +612,7 @@ func (s *ForgeService) VerifyEnv(
 //     (TestListForgeSecretsResponseCannotCarrySecretValues pins that);
 //   - dispatch errors are returned as-is from the shared mapper and are built
 //     from transport text, not from the report body.
-func (s *ForgeService) ListSecrets(
+func (s *Service) ListSecrets(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListForgeSecretsRequest],
 ) (*connect.Response[reliantv1.ListForgeSecretsResponse], error) {
@@ -673,7 +649,7 @@ func (s *ForgeService) ListSecrets(
 }
 
 // GetAudit returns the project audit rollup.
-func (s *ForgeService) GetAudit(
+func (s *Service) GetAudit(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetForgeAuditRequest],
 ) (*connect.Response[reliantv1.GetForgeAuditResponse], error) {
@@ -704,7 +680,7 @@ func (s *ForgeService) GetAudit(
 }
 
 // GetEnvStatus returns runtime checks for an environment.
-func (s *ForgeService) GetEnvStatus(
+func (s *Service) GetEnvStatus(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetForgeEnvStatusRequest],
 ) (*connect.Response[reliantv1.GetForgeEnvStatusResponse], error) {
@@ -750,7 +726,7 @@ func (s *ForgeService) GetEnvStatus(
 //
 // A KCL render under the env-status budget: no cluster reads, same shape of
 // work as `env status` for one environment.
-func (s *ForgeService) GetEnvShape(
+func (s *Service) GetEnvShape(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetForgeEnvShapeRequest],
 ) (*connect.Response[reliantv1.GetForgeEnvShapeResponse], error) {
@@ -845,7 +821,7 @@ func forgeReleaseArg(release string) (string, error) {
 // timeout here is therefore a real failure, not a reachability verdict —
 // claiming "cluster unknown" for a failed local read would be a diagnosis of
 // the wrong thing.
-func (s *ForgeService) PlanPromote(
+func (s *Service) PlanPromote(
 	ctx context.Context,
 	req *connect.Request[reliantv1.PlanForgePromoteRequest],
 ) (*connect.Response[reliantv1.PlanForgePromoteResponse], error) {
@@ -901,7 +877,7 @@ func (s *ForgeService) PlanPromote(
 // remembers to check it, and a client that forgets tells a user the promote
 // worked. On the error path the default behaviour of every client is to treat it
 // as a failure, and the structured facts still survive in the detail.
-func (s *ForgeService) ApplyPromote(
+func (s *Service) ApplyPromote(
 	ctx context.Context,
 	req *connect.Request[reliantv1.PromoteForgeEnvRequest],
 ) (*connect.Response[reliantv1.PromoteForgeEnvResponse], error) {
@@ -962,7 +938,7 @@ func (s *ForgeService) ApplyPromote(
 	// a timeout as "unknown" — a promote that timed out may or may not have
 	// written, and calling that a reachability verdict would hide it.
 	var reply forgePromoteReply
-	if err := s.daemon.Dispatch(ctx, userID, "forge.promote_apply", payload, &reply, forgePromoteApplyTimeoutMs); err != nil {
+	if err := s.daemon().Dispatch(ctx, userID, "forge.promote_apply", payload, &reply, forgePromoteApplyTimeoutMs); err != nil {
 		return nil, remapForgeDispatchError("forge.promote_apply", err)
 	}
 
@@ -1223,7 +1199,7 @@ func forgeDeployRefusedError(refused *forgeDeployRefusalReply) *connect.Error {
 // readsCluster=true, which is the difference from PlanPromote: the preflight
 // really does read Secrets and image metadata off the live target, so a timeout
 // here means live state is UNKNOWN rather than that something broke.
-func (s *ForgeService) PlanDeploy(
+func (s *Service) PlanDeploy(
 	ctx context.Context,
 	req *connect.Request[reliantv1.PlanForgeDeployRequest],
 ) (*connect.Response[reliantv1.PlanForgeDeployResponse], error) {
@@ -1268,7 +1244,7 @@ func (s *ForgeService) PlanDeploy(
 //
 // It is asynchronous for the same reason StartDeploy is, and more acutely: a
 // cold multi-image build is minutes, far past any synchronous budget.
-func (s *ForgeService) StartDeployPlan(
+func (s *Service) StartDeployPlan(
 	ctx context.Context,
 	req *connect.Request[reliantv1.StartForgeDeployPlanRequest],
 ) (*connect.Response[reliantv1.StartForgeDeployResponse], error) {
@@ -1296,7 +1272,7 @@ func (s *ForgeService) StartDeployPlan(
 	// got a build underway, and reporting that as "cluster unknown" would file
 	// a possibly-running job under a diagnosis of the network.
 	var reply forgeDeployStartReply
-	if err := s.daemon.Dispatch(ctx, userID, "forge.deploy_plan_start", payload, &reply,
+	if err := s.daemon().Dispatch(ctx, userID, "forge.deploy_plan_start", payload, &reply,
 		forgeDeployStartTimeoutMs); err != nil {
 		return nil, remapForgeDispatchError("forge.deploy_plan_start", err)
 	}
@@ -1330,7 +1306,7 @@ func (s *ForgeService) StartDeployPlan(
 
 // ListCheckouts lists the checkouts a preview may render — and defines the set
 // any checkout-bearing request may name. Read-only.
-func (s *ForgeService) ListCheckouts(
+func (s *Service) ListCheckouts(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListForgeCheckoutsRequest],
 ) (*connect.Response[reliantv1.ListForgeCheckoutsResponse], error) {
@@ -1363,7 +1339,7 @@ func (s *ForgeService) ListCheckouts(
 
 // DiffEnv renders a checkout and diffs it against what is deployed. Read-only:
 // no cluster is contacted, nothing is built or pushed.
-func (s *ForgeService) DiffEnv(
+func (s *Service) DiffEnv(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DiffForgeEnvRequest],
 ) (*connect.Response[reliantv1.DiffForgeEnvResponse], error) {
@@ -1442,7 +1418,7 @@ func (s *ForgeService) DiffEnv(
 // THIS RPC RETURNING OK MEANS A DEPLOY IS IN FLIGHT. It emphatically does not
 // mean one succeeded; nothing is known about the outcome yet. Poll
 // GetDeployStatus.
-func (s *ForgeService) StartDeploy(
+func (s *Service) StartDeploy(
 	ctx context.Context,
 	req *connect.Request[reliantv1.StartForgeDeployRequest],
 ) (*connect.Response[reliantv1.StartForgeDeployResponse], error) {
@@ -1544,7 +1520,7 @@ func (s *ForgeService) StartDeploy(
 	// "cluster unknown" would file a possibly-live deploy under a diagnosis of
 	// the network.
 	var reply forgeDeployStartReply
-	if err := s.daemon.Dispatch(ctx, userID, "forge.deploy_start", payload, &reply, forgeDeployStartTimeoutMs); err != nil {
+	if err := s.daemon().Dispatch(ctx, userID, "forge.deploy_start", payload, &reply, forgeDeployStartTimeoutMs); err != nil {
 		return nil, remapForgeDispatchError("forge.deploy_start", err)
 	}
 
@@ -1594,7 +1570,7 @@ func (s *ForgeService) StartDeploy(
 // UNKNOWN and a detail saying so, and this layer passes it through as a
 // successful RPC. Failing the RPC instead would render "something broke" over a
 // cluster that is converging; reporting FAILED would invite a retry.
-func (s *ForgeService) GetDeployStatus(
+func (s *Service) GetDeployStatus(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetForgeDeployStatusRequest],
 ) (*connect.Response[reliantv1.GetForgeDeployStatusResponse], error) {
@@ -1618,7 +1594,7 @@ func (s *ForgeService) GetDeployStatus(
 	}{Handle: handle}
 
 	var reply forgeDeployStatusReply
-	if err := s.daemon.Dispatch(ctx, userID, "forge.deploy_status", payload, &reply, forgeDeployStatusTimeoutMs); err != nil {
+	if err := s.daemon().Dispatch(ctx, userID, "forge.deploy_status", payload, &reply, forgeDeployStatusTimeoutMs); err != nil {
 		return nil, remapForgeDispatchError("forge.deploy_status", err)
 	}
 

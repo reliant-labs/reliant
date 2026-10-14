@@ -196,7 +196,7 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
  * control-plane DeployService read that should stay on the short default.
  *
  * WHY FORGE NEEDS THESE. Each ForgeService call runs a `forge` subprocess on the
- * user's daemon with its own 15–110s budget (internal/grpc/services/forge.go).
+ * user's daemon with its own 15–110s budget (internal/handlers/forge/forge.go).
  * Without an entry here this transport aborted them at 10s — `forge env status`
  * on control-plane takes about 5s cold and more under load — and the
  * api-server, seeing the request cancelled, answered with an empty UNREACHABLE

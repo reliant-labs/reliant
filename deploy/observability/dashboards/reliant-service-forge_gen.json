@@ -1,0 +1,1780 @@
+{
+  "name": "reliant: forge service",
+  "tags": [
+    "forge",
+    "generated"
+  ],
+  "tiles": [
+    {
+      "id": "t-requests",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 4,
+      "config": {
+        "name": "Requests",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND startsWith(SpanName, 'reliant.v1.ForgeService/')",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-errors",
+      "x": 8,
+      "y": 0,
+      "w": 8,
+      "h": 4,
+      "config": {
+        "name": "Server errors",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "errors"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND startsWith(SpanName, 'reliant.v1.ForgeService/') AND lower(StatusCode) = 'error'",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-p95",
+      "x": 16,
+      "y": 0,
+      "w": 8,
+      "h": 4,
+      "config": {
+        "name": "p95 latency",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND startsWith(SpanName, 'reliant.v1.ForgeService/')",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-red-by-rpc",
+      "x": 0,
+      "y": 4,
+      "w": 24,
+      "h": 8,
+      "config": {
+        "name": "Rate, errors and latency by rpc",
+        "source": "Traces",
+        "displayType": "table",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND startsWith(SpanName, 'reliant.v1.ForgeService/')",
+        "whereLanguage": "sql",
+        "groupBy": "SpanName"
+      }
+    },
+    {
+      "id": "t-rpc-ApplyPromote-rate",
+      "x": 0,
+      "y": 12,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ApplyPromote: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/ApplyPromote'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ApplyPromote-errors",
+      "x": 8,
+      "y": 12,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ApplyPromote: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/ApplyPromote'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ApplyPromote-latency",
+      "x": 16,
+      "y": 12,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ApplyPromote: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/ApplyPromote'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-DiffEnv-rate",
+      "x": 0,
+      "y": 18,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "DiffEnv: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/DiffEnv'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-DiffEnv-errors",
+      "x": 8,
+      "y": 18,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "DiffEnv: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/DiffEnv'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-DiffEnv-latency",
+      "x": 16,
+      "y": 18,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "DiffEnv: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/DiffEnv'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetAudit-rate",
+      "x": 0,
+      "y": 24,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetAudit: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetAudit'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetAudit-errors",
+      "x": 8,
+      "y": 24,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetAudit: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetAudit'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetAudit-latency",
+      "x": 16,
+      "y": 24,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetAudit: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetAudit'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetDeployStatus-rate",
+      "x": 0,
+      "y": 30,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetDeployStatus: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetDeployStatus'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetDeployStatus-errors",
+      "x": 8,
+      "y": 30,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetDeployStatus: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetDeployStatus'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetDeployStatus-latency",
+      "x": 16,
+      "y": 30,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetDeployStatus: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetDeployStatus'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetEnvShape-rate",
+      "x": 0,
+      "y": 36,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetEnvShape: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetEnvShape'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetEnvShape-errors",
+      "x": 8,
+      "y": 36,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetEnvShape: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetEnvShape'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetEnvShape-latency",
+      "x": 16,
+      "y": 36,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetEnvShape: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetEnvShape'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetEnvStatus-rate",
+      "x": 0,
+      "y": 42,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetEnvStatus: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetEnvStatus'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetEnvStatus-errors",
+      "x": 8,
+      "y": 42,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetEnvStatus: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetEnvStatus'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetEnvStatus-latency",
+      "x": 16,
+      "y": 42,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetEnvStatus: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetEnvStatus'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetTopology-rate",
+      "x": 0,
+      "y": 48,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetTopology: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetTopology'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetTopology-errors",
+      "x": 8,
+      "y": 48,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetTopology: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetTopology'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-GetTopology-latency",
+      "x": 16,
+      "y": 48,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "GetTopology: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/GetTopology'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListCheckouts-rate",
+      "x": 0,
+      "y": 54,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListCheckouts: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/ListCheckouts'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListCheckouts-errors",
+      "x": 8,
+      "y": 54,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListCheckouts: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/ListCheckouts'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListCheckouts-latency",
+      "x": 16,
+      "y": 54,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListCheckouts: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/ListCheckouts'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListSecrets-rate",
+      "x": 0,
+      "y": 60,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListSecrets: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/ListSecrets'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListSecrets-errors",
+      "x": 8,
+      "y": 60,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListSecrets: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/ListSecrets'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListSecrets-latency",
+      "x": 16,
+      "y": 60,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListSecrets: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/ListSecrets'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-PlanDeploy-rate",
+      "x": 0,
+      "y": 66,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "PlanDeploy: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/PlanDeploy'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-PlanDeploy-errors",
+      "x": 8,
+      "y": 66,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "PlanDeploy: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/PlanDeploy'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-PlanDeploy-latency",
+      "x": 16,
+      "y": 66,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "PlanDeploy: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/PlanDeploy'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-PlanPromote-rate",
+      "x": 0,
+      "y": 72,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "PlanPromote: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/PlanPromote'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-PlanPromote-errors",
+      "x": 8,
+      "y": 72,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "PlanPromote: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/PlanPromote'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-PlanPromote-latency",
+      "x": 16,
+      "y": 72,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "PlanPromote: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/PlanPromote'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-StartDeploy-rate",
+      "x": 0,
+      "y": 78,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "StartDeploy: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/StartDeploy'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-StartDeploy-errors",
+      "x": 8,
+      "y": 78,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "StartDeploy: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/StartDeploy'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-StartDeploy-latency",
+      "x": 16,
+      "y": 78,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "StartDeploy: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/StartDeploy'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-StartDeployPlan-rate",
+      "x": 0,
+      "y": 84,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "StartDeployPlan: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/StartDeployPlan'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-StartDeployPlan-errors",
+      "x": 8,
+      "y": 84,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "StartDeployPlan: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/StartDeployPlan'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-StartDeployPlan-latency",
+      "x": 16,
+      "y": 84,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "StartDeployPlan: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/StartDeployPlan'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-VerifyEnv-rate",
+      "x": 0,
+      "y": 90,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "VerifyEnv: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/VerifyEnv'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-VerifyEnv-errors",
+      "x": 8,
+      "y": 90,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "VerifyEnv: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/VerifyEnv'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-VerifyEnv-latency",
+      "x": 16,
+      "y": 90,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "VerifyEnv: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.ForgeService/VerifyEnv'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-db-latency",
+      "x": 0,
+      "y": 96,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Database call latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Client', 'SPAN_KIND_CLIENT') AND SpanAttributes['db.system'] != ''",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-db-by-operation",
+      "x": 12,
+      "y": 96,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Database calls by operation",
+        "source": "Traces",
+        "displayType": "table",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "calls"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          }
+        ],
+        "where": "SpanKind IN ('Client', 'SPAN_KIND_CLIENT') AND SpanAttributes['db.system'] != ''",
+        "whereLanguage": "sql",
+        "groupBy": "SpanAttributes['db.operation']"
+      }
+    },
+    {
+      "id": "t-go-memory",
+      "x": 0,
+      "y": 103,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Go memory used",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "sum",
+            "valueExpression": "",
+            "alias": "used",
+            "metricName": "go.memory.used",
+            "metricType": "sum"
+          },
+          {
+            "aggFn": "avg",
+            "valueExpression": "",
+            "alias": "gc goal",
+            "metricName": "go.memory.gc.goal",
+            "metricType": "sum"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "byte",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-go-goroutines",
+      "x": 12,
+      "y": 103,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Goroutines",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "sum",
+            "valueExpression": "",
+            "alias": "goroutines",
+            "metricName": "go.goroutine.count",
+            "metricType": "sum"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-go-alloc",
+      "x": 0,
+      "y": 110,
+      "w": 24,
+      "h": 7,
+      "config": {
+        "name": "Heap allocation",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "sum",
+            "valueExpression": "",
+            "alias": "allocated",
+            "metricName": "go.memory.allocated",
+            "metricType": "sum"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "byte",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-error-logs",
+      "x": 0,
+      "y": 117,
+      "w": 24,
+      "h": 9,
+      "config": {
+        "name": "Error logs",
+        "source": "Logs",
+        "displayType": "search",
+        "select": "Timestamp, ServiceName, SeverityText, Body",
+        "where": "startsWith(LogAttributes['procedure'], '/reliant.v1.ForgeService/') AND lower(SeverityText) = 'error'",
+        "whereLanguage": "sql"
+      }
+    },
+    {
+      "id": "t-logs",
+      "x": 0,
+      "y": 126,
+      "w": 24,
+      "h": 9,
+      "config": {
+        "name": "Logs",
+        "source": "Logs",
+        "displayType": "search",
+        "select": "Timestamp, ServiceName, SeverityText, Body",
+        "where": "startsWith(LogAttributes['procedure'], '/reliant.v1.ForgeService/')",
+        "whereLanguage": "sql"
+      }
+    }
+  ],
+  "filters": [
+    {
+      "id": "filter-service",
+      "type": "QUERY_EXPRESSION",
+      "name": "service.name",
+      "expression": "ServiceName",
+      "source": "Traces",
+      "whereLanguage": "sql"
+    },
+    {
+      "id": "filter-env",
+      "type": "QUERY_EXPRESSION",
+      "name": "deployment.environment.name",
+      "expression": "ResourceAttributes['deployment.environment.name']",
+      "source": "Traces",
+      "whereLanguage": "sql"
+    }
+  ]
+}

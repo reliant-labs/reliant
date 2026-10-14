@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package forge
 
 import (
 	"encoding/json"
@@ -129,7 +129,7 @@ func TestForgeService_DeployIsThreeDistinctMethods(t *testing.T) {
 	}
 
 	// The methods exist on the service.
-	svc := reflect.TypeOf(&ForgeService{})
+	svc := reflect.TypeOf(&Service{})
 	for _, name := range []string{"PlanDeploy", "StartDeploy", "GetDeployStatus"} {
 		_, ok := svc.MethodByName(name)
 		assert.True(t, ok, "ForgeService is missing %s", name)

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package forge
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// SetProjectForgeName completes forgeProjectLookup for the shared stub: the
+// SetProjectForgeName completes Repository for the shared stub: the
 // tests that use it assert on the dispatch, not on the row.
 func (p forgeTestProjects) SetProjectForgeName(context.Context, string, string, string) (bool, error) {
 	return false, nil
@@ -42,7 +42,7 @@ func (p *forgeNameRecordingProjects) SetProjectForgeName(_ context.Context, _, _
 
 func topologyForProjectName(t *testing.T, projects *forgeNameRecordingProjects, reply []byte) {
 	t.Helper()
-	svc := NewForgeService(&forgeTestRouter{reply: reply}, projects)
+	svc := newForgeService(&forgeTestRouter{reply: reply}, projects)
 	_, err := svc.GetTopology(authedCtx(),
 		connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1"}))
 	require.NoError(t, err)

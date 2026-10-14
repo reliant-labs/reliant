@@ -12614,8 +12614,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "ForgeReachability"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "RunService",
@@ -34425,5 +34424,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "3d441b572b16ea0a4eb8b355a271d6d7d6e9b3b3da40bf28043de5447d695710"
+  "source_hash": "4c724feab9c83daa8a9bcb8fa49e6228f0ccd019395a0213365fec8a2269f772"
 }

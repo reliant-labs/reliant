@@ -46,6 +46,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/daemon"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
+	"github.com/reliant-labs/reliant/internal/handlers/forge"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
@@ -213,7 +214,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// Order matters: recovery (outermost) -> timeout -> auth -> domain whitelist (innermost).
 	// A failed RPC reaches Sentry once, as forge's "rpc failed" line through
 	// the slog bridge (internal/logging), grouped per procedure and code.
-	timeouts := interceptors.NewTimeoutInterceptor().WithMethodTimeouts(services.ForgeRPCDeadlines())
+	timeouts := interceptors.NewTimeoutInterceptor().WithMethodTimeouts(forge.ForgeRPCDeadlines())
 	opts := newHandlerOptions(true, timeouts.Interceptor(), authInterceptor, domainWhitelistInterceptor)
 	// Innermost: every streaming handler's context ends when Stop begins, so
 	// Shutdown is never left waiting on a stream that cannot finish by itself.
@@ -541,7 +542,15 @@ func NewServer(cfg *Config) (*Server, error) {
 	var forgePath string
 	var forgeHandler http.Handler
 	if router != nil && !forgeAPIDisabled() {
-		forgeService := services.NewForgeService(router, database)
+		forgeService, err := forge.New(forge.Deps{
+			Logger: handlerLogger,
+			Config: handlerConfig,
+			Router: router,
+			Repo:   database,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("forge service: %w", err)
+		}
 		forgePath, forgeHandler = reliantv1connect.NewForgeServiceHandler(forgeService, opts...)
 	}
 

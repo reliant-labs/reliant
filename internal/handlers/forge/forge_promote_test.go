@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package forge
 
 import (
 	"encoding/json"
@@ -540,7 +540,7 @@ func TestNoUnguardedDeployRPCExists(t *testing.T) {
 		// write a promotion, it stops belonging on this list.
 		"StartDeployPlan": true,
 	}
-	svc := reflect.TypeOf(&ForgeService{})
+	svc := reflect.TypeOf(&Service{})
 	for i := 0; i < svc.NumMethod(); i++ {
 		name := svc.Method(i).Name
 		if !strings.Contains(strings.ToLower(name), "deploy") || allowed[name] {
@@ -699,11 +699,11 @@ func TestForgeService_Promote_NotAForgeProjectOnBothMethods(t *testing.T) {
 func TestForgeService_Promote_Validation(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		call func(*ForgeService) error
+		call func(*Service) error
 	}{
 		{
 			name: "plan requires env",
-			call: func(s *ForgeService) error {
+			call: func(s *Service) error {
 				_, err := s.PlanPromote(authedCtx(), connect.NewRequest(
 					&reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "  ", Release: "v1"}))
 				return err
@@ -711,7 +711,7 @@ func TestForgeService_Promote_Validation(t *testing.T) {
 		},
 		{
 			name: "plan requires release",
-			call: func(s *ForgeService) error {
+			call: func(s *Service) error {
 				_, err := s.PlanPromote(authedCtx(), connect.NewRequest(
 					&reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "staging", Release: " "}))
 				return err
@@ -719,7 +719,7 @@ func TestForgeService_Promote_Validation(t *testing.T) {
 		},
 		{
 			name: "plan requires project_id",
-			call: func(s *ForgeService) error {
+			call: func(s *Service) error {
 				_, err := s.PlanPromote(authedCtx(), connect.NewRequest(
 					&reliantv1.PlanForgePromoteRequest{Env: "staging", Release: "v1"}))
 				return err
@@ -727,7 +727,7 @@ func TestForgeService_Promote_Validation(t *testing.T) {
 		},
 		{
 			name: "apply requires env",
-			call: func(s *ForgeService) error {
+			call: func(s *Service) error {
 				_, err := s.ApplyPromote(authedCtx(), connect.NewRequest(
 					&reliantv1.PromoteForgeEnvRequest{
 						ProjectId: "p", Env: "", Release: "v1", ExpectedCurrentRelease: "v0"}))
@@ -736,7 +736,7 @@ func TestForgeService_Promote_Validation(t *testing.T) {
 		},
 		{
 			name: "apply requires release",
-			call: func(s *ForgeService) error {
+			call: func(s *Service) error {
 				_, err := s.ApplyPromote(authedCtx(), connect.NewRequest(
 					&reliantv1.PromoteForgeEnvRequest{
 						ProjectId: "p", Env: "staging", Release: "", ExpectedCurrentRelease: "v0"}))
@@ -779,11 +779,11 @@ func TestForgeService_Promote_Validation(t *testing.T) {
 func TestForgeService_Promote_TimeoutIsARealFailureNotUnreachable(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		call func(*ForgeService) error
+		call func(*Service) error
 	}{
 		{
 			name: "PlanPromote",
-			call: func(s *ForgeService) error {
+			call: func(s *Service) error {
 				_, err := s.PlanPromote(authedCtx(), connect.NewRequest(
 					&reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "staging", Release: "v1.5.15"}))
 				return err
@@ -791,7 +791,7 @@ func TestForgeService_Promote_TimeoutIsARealFailureNotUnreachable(t *testing.T) 
 		},
 		{
 			name: "ApplyPromote",
-			call: func(s *ForgeService) error {
+			call: func(s *Service) error {
 				_, err := s.ApplyPromote(authedCtx(), connect.NewRequest(
 					&reliantv1.PromoteForgeEnvRequest{
 						ProjectId: "p", Env: "staging", Release: "v1.5.15",
@@ -813,11 +813,11 @@ func TestForgeService_Promote_TimeoutIsARealFailureNotUnreachable(t *testing.T) 
 func TestForgeService_Promote_MissingProjectDirIsNotFound(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		call func(*ForgeService) error
+		call func(*Service) error
 	}{
 		{
 			name: "PlanPromote",
-			call: func(s *ForgeService) error {
+			call: func(s *Service) error {
 				_, err := s.PlanPromote(authedCtx(), connect.NewRequest(
 					&reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "staging", Release: "v1.5.15"}))
 				return err
@@ -825,7 +825,7 @@ func TestForgeService_Promote_MissingProjectDirIsNotFound(t *testing.T) {
 		},
 		{
 			name: "ApplyPromote",
-			call: func(s *ForgeService) error {
+			call: func(s *Service) error {
 				_, err := s.ApplyPromote(authedCtx(), connect.NewRequest(
 					&reliantv1.PromoteForgeEnvRequest{
 						ProjectId: "p", Env: "staging", Release: "v1.5.15",

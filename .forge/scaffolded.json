@@ -237,6 +237,48 @@
     "internal/handlers/file_system/handlers_scaffold_search_files_test.go": {
       "scaffolded_at": "2026-10-13T15:43:35Z"
     },
+    "internal/handlers/forge/handlers_scaffold_apply_promote_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_diff_env_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_get_audit_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_get_deploy_status_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_get_env_shape_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_get_env_status_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_get_topology_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_list_checkouts_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_list_secrets_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_plan_deploy_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_plan_promote_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_start_deploy_plan_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_start_deploy_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
+    "internal/handlers/forge/handlers_scaffold_verify_env_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:34Z"
+    },
     "internal/handlers/inbox/handlers_scaffold_cleanup_storage_test.go": {
       "scaffolded_at": "2026-10-14T04:37:10Z"
     },
@@ -700,6 +742,16 @@
     "internal/handlers/file_system/handlers_scaffold_replace_in_files_test.go",
     "internal/handlers/file_system/handlers_scaffold_save_file_content_test.go",
     "internal/handlers/file_system/handlers_scaffold_search_files_test.go",
+    "internal/handlers/forge/handlers_scaffold_apply_promote_test.go",
+    "internal/handlers/forge/handlers_scaffold_get_audit_test.go",
+    "internal/handlers/forge/handlers_scaffold_get_deploy_status_test.go",
+    "internal/handlers/forge/handlers_scaffold_get_env_status_test.go",
+    "internal/handlers/forge/handlers_scaffold_get_topology_test.go",
+    "internal/handlers/forge/handlers_scaffold_list_secrets_test.go",
+    "internal/handlers/forge/handlers_scaffold_plan_deploy_test.go",
+    "internal/handlers/forge/handlers_scaffold_plan_promote_test.go",
+    "internal/handlers/forge/handlers_scaffold_start_deploy_test.go",
+    "internal/handlers/forge/handlers_scaffold_verify_env_test.go",
     "internal/handlers/package_commands/handlers_scaffold_list_commands_test.go",
     "internal/handlers/preset/handlers_scaffold_create_preset_test.go",
     "internal/handlers/preset/handlers_scaffold_delete_preset_test.go",

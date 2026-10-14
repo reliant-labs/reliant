@@ -44,6 +44,10 @@
         "rpc_service": "reliant.v1.FileSystemService"
       },
       {
+        "name": "forge",
+        "rpc_service": "reliant.v1.ForgeService"
+      },
+      {
         "name": "inbox",
         "rpc_service": "reliant.v1.InboxService"
       },

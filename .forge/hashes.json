@@ -1,7 +1,7 @@
 {
   "files": {
-    "deploy/observability/alert-defaults_gen.json": "3a26190eb4757bfc17878b40aad3a584cc5b6948bb87c2a649da1b30fddef563",
-    "deploy/observability/dashboard-spec_gen.json": "d0786334b38df0e9f183c20097ed7e6b5369ee41c021a583ceb82106d85544aa",
+    "deploy/observability/alert-defaults_gen.json": "c365ae9d760b22c86b921202e5e02b3736a2a33d9f58c5808382088d45dbc827",
+    "deploy/observability/dashboard-spec_gen.json": "0b6c95d2330a82740b70db459f2080a37361fe057a871221c7e20b894b42908c",
     "deploy/observability/dashboards/reliant-overview_gen.json": "fcde7a5086fafae9f668ee7414a7c0cbfa9a767cdac4ca48727c63a26ff0a6c1",
     "deploy/observability/dashboards/reliant-service-account_gen.json": "557de124096572349119e70a18b6b97e0950a7c95240ad72fa3832bc07f8036b",
     "deploy/observability/dashboards/reliant-service-approval_gen.json": "5abaada958d43780089e315ac9fa157dcc9e819111fff70f81dde98f08f18d91",
@@ -13,6 +13,7 @@
     "deploy/observability/dashboards/reliant-service-daemon_gen.json": "18833f166c56298329e280df23cd6e3ce6b24232064fd3e485a9d9731d22caa7",
     "deploy/observability/dashboards/reliant-service-daemon_registry_gen.json": "e48534b376c24662637e89d9aaef468e672d3b2e290cc184a0d2ebf49f49d340",
     "deploy/observability/dashboards/reliant-service-file_system_gen.json": "ef3f5d5976718a6d92f9d64660e2737e445855151b242597278fdb915ff110b7",
+    "deploy/observability/dashboards/reliant-service-forge_gen.json": "55ebc50f7ecfafe9be97019adcd7799b3e9dc58f3b708ff5eb6d7d4ded79059c",
     "deploy/observability/dashboards/reliant-service-inbox_gen.json": "d3a89f51b90c960a183e3434e35c584518e46f225aafbedf3e605fcf198c5277",
     "deploy/observability/dashboards/reliant-service-message_gen.json": "074a078e90363f8a9a67181509f86bbbf95d47a55067961b2d3453ebd3361540",
     "deploy/observability/dashboards/reliant-service-model_endpoint_gen.json": "b6791da561f66c9e792194726bb697e84fd233abbd4109b624030c8e5b8440b0",
@@ -32,6 +33,6 @@
     "deploy/observability/dashboards/reliant-service-tool_call_gen.json": "1d0ec334c776ffb19691d08042d8c682f09d6b0dd758e8d1187348656059c622",
     "deploy/observability/dashboards/reliant-service-tools_daemon_gen.json": "71549ff886368657bafa0bd65a3956f894c3453fccd8c116f4597dec76ae1091",
     "deploy/observability/dashboards/reliant-service-worktree_gen.json": "93fd7f38c01a8f73261fdc83ad29c045f71e955e8b0214e693845a338be953b6",
-    "deploy/observability/dashboards/saved-searches_gen.ndjson": "d778c09aac98b031a789a99bf2605695fa8c2aa26695ffae34699d8de0130cea"
+    "deploy/observability/dashboards/saved-searches_gen.ndjson": "5a8a66db6efba4168d53ed92a6100df0e51ef554c6c82de6b7d25a2a5af792e5"
   }
 }

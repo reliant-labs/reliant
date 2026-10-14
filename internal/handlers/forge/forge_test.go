@@ -1,10 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package forge
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strings"
 	"testing"
@@ -17,12 +18,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
-// authedCtx is a request context signed in as "test-user". It lived with
-// PackageCommands' tests, which moved to internal/handlers/package_commands;
-// Forge's tests are its main user, and the Background, Daemon and Terminal
-// tests still here share it.
+// authedCtx is a request context signed in as "test-user", the way the API's
+// auth interceptor leaves it.
 func authedCtx() context.Context {
 	return context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 }
@@ -64,9 +64,19 @@ func (p forgeTestProjects) GetProjectWithUserCheck(_ context.Context, id, _ stri
 	return &db.Project{ID: id, Path: p.path}, nil
 }
 
-// newForgeTestService wires a ForgeService over a stub router and project lookup.
-func newForgeTestService(router *forgeTestRouter) *ForgeService {
-	return NewForgeService(router, forgeTestProjects{path: "/daemon/workspace/control-plane"})
+// newForgeTestService wires the Service over a stub router and project lookup.
+func newForgeTestService(router *forgeTestRouter) *Service {
+	return newForgeService(router, forgeTestProjects{path: "/daemon/workspace/control-plane"})
+}
+
+// newForgeService builds the Service as server.go does. Every required Dep is
+// set, so New cannot refuse it.
+func newForgeService(router Router, projects Repository) *Service {
+	svc, err := New(Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Router: router, Repo: projects})
+	if err != nil {
+		panic(err)
+	}
+	return svc
 }
 
 // forgeDaemonReply builds a daemon-shaped reply envelope.
@@ -125,7 +135,7 @@ func TestForgeService_GetTopology_PassesReportThroughVerbatim(t *testing.T) {
 // Timeouts are per-command, and the verify variant of topology gets the long one
 // because it makes live cluster round trips.
 func TestForgeService_Timeouts_ArePerCommand(t *testing.T) {
-	svc := func(r *forgeTestRouter) *ForgeService { return newForgeTestService(r) }
+	svc := func(r *forgeTestRouter) *Service { return newForgeTestService(r) }
 	ok := func(t *testing.T) []byte { return forgeDaemonReply(t, true, true, 0, `{}`) }
 
 	t.Run("topology ledger-only is short", func(t *testing.T) {
@@ -294,38 +304,38 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 func TestForgeService_CommandFailed_IsFailedPreconditionNotUnavailable(t *testing.T) {
 	const daemonErr = "daemon command forge.x: forge command failed: exit 1: kcl: undefined attribute"
 
-	calls := map[string]func(*ForgeService) error{
-		"GetTopology": func(s *ForgeService) error {
+	calls := map[string]func(*Service) error{
+		"GetTopology": func(s *Service) error {
 			_, err := s.GetTopology(authedCtx(), connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "p"}))
 			return err
 		},
-		"VerifyEnv (cluster read)": func(s *ForgeService) error {
+		"VerifyEnv (cluster read)": func(s *Service) error {
 			_, err := s.VerifyEnv(authedCtx(), connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
 			return err
 		},
-		"GetEnvStatus (cluster read)": func(s *ForgeService) error {
+		"GetEnvStatus (cluster read)": func(s *Service) error {
 			_, err := s.GetEnvStatus(authedCtx(), connect.NewRequest(&reliantv1.GetForgeEnvStatusRequest{ProjectId: "p", Env: "prod"}))
 			return err
 		},
-		"ListSecrets": func(s *ForgeService) error {
+		"ListSecrets": func(s *Service) error {
 			_, err := s.ListSecrets(authedCtx(), connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
 			return err
 		},
-		"GetAudit": func(s *ForgeService) error {
+		"GetAudit": func(s *Service) error {
 			_, err := s.GetAudit(authedCtx(), connect.NewRequest(&reliantv1.GetForgeAuditRequest{ProjectId: "p"}))
 			return err
 		},
-		"ApplyPromote (direct dispatch)": func(s *ForgeService) error {
+		"ApplyPromote (direct dispatch)": func(s *Service) error {
 			_, err := s.ApplyPromote(authedCtx(), connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
 				ProjectId: "p", Env: "staging", Release: "v1.5.15", ExpectedCurrentRelease: "v1.3.0",
 			}))
 			return err
 		},
-		"StartDeploy (direct dispatch)": func(s *ForgeService) error {
+		"StartDeploy (direct dispatch)": func(s *Service) error {
 			_, err := s.StartDeploy(authedCtx(), connect.NewRequest(authorisedStart("prod", "gke_prod", "v1.5.15")))
 			return err
 		},
-		"GetDeployStatus (direct dispatch)": func(s *ForgeService) error {
+		"GetDeployStatus (direct dispatch)": func(s *Service) error {
 			_, err := s.GetDeployStatus(authedCtx(), connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{
 				ProjectId: "p", Handle: "deploy-7f3a",
 			}))
