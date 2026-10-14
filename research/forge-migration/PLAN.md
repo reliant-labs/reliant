@@ -91,7 +91,7 @@ Every change ships as its own **small PR** that leaves everything that works tod
 6. **Old paths are deleted only after the new one is proven** in its own PR (reliant: no backwards compatibility pre-launch, but no flag-day either).
 7. **Forge fixes land in forge first** (released + pinned), then reliant adopts them. reliant never carries a workaround for a forge gap we can fix.
 
-### Status (updated 2026-10-13)
+### Status (updated 2026-10-14)
 
 **Merged** (CI budget exhausted; each change was verified locally before merging, and forge main was re-verified with all of them combined):
 
@@ -134,23 +134,37 @@ Every change ships as its own **small PR** that leaves everything that works tod
 | reliant P2: 10 public rpcs declare `auth_required: false` (the `publicMethods` slice is gone; the interceptor reads forge's generated set, pinned by a test); 17 list filters `optional` | reliant #829, #830–#841 |
 | reliant: regenerate the descriptor #785 left stale | reliant #801 |
 
+**Merged in wave 4 (2026-10-14):**
+
+| Item | PR |
+|---|---|
+| forge: kind-flip pins (`features:`), merge driver for parallel lanes' generated files, accurate "N changed", `//forge:resolves-caller`, schema-qualified table names, a scaffold that compiles without typed config | forge #724–#729 |
+| forge F5: `// forge:custom` per-rpc CRUD opt-out (no-orm stubs every rpc), the ORM refuses a name `internal/db` already declares, enums over INTEGER columns | forge #712–#714 |
+| forge: validate without linking (~14s instead of ~200s on reliant), skip the post-rollback build when no Go file changed, `FORGE_NO_GIT_HOOKS`, forge-history adoption (`-- forge:adopts forge`) | forge #717–#720 |
+| forge: migration tooling (goose NO TRANSACTION import split, CONCURRENTLY lint, `squash --from-dsn`, deterministic squash), one Postgres session per migratekit run | forge #706, #708–#711 |
+| forge: fail-closed programmable harness stubs, `WithPlaceholderDeps`, stale-ledger rescue, runnable streaming scaffold tests, packages/workers without typed config, generic deps judged by declaration | forge #731–#735, #738 |
+| reliant: forge pins `6f9811cb` → `8d812662` | reliant #857, #885 |
+| reliant P2 follow-up: the 28 required list parents declare `buf.validate` required, so no service is blocked by P2 | reliant #856 |
+| reliant P3b: 23 services on forge's handler model — System, Question, Account, Connector, Preset, Token, Run, Streaming, ToolCall, Message, Attachment, FileSystem, PackageCommands, DaemonRegistry, ToolsDaemon, ModelEndpoint, Daemon, Background, Terminal (the dead local Background/Terminal/FileSystem implementations deleted); recipe `06-p3b-recipe.md` | reliant #844–#873 |
+| reliant P4: typed root config (`RELIANT_LOG_LEVEL`, `LOG_FORMAT`, `RELIANT_CONFIG`), `ApiServerConfig`, `ControlPlaneConfig` (deprecated URL aliases), `RELIANT_ENV` (+ `NODE_ENV`), forbidigo patterns for the typed-access guardrail (advisory) | reliant #876–#882 |
+| reliant: main's test build fixed after #861 + #877 crossed (merges now vet the whole module) | reliant #884 |
+
 **In flight / ready for review:**
-- **P5a (goose → forge migrations): branches ready, NOT merged, needs the user.** `docs/p5a-runbook-fixes`, `feat/p5a-forge-migrations-baseline`, `feat/p5a-migrate-up-migratekit`, `chore/p5a-remove-goose` (merge last). Schema parity proven (normalized `pg_dump` identical, PG 16 and 17), adoption of a goose-head DB verified, an older goose DB refused loudly, concurrent runs verified behind a capped session PgBouncer. Decisions for the user are in the runbook (older-version handling, `forge:backward-compatible` on additive migrations, self-hosted installs, `reliant_cp_session` pool size, CI workflow edits).
-- **P3b pilot:** System and Question moved onto `internal/handlers/<svc>/`; recipe `06-p3b-recipe.md` for the remaining 33 lanes.
-- **P4 lanes 2+:** root `ReliantConfig` (log level/format), `ApiServerConfig`, then `ControlPlaneConfig` / `RELIANT_ENV` via aliases.
-- **forge:** project-kind flip made explicit; parallel lanes' generated files merge without conflicts; generate change count; audit recognises a project's own caller resolver; `shapes` reads `public.x`; **F5** per-rpc CRUD opt-out + ORM placement + integer-backed enums; migration tooling (goose no-tx import, CONCURRENTLY lint, `squash --from-dsn`, deterministic squash output).
+- **P5a (goose → forge migrations): branches ready, NOT merged, needs the user.** `docs/p5a-runbook-fixes`, `feat/p5a-forge-migrations-baseline`, `feat/p5a-migrate-up-migratekit`, `chore/p5a-remove-goose` (merge last). Schema parity proven (normalized `pg_dump` identical, PG 16 and 17), adoption of a goose-head DB verified, an older goose DB refused loudly, concurrent runs verified behind a capped session PgBouncer. They predate forge #706/#708–#711/#720 and need a rebase that can now use `forge db squash --from-dsn` and `migratekit.Apply`. Decisions for the user are in the runbook (older-version handling, `forge:backward-compatible` on additive migrations, self-hosted installs, `reliant_cp_session` pool size, CI workflow edits).
+- **P3b wave 3:** Inbox, Approval, Connection, Repo; Plan, Task, Settings, Scenario. Each lane marks its CRUD-named rpcs `// forge:custom` (F5) as it moves them. Remaining after: Catalog, Chat, Forge, MCP, Project, Trigger, Workflow, Worktree.
 
 **Next:**
 - **1h (needs a human):** CI runs pinned `forge generate` plus a clean-tree check, and `forge lint` goes non-gating, then gating. The GitHub App token cannot push `.github/workflows/*`, so someone with workflow permission lands it.
 - **Before lint can gate:** 20 golangci-lint and 2 buf findings (`forge.proto` RPC_REQUEST_RESPONSE_UNIQUE) that predate 1g. The contract lane is done.
-- **P3b:** fan out per the recipe once the pilot merges.
-- **New contributor obligation:** after editing a proto or a `contract.go`, run the pinned `forge generate` (`/home/workspace/go/bin/forge`, or `go run github.com/reliant-labs/forge/cmd/forge@<go.mod pin>`). Never hand-merge `gen/forge_descriptor.json`: take either side and regenerate.
+- **P4 remaining:** a designed `DaemonConfig` (`TOOLS_DAEMON_PORT` and `DAEMON_LISTEN_PORT` are two settings, not aliases); fields forge cannot express yet (exact-string bools, silently-defaulting numbers, `DEBUG` → log level, open key families, build-time defaults).
+- **New contributor obligation:** after editing a proto or a `contract.go`, run the pinned `forge generate` (`go run github.com/reliant-labs/forge/cmd/forge@<forge.yaml forge_version>`). Never hand-merge `gen/forge_descriptor.json`: take either side and regenerate.
+- **control-plane, when it next bumps reliant:** forge ≥ `b79abb1a` renamed `pkg/alerting`'s tenancy to owner (`RuleSource.Tenants` → `Owners`), so control-plane's `internal/alerting` must follow in that bump.
 
 **Still open in forge:** no way to opt out of CI scaffolding except deleting the files; F6 cross-project KCL; F7 Sentry hook and file log sink; F12 ORM gaps; `EnsureDevWebRuntimeLink` still adds `/package.json` to `.gitignore`.
 
 **Dev databases (user decision, 2026-10-12): fully destroyable.** At the P5a cutover, dev databases (the `forge env up` stack's `reliant` DB on 5434, per-developer 5433 DBs) are dropped and rebuilt from the new baseline, with no goose adoption and no reconciling branch-only versions. **Goose adoption stays mandatory for prod (`reliant_cp` on Cloud SQL `reliant-pg`)** and for any env holding data we keep. Never touch prod in a "dev DB" teardown.
 - As of 2026-10-12 this sandbox has no dev Postgres (no `postgres_data` volume, no k3d cluster); only prod kube contexts exist, and they are untouched. The dev stacks rebuild their DB on next `forge env up`.
-- Reliant pins forge `d67d2a72` (reliant #828).
+- Reliant pins forge `8d812662` (reliant #885).
 
 Research inputs, all in this dir: `02-contracts-classification.md` (P6), `03-config-census.md` (P4), `04-p5a-cutover-runbook.md` (P5a), `05-p3a-handler-map.md` (P3a/P3b).
 
