@@ -46,6 +46,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/daemon"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
+	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
@@ -562,7 +563,22 @@ func NewServer(cfg *Config) (*Server, error) {
 	if len(cfg.TriggerSenders) > 0 {
 		triggerService.WithSenderDirectories(cfg.TriggerSenders)
 	}
-	inboxPath, inboxHandler := reliantv1connect.NewInboxServiceHandler(services.NewInboxService(database).WithSweeper(worktreeSweeper), opts...)
+	// worktreeSweeper is nil without a daemon router. A nil *Sweeper stored
+	// in the interface would not be nil, so assign it only when it is set.
+	var inboxSweeper inbox.Sweeper
+	if worktreeSweeper != nil {
+		inboxSweeper = worktreeSweeper
+	}
+	inboxService, err := inbox.New(inbox.Deps{
+		Logger:  handlerLogger,
+		Config:  handlerConfig,
+		Repo:    database,
+		Sweeper: inboxSweeper,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("inbox service: %w", err)
+	}
+	inboxPath, inboxHandler := reliantv1connect.NewInboxServiceHandler(inboxService, opts...)
 	triggerPath, triggerHandler := reliantv1connect.NewTriggerServiceHandler(triggerService, opts...)
 
 	// FileSystem, Background, and Terminal services: when a daemon router is

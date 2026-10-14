@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package inbox
 
 import (
 	"context"
@@ -10,15 +10,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -53,28 +50,6 @@ var inboxItemPrefixes = []string{
 // section). The list itself is capped at defaultInboxLimit.
 const maxInboxDismissBatch = 500
 
-// InboxService implements the InboxService RPC handlers.
-type InboxService struct {
-	reliantv1connect.UnimplementedInboxServiceHandler
-	database db.Repository
-	// sweeper runs the confirmed storage cleanup on a machine's daemon. Nil
-	// when no daemon router is wired; CleanupStorage then reports unavailable.
-	sweeper *worktreesweep.Sweeper
-	// storageCache holds each user's storage view for storageViewTTL.
-	storageCache sync.Map
-}
-
-// NewInboxService creates a new InboxService.
-func NewInboxService(database db.Repository) *InboxService {
-	return &InboxService{database: database}
-}
-
-// WithSweeper enables the storage item's Clean up action.
-func (s *InboxService) WithSweeper(sweeper *worktreesweep.Sweeper) *InboxService {
-	s.sweeper = sweeper
-	return s
-}
-
 // ListInbox returns everything waiting on the caller, optionally within one
 // project. Pending rows come from one UNION ALL query; automation health reuses
 // triggers.ComputeHealth over one batched firings query, so the cost does not
@@ -82,7 +57,7 @@ func (s *InboxService) WithSweeper(sweeper *worktreesweep.Sweeper) *InboxService
 //
 // Scoping is applied after dismissal so the scoped response can also say how
 // many items wait in the caller's other projects (one read, not two).
-func (s *InboxService) ListInbox(
+func (s *Service) ListInbox(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListInboxRequest],
 ) (*connect.Response[reliantv1.ListInboxResponse], error) {
@@ -100,7 +75,7 @@ func (s *InboxService) ListInbox(
 
 	projectID := strings.TrimSpace(req.Msg.GetProjectId())
 
-	pending, err := s.database.ListInboxPending(ctx, userID)
+	pending, err := s.deps.Repo.ListInboxPending(ctx, userID)
 	if err != nil {
 		logging.Error("Failed to list inbox", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list inbox"))
@@ -173,7 +148,7 @@ func (s *InboxService) ListInbox(
 
 // DismissInboxItem hides items from the caller's inbox. Hiding an approval or
 // a question does not resolve it; the run still waits on it.
-func (s *InboxService) DismissInboxItem(
+func (s *Service) DismissInboxItem(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DismissInboxItemRequest],
 ) (*connect.Response[reliantv1.DismissInboxItemResponse], error) {
@@ -184,7 +159,7 @@ func (s *InboxService) DismissInboxItem(
 	if err := validateInboxItemIDs(req.Msg.ItemIds); err != nil {
 		return nil, err
 	}
-	if err := s.database.DismissInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds), time.Now().UTC()); err != nil {
+	if err := s.deps.Repo.DismissInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds), time.Now().UTC()); err != nil {
 		logging.Error("Failed to dismiss inbox items", "error", err, "count", len(req.Msg.ItemIds))
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to dismiss inbox item"))
 	}
@@ -192,7 +167,7 @@ func (s *InboxService) DismissInboxItem(
 }
 
 // RestoreInboxItem undoes DismissInboxItem (the Undo on the dismiss toast).
-func (s *InboxService) RestoreInboxItem(
+func (s *Service) RestoreInboxItem(
 	ctx context.Context,
 	req *connect.Request[reliantv1.RestoreInboxItemRequest],
 ) (*connect.Response[reliantv1.RestoreInboxItemResponse], error) {
@@ -203,7 +178,7 @@ func (s *InboxService) RestoreInboxItem(
 	if err := validateInboxItemIDs(req.Msg.ItemIds); err != nil {
 		return nil, err
 	}
-	if err := s.database.RestoreInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds)); err != nil {
+	if err := s.deps.Repo.RestoreInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds)); err != nil {
 		logging.Error("Failed to restore inbox items", "error", err, "count", len(req.Msg.ItemIds))
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to restore inbox item"))
 	}
@@ -236,8 +211,8 @@ func isInboxItemID(itemID string) bool {
 
 // failingAutomations returns one item per enabled trigger whose health is
 // FAILING, using the same ComputeHealth as Trigger.health.
-func (s *InboxService) failingAutomations(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
-	stored, err := s.database.ListTriggers(ctx, core.TriggerFilters{UserID: userID})
+func (s *Service) failingAutomations(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
+	stored, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID})
 	if err != nil {
 		return nil, err
 	}
@@ -247,20 +222,20 @@ func (s *InboxService) failingAutomations(ctx context.Context, userID string) ([
 			ids = append(ids, t.ID)
 		}
 	}
-	recent, err := s.database.RecentTriggerFirings(ctx, userID, ids, triggers.HealthWindow)
+	recent, err := s.deps.Repo.RecentTriggerFirings(ctx, userID, ids, triggers.HealthWindow)
 	if err != nil {
 		return nil, err
 	}
 
 	// The episode is read separately from the health window: a streak longer
 	// than the window must still be one item with an honest count.
-	episodes, err := s.database.FiringsSinceLastSuccess(ctx, userID, ids, triggers.EpisodeFirings)
+	episodes, err := s.deps.Repo.FiringsSinceLastSuccess(ctx, userID, ids, triggers.EpisodeFirings)
 	if err != nil {
 		return nil, err
 	}
 	// A polled source that cannot authenticate never fires, so it has no
 	// failed firing to show; its source state is what says it is failing.
-	regs, err := s.database.ListTriggerRegistrations(ctx, userID, ids)
+	regs, err := s.deps.Repo.ListTriggerRegistrations(ctx, userID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -322,14 +297,14 @@ func (s *InboxService) failingAutomations(ctx context.Context, userID string) ([
 	return out, nil
 }
 
-func (s *InboxService) dropDismissed(ctx context.Context, userID string, items []*reliantv1.InboxItem) ([]*reliantv1.InboxItem, error) {
+func (s *Service) dropDismissed(ctx context.Context, userID string, items []*reliantv1.InboxItem) ([]*reliantv1.InboxItem, error) {
 	keys := make([][]string, len(items))
 	candidates := make([]string, 0, len(items))
 	for i, it := range items {
 		keys[i] = dismissalKeys(it.ItemId)
 		candidates = append(candidates, keys[i]...)
 	}
-	dismissed, err := s.database.ListDismissedInboxItemIDs(ctx, userID, candidates)
+	dismissed, err := s.deps.Repo.ListDismissedInboxItemIDs(ctx, userID, candidates)
 	if err != nil {
 		return nil, err
 	}
@@ -415,12 +390,12 @@ func firstQuestionPrompt(metadata string) string {
 // storageItems returns one item per machine with a volume under disk pressure
 // or archived worktrees it declined to remove. Storage items are not tied to a
 // project, so they appear in every project scope.
-func (s *InboxService) storageItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
+func (s *Service) storageItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
 	machines, err := s.storageView(ctx, userID)
 	if err != nil || len(machines) == 0 {
 		return nil, err
 	}
-	daemons, err := s.database.ListDaemonsByUserID(ctx, userID)
+	daemons, err := s.deps.Repo.ListDaemonsByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -555,13 +530,13 @@ type cachedStorageView struct {
 // storageView is StorageView with a short per-user cache: ListInbox backs the
 // nav badge, which polls, and the storage picture changes on the scale of
 // minutes. A clean-up or dismissal that must show at once calls dropStorageView.
-func (s *InboxService) storageView(ctx context.Context, userID string) ([]*worktreesweep.MachineStorage, error) {
+func (s *Service) storageView(ctx context.Context, userID string) ([]*worktreesweep.MachineStorage, error) {
 	if v, ok := s.storageCache.Load(userID); ok {
 		if c := v.(cachedStorageView); time.Since(c.at) < storageViewTTL {
 			return c.machines, nil
 		}
 	}
-	machines, err := worktreesweep.StorageView(ctx, s.database, userID)
+	machines, err := worktreesweep.StorageView(ctx, s.deps.Repo, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -570,7 +545,7 @@ func (s *InboxService) storageView(ctx context.Context, userID string) ([]*workt
 }
 
 // CleanupStorage runs the storage item's Clean up action on one machine.
-func (s *InboxService) CleanupStorage(
+func (s *Service) CleanupStorage(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CleanupStorageRequest],
 ) (*connect.Response[reliantv1.CleanupStorageResponse], error) {
@@ -584,18 +559,18 @@ func (s *InboxService) CleanupStorage(
 	if len(req.Msg.WorktreeIds) > maxInboxDismissBatch {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at most %d worktrees per call", maxInboxDismissBatch))
 	}
-	if s.sweeper == nil {
+	if s.deps.Sweeper == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("storage cleanup is not available"))
 	}
 	// The machine must be the caller's: Cleanup only ever acts on worktrees of
 	// projects the caller owns, but naming a stranger's daemon is rejected
 	// outright rather than quietly doing nothing.
-	daemon, err := s.database.GetDaemon(ctx, req.Msg.DaemonId)
+	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.DaemonId)
 	if err != nil || daemon == nil || daemon.UserID != userID {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine not found"))
 	}
 
-	accepted, skipped, err := s.sweeper.StartCleanup(ctx, s.database, userID, req.Msg.DaemonId, req.Msg.WorktreeIds)
+	accepted, skipped, err := s.deps.Sweeper.StartCleanup(ctx, s.deps.Repo, userID, req.Msg.DaemonId, req.Msg.WorktreeIds)
 	if errors.Is(err, worktreesweep.ErrOffline) {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("that machine is offline; reconnect it and try again"))
 	}

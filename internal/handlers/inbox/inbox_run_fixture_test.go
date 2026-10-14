@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package inbox
 
 import (
 	"context"
@@ -16,8 +16,7 @@ import (
 // runListFixture is the part of the run handlers' list fixture
 // (internal/handlers/run/run_list_test.go) that inbox_test.go builds on: a
 // user, their project, and seeded runs in a real database. The inbox tests
-// never call the run service, so this copy has none. It moves with the Inbox
-// lane (research/forge-migration/06-p3b-recipe.md).
+// never call the run service, so this copy has none.
 type runListFixture struct {
 	repo   *db.Repo
 	ctx    context.Context

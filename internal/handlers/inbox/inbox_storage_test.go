@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package inbox
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
+	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
 
@@ -33,7 +34,7 @@ func storageFixture(t *testing.T) (*inboxFixture, string, string) {
 	t.Helper()
 	f := newInboxFixture(t)
 	daemonID := "d-" + uuid.NewString()
-	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID, Hostname: strPtr("MacBook")}))
+	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID, Hostname: ptr.Of("MacBook")}))
 	require.NoError(t, f.repo.UpsertDaemonAttachment(f.ctx, &db.DaemonAttachment{DaemonID: daemonID, UserID: f.userID, Source: db.DaemonAttachmentSourceInbound}))
 
 	now := time.Now().UTC()
@@ -122,7 +123,7 @@ func TestListInbox_StorageItemShowsDiskAndHeldWorktrees(t *testing.T) {
 
 func TestListInbox_StorageItemAppearsInEveryProjectScope(t *testing.T) {
 	f, _, _ := storageFixture(t)
-	resp, err := f.inbox.ListInbox(f.ctx, connect.NewRequest(&reliantv1.ListInboxRequest{ProjectId: strPtr("some-other-project")}))
+	resp, err := f.inbox.ListInbox(f.ctx, connect.NewRequest(&reliantv1.ListInboxRequest{ProjectId: ptr.Of("some-other-project")}))
 	require.NoError(t, err)
 	assert.Len(t, inboxByKind(resp.Msg.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE), 1)
 }
@@ -304,7 +305,7 @@ func TestStorageItemIDs(t *testing.T) {
 func TestCleanupStorage_RejectsAnotherUsersMachineAndAskedNothing(t *testing.T) {
 	f, daemonID, wtID := storageFixture(t)
 	sender := &neverSender{}
-	f.inbox.WithSweeper(worktreesweep.New(f.repo, sender))
+	f.withSweeper(t, worktreesweep.New(f.repo, sender))
 
 	otherCtx, _, _ := f.otherUser(t)
 	_, err := f.inbox.CleanupStorage(otherCtx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
@@ -320,7 +321,7 @@ func TestCleanupStorage_OfflineMachineIsAPreconditionNotAnError(t *testing.T) {
 	f, daemonID, wtID := storageFixture(t)
 	_, err := f.repo.DB.ExecContext(f.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, daemonID)
 	require.NoError(t, err)
-	f.inbox.WithSweeper(worktreesweep.New(f.repo, &neverSender{}))
+	f.withSweeper(t, worktreesweep.New(f.repo, &neverSender{}))
 	_, err = f.inbox.CleanupStorage(f.ctx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 }
@@ -347,7 +348,7 @@ func (s *slowSender) SendDaemonCommandToDaemon(ctx context.Context, _, _, _ stri
 func TestCleanupStorage_ReturnsAtOnceAndSurvivesTheRequestContext(t *testing.T) {
 	f, daemonID, wtID := storageFixture(t)
 	sender := &slowSender{done: make(chan struct{})}
-	f.inbox.WithSweeper(worktreesweep.New(f.repo, sender))
+	f.withSweeper(t, worktreesweep.New(f.repo, sender))
 
 	ic := interceptors.NewTimeoutInterceptor().Interceptor()
 	var deadline time.Duration
@@ -383,7 +384,7 @@ func TestCleanupStorage_NotRemovableWorktreesAreSkippedNotAccepted(t *testing.T)
 	f, daemonID, wtID := storageFixture(t)
 	require.NoError(t, f.repo.UpdateWorktreeCleanupMetadata(f.ctx, wtID, &db.CleanupMetadata{HeldReason: "data"}))
 	sender := &neverSender{}
-	f.inbox.WithSweeper(worktreesweep.New(f.repo, sender))
+	f.withSweeper(t, worktreesweep.New(f.repo, sender))
 	resp, err := f.inbox.CleanupStorage(f.ctx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Results, 1)
@@ -407,7 +408,7 @@ func TestListInbox_StorageViewIsCachedBetweenPolls(t *testing.T) {
 	assert.Empty(t, fresh[0].GetStorage().Held, "the held worktree is gone once the cache is dropped")
 }
 
-func (s *InboxService) mustList(t *testing.T, f *inboxFixture) []*reliantv1.InboxItem {
+func (s *Service) mustList(t *testing.T, f *inboxFixture) []*reliantv1.InboxItem {
 	t.Helper()
 	resp, err := s.ListInbox(f.ctx, connect.NewRequest(&reliantv1.ListInboxRequest{}))
 	require.NoError(t, err)

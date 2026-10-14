@@ -11,6 +11,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
@@ -37,6 +38,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/gmail"
@@ -50,6 +52,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/vault"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
+	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
 // Gmail end to end, with nothing faked but Google and the agent.
@@ -283,10 +286,17 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 
 	// The Inbox says so too, as one item that stays the same item across
 	// polls (so a dismissal holds), while bob's healthy trigger has none.
-	inbox := NewInboxService(repo)
+	inboxService, err := inbox.New(inbox.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo})
+	require.NoError(t, err)
 	failing := func(userID string) []*reliantv1.InboxItem {
-		items, err := inbox.failingAutomations(ctx, userID)
+		resp, err := inboxService.ListInbox(context.WithValue(ctx, auth.UserIDContextKey, userID), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 		require.NoError(t, err)
+		var items []*reliantv1.InboxItem
+		for _, it := range resp.Msg.GetItems() {
+			if it.GetKind() == reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING {
+				items = append(items, it)
+			}
+		}
 		return items
 	}
 	items := failing(ann.userID)

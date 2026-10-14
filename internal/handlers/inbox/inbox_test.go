@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package inbox
 
 import (
 	"context"
@@ -16,17 +16,25 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
 type inboxFixture struct {
 	*runListFixture
-	inbox *InboxService
+	inbox *Service
 }
 
 func newInboxFixture(t *testing.T) *inboxFixture {
 	t.Helper()
 	f := newRunListFixture(t)
-	return &inboxFixture{runListFixture: f, inbox: NewInboxService(f.repo)}
+	return &inboxFixture{runListFixture: f, inbox: NewTestInbox(t, WithInboxDeps(Deps{Repo: f.repo}))}
+}
+
+// withSweeper rebuilds the fixture's service with the storage clean-up
+// enabled.
+func (f *inboxFixture) withSweeper(t *testing.T, sweeper Sweeper) {
+	t.Helper()
+	f.inbox = NewTestInbox(t, WithInboxDeps(Deps{Repo: f.repo, Sweeper: sweeper}))
 }
 
 // otherUser returns a context and project for a second, unrelated user in the
@@ -201,7 +209,7 @@ func TestListInbox_AutomationFailingReusesHealthAndClearsOnSuccess(t *testing.T)
 	f.seed(t, "run-ok", "wf", db.Completed(), base.Add(2*time.Minute))
 	runID := "run-ok"
 	_, err := f.repo.CreateTriggerEvent(f.ctx, &core.TriggerEvent{
-		ID: "ev3", TriggerID: strPtr("trg-f"), UserID: f.userID, Kind: core.TriggerEventKindSchedule,
+		ID: "ev3", TriggerID: ptr.Of("trg-f"), UserID: f.userID, Kind: core.TriggerEventKindSchedule,
 		DedupeKey: "dd-ev3", OccurredAt: base.Add(3 * time.Minute).Truncate(time.Microsecond),
 		Payload: map[string]any{}, Outcome: core.TriggerEventLaunched, ChatID: &runID,
 		CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
@@ -470,7 +478,7 @@ func TestListInbox_ScopedToCallerAcrossEveryKind(t *testing.T) {
 	}))
 	for i, id := range []string{"o-e1", "o-e2"} {
 		_, err := f.repo.CreateTriggerEvent(otherCtx, &core.TriggerEvent{
-			ID: id, TriggerID: strPtr("o-trg"), UserID: otherUser, Kind: core.TriggerEventKindSchedule,
+			ID: id, TriggerID: ptr.Of("o-trg"), UserID: otherUser, Kind: core.TriggerEventKindSchedule,
 			DedupeKey: id, OccurredAt: now.Add(time.Duration(i) * time.Second).Truncate(time.Microsecond),
 			Payload: map[string]any{}, Outcome: core.TriggerEventFailed, OutcomeDetail: "x",
 			CreatedAt: now.Truncate(time.Microsecond),

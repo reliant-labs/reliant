@@ -237,6 +237,18 @@
     "internal/handlers/file_system/handlers_scaffold_search_files_test.go": {
       "scaffolded_at": "2026-10-13T15:43:35Z"
     },
+    "internal/handlers/inbox/handlers_scaffold_cleanup_storage_test.go": {
+      "scaffolded_at": "2026-10-14T04:37:10Z"
+    },
+    "internal/handlers/inbox/handlers_scaffold_dismiss_inbox_item_test.go": {
+      "scaffolded_at": "2026-10-14T04:37:10Z"
+    },
+    "internal/handlers/inbox/handlers_scaffold_list_inbox_test.go": {
+      "scaffolded_at": "2026-10-14T04:37:10Z"
+    },
+    "internal/handlers/inbox/handlers_scaffold_restore_inbox_item_test.go": {
+      "scaffolded_at": "2026-10-14T04:37:10Z"
+    },
     "internal/handlers/message/handlers_scaffold_get_message_test.go": {
       "scaffolded_at": "2026-10-13T13:35:41Z"
     },
