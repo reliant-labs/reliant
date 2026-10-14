@@ -842,6 +842,7 @@ export const MCPServerStatusSchema: GenEnum<MCPServerStatus> = /*@__PURE__*/
 export const MCPService: GenService<{
   /**
    * ListServers returns all configured MCP servers with their status
+   * forge:custom — merges the project's three config scopes with the daemon's live server status
    *
    * @generated from rpc reliant.v1.MCPService.ListServers
    */
@@ -852,6 +853,7 @@ export const MCPService: GenService<{
   },
   /**
    * GetServer returns detailed information about a specific MCP server
+   * forge:custom — resolves one server across the project's config scopes and the daemon's live status
    *
    * @generated from rpc reliant.v1.MCPService.GetServer
    */

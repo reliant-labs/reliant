@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package mcp
 
 import (
 	"container/list"
@@ -184,7 +184,7 @@ func (c *mcpStatusCache) startFetchLocked(ctx context.Context, key, userID, proj
 	return done
 }
 
-// invalidateUser forgets every status cached for a user. MCPService calls it
+// invalidateUser forgets every status cached for a user. The service calls it
 // after anything it does that can change a server's status — start, stop,
 // restart, a config write — so the read that follows asks the daemon.
 func (c *mcpStatusCache) invalidateUser(userID string) {

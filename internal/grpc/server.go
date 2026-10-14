@@ -48,6 +48,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/forge"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
+	"github.com/reliant-labs/reliant/internal/handlers/mcp"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
@@ -367,7 +368,15 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("settings service: %w", err)
 	}
-	mcpService := services.NewMCPService(database, router)
+	mcpService, err := mcp.New(mcp.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+		Router: router,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mcp service: %w", err)
+	}
 	workflowService := services.NewWorkflowService(database, router)
 	scenarioService, err := scenario.New(scenario.Deps{
 		Logger: handlerLogger,

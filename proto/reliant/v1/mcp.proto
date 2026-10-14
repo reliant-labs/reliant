@@ -8,15 +8,14 @@ import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // MCPService handles MCP (Model Context Protocol) server management
 service MCPService {
   // ListServers returns all configured MCP servers with their status
+  // forge:custom — merges the project's three config scopes with the daemon's live server status
   rpc ListServers(ListServersRequest) returns (ListServersResponse) {}
   
   // GetServer returns detailed information about a specific MCP server
+  // forge:custom — resolves one server across the project's config scopes and the daemon's live status
   rpc GetServer(GetServerRequest) returns (GetServerResponse) {}
 
   // GetServerTools returns the list of tools exposed by a specific MCP server

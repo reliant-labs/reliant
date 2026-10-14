@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package mcp
 
 import (
 	"context"
@@ -17,14 +17,12 @@ import (
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cmdutil"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ptr"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 const (
@@ -32,41 +30,18 @@ const (
 )
 
 // mcpManagerRuntime starts and stops a user's MCP servers. What they are
-// doing is read through MCPService.serverStatus instead.
+// doing is read through Service.serverStatus instead.
 type mcpManagerRuntime interface {
 	AddProjectServer(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error
 	RemoveProjectServer(projectPath, serverName string) error
 	RestartProjectServer(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error
 }
 
-// MCPService implements the MCPService RPC handlers
-type MCPService struct {
-	reliantv1connect.UnimplementedMCPServiceHandler
-	database     db.Repository
-	daemonRouter toolexec.DaemonRouter
-	// statuses holds the servers' last-known status per user and project
-	// (see mcpStatusCache), so reading the MCP page does not wait on the
-	// user's machine.
-	statuses *mcpStatusCache
-}
-
-// NewMCPService creates a new MCPService
-func NewMCPService(database db.Repository, daemonRouter toolexec.DaemonRouter) *MCPService {
-	s := &MCPService{
-		database:     database,
-		daemonRouter: daemonRouter,
-	}
-	s.statuses = newMCPStatusCache(func(ctx context.Context, userID, projectPath string) (*daemonMCPServerStatus, error) {
-		return NewDaemonMCPProxy(s.daemonRouter, userID).serverStatus(ctx, projectPath)
-	})
-	return s
-}
-
 // mcpManagerForUser returns an mcpManagerRuntime that proxies through the daemon
 // for the given user. MCP servers run on the user's machine (tools daemon), so
 // all runtime operations are dispatched via daemon commands.
-func (s *MCPService) mcpManagerForUser(userID string) mcpManagerRuntime {
-	proxy := NewDaemonMCPProxy(s.daemonRouter, userID)
+func (s *Service) mcpManagerForUser(userID string) mcpManagerRuntime {
+	proxy := newDaemonMCPProxy(s.deps.Router, userID)
 	proxy.onChange = func() { s.statuses.invalidateUser(userID) }
 	return proxy
 }
@@ -74,8 +49,8 @@ func (s *MCPService) mcpManagerForUser(userID string) mcpManagerRuntime {
 // serverStatus is the project's MCP server status as the daemon last reported
 // it, or nil when it is not known (no machine, or one too slow to answer in
 // time). It never waits on the daemon for long: see mcpStatusCache.
-func (s *MCPService) serverStatus(ctx context.Context, userID, projectPath string) *daemonMCPServerStatus {
-	if s.daemonRouter == nil || s.statuses == nil {
+func (s *Service) serverStatus(ctx context.Context, userID, projectPath string) *daemonMCPServerStatus {
+	if s.deps.Router == nil || s.statuses == nil {
 		return nil
 	}
 	return s.statuses.get(ctx, userID, projectPath)
@@ -269,7 +244,7 @@ func readScopeConfigFromStoredRecord(record *db.ProjectConfigRecord, scope relia
 	return &cfg, true, nil
 }
 
-func (s *MCPService) buildUpdatedStoredMCPConfigs(existing *string, scope reliantv1.ConfigScope, updatedScopeCfg *MCPConfigFile) (*string, error) {
+func (s *Service) buildUpdatedStoredMCPConfigs(existing *string, scope reliantv1.ConfigScope, updatedScopeCfg *MCPConfigFile) (*string, error) {
 	scopeConfigs := make(map[string]string)
 	if existing != nil && strings.TrimSpace(*existing) != "" {
 		if err := json.Unmarshal([]byte(*existing), &scopeConfigs); err != nil {
@@ -296,12 +271,12 @@ func (s *MCPService) buildUpdatedStoredMCPConfigs(existing *string, scope relian
 	return &value, nil
 }
 
-func (s *MCPService) persistStoredMCPConfigScopes(
+func (s *Service) persistStoredMCPConfigScopes(
 	ctx context.Context,
 	projectID string,
 	updatedScopes map[reliantv1.ConfigScope]*MCPConfigFile,
 ) error {
-	if s.database == nil || len(updatedScopes) == 0 {
+	if len(updatedScopes) == 0 {
 		return nil
 	}
 
@@ -316,7 +291,7 @@ func (s *MCPService) persistStoredMCPConfigScopes(
 		return nil
 	}
 
-	record, err := s.database.GetProjectConfigRecord(ctx, projectID)
+	record, err := s.deps.Repo.GetProjectConfigRecord(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
@@ -346,23 +321,23 @@ func (s *MCPService) persistStoredMCPConfigScopes(
 
 	record.MCPConfigs = updatedMCPConfigs
 	record.PushedAt = time.Now().UTC()
-	if err := s.database.UpsertProjectConfigRecord(ctx, record); err != nil {
+	if err := s.deps.Repo.UpsertProjectConfigRecord(ctx, record); err != nil {
 		return fmt.Errorf("failed to persist stored MCP configuration snapshot: %w", err)
 	}
 
 	return nil
 }
 
-func (s *MCPService) persistGlobalScopeSnapshotAcrossProjects(
+func (s *Service) persistGlobalScopeSnapshotAcrossProjects(
 	ctx context.Context,
 	sourceProjectID string,
 	globalCfg *MCPConfigFile,
 ) error {
-	if s == nil || s.database == nil || globalCfg == nil {
+	if globalCfg == nil {
 		return nil
 	}
 
-	sourceProject, err := s.database.GetProject(ctx, sourceProjectID)
+	sourceProject, err := s.deps.Repo.GetProject(ctx, sourceProjectID)
 	if err != nil {
 		return fmt.Errorf("failed to resolve source project for global MCP snapshot propagation: %w", err)
 	}
@@ -370,7 +345,7 @@ func (s *MCPService) persistGlobalScopeSnapshotAcrossProjects(
 		return nil
 	}
 
-	projects, err := s.database.ListProjects(ctx, db.ProjectFilters{
+	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{
 		UserID: sourceProject.UserID,
 		Limit:  100000,
 		Offset: 0,
@@ -384,7 +359,7 @@ func (s *MCPService) persistGlobalScopeSnapshotAcrossProjects(
 			continue
 		}
 
-		record, recErr := s.database.GetProjectConfigRecord(ctx, project.ID)
+		record, recErr := s.deps.Repo.GetProjectConfigRecord(ctx, project.ID)
 		if recErr != nil {
 			if errors.Is(recErr, sql.ErrNoRows) {
 				continue
@@ -399,7 +374,7 @@ func (s *MCPService) persistGlobalScopeSnapshotAcrossProjects(
 
 		record.MCPConfigs = updatedMCPConfigs
 		record.PushedAt = time.Now().UTC()
-		if err := s.database.UpsertProjectConfigRecord(ctx, record); err != nil {
+		if err := s.deps.Repo.UpsertProjectConfigRecord(ctx, record); err != nil {
 			return fmt.Errorf("failed to persist propagated global MCP snapshot for project %s: %w", project.ID, err)
 		}
 	}
@@ -426,14 +401,10 @@ func scopeToDaemonWriteScope(scope reliantv1.ConfigScope) string {
 }
 
 // readMCPConfigForScope reads the MCP config for a specific scope from the DB-backed ProjectConfigRecord.
-func (s *MCPService) readMCPConfigForScope(ctx context.Context, projectID string, scope reliantv1.ConfigScope) (*MCPConfigFile, error) {
+func (s *Service) readMCPConfigForScope(ctx context.Context, projectID string, scope reliantv1.ConfigScope) (*MCPConfigFile, error) {
 	normalizedScope := normalizeScope(scope)
 
-	if s.database == nil {
-		return &MCPConfigFile{MCPServers: make(map[string]MCPServerConfig)}, nil
-	}
-
-	mcpConfigs, err := s.database.GetProjectMCPConfigsJSON(ctx, projectID)
+	mcpConfigs, err := s.deps.Repo.GetProjectMCPConfigsJSON(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return &MCPConfigFile{MCPServers: make(map[string]MCPServerConfig)}, nil
@@ -459,11 +430,8 @@ func (s *MCPService) readMCPConfigForScope(ctx context.Context, projectID string
 // used to read it once per scope, and the record carries every skill body
 // the daemon indexed (18 MB in prod), so each MCP page load read it three
 // times to use a few hundred bytes of one column.
-func (s *MCPService) readMergedScopedServers(ctx context.Context, projectID string) (map[string]serverScopeConfig, error) {
-	if s.database == nil {
-		return map[string]serverScopeConfig{}, nil
-	}
-	mcpConfigs, err := s.database.GetProjectMCPConfigsJSON(ctx, projectID)
+func (s *Service) readMergedScopedServers(ctx context.Context, projectID string) (map[string]serverScopeConfig, error) {
+	mcpConfigs, err := s.deps.Repo.GetProjectMCPConfigsJSON(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return map[string]serverScopeConfig{}, nil
@@ -474,8 +442,8 @@ func (s *MCPService) readMergedScopedServers(ctx context.Context, projectID stri
 }
 
 // projectBelongsToUser checks if a project belongs to the authenticated user.
-func (s *MCPService) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
-	_, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
+	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
 			return connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
@@ -485,15 +453,11 @@ func (s *MCPService) projectBelongsToUser(ctx context.Context, projectID string,
 	return nil
 }
 
-func (s *MCPService) getProjectPath(ctx context.Context, projectID string, userID string) (string, error) {
+func (s *Service) getProjectPath(ctx context.Context, projectID string, userID string) (string, error) {
 	if strings.TrimSpace(projectID) == "" {
 		return "", fmt.Errorf("project_id is required")
 	}
-	if s == nil || s.database == nil {
-		return "", fmt.Errorf("database not available")
-	}
-
-	project, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		return "", fmt.Errorf("project not found")
 	}
@@ -504,7 +468,7 @@ func (s *MCPService) getProjectPath(ctx context.Context, projectID string, userI
 	return project.Path, nil
 }
 
-func (s *MCPService) removeServerFromAllScopes(ctx context.Context, projectID, userID, name string) (map[reliantv1.ConfigScope]*MCPConfigFile, error) {
+func (s *Service) removeServerFromAllScopes(ctx context.Context, projectID, userID, name string) (map[reliantv1.ConfigScope]*MCPConfigFile, error) {
 	projectPath, err := s.getProjectPath(ctx, projectID, userID)
 	if err != nil {
 		return nil, err
@@ -535,15 +499,15 @@ func (s *MCPService) removeServerFromAllScopes(ctx context.Context, projectID, u
 	return updatedScopes, nil
 }
 
-func (s *MCPService) ensureProjectLocalGitignore(ctx context.Context, projectID string) {
-	project, err := s.database.GetProject(ctx, projectID)
+func (s *Service) ensureProjectLocalGitignore(ctx context.Context, projectID string) {
+	project, err := s.deps.Repo.GetProject(ctx, projectID)
 	if err != nil {
 		logging.Warn("Failed to get project while ensuring .reliant.local is gitignored", "project_id", projectID, "error", err)
 		return
 	}
 
 	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok || s.daemonRouter == nil {
+	if !ok || s.deps.Router == nil {
 		logging.Warn("Cannot ensure gitignore: no user context or daemon router")
 		return
 	}
@@ -553,18 +517,18 @@ func (s *MCPService) ensureProjectLocalGitignore(ctx context.Context, projectID 
 		Pattern     string `json:"pattern"`
 	}{ProjectPath: project.Path, Pattern: ".reliant.local/"})
 
-	if _, err := s.daemonRouter.SendDaemonCommand(ctx, userID, "mcp.ensure_gitignore", payload, 10000); err != nil {
+	if _, err := s.deps.Router.SendDaemonCommand(ctx, userID, "mcp.ensure_gitignore", payload, 10000); err != nil {
 		logging.Warn("Failed to ensure .reliant.local/ is gitignored via daemon", "project_path", project.Path, "error", err)
 	}
 }
 
 // writeMCPConfigViaDaemon sends a daemon command to write the MCP config file on the daemon's filesystem.
-func (s *MCPService) writeMCPConfigViaDaemon(ctx context.Context, projectID, projectPath string, scope reliantv1.ConfigScope, cfg *MCPConfigFile) error {
+func (s *Service) writeMCPConfigViaDaemon(ctx context.Context, projectID, projectPath string, scope reliantv1.ConfigScope, cfg *MCPConfigFile) error {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return fmt.Errorf("no user context for daemon config write")
 	}
-	if s.daemonRouter == nil {
+	if s.deps.Router == nil {
 		return fmt.Errorf("daemon router not available for config write")
 	}
 
@@ -588,7 +552,7 @@ func (s *MCPService) writeMCPConfigViaDaemon(ctx context.Context, projectID, pro
 
 	// The daemon reloads servers when their config changes.
 	defer s.statuses.invalidateUser(userID)
-	respBytes, err := s.daemonRouter.SendDaemonCommand(ctx, userID, "mcp.write_config", payload, 15000)
+	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "mcp.write_config", payload, 15000)
 	if err != nil {
 		return fmt.Errorf("daemon config write failed: %w", err)
 	}
@@ -739,9 +703,9 @@ func normalizeScope(scope reliantv1.ConfigScope) reliantv1.ConfigScope {
 // ListServers returns all configured MCP servers with their status.
 //
 // The servers and their configuration come from the database; their runtime
-// status is the daemon's last report (see MCPService.serverStatus), so the
+// status is the daemon's last report (see Service.serverStatus), so the
 // list renders without waiting on the user's machine.
-func (s *MCPService) ListServers(
+func (s *Service) ListServers(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListServersRequest],
 ) (*connect.Response[reliantv1.ListServersResponse], error) {
@@ -763,7 +727,7 @@ func (s *MCPService) ListServers(
 	}
 
 	// Check if MCP manager is available
-	if s.daemonRouter == nil {
+	if s.deps.Router == nil {
 		return connect.NewResponse(&reliantv1.ListServersResponse{
 			Servers: []*reliantv1.MCPServer{},
 			Total:   int32(len(scopedServers)),
@@ -804,7 +768,7 @@ func (s *MCPService) ListServers(
 }
 
 // GetServer returns detailed information about a specific MCP server
-func (s *MCPService) GetServer(
+func (s *Service) GetServer(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetServerRequest],
 ) (*connect.Response[reliantv1.GetServerResponse], error) {
@@ -829,7 +793,7 @@ func (s *MCPService) GetServer(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read MCP configuration: %w", err))
 	}
 
-	if s.daemonRouter == nil {
+	if s.deps.Router == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("MCP not available"))
 	}
 
@@ -855,7 +819,7 @@ func (s *MCPService) GetServer(
 }
 
 // GetServerTools returns the list of tools exposed by a specific MCP server.
-func (s *MCPService) GetServerTools(
+func (s *Service) GetServerTools(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetServerToolsRequest],
 ) (*connect.Response[reliantv1.GetServerToolsResponse], error) {
@@ -889,7 +853,7 @@ func (s *MCPService) GetServerTools(
 		return connect.NewResponse(&reliantv1.GetServerToolsResponse{Tools: []*reliantv1.MCPTool{}, Total: 0}), nil
 	}
 
-	if s.daemonRouter == nil {
+	if s.deps.Router == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("MCP not available"))
 	}
 
@@ -900,7 +864,7 @@ func (s *MCPService) GetServerTools(
 
 	// The tools themselves are a live question for the server; ask within
 	// the request's own budget.
-	tools, err := NewDaemonMCPProxy(s.daemonRouter, userID).listTools(ctx, projectPath, name)
+	tools, err := newDaemonMCPProxy(s.deps.Router, userID).listTools(ctx, projectPath, name)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list tools: %w", err))
 	}
@@ -924,7 +888,7 @@ func (s *MCPService) GetServerTools(
 }
 
 // InstallServer installs a new MCP server
-func (s *MCPService) InstallServer(
+func (s *Service) InstallServer(
 	ctx context.Context,
 	req *connect.Request[reliantv1.InstallServerRequest],
 ) (*connect.Response[reliantv1.InstallServerResponse], error) {
@@ -949,7 +913,7 @@ func (s *MCPService) InstallServer(
 	scope := req.Msg.Scope
 	logging.Debug("InstallServer request received", "project_id", projectID, "name", name, "scope", scope.String())
 
-	if s.daemonRouter == nil {
+	if s.deps.Router == nil {
 		logging.Error("InstallServer: MCP manager is nil")
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP not available - manager not initialized"))
 	}
@@ -1065,7 +1029,7 @@ func (s *MCPService) InstallServer(
 	logging.Info("MCP server installed successfully", "name", name, "scope", scope.String())
 
 	if userID, ok := auth.GetUserIDFromContext(ctx); ok {
-		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
+		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
 			logging.Warn("Failed to emit config_health refetch after InstallServer", "error", err)
 		}
 	}
@@ -1104,13 +1068,13 @@ func installSkillBundleTargetDir(projectPath string, scope reliantv1.ConfigScope
 	}
 }
 
-func (s *MCPService) installBundledSkillsForRecommended(ctx context.Context, projectPath string, scope reliantv1.ConfigScope, rec *config.RecommendedMCP) (string, error) {
+func (s *Service) installBundledSkillsForRecommended(ctx context.Context, projectPath string, scope reliantv1.ConfigScope, rec *config.RecommendedMCP) (string, error) {
 	if rec == nil || rec.Bundles == nil || len(rec.Bundles.Skills) == 0 {
 		return "", nil
 	}
 
 	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok || s.daemonRouter == nil {
+	if !ok || s.deps.Router == nil {
 		return "", fmt.Errorf("cannot install bundles: no user context or daemon router")
 	}
 
@@ -1144,7 +1108,7 @@ func (s *MCPService) installBundledSkillsForRecommended(ctx context.Context, pro
 			return "", fmt.Errorf("failed to marshal bundle install request: %w", err)
 		}
 
-		respBytes, err := s.daemonRouter.SendDaemonCommand(ctx, userID, "mcp.install_bundle", payload, 30000)
+		respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "mcp.install_bundle", payload, 30000)
 		if err != nil {
 			return "", fmt.Errorf("daemon bundle install failed: %w", err)
 		}
@@ -1175,9 +1139,9 @@ func (s *MCPService) installBundledSkillsForRecommended(ctx context.Context, pro
 }
 
 // checkResourceExistsViaDaemon checks whether a file/path exists on the daemon's filesystem.
-func (s *MCPService) checkResourceExistsViaDaemon(ctx context.Context, path string) bool {
+func (s *Service) checkResourceExistsViaDaemon(ctx context.Context, path string) bool {
 	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok || s.daemonRouter == nil {
+	if !ok || s.deps.Router == nil {
 		return false
 	}
 
@@ -1185,7 +1149,7 @@ func (s *MCPService) checkResourceExistsViaDaemon(ctx context.Context, path stri
 		Path string `json:"path"`
 	}{Path: path})
 
-	respBytes, err := s.daemonRouter.SendDaemonCommand(ctx, userID, "mcp.check_resource", payload, 5000)
+	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "mcp.check_resource", payload, 5000)
 	if err != nil {
 		return false
 	}
@@ -1199,7 +1163,7 @@ func (s *MCPService) checkResourceExistsViaDaemon(ctx context.Context, path stri
 	return resp.Exists
 }
 
-func (s *MCPService) preflightMCPServer(ctx context.Context, name string, cfg config.MCPServer) error {
+func (s *Service) preflightMCPServer(ctx context.Context, name string, cfg config.MCPServer) error {
 	name = strings.ToLower(strings.TrimSpace(name))
 
 	if cfg.Type == "" {
@@ -1296,7 +1260,7 @@ func (s *MCPService) preflightMCPServer(ctx context.Context, name string, cfg co
 }
 
 // UninstallServer removes an MCP server
-func (s *MCPService) UninstallServer(
+func (s *Service) UninstallServer(
 	ctx context.Context,
 	req *connect.Request[reliantv1.UninstallServerRequest],
 ) (*connect.Response[reliantv1.UninstallServerResponse], error) {
@@ -1316,7 +1280,7 @@ func (s *MCPService) UninstallServer(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("server name is required"))
 	}
 
-	if s.daemonRouter == nil {
+	if s.deps.Router == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("MCP not available"))
 	}
 
@@ -1338,7 +1302,7 @@ func (s *MCPService) UninstallServer(
 
 	logging.Info("MCP server uninstalled successfully", "name", name)
 
-	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
+	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
 		logging.Warn("Failed to emit config_health refetch after UninstallServer", "error", err)
 	}
 
@@ -1350,7 +1314,7 @@ func (s *MCPService) UninstallServer(
 }
 
 // RestartServer restarts an MCP server
-func (s *MCPService) RestartServer(
+func (s *Service) RestartServer(
 	ctx context.Context,
 	req *connect.Request[reliantv1.RestartServerRequest],
 ) (*connect.Response[reliantv1.RestartServerResponse], error) {
@@ -1370,7 +1334,7 @@ func (s *MCPService) RestartServer(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("server name is required"))
 	}
 
-	if s.daemonRouter == nil {
+	if s.deps.Router == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("MCP not available"))
 	}
 
@@ -1432,7 +1396,7 @@ func (s *MCPService) RestartServer(
 	}
 
 	if userID, ok := auth.GetUserIDFromContext(ctx); ok {
-		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
+		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
 			logging.Warn("Failed to emit config_health refetch after RestartServer", "error", err)
 		}
 	}
@@ -1445,7 +1409,7 @@ func (s *MCPService) RestartServer(
 }
 
 // ListRecommended returns a list of recommended MCP servers
-func (s *MCPService) ListRecommended(
+func (s *Service) ListRecommended(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListRecommendedRequest],
 ) (*connect.Response[reliantv1.ListRecommendedResponse], error) {
@@ -1560,7 +1524,7 @@ func (s *MCPService) ListRecommended(
 }
 
 // UpdateServerConfig updates the configuration of an MCP server
-func (s *MCPService) UpdateServerConfig(
+func (s *Service) UpdateServerConfig(
 	ctx context.Context,
 	req *connect.Request[reliantv1.UpdateServerConfigRequest],
 ) (*connect.Response[reliantv1.UpdateServerConfigResponse], error) {
@@ -1621,7 +1585,7 @@ func (s *MCPService) UpdateServerConfig(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	if s.daemonRouter != nil {
+	if s.deps.Router != nil {
 		mgr := s.mcpManagerForUser(userID)
 		if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
 			logging.Warn("Failed to remove server before restart", "error", err)
@@ -1636,7 +1600,7 @@ func (s *MCPService) UpdateServerConfig(
 	}
 
 	if userID, ok := auth.GetUserIDFromContext(ctx); ok {
-		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
+		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
 			logging.Warn("Failed to emit config_health refetch after UpdateServerConfig", "error", err)
 		}
 	}
@@ -1645,7 +1609,7 @@ func (s *MCPService) UpdateServerConfig(
 }
 
 // SetServerEnabled toggles whether a server is enabled without uninstalling.
-func (s *MCPService) SetServerEnabled(
+func (s *Service) SetServerEnabled(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SetServerEnabledRequest],
 ) (*connect.Response[reliantv1.SetServerEnabledResponse], error) {
@@ -1697,7 +1661,7 @@ func (s *MCPService) SetServerEnabled(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	if s.daemonRouter != nil {
+	if s.deps.Router != nil {
 		mgr := s.mcpManagerForUser(userID)
 		if req.Msg.Enabled {
 			if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
@@ -1758,7 +1722,7 @@ func (s *MCPService) SetServerEnabled(
 }
 
 // MoveServerScope moves a server configuration between scopes.
-func (s *MCPService) MoveServerScope(
+func (s *Service) MoveServerScope(
 	ctx context.Context,
 	req *connect.Request[reliantv1.MoveServerScopeRequest],
 ) (*connect.Response[reliantv1.MoveServerScopeResponse], error) {
@@ -1839,7 +1803,7 @@ func (s *MCPService) MoveServerScope(
 		s.ensureProjectLocalGitignore(ctx, projectID)
 	}
 
-	if s.daemonRouter != nil {
+	if s.deps.Router != nil {
 		mgr := s.mcpManagerForUser(userID)
 		if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
 			logging.Warn("Failed to remove server before restarting after scope move", "name", name, "error", err)

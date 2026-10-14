@@ -1,4 +1,4 @@
-package services
+package mcp
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/mcp"
+	mcpclient "github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/require"
 )
@@ -104,7 +104,7 @@ func TestMCPService_SetServerEnabled_UpdatesStatusAcrossToggles(t *testing.T) {
 	require.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISABLED, server.Status)
 }
 
-func setupMCPServiceToggleTest(t *testing.T) (context.Context, *MCPService, *fakeMCPManagerRuntime, string) {
+func setupMCPServiceToggleTest(t *testing.T) (context.Context, *Service, *fakeMCPManagerRuntime, string) {
 	t.Helper()
 
 	repo, cleanup := db.SetupTestDB(t)
@@ -116,7 +116,7 @@ func setupMCPServiceToggleTest(t *testing.T) (context.Context, *MCPService, *fak
 	manager := newFakeMCPManagerRuntime()
 	router := newFakeMCPDaemonRouter(manager)
 
-	svc := NewMCPService(repo, router)
+	svc := newMCPService(t, repo, router)
 
 	projectPath := filepath.Join(t.TempDir(), "project")
 	require.NoError(t, os.MkdirAll(projectPath, 0o755))
@@ -148,14 +148,14 @@ func TestMCPService_SetServerEnabled_EnableStatusBecomesHealthyWhenManagerHasCli
 	manager.startErr = nil
 	manager.addClient = &fakeManagerClient{
 		connected: true,
-		tools: []mcp.Tool{
+		tools: []mcpclient.Tool{
 			{Name: "tool-a", Description: "A tool"},
 		},
-		info: &mcp.ServerInfo{
+		info: &mcpclient.ServerInfo{
 			Name:    "fake-server",
 			Version: "1.0.0",
-			Capabilities: mcp.ServerCapabilities{
-				Tools: &mcp.ToolsCapability{},
+			Capabilities: mcpclient.ServerCapabilities{
+				Tools: &mcpclient.ToolsCapability{},
 			},
 		},
 	}
@@ -220,11 +220,11 @@ func TestMCPService_SetServerEnabled_SuccessfulReenableClearsLastError(t *testin
 	manager.startErr = nil
 	manager.addClient = &fakeManagerClient{
 		connected: true,
-		tools:     []mcp.Tool{{Name: "tool-a", Description: "A tool"}},
-		info: &mcp.ServerInfo{
+		tools:     []mcpclient.Tool{{Name: "tool-a", Description: "A tool"}},
+		info: &mcpclient.ServerInfo{
 			Name:         "fake-server",
 			Version:      "1.0.0",
-			Capabilities: mcp.ServerCapabilities{Tools: &mcp.ToolsCapability{}},
+			Capabilities: mcpclient.ServerCapabilities{Tools: &mcpclient.ToolsCapability{}},
 		},
 	}
 
@@ -290,7 +290,7 @@ func TestMCPService_ListServers_PrefersStoredConfigSnapshotOverFilesystem(t *tes
 		PushedAt:   now,
 	}))
 
-	svc := NewMCPService(repo, newFakeMCPDaemonRouter(newFakeMCPManagerRuntime()))
+	svc := newMCPService(t, repo, newFakeMCPDaemonRouter(newFakeMCPManagerRuntime()))
 
 	server := getServerFromList(t, svc, ctx, projectID, "toggle-server")
 	require.False(t, server.Enabled, "stored config should override filesystem fallback")
@@ -304,7 +304,7 @@ func TestMCPService_SetServerEnabled_UpdatesStoredSnapshot(t *testing.T) {
 	// Seed stored snapshot with enabled=true so we can verify write-through update.
 	now := time.Now().UTC()
 	storedMCP := `{"project":"{\"mcpServers\":{\"toggle-server\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":true}}}"}`
-	require.NoError(t, svc.database.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedMCP,
@@ -318,7 +318,7 @@ func TestMCPService_SetServerEnabled_UpdatesStoredSnapshot(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	record, err := svc.database.GetProjectConfigRecord(ctx, projectID)
+	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	require.NotNil(t, record.MCPConfigs)
@@ -335,7 +335,7 @@ func TestMCPService_UpdateServerConfig_UpdatesStoredSnapshot(t *testing.T) {
 
 	now := time.Now().UTC()
 	storedMCP := `{"project":"{\"mcpServers\":{\"toggle-server\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":true}}}"}`
-	require.NoError(t, svc.database.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedMCP,
@@ -351,7 +351,7 @@ func TestMCPService_UpdateServerConfig_UpdatesStoredSnapshot(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	record, err := svc.database.GetProjectConfigRecord(ctx, projectID)
+	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
 	storedServers := readMergedScopedServersFromStoredRecord(record)
 	require.Contains(t, storedServers, "toggle-server")
@@ -363,7 +363,7 @@ func TestMCPService_InstallServer_PersistsToStoredSnapshot(t *testing.T) {
 	manager.startErr = nil
 
 	now := time.Now().UTC()
-	require.NoError(t, svc.database.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
 		ProjectID: projectID,
 		DaemonID:  "daemon-test",
 		PushedAt:  now,
@@ -381,7 +381,7 @@ func TestMCPService_InstallServer_PersistsToStoredSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	record, err := svc.database.GetProjectConfigRecord(ctx, projectID)
+	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
 	storedServers := readMergedScopedServersFromStoredRecord(record)
 	require.Contains(t, storedServers, "installed-server")
@@ -395,7 +395,7 @@ func TestMCPService_MoveServerScope_UsesStoredSnapshotAndPersistsMove(t *testing
 	// Stored snapshot has server in project scope and empty local scope.
 	now := time.Now().UTC()
 	storedMCP := `{"project":"{\"mcpServers\":{\"toggle-server\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":true}}}","local":"{\"mcpServers\":{}}"}`
-	require.NoError(t, svc.database.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedMCP,
@@ -411,7 +411,7 @@ func TestMCPService_MoveServerScope_UsesStoredSnapshotAndPersistsMove(t *testing
 	require.True(t, resp.Msg.Success)
 	require.Equal(t, reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL, resp.Msg.Scope)
 
-	record, err := svc.database.GetProjectConfigRecord(ctx, projectID)
+	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	servers := readMergedScopedServersFromStoredRecord(record)
@@ -425,7 +425,7 @@ func TestMCPService_UninstallServer_RemovesFromStoredSnapshot(t *testing.T) {
 
 	now := time.Now().UTC()
 	storedMCP := `{"project":"{\"mcpServers\":{\"toggle-server\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":true}}}"}`
-	require.NoError(t, svc.database.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedMCP,
@@ -439,7 +439,7 @@ func TestMCPService_UninstallServer_RemovesFromStoredSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	record, err := svc.database.GetProjectConfigRecord(ctx, projectID)
+	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	servers := readMergedScopedServersFromStoredRecord(record)
@@ -451,7 +451,7 @@ func TestMCPService_ReadMergedScopedServers_GlobalScopeUsesStoredRecord(t *testi
 
 	now := time.Now().UTC()
 	storedGlobal := `{"user":"{\"mcpServers\":{\"shared-global\":{\"command\":\"global-cmd\",\"args\":[\"--from-db\"],\"enabled\":true}}}"}`
-	require.NoError(t, svc.database.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedGlobal,
@@ -506,7 +506,7 @@ func TestMCPService_SetServerEnabled_GlobalScopePropagatesStoredSnapshotAcrossPr
 	require.NoError(t, os.MkdirAll(filepath.Dir(globalPath), 0o755))
 	require.NoError(t, os.WriteFile(globalPath, []byte(`{"mcpServers":{"shared-global":{"command":"go","args":["version"],"enabled":true}}}`), 0o644))
 
-	svc := NewMCPService(repo, newFakeMCPDaemonRouter(newFakeMCPManagerRuntime()))
+	svc := newMCPService(t, repo, newFakeMCPDaemonRouter(newFakeMCPManagerRuntime()))
 	_, err := svc.SetServerEnabled(ctx, connect.NewRequest(&reliantv1.SetServerEnabledRequest{
 		ProjectId: projectA,
 		Name:      "shared-global",
@@ -527,7 +527,7 @@ func TestMCPService_SetServerEnabled_GlobalScopePropagatesStoredSnapshotAcrossPr
 	require.False(t, serversB["shared-global"].Config.IsEnabled())
 }
 
-func seedMCPServerConfig(t *testing.T, svc *MCPService, ctx context.Context, projectID string, enabled bool) {
+func seedMCPServerConfig(t *testing.T, svc *Service, ctx context.Context, projectID string, enabled bool) {
 	t.Helper()
 
 	enabledStr := "true"
@@ -536,7 +536,7 @@ func seedMCPServerConfig(t *testing.T, svc *MCPService, ctx context.Context, pro
 	}
 	storedMCP := fmt.Sprintf(`{"project":"{\"mcpServers\":{\"toggle-server\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":%s}}}"}`, enabledStr)
 	now := time.Now().UTC()
-	require.NoError(t, svc.database.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedMCP,
@@ -546,8 +546,8 @@ func seedMCPServerConfig(t *testing.T, svc *MCPService, ctx context.Context, pro
 
 type fakeManagerClient struct {
 	connected bool
-	tools     []mcp.Tool
-	info      *mcp.ServerInfo
+	tools     []mcpclient.Tool
+	info      *mcpclient.ServerInfo
 }
 
 func (c *fakeManagerClient) Initialize(ctx context.Context) error {
@@ -555,30 +555,30 @@ func (c *fakeManagerClient) Initialize(ctx context.Context) error {
 	return nil
 }
 
-func (c *fakeManagerClient) ListTools() ([]mcp.Tool, error) {
+func (c *fakeManagerClient) ListTools() ([]mcpclient.Tool, error) {
 	return c.tools, nil
 }
 
-func (c *fakeManagerClient) CallTool(name string, arguments map[string]interface{}) (*mcp.ToolResult, error) {
+func (c *fakeManagerClient) CallTool(name string, arguments map[string]interface{}) (*mcpclient.ToolResult, error) {
 	_ = name
 	_ = arguments
-	return &mcp.ToolResult{}, nil
+	return &mcpclient.ToolResult{}, nil
 }
 
-func (c *fakeManagerClient) ListResources() ([]mcp.Resource, error) {
+func (c *fakeManagerClient) ListResources() ([]mcpclient.Resource, error) {
 	return nil, nil
 }
 
-func (c *fakeManagerClient) ReadResource(uri string) (*mcp.ResourceContent, error) {
+func (c *fakeManagerClient) ReadResource(uri string) (*mcpclient.ResourceContent, error) {
 	_ = uri
 	return nil, nil
 }
 
-func (c *fakeManagerClient) ListPrompts() ([]mcp.Prompt, error) {
+func (c *fakeManagerClient) ListPrompts() ([]mcpclient.Prompt, error) {
 	return nil, nil
 }
 
-func (c *fakeManagerClient) GetPrompt(name string, arguments map[string]interface{}) (*mcp.PromptResult, error) {
+func (c *fakeManagerClient) GetPrompt(name string, arguments map[string]interface{}) (*mcpclient.PromptResult, error) {
 	_ = name
 	_ = arguments
 	return nil, nil
@@ -593,25 +593,25 @@ func (c *fakeManagerClient) IsConnected() bool {
 	return c.connected
 }
 
-func (c *fakeManagerClient) ServerInfo() *mcp.ServerInfo {
+func (c *fakeManagerClient) ServerInfo() *mcpclient.ServerInfo {
 	if c.info != nil {
 		return c.info
 	}
-	return &mcp.ServerInfo{Capabilities: mcp.ServerCapabilities{Tools: &mcp.ToolsCapability{}}}
+	return &mcpclient.ServerInfo{Capabilities: mcpclient.ServerCapabilities{Tools: &mcpclient.ToolsCapability{}}}
 }
 
 type fakeMCPManagerRuntime struct {
-	clientByName   map[string]mcp.Client
+	clientByName   map[string]mcpclient.Client
 	healthByName   map[string]bool
 	lastErrByName  map[string]error
 	projectServers map[string]map[string]bool // projectPath -> set of server names
 	startErr       error
-	addClient      mcp.Client
+	addClient      mcpclient.Client
 }
 
 func newFakeMCPManagerRuntime() *fakeMCPManagerRuntime {
 	return &fakeMCPManagerRuntime{
-		clientByName:   make(map[string]mcp.Client),
+		clientByName:   make(map[string]mcpclient.Client),
 		healthByName:   make(map[string]bool),
 		lastErrByName:  make(map[string]error),
 		projectServers: make(map[string]map[string]bool),
@@ -631,7 +631,7 @@ func (m *fakeMCPManagerRuntime) AddServer(ctx context.Context, name string, cfg 
 	if m.addClient != nil {
 		m.clientByName[name] = m.addClient
 	} else if _, exists := m.clientByName[name]; !exists {
-		m.clientByName[name] = &fakeManagerClient{connected: true, info: &mcp.ServerInfo{Capabilities: mcp.ServerCapabilities{Tools: &mcp.ToolsCapability{}}}}
+		m.clientByName[name] = &fakeManagerClient{connected: true, info: &mcpclient.ServerInfo{Capabilities: mcpclient.ServerCapabilities{Tools: &mcpclient.ToolsCapability{}}}}
 	}
 	m.healthByName[name] = true
 	delete(m.lastErrByName, name)
@@ -690,9 +690,9 @@ func (m *fakeMCPManagerRuntime) RestartProjectServer(ctx context.Context, projec
 	return m.AddProjectServer(ctx, projectPath, serverName, cfg)
 }
 
-func (m *fakeMCPManagerRuntime) GetProjectClients(projectPath string) map[string]mcp.Client {
+func (m *fakeMCPManagerRuntime) GetProjectClients(projectPath string) map[string]mcpclient.Client {
 	normalizedProjectPath := filepath.Clean(projectPath)
-	result := make(map[string]mcp.Client)
+	result := make(map[string]mcpclient.Client)
 	for name := range m.projectServers[normalizedProjectPath] {
 		if client, exists := m.clientByName[name]; exists {
 			result[name] = client
@@ -716,7 +716,7 @@ func (m *fakeMCPManagerRuntime) GetProjectLastError(_, serverName string) error 
 	return m.lastErrByName[serverName]
 }
 
-func (m *fakeMCPManagerRuntime) GetProjectClient(projectPath, serverName string) (mcp.Client, bool) {
+func (m *fakeMCPManagerRuntime) GetProjectClient(projectPath, serverName string) (mcpclient.Client, bool) {
 	normalizedProjectPath := filepath.Clean(projectPath)
 	if servers, ok := m.projectServers[normalizedProjectPath]; ok && servers[serverName] {
 		client, exists := m.clientByName[serverName]
@@ -725,8 +725,8 @@ func (m *fakeMCPManagerRuntime) GetProjectClient(projectPath, serverName string)
 	return nil, false
 }
 
-func (m *fakeMCPManagerRuntime) GetAllClients() map[string]mcp.Client {
-	copyMap := make(map[string]mcp.Client, len(m.clientByName))
+func (m *fakeMCPManagerRuntime) GetAllClients() map[string]mcpclient.Client {
+	copyMap := make(map[string]mcpclient.Client, len(m.clientByName))
 	for k, v := range m.clientByName {
 		copyMap[k] = v
 	}
@@ -745,7 +745,7 @@ func (m *fakeMCPManagerRuntime) GetLastError(name string) error {
 	return m.lastErrByName[name]
 }
 
-func (m *fakeMCPManagerRuntime) GetClient(name string) (mcp.Client, bool) {
+func (m *fakeMCPManagerRuntime) GetClient(name string) (mcpclient.Client, bool) {
 	client, ok := m.clientByName[name]
 	return client, ok
 }
@@ -900,11 +900,11 @@ func (r *fakeMCPDaemonRouter) SendDaemonCommand(_ context.Context, _ string, com
 		}
 		client, ok := r.mgr.GetProjectClient(req.ProjectPath, req.ServerName)
 		if !ok {
-			return json.Marshal(map[string]interface{}{"tools": []mcp.Tool{}})
+			return json.Marshal(map[string]interface{}{"tools": []mcpclient.Tool{}})
 		}
 		tools, err := client.ListTools()
 		if err != nil {
-			return json.Marshal(map[string]interface{}{"tools": []mcp.Tool{}, "error": err.Error()})
+			return json.Marshal(map[string]interface{}{"tools": []mcpclient.Tool{}, "error": err.Error()})
 		}
 		return json.Marshal(map[string]interface{}{"tools": tools})
 
@@ -916,7 +916,7 @@ func (r *fakeMCPDaemonRouter) SendDaemonCommand(_ context.Context, _ string, com
 	}
 }
 
-func getServerFromList(t *testing.T, svc *MCPService, ctx context.Context, projectID, serverName string) *reliantv1.MCPServer {
+func getServerFromList(t *testing.T, svc *Service, ctx context.Context, projectID, serverName string) *reliantv1.MCPServer {
 	t.Helper()
 
 	listResp, err := svc.ListServers(ctx, connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: projectID}))

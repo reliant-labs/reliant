@@ -68,8 +68,10 @@ const (
 // MCPServiceClient is a client for the reliant.v1.MCPService service.
 type MCPServiceClient interface {
 	// ListServers returns all configured MCP servers with their status
+	// forge:custom — merges the project's three config scopes with the daemon's live server status
 	ListServers(context.Context, *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error)
 	// GetServer returns detailed information about a specific MCP server
+	// forge:custom — resolves one server across the project's config scopes and the daemon's live status
 	GetServer(context.Context, *connect.Request[v1.GetServerRequest]) (*connect.Response[v1.GetServerResponse], error)
 	// GetServerTools returns the list of tools exposed by a specific MCP server
 	GetServerTools(context.Context, *connect.Request[v1.GetServerToolsRequest]) (*connect.Response[v1.GetServerToolsResponse], error)
@@ -230,8 +232,10 @@ func (c *mCPServiceClient) MoveServerScope(ctx context.Context, req *connect.Req
 // MCPServiceHandler is an implementation of the reliant.v1.MCPService service.
 type MCPServiceHandler interface {
 	// ListServers returns all configured MCP servers with their status
+	// forge:custom — merges the project's three config scopes with the daemon's live server status
 	ListServers(context.Context, *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error)
 	// GetServer returns detailed information about a specific MCP server
+	// forge:custom — resolves one server across the project's config scopes and the daemon's live status
 	GetServer(context.Context, *connect.Request[v1.GetServerRequest]) (*connect.Response[v1.GetServerResponse], error)
 	// GetServerTools returns the list of tools exposed by a specific MCP server
 	GetServerTools(context.Context, *connect.Request[v1.GetServerToolsRequest]) (*connect.Response[v1.GetServerToolsResponse], error)

@@ -291,6 +291,36 @@
     "internal/handlers/inbox/handlers_scaffold_restore_inbox_item_test.go": {
       "scaffolded_at": "2026-10-14T04:37:10Z"
     },
+    "internal/handlers/mcp/handlers_scaffold_get_server_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:39Z"
+    },
+    "internal/handlers/mcp/handlers_scaffold_get_server_tools_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:39Z"
+    },
+    "internal/handlers/mcp/handlers_scaffold_install_server_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:39Z"
+    },
+    "internal/handlers/mcp/handlers_scaffold_list_recommended_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:39Z"
+    },
+    "internal/handlers/mcp/handlers_scaffold_list_servers_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:39Z"
+    },
+    "internal/handlers/mcp/handlers_scaffold_move_server_scope_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:39Z"
+    },
+    "internal/handlers/mcp/handlers_scaffold_restart_server_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:39Z"
+    },
+    "internal/handlers/mcp/handlers_scaffold_set_server_enabled_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:39Z"
+    },
+    "internal/handlers/mcp/handlers_scaffold_uninstall_server_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:39Z"
+    },
+    "internal/handlers/mcp/handlers_scaffold_update_server_config_test.go": {
+      "scaffolded_at": "2026-10-14T19:13:39Z"
+    },
     "internal/handlers/message/handlers_scaffold_get_message_test.go": {
       "scaffolded_at": "2026-10-13T13:35:41Z"
     },
@@ -824,6 +854,14 @@
     "internal/handlers/forge/handlers_scaffold_plan_promote_test.go",
     "internal/handlers/forge/handlers_scaffold_start_deploy_test.go",
     "internal/handlers/forge/handlers_scaffold_verify_env_test.go",
+    "internal/handlers/mcp/handlers_scaffold_get_server_test.go",
+    "internal/handlers/mcp/handlers_scaffold_get_server_tools_test.go",
+    "internal/handlers/mcp/handlers_scaffold_install_server_test.go",
+    "internal/handlers/mcp/handlers_scaffold_list_servers_test.go",
+    "internal/handlers/mcp/handlers_scaffold_move_server_scope_test.go",
+    "internal/handlers/mcp/handlers_scaffold_set_server_enabled_test.go",
+    "internal/handlers/mcp/handlers_scaffold_uninstall_server_test.go",
+    "internal/handlers/mcp/handlers_scaffold_update_server_config_test.go",
     "internal/handlers/package_commands/handlers_scaffold_list_commands_test.go",
     "internal/handlers/preset/handlers_scaffold_create_preset_test.go",
     "internal/handlers/preset/handlers_scaffold_delete_preset_test.go",

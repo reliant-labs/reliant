@@ -14206,6 +14206,1609 @@
       ]
     },
     {
+      "id": "service-mcp",
+      "title": "reliant: mcp service",
+      "description": "RED per rpc of reliant.v1.MCPService (server spans named reliant.v1.MCPService/\u003cMethod\u003e), Go runtime and logs. The Go runtime panels describe the PROCESS that serves this service: narrow with the service.name filter.",
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name"
+        },
+        {
+          "id": "env",
+          "label": "deployment.environment.name",
+          "field": "deployment.environment.name"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
+        }
+      ],
+      "panels": [
+        {
+          "id": "requests",
+          "title": "Requests",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "reliant.v1.MCPService/"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "id": "errors",
+          "title": "Server errors",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "reliant.v1.MCPService/"
+            },
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "id": "p95",
+          "title": "p95 latency",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "reliant.v1.MCPService/"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "id": "red-by-rpc",
+          "title": "Rate, errors and latency by rpc",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "reliant.v1.MCPService/"
+            }
+          ],
+          "groupBy": [
+            "span.name"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "id": "rpc-GetServer-rate",
+          "title": "GetServer: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/GetServer"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetServer-errors",
+          "title": "GetServer: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/GetServer"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetServer-latency",
+          "title": "GetServer: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/GetServer"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetServerTools-rate",
+          "title": "GetServerTools: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/GetServerTools"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetServerTools-errors",
+          "title": "GetServerTools: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/GetServerTools"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-GetServerTools-latency",
+          "title": "GetServerTools: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/GetServerTools"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-InstallServer-rate",
+          "title": "InstallServer: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/InstallServer"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-InstallServer-errors",
+          "title": "InstallServer: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/InstallServer"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-InstallServer-latency",
+          "title": "InstallServer: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/InstallServer"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListRecommended-rate",
+          "title": "ListRecommended: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/ListRecommended"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListRecommended-errors",
+          "title": "ListRecommended: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/ListRecommended"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListRecommended-latency",
+          "title": "ListRecommended: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/ListRecommended"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListServers-rate",
+          "title": "ListServers: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/ListServers"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListServers-errors",
+          "title": "ListServers: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/ListServers"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-ListServers-latency",
+          "title": "ListServers: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/ListServers"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-MoveServerScope-rate",
+          "title": "MoveServerScope: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/MoveServerScope"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-MoveServerScope-errors",
+          "title": "MoveServerScope: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/MoveServerScope"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-MoveServerScope-latency",
+          "title": "MoveServerScope: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/MoveServerScope"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-RestartServer-rate",
+          "title": "RestartServer: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/RestartServer"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-RestartServer-errors",
+          "title": "RestartServer: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/RestartServer"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-RestartServer-latency",
+          "title": "RestartServer: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/RestartServer"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-SetServerEnabled-rate",
+          "title": "SetServerEnabled: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/SetServerEnabled"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-SetServerEnabled-errors",
+          "title": "SetServerEnabled: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/SetServerEnabled"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-SetServerEnabled-latency",
+          "title": "SetServerEnabled: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/SetServerEnabled"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-UninstallServer-rate",
+          "title": "UninstallServer: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/UninstallServer"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-UninstallServer-errors",
+          "title": "UninstallServer: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/UninstallServer"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-UninstallServer-latency",
+          "title": "UninstallServer: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/UninstallServer"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-UpdateServerConfig-rate",
+          "title": "UpdateServerConfig: requests",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/UpdateServerConfig"
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-UpdateServerConfig-errors",
+          "title": "UpdateServerConfig: error rate",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/UpdateServerConfig"
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "rpc-UpdateServerConfig-latency",
+          "title": "UpdateServerConfig: latency",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "reliant.v1.MCPService/UpdateServerConfig"
+            }
+          ],
+          "unit": "ms",
+          "width": 8,
+          "height": 6
+        },
+        {
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "go-memory",
+          "title": "Go memory used",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "used",
+              "agg": "sum",
+              "field": "go.memory.used",
+              "metricType": "sum"
+            },
+            {
+              "label": "gc goal",
+              "agg": "avg",
+              "field": "go.memory.gc.goal",
+              "metricType": "sum"
+            }
+          ],
+          "unit": "bytes",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "go-goroutines",
+          "title": "Goroutines",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "goroutines",
+              "agg": "sum",
+              "field": "go.goroutine.count",
+              "metricType": "sum"
+            }
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "go-alloc",
+          "title": "Heap allocation",
+          "description": "Bytes allocated to the heap per time bucket: the rate the garbage collector has to keep up with.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "allocated",
+              "agg": "sum",
+              "field": "go.memory.allocated",
+              "metricType": "sum"
+            }
+          ],
+          "unit": "bytes",
+          "width": 24,
+          "height": 7
+        },
+        {
+          "id": "error-logs",
+          "title": "Error logs",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "log.attr.procedure",
+              "op": "prefix",
+              "value": "/reliant.v1.MCPService/"
+            },
+            {
+              "field": "log.severity",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "log.severity",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 9
+        },
+        {
+          "id": "logs",
+          "title": "Logs",
+          "description": "Every record whose rpc procedure belongs to this service.",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "log.attr.procedure",
+              "op": "prefix",
+              "value": "/reliant.v1.MCPService/"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "log.severity",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 9
+        }
+      ]
+    },
+    {
       "id": "service-message",
       "title": "reliant: message service",
       "description": "RED per rpc of reliant.v1.MessageService (server spans named reliant.v1.MessageService/\u003cMethod\u003e), Go runtime and logs. The Go runtime panels describe the PROCESS that serves this service: narrow with the service.name filter.",
@@ -38299,6 +39902,29 @@
           "field": "log.attr.procedure",
           "op": "prefix",
           "value": "/reliant.v1.InboxService/"
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ]
+    },
+    {
+      "id": "errors-mcp",
+      "title": "mcp: error logs",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "log.attr.procedure",
+          "op": "prefix",
+          "value": "/reliant.v1.MCPService/"
         },
         {
           "field": "log.severity",

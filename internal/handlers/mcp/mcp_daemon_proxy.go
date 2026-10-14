@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package mcp
 
 import (
 	"context"
@@ -8,23 +8,22 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/mcp"
-	"github.com/reliant-labs/reliant/internal/toolexec"
+	mcpclient "github.com/reliant-labs/reliant/internal/mcp"
 )
 
 // daemonMCPProxy implements mcpManagerRuntime by proxying all MCP operations
-// to the user's tools daemon via DaemonRouter daemon commands. This ensures
+// to the user's tools daemon via daemon commands. This ensures
 // MCP servers run on the user's machine with their PATH, node, npx, etc.
 type daemonMCPProxy struct {
-	router toolexec.DaemonRouter
+	router Router
 	userID string
 	// onChange runs after every start, stop or restart this proxy sends,
 	// whatever its outcome: the server's status may have changed.
 	onChange func()
 }
 
-// NewDaemonMCPProxy creates a new daemon-proxying MCP manager.
-func NewDaemonMCPProxy(router toolexec.DaemonRouter, userID string) *daemonMCPProxy {
+// newDaemonMCPProxy creates a new daemon-proxying MCP manager.
+func newDaemonMCPProxy(router Router, userID string) *daemonMCPProxy {
 	return &daemonMCPProxy{router: router, userID: userID}
 }
 
@@ -48,14 +47,14 @@ type daemonMCPServerStatus struct {
 }
 
 type daemonMCPServerStatusEntry struct {
-	Name             string          `json:"name"`
-	Connected        bool            `json:"connected"`
-	Healthy          bool            `json:"healthy"`
-	LastError        string          `json:"last_error,omitempty"`
-	ServerInfo       *mcp.ServerInfo `json:"server_info,omitempty"`
-	ToolCount        int             `json:"tool_count"`
-	ResourcesEnabled bool            `json:"resources_enabled"`
-	PromptsEnabled   bool            `json:"prompts_enabled"`
+	Name             string                `json:"name"`
+	Connected        bool                  `json:"connected"`
+	Healthy          bool                  `json:"healthy"`
+	LastError        string                `json:"last_error,omitempty"`
+	ServerInfo       *mcpclient.ServerInfo `json:"server_info,omitempty"`
+	ToolCount        int                   `json:"tool_count"`
+	ResourcesEnabled bool                  `json:"resources_enabled"`
+	PromptsEnabled   bool                  `json:"prompts_enabled"`
 }
 
 // entry returns the status of the named server, if the daemon reported one.
@@ -89,7 +88,7 @@ func (p *daemonMCPProxy) serverStatus(ctx context.Context, projectPath string) (
 }
 
 // listTools asks the daemon for the tools one server exposes.
-func (p *daemonMCPProxy) listTools(ctx context.Context, projectPath, serverName string) ([]mcp.Tool, error) {
+func (p *daemonMCPProxy) listTools(ctx context.Context, projectPath, serverName string) ([]mcpclient.Tool, error) {
 	req := map[string]string{
 		"project_path": projectPath,
 		"server_name":  serverName,
@@ -99,8 +98,8 @@ func (p *daemonMCPProxy) listTools(ctx context.Context, projectPath, serverName 
 		return nil, err
 	}
 	var resp struct {
-		Tools []mcp.Tool `json:"tools"`
-		Error string     `json:"error,omitempty"`
+		Tools []mcpclient.Tool `json:"tools"`
+		Error string           `json:"error,omitempty"`
 	}
 	if err := json.Unmarshal(respData, &resp); err != nil {
 		return nil, err

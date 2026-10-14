@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package mcp
 
 import (
 	"context"
@@ -17,13 +17,13 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/mcp"
+	mcpclient "github.com/reliant-labs/reliant/internal/mcp"
 )
 
 // mcpReadRepo is the repository the MCP read RPCs run against, in memory,
 // counting reads of the whole project config record.
 type mcpReadRepo struct {
-	db.Repository
+	Repository
 
 	project     *db.Project
 	mcpConfigs  string
@@ -99,7 +99,7 @@ func (r *countingMCPRouter) total() int {
 
 // newMCPReadFixture is a project with n enabled MCP servers, all running and
 // healthy on the user's (fake) machine.
-func newMCPReadFixture(t *testing.T, n int) (context.Context, *MCPService, *mcpReadRepo, *countingMCPRouter) {
+func newMCPReadFixture(t *testing.T, n int) (context.Context, *Service, *mcpReadRepo, *countingMCPRouter) {
 	t.Helper()
 	const userID = "mcp-read-user"
 	repo := &mcpReadRepo{project: &db.Project{ID: "mcp-read-project", UserID: userID, Path: "/work/mcp-read"}}
@@ -115,8 +115,8 @@ func newMCPReadFixture(t *testing.T, n int) (context.Context, *MCPService, *mcpR
 		servers += fmt.Sprintf(`\"%s\":{\"command\":\"run-%d\",\"enabled\":true}`, name, i)
 		mgr.clientByName[name] = &fakeManagerClient{
 			connected: true,
-			tools:     []mcp.Tool{{Name: "a"}, {Name: "b"}},
-			info:      &mcp.ServerInfo{Name: name, Version: "1.0.0", Capabilities: mcp.ServerCapabilities{Tools: &mcp.ToolsCapability{}}},
+			tools:     []mcpclient.Tool{{Name: "a"}, {Name: "b"}},
+			info:      &mcpclient.ServerInfo{Name: name, Version: "1.0.0", Capabilities: mcpclient.ServerCapabilities{Tools: &mcpclient.ToolsCapability{}}},
 		}
 		mgr.healthByName[name] = true
 		mgr.projectServers[repo.project.Path][name] = true
@@ -124,12 +124,12 @@ func newMCPReadFixture(t *testing.T, n int) (context.Context, *MCPService, *mcpR
 	repo.mcpConfigs = fmt.Sprintf(`{"project":"{\"mcpServers\":{%s}}"}`, servers)
 
 	router := &countingMCPRouter{fakeMCPDaemonRouter: newFakeMCPDaemonRouter(mgr)}
-	svc := NewMCPService(repo, router)
+	svc := newMCPService(t, repo, router)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	return ctx, svc, repo, router
 }
 
-func listMCPServers(t *testing.T, ctx context.Context, svc *MCPService, projectID string) []*reliantv1.MCPServer {
+func listMCPServers(t *testing.T, ctx context.Context, svc *Service, projectID string) []*reliantv1.MCPServer {
 	t.Helper()
 	resp, err := svc.ListServers(ctx, connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: projectID}))
 	require.NoError(t, err)

@@ -85,8 +85,6 @@ type knownViolation struct {
 //
 // TODO: remove entries as each service is migrated to route through daemon
 var knownViolations = []knownViolation{
-	// grpc/services
-	{File: "internal/grpc/services/mcp.go", Reason: "TODO: route through daemon — reads/writes MCP config, stat checks"},
 	// skills
 
 	// config

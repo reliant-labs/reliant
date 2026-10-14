@@ -15755,6 +15755,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.ListServersRequest",
           "OutputTypeFQ": "reliant.v1.ListServersResponse",
           "InputProtoFile": "reliant/v1/mcp.proto",
@@ -15768,6 +15769,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Custom": true,
           "InputTypeFQ": "reliant.v1.GetServerRequest",
           "OutputTypeFQ": "reliant.v1.GetServerResponse",
           "InputProtoFile": "reliant/v1/mcp.proto",
@@ -16694,8 +16696,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "MCPServerStatus"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "MessageService",
@@ -34429,5 +34430,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "04a22202354684e3037a8ab28a6922cb9ba26104bee2719a397319f13258b710"
+  "source_hash": "6240e663bb5bb5f696d23be882fd6d3699f6557273085adacec59e3dfb7aa83a"
 }
