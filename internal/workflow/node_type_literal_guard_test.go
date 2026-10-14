@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -150,11 +149,14 @@ func TestNoRawNodeTypeLiteralsInProductionFiles(t *testing.T) {
 		},
 	}
 
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("failed to resolve caller path")
+	// This package's source directory: the working directory `go test` runs
+	// it in. Not runtime.Caller: under -trimpath (the Reliant workspace
+	// image's GOFLAGS default) that reports a module-relative path, and the
+	// walk below would scan nothing.
+	workflowRoot, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatalf("resolve the package directory: %v", err)
 	}
-	workflowRoot := filepath.Dir(thisFile)
 
 	var violations []string
 	walkErr := filepath.WalkDir(workflowRoot, func(path string, dEntry fs.DirEntry, err error) error {

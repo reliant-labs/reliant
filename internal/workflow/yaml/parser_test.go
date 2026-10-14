@@ -3,7 +3,6 @@ package wfyaml
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -1598,9 +1597,12 @@ func TestMarshal_EntryStringVsArray(t *testing.T) {
 // Integration tests with builtin workflow YAML files
 // ---------------------------------------------------------------------------
 
+// builtinDir is relative to this package's source directory, the working
+// directory `go test` runs it in. Not runtime.Caller: under -trimpath (the
+// Reliant workspace image's GOFLAGS default) that reports a module-relative
+// path, not a file on disk.
 func builtinDir() string {
-	_, filename, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(filename), "..", "builtin")
+	return filepath.Join("..", "builtin")
 }
 
 func TestBuiltinWorkflow_Agent(t *testing.T) {

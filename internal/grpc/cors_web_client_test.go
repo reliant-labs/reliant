@@ -26,7 +26,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -117,15 +116,17 @@ func TestCORSExposesEveryHeaderTheWebClientReads(t *testing.T) {
 	}
 }
 
-// webSourceDir is the web client's source root, located from this file so the
-// test does not depend on the working directory.
+// webSourceDir is the web client's source root, two levels above this
+// package's source directory (the working directory `go test` runs it in).
+//
+// Not runtime.Caller: under -trimpath (the Reliant workspace image's GOFLAGS
+// default) it reports a module-relative path, not a file on disk.
 func webSourceDir(t *testing.T) string {
 	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
+	dir, err := filepath.Abs(filepath.Join("..", "..", "web", "src"))
+	if err != nil {
+		t.Fatalf("resolve web/src: %v", err)
 	}
-	dir := filepath.Join(filepath.Dir(file), "..", "..", "web", "src")
 	if _, err := os.Stat(dir); err != nil {
 		t.Fatalf("web client source not found at %s: %v", dir, err)
 	}

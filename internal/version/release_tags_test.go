@@ -4,7 +4,6 @@ package version_test
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -32,16 +31,20 @@ import (
 // tag that has not been cut yet, and a test that depends on remote refs is a
 // test that fails on an airplane.
 
-// repoRootFromTest locates the repository root relative to this file, which
-// works regardless of the working directory the test binary is run from.
+// repoRootFromTest locates the repository root two levels above this
+// package's source directory, which is the working directory `go test` runs
+// the package in whatever directory it was invoked from.
+//
+// Not runtime.Caller: under -trimpath (the Reliant workspace image's GOFLAGS
+// default) it reports "github.com/reliant-labs/reliant/internal/version/...",
+// a module-relative path that is not a file on disk.
 func repoRootFromTest(t *testing.T) string {
 	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed; cannot locate the repo root")
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("resolve the repo root: %v", err)
 	}
-	// internal/version/release_tags_test.go -> repo root
-	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
+	return root
 }
 
 func readScript(t *testing.T, name string) string {
