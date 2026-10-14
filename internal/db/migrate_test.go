@@ -239,13 +239,15 @@ func freshShape(t *testing.T) string {
 }
 
 // schemaFingerprint identifies every relation in public, other than forge's
-// migrator's bookkeeping, by oid and the transaction that last wrote its
-// catalog row. Any DDL against them — or a fresh CREATE — changes it.
+// migrator's bookkeeping, by oid and name. Rebuilding the schema (the baseline's
+// CREATEs) changes every oid, so an adoption that ran the baseline's DDL changes
+// it; a migration after the baseline that only ALTERs a table does not, because
+// adopting the baseline is followed by running those.
 func schemaFingerprint(t *testing.T, db *sql.DB) string {
 	t.Helper()
 	var fp string
 	require.NoError(t, db.QueryRow(`
-		SELECT count(*) || ':' || md5(string_agg(c.oid::text || '/' || c.xmin::text || '/' || c.relname, ',' ORDER BY c.oid))
+		SELECT count(*) || ':' || md5(string_agg(c.oid::text || '/' || c.relname, ',' ORDER BY c.oid))
 		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 		WHERE n.nspname = 'public' AND c.relname NOT LIKE 'schema_migrations%'`).Scan(&fp))
 	return fp

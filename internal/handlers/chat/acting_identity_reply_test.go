@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package chat
 
 import (
 	"testing"
@@ -48,7 +48,7 @@ func TestSendMessage_RestartOfAnAutomationChatDropsTheBotIdentity(t *testing.T) 
 	temporal := &inputCapturingTemporalClient{
 		absorbTestTemporalClient: absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED},
 	}
-	service := &ChatService{database: repo, tempClient: temporal, runs: runs.NewService(repo, temporal, nil)}
+	service := &Service{deps: Deps{Repo: repo, Temporal: temporal}, runs: runs.NewService(repo, temporal, nil)}
 
 	_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "one more thing"))
 	require.NoError(t, err)
