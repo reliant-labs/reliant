@@ -1,0 +1,208 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/delivery_insights/v1;delivery_insightsv1";
+
+// === DeliveryInsightsService ===
+//
+// Releases and DORA delivery metrics, read from the release / promotion ledger
+// (controlplane.deploy_promotions + deploy_releases) in Postgres. Console v2,
+// contract K5.
+//
+// SCOPE IS K1's, VERBATIM IN MEANING. Every RPC carries scope.org_id; the handler
+// verifies the caller is a member of that org (PermissionDenied otherwise) and
+// that every scope.env_ids entry is a live environment of THAT org (and of
+// scope.project_id when set), before any ledger row is read. Empty env_ids = every
+// environment of the org (of the project, when project_id is set).
+//
+// DeliveryScope deliberately mirrors ObservabilityService's QueryScope field for
+// field (same numbers, same semantics) so the console builds ONE scope and sends
+// it to both services; the two live in the same wire package and the repo forbids
+// service-to-service proto imports, so the message is declared here under its own
+// name.
+//
+// ERRORS: InvalidArgument (bad range, bad failure_window_hours), PermissionDenied
+// (not a member / an environment that is not this org's), Unavailable (the ledger
+// is not configured on this server), ResourceExhausted (the ledger history is too
+// large to analyse in one request).
+service DeliveryInsightsService {
+  option (forge.v1.service) = {
+    name: "DeliveryInsightsService"
+    version: "1.0.0"
+    description: "Releases and DORA delivery metrics over the release ledger"
+  };
+
+  // ListReleases returns the promotions in scope.time_range (which is required;
+  // max 366 days), oldest first, one per promotion: environment, release, version,
+  // source commit, promoted_at and promoted_by. It exists to draw deploy markers
+  // on charts. When more than `limit` promotions match, the NEWEST `limit` are
+  // returned and `truncated` is set.
+  rpc ListReleases(ListReleasesRequest) returns (ListReleasesResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetDoraMetrics returns the four DORA metrics over scope.time_range (the
+  // window; default the last 30 days when unset, max 366 days). Every value comes
+  // with the definition string that produced it.
+  rpc GetDoraMetrics(GetDoraMetricsRequest) returns (GetDoraMetricsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+}
+
+// DeliveryTimeRange is a half-open range [start, end). Both ends are required
+// when the range is present, and end must be after start.
+message DeliveryTimeRange {
+  google.protobuf.Timestamp start = 1 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp end = 2 [(buf.validate.field).required = true];
+}
+
+// DeliveryScope is console contract K1 as this service reads it. Field numbers
+// match ObservabilityService's QueryScope; the fields that only make sense for
+// telemetry (services, filters) are reserved, not repeated.
+message DeliveryScope {
+  reserved 2, 3, 7;
+  reserved "env_id", "services", "filters";
+  // The org whose ledger is read. The caller MUST be a member; verified
+  // server-side, never assumed.
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The range (ListReleases) or window (GetDoraMetrics). Required by
+  // ListReleases; GetDoraMetrics defaults it to the last 30 days.
+  DeliveryTimeRange time_range = 4;
+  // The forge project whose environments are in scope. Unset = not narrowed by
+  // project; set to "" = the project-less environments.
+  optional string project_id = 5 [(buf.validate.field).string.max_len = 128];
+  // Control-plane environment ids (deploy_environments.id). Empty = every
+  // environment of the org (of the project, when project_id is set).
+  repeated string env_ids = 6 [(buf.validate.field).repeated.max_items = 50];
+}
+
+message ListReleasesRequest {
+  DeliveryScope scope = 1 [(buf.validate.field).required = true];
+  // Cap on returned promotions. Unset or 0 = 500; max 2000.
+  int32 limit = 2 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 2000
+  ];
+}
+
+message ListReleasesResponse {
+  // Promotions in scope, oldest first.
+  repeated ReleaseMarker releases = 1;
+  // True when older promotions in the range were cut by `limit`.
+  bool truncated = 2;
+}
+
+// ReleaseMarker is one promotion: a release becoming an environment's running
+// release. A release promoted to three environments is three markers.
+message ReleaseMarker {
+  string promotion_id = 1;
+  string environment_id = 2;
+  string environment_name = 3;
+  string release_id = 4;
+  // The release's label as cut: a date-named auto version or semver. Not
+  // comparable as a string; order releases by promoted_at.
+  string version = 5;
+  // The source commit the release was cut from (full hex). Empty when the
+  // release recorded none (a non-git tree, or cut before provenance existed).
+  string git_commit = 6;
+  string git_tag = 7;
+  // When the promotion was recorded. For an imported ledger this is the original
+  // promotion time, not the import time.
+  google.protobuf.Timestamp promoted_at = 8;
+  // Who promoted: the user's display name (email when unnamed), else the
+  // automation actor ("ci"). Empty when neither was recorded.
+  string promoted_by = 9;
+  string promoted_by_user_id = 10;
+  // "promote" or "rollback", as recorded. A promote of an older release is NOT
+  // rewritten to "rollback" here; GetDoraMetrics classifies those.
+  string kind = 11;
+}
+
+message GetDoraMetricsRequest {
+  DeliveryScope scope = 1 [(buf.validate.field).required = true];
+  // N: a change is failed when a rollback follows it within this many hours.
+  // Unset or 0 = 24; max 168.
+  int32 failure_window_hours = 2 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 168
+  ];
+}
+
+message GetDoraMetricsResponse {
+  // The window actually measured (the default is filled in).
+  google.protobuf.Timestamp window_start = 1;
+  google.protobuf.Timestamp window_end = 2;
+  // The N used for change failure.
+  int32 failure_window_hours = 3;
+  // Environments the metrics span.
+  int32 environment_count = 4;
+  DeploymentFrequency deployment_frequency = 5;
+  LeadTime lead_time = 6;
+  ChangeFailureRate change_failure_rate = 7;
+  TimeToRestore time_to_restore = 8;
+  // Reserved for the alert-based MTTR (alerting A8, from alert_events).
+  reserved 9;
+}
+
+message DeploymentFrequency {
+  // How this value is computed, in words.
+  string definition = 1;
+  // Deployments in the window.
+  int32 deployments = 2;
+  // deployments / window length in days.
+  double per_day = 3;
+  // Promotions in the window that are not deployments: rollbacks (recorded or
+  // detected) and re-applies of the release already running.
+  int32 rollbacks = 4;
+  int32 reapplies = 5;
+}
+
+message LeadTime {
+  string definition = 1;
+  // Deployments with a known commit time; the statistics cover these only.
+  int32 measured_changes = 2;
+  // Deployments whose commit time is unknown, and how many distinct releases
+  // that is. Today the ledger records the commit id but not its time, so every
+  // deployment is unknown until the producers record one; nothing is inferred.
+  int32 unknown_changes = 3;
+  int32 unknown_releases = 4;
+  // Unset when measured_changes is 0.
+  google.protobuf.Duration median = 5;
+  google.protobuf.Duration mean = 6;
+}
+
+message ChangeFailureRate {
+  string definition = 1;
+  // Deployments in the window.
+  int32 changes = 2;
+  // Of those, how many were followed by a rollback within failure_window_hours.
+  int32 failed_changes = 3;
+  // failed_changes / changes. Unset when there were no changes.
+  optional double rate = 4;
+}
+
+message TimeToRestore {
+  string definition = 1;
+  // Where the figure comes from: "release_ledger" here. The alert-based MTTR
+  // that alerting (A8) will compute from alert_events is a separate figure with
+  // its own source, reserved below on the response, not a replacement for this.
+  string source = 2;
+  // Failed changes in the window (the same set ChangeFailureRate counts); each
+  // one is restored by the promotion that rolled it back.
+  int32 failures = 3;
+  // Unset when failures is 0.
+  google.protobuf.Duration median = 4;
+  google.protobuf.Duration mean = 5;
+}
