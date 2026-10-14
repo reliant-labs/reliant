@@ -3123,71 +3123,81 @@ func (a *CallLLMActivity) handleError(event llm.DriverEvent) error {
 	return fmt.Errorf("LLM streaming error: %w", event.Error)
 }
 
-// getLatestUserMessageText extracts the text content from the last user message in history.
-func getLatestUserMessageText(history []message.Message) string {
-	for i := len(history) - 1; i >= 0; i-- {
-		if history[i].Role != message.User {
-			continue
-		}
-		for _, part := range history[i].Parts {
-			if tc, ok := part.(message.TextContent); ok {
-				return tc.Text
-			}
-		}
-	}
-	return ""
+// isPreloadSeed reports whether m is the turn buildSeededSkillMessages emits.
+func isPreloadSeed(m message.Message) bool {
+	return strings.HasPrefix(m.Content().Text, preloadedSkillsPreamble)
 }
 
-// injectSkillSuggestions scores the project's skill catalog against the last
-// user message and appends the top matches to it as a system-reminder,
-// returning how many were suggested.
+// latestUserRequestText returns the text of the user's latest genuine request,
+// the thing the skill suggester scores.
 //
-// It is a NO-OP when this call preloaded skills, and that is the whole reason
-// the decision lives in one named function instead of inline at the call site.
+// A user-role message is not always the user's. The harness writes some too:
+// the preload seed, mailbox envelopes and agent-result bodies, an inject brief.
+// Scoring those ranks harness prose the user never wrote, and on a thread that
+// preloaded skills the seed is the LAST user message, so the real request was
+// never scored. So the seed is skipped, and a message persisted hidden is only
+// a fallback: with no visible user message (a forked sub-agent whose brief was
+// injected hidden) the earliest user message, which is the brief, stands in.
+func latestUserRequestText(history []message.Message) string {
+	var brief string
+	for i := len(history) - 1; i >= 0; i-- {
+		m := history[i]
+		if m.Role != message.User || isPreloadSeed(m) {
+			continue
+		}
+		text := m.Content().Text
+		if text == "" {
+			continue
+		}
+		if !m.Hidden {
+			return text
+		}
+		brief = text // ends as the earliest hidden user message
+	}
+	return brief
+}
+
+// injectSkillSuggestions appends a reminder naming skills that match the
+// user's latest request (see latestUserRequestText). It returns the number
+// suggested, and 0 when it added nothing.
 //
-// The suggester reads the LAST user message and writes back into it. On a
-// forked thread the preload seed IS the last user message — the brief is the
-// only other user turn and it comes first, tool results carry role Tool, so the
-// seed holds that position from turn one onward. Scoring skill BODIES is not a
-// ranking anyone asked for: suggest.Suggest weighs a skill's own name triple and
-// every body repeats its name, so the preloaded skills win their own contest.
-// The reminder is then appended to the seed itself, and the model reads
-// "ALREADY SATISFIED. Do not load it again" immediately followed by "use the
-// skill tool to load if needed" naming those same skills. That is the stimulus
-// preloadedSkillsPreamble exists to prevent, arriving from the other side.
+// A skill in preloaded is never suggested: the seed has just told the model it
+// is already loaded, and a reminder naming it directly beneath that is the
+// contradiction preloadedSkillsPreamble exists to prevent. Everything else that
+// matches is fair game, which is the point: a chat that preloads its starting
+// skills still has to be pointed at the one its request is about.
 //
-// Skipping — rather than subtracting the preloaded names from the result — is
-// deliberate. Subtraction removes the literal contradiction and keeps a ranking
-// computed over harness prose the user never wrote, and skills the brief never
-// asked for, endorsed directly beneath a block saying the loaded ones are
-// right, read as a correction just as loudly. A node that declares its skills
-// has already answered the question the suggester asks; the suggester is the
-// fallback for a turn where nobody did.
+// The reminder is its OWN message and never edits another turn. Appending it to
+// the user's text made the user's words not be the user's words, and appending
+// it to the seed would break the prefix the seed is pinned for: the seed sits at
+// a stable early offset so the prompt cache reuses it, and a catalog-dependent
+// suffix invalidates that on every turn.
 //
-// It also leaves the seed byte-identical. The seed is spliced at a stable early
-// offset so the prompt cache reuses it; a catalog-dependent suffix appended to
-// it breaks that prefix on every turn, and does so hardest while the catalog is
-// still filling — which is exactly when the seed matters most.
-// injectSkillSuggestions appends a reminder naming skills that match the latest
-// user request. It returns the number suggested, and 0 when it added nothing.
-//
-// The reminder is its OWN message and never edits the user's turn. Appending it
-// to the user's text made the user's words not be the user's words: the
-// transcript stopped matching what was sent, and the model saw the user asking
-// for skills they never mentioned. An engine may add to a request; it does not
-// get to rewrite the part the caller wrote.
-//
-// It takes history by pointer because it now appends rather than mutating in
-// place — a slice passed by value cannot grow for its caller.
+// It takes history by pointer because it appends; a slice passed by value
+// cannot grow for its caller.
 func injectSkillSuggestions(history *[]message.Message, catalog []cfgpkg.StoredSkill, preloaded []string) int {
-	if history == nil || len(catalog) == 0 || len(preloaded) > 0 {
+	const maxSuggestions = 5
+	if history == nil || len(catalog) == 0 {
 		return 0
 	}
-	latestUserText := getLatestUserMessageText(*history)
-	if latestUserText == "" {
+	request := latestUserRequestText(*history)
+	if request == "" {
 		return 0
 	}
-	suggestions := suggest.Suggest(catalog, latestUserText, 5)
+	loaded := make(map[string]bool, len(preloaded))
+	for _, name := range preloaded {
+		loaded[name] = true
+	}
+	var suggestions []suggest.Suggested
+	for _, s := range suggest.Suggest(catalog, request, 0) {
+		if loaded[s.Skill.Name] {
+			continue
+		}
+		suggestions = append(suggestions, s)
+		if len(suggestions) == maxSuggestions {
+			break
+		}
+	}
 	if len(suggestions) == 0 {
 		return 0
 	}

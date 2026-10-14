@@ -377,41 +377,22 @@ func TestPreloadSkillMissError_FailsOnlyTheTransientCause(t *testing.T) {
 	require.NoError(t, preloadSkillMissError(false, 0, nil, nil))
 }
 
-// TestSkillSuggestionsNeverContradictThePreload pins the one place the harness
-// could tell the model to load what it had just told it not to.
+// TestSkillSuggestionsNeverContradictThePreload pins two invariants for a call
+// that preloaded skills:
 //
-// The suggester scores the LAST USER MESSAGE and appends its result INTO that
-// same message. On a forked fan-out thread there is exactly one user turn — the
-// brief — and the preload seed is spliced in right after it; every later turn is
-// an assistant turn or a tool result, and a tool result carries role Tool. So
-// from turn one onward the seed IS the last user message, which makes it both
-// the text the suggester scores and the text it mutates.
+//  1. No preloaded skill is ever suggested. The seed has just told the model
+//     those skills are ALREADY SATISFIED; a reminder naming them directly beneath
+//     says the opposite.
+//  2. The seed stays byte-identical. It is pinned to an early offset for
+//     prompt-cache reuse, and a catalog-dependent suffix invalidates that prefix
+//     on every turn.
 //
-// Scored against skill BODIES the ranking is not a ranking: a skill's own name
-// weighs triple in suggest.Suggest and every body repeats its own name, so the
-// preloaded skills win their own contest. The model then reads, contiguously,
-// "that instruction is ALREADY SATISFIED. Do not load it again" and "use the
-// skill tool to load if needed" naming the very same skills. That is the exact
-// stimulus behind the failure preloadedSkillsPreamble exists to prevent — a unit
-// concluding it had loaded the wrong skill and spending its life re-loading.
-//
-// Suppressing the suggestion where the preload spoke is the whole fix, rather
-// than subtracting the preloaded names from the result: subtraction removes the
-// literal contradiction and leaves the ranking, which is still computed over
-// harness prose the user never wrote. Skills the brief did not ask for, endorsed
-// by the harness immediately below a block saying the loaded ones are already
-// right, read as a correction just as loudly. A call that declares its skills has
-// already answered the question the suggester asks.
-//
-// It also keeps the seed byte-stable. The seed is deliberately pinned to an early
-// offset for prompt-cache reuse; appending a catalog-dependent payload to it
-// invalidates that prefix on every turn, and does so most while the catalog is
-// still filling.
-//
-// Both halves are derived from what the emitters produce — the seed text from
-// buildSeededSkillMessages, the contradicting names from the injected list it
-// returns — so a reworded preamble or a renamed skill cannot leave this guard
-// asserting nothing.
+// The suggester no longer skips preloading calls wholesale (see
+// TestSkillSuggestionsScoreTheUserRequestWhenSkillsArePreloaded), so the
+// invariants have to hold on their own. The stimulus is a brief that matches
+// exactly the skills the seed delivered: without the exclusion they are the
+// top suggestions. Both halves are derived from what the emitters produce, so a
+// reworded preamble or renamed skill cannot leave this asserting nothing.
 func TestSkillSuggestionsNeverContradictThePreload(t *testing.T) {
 	catalog := preloadTestCatalog()
 	cfg := &cfgpkg.Config{Skills: catalog}
@@ -423,27 +404,19 @@ func TestSkillSuggestionsNeverContradictThePreload(t *testing.T) {
 		"'already satisfied' claim for a suggestion to contradict and this guard would pass "+
 		"against anything")
 
-	// The fan-out shape: one user brief, the seed after it, then the model's own
-	// turns. Nothing later carries role User, so the seed is what the suggester
-	// reads and writes.
+	const brief = "PROTO body — regenerate the proto surface, then DB body"
 	forkedThread := func() []message.Message {
 		return []message.Message{
-			{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Implement the orders service."}}},
+			{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: brief}}},
 			seed[0],
 			{Role: message.Assistant, Parts: []message.ContentPart{message.TextContent{Text: "Looking at the protos."}}},
 		}
 	}
-	require.Equal(t, seed[0].Content().Text, getLatestUserMessageText(forkedThread()),
-		"the seed is no longer the last user message — the premise of this guard has moved, "+
-			"and the suggestion path it protects now scores something else entirely")
 
-	// The stimulus is real: with no preload signal, the suggester fires on the
-	// seed and endorses the very skills the seed says are already loaded.
+	// The stimulus is real: with no preload signal the suggester endorses the
+	// very skills the seed says are loaded.
 	control := forkedThread()
-	require.Positive(t, injectSkillSuggestions(&control, catalog, nil),
-		"the suggester no longer fires on a preload seed, so this guard is testing nothing")
-	// The reminder is its own message now (it no longer edits the seed), so the
-	// contradiction shows up in the appended turn rather than inside the seed.
+	require.Positive(t, injectSkillSuggestions(&control, catalog, nil))
 	contradicted := 0
 	for _, name := range injected {
 		if strings.Contains(control[len(control)-1].Content().Text, "- "+name+":") {
@@ -451,19 +424,105 @@ func TestSkillSuggestionsNeverContradictThePreload(t *testing.T) {
 		}
 	}
 	require.Positive(t, contradicted,
-		"scoring the seed suggested none of the skills the seed itself delivered (%v) — the "+
-			"contradiction this guard pins no longer reproduces, so it cannot fail for the "+
-			"right reason either", injected)
+		"the brief suggested none of the skills the seed delivered (%v) — the contradiction "+
+			"this guard pins no longer reproduces, so it cannot fail for the right reason", injected)
 
-	// The fix: a call that preloaded skills makes no suggestion, and the seed is
-	// returned untouched.
 	guarded := forkedThread()
-	require.Zero(t, injectSkillSuggestions(&guarded, catalog, injected),
-		"the harness suggested skills into a turn whose seed already told the model not to "+
-			"load them")
+	injectSkillSuggestions(&guarded, catalog, injected)
+	for _, m := range guarded {
+		if m.Role != message.User || isPreloadSeed(m) {
+			continue
+		}
+		for _, name := range injected {
+			require.NotContains(t, m.Content().Text, "- "+name+":",
+				"suggested %q, a skill the seed already delivered", name)
+		}
+	}
 	require.Equal(t, seed[0].Content().Text, guarded[1].Content().Text,
-		"the preload seed was mutated: it is pinned to an early offset for prompt-cache reuse, "+
-			"and a catalog-dependent suffix invalidates that prefix on every turn")
+		"the preload seed was mutated: it is pinned to an early offset for prompt-cache reuse")
+	require.Equal(t, brief, guarded[0].Content().Text, "the user's brief was mutated")
+}
+
+// A main chat preloads skills too (general-agent, forge's start-here), and the
+// user's request used to go unscored because of it. The request is scored, a
+// matching skill that was NOT preloaded is suggested, and the preloaded ones
+// are not.
+func TestSkillSuggestionsScoreTheUserRequestWhenSkillsArePreloaded(t *testing.T) {
+	catalog := append(preloadTestCatalog(),
+		cfgpkg.StoredSkill{Name: "general-agent", SkillPath: "general-agent", Body: "General agent methodology.",
+			Description: "General-purpose agent methodology."},
+		cfgpkg.StoredSkill{Name: "workflow-builder", SkillPath: "workflow-builder", Body: "Build workflows.",
+			Description: "Build Reliant workflows: scheduled bots that wake up on a cron trigger, agents and scenario tests."},
+	)
+	cfg := &cfgpkg.Config{Skills: catalog}
+	seed, injected, _, _ := buildSeededSkillMessages(cfg, []string{"general-agent", "forge/db"})
+	require.Len(t, seed, 1)
+	require.Contains(t, injected, "general-agent")
+
+	const request = "I want a trader bot workflow that wakes up 2x per day"
+	history := []message.Message{
+		{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: request}}},
+		seed[0],
+	}
+	before := seed[0].Content().Text
+
+	n := injectSkillSuggestions(&history, catalog, injected)
+	require.Positive(t, n, "the user's request was not scored on a chat that preloaded skills")
+	reminder := history[len(history)-1].Content().Text
+	require.Contains(t, reminder, "- workflow-builder:")
+	for _, name := range injected {
+		require.NotContains(t, reminder, "- "+name+":")
+	}
+	require.Equal(t, before, history[1].Content().Text, "the seed must not be mutated")
+	require.Equal(t, request, history[0].Content().Text)
+}
+
+// Harness-written user turns are not requests: the preload seed, and anything
+// persisted hidden (mailbox envelope, agent-result body). The real request is
+// found beneath them.
+func TestSkillSuggestionsSkipHarnessInjectedTurns(t *testing.T) {
+	catalog := preloadTestCatalog()
+	cfg := &cfgpkg.Config{Skills: catalog}
+	seed, _, _, _ := buildSeededSkillMessages(cfg, []string{"forge/getting-started"})
+	require.Len(t, seed, 1)
+
+	text := func(role message.MessageRole, hidden bool, s string) message.Message {
+		return message.Message{Role: role, Hidden: hidden, Parts: []message.ContentPart{message.TextContent{Text: s}}}
+	}
+	history := []message.Message{
+		text(message.User, false, "regenerate the proto surface"),
+		seed[0],
+		text(message.Assistant, false, "ok"),
+		text(message.User, true, "<system>\n1 message queued while you were working</system>"),
+		text(message.User, true, "<agent_result agent_id=\"x\" status=\"completed\">db db db</agent_result>"),
+	}
+	require.Equal(t, "regenerate the proto surface", latestUserRequestText(history))
+
+	// A later visible user message wins over an earlier one.
+	history = append(history, text(message.User, false, "now fix the db migration"))
+	require.Equal(t, "now fix the db migration", latestUserRequestText(history))
+}
+
+// A forked sub-agent whose only user turn besides the seed is its brief (saved
+// hidden by inject) still gets that brief scored.
+func TestSkillSuggestionsScoreAHiddenBriefWhenNothingElseIsThere(t *testing.T) {
+	catalog := preloadTestCatalog()
+	cfg := &cfgpkg.Config{Skills: catalog}
+	seed, injected, _, _ := buildSeededSkillMessages(cfg, []string{"forge/getting-started"})
+	require.Len(t, seed, 1)
+
+	history := []message.Message{
+		{Role: message.User, Hidden: true, Parts: []message.ContentPart{message.TextContent{Text: "PROTO body — regenerate the proto surface"}}},
+		seed[0],
+	}
+	require.Equal(t, "PROTO body — regenerate the proto surface", latestUserRequestText(history))
+	require.Positive(t, injectSkillSuggestions(&history, catalog, injected))
+	require.Contains(t, history[len(history)-1].Content().Text, "- proto:")
+
+	// With no brief at all there is nothing to score.
+	onlySeed := []message.Message{seed[0]}
+	require.Zero(t, injectSkillSuggestions(&onlySeed, catalog, injected))
+	require.Len(t, onlySeed, 1)
 }
 
 // TestSkillSuggestionsStillFireWithoutAPreload keeps the guard above from being

@@ -215,9 +215,13 @@ type Message struct {
 	Thread          string // Thread path (UUID matching workflow ID)
 	ContextSequence int64  // Context window version (incremented on compaction)
 	Parts           []ContentPart
-	Model           models.ModelID
-	NextAgent       string          // State transition directive (if any)
-	StateData       json.RawMessage // Context data for state transition
+	// Hidden marks a message the harness wrote for the model and the user was
+	// never shown (persisted with display_style HIDDEN): mailbox envelopes,
+	// agent-result bodies, an inject brief. It is not something the user typed.
+	Hidden    bool
+	Model     models.ModelID
+	NextAgent string          // State transition directive (if any)
+	StateData json.RawMessage // Context data for state transition
 	// New fields for agent lane tracking
 	AgentID       string          // Unique ID for this agent instance
 	ParentAgentID string          // Parent agent ID for nested agents

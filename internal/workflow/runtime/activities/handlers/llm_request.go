@@ -531,8 +531,9 @@ func flattenToolContentToText(messages []message.Message) []message.Message {
 		}
 
 		flattened = append(flattened, message.Message{
-			Role:  role,
-			Parts: []message.ContentPart{message.TextContent{Text: text}},
+			Role:   role,
+			Hidden: msg.Hidden,
+			Parts:  []message.ContentPart{message.TextContent{Text: text}},
 		})
 	}
 

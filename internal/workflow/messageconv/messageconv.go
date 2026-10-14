@@ -121,6 +121,7 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 		Thread:          dbMsg.ThreadID, // Direct access
 		ContextSequence: contextSequence,
 		Parts:           parts,
+		Hidden:          dbMsg.DisplayStyle != nil && *dbMsg.DisplayStyle == reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN,
 	}
 
 	// Copy token count for context estimation, and the model it was counted
