@@ -456,20 +456,18 @@ migration:
 	@# goose's internal/db/migrations/postgres is frozen history: a file added
 	@# there never runs, and TestGooseHistoryIsFrozen fails.
 	@#
-	@# The file starts declared backward-compatible, with a placeholder reason
-	@# TestForgeMigrationsDeclareCompatibility refuses until it is written:
-	@# rolling back is redeploying the previous release (the last goose
-	@# release, until one ships after the cutover) onto this schema.
+	@# forge.yaml sets database.migration_safety.require_compat_declaration, so
+	@# forge opens the file with both compatibility declarations as a comment
+	@# to replace, and `forge lint --migration-safety` fails it until it says
+	@# one, with a reason: rolling back is redeploying the previous release
+	@# (the last goose release, until one ships after the cutover) onto this
+	@# schema.
 	@GOWORK=off go run github.com/reliant-labs/forge/cmd/forge db migration new $(NAME)
-	@FILE=$$(ls -t db/migrations/*_$(NAME).up.sql | head -1); \
-	{ printf -- '-- forge:backward-compatible — <why the previous release still works on this schema>\n'; \
-	  printf -- '--   (or, deliberately, "-- reliant:breaks-rollback" and the reason; see research/forge-migration/04-p5a-cutover-runbook.md)\n'; \
-	  cat "$$FILE"; } > "$$FILE.tmp" && mv "$$FILE.tmp" "$$FILE"; \
-	echo "$(GREEN)✅ Migration created: $$FILE$(NC)"
 	@echo "$(YELLOW)Next steps:$(NC)"
-	@echo "  1. Write the SQL, and replace the <why ...> placeholder: can the previous release run on this schema?"
-	@echo "     Additive (a column, table or index old code ignores): keep -- forge:backward-compatible."
-	@echo "     Otherwise expand now and contract in a later release, or declare -- reliant:breaks-rollback <why>."
+	@echo "  1. Write the SQL, and replace the declaration block at the top: can the previous release run on this schema?"
+	@echo "     Additive (a column, table or index old code ignores): -- forge:backward-compatible — <why>."
+	@echo "     Otherwise expand now and contract in a later release, or declare -- forge:breaks-rollback <why>."
+	@echo "     forge lint --migration-safety fails the file until it says one."
 	@echo "  2. Run: make db-regenerate"
 	@echo "  3. Write your Go code using the new types"
 

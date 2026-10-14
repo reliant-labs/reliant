@@ -616,6 +616,16 @@ jobs:
           GONOSUMCHECK: "1"
         run: go install "github.com/reliant-labs/forge/cmd/forge@${{ steps.forge-version.outputs.version }}"
 
+      # The migration-safety lane alone IS a hard gate. It is clean, and it is
+      # what enforces forge.yaml's
+      # database.migration_safety.require_compat_declaration: every migration
+      # after the baseline says whether the previous release keeps working on
+      # the schema it leaves (internal/db/SCHEMA.md). It replaced a Go test,
+      # so leaving it inside the non-blocking step below would have turned a
+      # failing check into a warning.
+      - name: Lint migrations (forge)
+        run: forge lint --migration-safety
+
       - name: Lint (forge)
         continue-on-error: true
         run: forge lint --no-fix

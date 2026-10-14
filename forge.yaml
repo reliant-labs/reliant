@@ -37,3 +37,12 @@ generate:
         - name: sqlc
           command: [make, sqlc]
           writes: [internal/db/postgres/generated]
+database:
+    migration_safety:
+        # Every migration after the baseline says whether the previous
+        # release keeps working on the schema it leaves:
+        # `-- forge:backward-compatible — <why>` or
+        # `-- forge:breaks-rollback <why>`. `forge lint --migration-safety`
+        # fails one that says neither, or gives no reason
+        # (internal/db/SCHEMA.md).
+        require_compat_declaration: true

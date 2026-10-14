@@ -36,7 +36,9 @@ import (
 // is what keeps a rollback to the last goose release a no-op: goose finds every
 // version it knows applied. It is also why every forge migration after the
 // baseline must be declared `-- forge:backward-compatible` unless it
-// deliberately ends that rollback (TestForgeMigrationsDeclareCompatibility).
+// deliberately ends that rollback (`-- forge:breaks-rollback`; forge.yaml's
+// database.migration_safety.require_compat_declaration, enforced by
+// `forge lint --migration-safety`).
 // See research/forge-migration/04-p5a-cutover-runbook.md.
 
 // migrationsTable is golang-migrate's version record: one row, (version, dirty).

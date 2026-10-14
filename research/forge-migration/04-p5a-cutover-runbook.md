@@ -34,9 +34,11 @@ true before goose can go.
    `pg_dump` before and after (§4).
 3. **Every forge migration after the baseline must say whether the previous
    release survives it** (`-- forge:backward-compatible — <why>`, or
-   deliberately `-- reliant:breaks-rollback <why>`), enforced by
-   `TestForgeMigrationsDeclareCompatibility`; `make migration` writes the
-   default. That keeps "redeploy the last goose release" a working rollback.
+   deliberately `-- forge:breaks-rollback <why>`), enforced by
+   `forge lint --migration-safety` (forge.yaml's
+   `database.migration_safety.require_compat_declaration`); `make migration`
+   writes both as a comment to replace. That keeps "redeploy the last goose
+   release" a working rollback.
 4. The baseline was re-cut for `20261013215013_worktree_failure_reason` (#861),
    `20261014055046_integration_writes` (#893) and
    `20261014142537_trigger_event_origin` (#909): **156** goose migrations,
@@ -119,27 +121,30 @@ opens a one-connection pool — one Postgres session for the whole run — and:
 
 ## 3. Forge migrations after the baseline
 
-- `make migration NAME=x` runs the pinned `forge db migration new` and starts
-  the file with `-- forge:backward-compatible — <why …>`. Replace the
-  placeholder; `TestForgeMigrationsDeclareCompatibility` fails while it is
-  there, and fails a migration that declares neither
-  `-- forge:backward-compatible` nor `-- reliant:breaks-rollback <why>`.
+- `make migration NAME=x` runs the pinned `forge db migration new`, which
+  opens the file with both declarations as a comment to replace. forge.yaml
+  sets `database.migration_safety.require_compat_declaration`, so
+  `forge lint --migration-safety` (a blocking step in PR CI) fails a
+  migration after the baseline that declares neither
+  `-- forge:backward-compatible — <why>` nor `-- forge:breaks-rollback <why>`,
+  gives no reason (a `<why …>` placeholder is none), or declares both.
 - Why it matters: rolling back is redeploying the previous release onto the
   schema the new one left. Until a release after the cutover ships, that is
   the **last goose release**, whose code must run on every forge migration
   applied since. After that it is an older forge release, whose migrator
   refuses to start on a schema ahead of it unless every newer version was
   declared compatible. Expand in one release, contract in a later one.
-- A `-- reliant:breaks-rollback` migration changes §7: from that release on,
+- A `-- forge:breaks-rollback` migration changes §7: from that release on,
   rollback means a forward fix.
-- **No `CREATE INDEX CONCURRENTLY` in a forge migration for now.** migratekit's
-  run-lock waiters block in `pg_advisory_lock`, which holds a snapshot the
-  index build waits for. Reproduced with forge `8d812662`'s `migratekit.Apply`,
-  4 concurrent runners over `CREATE TABLE` + a `CREATE INDEX CONCURRENTLY`
-  migration, 3 trials: every time the holder finished and the 3 waiters failed
-  `take the migration run lock: ERROR: deadlock detected (SQLSTATE 40P01)` —
-  i.e. every other api-server replica fails its boot and restarts. Reported to
-  forge (§11).
+- `CREATE INDEX CONCURRENTLY` must be the only statement in its file
+  (`forge lint --migration-safety` enforces it). With forge `8d812662`,
+  migratekit's run-lock waiters blocked in `pg_advisory_lock`, holding a
+  snapshot the index build waited for: 4 concurrent runners over
+  `CREATE TABLE` + a `CREATE INDEX CONCURRENTLY` migration, 3 trials, and
+  every time the 3 waiters failed `take the migration run lock: ERROR:
+  deadlock detected (SQLSTATE 40P01)`. forge #776 (pinned since `f3fd8c02`)
+  makes the waiters poll `pg_try_advisory_lock`, as the goose bridge does, so
+  the statement is allowed again.
 
 ## 4. Proof (throwaway Postgres 16.15; all passed)
 
@@ -316,7 +321,7 @@ release first. So, all of:
       REQUIRE_TEST_DB: "1"
     run: |
       go test ./internal/db/ -count=1 \
-        -run 'TestBaselineAdopts|TestGooseHistoryIsFrozen|TestForgeMigrationsDeclareCompatibility|TestMigrate_|TestPlanMigration|TestPendingMigrations|TestWaitForSchema'
+        -run 'TestBaselineAdopts|TestGooseHistoryIsFrozen|TestMigrate_|TestPlanMigration|TestPendingMigrations|TestWaitForSchema'
   ```
 - Keep the goose steps (they still check the frozen files) until §9.
 
@@ -325,12 +330,11 @@ release first. So, all of:
 - `reliant_cp_session` stays at 2 server connections per PgBouncer replica.
   A migration now holds one session there for its run (under a second for an
   adoption), beside the sweep lock; 4 concurrent runs passed behind a cap of 2.
-- `-- reliant:breaks-rollback` is reliant's own marker. forge has no
-  "deliberately not compatible" spelling and no check that a migration
-  declares either (reported as forge friction).
-- `CREATE INDEX CONCURRENTLY` in a forge migration fails every concurrent
-  runner but one until forge's run lock stops blocking with a snapshot (forge
-  friction, §3). Reliant's goose bridge already polls for its own lock.
+- Resolved by forge `f3fd8c02`: `-- forge:breaks-rollback` replaced
+  reliant's own `-- reliant:breaks-rollback`, and `forge lint
+  --migration-safety` replaced `TestForgeMigrationsDeclareCompatibility`
+  (forge #777); migratekit's run lock no longer deadlocks a
+  `CREATE INDEX CONCURRENTLY` (forge #776, §3).
 
 ## Not exercised
 

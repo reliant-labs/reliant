@@ -27,22 +27,22 @@ files to generate type-safe Go code, until the forge ORM replaces it (P5b in
    # Edit db/migrations/<version>_my_changes.up.sql
    ```
 
-   `make migration` runs `forge db migration new` from the forge go.mod pins
-   and starts the file declared backward-compatible (below). Always let forge
-   pick the version: it allocates a UTC timestamp that sorts after every
-   existing one. There is no down migration — a bad migration is repaired by a
-   new one written against the state the database is actually in.
+   `make migration` runs `forge db migration new` from the forge go.mod pins,
+   which opens the file with the two compatibility declarations (below) as a
+   comment to replace. Always let forge pick the version: it allocates a UTC
+   timestamp that sorts after every existing one. There is no down migration —
+   a bad migration is repaired by a new one written against the state the
+   database is actually in.
 
    A migration file runs as ONE transaction (golang-migrate sends it as a
    single multi-statement query). A statement that cannot run in a transaction
    block, such as `CREATE INDEX CONCURRENTLY`, must be the only statement in
-   its file — and do not write one yet: while forge's migrator holds its run
-   lock, the other api-server replica booting beside it waits in a blocking
-   `pg_advisory_lock`, which holds a snapshot that `CREATE INDEX CONCURRENTLY`
-   waits for, and Postgres breaks the deadlock by failing the waiter: every
-   replica but the one migrating fails its boot with `deadlock detected`
-   (reproduced against forge `8d812662`; reported to forge. The goose bridge
-   polls for its own lock for this reason).
+   its file; `forge lint --migration-safety` enforces it. Such a migration is
+   safe beside a replica booting at the same time: forge's migrator waits for
+   its run lock by polling `pg_try_advisory_lock`, holding no statement or
+   snapshot between attempts, so the index build never waits on a waiter
+   (forge #776; before it, every waiting replica failed its boot with
+   `deadlock detected`. The goose bridge polls for its own lock the same way).
 
    **Say whether the previous release survives it.** Rolling back is
    redeploying the previous release onto the schema this one left — until a
@@ -51,15 +51,18 @@ files to generate type-safe Go code, until the forge ORM replaces it (P5b in
 
    ```sql
    -- forge:backward-compatible — additive column; the previous release never reads it
-   -- reliant:breaks-rollback drops chats.title, which the previous release selects
+   -- forge:breaks-rollback drops chats.title, which the previous release selects
    ```
 
    The first is the default and the expand half of expand/contract (add in one
    release, stop reading the old shape, drop it in a later one). forge's
    migrator records it, so an older forge release can prove it may start on
    the newer schema. The second gives the rollback up on purpose; the runbook
-   changes with it. `TestForgeMigrationsDeclareCompatibility` fails a migration
-   that says neither, or still carries `make migration`'s placeholder.
+   changes with it. forge.yaml sets
+   `database.migration_safety.require_compat_declaration`, so
+   `forge lint --migration-safety` (a blocking CI step) fails a migration that
+   says neither — `make migration`'s unedited template included — gives no
+   reason (a `<why …>` placeholder is none), or says both.
 
 2. **Regenerate Go code**:
 
