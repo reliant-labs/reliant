@@ -1294,6 +1294,14 @@ cannot run — the binary is not on PATH, or the config selects no scanner at al
 the command FAILS and names the missing piece, rather than exiting 0 over a scan
 that never happened. The success line names every scanner that actually ran.
 
+Go fails on any advisory your code CALLS; npm fails on any advisory of severity
+high or critical (lower ones are printed, not failed). An advisory with no fixed
+version that cannot reach your code can be accepted under ci.vuln_scan.exemptions
+in forge.yaml — by its GO-… id (govulncheck) or GHSA-… id (npm audit), with a
+reason and an expiry date. Each entry accepts that one advisory and nothing else; an
+expired or incomplete entry fails the gate, and one that matches nothing is reported
+so it can be removed.
+
 ```
 reliant forge ci vuln-scan [flags]
 ```
@@ -6549,6 +6557,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--path`, `-p` | `string` | `.` | Path where to create the project |
 | `--service` | `stringSlice` | `[]` | Name(s) of initial Go services (repeatable or comma-separated). Name services after domain entities (item, order), not the binary. Omit to scaffold zero services and add them later via 'forge scaffold service `<entity>`' |
 | `--skip-tools` | `bool` | - | Skip auto-installing protoc-gen-go / protoc-gen-connect-go (run 'forge tools install' later) |
+| `--verbose`, `-v` | `bool` | - | Print the raw output behind a step forge summarizes in one line (e.g. git's explanation when the initial commit is skipped for want of a git identity) |
 
 ---
 

@@ -24,7 +24,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v0.1.46-0.20261015105719-eb7f12027ae7
+forge_version: v0.1.46-0.20261015192601-2eebdde375c5
 harness: reliant
 config:
     # Typed config (proto/config) is P4. Until every os.Getenv read moves
