@@ -217,7 +217,10 @@ func InferConfig(authorizeURLTemplate string) CallbackConfig {
 // so a bare failure there is a dead end for the user; waiting a moment turns
 // it into a click that just works. Kept short: a port held by something that
 // is NOT a dying flow of ours should still fail fast and say so.
-const listenRetryBudget = 3 * time.Second
+//
+// A variable only so the tests that must wait the budget out can shrink it
+// (setListenRetryBudget); nothing else assigns it.
+var listenRetryBudget = 3 * time.Second
 
 // listenRetryInterval is the poll between bind attempts. Fine enough that the
 // wait is imperceptible when the previous flow is already unwinding.

@@ -95,9 +95,8 @@ func TestRunReusesCompatibleExistingListener(t *testing.T) {
 }
 
 func TestRunFailsForIncompatibleExistingListener(t *testing.T) {
-	if testing.Short() {
-		t.Skip("waits out the full 3s listenRetryBudget against the held port; runs in make test")
-	}
+	// Waits out the whole bind-retry budget against the held port.
+	setListenRetryBudget(t, 400*time.Millisecond)
 	cfg := codexShapedConfig(t)
 	originalOpenBrowser := openBrowser
 	openBrowser = func(string) error { return nil }

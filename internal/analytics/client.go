@@ -91,6 +91,10 @@ type Client struct {
 	// stops sending (until restart) instead of being rejected, and logging
 	// it, once per batch.
 	statsigOff atomic.Bool
+
+	// sleep waits out the retry backoff. nil means time.Sleep; a test
+	// replaces it to record the backoff schedule instead of sleeping it.
+	sleep func(time.Duration)
 }
 
 const (
@@ -763,10 +767,15 @@ func (c *Client) sendEvents(payload map[string]interface{}) error {
 		return fmt.Errorf("failed to marshal events: %w", err)
 	}
 
+	sleep := c.sleep
+	if sleep == nil {
+		sleep = time.Sleep
+	}
+
 	var lastErr error
 	for i := 0; i < maxRetries; i++ {
 		if i > 0 {
-			time.Sleep(retryBackoff * time.Duration(i))
+			sleep(retryBackoff * time.Duration(i))
 		}
 
 		req, err := http.NewRequestWithContext(c.ctx, "POST", getStatsigEndpoint(), bytes.NewReader(data))

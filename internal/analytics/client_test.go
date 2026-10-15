@@ -280,9 +280,6 @@ func TestBatching(t *testing.T) {
 }
 
 func TestRetryLogic(t *testing.T) {
-	if testing.Short() {
-		t.Skip("sleeps through the real 2s+4s retry backoff; skipped under -short")
-	}
 	attemptCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attemptCount++
@@ -309,6 +306,9 @@ func TestRetryLogic(t *testing.T) {
 		sessionID:    "test-session",
 		sessionStart: time.Now(),
 	}
+	// Record the backoff instead of sleeping through it (2s + 4s).
+	var backoffs []time.Duration
+	client.sleep = func(d time.Duration) { backoffs = append(backoffs, d) }
 
 	ctx, cancel := context.WithCancel(context.Background())
 	client.ctx = ctx
@@ -322,6 +322,8 @@ func TestRetryLogic(t *testing.T) {
 
 	// Should have retried and eventually succeeded
 	assert.Equal(t, 3, attemptCount)
+	// ...backing off linearly before each retry, never before the first try.
+	assert.Equal(t, []time.Duration{retryBackoff, 2 * retryBackoff}, backoffs)
 
 	client.Shutdown()
 }

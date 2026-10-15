@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -82,6 +83,11 @@ func (d Deps) validateDeps() error {
 type Service struct {
 	reliantv1connect.UnimplementedStreamingServiceHandler
 	deps Deps
+
+	// heartbeatInterval is how often an idle user stream sends a heartbeat.
+	// Always defaultHeartbeatInterval in production; a field only so a test
+	// can observe a real heartbeat frame without waiting 30 seconds for it.
+	heartbeatInterval time.Duration
 }
 
 // New creates a new streaming service instance with the supplied Deps.
@@ -90,7 +96,7 @@ func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
-	return &Service{deps: deps}, nil
+	return &Service{deps: deps, heartbeatInterval: defaultHeartbeatInterval}, nil
 }
 
 // Name returns the service name for logging and registry.

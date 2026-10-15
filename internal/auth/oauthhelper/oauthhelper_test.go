@@ -218,13 +218,14 @@ func TestIdleTimeout_ClosesThePort(t *testing.T) {
 // A request must RESET the idle clock, or a user reading the consent screen
 // would have the port closed under them.
 func TestIdleTimeout_RequestKeepsItAlive(t *testing.T) {
-	if testing.Short() {
-		t.Skip("sleeps across a real 3s idle window to prove a request resets it (~5s); runs in make test")
-	}
+	// Poking every 100ms for twice the idle window outlives the window the
+	// clock would have closed at, unless each request reset it. Only a stall of
+	// ~900ms between two pokes could fail this, so a loaded machine has room.
+	const idle = time.Second
 	srv, err := Start(Options{
 		Port:        freePort(t),
 		Source:      "daemon",
-		IdleTimeout: 3 * time.Second,
+		IdleTimeout: idle,
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -237,14 +238,14 @@ func TestIdleTimeout_RequestKeepsItAlive(t *testing.T) {
 	addr := srv.Addr()
 
 	// Poke it past the would-be deadline.
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(2 * idle)
 	for time.Now().Before(deadline) {
 		resp, err := http.Get("http://" + addr + "/health")
 		if err != nil {
 			t.Fatalf("helper closed while still being used: %v", err)
 		}
 		_ = resp.Body.Close()
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

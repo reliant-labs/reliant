@@ -24,9 +24,12 @@ import (
 func TestStreamUserUpdates_BinaryConnectWire(t *testing.T) {
 	contentTypes := make(chan string, 1)
 	chatID := raceTestChatID
-	path, handler := reliantv1connect.NewStreamingServiceHandler(
-		NewTestStreaming(t, WithStreamingDeps(Deps{Repo: newCatchupChatRepo(42), Deltas: noopHub{}})),
-	)
+	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: newCatchupChatRepo(42), Deltas: noopHub{}}))
+	// The frame's encoding is what is under test, not the 30s production
+	// cadence, so the heartbeat comes fast. It still comes from the real
+	// ticker in the real stream loop, after the initial snapshot.
+	svc.heartbeatInterval = 100 * time.Millisecond
+	path, handler := reliantv1connect.NewStreamingServiceHandler(svc)
 	mux := http.NewServeMux()
 	mux.Handle(path, authInjector(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		contentTypes <- request.Header.Get("Content-Type")
@@ -38,10 +41,7 @@ func TestStreamUserUpdates_BinaryConnectWire(t *testing.T) {
 	server.Start()
 	t.Cleanup(server.Close)
 
-	if testing.Short() {
-		t.Skip("waits for the production heartbeat interval; skipped under -short")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), heartbeatInterval+10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), svc.heartbeatInterval+10*time.Second)
 	t.Cleanup(cancel)
 	stream, err := reliantv1connect.NewStreamingServiceClient(server.Client(), server.URL).
 		StreamUserUpdates(ctx, connect.NewRequest(&reliantv1.StreamUserUpdatesRequest{

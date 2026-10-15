@@ -41,6 +41,16 @@ const (
 // {"base_urls": ["http://localhost:11434/v1", ...]}.
 const CommandLocalModelsSetEndpoints = "localmodels.set_endpoints"
 
+// localModelWorkerIdleGrace and localModelBridgeIdleGrace stagger the idle
+// deadlines when the request names one: daemon first (it has the most
+// informative error), then the worker, then the bridge as the backstop that
+// frees its in-flight slot.
+//
+// The worker's grace is a variable only so a test can watch the worker's idle
+// timeout fire without waiting 5 seconds for it; nothing else assigns it, and
+// it must stay below localModelBridgeIdleGrace.
+var localModelWorkerIdleGrace = 5 * time.Second
+
 const (
 	// localModelAckTimeout bounds the wait for the bridge to accept a request.
 	localModelAckTimeout = 10 * time.Second
@@ -54,11 +64,8 @@ const (
 	// cold model load before the first token can take minutes.
 	defaultLocalModelIdleTimeout = 5 * time.Minute
 
-	// localModelWorkerIdleGrace and localModelBridgeIdleGrace stagger the
-	// idle deadlines when the request names one: daemon first (it has the
-	// most informative error), then the worker, then the bridge as the
-	// backstop that frees its in-flight slot.
-	localModelWorkerIdleGrace = 5 * time.Second
+	// localModelBridgeIdleGrace is the bridge's share of the idle stagger
+	// (see localModelWorkerIdleGrace).
 	localModelBridgeIdleGrace = 10 * time.Second
 
 	// maxInFlightLocalModelRequests bounds concurrent relayed requests per

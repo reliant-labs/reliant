@@ -64,9 +64,7 @@ func TestBuiltins_NoDuplicateModelSettingInputs(t *testing.T) {
 		if e.IsDir() || e.Name() == "structured-agent.yaml" {
 			continue
 		}
-		data, err := builtin.BuiltinWorkflowsFS.ReadFile(e.Name())
-		require.NoError(t, err)
-		wf, err := runtime.ParseWorkflowProtoBytesWithLoader(data, builtinLoader)
+		wf, err := parseBuiltin(e.Name())
 		require.NoError(t, err, e.Name())
 		for _, dup := range []string{"temperature", "thinking_level", "compaction_threshold"} {
 			_, has := wf.GetInputs()[dup]

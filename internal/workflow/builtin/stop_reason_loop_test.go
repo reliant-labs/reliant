@@ -235,11 +235,7 @@ func TestBuiltinLLMLoopsReadStopReason(t *testing.T) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
 			continue
 		}
-		data, err := builtin.BuiltinWorkflowsFS.ReadFile(entry.Name())
-		if err != nil {
-			t.Fatalf("read %s: %v", entry.Name(), err)
-		}
-		wf, err := v2.ParseWorkflowProtoBytes(data)
+		wf, err := parseBuiltin(entry.Name())
 		if err != nil {
 			t.Fatalf("parse %s: %v", entry.Name(), err)
 		}

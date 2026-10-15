@@ -1142,11 +1142,16 @@ stream is not established.`,
 // daemon running current code always beats daemonStopGrace and `stop` never
 // needs to escalate; escalation exists for a daemon so wedged that even its own
 // watchdog cannot run, and for older binaries that have none.
-const (
+//
+// The two graces are variables only so the tests can shrink them
+// (setDaemonStopGraces): the escalation logic is the same at 50ms as at 12s,
+// and waiting out the real values cost ~34s a run. Nothing else assigns them.
+var (
 	daemonStopGrace = 12 * time.Second
 	daemonKillGrace = 5 * time.Second
-	daemonStopPoll  = 50 * time.Millisecond
 )
+
+const daemonStopPoll = 50 * time.Millisecond
 
 // processControl is the seam over signalling and liveness. It exists so the
 // stop path can be tested against a process that survives SIGKILL — the one

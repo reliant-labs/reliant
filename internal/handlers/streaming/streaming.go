@@ -28,8 +28,9 @@ const (
 )
 
 const (
-	heartbeatInterval = 30 * time.Second
-	batchSize         = 100
+	// defaultHeartbeatInterval is Service.heartbeatInterval in production.
+	defaultHeartbeatInterval = 30 * time.Second
+	batchSize                = 100
 
 	// snapshotMessageLimit bounds the initial chat snapshot to a window of
 	// recent messages rather than the chat's entire history. The client
@@ -215,7 +216,7 @@ func (s *Service) StreamUserUpdates(
 	// Both hubs are subscribed above, before their respective catch-up reads,
 	// so live events overlap the replay rather than falling between the two.
 	// The seq <= last*Seq checks below discard the overlap.
-	heartbeatTicker := time.NewTicker(heartbeatInterval)
+	heartbeatTicker := time.NewTicker(s.heartbeatInterval)
 	defer heartbeatTicker.Stop()
 
 	// Helper channels — nil channels are never selected

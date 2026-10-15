@@ -380,10 +380,20 @@ func TestLocalModelTransport_AuthorizationIsTheSubject(t *testing.T) {
 	assert.Empty(t, mgr.requests, "the daemon must never see another user's request")
 }
 
+// The production stagger the test below shrinks: the worker gives up before the
+// bridge does, so the caller sees the worker's error, which names the daemon.
+func TestLocalModelIdleGraces_WorkerBeforeBridge(t *testing.T) {
+	assert.Less(t, localModelWorkerIdleGrace, localModelBridgeIdleGrace)
+}
+
 func TestLocalModelStream_IdleTimeout(t *testing.T) {
-	if testing.Short() {
-		t.Skip("the worker idle window carries the fixed 5s localModelWorkerIdleGrace; runs in make test")
-	}
+	// The worker's idle window is the request's 50ms plus its grace; at the
+	// real 5s grace this test waited 5 seconds for the timeout to fire. The
+	// bridge's 10s grace is untouched, so the stagger still holds.
+	prev := localModelWorkerIdleGrace
+	localModelWorkerIdleGrace = 100 * time.Millisecond
+	t.Cleanup(func() { localModelWorkerIdleGrace = prev })
+
 	// Daemon accepts and then says nothing.
 	mgr := &silentDaemonMgr{}
 	_, router := startBridgeAndRouter(t, mgr)

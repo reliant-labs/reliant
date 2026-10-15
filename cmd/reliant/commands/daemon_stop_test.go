@@ -94,15 +94,37 @@ func startUnrelatedProcess(t *testing.T, body string) int {
 	return pid
 }
 
+// setDaemonStopGraces swaps the stop and kill graces for one test, so the
+// escalation paths run without waiting out the real 12s + 5s. The logic under
+// test does not depend on the values: each grace is one awaitExit deadline,
+// and a deadline that is waited out fully is just as waited out at 50ms. Not
+// for parallel tests: it swaps package state.
+func setDaemonStopGraces(t *testing.T, stop, kill time.Duration) {
+	t.Helper()
+	prevStop, prevKill := daemonStopGrace, daemonKillGrace
+	daemonStopGrace, daemonKillGrace = stop, kill
+	t.Cleanup(func() { daemonStopGrace, daemonKillGrace = prevStop, prevKill })
+}
+
+// The graces the tests shrink still have to hold their production ordering:
+// the daemon's own watchdog (daemonShutdownGrace) must fire before `stop`
+// gives up on SIGTERM, or a healthy daemon gets escalated to SIGKILL.
+func TestDaemonShutdownGraceBeatsStopGrace(t *testing.T) {
+	require.Less(t, daemonShutdownGrace, daemonStopGrace)
+	require.Positive(t, daemonKillGrace)
+}
+
 // The defect. `stop` sent SIGTERM and then waited on os.Process.Wait, which
 // against a non-child returns "wait: no child processes" immediately; the error
 // was discarded, so the wait was a ~20us no-op, the 10-second escalation behind
 // it was unreachable, and "Daemon stopped" was printed over a live daemon whose
 // runtime record had just been deleted.
 func TestStopDoesNotReportSuccessUntilTheProcessIsGone(t *testing.T) {
-	if testing.Short() {
-		t.Skip("waits out the real 12s daemonStopGrace before escalating; skipped under -short")
-	}
+	// The process ignores SIGTERM, so the stop grace is waited out in full:
+	// that is the part worth shrinking. The kill grace keeps its real value,
+	// because awaitExit returns the moment the SIGKILLed process is reaped and
+	// a loaded machine can take a while to reap it.
+	setDaemonStopGraces(t, 300*time.Millisecond, daemonKillGrace)
 	dataDir := t.TempDir()
 	pid := startUnrelatedProcess(t, `sh -c 'trap "" TERM; while :; do sleep 0.2; done'`)
 	writeRecordForPID(t, dataDir, pid)
@@ -141,9 +163,8 @@ func TestStopReportsSuccessWhenTheProcessExitsGracefully(t *testing.T) {
 // a stale one — `status` then says "no daemon running" and `start` creates a
 // second daemon under the same gateway identity.
 func TestStopKeepsTheRecordAndFailsWhenTheProcessSurvives(t *testing.T) {
-	if testing.Short() {
-		t.Skip("waits out the real 12s stop grace plus 5s kill grace; skipped under -short")
-	}
+	// The fake process never dies, so both graces are waited out in full.
+	setDaemonStopGraces(t, 50*time.Millisecond, 50*time.Millisecond)
 	dataDir := t.TempDir()
 	writeRecordForPID(t, dataDir, 4242)
 
@@ -199,9 +220,7 @@ func TestStopWithoutARecordSaysSo(t *testing.T) {
 
 // --force does not get to skip verification either.
 func TestForceStopStillVerifiesTheProcessIsGone(t *testing.T) {
-	if testing.Short() {
-		t.Skip("waits out the real 5s daemonKillGrace; skipped under -short")
-	}
+	setDaemonStopGraces(t, 50*time.Millisecond, 50*time.Millisecond)
 	dataDir := t.TempDir()
 	writeRecordForPID(t, dataDir, 4242)
 

@@ -108,10 +108,14 @@ func TestRunCommand_TimeoutIsEnforcedDespiteLingeringChild(t *testing.T) {
 }
 
 func TestRunCommand_SlowButWorkingCommandIsNotCut(t *testing.T) {
-	shortWaitDelay(t) // 1s bound, 4s command
+	// 1s bound, 2s command. Twice the bound is as conclusive as four times:
+	// a bound that started counting before exit would cut it either way. The
+	// bound itself stays at 1s, because after exit it must still cover the
+	// pipe drain on a loaded machine.
+	shortWaitDelay(t)
 
 	res, err := NewLocalClient().RunCommand(context.Background(), &RunCommandRequest{
-		Command:    `echo start; sleep 4; echo end`,
+		Command:    `echo start; sleep 2; echo end`,
 		WorkingDir: t.TempDir(),
 		TimeoutMs:  60_000,
 	})

@@ -11,10 +11,8 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
-	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
-	"github.com/reliant-labs/reliant/internal/workflow/validation"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/assert"
@@ -42,14 +40,11 @@ func TestBuiltinWorkflowScenarios(t *testing.T) {
 		workflowFile := entry.Name()
 		workflowName := strings.TrimSuffix(strings.TrimSuffix(workflowFile, ".yaml"), ".yml")
 
-		workflowData, err := builtin.BuiltinWorkflowsFS.ReadFile(workflowFile)
-		require.NoError(t, err, "Failed to read workflow %s", workflowFile)
-
-		wf, err := v2.ParseWorkflowProtoBytesWithLoader(workflowData, builtinLoader)
+		wf, err := parseBuiltin(workflowFile)
 		require.NoError(t, err, "Failed to parse workflow %s", workflowFile)
 
 		// Full structural validation (same as the runtime uses).
-		result := validation.StaticAnalysis(wf, builtinLoader)
+		result := analyzeBuiltin(workflowFile)
 		require.NoError(t, result.AsError(), "Workflow validation failed for %s", workflowFile)
 
 		scenarios, err := loadScenariosForWorkflow(t, layout, workflowName)

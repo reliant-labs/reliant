@@ -42,6 +42,10 @@ func startNATSCluster(t *testing.T, n int) *natsTestCluster {
 		routePorts[i] = freeLocalPort(t)
 	}
 	c := &natsTestCluster{}
+	// routesPerPeer is how many route connections a member holds to each
+	// peer once the mesh is complete: one per pool slot plus one per pinned
+	// account. NewServer fills both defaults into the options it is given.
+	var routesPerPeer int
 	for i := 0; i < n; i++ {
 		var routes []string
 		for j, p := range routePorts {
@@ -65,6 +69,7 @@ func startNATSCluster(t *testing.T, n int) *natsTestCluster {
 		opts.Routes = server.RoutesFromStr(joinCSV(routes))
 		srv, err := server.NewServer(opts)
 		require.NoError(t, err)
+		routesPerPeer = max(opts.Cluster.PoolSize, 1) + len(opts.Cluster.PinnedAccounts)
 		go srv.Start()
 		c.servers = append(c.servers, srv)
 	}
@@ -76,6 +81,30 @@ func startNATSCluster(t *testing.T, n int) *natsTestCluster {
 	for _, s := range c.servers {
 		require.True(t, s.ReadyForConnections(20*time.Second), "cluster member not ready")
 	}
+	// Wait for the COMPLETE route mesh, not just a JetStream meta leader.
+	//
+	// The members start together, so some of their first route dials are
+	// refused and the races between explicit and implicit routes end in
+	// duplicate routes being closed. That can leave one pool slot between two
+	// members empty until the 1s reconnect fills it. JetStream rides the
+	// system account's pinned route, so the cluster elects leaders and
+	// reports healthy, but the $G interest that slot carries does not cross:
+	// a stream leader's subscription never reaches the member the test
+	// publishes through ("nats: no response from stream"), and an advisory
+	// the test subscribed to is dropped by a member that never heard of the
+	// subscription. Captured in a protocol trace: n0's RS+ for the advisory
+	// reached n2 only 0.7s later, over the reconnected route, after n2 had
+	// already published the consumer-created advisory to nobody.
+	// nats-server's own tests wait for exactly this (checkClusterFormed).
+	wantRoutes := (n - 1) * routesPerPeer
+	require.Eventually(t, func() bool {
+		for _, s := range c.servers {
+			if s.NumRoutes() != wantRoutes {
+				return false
+			}
+		}
+		return true
+	}, 20*time.Second, 50*time.Millisecond, "route mesh never completed: want %d routes per member", wantRoutes)
 	require.Eventually(t, func() bool {
 		leader := false
 		for _, s := range c.servers {
@@ -108,13 +137,47 @@ func (c *natsTestCluster) connect(t *testing.T) *nats.Conn {
 	return nc
 }
 
-// assertHealthy fails if any member's /healthz would fail.
+// assertHealthy fails unless every member's /healthz settles at ok.
+//
+// Settles, not "is ok at this instant": a follower of an idle raft group
+// reports "not current, no recent leader contact" once 2 x hbInterval passes
+// without an append from its leader, and an idle leader heartbeats on a 1s
+// ticker that skips a beat when it sent anything in the last second, so its
+// gaps run up to ~2s by design. A single sample can land in that gap on a
+// perfectly healthy cluster (captured: a 2.03s gap, 4s after the drain's last
+// write). The defect these tests guard, per-poll consumer churn, is pinned
+// exactly by the consumer-created advisory counts; health here means the drain
+// leaves no lasting damage, which a cluster that stays unhealthy fails.
 func (c *natsTestCluster) assertHealthy(t *testing.T, when string) {
 	t.Helper()
-	for _, s := range c.servers {
-		hs := s.Healthz(&server.HealthzOptions{})
-		require.Equal(t, "ok", hs.Status, "%s: %s /healthz = %s (%s)", when, s.Name(), hs.Status, hs.Error)
+	var last string
+	healthy := func() bool {
+		for _, s := range c.servers {
+			if hs := s.Healthz(&server.HealthzOptions{}); hs.Status != "ok" {
+				last = fmt.Sprintf("%s /healthz = %s (%s)", s.Name(), hs.Status, hs.Error)
+				return false
+			}
+		}
+		return true
 	}
+	if healthy() {
+		return
+	}
+	require.Eventually(t, healthy, 10*time.Second, 50*time.Millisecond, "%s: never healthy, last: %s", when, last)
+}
+
+// waitInterest blocks until every member has interest in subject, so a
+// message published on it from any member reaches the subscriber.
+func (c *natsTestCluster) waitInterest(t *testing.T, subject string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		for _, s := range c.servers {
+			if !s.GlobalAccount().SubscriptionInterest(subject) {
+				return false
+			}
+		}
+		return true
+	}, 10*time.Second, 20*time.Millisecond, "interest in %s never reached every member", subject)
 }
 
 func (c *natsTestCluster) waitHealthy(t *testing.T) {
@@ -172,12 +235,20 @@ func newPendingClusterEnv(t *testing.T) *pendingClusterEnv {
 	require.Equal(t, 3, stream.CachedInfo().Config.Replicas)
 
 	env := &pendingClusterEnv{cluster: c, nc: nc, js: js, stream: stream}
-	sub, err := nc.Subscribe("$JS.EVENT.ADVISORY.CONSUMER.CREATED."+pendingCommandsStream+".*", func(*nats.Msg) {
+	advisories := "$JS.EVENT.ADVISORY.CONSUMER.CREATED." + pendingCommandsStream + ".*"
+	sub, err := nc.Subscribe(advisories, func(*nats.Msg) {
 		env.consumerCreates.Add(1)
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 	require.NoError(t, nc.Flush())
+	// The advisory is published by whichever member leads the new consumer,
+	// and dropped if that member has not yet heard of this subscription. Flush
+	// proves only that the member we are connected to has it.
+	c.waitInterest(t, "$JS.EVENT.ADVISORY.CONSUMER.CREATED."+pendingCommandsStream+".probe")
+	// And the stream leader's subscription must have reached the member we
+	// publish through, or a publish finds no responders.
+	c.waitInterest(t, pendingSubjectPrefix+"probe")
 	// A freshly created R3 stream is briefly "not current" on followers; that
 	// settles on its own. Baseline AFTER it does, so any later failure is
 	// attributable to what the test does.

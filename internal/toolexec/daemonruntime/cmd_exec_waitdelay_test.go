@@ -112,12 +112,15 @@ func TestHandleExecRun_TimeoutIsEnforcedDespiteLingeringChild(t *testing.T) {
 // matters most: the bound must never truncate a command that is simply slow.
 // It cannot, structurally — WaitDelay's clock starts only once the process has
 // exited or the context is done — and this pins that with a command that runs
-// for several multiples of the bound and still returns complete output.
+// for twice the bound and still returns complete output. Twice is as
+// conclusive as four times: a bound that started counting before exit would
+// cut it either way. The bound itself stays at 1s, because after exit it must
+// still cover the pipe drain on a loaded machine.
 func TestHandleExecRun_SlowButWorkingCommandIsNotCut(t *testing.T) {
-	shortWaitDelay(t) // 1s bound, 4s command
+	shortWaitDelay(t) // 1s bound, 2s command
 
 	res := runExec(t, daemon.RunCommandRequest{
-		Command:    `echo start; sleep 4; echo end`,
+		Command:    `echo start; sleep 2; echo end`,
 		WorkingDir: t.TempDir(),
 		TimeoutMs:  60_000,
 	})

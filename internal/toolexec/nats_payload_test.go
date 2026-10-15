@@ -230,8 +230,15 @@ func TestChunkedReply_OverAbsoluteCapReturnsStructuredError(t *testing.T) {
 	}
 	_, router := startBridgeAndRouter(t, mgr)
 
+	// "Fast, not a timeout" means the bridge's structured reply ends the call,
+	// not the request's deadline. That is what is asserted, and the deadline is
+	// deliberately generous so nothing else can end it: building and encoding
+	// 49MB is seconds of CPU under -race on a loaded machine, so the old
+	// `elapsed < 5s` measured the machine, not the code, and failed under load.
+	const requestTimeout = 60 * time.Second
 	start := time.Now()
-	payload, err := router.SendDaemonCommand(context.Background(), "user-1", "fs.search", []byte(`{"pattern":"x"}`), 10000)
+	payload, err := router.SendDaemonCommand(context.Background(), "user-1", "fs.search", []byte(`{"pattern":"x"}`),
+		int32(requestTimeout/time.Millisecond))
 	elapsed := time.Since(start)
 
 	require.Error(t, err)
@@ -241,7 +248,9 @@ func TestChunkedReply_OverAbsoluteCapReturnsStructuredError(t *testing.T) {
 	assert.Contains(t, err.Error(), "narrow your search", "error must be actionable")
 	assert.Contains(t, err.Error(), `daemon command "fs.search" failed`, "error must name the command")
 	assert.NotContains(t, err.Error(), "nats: timeout", "must fail fast, not time out")
-	assert.Less(t, elapsed, 5*time.Second)
+	assert.NotErrorIs(t, err, nats.ErrTimeout, "must fail fast, not time out")
+	assert.NotErrorIs(t, err, context.DeadlineExceeded, "must fail fast, not time out")
+	assert.Less(t, elapsed, requestTimeout, "the reply, not the deadline, must end the call")
 }
 
 // An oversize tools.request.sync result transits the chunked transport intact

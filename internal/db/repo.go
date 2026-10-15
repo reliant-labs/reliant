@@ -144,6 +144,22 @@ type Repo struct {
 	// streaming hubs after DB writes. Nil = no notification (tests, CLI).
 	onUserUpdate UserUpdateNotifier
 	onChatUpdate ChatUpdateNotifier
+
+	// retrySleep waits out RunTx's backoff between attempts. Nil (always, in
+	// production) means time.Sleep. A test sets it to record the backoff
+	// ladder instead of sleeping through it: an exhausted retry budget is
+	// ~2.5s of sleep. Per Repo, so parallel tests cannot see each other's.
+	retrySleep func(time.Duration)
+}
+
+// backoffBeforeRetry sleeps calculateBackoff(attempt) before RunTx retries.
+func (r *Repo) backoffBeforeRetry(attempt int) {
+	delay := calculateBackoff(attempt)
+	if r.retrySleep != nil {
+		r.retrySleep(delay)
+		return
+	}
+	time.Sleep(delay)
 }
 
 // NewRepo creates a new Repo with the given database
@@ -575,7 +591,7 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts TxOptions, f func(ctx 
 					"attempt", attempt+1,
 					"maxRetries", maxRetries,
 					"error", err)
-				time.Sleep(calculateBackoff(attempt))
+				r.backoffBeforeRetry(attempt)
 				continue
 			}
 			logging.Error("Failed to begin transaction", "error", err, "attempts", attempt+1)
@@ -595,7 +611,7 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts TxOptions, f func(ctx 
 				"attempt", attempt+1,
 				"maxRetries", maxRetries,
 				"error", result.err)
-			time.Sleep(calculateBackoff(attempt))
+			r.backoffBeforeRetry(attempt)
 			continue
 		}
 

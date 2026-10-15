@@ -41,15 +41,12 @@ func TestValidateBuiltinWorkflows(t *testing.T) {
 		}
 
 		t.Run(entry.Name(), func(t *testing.T) {
-			data, err := builtin.BuiltinWorkflowsFS.ReadFile(entry.Name())
-			require.NoError(t, err, "Failed to read %s", entry.Name())
-
-			wf, err := runtime.ParseWorkflowProtoBytesWithLoader(data, builtinLoader)
+			wf, err := parseBuiltin(entry.Name())
 			require.NoError(t, err, "Failed to parse %s", entry.Name())
 
 			// Run FULL validation - same as runtime uses
 			// This catches unknown arg fields, invalid CEL, etc.
-			result := validation.StaticAnalysis(wf, builtinLoader)
+			result := analyzeBuiltin(entry.Name())
 			require.NoError(t, result.AsError(), "Validation failed for %s", entry.Name())
 
 			// Builtins must have ZERO execution-ordering findings, warnings
@@ -95,7 +92,7 @@ func TestAllBuiltinWorkflowsDiscoverable(t *testing.T) {
 			require.NoError(t, err, "Should be able to read %s", filename)
 			require.NotEmpty(t, data, "File %s should not be empty", filename)
 
-			wf, err := runtime.ParseWorkflowProtoBytesWithLoader(data, builtinLoader)
+			wf, err := parseBuiltin(filename)
 			require.NoError(t, err, "Should be able to parse %s", filename)
 			require.NotNil(t, wf, "Workflow should not be nil")
 			assert.NotEmpty(t, wf.GetName(), "Workflow should have a name")
@@ -151,12 +148,11 @@ func TestBuiltinWorkflowLoading(t *testing.T) {
 
 			// This mimics the runtime loading path for YAML-based builtins
 			filename := name + ".yaml"
-			data, err := builtin.BuiltinWorkflowsFS.ReadFile(filename)
-			if err != nil {
+			if _, err := builtin.BuiltinWorkflowsFS.ReadFile(filename); err != nil {
 				t.Fatalf("builtin workflow not found: builtin://%s (tried embedded %s): %v", name, filename, err)
 			}
 
-			wf, err := runtime.ParseWorkflowProtoBytesWithLoader(data, builtinLoader)
+			wf, err := parseBuiltin(filename)
 			require.NoError(t, err, "Should parse builtin://%s", name)
 			require.NotNil(t, wf, "Workflow should not be nil")
 			assert.Equal(t, name, wf.GetName(), "Workflow name should match")
@@ -206,10 +202,7 @@ func TestBuiltinWorkflowModelIDsAreValid(t *testing.T) {
 		}
 
 		t.Run(entry.Name(), func(t *testing.T) {
-			data, err := builtin.BuiltinWorkflowsFS.ReadFile(entry.Name())
-			require.NoError(t, err, "Should be able to read %s", entry.Name())
-
-			wf, err := runtime.ParseWorkflowProtoBytesWithLoader(data, builtinLoader)
+			wf, err := parseBuiltin(entry.Name())
 			require.NoError(t, err, "Should be able to parse %s", entry.Name())
 
 			// Check top-level inputs for model defaults
@@ -292,10 +285,7 @@ func TestBuiltinPresetsValidateAgainstWorkflows(t *testing.T) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
 			continue
 		}
-		data, err := builtin.BuiltinWorkflowsFS.ReadFile(entry.Name())
-		require.NoError(t, err)
-
-		wf, err := runtime.ParseWorkflowProtoBytesWithLoader(data, builtinLoader)
+		wf, err := parseBuiltin(entry.Name())
 		require.NoError(t, err)
 		workflows = append(workflows, wf)
 	}
@@ -423,10 +413,7 @@ func TestBuiltinWorkflowNodePresetReferencesExist(t *testing.T) {
 		}
 
 		t.Run(entry.Name(), func(t *testing.T) {
-			data, err := builtin.BuiltinWorkflowsFS.ReadFile(entry.Name())
-			require.NoError(t, err, "Should be able to read %s", entry.Name())
-
-			wf, err := runtime.ParseWorkflowProtoBytesWithLoader(data, builtinLoader)
+			wf, err := parseBuiltin(entry.Name())
 			require.NoError(t, err, "Should be able to parse %s", entry.Name())
 
 			// Check all nodes for preset references

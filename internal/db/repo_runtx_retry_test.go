@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -28,14 +27,28 @@ func serializationFailure() error {
 	}
 }
 
+// recordRetryBackoff makes repo's RunTx record each backoff it would sleep
+// instead of sleeping it, and returns the recording. Exhausting the retry
+// budget is otherwise ~2.5s of real sleep per test, spent proving nothing the
+// recording does not. RunTx retries sequentially, so no lock is needed.
+func recordRetryBackoff(repo *Repo) *[]time.Duration {
+	var backoffs []time.Duration
+	repo.retrySleep = func(d time.Duration) { backoffs = append(backoffs, d) }
+	return &backoffs
+}
+
 // RunTx must retry a retryable failure and return success when a later attempt
 // succeeds. This is the core contract; without it every 40001 is a user-visible
 // error rather than a hiccup.
+//
+// This test keeps the REAL sleep (two short backoffs, ~150ms), so the
+// production time.Sleep path is exercised somewhere.
 func TestRunTx_RetriesUntilSuccess(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	attempts := 0
+	start := time.Now()
 	err := repo.RunTx(context.Background(), func(ctx context.Context) error {
 		attempts++
 		if attempts < 3 {
@@ -43,12 +56,18 @@ func TestRunTx_RetriesUntilSuccess(t *testing.T) {
 		}
 		return nil
 	})
+	elapsed := time.Since(start)
 
 	if err != nil {
 		t.Fatalf("RunTx should have succeeded on the third attempt, got: %v", err)
 	}
 	if attempts != 3 {
 		t.Fatalf("expected exactly 3 attempts (2 failures + 1 success), got %d", attempts)
+	}
+	// A lower bound only: load can stretch a sleep but never shorten it. Two
+	// backoffs of at least 3/4 of baseRetryDelay and 2*baseRetryDelay.
+	if minSlept := 3 * (baseRetryDelay + 2*baseRetryDelay) / 4; elapsed < minSlept {
+		t.Fatalf("two retries took %v, less than the %v their backoff sleeps alone take", elapsed, minSlept)
 	}
 }
 
@@ -58,6 +77,7 @@ func TestRunTx_RetriesUntilSuccess(t *testing.T) {
 func TestRunTx_StopsAtMaxRetries(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
+	recordRetryBackoff(repo)
 
 	attempts := 0
 	err := repo.RunTx(context.Background(), func(ctx context.Context) error {
@@ -112,6 +132,7 @@ func TestRunTx_DoesNotRetryNonRetryable(t *testing.T) {
 func TestRunTx_ExhaustionPreservesErrorChain(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
+	recordRetryBackoff(repo)
 
 	err := repo.RunTx(context.Background(), func(ctx context.Context) error {
 		return serializationFailure()
@@ -167,31 +188,28 @@ func TestRunTx_NestedDoesNotRetryIndependently(t *testing.T) {
 
 // Retries must be spaced, not immediate. Hammering a contended row with no
 // delay makes the conflict that caused the retry more likely to recur.
+//
+// The backoffs are recorded rather than slept (see recordRetryBackoff), which
+// pins more than wall-clock gaps could: exactly one backoff before each retry,
+// none before the first attempt, each on the capped exponential ladder.
 func TestRunTx_BacksOffBetweenRetries(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-
-	var mu sync.Mutex
-	var gaps []time.Duration
-	last := time.Now()
+	backoffs := recordRetryBackoff(repo)
 
 	_ = repo.RunTx(context.Background(), func(ctx context.Context) error {
-		mu.Lock()
-		now := time.Now()
-		gaps = append(gaps, now.Sub(last))
-		last = now
-		mu.Unlock()
 		return serializationFailure()
 	})
 
-	// gaps[0] is the time to the first attempt (no backoff); every gap after
-	// that follows a retry and must be non-trivial.
-	if len(gaps) < 2 {
-		t.Fatalf("expected multiple attempts, got %d", len(gaps))
+	if len(*backoffs) != maxRetries {
+		t.Fatalf("expected one backoff before each of the %d retries, got %d: %v", maxRetries, len(*backoffs), *backoffs)
 	}
-	for i := 1; i < len(gaps); i++ {
-		if gaps[i] <= 0 {
-			t.Fatalf("retry %d followed the previous attempt with no delay", i)
+	for attempt, got := range *backoffs {
+		// calculateBackoff: baseRetryDelay doubling per attempt, capped at
+		// maxRetryDelay, with jitter in [-25%, +25%).
+		want := min(baseRetryDelay<<attempt, maxRetryDelay)
+		if got < want*3/4 || got >= want*5/4 {
+			t.Fatalf("backoff before retry %d = %v, want %v ±25%%", attempt+1, got, want)
 		}
 	}
 }
@@ -235,6 +253,7 @@ func TestRunTx_HonorsContextCancellation(t *testing.T) {
 func TestRunTx_ExhaustionReturnsUnflattenedError(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
+	recordRetryBackoff(repo)
 
 	err := repo.RunTx(context.Background(), func(ctx context.Context) error {
 		return serializationFailure()
