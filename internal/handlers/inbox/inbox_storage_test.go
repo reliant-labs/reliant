@@ -332,14 +332,19 @@ func TestCleanupStorage_UnavailableWithoutASweeper(t *testing.T) {
 	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 }
 
-// slowSender answers only after the 10s default RPC deadline would have fired.
-type slowSender struct {
-	done chan struct{}
+// heldSender does not answer until the test releases it, so an RPC that waits
+// for the machine cannot return while it is held. Its context is recorded so
+// the test can see the work outlived the request's.
+type heldSender struct {
+	release chan struct{}
+	done    chan struct{}
+	ctxErr  error
 }
 
-func (s *slowSender) SendDaemonCommandToDaemon(ctx context.Context, _, _, _ string, _ []byte, _ int32) ([]byte, error) {
+func (s *heldSender) SendDaemonCommandToDaemon(ctx context.Context, _, _, _ string, _ []byte, _ int32) ([]byte, error) {
 	defer close(s.done)
-	time.Sleep(300 * time.Millisecond)
+	<-s.release
+	s.ctxErr = ctx.Err()
 	return nil, assert.AnError
 }
 
@@ -347,33 +352,49 @@ func (s *slowSender) SendDaemonCommandToDaemon(ctx context.Context, _, _, _ stri
 // accepted at once, and the work must outlive the request's context.
 func TestCleanupStorage_ReturnsAtOnceAndSurvivesTheRequestContext(t *testing.T) {
 	f, daemonID, wtID := storageFixture(t)
-	sender := &slowSender{done: make(chan struct{})}
+	sender := &heldSender{release: make(chan struct{}), done: make(chan struct{})}
 	f.withSweeper(t, worktreesweep.New(f.repo, sender))
 
 	ic := interceptors.NewTimeoutInterceptor().Interceptor()
-	var deadline time.Duration
+	reqCtx, cancelReq := context.WithCancel(f.ctx)
 	call := ic(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if d, ok := ctx.Deadline(); ok {
-			deadline = time.Until(d)
-		}
 		return f.inbox.CleanupStorage(ctx, req.(*connect.Request[reliantv1.CleanupStorageRequest]))
 	})
 	req := connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}})
-	start := time.Now()
-	resp, err := call(f.ctx, req)
-	require.NoError(t, err)
-	assert.Less(t, time.Since(start), 250*time.Millisecond, "the RPC must not wait for the machine")
-	_ = deadline
 
-	out := resp.(*connect.Response[reliantv1.CleanupStorageResponse]).Msg
+	// The machine is held for the whole call: an RPC that waits for it never
+	// returns, and fails here rather than by a wall-clock bound a loaded host
+	// can miss.
+	type result struct {
+		resp connect.AnyResponse
+		err  error
+	}
+	returned := make(chan result, 1)
+	go func() {
+		resp, err := call(reqCtx, req)
+		returned <- result{resp, err}
+	}()
+	var res result
+	select {
+	case res = <-returned:
+	case <-time.After(10 * time.Second):
+		close(sender.release)
+		t.Fatal("the RPC waited for the machine")
+	}
+	require.NoError(t, res.err)
+	out := res.resp.(*connect.Response[reliantv1.CleanupStorageResponse]).Msg
 	require.Len(t, out.Results, 1)
 	assert.Equal(t, reliantv1.CleanupStorageOutcome_CLEANUP_STORAGE_OUTCOME_ACCEPTED, out.Results[0].Outcome)
 
+	// The request is over; the clean-up must outlive its context.
+	cancelReq()
+	close(sender.release)
 	select {
 	case <-sender.done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the background clean-up never ran")
 	}
+	assert.NoError(t, sender.ctxErr, "the clean-up ran on the request's cancelled context")
 	require.Eventually(t, func() bool {
 		wt, err := f.repo.GetWorktree(f.ctx, wtID)
 		return err == nil && wt.CleanupMetadata != nil && !wt.CleanupMetadata.Cleaning
