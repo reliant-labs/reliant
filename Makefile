@@ -64,7 +64,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-short test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
+.PHONY: all build build-all clean test test-short test-affected test-affected-plan test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
 
 # Default target
 all: deps fmt vet test build
@@ -194,6 +194,24 @@ test:
 # read those inputs itself (os.ReadFile) — otherwise a cached `ok` goes stale.
 test-short:
 	$(GOTEST) -short -timeout 60s $(or $(PKGS),./...)
+
+## test-affected: Run ONLY the tests your diff can reach (Go -short, vitest, electron), diffed against the merge-base with origin/main
+# The first thing to run before pushing. Reads the diff (committed, staged,
+# unstaged, untracked), maps each path to the Go packages and their reverse
+# dependencies, the vitest files that import it, and the electron tests, runs
+# those and prints why each ran. A path it cannot place, a go.mod/package.json/
+# Makefile/config change, or a diff it cannot compute runs the whole lane.
+# Knobs: TEST_BASE=<rev> moves the diff base, TEST_FULL=1 runs everything,
+# LANES=go,web,electron picks lanes. A migration also runs the DB-backed
+# packages it reaches, but only when YOU set DATABASE_URL (the compose default
+# is not exported here: it is a server shared by everyone on this machine).
+# Design and the rule table: dev-docs/testing-affected.md.
+test-affected:
+	$(GOCMD) run ./tools/test-affected run $(if $(LANES),-lanes $(LANES))
+
+## test-affected-plan: Print what test-affected would run and why, without running it
+test-affected-plan:
+	$(GOCMD) run ./tools/test-affected $(if $(LANES),-lanes $(LANES))
 
 ## test-race: Run tests with race detection
 test-race:

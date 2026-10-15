@@ -47,11 +47,21 @@ For the usual `forge env up` stack, every log — backend, browser console, Elec
 
 ## Testing while iterating
 
-Run the fast tier, scoped to what you touched:
+Run the affected tier first: it runs ONLY the tests your diff can reach (Go
+packages plus their reverse dependencies, `-short`; the vitest files importing a
+changed web module; electron when it or a file it reads changed) and says why each ran:
 
 ```bash
-make test-short PKGS=./internal/<pkg>/...  # -short, cached, no -race, 60s/pkg
+make test-affected                         # diff vs merge-base with origin/main, all lanes
+make test-affected-plan                    # same decision, nothing run
+make test-affected LANES=go                # one lane; TEST_BASE=<rev> moves the base, TEST_FULL=1 runs all
+make test-short PKGS=./internal/<pkg>/...  # one package by hand: -short, cached, no -race, 60s/pkg
 ```
+
+`go.mod`, `package.json`, `Makefile`, config, or a path nothing claims runs the whole
+lane. A migration also runs the DB-backed packages it reaches, but only when you
+set `DATABASE_URL`. Rule table and blind spots: `dev-docs/testing-affected.md`.
+Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under load.
 
 - **Never `make test` / `make test-all`** — they run `make stop`, which stops
   other agents' environments. For the full lane run `go test ./internal/<pkg>/...`

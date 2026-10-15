@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import os from "node:os";
 import path from "path";
 import { browserLogSink } from "./vite-plugin-browser-logs";
 import { versionJson } from "./vite-plugin-version-json";
@@ -18,6 +19,25 @@ function getWorktreeName(): string {
     return 'dev';
   }
 }
+
+// Vitest sizing. A jsdom worker is ~300MB and a core's worth of CPU, and this
+// suite (~750 files) shares a machine with other agents' builds, so two knobs
+// follow the host instead of assuming an idle box:
+//  - workers: one per core, capped at 8 (jsdom workers are memory-heavy; vitest's
+//    own default is one per core, 15 on a 16-core box).
+//  - timeouts: the 5s default is for an idle machine. At load average 6x the core
+//    count (25 tests hit "timed out in 5000ms" at load 97 on 16 cores) a timeout
+//    says the host is busy, not that the code regressed. Scales 1x..6x with the
+//    1-minute load per core.
+// VITEST_MAX_WORKERS / VITEST_TIMEOUT_MS override both (CI, debugging a hang).
+function intEnv(name: string): number | undefined {
+  const n = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+const cores = os.availableParallelism();
+const maxWorkers = intEnv("VITEST_MAX_WORKERS") ?? Math.max(2, Math.min(8, cores));
+const loadFactor = Math.min(6, Math.max(1, Math.ceil(os.loadavg()[0] / cores)));
+const testTimeout = intEnv("VITEST_TIMEOUT_MS") ?? 5_000 * loadFactor;
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -193,6 +213,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
+    maxWorkers,
+    testTimeout,
+    hookTimeout: Math.max(10_000, testTimeout * 2),
     setupFiles: "./src/test/setup.ts",
     exclude: [
       "**/node_modules/**",

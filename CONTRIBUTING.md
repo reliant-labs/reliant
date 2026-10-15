@@ -96,10 +96,19 @@ plugins. `make pin-forge` regenerates for you.
 ## Running Tests
 
 ```bash
+make test-affected     # FIRST: only the tests your diff can reach (Go -short, vitest, electron)
 make postgres-up       # once: this repo's compose Postgres, for DB-backed tests
 make test              # Go tests
 npm run verify:dev     # full verification (lint + type-check + tests)
 ```
+
+`make test-affected` diffs against the merge-base with `origin/main`, runs the
+Go packages whose test binaries contain a changed package, the vitest files that
+import a changed module, and the electron tests when electron or a file they read
+changed, and prints why each ran. A `go.mod`, `package.json`, `Makefile` or config
+change, or any path nothing claims, runs the whole lane. `make test-affected-plan`
+prints the decision without running it. The rule table and its blind spots:
+[dev-docs/testing-affected.md](dev-docs/testing-affected.md).
 
 ### Which database the Go tests use
 
