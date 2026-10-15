@@ -18,6 +18,11 @@ type ScenarioFile struct {
 	Scenarios  []*Scenario `yaml:"scenarios"`
 }
 
+// wrapperListKey is ScenarioFile's list key: a document with it at the top
+// level is the wrapper format. It is a YAML key, not the scenarios directory,
+// whose layout lives in workflowref.
+const wrapperListKey = "scenarios"
+
 // LoadScenariosFromFile loads scenarios from a YAML file on disk.
 // Supports two formats:
 // 1. Multi-document YAML (separated by ---)
@@ -70,7 +75,7 @@ func readScenarioDocs(data []byte) ([]scenarioDoc, error) {
 			continue // an empty document between separators
 		}
 
-		if hasTopLevelKey(node.Content[0], "scenarios") {
+		if hasTopLevelKey(node.Content[0], wrapperListKey) {
 			var wrapper ScenarioFile
 			if err := typed.Decode(&wrapper); err != nil {
 				return nil, fmt.Errorf("failed to parse scenario YAML: %w", err)
