@@ -110,6 +110,11 @@ change, or any path nothing claims, runs the whole lane. `make test-affected-pla
 prints the decision without running it. The rule table and its blind spots:
 [dev-docs/testing-affected.md](dev-docs/testing-affected.md).
 
+CI runs Go tests in two tiers: `go test -short` on a pull request, the full
+suite on every push to main and nightly. A test gated on `testing.Short()` runs
+only in the full tier, so run its package without `-short` when you change what
+it covers. See "CI tiers" in the same document.
+
 ### Which database the Go tests use
 
 DB-backed tests use `DATABASE_URL` and nothing else. They never pick a server

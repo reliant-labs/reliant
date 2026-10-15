@@ -37,6 +37,20 @@
 # dark gate — or deciding to delete it, which is also a legitimate answer — is a
 # human call.
 
+#
+# MAIN IS GREEN (the second job)
+# ==============================
+#
+# PR CI runs Go tests in two tiers: `-short` on pull requests and the full
+# suite on pushes to main and nightly (pr-ci.yml, the backend job). Every
+# short-gated test therefore runs ONLY on main, and a red main is the one place
+# those tests can fail at all. A red push run notifies only whoever merged; a
+# red scheduled run, only whoever last edited its cron. So `main-health` runs
+# after every PR CI run on main and keeps ONE issue, labelled `ci:main-red`,
+# open for exactly as long as main's newest verdict is red. It also fails when
+# main's run has no "Backend (Go, full)" job: the full tier stopping on main is
+# the PR and full tiers silently merging into one, and must not read as green.
+
 name: Gate health
 
 on:
@@ -45,6 +59,14 @@ on:
     # ~50 runs to go unnoticed, so a week is early, and a daily run for a
     # condition that changes this slowly is how an alert gets muted.
     - cron: "0 14 * * 1"
+  # Every PR CI run on main (push, nightly, dispatch) that finishes. The
+  # `branches` filter matches the triggering run's head branch, so PR runs do
+  # not fire it; main-health's `if` re-checks the event anyway (a fork's branch
+  # named `main`).
+  workflow_run:
+    workflows: ["PR CI"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       workflow:
@@ -64,16 +86,21 @@ permissions:
 jobs:
   gate-health:
     name: No CI gate has gone dark
+    # The weekly audit; a single main run finishing is main-health's business.
+    if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
-      # No --branch on purpose. pr-ci.yml is triggered by `pull_request` only, so
-      # it has ZERO runs on the default branch; a main-scoped audit would find
-      # nothing and pass, which is precisely the do-nothing gate this workflow
-      # exists to catch. The script treats "no runs found" as a failure for the
-      # same reason.
+      # No --branch on purpose: a gate goes dark on PRs as easily as on main,
+      # and most runs are PR runs. The script treats "no runs found" as a
+      # failure, because an audit that found nothing verified nothing.
+      #
+      # Each job's history is keyed by its NAME. The Go tests report as
+      # "Backend (Go, short)" on PRs and "Backend (Go, full)" on main, so the
+      # two tiers have separate streaks and green PR runs cannot hide a full
+      # tier that is permanently red.
       - name: Audit recent runs for permanently-dark jobs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -82,3 +109,66 @@ jobs:
             --workflow "${{ github.event.inputs.workflow || 'pr-ci.yml' }}" \
             --runs 20 \
             --threshold "${{ github.event.inputs.threshold || '5' }}"
+
+  main-health:
+    name: Main's full test tier is green
+    # A run cancelled because a newer one superseded it carries no verdict;
+    # the newer run's completion will fire this again.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event != 'pull_request' &&
+       github.event.workflow_run.conclusion != 'cancelled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      # The one write anywhere in this workflow: the `ci:main-red` issue.
+      issues: write
+    # Two main runs finishing together must not both open an issue.
+    concurrency:
+      group: gate-health-main-health
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+
+      # Exit 1 means red and still writes the verdict; anything else without a
+      # verdict means the audit itself broke, which must not touch the issue.
+      - name: Audit main's newest PR CI verdict
+        id: audit
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/check-main-health.mjs --report "${RUNNER_TEMP}/main-health.md"
+
+      - name: Open, update or close the ci:main-red issue
+        if: steps.audit.outputs.verdict == 'red' || steps.audit.outputs.verdict == 'green'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERDICT: ${{ steps.audit.outputs.verdict }}
+          RUN_URL: ${{ steps.audit.outputs.run_url }}
+          SHA: ${{ steps.audit.outputs.sha }}
+        run: |
+          set -euo pipefail
+          label="ci:main-red"
+          gh label create "${label}" --force --color B60205 \
+            --description "PR CI is red on main; opened and closed by gate-health.yml" >/dev/null
+          open="$(gh issue list --label "${label}" --state open --limit 1 --json number --jq '.[0].number // empty')"
+          report="${RUNNER_TEMP}/main-health.md"
+
+          if [ "${VERDICT}" = "red" ]; then
+            if [ -z "${open}" ]; then
+              gh issue create --title "main is red: PR CI" --label "${label}" --body-file "${report}"
+            # The weekly backstop re-audits a run already reported: say it once.
+            elif ! gh issue view "${open}" --json comments,body --jq '[.body, .comments[].body] | join("\n")' | grep -qF "${RUN_URL}"; then
+              gh issue comment "${open}" --body-file "${report}"
+            fi
+          elif [ -n "${open}" ]; then
+            gh issue close "${open}" --comment "main is green again at \`${SHA}\`: ${RUN_URL}"
+          fi
+
+      - name: Fail if main is red or the audit could not decide
+        if: steps.audit.outputs.verdict != 'green'
+        run: |
+          echo "::error::main-health verdict: '${{ steps.audit.outputs.verdict || 'none (audit failed)' }}'. See the audit step above."
+          exit 1

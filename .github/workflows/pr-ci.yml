@@ -10,11 +10,28 @@ name: PR CI
 # against the merge RESULT, so two independently-green PRs can still merge into
 # a red main. Post-merge verification is the only thing that catches that, and
 # it is also what gives `main` an authoritative last-known-good signal.
+#
+# TWO GO TEST TIERS. The event picks the tier, and the `backend` job is where it
+# lands (see the comment there):
+#
+#   pull_request                      short: `go test -short`, DB tests still on
+#   push to main, schedule, dispatch  full:  `go test`, every short-gated test too
+#
+# The nightly `schedule` exists so the full tier also runs on days nobody
+# merges, and so a test that fails only some nights (a flake, a clock edge)
+# leaves a record. gate-health.yml watches main's runs and opens a tracking
+# issue when one goes red. `workflow_dispatch` runs the full tier on any branch
+# on demand: use it on a PR that touches code only the full tier exercises.
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    # 06:17 UTC daily: off the top of the hour, where GitHub's scheduler queues
+    # are longest, and before the Americas workday so a red night is waiting.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
 
 # Cancellation is right for a PR and WRONG for main.
 #
@@ -37,9 +54,14 @@ on:
 # run tests the newest main, which contains every superseded commit, so a break
 # introduced by a skipped SHA is still caught; only the attribution is coarser
 # (bisect the range between two verdicts). This mirrors control-plane's ci.yml.
+#
+# The nightly `schedule` run joins main's group: it tests main's HEAD too, so a
+# pending push run and a pending nightly are interchangeable and whichever is
+# newer may supersede the other. A `workflow_dispatch` run groups by its ref and
+# is never cancelled: somebody asked for that verdict.
 concurrency:
-  group: pr-ci-${{ github.event_name == 'push' && 'main' || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'push' }}
+  group: pr-ci-${{ (github.event_name == 'push' || github.event_name == 'schedule') && 'main' || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -110,6 +132,16 @@ jobs:
           PUSH_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+
+          # The nightly schedule and a manual dispatch have no change range at
+          # all: they are asked for a verdict on the whole tree, so every job
+          # runs.
+          if [ "${EVENT_NAME}" != "push" ] && [ "${EVENT_NAME}" != "pull_request" ]; then
+            echo "non_gomod=true" >> "$GITHUB_OUTPUT"
+            echo "cp_contract=true" >> "$GITHUB_OUTPUT"
+            echo "${EVENT_NAME} run — running everything"
+            exit 0
+          fi
 
           if [ "${EVENT_NAME}" = "push" ]; then
             # A push has no base branch and no merge base. The right comparison
@@ -378,14 +410,24 @@ jobs:
 
       # The Makefile pins GOTOOLCHAIN to go.mod's version for generation, so
       # this must install that same version or `go` would download it again.
+      # `cache: false`: see "CACHES ARE SAVED ON MAIN ONLY" on the backend job.
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
-      - name: Cache Go build cache
-        uses: actions/cache@v4
+      - name: Restore Go module cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-mod-${{ runner.os }}-
+
+      - name: Restore Go build cache
+        id: build-cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
           key: go-build-drift-${{ runner.os }}-${{ hashFiles('go.sum') }}
@@ -411,8 +453,9 @@ jobs:
           echo "buf=$(sed -n 's/^BUF_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
           echo "sqlc=$(sed -n 's/^SQLC_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache pinned buf and sqlc
-        uses: actions/cache@v4
+      - name: Restore pinned buf and sqlc
+        id: gen-bins
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/go/bin/buf-${{ steps.pins.outputs.buf }}
@@ -421,6 +464,24 @@ jobs:
 
       - name: Regenerate everything
         run: make generate-all
+
+      # Saved here, before the docs and drift steps, so a drift failure on main
+      # still keeps the binaries. Main only: see the backend job.
+      - name: Save pinned buf and sqlc (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.gen-bins.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/go/bin/buf-${{ steps.pins.outputs.buf }}
+            ~/go/bin/sqlc-${{ steps.pins.outputs.sqlc }}
+          key: ${{ steps.gen-bins.outputs.cache-primary-key }}
+
+      - name: Save Go build cache (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
       # The published docs are generated too: the CLI/tools/models/types
       # references, the changelog page and the Mintlify .mdx conversions. If a
@@ -448,8 +509,34 @@ jobs:
           fi
           echo "Generated code matches the committed output."
 
+  # ── Go unit tests, in two tiers ───────────────────────────────────────────
+  #
+  # The event picks the tier (see the header):
+  #
+  #   short  pull_request              go test -short   (~130s of fixed waits off)
+  #   full   push to main / schedule   go test          (every short-gated test)
+  #
+  # `-short` skips only tests that gate themselves on testing.Short(): ones that
+  # wait out real production timeouts, start a NATS cluster or similar. DB-backed
+  # tests still run on a PR, because REQUIRE_TEST_DB=1 overrides their
+  # short-mode skip (internal/db/testutil.go, shortModeDBSkipReason). Nothing is
+  # deleted: every short-gated test runs on every push to main and every night.
+  #
+  # THE TIERS CANNOT SILENTLY MERGE. Three things hold them apart:
+  #
+  #   1. The job NAME carries the tier, so "Backend (Go, short)" and
+  #      "Backend (Go, full)" are separate checks with separate histories. A
+  #      green PR run can never reset the bad streak of a red main, which it
+  #      could when both were "Backend (Go)".
+  #   2. RELIANT_TEST_TIER is checked against the flag that actually reached
+  #      `go test` by TestCITestTierReachedGoTest (tools/test-affected), which
+  #      fails if the two disagree: an edit that drops or hardcodes `-short` on
+  #      the command line goes red in the run it lands in.
+  #   3. gate-health.yml's main audit fails, and opens an issue, when main's
+  #      newest run has no green "Backend (Go, full)" job — including when the
+  #      job is missing because the full tier stopped running on main.
   backend:
-    name: Backend (Go)
+    name: Backend (Go, ${{ github.event_name == 'pull_request' && 'short' || 'full' }})
     # DELIBERATELY NOT GATED on the `changes` job. A dependency bump is
     # exactly the change this job exists to validate: a new forge/pkg can
     # break compilation or change behaviour, and that failure must surface
@@ -479,44 +566,58 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/reliant?sslmode=disable
       REQUIRE_TEST_DB: "1"
+      RELIANT_TEST_TIER: ${{ github.event_name == 'pull_request' && 'short' || 'full' }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
+      # CACHES ARE SAVED ON MAIN ONLY, and every Go job follows this pattern.
+      #
+      # A cache saved by a pull_request run is scoped to that PR's ref: no
+      # other PR and not main can ever restore it. Saving one was pure cost
+      # (~30-75s of "Post" steps on the PR's critical path whenever go.sum
+      # moved) and it doubled the repo's cache storage past GitHub's 10 GB cap
+      # (15.6 GB measured), so caches main needed were being evicted. Caches
+      # saved on main ARE visible to every PR. So: restore everywhere, save
+      # only on main (push, the nightly), and only when the exact key missed.
+      #
+      # setup-go's own `cache: true` cannot be split that way (it always saves
+      # in its post step), and it stored GOMODCACHE + GOCACHE as one entry that
+      # whichever Go job finished first won. So it is off, and the module cache
+      # and this job's build cache are restored explicitly below.
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
-      # setup-go's `cache: true` caches the MODULE cache (~/go/pkg/mod) but
-      # NOT the build cache (~/.cache/go-build), so every run recompiled the
-      # whole dependency graph from source before a single test ran.
-      #
+      # One module cache, shared by every Go job and saved only here: this job
+      # compiles every package, so it downloads every module the others need.
+      - name: Restore Go module cache
+        id: mod-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-mod-${{ runner.os }}-
+
       # Keyed on the resolved Go version + go.sum: a toolchain bump or a
       # dependency change invalidates it, which is exactly when the cached
       # objects stop being reusable. The restore-keys prefix means a go.sum
       # change still restores the previous cache and recompiles only what
       # actually changed, rather than starting cold.
-      - name: Cache Go build cache
-        uses: actions/cache@v4
+      - name: Restore Go build cache
+        id: build-cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
           key: go-build-backend-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}
           restore-keys: |
             go-build-backend-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
             go-build-backend-${{ runner.os }}-
-
-      # buf stays: `forge lint` wraps buf lint alongside golangci-lint, so
-      # dropping it here would quietly reduce what the lint step checks.
-      - name: Install buf
-        uses: bufbuild/buf-setup-action@v1
-        with:
-          version: '1.57.0'
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          buf_api_token: ${{ secrets.BUF_API_KEY }}
 
       # Generated code is COMMITTED (see the "Generated code is committed"
       # note in .gitignore): a checkout compiles and tests as-cloned, and
@@ -545,29 +646,110 @@ jobs:
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep
 
-      # Lint via FORGE rather than a raw golangci-lint pin.
-      #
-      # `forge lint` wraps golangci-lint (plus buf lint and the frontend
-      # lint/typecheck) and ships a version built against the Go it targets, so
-      # the toolchain-skew class of failure goes away. The previous pin —
-      # golangci-lint v2.5.0, a go1.25 build — refused to start the moment
-      # go.mod moved to 1.26.2:
-      #   can't load config: the Go language version (go1.25) used to build
-      #   golangci-lint is lower than the targeted Go version (1.26.2)
-      # That is exactly the maintenance forge exists to absorb.
-      #
-      # reliant is NOT a forge project (no forge.yaml) — forge is used here as
-      # a toolchain, not a framework, which its lint command supports.
-      #
-      # NON-BLOCKING FOR NOW (`continue-on-error`). `forge lint` has no
-      # only-new-issues mode, and this repo carries ~12 PRE-EXISTING findings
-      # (gosec taint analysis, staticcheck SA4006, errcheck, goimports) that
-      # predate this change. Gating on them would fail every PR from day one,
-      # which is how a lint gate gets disabled wholesale instead of fixed.
-      #
-      # The findings are REPORTED on every PR so they stay visible and the
-      # backlog shrinks. Flip this to a hard gate (drop continue-on-error) once
-      # it reaches zero — that is a small, separate cleanup.
+      # forge lint used to run here, in front of the tests: ~30s of lint plus
+      # ~50s of `go install forge` on a forge bump, all on the critical path.
+      # It is the `lint` job now, in parallel.
+
+      # The tier flag is the ONLY difference between the tiers, and it is
+      # decided here, from RELIANT_TEST_TIER, nowhere else. An unknown tier is
+      # an error rather than a default, so a typo cannot quietly pick one.
+      # TestCITestTierReachedGoTest then proves the flag reached `go test`.
+      - name: Go tests (exclude e2e, ${{ env.RELIANT_TEST_TIER }} tier)
+        run: |
+          set -euo pipefail
+          case "${RELIANT_TEST_TIER}" in
+            short) tier_flags=(-short) ;;
+            full)  tier_flags=() ;;
+            *) echo "::error::RELIANT_TEST_TIER must be short or full, got '${RELIANT_TEST_TIER}'"; exit 1 ;;
+          esac
+          echo "tier: ${RELIANT_TEST_TIER} (go test ${tier_flags[*]:-<no tier flag>})"
+          go test -buildvcs=false -timeout=10m -v "${tier_flags[@]}" $(go list -buildvcs=false ./... | grep -v '^github.com/reliant-labs/reliant/e2e$' | tr '\n' ' ')
+
+      # Main only, after the tests: a red run on main still saves, because
+      # the compiled packages are just as reusable. `!cancelled()` lets a
+      # failed test step through; a cancelled run may have a half-written cache.
+      - name: Save Go module cache (main only)
+        if: '!cancelled() && github.ref == ''refs/heads/main'' && github.event_name != ''pull_request'' && steps.mod-cache.outputs.cache-hit != ''true'''
+        uses: actions/cache/save@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ steps.mod-cache.outputs.cache-primary-key }}
+
+      - name: Save Go build cache (main only)
+        if: '!cancelled() && github.ref == ''refs/heads/main'' && github.event_name != ''pull_request'' && steps.build-cache.outputs.cache-hit != ''true'''
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
+  # Lint via FORGE rather than a raw golangci-lint pin, in its own job so it
+  # runs beside the tests instead of in front of them.
+  #
+  # `forge lint` wraps golangci-lint (plus buf lint and the frontend
+  # lint/typecheck) and ships a version built against the Go it targets, so
+  # the toolchain-skew class of failure goes away. The previous pin —
+  # golangci-lint v2.5.0, a go1.25 build — refused to start the moment
+  # go.mod moved to 1.26.2:
+  #   can't load config: the Go language version (go1.25) used to build
+  #   golangci-lint is lower than the targeted Go version (1.26.2)
+  # That is exactly the maintenance forge exists to absorb.
+  #
+  # The whole-repo lint is NON-BLOCKING FOR NOW (`continue-on-error`).
+  # `forge lint` has no only-new-issues mode, and this repo carries
+  # PRE-EXISTING findings (gosec taint analysis, staticcheck SA4006, errcheck,
+  # goimports). Gating on them would fail every PR from day one, which is how a
+  # lint gate gets disabled wholesale instead of fixed. The findings are
+  # REPORTED on every PR so they stay visible and the backlog shrinks. Flip it
+  # to a hard gate (drop continue-on-error) once it reaches zero. The
+  # migration-safety lane below IS a hard gate, so this job can go red.
+  lint:
+    name: Lint (forge)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore Go module cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-mod-${{ runner.os }}-
+
+      # golangci-lint type-checks every package, and the backend job's build
+      # cache already holds that work, so lint reads it rather than keeping a
+      # second multi-GB copy. Restore only: this job never saves it.
+      - name: Restore Go build cache (the backend job's)
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-build-backend-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-build-backend-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
+            go-build-backend-${{ runner.os }}-
+
+      # buf is here because `forge lint` wraps buf lint alongside
+      # golangci-lint; without it the lint step would quietly check less.
+      - name: Install buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.57.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          buf_api_token: ${{ secrets.BUF_API_KEY }}
+
+      - name: Disable VCS stamping
+        run: echo "GOFLAGS=-buildvcs=false" >> $GITHUB_ENV
+
       # Resolve the forge version BEFORE the cache step, so the cache key can
       # be keyed on it. go.mod stays the single source of truth — @latest
       # silently switched forge mid-release once, and a hardcoded version is a
@@ -583,10 +765,11 @@ jobs:
       # Cache the BUILT binary keyed on the exact version, so the ~52s
       # `go install` from source happens once per forge bump instead of once
       # per run. No restore-keys: a stale binary from a different version is
-      # not a partial hit, it is the wrong linter.
-      - name: Cache forge binary
+      # not a partial hit, it is the wrong linter. Saved on main only, like
+      # every cache (see the backend job).
+      - name: Restore forge binary
         id: forge-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/go/bin/forge
           key: forge-${{ runner.os }}-${{ steps.forge-version.outputs.version }}
@@ -616,6 +799,13 @@ jobs:
           GONOSUMCHECK: "1"
         run: go install "github.com/reliant-labs/forge/cmd/forge@${{ steps.forge-version.outputs.version }}"
 
+      - name: Save forge binary (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.forge-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/go/bin/forge
+          key: ${{ steps.forge-cache.outputs.cache-primary-key }}
+
       # The migration-safety lane alone IS a hard gate. It is clean, and it is
       # what enforces forge.yaml's
       # database.migration_safety.require_compat_declaration: every migration
@@ -629,11 +819,6 @@ jobs:
       - name: Lint (forge)
         continue-on-error: true
         run: forge lint --no-fix
-
-      - name: Go tests (exclude e2e)
-        run: |
-          set -euo pipefail
-          go test -buildvcs=false -timeout=10m -v $(go list -buildvcs=false ./... | grep -v '^github.com/reliant-labs/reliant/e2e$' | tr '\n' ' ')
 
   e2e-backend:
     name: E2E Backend (Go)
@@ -668,19 +853,28 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # `cache: false`: see "CACHES ARE SAVED ON MAIN ONLY" on the backend job.
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
-      # See the backend job for why this is needed on top of setup-go's
-      # module cache. Separate key prefix because this job compiles a
-      # different package set (-tags=e2e), so sharing one cache entry would
-      # have the two jobs evicting each other's objects.
-      - name: Cache Go build cache
-        uses: actions/cache@v4
+      - name: Restore Go module cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-mod-${{ runner.os }}-
+
+      # Separate key prefix because this job compiles a different package set
+      # (-tags=e2e), so sharing one cache entry would have the two jobs
+      # evicting each other's objects.
+      - name: Restore Go build cache
+        id: build-cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
           key: go-build-e2e-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}
@@ -706,14 +900,21 @@ jobs:
         # never actually run a single e2e test while reporting failure.
         run: go test -tags=e2e -buildvcs=false -timeout=5m -v ./e2e/...
 
+      - name: Save Go build cache (main only)
+        if: '!cancelled() && github.ref == ''refs/heads/main'' && github.event_name != ''pull_request'' && steps.build-cache.outputs.cache-hit != ''true'''
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
   web:
-    name: Web (lint, test, build)
+    name: Web (lint, typecheck, build)
     # SAFE TO SKIP on a go.mod/go.sum-only PR. This job is pure Node — npm
-    # lint / typecheck / vitest / vite build — with no Go toolchain in it at
-    # all (see the note below on why the generators were removed). The
-    # generated TypeScript under web/src/gen/** is COMMITTED, so nothing here
-    # is derived from a Go dependency at build time. Changing the version of
-    # a Go module cannot alter eslint, tsc, vitest or vite output.
+    # lint / typecheck / vite build (vitest is `web-test`, below) — with no Go
+    # toolchain in it at all (see the note below on why the generators were
+    # removed). The generated TypeScript under web/src/gen/** is COMMITTED, so
+    # nothing here is derived from a Go dependency at build time. Changing the
+    # version of a Go module cannot alter eslint, tsc, vitest or vite output.
     needs: changes
     if: needs.changes.outputs.non_gomod == 'true'
     runs-on: ubuntu-latest
@@ -722,7 +923,7 @@ jobs:
       - uses: actions/checkout@v6
 
       # No Go toolchain and no buf here: with the generators gone (see below)
-      # this job is pure Node — npm lint / typecheck / vitest / vite build.
+      # this job is pure Node — npm lint / typecheck / vite build.
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -760,21 +961,7 @@ jobs:
         working-directory: web
         run: npm run typecheck
 
-      - name: Unit tests
-        working-directory: web
-        env:
-          CI: true
-        run: npm test -- --run
-
-      - name: Upload vitest report (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-test-artifacts
-          path: |
-            web/coverage
-            web/test-results
-          if-no-files-found: ignore
+      # The unit tests are the `web-test` job, sharded, in parallel with this.
 
       - name: Build (alpha)
         working-directory: web
@@ -786,6 +973,60 @@ jobs:
           name: web-dist
           path: web/dist
           retention-days: 1
+
+  # vitest, split across parallel runners.
+  #
+  # One runner spent ~333s here, and vitest's own breakdown said where: most of
+  # it is per-file jsdom environment setup and module import (424s + 426s
+  # summed across workers), not test bodies (253s). That cost is per FILE, so
+  # it divides cleanly across machines: `--shard=i/n` gives each runner a
+  # disjoint, deterministic 1/n of the test files, and together the shards run
+  # every file exactly once. Once Backend dropped below ~8 min this would
+  # otherwise have become the PR critical path.
+  #
+  # To add a shard, extend `shard` AND `shard_total` together.
+  web-test:
+    name: Web (vitest ${{ matrix.shard }}/${{ matrix.shard_total }})
+    # Same skip rule as `web`: pure Node, no Go dependency participates.
+    needs: changes
+    if: needs.changes.outputs.non_gomod == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      # Every shard reports: one shard's failure must not hide another's.
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+        shard_total: [2]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install deps
+        working-directory: web
+        run: npm ci || npm install
+
+      - name: Unit tests (shard ${{ matrix.shard }}/${{ matrix.shard_total }})
+        working-directory: web
+        env:
+          CI: true
+        run: npm test -- --run --shard=${{ matrix.shard }}/${{ matrix.shard_total }}
+
+      - name: Upload vitest report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-test-artifacts-${{ matrix.shard }}
+          path: |
+            web/coverage
+            web/test-results
+          if-no-files-found: ignore
 
   e2e-frontend:
     name: E2E Frontend (Playwright)
@@ -825,8 +1066,10 @@ jobs:
       # the goose install that supported them are all gone from this job;
       # `generate-drift` verifies the committed copies are current.
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
+      # Restored everywhere, saved on main only (see the backend job).
+      - name: Restore Playwright browsers
+        id: playwright-cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
@@ -853,6 +1096,13 @@ jobs:
       - name: Install Playwright browsers
         working-directory: web
         run: npx playwright install chromium --with-deps
+
+      - name: Save Playwright browsers (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.playwright-cache.outputs.cache-primary-key }}
 
       - name: Run E2E tests
         working-directory: web

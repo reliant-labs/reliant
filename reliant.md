@@ -65,7 +65,12 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
 
 - **Never `make test` / `make test-all`** — they run `make stop`, which stops
   other agents' environments. For the full lane run `go test ./internal/<pkg>/...`
-  (no `-short`) once at the end; CI runs everything.
+  (no `-short`) once at the end.
+- **CI has two Go tiers.** PRs run `go test -short` (DB tests still on); pushes
+  to main and the nightly run the full suite. A `testing.Short()`-gated test
+  therefore runs only on main: when you touch code one covers, run its package
+  without `-short` yourself, or dispatch PR CI on your branch. A red main opens
+  a `ci:main-red` issue. Details: `dev-docs/testing-affected.md`, "CI tiers".
 - **DB-backed tests use `DATABASE_URL` and only `DATABASE_URL`.** Unset, a bare
   `go test` skips them loudly and connects to nothing; `REQUIRE_TEST_DB=1`
   makes that a failure. The Make test targets pass `DATABASE_URL` for you —
@@ -81,6 +86,9 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
 - The cache only sees files the test process itself reads. A test that execs a
   child reading repo files (not embedded, not in `t.TempDir()`) must skip under
   `testing.Short()` or `os.ReadFile` those inputs itself.
-- A new test that takes >2s gets `if testing.Short() { t.Skip("<why>; skipped under -short") }`
-  — gate it, never weaken the assertion.
+- A new test that takes >2s: first make it fast — a fixed wait on a production
+  timeout or backoff gets a package-level var or option the test shrinks. Only
+  if it is inherently slow (a cluster, a real subprocess) does it get
+  `if testing.Short() { t.Skip("<why>; skipped under -short") }`, which moves it
+  off PRs to main/nightly. Gate it, never weaken the assertion.
 - Anything expected to run >~2 min: `run_in_background` + `shell_wait`.

@@ -89,6 +89,42 @@ cannot see).
   that reads files and names the changed file as a literal.
 - `-short` hides DB-backed tests. That is today's inner-loop behavior too.
 
+## CI tiers: which tests run where
+
+`make test-affected` is the local inner loop. GitHub's PR CI
+(`.github/workflows/pr-ci.yml`) runs on every PR, every push to main, nightly
+(06:17 UTC) and on manual dispatch. The event picks the Go tier:
+
+| Event | Go tier | Command | What it skips |
+|---|---|---|---|
+| `pull_request` | **short**, job `Backend (Go, short)` | `go test -short` | tests gated on `testing.Short()` |
+| push to `main`, nightly `schedule`, `workflow_dispatch` | **full**, job `Backend (Go, full)` | `go test` | nothing |
+
+- **DB-backed tests run in both tiers.** CI sets `REQUIRE_TEST_DB=1`, which
+  overrides their short-mode skip (`internal/db/testutil.go`).
+- **A short-gated test runs only on main and nightly.** Gating is for tests that
+  are inherently slow: a NATS cluster (`*_Cluster_*`), a real subprocess or a
+  daemon that must outlive a kill. A test that is slow because it waits out a
+  production timeout or backoff should be made fast instead (inject the
+  duration through a package-level var or an option) so it keeps running on
+  every PR.
+- **To run the full tier before merging**, run the package without `-short`
+  locally (`go test ./internal/<pkg>/...`), or start PR CI on your branch with
+  `gh workflow run pr-ci.yml --ref <branch>`.
+- **A red main is surfaced.** `gate-health.yml` audits main's newest PR CI run
+  after every run on main, and keeps one issue labelled `ci:main-red` open while
+  it is red. It also fails when main has no `Backend (Go, full)` job.
+- **The tiers cannot silently merge.** The job name carries the tier, so the two
+  have separate check histories. `TestCITestTierReachedGoTest`
+  (`tools/test-affected/ci_tier_test.go`) fails when the job's declared tier
+  (`RELIANT_TEST_TIER`) disagrees with whether `-short` reached `go test`.
+- **Other jobs** run identically on every event: `Lint (forge)` (in parallel;
+  `--migration-safety` blocks, the full lint reports), web lint/typecheck/build,
+  vitest in two shards (`Web (vitest 1/2)`, `2/2`), Playwright, the e2e
+  stories, generated-code drift.
+- **Caches are saved only on main.** A PR restores main's caches and never
+  saves its own: a PR-scoped cache is unreachable from any other ref.
+
 ## Parallelism and timeouts
 
 - **vitest** (`web/vite.config.ts`): one worker per core, capped at 8, and the

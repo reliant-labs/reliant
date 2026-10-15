@@ -50,10 +50,9 @@ function argValue(flag, fallback) {
 }
 
 const workflow = argValue("--workflow", "pr-ci.yml");
-// Empty means "any branch", which is what PR-triggered workflows need:
-// pr-ci.yml runs on `pull_request` only, so it has NO runs on main and a
-// main-scoped audit would silently find nothing — the same do-nothing gate this
-// script exists to detect.
+// Empty means "any branch", which is what PR-triggered workflows need: most of
+// their runs are PR runs, and a gate goes dark there as easily as on main.
+// Whether main itself is green is check-main-health.mjs's question.
 const branch = argValue("--branch", "");
 // How far back to look, and how many consecutive bad results constitute "dark".
 // 5 is deliberately well below the 50 that went unnoticed: the point is to fire
