@@ -39,6 +39,21 @@ CGO_ENABLED ?= 0
 TEST_TIMEOUT=300s
 BENCH_TIMEOUT=60s
 
+# SLOT runs the full-mode Go test lanes (test, test-race, test-coverage,
+# test-integration) inside one of this machine's host-wide heavy slots:
+# `forge slot run` waits while N other heavy jobs (builds, test lanes, codegen,
+# lints, from any agent, worktree or terminal) are running, because past a
+# handful every one of them slows down. N comes from the machine; set
+# FORGE_HEAVY_SLOTS=<n> to change it or =off to switch it off. Already inside a
+# slot (a gate check, a parent `forge slot run`), it does not wait.
+# Empty when forge is absent or predates `forge slot` (the probe fails), so the
+# targets still run; `make test-race SLOT=` skips the slot for one run.
+# `--class heavy` is spelled out so a forge without the verb rejects the flag
+# instead of printing its help and exiting 0 without running the tests.
+# test-short takes no slot: the scoped inner loop is not heavy and must not
+# queue. `?=` keeps it lazy: the probe runs only when a target reads it.
+SLOT ?= $(shell forge slot status --class heavy >/dev/null 2>&1 && echo 'forge slot run --class heavy --')
+
 # Colors for output
 GREEN := \033[0;32m
 YELLOW := \033[0;33m
@@ -163,7 +178,7 @@ endif
 test:
 	@echo "$(YELLOW)Running tests...$(NC)"
 	@$(MAKE) stop 2>/dev/null || true
-	$(GOTEST) -v -timeout=$(TEST_TIMEOUT) ./...
+	$(SLOT) $(GOTEST) -v -timeout=$(TEST_TIMEOUT) ./...
 	@$(MAKE) stop 2>/dev/null || true
 	@echo "$(GREEN)✅ Tests complete$(NC)"
 
@@ -183,13 +198,13 @@ test-short:
 ## test-race: Run tests with race detection
 test-race:
 	@echo "$(YELLOW)Running tests with race detection...$(NC)"
-	$(GOTEST) -v -race -timeout=$(TEST_TIMEOUT) ./...
+	$(SLOT) $(GOTEST) -v -race -timeout=$(TEST_TIMEOUT) ./...
 	@echo "$(GREEN)✅ Race tests complete$(NC)"
 
 ## test-coverage: Run tests with coverage
 test-coverage:
 	@echo "$(YELLOW)Running tests with coverage...$(NC)"
-	$(GOTEST) -v -race -coverprofile=coverage.out -covermode=atomic ./...
+	$(SLOT) $(GOTEST) -v -race -coverprofile=coverage.out -covermode=atomic ./...
 	$(GOCMD) tool cover -html=coverage.out -o coverage.html
 	@echo "$(GREEN)✅ Coverage report generated: coverage.html$(NC)"
 
@@ -940,7 +955,7 @@ test-integration:
 	@$(MAKE) env-setup ENV=test
 	@eval "$$(. ./.reliant/scripts/env-loader.sh test env)" && \
 		timeout 30 sh -c 'until curl -s http://localhost:$$BACKEND_PORT/health; do sleep 1; done' && \
-		$(GOTEST) -v -tags=integration ./test/integration/...
+		$(SLOT) $(GOTEST) -v -tags=integration ./test/integration/...
 	@$(MAKE) env-cleanup ENV=test
 
 ## test-env-integration: Test environment setup integration
