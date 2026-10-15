@@ -50,10 +50,7 @@ func (s *Service) ResolveTriggerSenders(
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("looking people up is only available for GitHub, not %q", integration))
 	}
-	var dir SenderDirectory
-	if s.deps.Senders != nil {
-		dir, _ = s.deps.Senders.Directory(integration)
-	}
+	dir := s.deps.Senders[integration]
 	if dir == nil {
 		return nil, connect.NewError(connect.CodeUnavailable,
 			errors.New("GitHub triggers are not set up on this server, so GitHub people cannot be looked up"))

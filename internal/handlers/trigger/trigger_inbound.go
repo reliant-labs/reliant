@@ -61,15 +61,6 @@ type IntegrationAccess interface {
 	IsPermanent(err error) bool
 }
 
-// accessGate is the access refresher of integration, and whether its events
-// are access-gated on this server.
-func (s *Service) accessGate(integration string) (IntegrationAccess, bool) {
-	if s.deps.Access == nil {
-		return nil, false
-	}
-	return s.deps.Access.Gate(integration)
-}
-
 // inboundUnavailable reports a kind this deployment cannot serve.
 func inboundUnavailable(what string) error {
 	return connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s triggers are not available on this server", what))
@@ -111,7 +102,7 @@ func (s *Service) applyInboundDefinition(ctx context.Context, userID string, def
 			return connect.NewError(connect.CodeInvalidArgument,
 				fmt.Errorf("integration %q does not deliver events on this server", src.Integration))
 		}
-		if _, gated := s.accessGate(src.Integration); gated {
+		if _, gated := s.deps.Access[src.Integration]; gated {
 			// Access-gated: events route by the owner's own access, so a
 			// connection is bound when one exists (and a named one must be
 			// the caller's) but is not required — hosted GitHub's token is
@@ -204,8 +195,8 @@ func (s *Service) refreshTriggerAccess(ctx context.Context, trigger *core.Trigge
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
-	access, ok := s.accessGate(cfg.Integration)
-	if !ok || access == nil {
+	access := s.deps.Access[cfg.Integration]
+	if access == nil {
 		return nil
 	}
 	if err := access.Refresh(ctx, trigger.UserID); err != nil {

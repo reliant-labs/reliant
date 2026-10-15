@@ -50,7 +50,7 @@ func setupAccessTriggerTest(t *testing.T) (*triggerTestEnv, *fakeAccess) {
 		d.Sealer = fakeSealer{}
 		d.Catalog = fakeCatalog{"test": true, "gh": true}
 		d.Intake = &fakeIntake{}
-		d.Access = AccessByIntegration{"gh": access}
+		d.Access = map[string]IntegrationAccess{"gh": access}
 	})
 	return env, access
 }

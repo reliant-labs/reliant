@@ -154,7 +154,7 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo,
 		PublicURL: publicURL, Catalog: registry, Intake: intake,
-		Access: AccessByIntegration{"github": e2eGitHubAccess{refresher}},
+		Access: map[string]IntegrationAccess{"github": e2eGitHubAccess{refresher}},
 	}))
 
 	// --- two users, one project each ---------------------------------------

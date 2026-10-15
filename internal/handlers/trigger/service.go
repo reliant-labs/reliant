@@ -64,48 +64,19 @@ type Deps struct {
 	Catalog IntegrationCatalog
 	// forge:optional-dep
 	Intake EventIntake
-	// Access names the integrations whose events are access-gated. A
-	// trigger of one needs no saved connection (its token may be
-	// delegated), and writing or re-enabling it refreshes the owner's access
-	// so the first event routes. See webhook.Event.ResourceKey.
+	// Access holds the access refresher of each integration whose events
+	// are access-gated, keyed by integration id. A trigger of one needs no
+	// saved connection (its token may be delegated), and writing or
+	// re-enabling it refreshes the owner's access so the first event
+	// routes. See webhook.Event.ResourceKey. Nil gates none.
 	// forge:optional-dep
-	Access AccessGates
+	Access map[string]IntegrationAccess
 
-	// Senders looks people up for "Only from" (ResolveTriggerSenders). An
-	// integration without a directory answers Unavailable.
+	// Senders looks people up for "Only from" (ResolveTriggerSenders),
+	// keyed by integration id. An integration without a directory answers
+	// Unavailable.
 	// forge:optional-dep
-	Senders SenderDirectories
-}
-
-// AccessGates names the integrations whose events are access-gated.
-type AccessGates interface {
-	// Gate returns the access refresher of integration, and whether its
-	// events are access-gated at all.
-	Gate(integration string) (IntegrationAccess, bool)
-}
-
-// AccessByIntegration is AccessGates over a map keyed by integration id.
-type AccessByIntegration map[string]IntegrationAccess
-
-// Gate implements AccessGates.
-func (m AccessByIntegration) Gate(integration string) (IntegrationAccess, bool) {
-	access, ok := m[integration]
-	return access, ok
-}
-
-// SenderDirectories finds the SenderDirectory of an integration.
-type SenderDirectories interface {
-	Directory(integration string) (SenderDirectory, bool)
-}
-
-// SendersByIntegration is SenderDirectories over a map keyed by integration
-// id.
-type SendersByIntegration map[string]SenderDirectory
-
-// Directory implements SenderDirectories.
-func (m SendersByIntegration) Directory(integration string) (SenderDirectory, bool) {
-	dir, ok := m[integration]
-	return dir, ok
+	Senders map[string]SenderDirectory
 }
 
 // Syncer is the schedule backend the handlers converge onto. Declared here,

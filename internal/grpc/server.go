@@ -627,12 +627,10 @@ func NewServer(cfg *Config) (*Server, error) {
 	// The schedule backend exists only with a Temporal client; an inbound
 	// configuration also polls the integrations its registry polls.
 	triggerDeps := trigger.Deps{
-		Logger: handlerLogger,
-		Config: handlerConfig,
-		Repo:   database,
-	}
-	if len(cfg.TriggerSenders) > 0 {
-		triggerDeps.Senders = trigger.SendersByIntegration(cfg.TriggerSenders)
+		Logger:  handlerLogger,
+		Config:  handlerConfig,
+		Repo:    database,
+		Senders: cfg.TriggerSenders,
 	}
 	var polled func(integration string) bool
 	if in := cfg.TriggerInbound; in != nil {
@@ -645,12 +643,9 @@ func NewServer(cfg *Config) (*Server, error) {
 		if in.Vault != nil {
 			triggerDeps.Sealer = in.Vault
 		}
-		if len(in.Access) > 0 {
-			access := make(trigger.AccessByIntegration, len(in.Access))
-			for id, a := range in.Access {
-				access[id] = a
-			}
-			triggerDeps.Access = access
+		triggerDeps.Access = make(map[string]trigger.IntegrationAccess, len(in.Access))
+		for id, a := range in.Access {
+			triggerDeps.Access[id] = a
 		}
 	}
 	triggerDeps.Syncer, triggerDeps.Fires = trigger.TemporalBackend(cfg.TemporalClient, database, cfg.SharedTaskQueue, polled)
