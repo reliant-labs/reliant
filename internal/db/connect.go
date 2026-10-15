@@ -15,6 +15,8 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/reliant-labs/forge/pkg/serverkit"
+
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -90,6 +92,12 @@ type DatabaseConfig struct {
 
 	// Migrate defaults to MigrateApply; see MigrationPolicy.
 	Migrate MigrationPolicy
+
+	// ConnectTimeout is the total time the startup ping keeps retrying a
+	// database that is not up yet (a pooler or primary starting beside this
+	// process). Zero means serverkit.DefaultDBConnectTimeout. It must stay
+	// inside the deployment's startup probe window.
+	ConnectTimeout time.Duration
 }
 
 func ParseDatabaseDriver(raw string) (DatabaseDriver, error) {
@@ -116,6 +124,14 @@ func ResolveDatabaseConfig(dataDir string) (DatabaseConfig, error) {
 
 	if cfg.URL == "" {
 		return DatabaseConfig{}, fmt.Errorf("DATABASE_URL is required when DATABASE_DRIVER=postgres")
+	}
+
+	if raw := strings.TrimSpace(os.Getenv("DB_CONNECT_TIMEOUT")); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d <= 0 {
+			return DatabaseConfig{}, fmt.Errorf("invalid DB_CONNECT_TIMEOUT %q (expected a positive Go duration, e.g. 5m)", raw)
+		}
+		cfg.ConnectTimeout = d
 	}
 
 	return cfg, nil
@@ -154,7 +170,11 @@ func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 		logging.Warn("Failed to register DB stats metrics", "error", regErr)
 	}
 
-	if err := db.Ping(); err != nil {
+	// Retry with capped backoff: a database that comes up seconds after its
+	// clients is a wait, not a crash loop.
+	if err := serverkit.RetryConnect(context.Background(),
+		serverkit.ConnectPolicy{Timeout: cfg.ConnectTimeout, Logger: slog.Default()},
+		db.PingContext); err != nil {
 		if closeErr := db.Close(); closeErr != nil {
 			logging.Error("Failed to close postgres database after ping failure", "error", closeErr)
 		}

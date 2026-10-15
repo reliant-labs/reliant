@@ -60,8 +60,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge cloud token list`](#reliant-forge-cloud-token-list) | List the org's automation tokens (never their secrets) |
 | [`reliant forge cloud token revoke`](#reliant-forge-cloud-token-revoke) | Revoke an org automation token, immediately |
 | [`reliant forge cluster`](#reliant-forge-cluster) | Manage the local k3d cluster and inspect dev state |
-| [`reliant forge cluster connect`](#reliant-forge-cluster-connect) | Register a Kubernetes cluster the control plane may deploy into |
-| [`reliant forge cluster disconnect`](#reliant-forge-cluster-disconnect) | Deregister a connected cluster and remove what forge created in it |
+| [`reliant forge cluster connect`](#reliant-forge-cluster-connect) | Register a Kubernetes cluster the control plane may deploy into, as one env's binding |
+| [`reliant forge cluster disconnect`](#reliant-forge-cluster-disconnect) | Deregister a connected cluster and remove every grant forge created in it |
 | [`reliant forge cluster down`](#reliant-forge-cluster-down) | Delete the k3d cluster |
 | [`reliant forge cluster info`](#reliant-forge-cluster-info) | Print static dev-loop config (cluster name, expected context, declared ports) |
 | [`reliant forge cluster instances`](#reliant-forge-cluster-instances) | List every forge dev namespace on every reachable cluster |
@@ -1492,8 +1492,8 @@ reliant forge cluster
 
 | Command | Description |
 |---------|-------------|
-| [`connect`](#reliant-forge-cluster-connect) | Register a Kubernetes cluster the control plane may deploy into |
-| [`disconnect`](#reliant-forge-cluster-disconnect) | Deregister a connected cluster and remove what forge created in it |
+| [`connect`](#reliant-forge-cluster-connect) | Register a Kubernetes cluster the control plane may deploy into, as one env's binding |
+| [`disconnect`](#reliant-forge-cluster-disconnect) | Deregister a connected cluster and remove every grant forge created in it |
 | [`down`](#reliant-forge-cluster-down) | Delete the k3d cluster |
 | [`info`](#reliant-forge-cluster-info) | Print static dev-loop config (cluster name, expected context, declared ports) |
 | [`instances`](#reliant-forge-cluster-instances) | List every forge dev namespace on every reachable cluster |
@@ -1508,36 +1508,60 @@ reliant forge cluster
 
 #### reliant forge cluster connect
 
-Register a Kubernetes cluster the control plane may deploy into
+Register a Kubernetes cluster the control plane may deploy into, as one env's binding
 
-Register a cluster you operate, by address, so environments can target it.
-
-Nothing is installed in your cluster beyond the RBAC the platform's apply
-needs, and nothing about the cluster changes. forge reads the API server
-address and CA from your kubectl context, tells the control plane, and applies
-the in-cluster grant.
+Register a cluster you operate, by address, and grant ONE env's binding exactly
+what that env's render applies there.
 
   forge cluster connect prod-us --context gke_acme_us-central1_prod --env prod
-  forge cluster connect vke-prod --context vke-prod --auth token --env prod
-  forge cluster disconnect prod-us --env prod
+  forge cluster connect prod-us --context ... --env prod --apply-scope namespace:acme-prod,acme-jobs
+  forge cluster connect hub --context ... --env prod --apply-scope cluster
+  forge cluster connect prod-us --context ... --env prod --dry-run
+  forge cluster disconnect prod-us --env prod --context ...
+
+A BINDING is one env on one cluster, and it has its OWN identity: a Google
+service account the control plane allocates for it (gcp), or a ServiceAccount
+token forge mints for it (token). Nothing is shared across bindings, and the
+apply runs AS that identity: no impersonation, no bootstrap writes. The only
+objects connect writes in your cluster are the grant itself.
+
+APPLY SCOPE — YOU choose where the identity may write; the env's render
+chooses what:
+
+  namespace:<ns>[,<ns>…]   a Role and RoleBinding in each named namespace. The
+                           DEFAULT, over every namespace the render targets.
+                           Refused if the render carries cluster-scoped kinds.
+  cluster                  a ClusterRole and ClusterRoleBinding. Equivalent to
+                           cluster-admin (it holds bind and escalate on RBAC),
+                           and forge says so every time.
+
+Either way the rules are derived from the render: one rule per resource it
+applies, nothing else. A release that adds a kind is Forbidden by your
+cluster's own access check until you re-run connect — review it first with
+--dry-run, which prints the exact RBAC diff against what is on the cluster.
 
 AUTH — two values, the two ends of a real trade-off rather than two clouds:
 
-  gcp     GKE workload identity. The hub presents its OWN GCP identity and no
-          secret ever crosses the boundary. forge prints the one-time IAM
-          grant you run; it cannot run it for you.
+  gcp     GKE. The control plane presents the binding's own Google service
+          account; no secret crosses the boundary. forge prints the one-time
+          IAM grant you run; it cannot run it for you.
   token   A scoped ServiceAccount token forge mints in your cluster. Works on
-          ANY Kubernetes cluster — EKS, AKS, VKE, k3s, bare metal — and needs
-          no cloud identity. Strictly worse (a bearer token at rest), bounded
-          by the RBAC forge applies, and revoked by disconnect.
+          ANY Kubernetes cluster and needs no cloud identity. Strictly worse (a
+          bearer token at rest), bounded by the RBAC forge applies, and revoked
+          by disconnect.
 
 --auth auto (the default) picks gcp for a GKE context and token for anything
-else. The token path is a real answer, not a fallback: it is how a cluster
-with no cloud identity to trust becomes a target at all.
+else. Re-running connect UPDATES the cluster of that name and prunes grants the
+new plan no longer names. --env names which control plane to talk to AND whose
+binding this is; the render is read from the project in the current directory.
 
-Re-running connect UPDATES the cluster of that name, so fixing an endpoint is
-the same command again. --env names WHICH control plane to talk to, from that
-env's forge.ControlPlane declaration.
+DRY RUN — contacts no control plane and changes nothing. It renders the env,
+reads the binding's live RBAC through --context (read-only) — or from a capture
+with --live-from <file> (kubectl get clusterrole,clusterrolebinding,role,
+rolebinding -A -l <selector> -o yaml, selector printed by --dry-run) — and
+prints the diff and the permissions this run would newly grant. On gcp the
+subject is unknown until the control plane allocates it; pass --binding-gsa to
+review the exact subject.
 
 SECRET DELIVERY — opt-in, off unless named. A Secret the control plane supplies
 and renews (forge.ControlPlaneSecret) needs write access to exactly that
@@ -1551,8 +1575,7 @@ update, patch and delete on the named Secrets, plus create — which RBAC cannot
 limit by name, so a ValidatingAdmissionPolicy admits only the named
 namespace/name pairs, only as type Opaque, for the delivery identities only.
 --delivery-subject (user:<name> or serviceaccount:<ns>/<name>) binds a second,
-dedicated delivery identity alongside the connect identity. Re-running connect
-re-converges the grant; --dry-run prints every object.
+dedicated delivery identity alongside the binding's identity.
 
 ```
 reliant forge cluster connect <name> [flags]
@@ -1562,27 +1585,32 @@ reliant forge cluster connect <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--auth` | `string` | `auto` | How the hub authenticates: auto, gcp or token |
+| `--apply-scope` | `string` | - | Where the binding's identity may write: namespace:<ns>[,<ns>…] (default: the namespaces the env renders) or cluster (cluster-admin equivalent) |
+| `--auth` | `string` | `auto` | How the control plane authenticates: auto, gcp or token |
+| `--binding-gsa` | `string` | - | With --dry-run on gcp: the binding's GCP service account, to review the exact subject |
 | `--context` | `string` | - | kubectl context addressing the cluster (required) |
 | `--delivery-secret` | `stringArray` | `[]` | <namespace>/<name> of a Secret the control plane may write and renew (repeatable) |
 | `--delivery-subject` | `string` | - | Also bind the delivery grant to this dedicated identity: user:<name> or serviceaccount:<namespace>/<name> |
-| `--dry-run` | `bool` | - | Print what would be sent and applied, and contact nothing |
-| `--env` | `string` | - | Environment whose control plane to talk to (required) |
+| `--dry-run` | `bool` | - | Print the RBAC diff against the cluster and what would be sent; contact no control plane and change nothing |
+| `--env` | `string` | - | Environment whose binding this is, and whose control plane to talk to (required) |
+| `--live-from` | `string` | - | With --dry-run: diff against this kubectl capture instead of reading the cluster |
 | `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 
 ---
 
 #### reliant forge cluster disconnect
 
-Deregister a connected cluster and remove what forge created in it
+Deregister a connected cluster and remove every grant forge created in it
 
 Deregister the connected cluster of this exact name.
 
 Two halves, and the order matters: the control plane revokes the cluster's
-credential first, then forge deletes the ServiceAccount, token Secret and RBAC
-it created in the cluster. A token revoked server-side is already powerless, so
-a failure to reach the cluster afterwards leaves litter rather than a live
-credential.
+credential first, then forge deletes the grant it created in the cluster — the
+Roles, ClusterRoles and bindings of every binding of this cluster, each
+binding's token ServiceAccount and Secret, and the delivery policy. They are
+found by label, so nothing else in the cluster is touched. A credential revoked
+server-side is already powerless, so a failure to reach the cluster afterwards
+leaves litter rather than a live credential.
 
 REFUSED while any live environment targets the cluster — that check is the
 control plane's, and it is why this is not a local delete.
@@ -1590,7 +1618,7 @@ control plane's, and it is why this is not a local delete.
   forge cluster disconnect prod-us --env prod --context gke_acme_us-central1_prod
 
 --context is optional and names where to clean up. Without it, forge
-deregisters the cluster and tells you which objects to delete by hand.
+deregisters the cluster and prints the commands to delete the grant by hand.
 
 ```
 reliant forge cluster disconnect <name> [flags]

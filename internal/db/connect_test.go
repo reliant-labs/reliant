@@ -3,6 +3,7 @@ package db
 import (
 	"os"
 	"testing"
+	"time"
 )
 
 func TestParseDatabaseDriver(t *testing.T) {
@@ -109,5 +110,40 @@ func TestEnvInt(t *testing.T) {
 				t.Errorf("envInt(%q, %d) = %d, want %d", tt.val, tt.def, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestResolveDatabaseConfigReadsConnectTimeout(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://reliant@localhost:5432/reliant")
+	t.Setenv("DB_CONNECT_TIMEOUT", "90s")
+	cfg, err := ResolveDatabaseConfig("")
+	if err != nil {
+		t.Fatalf("ResolveDatabaseConfig: %v", err)
+	}
+	if cfg.ConnectTimeout != 90*time.Second {
+		t.Errorf("ConnectTimeout = %s, want 90s", cfg.ConnectTimeout)
+	}
+
+	t.Setenv("DB_CONNECT_TIMEOUT", "soon")
+	if _, err := ResolveDatabaseConfig(""); err == nil {
+		t.Error("a malformed DB_CONNECT_TIMEOUT must be refused, not ignored")
+	}
+}
+
+func TestConnectGivesUpAfterConnectTimeoutOnAnUnreachableDatabase(t *testing.T) {
+	if testing.Short() {
+		t.Skip("-short: waits out a 1s connect budget; runs in the full lane")
+	}
+	start := time.Now()
+	_, err := ConnectWithConfig(DatabaseConfig{
+		Driver:         DriverPostgres,
+		URL:            "postgres://reliant@127.0.0.1:1/reliant?sslmode=disable",
+		ConnectTimeout: time.Second,
+	})
+	if err == nil {
+		t.Fatal("connecting to a closed port succeeded")
+	}
+	if elapsed := time.Since(start); elapsed < 900*time.Millisecond {
+		t.Errorf("gave up after %s, want the whole 1s budget spent retrying", elapsed)
 	}
 }
