@@ -26,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/certs"
+	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
@@ -433,6 +434,8 @@ func Run(ctx context.Context, opts Options) error {
 		AllowedEmailDomains: opts.AllowedEmailDomains,
 		ControlPlane:        opts.ControlPlane,
 		Database:            repo,
+		SQL:                 repo.DB.SQLDB(),
+		ConnectorGrants:     connectorgrant.NewSQLStore(repo.DB.SQLDB()),
 		ToolsFactory:        toolsFactory,
 		TemporalClient:      temporalClient,
 		StreamingHub:        streamingHub,
@@ -483,9 +486,7 @@ func Run(ctx context.Context, opts Options) error {
 	// Settle archived worktrees' directories on their daemons: remove what is
 	// provably safe, record what is held, and lock live worktrees as
 	// reliant-owned. Every replica runs it; a daemon's answers are idempotent.
-	if sweeper := grpcSrv.WorktreeSweeper(); sweeper != nil {
-		go sweeper.Run(ctx, worktreeSweepInterval)
-	}
+	go grpcSrv.WorktreeSweeper().Run(ctx, worktreeSweepInterval)
 
 	// Converge every trigger's Temporal Schedule onto its row, and drop
 	// schedules whose row is gone. The DB is the truth, so this repairs drift

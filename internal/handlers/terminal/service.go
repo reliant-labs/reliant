@@ -26,7 +26,6 @@ type Deps struct {
 	Config *config.Config
 
 	// Router reaches the caller's daemon, which owns the terminal sessions.
-	// The service is mounted only when the server has one.
 	Router SessionRouter
 }
 

@@ -79,7 +79,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
-	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -108,7 +107,7 @@ type Server struct {
 	router toolexec.DaemonRouter
 
 	// worktreeSweeper settles archived worktrees' directories through their
-	// daemons. Nil when the server has no daemon router.
+	// daemons.
 	worktreeSweeper *worktreesweep.Sweeper
 
 	// streams ends every long-lived stream (streaming RPCs, the terminal
@@ -117,7 +116,13 @@ type Server struct {
 	streams *drain.Streams
 }
 
-// Config holds gRPC server configuration
+// Config holds gRPC server configuration.
+//
+// Every collaborator validate names is required: serverapi.Run builds each
+// one or fails boot, so NewServer refuses a Config without one rather than
+// serve a surface with routes missing. A missing route answers 404, which the
+// web client reports as version skew (web/src/api/rpcErrorPolicy.ts) — the
+// wrong diagnosis for a composition bug.
 type Config struct {
 	Port                int
 	BindAddress         string   // Bind address (default: "127.0.0.1", use "0.0.0.0" for containers)
@@ -130,16 +135,31 @@ type Config struct {
 	// from, whether suspended workspaces can be woken, and the dial policy
 	// for user-supplied model endpoints.
 	ControlPlane    controlplane.Endpoint
-	Database        db.Repository                      // Database repository
-	ToolsFactory    *tools.ToolsFactory                // Tools factory for catalog service
-	TemporalClient  client.Client                      // Temporal client for workflow operations
+	Database        db.Repository                      // Database repository. Required.
+	ToolsFactory    *tools.ToolsFactory                // Tools factory for catalog service. Required.
+	TemporalClient  client.Client                      // Temporal client for workflow operations. Required.
 	StreamingHub    streaming.StreamingHub             // Streaming hub for ephemeral events
 	UserUpdateHub   streaming.UpdateHub[db.UserUpdate] // Update hub for user-level events
 	ChatUpdateHub   streaming.UpdateHub[db.ChatUpdate] // Update hub for chat-level events
-	PauseService    *workflow.PauseService             // Pause service for unified pause/resume operations
+	PauseService    *workflow.PauseService             // Pause service for unified pause/resume operations. Required.
 	SharedTaskQueue string                             // Shared workflow task queue name
 
-	DaemonRouter toolexec.DaemonRouter // Optional pre-created daemon router for transport-agnostic daemon access
+	// SQL is the raw handle on Database's database. Required. AccountService's
+	// purge runs on it (an ordered multi-statement transaction the
+	// per-entity Repository surface cannot express), and so does the
+	// self-hosted token store when TokenAuthority is nil.
+	SQL *sql.DB
+
+	// ConnectorGrants stores connector grants, their audit log and the OAuth
+	// client bindings. Required. ConnectorService manages them and the /mcp
+	// endpoint resolves every call through them.
+	ConnectorGrants connectorgrant.Store
+
+	// DaemonRouter reaches the user's daemons (NATS-backed). Required: the
+	// filesystem, terminal, background-process, package-command and forge
+	// services, and the connector MCP endpoint, are nothing but a route to
+	// a daemon.
+	DaemonRouter toolexec.DaemonRouter
 
 	NATSChecker func() bool // Optional: returns true if NATS is connected; nil means NATS not in use
 
@@ -166,33 +186,67 @@ type Config struct {
 	// RELIANT_CONTROL_PLANE_URL is set, else reliant's own store — exactly one.
 	TokenAuthority tokenauthority.Authority
 
-	// Connections backs ConnectionService. nil leaves the service unmounted
-	// (a test or CLI composition with no vault).
+	// Connections backs ConnectionService. Required.
 	Connections *connections.Service
 
 	// CatalogSearch backs CatalogService.SearchCatalog / GetCatalogEntry:
-	// the integration catalog index plus each caller's connection state. nil
-	// leaves those two RPCs Unimplemented.
+	// the integration catalog index plus each caller's connection state.
+	// Required.
 	CatalogSearch *catalogindex.Service
 
 	// OAuthRoutes mounts the browser half of the connection OAuth broker
-	// (/integrations/oauth/{provider}/{start,callback}). nil leaves it off.
+	// (/integrations/oauth/{provider}/{start,callback}). Required.
 	OAuthRoutes *connections.OAuthHTTP
 
 	// TriggerInbound mounts the inbound-trigger receivers
 	// (/hooks/{trigger_id}[/{token}], /integrations/{provider}/events) and
-	// lets TriggerService write webhook and integration triggers. nil leaves
-	// both off: only schedule triggers can be created.
+	// lets TriggerService write webhook and integration triggers. Required.
 	TriggerInbound *webhook.Inbound
 
 	// TriggerSenders backs TriggerService.ResolveTriggerSenders, keyed by
-	// integration id ("github"). nil leaves it answering Unavailable.
+	// integration id ("github"). Optional: an integration this deployment
+	// receives no events for has no directory, and nil (none at all) leaves
+	// it answering Unavailable.
 	TriggerSenders map[string]trigger.SenderDirectory
 }
 
-// NewServer creates a new Connect/gRPC server.
-// Returns an error if the auth interceptor fails to initialize.
+// validate fails naming every required collaborator cfg lacks.
+func (cfg *Config) validate() error {
+	required := []struct {
+		name    string
+		missing bool
+	}{
+		{"Database", cfg.Database == nil},
+		{"SQL", cfg.SQL == nil},
+		{"ConnectorGrants", cfg.ConnectorGrants == nil},
+		{"DaemonRouter", cfg.DaemonRouter == nil},
+		{"TemporalClient", cfg.TemporalClient == nil},
+		{"PauseService", cfg.PauseService == nil},
+		{"ToolsFactory", cfg.ToolsFactory == nil},
+		{"CatalogSearch", cfg.CatalogSearch == nil},
+		{"Connections", cfg.Connections == nil},
+		{"OAuthRoutes", cfg.OAuthRoutes == nil},
+		{"TriggerInbound", cfg.TriggerInbound == nil},
+	}
+	var missing []string
+	for _, r := range required {
+		if r.missing {
+			missing = append(missing, r.name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("grpc server config: required collaborators not set: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+// NewServer creates a new Connect/gRPC server, with every service mounted.
+// Returns an error if a required collaborator is missing (Config.validate) or
+// the auth interceptor fails to initialize.
 func NewServer(cfg *Config) (*Server, error) {
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
 	mux := http.NewServeMux()
 	database := cfg.Database
 
@@ -266,24 +320,13 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("task service: %w", err)
 	}
-	// cfg.ToolsFactory and cfg.CatalogSearch are pointers: only a non-nil one
-	// may reach an interface field, or a typed nil would pass the handlers'
-	// nil checks.
-	var catalogTools catalog.ToolBuilder
-	if cfg.ToolsFactory != nil {
-		catalogTools = cfg.ToolsFactory
-	}
-	var catalogSearch catalog.Searcher
-	if cfg.CatalogSearch != nil {
-		catalogSearch = cfg.CatalogSearch
-	}
 	catalogService, err := catalog.New(catalog.Deps{
 		Logger:             handlerLogger,
 		Config:             handlerConfig,
-		Tools:              catalogTools,
+		Tools:              cfg.ToolsFactory,
 		TagPrefs:           database,
 		LocalModels:        local.NewRepoDirectory(database),
-		Search:             catalogSearch,
+		Search:             cfg.CatalogSearch,
 		IntegrationMethods: catalog.IntegrationMethodsFrom(cfg.Connections),
 	})
 	if err != nil {
@@ -305,21 +348,14 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("project service: %w", err)
 	}
-	var worktreeSweeper *worktreesweep.Sweeper
-	// worktreeSettler stays a nil interface without a router: a nil *Sweeper
-	// stored in it would pass the handler's nil checks.
-	var worktreeSettler worktree.Settler
-	if router != nil {
-		worktreeSweeper = worktreesweep.New(database, router).WithKeepFiles(worktreesweep.KeepSetting{R: database})
-		worktreeSettler = worktreeSweeper
-	}
+	worktreeSweeper := worktreesweep.New(database, router).WithKeepFiles(worktreesweep.KeepSetting{R: database})
 	worktreeService, err := worktree.New(worktree.Deps{
 		Logger:   handlerLogger,
 		Config:   handlerConfig,
 		Repo:     database,
 		Router:   router,
 		Temporal: cfg.TemporalClient,
-		Settler:  worktreeSettler,
+		Settler:  worktreeSweeper,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("worktree service: %w", err)
@@ -351,19 +387,12 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("question service: %w", err)
 	}
-	// A nil *PauseService stored in the interface field would not be nil and
-	// would pass chat's validateDeps; convert it explicitly so a server without
-	// one fails here rather than on the first pause.
-	var chatPause runs.PauseController
-	if cfg.PauseService != nil {
-		chatPause = cfg.PauseService
-	}
 	chatService, err := chat.New(chat.Deps{
 		Logger:    handlerLogger,
 		Config:    handlerConfig,
 		Repo:      database,
 		Temporal:  cfg.TemporalClient,
-		Pause:     chatPause,
+		Pause:     cfg.PauseService,
 		TaskQueue: cfg.SharedTaskQueue,
 		Router:    router,
 	})
@@ -416,24 +445,19 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, fmt.Errorf("scenario service: %w", err)
 	}
 	// PackageCommands is a browser-facing workspace service: its command
-	// discovery must run on the daemon's filesystem (run against the
-	// api-server's, it silently returned an empty command list), so it is
-	// mounted only with a daemon router, as FileSystem is.
-	var packageCommandsPath string
-	var packageCommandsHandler http.Handler
-	if router != nil {
-		packageCommandsService, err := package_commands.New(package_commands.Deps{
-			Logger:    handlerLogger,
-			Config:    handlerConfig,
-			Router:    router,
-			Repo:      database,
-			Processes: pkgmgr.NewService(),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("package_commands service: %w", err)
-		}
-		packageCommandsPath, packageCommandsHandler = reliantv1connect.NewPackageCommandsServiceHandler(packageCommandsService, opts...)
+	// discovery runs on the daemon's filesystem, through the router (run
+	// against the api-server's, it silently returned an empty command list).
+	packageCommandsService, err := package_commands.New(package_commands.Deps{
+		Logger:    handlerLogger,
+		Config:    handlerConfig,
+		Router:    router,
+		Repo:      database,
+		Processes: pkgmgr.NewService(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("package_commands service: %w", err)
 	}
+	packageCommandsPath, packageCommandsHandler := reliantv1connect.NewPackageCommandsServiceHandler(packageCommandsService, opts...)
 
 	streamingService, err := streaminghandler.New(streaminghandler.Deps{
 		Logger:      handlerLogger,
@@ -473,8 +497,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("daemon_registry service: %w", err)
 	}
-	// Credentials for custom endpoints have one home, the sealed connection
-	// store, which this branch does not have; nil keeps keys unavailable.
+	// Credentials stays nil: endpoint API keys have one home, the sealed
+	// connection store, and no modelendpoints.EndpointCredentials over it
+	// exists yet, so storing a key answers ErrCredentialStoreUnavailable.
 	modelEndpointService, err := model_endpoint.New(model_endpoint.Deps{
 		Logger: handlerLogger,
 		Config: handlerConfig,
@@ -576,13 +601,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	toolCallPath, toolCallHandler := reliantv1connect.NewToolCallServiceHandler(toolCallService, opts...)
 
 	// ForgeService reads a forge project's release/env/secret state off the
-	// DAEMON's filesystem, so unlike the DB-backed services it has no local
-	// fallback to degrade to: without a router there is no filesystem to read.
-	// Registered only when a router exists, the same way FileSystem/Background/
-	// Terminal are, so a caller gets an unimplemented route rather than a
-	// service that answers every request with "daemon unavailable".
+	// DAEMON's filesystem, through the router.
 	//
-	// It is ALSO gated by RELIANT_DISABLE_FORGE_API, a server-side kill switch
+	// It is gated by RELIANT_DISABLE_FORGE_API, a server-side kill switch
 	// independent of the frontend's own experimental flag. Two gates rather than
 	// one because they answer different questions and fail differently: the
 	// frontend flag hides the UI, while this one makes the RPCs unroutable. The
@@ -597,7 +618,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// a feature the operator deliberately turned on in the UI.
 	var forgePath string
 	var forgeHandler http.Handler
-	if router != nil && !forgeAPIDisabled() {
+	if !forgeAPIDisabled() {
 		forgeService, err := forge.New(forge.Deps{
 			Logger: handlerLogger,
 			Config: handlerConfig,
@@ -615,36 +636,32 @@ func NewServer(cfg *Config) (*Server, error) {
 	attachmentPath, attachmentHandler := reliantv1connect.NewAttachmentServiceHandler(attachmentService, opts...)
 	presetPath, presetHandler := reliantv1connect.NewPresetServiceHandler(presetService, opts...)
 
-	// TriggerService converges Temporal Schedules onto the triggers table, so
-	// it needs the Temporal client. Without one, the write paths return
-	// Unavailable rather than storing triggers that could never fire.
-	// The service is constructed through a helper rather than inline because a
-	// nil *triggers.Backend assigned to an interface is NOT nil — the
-	// handler's own nil checks would pass and it would panic on the first
-	// write. NewTriggerServiceFor keeps that conversion in one place.
-	// The schedule backend exists only with a Temporal client; an inbound
-	// configuration also polls the integrations its registry polls.
+	// TriggerService converges Temporal Schedules onto the triggers table
+	// (trigger.TemporalBackend), and writes webhook and integration triggers
+	// against the inbound receivers; the schedule backend also polls the
+	// integrations the inbound registry polls.
+	in := cfg.TriggerInbound
 	triggerDeps := trigger.Deps{
-		Logger:  handlerLogger,
-		Config:  handlerConfig,
-		Repo:    database,
-		Senders: cfg.TriggerSenders,
+		Logger:    handlerLogger,
+		Config:    handlerConfig,
+		Repo:      database,
+		Senders:   cfg.TriggerSenders,
+		PublicURL: in.PublicURL,
+		Intake:    in.Intake,
 	}
+	// Each assigned only when set: a nil pointer stored in an interface field
+	// would pass the handler's nil checks.
 	var polled func(integration string) bool
-	if in := cfg.TriggerInbound; in != nil {
-		triggerDeps.PublicURL = in.PublicURL
-		triggerDeps.Intake = in.Intake
-		if in.Registry != nil {
-			triggerDeps.Catalog = in.Registry
-			polled = in.Registry.IsPolled
-		}
-		if in.Vault != nil {
-			triggerDeps.Sealer = in.Vault
-		}
-		triggerDeps.Access = make(map[string]trigger.IntegrationAccess, len(in.Access))
-		for id, a := range in.Access {
-			triggerDeps.Access[id] = a
-		}
+	if in.Registry != nil {
+		triggerDeps.Catalog = in.Registry
+		polled = in.Registry.IsPolled
+	}
+	if in.Vault != nil {
+		triggerDeps.Sealer = in.Vault
+	}
+	triggerDeps.Access = make(map[string]trigger.IntegrationAccess, len(in.Access))
+	for id, a := range in.Access {
+		triggerDeps.Access[id] = a
 	}
 	triggerDeps.Syncer, triggerDeps.Fires = trigger.TemporalBackend(cfg.TemporalClient, database, cfg.SharedTaskQueue, polled)
 	if cfg.ControlPlane.Hosted() {
@@ -654,17 +671,11 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
 	}
-	// worktreeSweeper is nil without a daemon router. A nil *Sweeper stored
-	// in the interface would not be nil, so assign it only when it is set.
-	var inboxSweeper inbox.Sweeper
-	if worktreeSweeper != nil {
-		inboxSweeper = worktreeSweeper
-	}
 	inboxService, err := inbox.New(inbox.Deps{
 		Logger:  handlerLogger,
 		Config:  handlerConfig,
 		Repo:    database,
-		Sweeper: inboxSweeper,
+		Sweeper: worktreeSweeper,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("inbox service: %w", err)
@@ -672,72 +683,58 @@ func NewServer(cfg *Config) (*Server, error) {
 	inboxPath, inboxHandler := reliantv1connect.NewInboxServiceHandler(inboxService, opts...)
 	triggerPath, triggerHandler := reliantv1connect.NewTriggerServiceHandler(triggerService, opts...)
 
-	// FileSystem, Background, and Terminal services: when a daemon router is
-	// available, use proxy services that forward requests through the daemon.
-	// Otherwise none of them is mounted: their files, processes and
-	// sessions live on the user's machines.
-	var filesystemPath string
-	var filesystemHandler http.Handler
-	var backgroundPath string
-	var backgroundHandler http.Handler
-	var terminalPath string
-	var terminalHandler http.Handler
-
-	if router != nil {
-		// Proxy services route browser requests through the daemon router (NATS in
-		// distributed mode) to the connected daemon.
-		logging.Info("Registering daemon proxy services (FileSystem, Background, Terminal)")
-
-		fileSystemService, err := file_system.New(file_system.Deps{
-			Logger: handlerLogger,
-			Config: handlerConfig,
-			Router: router,
-			Repo:   database,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("file_system service: %w", err)
-		}
-		filesystemPath, filesystemHandler = reliantv1connect.NewFileSystemServiceHandler(fileSystemService, machineWakeOpts...)
-
-		bgProxy, err := background.New(background.Deps{
-			Logger: handlerLogger,
-			Config: handlerConfig,
-			Router: router,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("background service: %w", err)
-		}
-		backgroundPath, backgroundHandler = reliantv1connect.NewBackgroundServiceHandler(bgProxy, opts...)
-
-		termProxy, err := terminal.New(terminal.Deps{
-			Logger: handlerLogger,
-			Config: handlerConfig,
-			Router: router,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("terminal service: %w", err)
-		}
-		terminalPath, terminalHandler = reliantv1connect.NewTerminalServiceHandler(termProxy, opts...)
-
-		// WebSocket terminal handler (browser bidi terminal I/O)
-		var wsValidator auth.TokenValidator
-		switch auth.GetAuthMode() {
-		case "apikey":
-			if key := os.Getenv("AUTH_API_KEY"); key != "" {
-				wsValidator, _ = auth.NewAPIKeyValidator(key)
-			}
-		default: // supabase
-			if cfg.JWTPublicKey != "" {
-				wsValidator, _ = auth.NewJWTValidator(cfg.JWTPublicKey)
-			} else if cfg.JWKSURL != "" {
-				wsValidator, _ = auth.LoadJWKS(context.Background(), cfg.JWKSURL)
-			}
-		}
-		// A terminal websocket lives as long as the browser tab: bound to the
-		// drain so it ends with a reconnect close code when Stop begins.
-		mux.Handle("/api/v2/terminal/ws", streams.Handler(
-			terminal.TerminalWSHandler(router, wsValidator, terminal.WithTerminalCheckouts(database))))
+	// FileSystem, Background, and Terminal services: proxies that forward each
+	// request through the daemon router (NATS) to the connected daemon, which
+	// holds the files, processes and sessions.
+	fileSystemService, err := file_system.New(file_system.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Router: router,
+		Repo:   database,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("file_system service: %w", err)
 	}
+	filesystemPath, filesystemHandler := reliantv1connect.NewFileSystemServiceHandler(fileSystemService, machineWakeOpts...)
+
+	bgProxy, err := background.New(background.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Router: router,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("background service: %w", err)
+	}
+	backgroundPath, backgroundHandler := reliantv1connect.NewBackgroundServiceHandler(bgProxy, opts...)
+
+	termProxy, err := terminal.New(terminal.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Router: router,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("terminal service: %w", err)
+	}
+	terminalPath, terminalHandler := reliantv1connect.NewTerminalServiceHandler(termProxy, opts...)
+
+	// WebSocket terminal handler (browser bidi terminal I/O)
+	var wsValidator auth.TokenValidator
+	switch auth.GetAuthMode() {
+	case "apikey":
+		if key := os.Getenv("AUTH_API_KEY"); key != "" {
+			wsValidator, _ = auth.NewAPIKeyValidator(key)
+		}
+	default: // supabase
+		if cfg.JWTPublicKey != "" {
+			wsValidator, _ = auth.NewJWTValidator(cfg.JWTPublicKey)
+		} else if cfg.JWKSURL != "" {
+			wsValidator, _ = auth.LoadJWKS(context.Background(), cfg.JWKSURL)
+		}
+	}
+	// A terminal websocket lives as long as the browser tab: bound to the
+	// drain so it ends with a reconnect close code when Stop begins.
+	mux.Handle("/api/v2/terminal/ws", streams.Handler(
+		terminal.TerminalWSHandler(router, wsValidator, terminal.WithTerminalCheckouts(database))))
 
 	// DaemonRegistryService: browser-driven list/get/resolve/resume. The
 	// ToolsDaemonService streaming endpoint is hosted by the daemon-gateway,
@@ -746,55 +743,43 @@ func NewServer(cfg *Config) (*Server, error) {
 	daemonRegistryPath, daemonRegistryHandler := reliantv1connect.NewDaemonRegistryServiceHandler(daemonRegistryService, opts...)
 	tokenPath, tokenHandler := reliantv1connect.NewTokenServiceHandler(tokenService, opts...)
 
-	// AccountService (account deletion) needs the raw *sql.DB: the purge is an
-	// ordered multi-statement transaction across every user-owned table, which
-	// the per-entity Repository surface cannot express. Mounted only when a
-	// SQL-backed repository is present — offering a delete button that cannot
-	// delete is worse than not offering one.
-	var accountPath string
-	var accountHandler http.Handler
-	if repo, ok := database.(*db.Repo); ok && repo != nil && repo.DB != nil {
-		// The control-plane client is wired only when this deployment HAS a
-		// control plane (cfg.ControlPlane). Self-hosted reliant has no
-		// platform account to delete, and defaulting to localhost would make
-		// every such deployment fail deletion against a control plane that
-		// isn't there.
-		var accountControlPlane account.ControlPlane
-		if cfg.ControlPlane.Hosted() {
-			accountControlPlane = controlplane.NewClient(cfg.ControlPlane.URL)
-		}
-		accountService, err := account.New(account.Deps{
-			Logger:       handlerLogger,
-			Config:       handlerConfig,
-			SQL:          repo.DB.SQLDB(),
-			ControlPlane: accountControlPlane,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("account service: %w", err)
-		}
-		accountPath, accountHandler = reliantv1connect.NewAccountServiceHandler(accountService, opts...)
+	// AccountService (account deletion) runs on the raw *sql.DB: the purge is
+	// an ordered multi-statement transaction across every user-owned table,
+	// which the per-entity Repository surface cannot express.
+	//
+	// The control-plane client is wired only when this deployment HAS a
+	// control plane (cfg.ControlPlane). Self-hosted reliant has no platform
+	// account to delete, and defaulting to localhost would make every such
+	// deployment fail deletion against a control plane that isn't there.
+	var accountControlPlane account.ControlPlane
+	if cfg.ControlPlane.Hosted() {
+		accountControlPlane = controlplane.NewClient(cfg.ControlPlane.URL)
 	}
+	accountService, err := account.New(account.Deps{
+		Logger:       handlerLogger,
+		Config:       handlerConfig,
+		SQL:          cfg.SQL,
+		ControlPlane: accountControlPlane,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("account service: %w", err)
+	}
+	accountPath, accountHandler := reliantv1connect.NewAccountServiceHandler(accountService, opts...)
 	daemonPath, daemonHandler := reliantv1connect.NewDaemonServiceHandler(daemonProxyService, opts...)
 
-	// ConnectorService manages grants for third-party MCP clients. It is
-	// mounted only when a SQL-backed repository is present, matching the /mcp
-	// endpoint it administers — offering grant management without a working
-	// endpoint would let a user mint credentials that cannot be redeemed.
-	var connectorPath string
-	var connectorHandler http.Handler
-	if repo, ok := database.(*db.Repo); ok && repo != nil && repo.DB != nil {
-		connectorService, err := connector.New(connector.Deps{
-			Logger:    handlerLogger,
-			Config:    handlerConfig,
-			Grants:    connectorgrant.NewSQLStore(repo.DB.SQLDB()),
-			Tokens:    authority,
-			PublicURL: cfg.PublicURL,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("connector service: %w", err)
-		}
-		connectorPath, connectorHandler = reliantv1connect.NewConnectorServiceHandler(connectorService, opts...)
+	// ConnectorService manages grants for third-party MCP clients, in the same
+	// store the /mcp endpoint (mountConnectorMCP) redeems them from.
+	connectorService, err := connector.New(connector.Deps{
+		Logger:    handlerLogger,
+		Config:    handlerConfig,
+		Grants:    cfg.ConnectorGrants,
+		Tokens:    authority,
+		PublicURL: cfg.PublicURL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("connector service: %w", err)
 	}
+	connectorPath, connectorHandler := reliantv1connect.NewConnectorServiceHandler(connectorService, opts...)
 
 	mux.Handle(systemPath, systemHandler)
 	mux.Handle(planPath, planHandler)
@@ -812,12 +797,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	mux.Handle(mcpPath, mcpHandler)
 	mux.Handle(workflowPath, workflowHandler)
 	mux.Handle(scenarioPath, scenarioHandler)
-	if filesystemHandler != nil {
-		mux.Handle(filesystemPath, filesystemHandler)
-	}
-	if packageCommandsHandler != nil {
-		mux.Handle(packageCommandsPath, packageCommandsHandler)
-	}
+	mux.Handle(filesystemPath, filesystemHandler)
+	mux.Handle(packageCommandsPath, packageCommandsHandler)
 	mux.Handle(toolCallPath, toolCallHandler)
 	if forgeHandler != nil {
 		mux.Handle(forgePath, forgeHandler)
@@ -838,42 +819,27 @@ func NewServer(cfg *Config) (*Server, error) {
 	mux.Handle(tokenPath, tokenHandler)
 	mux.Handle(daemonPath, daemonHandler)
 
-	if accountHandler != nil {
-		mux.Handle(accountPath, accountHandler)
-	}
+	mux.Handle(accountPath, accountHandler)
 
-	if cfg.Connections != nil {
-		connectionService, err := connection.New(connection.Deps{
-			Logger:      handlerLogger,
-			Config:      handlerConfig,
-			Connections: cfg.Connections,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("connection service: %w", err)
-		}
-		connectionPath, connectionHandler := reliantv1connect.NewConnectionServiceHandler(connectionService, opts...)
-		mux.Handle(connectionPath, connectionHandler)
+	connectionService, err := connection.New(connection.Deps{
+		Logger:      handlerLogger,
+		Config:      handlerConfig,
+		Connections: cfg.Connections,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("connection service: %w", err)
 	}
-	if cfg.OAuthRoutes != nil {
-		cfg.OAuthRoutes.Register(func(pattern string, h http.Handler) { mux.Handle(pattern, h) })
-	}
+	connectionPath, connectionHandler := reliantv1connect.NewConnectionServiceHandler(connectionService, opts...)
+	mux.Handle(connectionPath, connectionHandler)
+	cfg.OAuthRoutes.Register(func(pattern string, h http.Handler) { mux.Handle(pattern, h) })
 	// Inbound trigger receivers: plain HTTP routes outside the Connect
 	// interceptor chain, authenticated by the trigger's own token or the
 	// provider's signature rather than a user's JWT.
-	if cfg.TriggerInbound != nil {
-		cfg.TriggerInbound.Register(func(pattern string, h http.Handler) { mux.Handle(pattern, h) })
-	}
+	cfg.TriggerInbound.Register(func(pattern string, h http.Handler) { mux.Handle(pattern, h) })
 
-	if connectorHandler != nil {
-		mux.Handle(connectorPath, connectorHandler)
-	}
-
-	if backgroundHandler != nil {
-		mux.Handle(backgroundPath, backgroundHandler)
-	}
-	if terminalHandler != nil {
-		mux.Handle(terminalPath, terminalHandler)
-	}
+	mux.Handle(connectorPath, connectorHandler)
+	mux.Handle(backgroundPath, backgroundHandler)
+	mux.Handle(terminalPath, terminalHandler)
 
 	// The CLI's api-token management and workflow-trigger surfaces are Connect
 	// RPCs now (TokenService above, ChatService.StartChat), not bespoke
@@ -888,8 +854,10 @@ func NewServer(cfg *Config) (*Server, error) {
 	// outside the interceptor chain. Confinement is enforced daemon-side at
 	// command dispatch (internal/daemonpolicy); this route resolves the grant
 	// and terminates the protocol.
-	mountConnectorMCP(mux, streams, database, router, cfg.PublicURL, cfg.OAuthIssuers, connectorTokenValidator(cfg),
-		accesstokenclient.NewCachedIntrospector(authority), cfg.ControlPlane.URL)
+	if err := mountConnectorMCP(mux, streams, database, cfg.ConnectorGrants, router, cfg.PublicURL, cfg.OAuthIssuers,
+		connectorTokenValidator(cfg), accesstokenclient.NewCachedIntrospector(authority), cfg.ControlPlane.URL); err != nil {
+		return nil, fmt.Errorf("connector MCP endpoint: %w", err)
+	}
 
 	// CLI login discovery (RFC 8414): names the control plane that issues this
 	// deployment's rlat_ tokens, so `reliant auth login --server <this>` finds
@@ -1035,8 +1003,7 @@ func (s *Server) ChatService() *chat.Service {
 	return s.chatService
 }
 
-// WorktreeSweeper returns the sweeper that settles archived worktrees, or nil
-// when the server has no daemon router.
+// WorktreeSweeper returns the sweeper that settles archived worktrees.
 func (s *Server) WorktreeSweeper() *worktreesweep.Sweeper {
 	return s.worktreeSweeper
 }
@@ -1225,37 +1192,21 @@ func isNilInterceptor(i connect.Interceptor) bool {
 	}
 }
 
-// mountConnectorMCP mounts the connector MCP endpoint when its prerequisites
-// are present.
-//
-// Both are genuinely optional at this layer: a server may be constructed
-// without a daemon router (nothing to drive remotely), and some test harnesses
-// construct a server without a SQL-backed repository. Rather than fail
-// startup, the route is simply not mounted — an unmounted route 404s, which is
-// the correct answer to "connect me to a workspace that cannot be reached".
-// The reason is logged so a misconfigured deployment is diagnosable.
+// mountConnectorMCP mounts the connector MCP endpoint: grants resolves each
+// call's connector grant and OAuth client binding, and router carries the
+// call to the grant's daemon.
 func mountConnectorMCP(
 	mux *http.ServeMux,
 	streams *drain.Streams,
 	database db.Repository,
+	grants connectorgrant.Store,
 	router toolexec.DaemonRouter,
 	publicURL string,
 	oauthIssuers []string,
 	tokenValidator mcpserver.OAuthTokenValidator,
 	credentials mcpserver.CredentialIntrospector,
 	controlPlaneURL string,
-) {
-	if router == nil {
-		logging.Info("connector MCP endpoint not mounted: no daemon router")
-		return
-	}
-
-	repo, ok := database.(*db.Repo)
-	if !ok || repo == nil || repo.DB == nil {
-		logging.Info("connector MCP endpoint not mounted: no SQL-backed repository")
-		return
-	}
-
+) error {
 	// A connector request is often the first traffic a workspace has seen in
 	// hours, so a suspended workspace is woken rather than reported as broken.
 	// The wake is triggered and the call returns immediately — see
@@ -1286,7 +1237,7 @@ func mountConnectorMCP(
 	}
 
 	handler, err := mcpserver.NewHTTPHandler(mcpserver.HTTPDeps{
-		Store:       connectorgrant.NewSQLStore(repo.DB.SQLDB()),
+		Store:       grants,
 		Credentials: credentials,
 		Sender:      router,
 		Waker:       waker,
@@ -1296,12 +1247,11 @@ func mountConnectorMCP(
 		TokenValidator: tokenValidator,
 		// Bindings answer "which connector does this application act
 		// through?", recorded at consent.
-		Bindings:       connectorgrant.NewSQLStore(repo.DB.SQLDB()),
+		Bindings:       grants,
 		ConsentBaseURL: publicURL,
 	})
 	if err != nil {
-		logging.Error("connector MCP endpoint not mounted", "error", err)
-		return
+		return err
 	}
 
 	// Both the bare path and the subtree: MCP clients differ on whether they
@@ -1329,6 +1279,7 @@ func mountConnectorMCP(
 	// RFC 9728 discovery, so a consumer MCP client can find the authorization
 	// server from a failed request rather than being configured by hand.
 	mcpserver.MountOAuthRoutes(mux, oauthCfg, slog.Default())
+	return nil
 }
 
 // connectorTokenValidator adapts reliant's JWT validator to the connector
@@ -1428,20 +1379,16 @@ func securityHeaders(next http.Handler) http.Handler {
 
 // resolveTokenAuthority returns the deployment's ONE token authority: the
 // configured one, else control-plane or the local store as the environment
-// dictates. A misconfiguration (control-plane URL without its secret, or no
-// database for the self-hosted store) fails server start loudly rather than
-// serving a surface that can mint nothing.
+// dictates (the self-hosted store keeps its tokens in cfg.SQL). A
+// misconfiguration (control-plane URL without its secret) fails server start
+// loudly rather than serving a surface that can mint nothing.
 func resolveTokenAuthority(cfg *Config) (tokenauthority.Authority, tokenauthority.Mode, error) {
 	if cfg.TokenAuthority != nil {
 		// An injected authority states no mode, so nothing that depends on
 		// control-plane-side clipping is enabled for it.
 		return cfg.TokenAuthority, "", nil
 	}
-	var sqlDB *sql.DB
-	if repo, ok := cfg.Database.(*db.Repo); ok && repo != nil && repo.DB != nil {
-		sqlDB = repo.DB.SQLDB()
-	}
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(cfg.ControlPlane, sqlDB))
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(cfg.ControlPlane, cfg.SQL))
 	if err != nil {
 		return nil, "", fmt.Errorf("token authority: %w", err)
 	}

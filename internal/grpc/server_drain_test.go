@@ -12,14 +12,12 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/client"
 	"golang.org/x/net/http2"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
-	"github.com/reliant-labs/reliant/internal/workflow"
 )
 
 // The defect these pin: every prod rollout logged "Error stopping gRPC
@@ -54,33 +52,7 @@ type drainTestAuthority struct{ tokenauthority.Authority }
 // loopback port, returning the server and its base URL.
 func startDrainTestServer(t *testing.T) (*Server, string) {
 	t.Helper()
-	t.Setenv("AUTH_MODE", "apikey")
-	t.Setenv("AUTH_API_KEY", drainTestAPIKey)
-	t.Setenv("RELIANT_AUTHORIZATION_SERVER", "")
-
-	// The chat service requires Temporal, which nothing here reaches: a lazy
-	// client never dials.
-	temporal, err := client.NewLazyClient(client.Options{HostPort: "127.0.0.1:1"})
-	require.NoError(t, err)
-	t.Cleanup(temporal.Close)
-
-	srv, err := NewServer(&Config{
-		Database:       drainTestRepo{},
-		TokenAuthority: drainTestAuthority{},
-		TemporalClient: temporal,
-		PauseService:   workflow.NewPauseService(temporal, drainTestRepo{}),
-	})
-	require.NoError(t, err)
-
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	served := make(chan error, 1)
-	go func() { served <- srv.server.Serve(ln) }()
-	t.Cleanup(func() {
-		_ = srv.server.Close()
-		<-served
-	})
-	return srv, "http://" + ln.Addr().String()
+	return startTestServer(t, testServerConfig(t, drainTestRepo{}))
 }
 
 // h2cClient speaks prior-knowledge HTTP/2, as the load balancer does to the pod.
