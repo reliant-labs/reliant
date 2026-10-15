@@ -831,7 +831,7 @@ message VersionChange {
 // === Dashboards (mirror of forge internal/obsdash Spec, forge.dashboards/v1) ===
 //
 // Enum-like fields are plain strings with forge's values so the JSON of
-// deploy/observability/dashboard-spec_gen.json unmarshals into these messages
+// deploy/observability/spec/*_gen.json (one file per service) unmarshal into these messages
 // as-is (protojson, camelCase names).
 
 message QueryPanelRequest {
