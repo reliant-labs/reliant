@@ -1,0 +1,2002 @@
+{
+  "version": "forge.dashboard-parts/v1",
+  "service": "file_system",
+  "dashboard": {
+    "id": "service-file_system",
+    "title": "reliant: file_system service",
+    "description": "RED per rpc of reliant.v1.FileSystemService (server spans named reliant.v1.FileSystemService/\u003cMethod\u003e), Go runtime and logs. The Go runtime panels describe the PROCESS that serves this service: narrow with the service.name filter.",
+    "filters": [
+      {
+        "id": "service",
+        "label": "service.name",
+        "field": "service.name"
+      },
+      {
+        "id": "env",
+        "label": "deployment.environment.name",
+        "field": "deployment.environment.name"
+      }
+    ],
+    "annotations": [
+      {
+        "source": "releases",
+        "label": "Releases"
+      }
+    ],
+    "panels": [
+      {
+        "id": "requests",
+        "title": "Requests",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.FileSystemService/"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "errors",
+        "title": "Server errors",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.FileSystemService/"
+          },
+          {
+            "field": "span.status",
+            "op": "eq",
+            "value": "error"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "p95",
+        "title": "p95 latency",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.FileSystemService/"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "red-by-rpc",
+        "title": "Rate, errors and latency by rpc",
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          },
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.FileSystemService/"
+          }
+        ],
+        "groupBy": [
+          "span.name"
+        ],
+        "width": 24,
+        "height": 8
+      },
+      {
+        "id": "rpc-CopyFile-rate",
+        "title": "CopyFile: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/CopyFile"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CopyFile-errors",
+        "title": "CopyFile: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/CopyFile"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CopyFile-latency",
+        "title": "CopyFile: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/CopyFile"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateDirectory-rate",
+        "title": "CreateDirectory: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/CreateDirectory"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateDirectory-errors",
+        "title": "CreateDirectory: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/CreateDirectory"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateDirectory-latency",
+        "title": "CreateDirectory: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/CreateDirectory"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateFileOrFolder-rate",
+        "title": "CreateFileOrFolder: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/CreateFileOrFolder"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateFileOrFolder-errors",
+        "title": "CreateFileOrFolder: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/CreateFileOrFolder"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateFileOrFolder-latency",
+        "title": "CreateFileOrFolder: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/CreateFileOrFolder"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DeleteFileOrFolder-rate",
+        "title": "DeleteFileOrFolder: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/DeleteFileOrFolder"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DeleteFileOrFolder-errors",
+        "title": "DeleteFileOrFolder: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/DeleteFileOrFolder"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DeleteFileOrFolder-latency",
+        "title": "DeleteFileOrFolder: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/DeleteFileOrFolder"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFileContent-rate",
+        "title": "GetFileContent: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFileContent"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFileContent-errors",
+        "title": "GetFileContent: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFileContent"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFileContent-latency",
+        "title": "GetFileContent: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFileContent"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFileMetadata-rate",
+        "title": "GetFileMetadata: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFileMetadata"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFileMetadata-errors",
+        "title": "GetFileMetadata: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFileMetadata"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFileMetadata-latency",
+        "title": "GetFileMetadata: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFileMetadata"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFilePreview-rate",
+        "title": "GetFilePreview: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFilePreview"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFilePreview-errors",
+        "title": "GetFilePreview: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFilePreview"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFilePreview-latency",
+        "title": "GetFilePreview: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFilePreview"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFilePreviewInfo-rate",
+        "title": "GetFilePreviewInfo: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFilePreviewInfo"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFilePreviewInfo-errors",
+        "title": "GetFilePreviewInfo: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFilePreviewInfo"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFilePreviewInfo-latency",
+        "title": "GetFilePreviewInfo: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFilePreviewInfo"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFileTree-rate",
+        "title": "GetFileTree: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFileTree"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFileTree-errors",
+        "title": "GetFileTree: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFileTree"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetFileTree-latency",
+        "title": "GetFileTree: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/GetFileTree"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListDirectory-rate",
+        "title": "ListDirectory: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/ListDirectory"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListDirectory-errors",
+        "title": "ListDirectory: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/ListDirectory"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListDirectory-latency",
+        "title": "ListDirectory: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/ListDirectory"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ReplaceInFiles-rate",
+        "title": "ReplaceInFiles: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/ReplaceInFiles"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ReplaceInFiles-errors",
+        "title": "ReplaceInFiles: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/ReplaceInFiles"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ReplaceInFiles-latency",
+        "title": "ReplaceInFiles: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/ReplaceInFiles"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-SaveFileContent-rate",
+        "title": "SaveFileContent: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/SaveFileContent"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-SaveFileContent-errors",
+        "title": "SaveFileContent: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/SaveFileContent"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-SaveFileContent-latency",
+        "title": "SaveFileContent: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/SaveFileContent"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-SearchFiles-rate",
+        "title": "SearchFiles: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/SearchFiles"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-SearchFiles-errors",
+        "title": "SearchFiles: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/SearchFiles"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-SearchFiles-latency",
+        "title": "SearchFiles: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.FileSystemService/SearchFiles"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "db-latency",
+        "title": "Database call latency",
+        "description": "Client spans carrying db.system (the ORM's query hook).",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "client"
+          },
+          {
+            "field": "span.attr.db.system",
+            "op": "exists"
+          }
+        ],
+        "unit": "ms",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "db-by-operation",
+        "title": "Database calls by operation",
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "calls",
+            "agg": "count"
+          },
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "client"
+          },
+          {
+            "field": "span.attr.db.system",
+            "op": "exists"
+          }
+        ],
+        "groupBy": [
+          "span.attr.db.operation"
+        ],
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-memory",
+        "title": "Go memory used",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "used",
+            "agg": "sum",
+            "field": "go.memory.used",
+            "metricType": "sum"
+          },
+          {
+            "label": "gc goal",
+            "agg": "avg",
+            "field": "go.memory.gc.goal",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "bytes",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-goroutines",
+        "title": "Goroutines",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "goroutines",
+            "agg": "sum",
+            "field": "go.goroutine.count",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "count",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-alloc",
+        "title": "Heap allocation",
+        "description": "Bytes allocated to the heap per time bucket: the rate the garbage collector has to keep up with.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "allocated",
+            "agg": "sum",
+            "field": "go.memory.allocated",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "bytes",
+        "width": 24,
+        "height": 7
+      },
+      {
+        "id": "error-logs",
+        "title": "Error logs",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "log.attr.procedure",
+            "op": "prefix",
+            "value": "/reliant.v1.FileSystemService/"
+          },
+          {
+            "field": "log.severity",
+            "op": "eq",
+            "value": "error"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 9
+      },
+      {
+        "id": "logs",
+        "title": "Logs",
+        "description": "Every record whose rpc procedure belongs to this service.",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "log.attr.procedure",
+            "op": "prefix",
+            "value": "/reliant.v1.FileSystemService/"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 9
+      }
+    ]
+  },
+  "savedSearches": [
+    {
+      "id": "errors-file_system",
+      "title": "file_system: error logs",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "log.attr.procedure",
+          "op": "prefix",
+          "value": "/reliant.v1.FileSystemService/"
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ]
+    }
+  ],
+  "alert": {
+    "name": "file_system",
+    "rpc_service": "reliant.v1.FileSystemService"
+  }
+}

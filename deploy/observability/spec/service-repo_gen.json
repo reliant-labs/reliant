@@ -1,0 +1,1026 @@
+{
+  "version": "forge.dashboard-parts/v1",
+  "service": "repo",
+  "dashboard": {
+    "id": "service-repo",
+    "title": "reliant: repo service",
+    "description": "RED per rpc of reliant.v1.RepoService (server spans named reliant.v1.RepoService/\u003cMethod\u003e), Go runtime and logs. The Go runtime panels describe the PROCESS that serves this service: narrow with the service.name filter.",
+    "filters": [
+      {
+        "id": "service",
+        "label": "service.name",
+        "field": "service.name"
+      },
+      {
+        "id": "env",
+        "label": "deployment.environment.name",
+        "field": "deployment.environment.name"
+      }
+    ],
+    "annotations": [
+      {
+        "source": "releases",
+        "label": "Releases"
+      }
+    ],
+    "panels": [
+      {
+        "id": "requests",
+        "title": "Requests",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.RepoService/"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "errors",
+        "title": "Server errors",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.RepoService/"
+          },
+          {
+            "field": "span.status",
+            "op": "eq",
+            "value": "error"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "p95",
+        "title": "p95 latency",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.RepoService/"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "red-by-rpc",
+        "title": "Rate, errors and latency by rpc",
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          },
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.RepoService/"
+          }
+        ],
+        "groupBy": [
+          "span.name"
+        ],
+        "width": 24,
+        "height": 8
+      },
+      {
+        "id": "rpc-AddRepo-rate",
+        "title": "AddRepo: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/AddRepo"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-AddRepo-errors",
+        "title": "AddRepo: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/AddRepo"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-AddRepo-latency",
+        "title": "AddRepo: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/AddRepo"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DiscoverRepos-rate",
+        "title": "DiscoverRepos: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/DiscoverRepos"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DiscoverRepos-errors",
+        "title": "DiscoverRepos: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/DiscoverRepos"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DiscoverRepos-latency",
+        "title": "DiscoverRepos: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/DiscoverRepos"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetRepoGitInfo-rate",
+        "title": "GetRepoGitInfo: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/GetRepoGitInfo"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetRepoGitInfo-errors",
+        "title": "GetRepoGitInfo: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/GetRepoGitInfo"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetRepoGitInfo-latency",
+        "title": "GetRepoGitInfo: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/GetRepoGitInfo"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListRepos-rate",
+        "title": "ListRepos: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/ListRepos"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListRepos-errors",
+        "title": "ListRepos: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/ListRepos"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListRepos-latency",
+        "title": "ListRepos: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/ListRepos"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RemoveRepo-rate",
+        "title": "RemoveRepo: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/RemoveRepo"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RemoveRepo-errors",
+        "title": "RemoveRepo: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/RemoveRepo"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RemoveRepo-latency",
+        "title": "RemoveRepo: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RepoService/RemoveRepo"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "db-latency",
+        "title": "Database call latency",
+        "description": "Client spans carrying db.system (the ORM's query hook).",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "client"
+          },
+          {
+            "field": "span.attr.db.system",
+            "op": "exists"
+          }
+        ],
+        "unit": "ms",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "db-by-operation",
+        "title": "Database calls by operation",
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "calls",
+            "agg": "count"
+          },
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "client"
+          },
+          {
+            "field": "span.attr.db.system",
+            "op": "exists"
+          }
+        ],
+        "groupBy": [
+          "span.attr.db.operation"
+        ],
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-memory",
+        "title": "Go memory used",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "used",
+            "agg": "sum",
+            "field": "go.memory.used",
+            "metricType": "sum"
+          },
+          {
+            "label": "gc goal",
+            "agg": "avg",
+            "field": "go.memory.gc.goal",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "bytes",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-goroutines",
+        "title": "Goroutines",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "goroutines",
+            "agg": "sum",
+            "field": "go.goroutine.count",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "count",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-alloc",
+        "title": "Heap allocation",
+        "description": "Bytes allocated to the heap per time bucket: the rate the garbage collector has to keep up with.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "allocated",
+            "agg": "sum",
+            "field": "go.memory.allocated",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "bytes",
+        "width": 24,
+        "height": 7
+      },
+      {
+        "id": "error-logs",
+        "title": "Error logs",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "log.attr.procedure",
+            "op": "prefix",
+            "value": "/reliant.v1.RepoService/"
+          },
+          {
+            "field": "log.severity",
+            "op": "eq",
+            "value": "error"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 9
+      },
+      {
+        "id": "logs",
+        "title": "Logs",
+        "description": "Every record whose rpc procedure belongs to this service.",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "log.attr.procedure",
+            "op": "prefix",
+            "value": "/reliant.v1.RepoService/"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 9
+      }
+    ]
+  },
+  "savedSearches": [
+    {
+      "id": "errors-repo",
+      "title": "repo: error logs",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "log.attr.procedure",
+          "op": "prefix",
+          "value": "/reliant.v1.RepoService/"
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ]
+    }
+  ],
+  "alert": {
+    "name": "repo",
+    "rpc_service": "reliant.v1.RepoService"
+  }
+}

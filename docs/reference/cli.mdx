@@ -973,7 +973,7 @@ reliant forge build [environment] [flags]
 | `--docker` | `bool` | - | Build Docker images for all services |
 | `--gate-json` | `string` | - | Also write this build's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the build log and the exit code are unchanged. |
 | `--no-generate` | `bool` | - | Skip the pre-build code-generation check. By default forge build runs forge generate when gen/ is missing or proto sources are newer than the generated tree. |
-| `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. Requires the environment argument. List an env's options with `forge env options <env>`. |
+| `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. Requires the environment argument. List an env's options with 'forge env options `<env>`'. |
 | `--output`, `-o` | `string` | `bin` | Output directory for binaries |
 | `--parallel` | `bool` | `true` | Build services in parallel |
 | `--plan` | `bool` | - | Resolve the exact build set this invocation would build (same KCL discovery, same --target narrowing) and PREFLIGHT every step without running it: each go-build package exists and is a main package, each Dockerfile and frontend build script exists, each ShellBuild cwd exists, and with --release the ledger would cover everything the env declares. Builds, pushes, generates and writes nothing; exits non-zero on anything the real build would fail on. Pass it the release cut's exact arguments to gate a PR on the cut. |
@@ -1265,7 +1265,7 @@ reliant forge ci verify-test-run [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--from` | `string` | - | Read the `go test -json` stream from this file instead of stdin |
+| `--from` | `string` | - | Read the 'go test -json' stream from this file instead of stdin |
 | `--gate-json` | `string` | - | Also write this run's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the report and the exit code are unchanged. |
 | `--max-skip-ratio` | `float64` | `0.5` | Share of a package's tests that may skip before it is reported |
 | `--min-tests` | `int` | `5` | Sample-size floor for the mass-skip rule (a package that skipped EVERY test is reported regardless) |
@@ -2239,8 +2239,8 @@ reliant forge db migration new [name] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--backward-compatible` | `string` | - | declare that the previous release keeps working on this schema, and why (writes `-- forge:backward-compatible — <why>`) |
-| `--breaks-rollback` | `string` | - | declare that the previous release deliberately does NOT keep working on this schema, and why (writes `-- forge:breaks-rollback <why>`) |
+| `--backward-compatible` | `string` | - | declare that the previous release keeps working on this schema, and `why` (writes "-- forge:backward-compatible — `<why>`") |
+| `--breaks-rollback` | `string` | - | declare that the previous release deliberately does NOT keep working on this schema, and `why` (writes "-- forge:breaks-rollback `<why>`") |
 | `--context` | `bool` | - | write the schema, the previous migration and the history into the file's header instead of a pointer to them |
 | `--dir` | `string` | - | Migrations directory (default: forge.yaml database.migrations_dir, else db/migrations; a relative path resolves against the project root, not the CWD) |
 | `--dsn` | `string` | - | Database connection string for live schema introspection (implies --context) |
@@ -3304,18 +3304,18 @@ reliant forge env build <environment> [flags]
 | `--debug` | `bool` | - | Build with debug symbols for Delve |
 | `--docker` | `bool` | - | Build Docker images for all services (implied by --push and --release) |
 | `--gate-json` | `string` | - | Also write this build's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the build log and the exit code are unchanged. |
-| `--no-build` | `bool` | - | With --release: record the release over the digests an earlier `--push` already captured in .forge/state, without rebuilding. This is the cut-only half of a pipeline whose build and release are separate jobs. |
+| `--no-build` | `bool` | - | With --release: record the release over the digests an earlier --push already captured in .forge/state, without rebuilding. This is the cut-only half of a pipeline whose build and release are separate jobs. |
 | `--no-generate` | `bool` | - | Skip the pre-build code-generation check. By default this runs forge generate when gen/ is missing or proto sources are newer than the generated tree. |
 | `--no-run` | `bool` | - | Record no run, even inside CI |
-| `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with `forge env options <env>`. |
+| `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with 'forge env options `<env>`'. |
 | `--output`, `-o` | `string` | `bin` | Output directory for binaries |
 | `--parallel` | `bool` | `true` | Build services in parallel |
 | `--plan` | `bool` | - | Resolve the exact build set this invocation would build (same KCL discovery, same --target narrowing) and PREFLIGHT every step without running it: each go-build package exists and is a main package, each Dockerfile and frontend build script exists, each ShellBuild cwd exists, and with --release the ledger would cover everything the env declares. Builds, pushes, generates and writes nothing; exits non-zero on anything the real build would fail on. Pass it the release's exact arguments to gate a PR on the cut. |
 | `--push` | `bool` | - | Push docker images after build (implies --docker), each to the reference its own workload declares (its image field in deploy/kcl/workloads.k). Takes no value and carries no registry |
-| `--release` | `string` | - | Record an immutable release with this version label (e.g. v1.4.0). IMPLIES --push. The release's artifact SET (project images plus per-env external build_cmd images) is discovered from deploy/kcl/`<env>`/main.k; the built images stay env-agnostic, so promote the release to every env with `forge env deploy <env> <version>`. Captures each artifact's digest into a release ledger, which every later deploy pins. |
+| `--release` | `string` | - | Record an immutable release with this version label (e.g. v1.4.0). IMPLIES --push. The release's artifact SET (project images plus per-env external build_cmd images) is discovered from deploy/kcl/`<env>`/main.k; the built images stay env-agnostic, so promote the release to every env with 'forge env deploy `<env>` `<version>`'. Captures each artifact's digest into a release ledger, which every later deploy pins. |
 | `--run-id` | `string` | - | CI run this write belongs to (default: detected from the CI environment, e.g. github:`<repo>`/`<run>`/`<attempt>`) |
 | `--run-url` | `string` | - | Link to the CI run, for a human reading the ledger (default: detected from the CI environment) |
-| `--tag` | `string` | - | Override the image tag of every image this build writes (default: the tag a workload's image pins, else the env's image_tag, else git describe --tags --always --dirty). Refused when it differs from the tag a selected workload's image pins, or when it conflicts with --release. Recorded in .forge/state so `forge env deploy` uses the same value. |
+| `--tag` | `string` | - | Override the image tag of every image this build writes (default: the tag a workload's image pins, else the env's image_tag, else git describe --tags --always --dirty). Refused when it differs from the tag a selected workload's image pins, or when it conflicts with --release. Recorded in .forge/state so 'forge env deploy' uses the same value. |
 | `--target`, `-t` | `string` | `all` | Build target (all | external | a specific service/frontend name). `external` builds only the KCL services declaring build_cmd. |
 | `--target-arch` | `string` | - | Override target GOARCH for cross-compilation (default: forge.yaml deploy.target_arch, then amd64 for docker builds) |
 
@@ -3682,10 +3682,10 @@ reliant forge env deploy <environment> [version] [flags]
 | `--namespace` | `string` | - | Override namespace from environment config |
 | `--no-digest` | `bool` | - | Deploy by the mutable :tag even when the build state captured an immutable image digest. By default forge pins the manifest to `<image>`@sha256:... so a re-tagged/cached layer can't ship; this escape hatch restores tag-based references. |
 | `--no-run` | `bool` | - | Record no run, even inside CI |
-| `--no-wait` | `bool` | - | Record and apply, but do NOT wait for health. Gate on it later with `forge env status <env> --wait` |
+| `--no-wait` | `bool` | - | Record and apply, but do NOT wait for health. Gate on it later with 'forge env status `<env>` --wait' |
 | `--note` | `string` | - | Why — recorded on the ledger entry (most valuable on a deploy that moves the env BEHIND) |
 | `--offline-ledger` | `bool` | - | Break-glass for a control plane that is down: deploy the env's cached CURRENT release by its recorded digests (nothing is built, the ledger is not contacted) and queue the promotion record, replayed idempotently on the next successful ledger contact. Refuses a hosted tier and a hub-converged env, and a move to any other release. Prints the cache's age; the cache is refreshed by every successful ledger read or write |
-| `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with `forge env options <env>`. |
+| `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with 'forge env options `<env>`'. |
 | `--plan` | `bool` | - | Compute and print the full change set WITHOUT writing the binding or applying anything |
 | `--plan-only` | `bool` | - | Build, push and cut as usual, print the plan, and STOP without writing the promotion (exit 0). The first stage of a two-stage pipeline |
 | `--prune` | `bool` | - | Delete forge-managed Deployments in the namespace that the current KCL render no longer produces (opt-in) |
@@ -4590,7 +4590,7 @@ reliant forge env status [environment...] [flags]
 | `--release` | `string` | - | Refuse unless the promotion read binds this release version (exit 6 if it moved on). With --history, only promotions of this version |
 | `--signal` | `string` | - | Run only one runtime signal: app, metrics, traces, logs, profiles (default: all) |
 | `--stable-for` | `duration` | `0s` | --wait only: extra hold AFTER the phase reaches succeeded (default 0: the server's own stability window already applies) |
-| `--timeout` | `duration` | `0s` | Maximum time to spend reading the cluster (default 1m0s). With --wait this is the whole wait budget instead (default 15m0s); `--wait --timeout 0` reads the phase ONCE and never blocks |
+| `--timeout` | `duration` | `0s` | Maximum time to spend reading the cluster (default 1m0s). With --wait this is the whole wait budget instead (default 15m0s); '--wait --timeout 0' reads the phase ONCE and never blocks |
 | `--verbose`, `-v` | `bool` | - | Show evidence for all runtime checks (not just failures) |
 | `--verify` | `bool` | - | All-environments view only: also read each environment's cluster and reconcile it against the ledger (slow, needs credentials) |
 | `--wait` | `bool` | - | Block until the rollout settles, and prove it stayed up (exit 0/1/2/5/6) |
@@ -4765,14 +4765,14 @@ reliant forge env up <environment> [-- <dev-server flags>] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--background` | `bool` | - | Detach long-running phases and return immediately (stop with `forge env down <env>`). Beats --watch and the TTY default. |
+| `--background` | `bool` | - | Detach long-running phases and return immediately (stop with 'forge env down `<env>`'). Beats --watch and the TTY default. |
 | `--host-ready-timeout` | `duration` | `2m0s` | Maximum wait for host services to bind their ports, including compilation; exited runners fail immediately |
 | `--no-build` | `bool` | - | Skip the build phase (use already-built images / binaries) |
 | `--no-deploy` | `bool` | - | Skip the cluster apply phase (host services and frontends still launch) |
-| `--no-generate` | `bool` | - | Skip the pre-build code-generation check. By default `forge env up` runs `forge generate` when gen/ is missing or proto sources are newer than the generated tree. |
-| `--no-install` | `bool` | - | Skip the pre-dev-serve frontend dependency install. By default `forge env up` installs a frontend's deps when node_modules is missing or older than its lockfile/manifest. |
-| `--no-seed` | `bool` | - | Skip the first-boot dev auto-seed. By default `forge env up` seeds a dev database once when it is reachable and all seedable tables are empty. |
-| `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with `forge env options <env>`. |
+| `--no-generate` | `bool` | - | Skip the pre-build code-generation check. By default 'forge env up' runs 'forge generate' when gen/ is missing or proto sources are newer than the generated tree. |
+| `--no-install` | `bool` | - | Skip the pre-dev-serve frontend dependency install. By default 'forge env up' installs a frontend's deps when node_modules is missing or older than its lockfile/manifest. |
+| `--no-seed` | `bool` | - | Skip the first-boot dev auto-seed. By default 'forge env up' seeds a dev database once when it is reachable and all seedable tables are empty. |
+| `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with 'forge env options `<env>`'. |
 | `--target` | `stringArray` | `[]` | Scope the whole run — build, deploy, host and frontend phases — to specific services/operators/frontends by name (repeatable). Targeting only host/frontend apps builds no images. An unknown name is an error listing the env's app names. Default: everything. |
 | `--watch` | `bool` | - | Force the hold-and-teardown lifecycle (block until Ctrl-C, then cascade-stop) even without a TTY. Default without --watch/--background: hold when stdin is a TTY, otherwise return after start (non-TTY agent/CI path). |
 
@@ -5416,7 +5416,7 @@ reliant forge lint [paths...] [flags]
 | `--frontend-stores` | `bool` | - | Flag Zustand stores that import generated Connect clients (warnings only) |
 | `--gate-json` | `string` | - | Also write this run's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the findings and the exit code are unchanged. |
 | `--generated-drift` | `bool` | - | Fail when a forge-generated ("Code generated by forge. DO NOT EDIT.") file was edited after forge wrote it |
-| `--guarded-fields` | `bool` | - | Flag a scaffolded edit page whose update_mask still names a column declared `forge:guards` — saving the form writes it raw and bypasses the rpc that owns it, and pages are scaffold-once so `forge generate` cannot repair them (warnings only) |
+| `--guarded-fields` | `bool` | - | Flag a scaffolded edit page whose update_mask still names a column declared 'forge:guards' — saving the form writes it raw and bypasses the rpc that owns it, and pages are scaffold-once so 'forge generate' cannot repair them (warnings only) |
 | `--help-dev` | `bool` | - | List maintainer/debug flags hidden from --help |
 | `--json` | `bool` | - | Output findings as JSON (see lint_json.go header for the schema; exit code matches text mode) |
 | `--migration-safety` | `bool` | - | Run SQL migration safety checks |
@@ -5612,10 +5612,10 @@ Validate the dashboards a release bundle would carry
 Validate every dashboard the next release bundle would carry, exactly as a release
 cut does, and print what would ship.
 
-Generated dashboards come from deploy/observability/dashboard-spec_gen.json (and the
+Generated dashboards come from the spec in deploy/observability/spec/ (and the
 Custom metrics dashboard, when bin/observability/metrics-schema.json exists). A file
 you own in deploy/observability/dashboards/ is a renderer-neutral dashboard object
-(the objects of the spec's "dashboards" array, with a "panels" array); one named like a
+(the shape of the spec's dashboards, with a "panels" array); one named like a
 generated dashboard (shop-overview.json for shop-overview_gen.json) replaces it. A
 HyperDX-format file (with "tiles") is for the local HyperDX only and is not shipped.
 
@@ -6492,7 +6492,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--frontend` | `stringSlice` | `[]` | Name(s) of Next.js frontends (can be repeated or comma-separated) |
 | `--frontend-workspaces` | `bool` | - | Opt into pnpm-workspaces layout: emit packages/api + packages/hooks + packages/ui-web shared across all frontends. Off by default; recommended once you have 2+ frontends (web + mobile). |
 | `--go-version` | `string` | - | Go version to use in go.mod (e.g., 1.24); defaults to detected version |
-| `--harness` | `string` | `reliant` | AI harness conventions to scaffold for. Each writes a memory file; Forge never writes skill files for any harness. reliant (default): reliant.md — skills are read from the forge binary (`forge skill search|load`) and discovered via forge.yaml. claude: CLAUDE.md. For non-reliant harnesses, add your own skill telling the agent to run `forge skill search <query>`. cursor: .cursorrules. copilot: .github/copilot-instructions.md. codex: AGENTS.md. Recorded as `harness:` in forge.yaml and honored by every later generate |
+| `--harness` | `string` | `reliant` | AI harness conventions to scaffold for. Each writes a memory file; Forge never writes skill files for any harness. reliant (default): reliant.md — skills are read from the forge binary ('forge skill search|load') and discovered via forge.yaml. claude: CLAUDE.md. For non-reliant harnesses, add your own skill telling the agent to run 'forge skill search `<query>`'. cursor: .cursorrules. copilot: .github/copilot-instructions.md. codex: AGENTS.md. Recorded as 'harness:' in forge.yaml and honored by every later generate |
 | `--in-place` | `bool` | - | Create project in current directory instead of a new subdirectory |
 | `--kind` | `string` | `service` | Project kind: service (default), cli, library |
 | `--link-forge` | `bool` | - | Bridge the project to the forge checkout this binary was built from (gitignored go.work 'use' + .forge-link/ for the web runtime). Off by default; required for a service scaffold from an unreleased forge build (also: FORGE_LINK_FORGE=1) |
@@ -6829,7 +6829,7 @@ reliant forge registry login <environment> [flags]
 |------|------|---------|-------------|
 | `--password-env` | `string` | - | Name of the environment variable holding a foreign registry's credential (the forge.ControlPlane token_env convention: the NAME is in git, the VALUE never is) |
 | `--password-stdin` | `bool` | - | Read a foreign registry's credential from stdin (a credential never belongs on the command line) |
-| `--token` | `string` | - | Control-plane credential to present to the PLATFORM registry, overriding the env's token_env and the stored `forge login` (one-off / debugging) |
+| `--token` | `string` | - | Control-plane credential to present to the PLATFORM registry, overriding the env's token_env and the stored 'forge login' (one-off / debugging) |
 | `--username`, `-u` | `string` | - | Registry user the credential belongs to, for a registry that is NOT the platform's (e.g. $GITHUB_ACTOR, _json_key, oauth2accesstoken, AWS) |
 
 ---
@@ -7374,7 +7374,7 @@ reliant forge scaffold frontend <name> [flags]
 | `--kind` | `string` | - | frontend kind (web, mobile, or vite-spa) |
 | `--output` | `string` | - | Next.js output shape: static (default — a static export into out/), standalone, or server. Only applies to --kind web. |
 | `--port` | `int` | `0` | Pin the frontend dev-server port. Default (unset) allocates a free port at launch — set this only when the port is externally fixed (e.g. an OAuth redirect URI registered with an IdP). |
-| `--routes` | `stringSlice` | `[]` | Only generate CRUD pages for these entity route slugs (e.g. --routes users,usage-events), or `--routes none` for no generated pages at all. Default (unset) generates a page set for EVERY entity. Persisted as frontends[].routes and honored by every later generate run. |
+| `--routes` | `stringSlice` | `[]` | Only generate CRUD pages for these entity route slugs (e.g. --routes users,usage-events), or '--routes none' for no generated pages at all. Default (unset) generates a page set for EVERY entity. Persisted as frontends[].routes and honored by every later generate run. |
 
 ---
 
@@ -7719,7 +7719,7 @@ reliant forge scaffold worker <name> [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--kind` | `string` | - | worker kind (use cron for scheduled workers) |
-| `--no-generate` | `bool` | - | skip the post-scaffold `forge generate` run (scaffold-only mode for parallel-agent rounds) |
+| `--no-generate` | `bool` | - | skip the post-scaffold 'forge generate' run (scaffold-only mode for parallel-agent rounds) |
 | `--schedule` | `string` | - | cron schedule for --kind cron workers |
 
 ---

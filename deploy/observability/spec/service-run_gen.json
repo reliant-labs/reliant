@@ -1,0 +1,1514 @@
+{
+  "version": "forge.dashboard-parts/v1",
+  "service": "run",
+  "dashboard": {
+    "id": "service-run",
+    "title": "reliant: run service",
+    "description": "RED per rpc of reliant.v1.RunService (server spans named reliant.v1.RunService/\u003cMethod\u003e), Go runtime and logs. The Go runtime panels describe the PROCESS that serves this service: narrow with the service.name filter.",
+    "filters": [
+      {
+        "id": "service",
+        "label": "service.name",
+        "field": "service.name"
+      },
+      {
+        "id": "env",
+        "label": "deployment.environment.name",
+        "field": "deployment.environment.name"
+      }
+    ],
+    "annotations": [
+      {
+        "source": "releases",
+        "label": "Releases"
+      }
+    ],
+    "panels": [
+      {
+        "id": "requests",
+        "title": "Requests",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.RunService/"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "errors",
+        "title": "Server errors",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.RunService/"
+          },
+          {
+            "field": "span.status",
+            "op": "eq",
+            "value": "error"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "p95",
+        "title": "p95 latency",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.RunService/"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "red-by-rpc",
+        "title": "Rate, errors and latency by rpc",
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          },
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.RunService/"
+          }
+        ],
+        "groupBy": [
+          "span.name"
+        ],
+        "width": 24,
+        "height": 8
+      },
+      {
+        "id": "rpc-CancelRun-rate",
+        "title": "CancelRun: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/CancelRun"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CancelRun-errors",
+        "title": "CancelRun: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/CancelRun"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CancelRun-latency",
+        "title": "CancelRun: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/CancelRun"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetRun-rate",
+        "title": "GetRun: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/GetRun"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetRun-errors",
+        "title": "GetRun: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/GetRun"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetRun-latency",
+        "title": "GetRun: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/GetRun"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-InterruptRun-rate",
+        "title": "InterruptRun: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/InterruptRun"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-InterruptRun-errors",
+        "title": "InterruptRun: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/InterruptRun"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-InterruptRun-latency",
+        "title": "InterruptRun: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/InterruptRun"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-LastRunPerWorkflow-rate",
+        "title": "LastRunPerWorkflow: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/LastRunPerWorkflow"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-LastRunPerWorkflow-errors",
+        "title": "LastRunPerWorkflow: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/LastRunPerWorkflow"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-LastRunPerWorkflow-latency",
+        "title": "LastRunPerWorkflow: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/LastRunPerWorkflow"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListRuns-rate",
+        "title": "ListRuns: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/ListRuns"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListRuns-errors",
+        "title": "ListRuns: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/ListRuns"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListRuns-latency",
+        "title": "ListRuns: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/ListRuns"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PauseRun-rate",
+        "title": "PauseRun: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/PauseRun"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PauseRun-errors",
+        "title": "PauseRun: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/PauseRun"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PauseRun-latency",
+        "title": "PauseRun: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/PauseRun"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ResumeRun-rate",
+        "title": "ResumeRun: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/ResumeRun"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ResumeRun-errors",
+        "title": "ResumeRun: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/ResumeRun"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ResumeRun-latency",
+        "title": "ResumeRun: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/ResumeRun"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-SignalRun-rate",
+        "title": "SignalRun: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/SignalRun"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-SignalRun-errors",
+        "title": "SignalRun: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/SignalRun"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-SignalRun-latency",
+        "title": "SignalRun: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/SignalRun"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-StartRun-rate",
+        "title": "StartRun: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/StartRun"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-StartRun-errors",
+        "title": "StartRun: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/StartRun"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-StartRun-latency",
+        "title": "StartRun: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.RunService/StartRun"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "db-latency",
+        "title": "Database call latency",
+        "description": "Client spans carrying db.system (the ORM's query hook).",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "client"
+          },
+          {
+            "field": "span.attr.db.system",
+            "op": "exists"
+          }
+        ],
+        "unit": "ms",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "db-by-operation",
+        "title": "Database calls by operation",
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "calls",
+            "agg": "count"
+          },
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "client"
+          },
+          {
+            "field": "span.attr.db.system",
+            "op": "exists"
+          }
+        ],
+        "groupBy": [
+          "span.attr.db.operation"
+        ],
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-memory",
+        "title": "Go memory used",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "used",
+            "agg": "sum",
+            "field": "go.memory.used",
+            "metricType": "sum"
+          },
+          {
+            "label": "gc goal",
+            "agg": "avg",
+            "field": "go.memory.gc.goal",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "bytes",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-goroutines",
+        "title": "Goroutines",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "goroutines",
+            "agg": "sum",
+            "field": "go.goroutine.count",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "count",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-alloc",
+        "title": "Heap allocation",
+        "description": "Bytes allocated to the heap per time bucket: the rate the garbage collector has to keep up with.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "allocated",
+            "agg": "sum",
+            "field": "go.memory.allocated",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "bytes",
+        "width": 24,
+        "height": 7
+      },
+      {
+        "id": "error-logs",
+        "title": "Error logs",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "log.attr.procedure",
+            "op": "prefix",
+            "value": "/reliant.v1.RunService/"
+          },
+          {
+            "field": "log.severity",
+            "op": "eq",
+            "value": "error"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 9
+      },
+      {
+        "id": "logs",
+        "title": "Logs",
+        "description": "Every record whose rpc procedure belongs to this service.",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "log.attr.procedure",
+            "op": "prefix",
+            "value": "/reliant.v1.RunService/"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 9
+      }
+    ]
+  },
+  "savedSearches": [
+    {
+      "id": "errors-run",
+      "title": "run: error logs",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "log.attr.procedure",
+          "op": "prefix",
+          "value": "/reliant.v1.RunService/"
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ]
+    }
+  ],
+  "alert": {
+    "name": "run",
+    "rpc_service": "reliant.v1.RunService"
+  }
+}

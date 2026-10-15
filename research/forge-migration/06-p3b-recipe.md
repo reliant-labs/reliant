@@ -156,10 +156,15 @@ the background. It writes:
   - one `handlers_scaffold_<name>_test.go` per rpc (yours)
   - `helpers_gen_test.go` (generated)
 - `internal/handlers/mocks/<svc>_mock_gen.go`
-- `deploy/observability/dashboards/reliant-service-<svc>_gen.json`
-- updates to `gen/forge_descriptor.json`, `.forge/{hashes,scaffolded}.json`
-  and `deploy/observability/{dashboard-spec,alert-defaults}_gen.json`,
-  `…/saved-searches_gen.ndjson`
+- `deploy/observability/dashboards/reliant-service-<svc>_gen.json` (the
+  service's dashboard) and `…/reliant-service-<svc>_gen.ndjson` (its saved
+  searches)
+- `deploy/observability/spec/service-<svc>_gen.json` (the service's part of
+  the dashboard spec: dashboard, saved searches, alert entry)
+- updates to `gen/forge_descriptor.json` and `.forge/{hashes,scaffolded}.json`.
+  Since forge #799 no observability file lists every service
+  (`spec/project_gen.json` and `alert-defaults_gen.json` name none), so a new
+  service adds files and edits none.
 
 **3.3 Move the code.** Use `git mv` so review sees renames:
 
@@ -436,7 +441,8 @@ mechanically.
 
 | File | Resolution |
 |---|---|
-| `gen/forge_descriptor.json`, `.forge/hashes.json`, `.forge/scaffolded.json`, `deploy/observability/{dashboard-spec,alert-defaults}_gen.json`, `deploy/observability/dashboards/{saved-searches_gen.ndjson,reliant-overview_gen.json}`, `internal/handlers/<svc>/helpers_gen_test.go`, `internal/handlers/mocks/*_gen.go`, `pkg/middleware/procedures_gen.go` | Steps 1, 3, 4 |
+| `gen/forge_descriptor.json`, `.forge/hashes.json`, `.forge/scaffolded.json`, `internal/handlers/<svc>/helpers_gen_test.go`, `internal/handlers/mocks/*_gen.go`, `pkg/middleware/procedures_gen.go` | Steps 1, 3, 4 |
+| `deploy/observability/**` | Does not conflict: since forge #799 each service owns its own files (`spec/service-<svc>_gen.json`, `dashboards/reliant-service-<svc>_gen.{json,ndjson}`), so two lanes touch disjoint files. A conflict here means the shared `spec/project_gen.json` or `alert-defaults_gen.json` changed: Steps 1, 3, 4 |
 | `gen/reliant/v1/**`, `web/src/gen/**` | Steps 1–4 |
 | `internal/grpc/server.go` | Hand-merged code. Adjacent constructor lines and imports: keep both sides |
 | `internal/grpc/workspace_proxy_test.go` (FileSystem, Background, Terminal, PackageCommands) | Interface assertions on adjacent lines: keep both sides |

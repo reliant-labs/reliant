@@ -1,0 +1,3344 @@
+{
+  "version": "forge.dashboard-parts/v1",
+  "service": "project",
+  "dashboard": {
+    "id": "service-project",
+    "title": "reliant: project service",
+    "description": "RED per rpc of reliant.v1.ProjectService (server spans named reliant.v1.ProjectService/\u003cMethod\u003e), Go runtime and logs. The Go runtime panels describe the PROCESS that serves this service: narrow with the service.name filter.",
+    "filters": [
+      {
+        "id": "service",
+        "label": "service.name",
+        "field": "service.name"
+      },
+      {
+        "id": "env",
+        "label": "deployment.environment.name",
+        "field": "deployment.environment.name"
+      }
+    ],
+    "annotations": [
+      {
+        "source": "releases",
+        "label": "Releases"
+      }
+    ],
+    "panels": [
+      {
+        "id": "requests",
+        "title": "Requests",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.ProjectService/"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "errors",
+        "title": "Server errors",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.ProjectService/"
+          },
+          {
+            "field": "span.status",
+            "op": "eq",
+            "value": "error"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "p95",
+        "title": "p95 latency",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.ProjectService/"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "red-by-rpc",
+        "title": "Rate, errors and latency by rpc",
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          },
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.ProjectService/"
+          }
+        ],
+        "groupBy": [
+          "span.name"
+        ],
+        "width": 24,
+        "height": 8
+      },
+      {
+        "id": "rpc-CreateProject-rate",
+        "title": "CreateProject: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/CreateProject"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateProject-errors",
+        "title": "CreateProject: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/CreateProject"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateProject-latency",
+        "title": "CreateProject: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/CreateProject"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateProjectFromRepo-rate",
+        "title": "CreateProjectFromRepo: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/CreateProjectFromRepo"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateProjectFromRepo-errors",
+        "title": "CreateProjectFromRepo: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/CreateProjectFromRepo"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateProjectFromRepo-latency",
+        "title": "CreateProjectFromRepo: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/CreateProjectFromRepo"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DeleteProject-rate",
+        "title": "DeleteProject: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/DeleteProject"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DeleteProject-errors",
+        "title": "DeleteProject: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/DeleteProject"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DeleteProject-latency",
+        "title": "DeleteProject: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/DeleteProject"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProject-rate",
+        "title": "GetProject: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProject"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProject-errors",
+        "title": "GetProject: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProject"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProject-latency",
+        "title": "GetProject: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProject"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectChanges-rate",
+        "title": "GetProjectChanges: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectChanges"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectChanges-errors",
+        "title": "GetProjectChanges: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectChanges"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectChanges-latency",
+        "title": "GetProjectChanges: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectChanges"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectGitBranches-rate",
+        "title": "GetProjectGitBranches: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectGitBranches"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectGitBranches-errors",
+        "title": "GetProjectGitBranches: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectGitBranches"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectGitBranches-latency",
+        "title": "GetProjectGitBranches: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectGitBranches"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectGitInfo-rate",
+        "title": "GetProjectGitInfo: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectGitInfo"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectGitInfo-errors",
+        "title": "GetProjectGitInfo: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectGitInfo"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectGitInfo-latency",
+        "title": "GetProjectGitInfo: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectGitInfo"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectInitStatus-rate",
+        "title": "GetProjectInitStatus: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectInitStatus"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectInitStatus-errors",
+        "title": "GetProjectInitStatus: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectInitStatus"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectInitStatus-latency",
+        "title": "GetProjectInitStatus: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectInitStatus"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectMetadata-rate",
+        "title": "GetProjectMetadata: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectMetadata"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectMetadata-errors",
+        "title": "GetProjectMetadata: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectMetadata"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectMetadata-latency",
+        "title": "GetProjectMetadata: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectMetadata"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectPrompts-rate",
+        "title": "GetProjectPrompts: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectPrompts"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectPrompts-errors",
+        "title": "GetProjectPrompts: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectPrompts"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetProjectPrompts-latency",
+        "title": "GetProjectPrompts: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/GetProjectPrompts"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-InitializeGitRepo-rate",
+        "title": "InitializeGitRepo: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/InitializeGitRepo"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-InitializeGitRepo-errors",
+        "title": "InitializeGitRepo: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/InitializeGitRepo"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-InitializeGitRepo-latency",
+        "title": "InitializeGitRepo: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/InitializeGitRepo"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-InitializeProject-rate",
+        "title": "InitializeProject: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/InitializeProject"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-InitializeProject-errors",
+        "title": "InitializeProject: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/InitializeProject"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-InitializeProject-latency",
+        "title": "InitializeProject: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/InitializeProject"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListProjectDaemons-rate",
+        "title": "ListProjectDaemons: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/ListProjectDaemons"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListProjectDaemons-errors",
+        "title": "ListProjectDaemons: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/ListProjectDaemons"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListProjectDaemons-latency",
+        "title": "ListProjectDaemons: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/ListProjectDaemons"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListProjectDaemonsForDaemon-rate",
+        "title": "ListProjectDaemonsForDaemon: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/ListProjectDaemonsForDaemon"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListProjectDaemonsForDaemon-errors",
+        "title": "ListProjectDaemonsForDaemon: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/ListProjectDaemonsForDaemon"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListProjectDaemonsForDaemon-latency",
+        "title": "ListProjectDaemonsForDaemon: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/ListProjectDaemonsForDaemon"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListProjects-rate",
+        "title": "ListProjects: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/ListProjects"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListProjects-errors",
+        "title": "ListProjects: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/ListProjects"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListProjects-latency",
+        "title": "ListProjects: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/ListProjects"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListRepositoriesForDaemon-rate",
+        "title": "ListRepositoriesForDaemon: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/ListRepositoriesForDaemon"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListRepositoriesForDaemon-errors",
+        "title": "ListRepositoriesForDaemon: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/ListRepositoriesForDaemon"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListRepositoriesForDaemon-latency",
+        "title": "ListRepositoriesForDaemon: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/ListRepositoriesForDaemon"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-MarkProjectInstalled-rate",
+        "title": "MarkProjectInstalled: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/MarkProjectInstalled"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-MarkProjectInstalled-errors",
+        "title": "MarkProjectInstalled: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/MarkProjectInstalled"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-MarkProjectInstalled-latency",
+        "title": "MarkProjectInstalled: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/MarkProjectInstalled"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PullProjectOnDaemon-rate",
+        "title": "PullProjectOnDaemon: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/PullProjectOnDaemon"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PullProjectOnDaemon-errors",
+        "title": "PullProjectOnDaemon: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/PullProjectOnDaemon"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PullProjectOnDaemon-latency",
+        "title": "PullProjectOnDaemon: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/PullProjectOnDaemon"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RecloneProjectOnDaemon-rate",
+        "title": "RecloneProjectOnDaemon: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/RecloneProjectOnDaemon"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RecloneProjectOnDaemon-errors",
+        "title": "RecloneProjectOnDaemon: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/RecloneProjectOnDaemon"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RecloneProjectOnDaemon-latency",
+        "title": "RecloneProjectOnDaemon: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/RecloneProjectOnDaemon"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RemoveProjectFromDaemon-rate",
+        "title": "RemoveProjectFromDaemon: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/RemoveProjectFromDaemon"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RemoveProjectFromDaemon-errors",
+        "title": "RemoveProjectFromDaemon: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/RemoveProjectFromDaemon"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RemoveProjectFromDaemon-latency",
+        "title": "RemoveProjectFromDaemon: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/RemoveProjectFromDaemon"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-SaveProjectPrompts-rate",
+        "title": "SaveProjectPrompts: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/SaveProjectPrompts"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-SaveProjectPrompts-errors",
+        "title": "SaveProjectPrompts: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/SaveProjectPrompts"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-SaveProjectPrompts-latency",
+        "title": "SaveProjectPrompts: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/SaveProjectPrompts"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-TouchProject-rate",
+        "title": "TouchProject: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/TouchProject"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-TouchProject-errors",
+        "title": "TouchProject: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/TouchProject"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-TouchProject-latency",
+        "title": "TouchProject: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/TouchProject"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UpdateProject-rate",
+        "title": "UpdateProject: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/UpdateProject"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UpdateProject-errors",
+        "title": "UpdateProject: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/UpdateProject"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UpdateProject-latency",
+        "title": "UpdateProject: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/UpdateProject"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UpdateProjectMetadata-rate",
+        "title": "UpdateProjectMetadata: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/UpdateProjectMetadata"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UpdateProjectMetadata-errors",
+        "title": "UpdateProjectMetadata: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/UpdateProjectMetadata"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UpdateProjectMetadata-latency",
+        "title": "UpdateProjectMetadata: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.ProjectService/UpdateProjectMetadata"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "db-latency",
+        "title": "Database call latency",
+        "description": "Client spans carrying db.system (the ORM's query hook).",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "client"
+          },
+          {
+            "field": "span.attr.db.system",
+            "op": "exists"
+          }
+        ],
+        "unit": "ms",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "db-by-operation",
+        "title": "Database calls by operation",
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "calls",
+            "agg": "count"
+          },
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "client"
+          },
+          {
+            "field": "span.attr.db.system",
+            "op": "exists"
+          }
+        ],
+        "groupBy": [
+          "span.attr.db.operation"
+        ],
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-memory",
+        "title": "Go memory used",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "used",
+            "agg": "sum",
+            "field": "go.memory.used",
+            "metricType": "sum"
+          },
+          {
+            "label": "gc goal",
+            "agg": "avg",
+            "field": "go.memory.gc.goal",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "bytes",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-goroutines",
+        "title": "Goroutines",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "goroutines",
+            "agg": "sum",
+            "field": "go.goroutine.count",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "count",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-alloc",
+        "title": "Heap allocation",
+        "description": "Bytes allocated to the heap per time bucket: the rate the garbage collector has to keep up with.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "allocated",
+            "agg": "sum",
+            "field": "go.memory.allocated",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "bytes",
+        "width": 24,
+        "height": 7
+      },
+      {
+        "id": "error-logs",
+        "title": "Error logs",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "log.attr.procedure",
+            "op": "prefix",
+            "value": "/reliant.v1.ProjectService/"
+          },
+          {
+            "field": "log.severity",
+            "op": "eq",
+            "value": "error"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 9
+      },
+      {
+        "id": "logs",
+        "title": "Logs",
+        "description": "Every record whose rpc procedure belongs to this service.",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "log.attr.procedure",
+            "op": "prefix",
+            "value": "/reliant.v1.ProjectService/"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 9
+      }
+    ]
+  },
+  "savedSearches": [
+    {
+      "id": "errors-project",
+      "title": "project: error logs",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "log.attr.procedure",
+          "op": "prefix",
+          "value": "/reliant.v1.ProjectService/"
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ]
+    }
+  ],
+  "alert": {
+    "name": "project",
+    "rpc_service": "reliant.v1.ProjectService"
+  }
+}

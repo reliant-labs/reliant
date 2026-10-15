@@ -1,0 +1,3222 @@
+{
+  "version": "forge.dashboard-parts/v1",
+  "service": "worktree",
+  "dashboard": {
+    "id": "service-worktree",
+    "title": "reliant: worktree service",
+    "description": "RED per rpc of reliant.v1.WorktreeService (server spans named reliant.v1.WorktreeService/\u003cMethod\u003e), Go runtime and logs. The Go runtime panels describe the PROCESS that serves this service: narrow with the service.name filter.",
+    "filters": [
+      {
+        "id": "service",
+        "label": "service.name",
+        "field": "service.name"
+      },
+      {
+        "id": "env",
+        "label": "deployment.environment.name",
+        "field": "deployment.environment.name"
+      }
+    ],
+    "annotations": [
+      {
+        "source": "releases",
+        "label": "Releases"
+      }
+    ],
+    "panels": [
+      {
+        "id": "requests",
+        "title": "Requests",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.WorktreeService/"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "errors",
+        "title": "Server errors",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.WorktreeService/"
+          },
+          {
+            "field": "span.status",
+            "op": "eq",
+            "value": "error"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "p95",
+        "title": "p95 latency",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.WorktreeService/"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "id": "red-by-rpc",
+        "title": "Rate, errors and latency by rpc",
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          },
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "prefix",
+            "value": "reliant.v1.WorktreeService/"
+          }
+        ],
+        "groupBy": [
+          "span.name"
+        ],
+        "width": 24,
+        "height": 8
+      },
+      {
+        "id": "rpc-ArchiveWorktree-rate",
+        "title": "ArchiveWorktree: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/ArchiveWorktree"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ArchiveWorktree-errors",
+        "title": "ArchiveWorktree: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/ArchiveWorktree"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ArchiveWorktree-latency",
+        "title": "ArchiveWorktree: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/ArchiveWorktree"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CommitWorktree-rate",
+        "title": "CommitWorktree: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/CommitWorktree"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CommitWorktree-errors",
+        "title": "CommitWorktree: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/CommitWorktree"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CommitWorktree-latency",
+        "title": "CommitWorktree: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/CommitWorktree"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateWorktree-rate",
+        "title": "CreateWorktree: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/CreateWorktree"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateWorktree-errors",
+        "title": "CreateWorktree: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/CreateWorktree"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateWorktree-latency",
+        "title": "CreateWorktree: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/CreateWorktree"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateWorktreePR-rate",
+        "title": "CreateWorktreePR: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/CreateWorktreePR"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateWorktreePR-errors",
+        "title": "CreateWorktreePR: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/CreateWorktreePR"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-CreateWorktreePR-latency",
+        "title": "CreateWorktreePR: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/CreateWorktreePR"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DeleteWorktree-rate",
+        "title": "DeleteWorktree: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/DeleteWorktree"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DeleteWorktree-errors",
+        "title": "DeleteWorktree: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/DeleteWorktree"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DeleteWorktree-latency",
+        "title": "DeleteWorktree: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/DeleteWorktree"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DiscoverWorktrees-rate",
+        "title": "DiscoverWorktrees: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/DiscoverWorktrees"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DiscoverWorktrees-errors",
+        "title": "DiscoverWorktrees: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/DiscoverWorktrees"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-DiscoverWorktrees-latency",
+        "title": "DiscoverWorktrees: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/DiscoverWorktrees"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktree-rate",
+        "title": "GetWorktree: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktree"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktree-errors",
+        "title": "GetWorktree: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktree"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktree-latency",
+        "title": "GetWorktree: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktree"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktreeChanges-rate",
+        "title": "GetWorktreeChanges: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktreeChanges"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktreeChanges-errors",
+        "title": "GetWorktreeChanges: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktreeChanges"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktreeChanges-latency",
+        "title": "GetWorktreeChanges: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktreeChanges"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktreeCommits-rate",
+        "title": "GetWorktreeCommits: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktreeCommits"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktreeCommits-errors",
+        "title": "GetWorktreeCommits: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktreeCommits"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktreeCommits-latency",
+        "title": "GetWorktreeCommits: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktreeCommits"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktreeGitStatus-rate",
+        "title": "GetWorktreeGitStatus: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktreeGitStatus"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktreeGitStatus-errors",
+        "title": "GetWorktreeGitStatus: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktreeGitStatus"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktreeGitStatus-latency",
+        "title": "GetWorktreeGitStatus: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktreeGitStatus"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktreePR-rate",
+        "title": "GetWorktreePR: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktreePR"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktreePR-errors",
+        "title": "GetWorktreePR: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktreePR"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-GetWorktreePR-latency",
+        "title": "GetWorktreePR: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/GetWorktreePR"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ImportWorktree-rate",
+        "title": "ImportWorktree: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/ImportWorktree"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ImportWorktree-errors",
+        "title": "ImportWorktree: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/ImportWorktree"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ImportWorktree-latency",
+        "title": "ImportWorktree: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/ImportWorktree"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListWorktreeRepoStatuses-rate",
+        "title": "ListWorktreeRepoStatuses: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/ListWorktreeRepoStatuses"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListWorktreeRepoStatuses-errors",
+        "title": "ListWorktreeRepoStatuses: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/ListWorktreeRepoStatuses"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListWorktreeRepoStatuses-latency",
+        "title": "ListWorktreeRepoStatuses: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/ListWorktreeRepoStatuses"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListWorktrees-rate",
+        "title": "ListWorktrees: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/ListWorktrees"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListWorktrees-errors",
+        "title": "ListWorktrees: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/ListWorktrees"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-ListWorktrees-latency",
+        "title": "ListWorktrees: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/ListWorktrees"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PruneWorktrees-rate",
+        "title": "PruneWorktrees: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/PruneWorktrees"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PruneWorktrees-errors",
+        "title": "PruneWorktrees: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/PruneWorktrees"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PruneWorktrees-latency",
+        "title": "PruneWorktrees: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/PruneWorktrees"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PullWorktree-rate",
+        "title": "PullWorktree: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/PullWorktree"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PullWorktree-errors",
+        "title": "PullWorktree: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/PullWorktree"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PullWorktree-latency",
+        "title": "PullWorktree: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/PullWorktree"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PushWorktree-rate",
+        "title": "PushWorktree: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/PushWorktree"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PushWorktree-errors",
+        "title": "PushWorktree: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/PushWorktree"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-PushWorktree-latency",
+        "title": "PushWorktree: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/PushWorktree"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RecreateWorktree-rate",
+        "title": "RecreateWorktree: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/RecreateWorktree"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RecreateWorktree-errors",
+        "title": "RecreateWorktree: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/RecreateWorktree"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RecreateWorktree-latency",
+        "title": "RecreateWorktree: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/RecreateWorktree"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RevertFiles-rate",
+        "title": "RevertFiles: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/RevertFiles"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RevertFiles-errors",
+        "title": "RevertFiles: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/RevertFiles"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-RevertFiles-latency",
+        "title": "RevertFiles: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/RevertFiles"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-StageFiles-rate",
+        "title": "StageFiles: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/StageFiles"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-StageFiles-errors",
+        "title": "StageFiles: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/StageFiles"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-StageFiles-latency",
+        "title": "StageFiles: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/StageFiles"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UnarchiveWorktree-rate",
+        "title": "UnarchiveWorktree: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/UnarchiveWorktree"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UnarchiveWorktree-errors",
+        "title": "UnarchiveWorktree: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/UnarchiveWorktree"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UnarchiveWorktree-latency",
+        "title": "UnarchiveWorktree: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/UnarchiveWorktree"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UnstageFiles-rate",
+        "title": "UnstageFiles: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/UnstageFiles"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UnstageFiles-errors",
+        "title": "UnstageFiles: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/UnstageFiles"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UnstageFiles-latency",
+        "title": "UnstageFiles: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/UnstageFiles"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UpdateWorktree-rate",
+        "title": "UpdateWorktree: requests",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/UpdateWorktree"
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UpdateWorktree-errors",
+        "title": "UpdateWorktree: error rate",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/UpdateWorktree"
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "rpc-UpdateWorktree-latency",
+        "title": "UpdateWorktree: latency",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          },
+          {
+            "field": "span.name",
+            "op": "eq",
+            "value": "reliant.v1.WorktreeService/UpdateWorktree"
+          }
+        ],
+        "unit": "ms",
+        "width": 8,
+        "height": 6
+      },
+      {
+        "id": "db-latency",
+        "title": "Database call latency",
+        "description": "Client spans carrying db.system (the ORM's query hook).",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "client"
+          },
+          {
+            "field": "span.attr.db.system",
+            "op": "exists"
+          }
+        ],
+        "unit": "ms",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "db-by-operation",
+        "title": "Database calls by operation",
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "calls",
+            "agg": "count"
+          },
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "client"
+          },
+          {
+            "field": "span.attr.db.system",
+            "op": "exists"
+          }
+        ],
+        "groupBy": [
+          "span.attr.db.operation"
+        ],
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-memory",
+        "title": "Go memory used",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "used",
+            "agg": "sum",
+            "field": "go.memory.used",
+            "metricType": "sum"
+          },
+          {
+            "label": "gc goal",
+            "agg": "avg",
+            "field": "go.memory.gc.goal",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "bytes",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-goroutines",
+        "title": "Goroutines",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "goroutines",
+            "agg": "sum",
+            "field": "go.goroutine.count",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "count",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "go-alloc",
+        "title": "Heap allocation",
+        "description": "Bytes allocated to the heap per time bucket: the rate the garbage collector has to keep up with.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "allocated",
+            "agg": "sum",
+            "field": "go.memory.allocated",
+            "metricType": "sum"
+          }
+        ],
+        "unit": "bytes",
+        "width": 24,
+        "height": 7
+      },
+      {
+        "id": "error-logs",
+        "title": "Error logs",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "log.attr.procedure",
+            "op": "prefix",
+            "value": "/reliant.v1.WorktreeService/"
+          },
+          {
+            "field": "log.severity",
+            "op": "eq",
+            "value": "error"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 9
+      },
+      {
+        "id": "logs",
+        "title": "Logs",
+        "description": "Every record whose rpc procedure belongs to this service.",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "log.attr.procedure",
+            "op": "prefix",
+            "value": "/reliant.v1.WorktreeService/"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 9
+      }
+    ]
+  },
+  "savedSearches": [
+    {
+      "id": "errors-worktree",
+      "title": "worktree: error logs",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "log.attr.procedure",
+          "op": "prefix",
+          "value": "/reliant.v1.WorktreeService/"
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ]
+    }
+  ],
+  "alert": {
+    "name": "worktree",
+    "rpc_service": "reliant.v1.WorktreeService"
+  }
+}

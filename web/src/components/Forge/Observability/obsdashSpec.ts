@@ -429,9 +429,11 @@ function goJson(doc: { [key: string]: Json }): string {
 }
 
 /**
- * A whole spec document as forge writes it (dashboard-spec_gen.json):
- * json.MarshalIndent with two spaces, then a newline; Go field order; `<` `>`
- * `&` escaped as encoding/json does.
+ * A whole spec document as forge serializes it (the `forge.dashboards/v1` Spec
+ * that obsdash.ReadSpec assembles from deploy/observability/spec/project_gen.json
+ * and one spec/service-<svc>_gen.json per service, and that a release bundle
+ * carries): json.MarshalIndent with two spaces, then a newline; Go field
+ * order; `<` `>` `&` escaped as encoding/json does.
  */
 export function specJson(spec: ObsdashSpec): string {
   const doc = ordered([
