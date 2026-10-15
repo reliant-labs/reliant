@@ -85,14 +85,7 @@ func TestBuiltinWorkflowCELExpressions(t *testing.T) {
 
 			// Create a comprehensive CEL environment that includes ALL namespaces
 			config := wfcel.CELEnvConfig{
-				Namespaces: []wfcel.CELNamespace{
-					wfcel.CELInputs,
-					wfcel.CELWorkflow,
-					wfcel.CELNodes,
-					wfcel.CELIter,
-					wfcel.CELOutput,
-					wfcel.CELOutputs,
-				},
+				Namespaces:             wfcel.AllNamespaces(),
 				IncludeStdLib:          true,
 				IncludeCustomFunctions: true,
 			}
