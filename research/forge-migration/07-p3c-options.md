@@ -10,10 +10,8 @@ Forge facts come from `forge skill load services|architecture` and
   is called only from `internal/serverapi/run.go:413`. The gateway serves a separate,
   untrusted `DaemonServer` (`internal/grpc/daemon_server.go:53`, called from
   `internal/servergateway/run.go:361`). The worker serves no Connect at all. There is
-  **no monolith server path left**. `cmd/reliant/commands/server.go:21-31` has only
-  `api|worker|gateway`, and the comments call the monolith gone
-  (`internal/grpc/server.go:228-234`, `internal/servergateway/run.go:234`). PLAN.md's
-  "`reliant server` = monolith" bullet (PLAN.md:231-235) is stale.
+  **no all-in-one server path**: `cmd/reliant/commands/server.go:21-31` has only
+  `api|worker|gateway`.
 - forge's root is `internal/app` (`providers.go` Infra/OpenInfra, `compose.go`
   NewComponents, generated `mounts_services_gen.go`, `lifecycle.go`). serverkit then
   runs it (`serverkit.Run(ctx, cfg, Server)`). reliant has **no `internal/app` yet**.
@@ -334,6 +332,4 @@ under every option except C.
 4. **Is the CLI/KCL surface frozen?** Keeping `reliant server api|worker|gateway` (B)
    versus forge's generated subcommands (A) is a control-plane deploy change, and
    acceptable pre-launch, but it couples two repos' releases.
-5. **PLAN.md:231-235 is stale:** no monolith server path remains. Should the bullet be
-   deleted, or does "monolith" (all roles in one process, for desktop/self-hosted) need
-   to come back as a requirement that A/D must serve?
+5. **Decided 2026-10-15: no monolith mode.** `reliant server` serves only `api|worker|gateway`; no option has to serve all roles in one process.

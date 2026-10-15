@@ -278,7 +278,7 @@ cutover is `-- forge:backward-compatible` (§3).
 
 - **Desktop (Electron) has no database.** It spawns only
   `reliant daemon start --server <api url>`; `data-migration.js`'s `reliant.db`
-  moves are a SQLite-era leftover. There is no monolith mode.
+  moves are a SQLite-era leftover.
 - **Self-hosted compose** (`docker-compose.cloud.yml`) runs `server api`
   against its own Postgres and migrates at boot through `db.Migrate`. Any
   install on the goose history — at head, or any number of releases behind —

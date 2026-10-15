@@ -168,7 +168,7 @@ The api-server process never discovers. It boots with the base registry and
 `SetLocalConfig(nil)` (`serverapi/run.go:176-179`), and no code path in the
 api-server calls `InitGlobalRegistryWithDiscovery`. Only `call_llm.go:900`
 does, which runs in the worker. `internal/grpc/server.go:140-148` confirms the
-api-server is a separate process ("pre-split monolith days; it isn't anymore").
+api-server is a separate process (it serves no daemon streams).
 
 **So a local model can never appear in the picker today, in any deployment.**
 - **[log]** `grep -c "[ListModels] Found local model" reliant-api-server.log` → 0.

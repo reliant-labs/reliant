@@ -229,9 +229,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.
 	// The api-server itself never accepts daemon bidi streams — daemons connect to
 	// the daemon-gateway process (see internal/servergateway) and the api-server
-	// reaches them through this router (NATS-backed in production). Anything that
-	// looks like a ToolsDaemonService here used to be live in the pre-split
-	// monolith days; it isn't anymore.
+	// reaches them through this router (NATS-backed in production).
 	router := cfg.DaemonRouter
 
 	// Create services
@@ -1230,7 +1228,7 @@ func isNilInterceptor(i connect.Interceptor) bool {
 // mountConnectorMCP mounts the connector MCP endpoint when its prerequisites
 // are present.
 //
-// Both are genuinely optional at this layer: monolith/desktop deployments run
+// Both are genuinely optional at this layer: a server may be constructed
 // without a daemon router (nothing to drive remotely), and some test harnesses
 // construct a server without a SQL-backed repository. Rather than fail
 // startup, the route is simply not mounted — an unmounted route 404s, which is
@@ -1248,7 +1246,7 @@ func mountConnectorMCP(
 	controlPlaneURL string,
 ) {
 	if router == nil {
-		logging.Info("connector MCP endpoint not mounted: no daemon router (expected in monolith/desktop mode)")
+		logging.Info("connector MCP endpoint not mounted: no daemon router")
 		return
 	}
 

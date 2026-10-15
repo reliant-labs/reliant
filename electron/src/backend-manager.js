@@ -49,7 +49,7 @@ class BackendManager {
     this.useTLS = process.env.DISABLE_TLS !== 'true'; // TLS enabled by default unless DISABLE_TLS=true
     this.isRunning = false;
     this.isShuttingDown = false;
-    this.startupTimeout = 30000; // 30 seconds - daemon startup is simpler than monolith
+    this.startupTimeout = 30000; // 30 seconds - daemon startup is quick
     this.shutdownTimeout = 25000; // 25 seconds - must be longer than Go's total shutdown (15s)
     this.isDevelopment = process.env.NODE_ENV === 'development'; // Added for development mode
     this.restartAttempts = 0;
@@ -1217,10 +1217,9 @@ class BackendManager {
     // Determine data directory (same logic as when starting backend)
     const dataDir = this.daemonDataDir();
 
-    // Two records can name an orphaned process: the legacy monolith's bare-PID
-    // lock, and the daemon's JSON runtime record. Each states its PID in its own
-    // shape, so each carries its own reader — parsing JSON with parseInt yields
-    // NaN, which this loop treats as a corrupt file and DELETES.
+    // The daemon's JSON runtime record names an orphaned process. Its reader
+    // goes through the instance check rather than parseInt — parsing JSON with
+    // parseInt yields NaN, which this loop treats as a corrupt file and DELETES.
     //
     // `daemon.lock` is deliberately absent. It is an OS advisory lock whose PID
     // line exists for humans reading the file (daemonstate/lock.go); the claim
@@ -1234,7 +1233,6 @@ class BackendManager {
     // treat the file as corrupt and delete it, which is the right outcome for
     // a file at OUR path that is not ours.
     const lockFiles = [
-      { path: path.join(dataDir, '.reliant-backend.lock'), readPid: (raw) => parseInt(raw, 10) },
       {
         path: path.join(dataDir, 'daemon-state.json'),
         readPid: () => {

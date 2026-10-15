@@ -231,8 +231,8 @@ func Run(ctx context.Context, opts Options) error {
 	// them as ephemeral (never persisted) user updates on the same subject the
 	// api-server's StreamUserUpdates subscribes to. Unwired, every heartbeat
 	// and the local-models refetch were silently discarded at the source —
-	// the api-server's copy of this wiring was removed with the monolith
-	// split, and the gateway never picked it up.
+	// the api-server's copy of this wiring was removed when the api-server
+	// and gateway were split, and the gateway never picked it up.
 	userUpdateHub := streaming.NewNATSUpdateHub[db.UserUpdate](nc, "user.updates", "UserUpdate")
 
 	// ToolsDaemonService holds bidi gRPC streams to daemon processes

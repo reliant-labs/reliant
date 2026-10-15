@@ -65,7 +65,7 @@ blockers found are a handful of renames and markers plus three real forge design
   - Transactions are scoped with `RunTransactionWithOptions` / `orm.Context` (`forge project libraries orm`).
 - **No one has dogfooded the forge ORM at this scale yet.** control-plane is `//forge:no-orm` (`control-plane/internal/db/doc.go:11`, a hand-owned pgx repository). reliant becomes the first serious consumer, so expect ORM gaps to surface. Fix them in forge (F11–F12), never by bringing sqlc back.
 - Transitional (P5a only): forge's scaffold wrote `db/sqlc.yaml` with `schema: db/migrations/`. Pointing sqlc at the migrations already retires the hand-maintained `schema.sql`, `scripts/generate-schema-sql.sh`, `schema_drift_test.go` and `make generate-schema` before the ORM swap lands.
-- Migration engine: goose → golang-migrate via `forge/pkg/migratekit` (`schema_migrations` + `schema_migrations_applied/compat`, advisory lock, embedded FS, initContainer, `AutoMigrate` for the desktop/monolith boot path).
+- Migration engine: goose → golang-migrate via `forge/pkg/migratekit` (`schema_migrations` + `schema_migrations_applied/compat`, advisory lock, embedded FS, initContainer, `AutoMigrate` for the self-hosted boot path).
 - **Behavior change:** reliant applies out-of-order migrations (`WithAllowMissing`). Forge refuses them (`MissingMigrationError`) and requires `forge db migration rebase`, backed by the PR-time lint `migration-version-below-merged-head`. Forge's rule is more correct, since schema shouldn't depend on merge order. Accept it.
 - History: **squash to a baseline** at cutover. Pre-launch we owe nothing to the 146-file history, and squashing also removes the goose-specific `StatementBegin`/`NO TRANSACTION` handling. Existing DBs (prod `reliant_cp`, dev 5434, self-hosted installs) are adopted on their first boot of the new binary (§5 F1); one an older goose release left behind is first caught up by goose itself (the goose bridge, runbook §2). Desktop has no database.
 - ORM/CRUD: P5a may start with `//forge:no-orm`; P5b removes the marker. Turning the ORM on makes the **52 CRUD-name collisions live**: forge would wire generic `pkg/crud` ops over rpcs like `GetChat`, `UpdateChat` and `ListMessages`, which carry real business logic. Each one must either become forge CRUD on purpose, with owned overrides (`db/crud-overrides`: `op.Filters/Fetch/Persist` in `handlers_crud.go`), or opt out explicitly. That makes F5 a **P5b blocker**, not a nice-to-have.
@@ -232,7 +232,6 @@ Then P2 onward proceed one service, one package or one concern at a time under t
   - `server api` = subset `Mount`;
   - `server worker` = Temporal worker as a supervised component;
   - `server gateway` = the NATS bridge;
-  - `reliant server` = monolith (all services and workers).
 - reliant's extra interceptors (timeout, domain whitelist, machine-wake, slow-rpc watchdog, error reporter) join `observe.Chain` as named `Deps`.
 
 **P4 — Typed config + secrets (M).** Depends on P1. Owns `proto/config/`, `pkg/config`, the `os.Getenv` sites.
@@ -319,5 +318,5 @@ Resolved 2026-10-10: D1–D4 accepted, with D3 revised so sqlc is removed long-t
 
 Also resolved 2026-10-10: **F11 approved** (sqlc removed from forge itself, not just reliant), and the **migration squash is confirmed**.
 3. **Binary shape**: keep one `reliant` binary (needs F3) or split server roles into their own binaries (`cmd/reliant-server`, keeping `cmd/reliant` for CLI + daemon), which fits forge's model today?
-4. **Desktop/Electron**: is the desktop app's embedded Postgres/monolith mode in scope for P5's migrate-at-boot, and how should Electron deliver `config.js` (P9)?
+4. **Desktop/Electron**: how should Electron deliver `config.js` (P9)? (The desktop app has no database of its own, so P5's migrate-at-boot does not apply to it.)
 5. **Forge-first ordering**: fix F1–F5 in forge before P1/P3/P5, or start P1 with the workarounds and fix in parallel?

@@ -29,7 +29,7 @@ type Deps struct {
 	// Repo stores the caller's endpoints.
 	Repo modelendpoints.Store
 	// Router relays VIA_DAEMON endpoints to the caller's machine. Without it
-	// (a monolith with no daemon router) those report the relay unavailable.
+	// (no daemon router configured) those report the relay unavailable.
 	// forge:optional-dep
 	Router Router
 	// Credentials seals endpoint API keys. Without it credential storage is

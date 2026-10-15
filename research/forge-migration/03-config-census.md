@@ -60,7 +60,7 @@ Roles were attributed by which entrypoint package imports the reader:
 | **C** = end-user CLI | `cmd/reliant/commands` | — |
 | **T** | tests / dev tools only | — |
 
-`internal/llm/tools` is imported by A, W and D; `internal/logging` by every role. Monolith mode (`reliant server`) = A+W+G in one process.
+`internal/llm/tools` is imported by A, W and D; `internal/logging` by every role.
 
 ### Where control-plane sets each name
 
@@ -303,7 +303,6 @@ More shared blocks:
 | **ApiServerConfig** | Log, Runtime, Telemetry, Database, Nats, Temporal, ControlPlane, ServerListen, Preview, Feature, Integrations, LLM | GRPC_PORT (9090), PPROF_PORT (6060), CORS_ALLOWED_ORIGINS (*), JWT_PUBLIC_KEY, JWT_PUBLIC_KEY_FILE, RELIANT_JWKS_URL, ALLOWED_EMAIL_DOMAINS, AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM, AUTH_MODE, AUTH_API_KEY (sensitive), RELIANT_AUTHORIZATION_SERVER, MCP_OAUTH_ISSUERS, MAX_UPLOAD_SIZE, RELIANT_DISABLE_FORGE_API |
 | **WorkerConfig** | the same blocks minus ServerListen | HEALTH_PORT (8081), PPROF_PORT (6060) |
 | **GatewayConfig** | Log, Runtime, Telemetry, Database, Nats, ControlPlane, ServerListen | TOOLS_DAEMON_PORT (9190, int), HEALTH_PORT default **8080**, PPROF_ADDR |
-| **MonolithConfig** (`reliant server`) | the union | only ApiServerConfig's own leaves, so they aren't redeclared |
 | **DaemonConfig** (`reliant daemon …`) | Log, Runtime, Preview | everything in §1b except the FORGE_* names, MCP expansion and RELIANT_USER_CONFIG_DIR; plus RELIANT_SERVER_URL, RELIANT_GATEWAY_URL, RELIANT_SKIP_TLS_VERIFY, RELIANT_APP_DATA_DIR, RELIANT_CHROME_BROWSER_URL, RELIANT_CHILD_PRIORITY. The daemon's `--port` becomes `DAEMON_LISTEN_PORT`; keep reading TOOLS_DAEMON_PORT as a deprecated alias until the operator stops (it doesn't set it today). |
 | **CliConfig** (root, every other subcommand) | Log, Runtime | RELIANT_SERVER_URL, RELIANT_GATEWAY_URL, RELIANT_TOKEN (sensitive, no flag), RELIANT_AUTH_URL, RELIANT_AUTH_KEY, RELIANT_SKIP_TLS_VERIFY, RELIANT_APP_DATA_DIR, FRONTEND_PORT, RELIANT_WEB_ORIGIN |
 
@@ -349,7 +348,6 @@ What stays bespoke (no proto):
 **Devil's advocate: split binaries instead (PLAN Q3).** Using `cmd/reliant-server` + `cmd/reliant` would fit forge with zero F3b work. But:
 
 - control-plane's `workloads.k:639,653` and `dev/main.k:2748` hard-code `reliant server api|worker`, and the gateway image ENTRYPOINT is `reliant server gateway`. A split is a 3-PR rule-3 dance across two repos plus Dockerfiles.
-- Monolith mode (`reliant server`) and the desktop binary still need all roles in one process. That forces a third binary or the same per-command problem again.
 - Forge's own control-plane is *already* "one binary, many subcommands" (control-plane `proto/config/v1/config.proto:30-44`), and it dodged the issue only by sharing one AppConfig across all subcommands, which leaks secrets to every role.
 
 So F3b fixes forge for its own dogfood project too. **Recommend F3a+F3b+F3d in forge first (rule 7); F3c/e/f are optional.**
@@ -413,7 +411,7 @@ The test asserts each name that reliant read before P4 is still either an `env_v
 | # | PR | Size | Owns (disjoint) | Proves nothing broke |
 |---|---|---|---|---|
 | F | **forge first:** F3a (validate binary) + F3b (`command` path + reach lint) + F3d (aliases) + `config.path_env`. Release, then pin in reliant (rule 7). | M | forge `internal/codegen/config*`, `pkg/config`, `proto/forge/v1/forge.proto`, linter | forge `task test`; e2e fixture of a one-binary multi-command project |
-| 1 | Add `proto/config/v1/{shared,api,worker,gateway,monolith,daemon,cli}.proto` and generated `pkg/config`. **No call site changes.** `forge.yaml config: {enforce_typed_access: warn, loader_package: pkg/config}`. Add `TestEnvContract`. Delete `internal/envutil` (0 callers). | M | `proto/config/`, `pkg/config/`, `forge.yaml` | build; contract test green; `forge lint` warn only |
+| 1 | Add `proto/config/v1/{shared,api,worker,gateway,daemon,cli}.proto` and generated `pkg/config`. **No call site changes.** `forge.yaml config: {enforce_typed_access: warn, loader_package: pkg/config}`. Add `TestEnvContract`. Delete `internal/envutil` (0 callers). | M | `proto/config/`, `pkg/config/`, `forge.yaml` | build; contract test green; `forge lint` warn only |
 | 2 | Server flag registration: replace `serverEnvOrDefault*` in `cmd/reliant/commands/server.go` with `Register*Flags` + `Load*`. Map loaded values into the existing `serverapi/serverworker/servergateway.Options`. **Identical flag names** (`--grpc-port`, `--db-url`, …). | M | `cmd/reliant/commands/server.go` | `server {api,worker,gateway} --help` flag diff is empty; `forge env up dev` boots api+worker (rule 4) |
 | 3 | Daemon/CLI flags: `envOrDefault*` in daemon.go/daemon_instance.go/connection.go → `DaemonConfig`/`CliConfig`; `builddefaults` through the defaults hook | M | `cmd/reliant/commands/{daemon,daemon_instance,connection,auth,preview,root}.go`, `internal/builddefaults` | `reliant daemon --help` diff; Electron dev launch; operator env names (contract test) |
 | 4a | DB: `internal/db/connect.go` takes `DatabaseConfig` (envInt, raw DATABASE_* reads gone) | S | `internal/db/connect.go`, `repo.go` | `DATABASE_URL=… REQUIRE_TEST_DB=1 make test-short PKGS=./internal/db/...` |

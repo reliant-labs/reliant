@@ -10,13 +10,11 @@ For consequential decisions — architecture, public APIs, schemas, lifecycle, a
 
 Skip this depth for trivial/mechanical work — there, just do it.
 
-## Architecture modes
+## Architecture
 
-Reliant runs in two modes: **distributed** and **monolith**. They share most of the same code paths, so changes should preserve parity unless a mode-specific difference is intentional.
+Reliant is a **multi-tenant distributed system** with three server roles — **API server**, **worker**, and **daemon gateway** (`reliant server api|worker|gateway`) — plus the **daemon**. There is no all-in-one server process.
 
-We optimize for **distributed** mode:
-
-- Reliant is a **multi-tenant distributed system**; we use **NATS** to send messages to the tools daemon.
+- We use **NATS** to send messages to the tools daemon.
 - The **API server**, **worker**, and **daemon gateway** do **not** have access to the user's filesystem. Only the **daemon** does.
 - The **daemon may not run on the same device as the user**, so do not assume local-device or same-machine access patterns outside the daemon boundary.
 

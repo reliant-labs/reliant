@@ -101,8 +101,8 @@ func TestRemoteWriteBinaryFileEncodesBase64(t *testing.T) {
 	}
 }
 
-// TestLocalWriteBinaryFileRoundTrip covers the monolith path, where there is
-// no JSON hop but the interface must still behave identically.
+// TestLocalWriteBinaryFileRoundTrip covers the daemon-local path, where there
+// is no JSON hop but the interface must still behave identically.
 func TestLocalWriteBinaryFileRoundTrip(t *testing.T) {
 	client := NewLocalClient()
 	path := filepath.Join(t.TempDir(), "generated", "out.png")
