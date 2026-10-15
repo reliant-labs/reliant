@@ -538,8 +538,21 @@ jobs:
   #   3. gate-health.yml's main audit fails, and opens an issue, when main's
   #      newest run has no green "Backend (Go, full)" job — including when the
   #      job is missing because the full tier stopped running on main.
+  #
+  # SHARDED ACROSS RUNNERS. The suite is CPU-bound on a 4-vCPU runner:
+  # measured, `go test -p 4` and `-p 8` both take ~540s, and `-short` alone
+  # barely moved it, because compile and test bodies already fill every core.
+  # So the packages are split across `shard_total` runners by
+  # `tools/test-affected shard`, which balances them by measured duration
+  # (tools/test-affected/go-test-weights.tsv) and starts each shard's slowest
+  # packages first. Every package runs in exactly one shard whatever the
+  # weights say (TestShardPartitionsEveryPackage); stale weights only cost
+  # balance. The `backend-result` job below is the one check that reports the
+  # tier, so the shard count can change without renaming anything.
+  #
+  # To change the shard count, extend `shard` AND `shard_total` together.
   backend:
-    name: Backend (Go, ${{ github.event_name == 'pull_request' && 'short' || 'full' }})
+    name: Backend (Go, ${{ github.event_name == 'pull_request' && 'short' || 'full' }}) ${{ matrix.shard }}/${{ matrix.shard_total }}
     # DELIBERATELY NOT GATED on the `changes` job. A dependency bump is
     # exactly the change this job exists to validate: a new forge/pkg can
     # break compilation or change behaviour, and that failure must surface
@@ -547,6 +560,12 @@ jobs:
     # change would be strictly worse than a slow CI run.
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      # Every shard reports: one shard's failure must not hide another's.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+        shard_total: [3]
     # A REAL Postgres, for the same reason as the E2E job below. Without it
     # DATABASE_URL was unset here, every DB-backed unit test skipped (1426 of
     # them per run), and this job went green regardless. That is how a test
@@ -596,8 +615,9 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      # One module cache, shared by every Go job and saved only here: this job
-      # compiles every package, so it downloads every module the others need.
+      # One module cache, shared by every Go job and saved only by shard 1,
+      # after `go mod download` (below) has fetched every module go.mod names,
+      # so it holds what the other jobs need too.
       - name: Restore Go module cache
         id: mod-cache
         uses: actions/cache/restore@v4
@@ -607,20 +627,29 @@ jobs:
           restore-keys: |
             go-mod-${{ runner.os }}-
 
-      # Keyed on the resolved Go version + go.sum: a toolchain bump or a
-      # dependency change invalidates it, which is exactly when the cached
-      # objects stop being reusable. The restore-keys prefix means a go.sum
-      # change still restores the previous cache and recompiles only what
-      # actually changed, rather than starting cold.
+      - name: Download Go modules (module cache miss)
+        if: steps.mod-cache.outputs.cache-hit != 'true'
+        run: go mod download
+
+      # One build cache per shard, since each compiles a different package set.
+      #
+      # The key ends in the commit SHA, so main saves a FRESH cache on every
+      # push and a PR restores the newest one by prefix. Keyed on go.sum alone
+      # (as before), main saved once per go.sum and every later run on main hit
+      # that key exactly and skipped saving, so the cache PRs restored drifted
+      # further from main with every merge, and a PR recompiled everything that
+      # changed since. The Go version and go.sum stay in the prefix: a
+      # toolchain bump or a dependency change prefers a cache built against
+      # them, and falls back to the previous one rather than starting cold.
       - name: Restore Go build cache
         id: build-cache
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
-          key: go-build-backend-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+          key: go-build-backend-s${{ matrix.shard }}of${{ matrix.shard_total }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-build-backend-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
-            go-build-backend-${{ runner.os }}-
+            go-build-backend-s${{ matrix.shard }}of${{ matrix.shard_total }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
+            go-build-backend-s${{ matrix.shard }}of${{ matrix.shard_total }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
 
       # Generated code is COMMITTED (see the "Generated code is committed"
       # note in .gitignore): a checkout compiles and tests as-cloned, and
@@ -657,7 +686,10 @@ jobs:
       # decided here, from RELIANT_TEST_TIER, nowhere else. An unknown tier is
       # an error rather than a default, so a typo cannot quietly pick one.
       # TestCITestTierReachedGoTest then proves the flag reached `go test`.
-      - name: Go tests (exclude e2e, ${{ env.RELIANT_TEST_TIER }} tier)
+      - name: Go tests (exclude e2e, ${{ env.RELIANT_TEST_TIER }} tier, shard ${{ matrix.shard }}/${{ matrix.shard_total }})
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ matrix.shard_total }}
         run: |
           set -euo pipefail
           case "${RELIANT_TEST_TIER}" in
@@ -666,13 +698,18 @@ jobs:
             *) echo "::error::RELIANT_TEST_TIER must be short or full, got '${RELIANT_TEST_TIER}'"; exit 1 ;;
           esac
           echo "tier: ${RELIANT_TEST_TIER} (go test ${tier_flags[*]:-<no tier flag>})"
-          go test -buildvcs=false -timeout=10m -v "${tier_flags[@]}" $(go list -buildvcs=false ./... | grep -v '^github.com/reliant-labs/reliant/e2e$' | tr '\n' ' ')
+          all="$(go list ./... | grep -v '^github.com/reliant-labs/reliant/e2e$')"
+          pkgs="$(go run ./tools/test-affected shard -index "${SHARD}" -total "${SHARD_TOTAL}" <<< "${all}")"
+          echo "shard ${SHARD}/${SHARD_TOTAL}: $(wc -l <<< "${pkgs}") of $(wc -l <<< "${all}") packages, slowest first:"
+          echo "${pkgs}"
+          # shellcheck disable=SC2086 # one argument per package
+          go test -timeout=10m -v "${tier_flags[@]}" ${pkgs}
 
       # Main only, after the tests: a red run on main still saves, because
       # the compiled packages are just as reusable. `!cancelled()` lets a
       # failed test step through; a cancelled run may have a half-written cache.
       - name: Save Go module cache (main only)
-        if: '!cancelled() && github.ref == ''refs/heads/main'' && github.event_name != ''pull_request'' && steps.mod-cache.outputs.cache-hit != ''true'''
+        if: '!cancelled() && matrix.shard == 1 && github.ref == ''refs/heads/main'' && github.event_name != ''pull_request'' && steps.mod-cache.outputs.cache-hit != ''true'''
         uses: actions/cache/save@v4
         with:
           path: ~/go/pkg/mod
@@ -684,6 +721,28 @@ jobs:
         with:
           path: ~/.cache/go-build
           key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
+  # The one Go check per tier: "Backend (Go, short)" on a PR, "Backend (Go,
+  # full)" on main. It passes only when every shard passed, so a skipped,
+  # cancelled or failed shard can never read as green, and its name does not
+  # change with the shard count (gate-health.yml's main audit requires
+  # "Backend (Go, full)" by name).
+  backend-result:
+    name: Backend (Go, ${{ github.event_name == 'pull_request' && 'short' || 'full' }})
+    needs: backend
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every shard passed
+        env:
+          RESULT: ${{ needs.backend.result }}
+        run: |
+          if [ "${RESULT}" != "success" ]; then
+            echo "::error::Go test shards concluded '${RESULT}': at least one shard did not pass (see the shard jobs)."
+            exit 1
+          fi
+          echo "every Go test shard passed"
 
   # Lint via FORGE rather than a raw golangci-lint pin, in its own job so it
   # runs beside the tests instead of in front of them.
@@ -729,17 +788,18 @@ jobs:
           restore-keys: |
             go-mod-${{ runner.os }}-
 
-      # golangci-lint type-checks every package, and the backend job's build
-      # cache already holds that work, so lint reads it rather than keeping a
-      # second multi-GB copy. Restore only: this job never saves it.
-      - name: Restore Go build cache (the backend job's)
+      # golangci-lint type-checks every package, and a backend shard's build
+      # cache already holds most of that work (every shard compiles the shared
+      # dependencies), so lint reads the newest one rather than keeping a
+      # second multi-GB copy. Restore only: this job never saves it. The key
+      # never matches exactly; the prefix picks the most recent shard cache.
+      - name: Restore Go build cache (a backend shard's)
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
-          key: go-build-backend-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+          key: go-build-backend-lint-${{ github.sha }}
           restore-keys: |
-            go-build-backend-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
-            go-build-backend-${{ runner.os }}-
+            go-build-backend-
 
       # buf is here because `forge lint` wraps buf lint alongside
       # golangci-lint; without it the lint step would quietly check less.

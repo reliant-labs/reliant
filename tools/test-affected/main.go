@@ -9,6 +9,11 @@
 //	go run ./tools/test-affected run -lanes go,web
 //	go run ./tools/test-affected -base origin/main~3 -json
 //
+// CI's sharded Go lane uses two more commands (shard.go):
+//
+//	go list ./... | go run ./tools/test-affected shard -index 1 -total 3
+//	gh run view <id> --log | go run ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv
+//
 // `make test-affected` is the front door. The decision is Classify (plan.go)
 // over rules.go, the Go package graph (graph.go) and the web import graph
 // (webgraph.go); this file is the I/O. A path no rule and no Go package claims,
@@ -36,11 +41,25 @@ func main() {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		cmd, args = args[0], args[1:]
 	}
-	if cmd != "plan" && cmd != "run" {
-		fmt.Fprintf(os.Stderr, "test-affected: unknown command %q (want plan or run)\n", cmd)
+	// shard and weights serve CI's sharded Go lane (shard.go), not the
+	// affected-tests plan.
+	switch cmd {
+	case "shard", "weights":
+		run := func() error { return runShard(args, os.Stdin, os.Stdout) }
+		if cmd == "weights" {
+			run = func() error { return runWeights(os.Stdin, os.Stdout) }
+		}
+		if err := run(); err != nil {
+			fmt.Fprintln(os.Stderr, "test-affected "+cmd+":", err)
+			os.Exit(1)
+		}
+		return
+	case "plan", "run":
+	default:
+		fmt.Fprintf(os.Stderr, "test-affected: unknown command %q (want plan, run, shard or weights)\n", cmd)
 		os.Exit(2)
 	}
-	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	fs := newFlagSet(cmd)
 	root := fs.String("root", ".", "repository root")
 	baseFlag := fs.String("base", "", "base commit-ish (default: the merge-base with origin/main, or $TEST_BASE)")
 	asJSON := fs.Bool("json", false, "print the plan as JSON instead of the table")
@@ -78,6 +97,10 @@ func main() {
 		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, dbURL: os.Getenv("DATABASE_URL")}
 		os.Exit(r.run(ctx, pl, enabled))
 	}
+}
+
+func newFlagSet(cmd string) *flag.FlagSet {
+	return flag.NewFlagSet(cmd, flag.ExitOnError)
 }
 
 func splitList(s string) []string {
