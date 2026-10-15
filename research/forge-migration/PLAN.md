@@ -157,11 +157,20 @@ Every change ships as its own **small PR** that leaves everything that works tod
 | reliant P5a: goose → forge migrations. `db/migrations/20261014050404_baseline.up.sql` is goose's 156 migrations (through #909) cut with `forge db squash --from-dsn`, schema identical to a goose-built database; `db.Migrate` runs a goose bridge (catches up a database behind goose's head) then `migratekit.Apply`, adopting a goose database without running SQL; every forge migration declares `-- forge:backward-compatible` or `-- reliant:breaks-rollback`; goose's history is frozen; `schema.sql` and its drift test are gone (sqlc reads `db/migrations`) | reliant #910, #912, #914 |
 | reliant: main a generate fixed point and contract-clean again after #893/#895; node-type guard allows #909's `trigger.origin` key; the preset concurrency test counts overlapping reads instead of timing them | reliant #902, #916, #917 |
 
-**After P5a, before the next prod deploy (human):** the merge's first prod deploy adopts `reliant_cp`. Run the Cloud SQL clone rehearsal first (runbook §6.3), then §6.4. `check-migrations.yml` still runs the removed `schema.sql` drift step and now fails: apply runbook §10's edit (needs workflow permission). Still open for the user: when goose can be removed (§9) and the `reliant_cp_session` pool size (§11).
+**After P5a, before the next prod deploy (human):** the merge's first prod deploy adopts `reliant_cp`. Run the Cloud SQL clone rehearsal first (runbook §6.3), then §6.4. Still open for the user: when goose can be removed (§9) and the `reliant_cp_session` pool size (§11). (`check-migrations.yml`'s schema.sql drift step is replaced by the migration-path tests: runbook §10, applied.)
 
-**In flight / ready for review:**
-- **P3b final wave:** Chat; Trigger, Workflow, Catalog; Worktree, Forge (+ `forge:custom` backfill on Attachment, Message, ModelEndpoint, which moved before the rule and are now live CRUD candidates since P5a turned the ORM on); Project, MCP. Inbox waits for forge's harness fix for cross-package embedded interfaces, then a re-pin. Then the cleanup commit: delete `internal/grpc/services` (recipe §8).
-- **forge:** harness keeps a cross-package embedded interface's methods (blocks Inbox); package directives honoured from any file; `handler-error-mapping` false positive; Deps value structs with function seams (`netguard.Policy`, which fails `--conventions` on reliant main); migratekit run-lock waiters poll `pg_try_advisory_lock` (concurrent boots deadlock with `CREATE INDEX CONCURRENTLY` today, so no CONCURRENTLY in a forge migration until then); `forge:breaks-rollback` declaration + lint; a short `forge db migration new`.
+**Merged in wave 6 (2026-10-14/15):**
+
+| Item | PR |
+|---|---|
+| reliant P3b complete: Chat, Inbox, Worktree, Forge, Project, MCP, Trigger, Workflow, Catalog moved; `forge:custom` backfilled on Attachment, Message, ModelEndpoint; `internal/grpc/services` deleted. All 35 services are forge handler packages under `internal/handlers/<svc>`; `internal/grpc/server.go` still mounts them by hand (P3c) | reliant #923, #925, #927–#931, #934–#937 |
+| reliant: forge pins `8d812662` → `5f84ae8c` → `f3fd8c02`; one package directive per package (`doc.go`); model_endpoint takes the control-plane config block and derives its dial policy in `New` (`forge lint --conventions` is clean); migrations declare compatibility with forge's `-- forge:backward-compatible` / `-- forge:breaks-rollback`, enforced by `forge lint --migration-safety` (`require_compat_declaration`, a blocking PR-CI step) instead of reliant's own test; `CREATE INDEX CONCURRENTLY` is allowed again in a forge migration (alone in its file) | reliant #924, #938, #939, #941 |
+| forge: harness/mock/decorator keep a cross-package embedded interface's methods; package directives from any file, conflicts refused; handler-error-mapping counts only sentinels mapped to connect errors; struct-value deps explained; migratekit run-lock waiters poll `pg_try_advisory_lock` (no deadlock with CONCURRENTLY); `forge:breaks-rollback` + opt-in compat lint; short `migration new` header | forge #771, #772, #774–#778 |
+| forge: generate reports what each step wrote and skips dependents of a failed step; ORM collision names the declared rpcs; `shapes` handler lines are `Service.Rpc` with `--service`/`--unimplemented`; the merge driver runs only the pinned forge; stale generated files deleted by default; `generate --steps harness`; harness stubs for optional deps; deps-are-interfaces accepts maps/slices of interfaces; observability spec/saved searches/alert inputs split per service so parallel branches merge into the render | forge #783–#785, #788, #789, #791–#793, #799 |
+
+**In flight / next:**
+- **Re-pin reliant** onto forge main past #799: picks up `--steps harness`, optional-dep stubs and the per-service observability layout (one-time: ~53 new files, the two aggregates deleted). Check whether any local compose's HyperDX saved-search loader needs forge's new `listFiles` block.
+- **P3c:** compose the handlers through forge's composition root instead of `internal/grpc/server.go`.
 
 **Next:**
 - **1h (needs a human):** CI runs pinned `forge generate` plus a clean-tree check, and `forge lint` goes non-gating, then gating. The GitHub App token cannot push `.github/workflows/*`, so someone with workflow permission lands it.
@@ -174,7 +183,7 @@ Every change ships as its own **small PR** that leaves everything that works tod
 
 **Dev databases (user decision, 2026-10-12): fully destroyable.** At the P5a cutover, dev databases (the `forge env up` stack's `reliant` DB on 5434, per-developer 5433 DBs) may be dropped and rebuilt from the new baseline rather than reconciling branch-only goose versions (a dev DB on the goose history is simply caught up and adopted; one with a branch-only version is refused and must be rebuilt). **Goose adoption stays mandatory for prod (`reliant_cp` on Cloud SQL `reliant-pg`)** and for any env holding data we keep. Never touch prod in a "dev DB" teardown.
 - As of 2026-10-12 this sandbox has no dev Postgres (no `postgres_data` volume, no k3d cluster); only prod kube contexts exist, and they are untouched. The dev stacks rebuild their DB on next `forge env up`.
-- Reliant pins forge `8d812662` (reliant #885).
+- Reliant pins forge `f3fd8c02` (reliant #938).
 
 Research inputs, all in this dir: `02-contracts-classification.md` (P6), `03-config-census.md` (P4), `04-p5a-cutover-runbook.md` (P5a), `05-p3a-handler-map.md` (P3a/P3b).
 
