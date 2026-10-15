@@ -393,8 +393,12 @@ nodes:
           timeout: 2m
           args:
             command: |
+              # The checkout must be a clone of THIS repository (see the issue worker).
               for d in "{{ nodes.wt.path }}/{{ inputs.repo.split('/')[1] }}" "{{ nodes.wt.path }}"; do
-                if [ -e "$d/.git" ]; then printf '%s %s' "$(git -C "$d" rev-parse HEAD)" "$d"; exit 0; fi
+                if [ -e "$d/.git" ]; then
+                  u=$(git -C "$d" remote get-url origin 2>/dev/null | sed -e 's/\.git$//' | tr 'A-Z' 'a-z')
+                  case "$u" in *github.com[:/]{{ inputs.repo.lowerAscii() }}) printf '%s %s' "$(git -C "$d" rev-parse HEAD)" "$d"; exit 0 ;; esac
+                fi
               done
               exit 1
             credentials: none

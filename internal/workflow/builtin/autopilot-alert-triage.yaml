@@ -307,8 +307,12 @@ nodes:
           timeout: 2m
           args:
             command: |
+              # The checkout must be a clone of THIS repository, not just a neighbour.
               for d in "{{ workflow.path }}/{{ iter.item.repo.split('/')[1] }}" "{{ workflow.path }}"; do
-                if [ -e "$d/.git" ]; then printf '%s' "$d"; exit 0; fi
+                if [ -e "$d/.git" ]; then
+                  u=$(git -C "$d" remote get-url origin 2>/dev/null | sed -e 's/\.git$//' | tr 'A-Z' 'a-z')
+                  case "$u" in *github.com[:/]{{ iter.item.repo.lowerAscii() }}) printf '%s' "$d"; exit 0 ;; esac
+                fi
               done
               exit 1
             credentials: none

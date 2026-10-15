@@ -269,8 +269,13 @@ nodes:
     timeout: 2m
     args:
       command: |
+        # The checkout must be a clone of THIS repository: a project of one other repo is not a place to
+        # work, and git_publish would push its history here.
         for d in "{{ nodes.wt.path }}/{{ inputs.repo.split('/')[1] }}" "{{ nodes.wt.path }}"; do
-          if [ -e "$d/.git" ]; then printf '%s' "$d"; exit 0; fi
+          if [ -e "$d/.git" ]; then
+            u=$(git -C "$d" remote get-url origin 2>/dev/null | sed -e 's/\.git$//' | tr 'A-Z' 'a-z')
+            case "$u" in *github.com[:/]{{ inputs.repo.lowerAscii() }}) printf '%s' "$d"; exit 0 ;; esac
+          fi
         done
         exit 1
       credentials: none
