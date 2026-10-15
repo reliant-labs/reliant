@@ -118,6 +118,15 @@ cannot see).
   have separate check histories. `TestCITestTierReachedGoTest`
   (`tools/test-affected/ci_tier_test.go`) fails when the job's declared tier
   (`RELIANT_TEST_TIER`) disagrees with whether `-short` reached `go test`.
+- **The Go tests run in 3 shards** (`Backend (Go, short) 1/3` ... `3/3`);
+  `Backend (Go, short)` / `Backend (Go, full)` is the one check that passes only
+  when every shard did. `go run ./tools/test-affected shard -index K -total N`
+  assigns packages by their measured duration in
+  `tools/test-affected/go-test-weights.tsv` and lists the slowest first. Every
+  package runs in exactly one shard whatever the weights say; a stale weights
+  file only costs balance. Refresh it when a shard runs much longer than the
+  others: `gh run view <run-id> --log | go run ./tools/test-affected weights >
+  tools/test-affected/go-test-weights.tsv`.
 - **Other jobs** run identically on every event: `Lint (forge)` (in parallel;
   `--migration-safety` blocks, the full lint reports), web lint/typecheck/build,
   vitest in two shards (`Web (vitest 1/2)`, `2/2`), Playwright, the e2e
