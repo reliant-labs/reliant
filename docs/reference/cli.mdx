@@ -1194,13 +1194,22 @@ Three checks, all local to the checkout:
      committed without --force / forge project disown.
   2. Freshness: runs forge generate and verifies no files changed —
      catches stale generated code after an input (proto/forge.yaml) change.
+     The regenerate skips its steps when this exact tree, forge binary,
+     toolset and environment were already verified as generate's own
+     output (see `forge generate --help`); --no-cache runs them anyway.
   3. Commit policy: no generated file is gitignored (check 2 cannot see an
      ignored file), and no machine-local state (.forge-kcl/, a frontend's
      dev public/config.js) is tracked.
 
 ```
-reliant forge ci verify-generated
+reliant forge ci verify-generated [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--no-cache` | `bool` | - | Make the regenerate run every step, even when the committed tree is one a full forge generate already verified as its own output (FORGE_GENERATE_NO_CACHE=1 does the same) |
 
 ---
 
@@ -4959,11 +4968,21 @@ Hooks:
   core.hooksPath=.githooks and its merge driver in your clone. FORGE_NO_HOOKS=1
   is its older name and means the same.
 
+Skipping:
+  A full run that changes nothing records the tree as a verified fixed point
+  (.forge/generate-cache.json, per checkout). The next run that finds every
+  input and output byte-identical — the work tree, the files git ignores but
+  generate reads or writes, the forge binary, every tool it runs, and the
+  environment that steers them — prints one line saying so and stops, in
+  about a second instead of minutes. Any change runs every step. --no-cache
+  (or FORGE_GENERATE_NO_CACHE=1) always runs every step.
+
 Examples:
   forge generate            # Generate all code
   forge generate --watch    # Watch mode for development
   forge generate --force    # Discard hand-edits to Tier-1 files and regenerate
   forge generate --check    # Run generate into a tmpdir; exit 1 if it would change the tree (CI guard)
+  forge generate --no-cache # Run every step even if nothing changed since the last verified run
   forge generate --explain  # Print per-file provenance log after generate
   forge generate --verbose  # Print one line per gate-off skipped step
 
@@ -4987,6 +5006,7 @@ reliant forge generate [flags]
 | `--force-cleanup` | `bool` | - | Also delete stale generated files that carry hand-edits. Generate always deletes the stale files nobody edited; without this flag it lists the edited ones and keeps them. |
 | `--heal` | `bool` | - | Overwrite on-disk content that matches a PRIOR forge render (an older vintage) with the current template. OFF by default: such content is byte-indistinguishable from a deliberate edit, so forge leaves it untouched and tells you how to proceed rather than silently reverting your work. Pass --heal to advance every such file to the current templates. |
 | `--help-dev` | `bool` | - | List maintainer/debug flags hidden from --help |
+| `--no-cache` | `bool` | - | Run every step even when nothing changed since a full run verified this tree (a no-op generate otherwise skips in about a second; see the 'Skipping' section above). FORGE_GENERATE_NO_CACHE=1 does the same. |
 | `--verbose`, `-v` | `bool` | - | Print one line per gate-off skipped step ('⏩ skipped: \<step name> (`<reason>`)'). Default is silent skip. |
 | `--watch`, `-w` | `bool` | - | Watch for changes and regenerate |
 
