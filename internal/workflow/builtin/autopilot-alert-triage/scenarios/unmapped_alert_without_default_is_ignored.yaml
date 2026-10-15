@@ -1,0 +1,8 @@
+name: unmapped_alert_without_default_is_ignored
+description: >-
+  With no default_repo, an alert no service_repos entry matches is not filed anywhere.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "1111111111111111", "labels": {"alertname": "A", "app": "billing"}, "annotations": {"summary": "A is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+expect:
+  outcome: completed
+  completed: [plan, nothing]
+  not_reached: [classify, file]

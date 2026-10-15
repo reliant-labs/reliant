@@ -1,0 +1,51 @@
+name: git_publish_refusal_blocks_the_pr
+description: >-
+  git_publish refuses (a push to this branch is not allowed, or the remote moved): the refusal is named in the summary, the PR is labelled blocked, nothing is retried.
+inputs: {"repos": ["reliant-labs/forge"], "trusted_ids": [], "repo": "reliant-labs/forge", "pr_number": 55, "event": "review by x", "owner_id": "225976313"}
+events:
+  - node: rounds.me
+    output: {"is_error": false, "data": {"login": "reliant-01", "id": 225976313}}
+  - node: rounds.pr
+    output: {"is_error": false, "data": {"number": 55, "state": "open", "title": "fix: x", "body": "Closes #7", "user": "reliant-01", "head": {"ref": "autopilot/issue-7", "sha": "0123456789abcdef0123456789abcdef01234567", "repo": "reliant-labs/forge"}, "base": {"ref": "main", "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "repo": "reliant-labs/forge"}}}
+  - node: rounds.issue
+    output: {"is_error": false, "data": {"labels": ["agent:authored"], "state": "open", "is_pull_request": true}}
+  - node: rounds.repo_info
+    output: {"is_error": false, "data": {"default_branch": "main"}}
+  - node: rounds.head_branch
+    output: {"is_error": false, "data": {"exists": true, "protected": false}}
+  - node: rounds.reviews
+    output: {"is_error": false, "data": {"items": [{"id": 900, "state": "CHANGES_REQUESTED", "body": "Please handle the nil case.", "html_url": "r900", "user": "reliant-01", "user_id": 225976313, "submitted_at": "2026-10-14T20:10:00Z"}]}}
+  - node: rounds.inline
+    output: {"is_error": false, "data": {"items": []}}
+  - node: rounds.convo
+    output: {"is_error": false, "data": {"items": []}}
+  - node: rounds.labels
+    black_box: true
+    output: {}
+  - node: rounds.lease
+    black_box: true
+    output: {"status": "acquired", "lease_id": 4242, "started_at": "2026-10-14T20:20:00Z", "expires": "x", "takeover_from": "", "holder": "", "detail": "ACQUIRE"}
+  - node: rounds.wt
+    output: {"path": "/w/ws", "branch": "b", "id": "w", "name": "n", "base_branch": "x", "status": "active"}
+  - node: rounds.dir
+    output: {"exit_code": 0, "stdout": "0123456789abcdef0123456789abcdef01234567 /w/ws/forge"}
+  - node: rounds.agent
+    black_box: true
+    output: {"completed": true, "response": {"outcome": "changed", "summary": "Handled nil.", "commit_message": "fix: handle nil\n\nper review", "replies": [{"kind": "review", "id": 900, "reply": "Handled in a.go:12."}, {"kind": "inline", "id": 800, "reply": "Renamed."}]}, "model": "m"}
+  - node: rounds.gate
+    output: {"exit_code": 0, "stdout": "ok"}
+  - node: rounds.publish
+    output: {"refused": true, "refusal": "the remote branch has commits this checkout does not (non-fast-forward): the push was refused, not forced", "pushed": false}
+  - node: rounds.summary
+    output: {"is_error": false, "data": {"id": 9}}
+  - node: rounds.blocked_label
+    black_box: true
+    output: {}
+  - node: rounds.release
+    black_box: true
+    output: {"recheck_found": 0, "other_live_lease": false}
+expect:
+  outcome: completed
+  completed: [rounds.publish, rounds.outcome, rounds.blocked_label, rounds.release]
+  node_outputs:
+    rounds.outcome: {kind: blocked}

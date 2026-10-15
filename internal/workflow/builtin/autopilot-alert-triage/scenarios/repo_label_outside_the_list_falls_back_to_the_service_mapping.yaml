@@ -1,0 +1,15 @@
+name: repo_label_outside_the_list_falls_back_to_the_service_mapping
+description: >-
+  An alert whose repo label names an unlisted repository is routed by its service instead, never to the unlisted one.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "reliant-labs/control-plane", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "1111111111111111", "labels": {"alertname": "A", "repo": "evil/repo", "app": "forge"}, "annotations": {"summary": "A is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 1, "items": [{"number": 1, "html_url": "https://github.com/x/y/issues/1", "state": "open"}]}}
+  - node: classify.comment
+    output: {"is_error": false, "data": {"id": 5}}
+expect:
+  outcome: completed
+  completed: [plan, classify]
+  node_outputs:
+    routes:
+      repos: "reliant-labs/forge"

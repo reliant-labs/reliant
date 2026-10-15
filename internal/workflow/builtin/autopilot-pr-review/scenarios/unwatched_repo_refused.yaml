@@ -1,0 +1,10 @@
+name: unwatched_repo_refused
+description: A run for a repository that is not in `repos` (a manual start) refuses before reading anything.
+inputs:
+  repos: [reliant-labs/forge]
+  repo: evil/repo
+  pr_number: 1
+expect:
+  outcome: completed
+  completed: [check, invalid]
+  not_reached: [me, pr, issue, review, post]

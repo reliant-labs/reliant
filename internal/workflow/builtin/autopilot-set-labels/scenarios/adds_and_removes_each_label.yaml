@@ -1,0 +1,16 @@
+name: adds_and_removes_each_label
+description: >-
+  Each label is its own atomic request; a label the item does not carry (404) does not fail the run.
+inputs: {"repo": "reliant-labs/forge", "number": 5, "add": ["agent:in-review", "size:S"], "remove": ["agent:ready", "agent:blocked"]}
+events:
+  - node: removing.drop
+    output: {"is_error": false, "data": {}}
+  - node: removing.drop
+    output: {"is_error": true, "content": "not found"}
+  - node: adding.put
+    output: {"is_error": false, "data": {}}
+  - node: adding.put
+    output: {"is_error": false, "data": {}}
+expect:
+  outcome: completed
+  completed: [removing, adding]

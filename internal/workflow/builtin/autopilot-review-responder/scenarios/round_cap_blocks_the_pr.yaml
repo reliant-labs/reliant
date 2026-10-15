@@ -1,0 +1,32 @@
+name: round_cap_blocks_the_pr
+description: >-
+  Three rounds are done and there is new feedback: the PR is labelled blocked and a human is told once.
+inputs: {"repos": ["reliant-labs/forge"], "trusted_ids": [], "repo": "reliant-labs/forge", "pr_number": 55, "event": "review by x", "owner_id": "225976313"}
+events:
+  - node: rounds.me
+    output: {"is_error": false, "data": {"login": "reliant-01", "id": 225976313}}
+  - node: rounds.pr
+    output: {"is_error": false, "data": {"number": 55, "state": "open", "title": "fix: x", "body": "Closes #7", "user": "reliant-01", "head": {"ref": "autopilot/issue-7", "sha": "0123456789abcdef0123456789abcdef01234567", "repo": "reliant-labs/forge"}, "base": {"ref": "main", "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "repo": "reliant-labs/forge"}}}
+  - node: rounds.issue
+    output: {"is_error": false, "data": {"labels": ["agent:authored"], "state": "open", "is_pull_request": true}}
+  - node: rounds.repo_info
+    output: {"is_error": false, "data": {"default_branch": "main"}}
+  - node: rounds.head_branch
+    output: {"is_error": false, "data": {"exists": true, "protected": false}}
+  - node: rounds.reviews
+    output: {"is_error": false, "data": {"items": [{"id": 900, "state": "CHANGES_REQUESTED", "body": "Please handle the nil case.", "html_url": "r900", "user": "reliant-01", "user_id": 225976313, "submitted_at": "2026-10-14T20:10:00Z"}]}}
+  - node: rounds.inline
+    output: {"is_error": false, "data": {"items": []}}
+  - node: rounds.convo
+    output: {"is_error": false, "data": {"items": [{"id": 701, "user": "reliant-01", "user_id": 225976313, "created_at": "2026-10-14T19:00:00Z", "body": "<!-- autopilot-respond round=1 started=2026-10-14T19:00:00Z -->\nsummary", "html_url": "c"}, {"id": 702, "user": "reliant-01", "user_id": 225976313, "created_at": "2026-10-14T19:20:00Z", "body": "<!-- autopilot-respond round=2 started=2026-10-14T19:20:00Z -->\nsummary", "html_url": "c"}, {"id": 703, "user": "reliant-01", "user_id": 225976313, "created_at": "2026-10-14T19:40:00Z", "body": "<!-- autopilot-respond round=3 started=2026-10-14T19:40:00Z -->\nsummary", "html_url": "c"}]}}
+  - node: rounds.capped_label
+    black_box: true
+    output: {}
+  - node: rounds.capped_comment
+    output: {"is_error": false, "data": {"id": 11}}
+expect:
+  outcome: completed
+  completed: [rounds.plan, rounds.capped_label, rounds.capped_comment]
+  not_reached: [rounds.lease, rounds.agent, rounds.publish]
+  node_outputs:
+    rounds.plan: {status: round_cap}

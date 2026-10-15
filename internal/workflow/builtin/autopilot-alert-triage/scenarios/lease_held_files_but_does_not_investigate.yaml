@@ -1,0 +1,19 @@
+name: lease_held_files_but_does_not_investigate
+description: >-
+  The new issue is filed but another run holds its lease (a human promoted it at once): no investigation, no write beyond the issue.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "reliant-labs/control-plane", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "1111111111111111", "labels": {"alertname": "A"}, "annotations": {"summary": "A is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 0, "items": []}}
+  - node: file.labels
+    black_box: true
+    output: {}
+  - node: file.created
+    output: {"is_error": false, "data": {"number": 10}}
+  - node: file.lease
+    black_box: true
+    output: {"status": "held", "lease_id": 0, "started_at": "", "expires": "", "takeover_from": "", "holder": "run-x", "detail": "lease held by run-x"}
+expect:
+  outcome: completed
+  completed: [file.created, file.lease, file.lease_note]
+  not_reached: [file.agent, file.publish, file.release]

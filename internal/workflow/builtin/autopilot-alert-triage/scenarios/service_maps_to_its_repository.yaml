@@ -1,0 +1,23 @@
+name: service_maps_to_its_repository
+description: >-
+  The repository comes from service_repos by the alert's service-like labels (service, job, app, ...), lowercased; an unmapped one falls back to default_repo; an explicit repo label wins when listed.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "reliant-labs/control-plane", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "1111111111111111", "labels": {"alertname": "A", "service": "Reliant-API-Server"}, "annotations": {"summary": "A is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}, {"status": "firing", "fingerprint": "2222222222222222", "labels": {"alertname": "B", "app": "billing"}, "annotations": {"summary": "B is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}, {"status": "firing", "fingerprint": "3333333333333333", "labels": {"alertname": "C", "repo": "reliant-labs/forge", "app": "billing"}, "annotations": {"summary": "C is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 1, "items": [{"number": 1, "html_url": "https://github.com/x/y/issues/1", "state": "open"}]}}
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 1, "items": [{"number": 2, "html_url": "https://github.com/x/y/issues/2", "state": "open"}]}}
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 1, "items": [{"number": 3, "html_url": "https://github.com/x/y/issues/3", "state": "open"}]}}
+  - node: classify.comment
+    output: {"is_error": false, "data": {"id": 5}}
+  - node: classify.comment
+    output: {"is_error": false, "data": {"id": 5}}
+  - node: classify.comment
+    output: {"is_error": false, "data": {"id": 5}}
+expect:
+  outcome: completed
+  completed: [plan, classify]
+  node_outputs:
+    routes:
+      repos: "reliant-labs/reliant,reliant-labs/control-plane,reliant-labs/forge"

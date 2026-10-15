@@ -1,0 +1,8 @@
+name: unwatched_repo_refused
+description: >-
+  A repository outside `repos` (its name would be interpolated into a shell command) is refused before anything runs.
+inputs: {"repos": ["reliant-labs/forge"], "trusted_ids": [], "repo": "evil/repo", "pr_number": 55, "event": "review by x", "owner_id": "225976313"}
+expect:
+  outcome: completed
+  completed: [check, invalid]
+  not_reached: [rounds]

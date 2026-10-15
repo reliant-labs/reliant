@@ -1,0 +1,23 @@
+name: collision_won_when_ours_is_first
+description: >-
+  Another run's lease landed after ours: this run keeps the lease and says who must step aside (COLLISION-WON).
+inputs: {"repo": "reliant-labs/forge", "number": 743, "run_id": "run-A", "workflow_name": "autopilot-issue-worker", "settle_seconds": 0}
+events:
+  - node: me
+    output: {"is_error": false, "data": {"login": "reliant-01", "id": 225976313}}
+  - node: first_read
+    output: {"is_error": false, "data": {"items": []}}
+  - node: mirror
+    output: {"is_error": false, "data": {"id": 1}}
+  - node: post
+    output: {"is_error": false, "data": {"id": 100, "created_at": "2026-10-14T20:05:00Z"}}
+  - node: settle
+    output: {"exit_code": 0}
+  - node: second_read
+    output: {"is_error": false, "data": {"items": [{"id": 100, "user": "reliant-01", "user_id": 1, "created_at": "2026-10-14T20:05:00Z", "body": "<!-- autopilot-lease run=run-A expires=2099-01-01T00:00:00Z state=held workflow=issue-worker -->\ntext", "html_url": "c100"}, {"id": 101, "user": "reliant-01", "user_id": 1, "created_at": "2026-10-14T20:05:02Z", "body": "<!-- autopilot-lease run=run-C expires=2099-01-01T00:00:00Z state=held workflow=issue-worker -->\ntext", "html_url": "c101"}]}}
+expect:
+  outcome: completed
+  completed: [race, won]
+  not_reached: [step_aside, lost]
+  outputs:
+    status: acquired

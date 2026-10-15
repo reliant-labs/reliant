@@ -1,0 +1,26 @@
+name: draft_pr_skipped
+description: A draft PR (a re-review requested while still a draft) is not reviewed.
+inputs:
+  repos: [reliant-labs/forge]
+  repo: reliant-labs/forge
+  pr_number: 103
+events:
+  - node: me
+    output: {is_error: false, data: {login: reliant-01, id: 225976313}}
+  - node: pr
+    output:
+      is_error: false
+      data:
+        number: 103
+        state: open
+        draft: true
+        user: nunoo
+        title: WIP
+        head: {ref: wip, sha: 0123456789abcdef0123456789abcdef01234567}
+        base: {ref: main, sha: fedcba9876543210fedcba9876543210fedcba98}
+  - node: issue
+    output: {is_error: false, data: {labels: [], is_pull_request: true, state: open}}
+expect:
+  outcome: completed
+  completed: [eligible, skipped]
+  not_reached: [review, decide, post]

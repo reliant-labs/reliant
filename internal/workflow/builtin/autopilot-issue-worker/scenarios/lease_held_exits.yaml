@@ -1,0 +1,23 @@
+name: lease_held_exits
+description: >-
+  Another run holds the issue lease (a second label or a mention a minute later): this run exits without a worktree, an agent or a write.
+inputs: {"repos": ["reliant-labs/forge"], "repo": "reliant-labs/forge", "issue_number": 7, "via": "label", "owner_id": "225976313"}
+events:
+  - node: issue
+    output: {"is_error": false, "data": {"number": 7, "title": "Panic on empty config", "body": "Crashes when config is empty.", "state": "open", "is_pull_request": false, "labels": ["agent:ready"], "user": "someone"}}
+  - node: existing
+    output: {"is_error": false, "data": {"total_count": 0, "items": []}}
+  - node: repo_info
+    output: {"is_error": false, "data": {"default_branch": "main", "full_name": "reliant-labs/forge"}}
+  - node: taken
+    output: {"is_error": false, "data": {"exists": false, "protected": false}}
+  - node: labels
+    black_box: true
+    output: {}
+  - node: lease
+    black_box: true
+    output: {"status": "held", "lease_id": 4242, "started_at": "2026-10-14T20:00:00Z", "expires": "2026-10-14T21:30:00Z", "takeover_from": "", "holder": "run-other", "detail": "lease held by run run-other"}
+expect:
+  outcome: completed
+  completed: [lease, lease_note]
+  not_reached: [thread, wt, agent, gate, publish, pr, release]

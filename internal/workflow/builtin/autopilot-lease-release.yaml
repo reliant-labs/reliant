@@ -1,0 +1,137 @@
+name: autopilot-lease-release
+title: Autopilot · release a work-item lease
+hidden: true
+apiVersion: "0.0.5"
+description: |
+  Releases the lease autopilot-lease-acquire took, then looks at what arrived while it was held.
+  Building block of the Autopilot pack; not meant to be started on its own.
+
+  1. Mark the lease comment `released` (the comment is edited in place).
+  2. Remove the working label unless another run holds a live lease on the item.
+  3. Release first, THEN re-check: read the comments newer than `since` and count the ones from a
+     trusted person that Autopilot did not write. Anything that arrived while the lease was held was
+     turned away by the lease, so it is the caller's to pick up now (`recheck_found`).
+
+inputs:
+  repo:
+    type: string
+  number:
+    type: integer
+  run_id:
+    type: string
+  workflow_name:
+    type: string
+    default: autopilot
+  lease_id:
+    type: integer
+    description: The lease comment's id (autopilot-lease-acquire's lease_id)
+  note:
+    type: string
+    default: done
+  working_label:
+    type: string
+    default: "agent:working"
+  since:
+    type: string
+    default: "1970-01-01T00:00:00Z"
+    description: RFC 3339 time the lease was taken (autopilot-lease-acquire's started_at)
+  trusted:
+    type: array
+    default: []
+    description: GitHub user ids (strings) whose comments count as feedback in the re-check
+
+outputs:
+  recheck_found: "{{ has(nodes.recheck) && has(nodes.recheck.found) ? nodes.recheck.found : 0 }}"
+  other_live_lease: "{{ has(nodes.others) && has(nodes.others.other_live) ? nodes.others.other_live : false }}"
+
+entry: [me]
+
+nodes:
+  - id: me
+    type: action
+    uses: github/user.get@1
+    with: {}
+
+  - id: mark
+    type: action
+    uses: github/issue.comment.update@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      comment_id: "{{ inputs.lease_id }}"
+      body: >-
+        <!-- autopilot-lease run={{ inputs.run_id }} expires={{ now() }} state=released workflow={{ inputs.workflow_name }} -->
+
+        🔓 **Autopilot lease released** by `{{ inputs.workflow_name }}` run `{{ inputs.run_id }}` at {{ now() }}: {{ inputs.note }}
+
+  - id: comments
+    type: action
+    uses: github/issue.comment.list@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      issue_number: "{{ inputs.number }}"
+
+  - id: others
+    type: compute
+    outputs:
+      other_live: >-
+        {{ !nodes.comments.is_error && nodes.comments.data.items.exists(c,
+             c.user == nodes.me.data.login && c.body.startsWith('<!-- autopilot-lease ')
+             && regex.extract(c.body, 'state=([^ ]+)').orValue('') == 'held'
+             && regex.extract(c.body, 'run=([^ ]+)').orValue('') != inputs.run_id
+             && timestamp(regex.extract(c.body, 'expires=([^ ]+)').orValue('1970-01-01T00:00:00Z')) > timestamp(now())) }}
+
+  - id: drop_label
+    type: action
+    condition: "nodes.others.other_live == false"
+    uses: github/issue.labels.remove@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      issue_number: "{{ inputs.number }}"
+      label: "{{ inputs.working_label }}"
+
+  # What arrived while the lease was held: comments from a trusted person since the lease was taken that
+  # Autopilot did not write. Autopilot's own comments start with an HTML comment marker; see the Autopilot
+  # guide for why a marker is still used to tell them apart when reading a thread.
+  - id: recheck_read
+    type: action
+    uses: github/issue.comment.list@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      issue_number: "{{ inputs.number }}"
+      since: "{{ inputs.since }}"
+
+  - id: recheck
+    type: compute
+    outputs:
+      found: >-
+        {{ nodes.recheck_read.is_error ? 0 : size(nodes.recheck_read.data.items.filter(c,
+             c.created_at > inputs.since && string(c.user_id) in inputs.trusted
+             && !c.body.contains('<!-- autopilot'))) }}
+      urls: >-
+        {{ nodes.recheck_read.is_error ? [] : nodes.recheck_read.data.items.filter(c,
+             c.created_at > inputs.since && string(c.user_id) in inputs.trusted
+             && !c.body.contains('<!-- autopilot')).map(c, c.html_url) }}
+
+  - id: released_note
+    type: save_message
+    args:
+      role: assistant
+      content: "RELEASE {{ inputs.repo }}#{{ inputs.number }}: {{ inputs.note }}{{ nodes.recheck.found > 0 ? ' (RECHECK: ' + string(nodes.recheck.found) + ' new comment(s) arrived while the lease was held)' : '' }}"
+
+edges:
+  - from: me
+    default: mark
+  - from: mark
+    default: comments
+  - from: comments
+    default: others
+  - from: others
+    default: [drop_label, recheck_read]
+  - from: recheck_read
+    default: recheck
+  - from: recheck
+    default: released_note

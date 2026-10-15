@@ -1,0 +1,22 @@
+name: already_in_review_exits
+description: >-
+  An open Autopilot PR already exists for this issue branch (a re-added ready label): no second PR, no lease.
+inputs: {"repos": ["reliant-labs/forge"], "repo": "reliant-labs/forge", "issue_number": 7, "via": "label", "owner_id": "225976313"}
+events:
+  - node: issue
+    output: {"is_error": false, "data": {"number": 7, "title": "Panic on empty config", "body": "Crashes when config is empty.", "state": "open", "is_pull_request": false, "labels": ["agent:ready"], "user": "someone"}}
+  - node: existing
+    output: {"is_error": false, "data": {"total_count": 1, "items": [{"number": 55, "html_url": "https://github.com/reliant-labs/forge/pull/55", "is_pull_request": true}]}}
+  - node: repo_info
+    output: {"is_error": false, "data": {"default_branch": "main", "full_name": "reliant-labs/forge"}}
+  - node: taken
+    output: {"is_error": false, "data": {"exists": true, "protected": false}}
+  - node: labels
+    black_box: true
+    output: {}
+expect:
+  outcome: completed
+  completed: [readiness, not_ready]
+  not_reached: [lease, wt, agent, publish, pr]
+  node_outputs:
+    readiness: {status: already_in_review}

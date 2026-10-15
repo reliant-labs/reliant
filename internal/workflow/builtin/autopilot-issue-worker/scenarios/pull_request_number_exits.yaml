@@ -1,0 +1,22 @@
+name: pull_request_number_exits
+description: >-
+  The number belongs to a pull request, not an issue.
+inputs: {"repos": ["reliant-labs/forge"], "repo": "reliant-labs/forge", "issue_number": 7, "via": "label", "owner_id": "225976313"}
+events:
+  - node: issue
+    output: {"is_error": false, "data": {"number": 7, "title": "Panic on empty config", "body": "Crashes when config is empty.", "state": "open", "is_pull_request": true, "labels": ["agent:ready"], "user": "someone"}}
+  - node: existing
+    output: {"is_error": false, "data": {"total_count": 0, "items": []}}
+  - node: repo_info
+    output: {"is_error": false, "data": {"default_branch": "main", "full_name": "reliant-labs/forge"}}
+  - node: taken
+    output: {"is_error": false, "data": {"exists": false, "protected": false}}
+  - node: labels
+    black_box: true
+    output: {}
+expect:
+  outcome: completed
+  completed: [readiness, not_ready]
+  not_reached: [lease]
+  node_outputs:
+    readiness: {status: is_pull_request}

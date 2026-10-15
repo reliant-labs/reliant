@@ -1,0 +1,49 @@
+name: happy_path_changed_and_pushed
+description: >-
+  The owner requested changes on an agent:authored PR: lease, checkout at the PR head, agent changes code, gate passes, git_publish pushes to the PR head, replies, round summary, release.
+inputs: {"repos": ["reliant-labs/forge"], "trusted_ids": [], "repo": "reliant-labs/forge", "pr_number": 55, "event": "review by x", "owner_id": "225976313"}
+events:
+  - node: rounds.me
+    output: {"is_error": false, "data": {"login": "reliant-01", "id": 225976313}}
+  - node: rounds.pr
+    output: {"is_error": false, "data": {"number": 55, "state": "open", "title": "fix: x", "body": "Closes #7", "user": "reliant-01", "head": {"ref": "autopilot/issue-7", "sha": "0123456789abcdef0123456789abcdef01234567", "repo": "reliant-labs/forge"}, "base": {"ref": "main", "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "repo": "reliant-labs/forge"}}}
+  - node: rounds.issue
+    output: {"is_error": false, "data": {"labels": ["agent:authored"], "state": "open", "is_pull_request": true}}
+  - node: rounds.repo_info
+    output: {"is_error": false, "data": {"default_branch": "main"}}
+  - node: rounds.head_branch
+    output: {"is_error": false, "data": {"exists": true, "protected": false}}
+  - node: rounds.reviews
+    output: {"is_error": false, "data": {"items": [{"id": 900, "state": "CHANGES_REQUESTED", "body": "Please handle the nil case.", "html_url": "r900", "user": "reliant-01", "user_id": 225976313, "submitted_at": "2026-10-14T20:10:00Z"}]}}
+  - node: rounds.inline
+    output: {"is_error": false, "data": {"items": [{"id": 800, "user": "reliant-01", "user_id": 225976313, "created_at": "2026-10-14T20:14:00Z", "body": "rename this", "html_url": "i800", "path": "a.go", "line": 12, "original_line": 12}]}}
+  - node: rounds.convo
+    output: {"is_error": false, "data": {"items": []}}
+  - node: rounds.labels
+    black_box: true
+    output: {}
+  - node: rounds.lease
+    black_box: true
+    output: {"status": "acquired", "lease_id": 4242, "started_at": "2026-10-14T20:20:00Z", "expires": "x", "takeover_from": "", "holder": "", "detail": "ACQUIRE"}
+  - node: rounds.wt
+    output: {"path": "/w/ws", "branch": "b", "id": "w", "name": "n", "base_branch": "x", "status": "active"}
+  - node: rounds.dir
+    output: {"exit_code": 0, "stdout": "0123456789abcdef0123456789abcdef01234567 /w/ws/forge"}
+  - node: rounds.agent
+    black_box: true
+    output: {"completed": true, "response": {"outcome": "changed", "summary": "Handled nil.", "commit_message": "fix: handle nil\n\nper review", "replies": [{"kind": "review", "id": 900, "reply": "Handled in a.go:12."}, {"kind": "inline", "id": 800, "reply": "Renamed."}]}, "model": "m"}
+  - node: rounds.gate
+    output: {"exit_code": 0, "stdout": "ok"}
+  - node: rounds.publish
+    output: {"pushed": true, "refused": false, "sha": "ffffffffffffffffffffffffffffffffffffffff", "branch": "autopilot/issue-7", "files_changed": 1, "insertions": 2, "deletions": 1}
+  - node: rounds.summary
+    output: {"is_error": false, "data": {"id": 9}}
+  - node: rounds.release
+    black_box: true
+    output: {"recheck_found": 0, "other_live_lease": false}
+expect:
+  outcome: completed
+  completed: [check, rounds, rounds.plan, rounds.labels, rounds.lease, rounds.wt, rounds.agent, rounds.gate, rounds.publish, rounds.outcome, rounds.summary, rounds.release, rounds.finished]
+  not_reached: [invalid, rounds.exit_note, rounds.stale, rounds.agent_retry, rounds.blocked_label]
+  node_outputs:
+    rounds: {_iterations: 1}

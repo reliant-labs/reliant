@@ -1,0 +1,24 @@
+name: taken_branch_gets_a_run_suffix
+description: >-
+  autopilot/issue-7 already exists on the remote without an open PR: the new branch name carries the first 8 characters of the run id.
+inputs: {"repos": ["reliant-labs/forge"], "repo": "reliant-labs/forge", "issue_number": 7, "via": "label", "owner_id": "225976313"}
+events:
+  - node: issue
+    output: {"is_error": false, "data": {"number": 7, "title": "Panic on empty config", "body": "Crashes when config is empty.", "state": "open", "is_pull_request": false, "labels": ["agent:ready"], "user": "someone"}}
+  - node: existing
+    output: {"is_error": false, "data": {"total_count": 0, "items": []}}
+  - node: repo_info
+    output: {"is_error": false, "data": {"default_branch": "main", "full_name": "reliant-labs/forge"}}
+  - node: taken
+    output: {"is_error": false, "data": {"exists": true, "protected": false}}
+  - node: labels
+    black_box: true
+    output: {}
+  - node: lease
+    black_box: true
+    output: {"status": "held", "lease_id": 4242, "started_at": "2026-10-14T20:00:00Z", "expires": "2026-10-14T21:30:00Z", "takeover_from": "", "holder": "x", "detail": "lease held by run x"}
+expect:
+  outcome: completed
+  completed: [readiness]
+  node_outputs:
+    readiness: {status: ready}

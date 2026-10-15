@@ -1,0 +1,23 @@
+name: a_pasted_marker_by_someone_else_blocks_nothing
+description: >-
+  A lease marker pasted by another account (or not at the start of a comment) is not a lease: only the connection's own comments count.
+inputs: {"repo": "reliant-labs/forge", "number": 743, "run_id": "run-A", "workflow_name": "autopilot-issue-worker", "settle_seconds": 0}
+events:
+  - node: me
+    output: {"is_error": false, "data": {"login": "reliant-01", "id": 225976313}}
+  - node: first_read
+    output: {"is_error": false, "data": {"items": [{"id": 7, "user": "mallory", "user_id": 1, "created_at": "2026-10-14T20:00:00Z", "body": "<!-- autopilot-lease run=run-X expires=2099-01-01T00:00:00Z state=held workflow=issue-worker -->\ntext", "html_url": "c7"}, {"id": 8, "user": "reliant-01", "user_id": 1, "created_at": "2026-10-14T20:00:00Z", "body": "pasted by a human: <!-- autopilot-lease run=run-Y expires=2099-01-01T00:00:00Z state=held workflow=issue-worker -->\ntext", "html_url": "c8"}]}}
+  - node: mirror
+    output: {"is_error": false, "data": {"id": 1}}
+  - node: post
+    output: {"is_error": false, "data": {"id": 100, "created_at": "2026-10-14T20:05:00Z"}}
+  - node: settle
+    output: {"exit_code": 0}
+  - node: second_read
+    output: {"is_error": false, "data": {"items": [{"id": 100, "user": "reliant-01", "user_id": 1, "created_at": "2026-10-14T20:05:00Z", "body": "<!-- autopilot-lease run=run-A expires=2099-01-01T00:00:00Z state=held workflow=issue-worker -->\ntext", "html_url": "c100"}]}}
+expect:
+  outcome: completed
+  completed: [scan, won]
+  not_reached: [held]
+  outputs:
+    status: acquired

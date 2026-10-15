@@ -1,0 +1,24 @@
+name: missing_checkout_files_without_investigating
+description: >-
+  The project has no checkout of the alert's repository: the issue is still filed and the lease released, but nothing is investigated.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "reliant-labs/control-plane", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "1111111111111111", "labels": {"alertname": "A"}, "annotations": {"summary": "A is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 0, "items": []}}
+  - node: file.labels
+    black_box: true
+    output: {}
+  - node: file.created
+    output: {"is_error": false, "data": {"number": 10}}
+  - node: file.lease
+    black_box: true
+    output: {"status": "acquired", "lease_id": 77, "started_at": "t", "expires": "x", "takeover_from": "", "holder": "", "detail": "ACQUIRE"}
+  - node: file.dir
+    output: {"exit_code": 1, "stdout": ""}
+  - node: file.release
+    black_box: true
+    output: {"recheck_found": 0, "other_live_lease": false}
+expect:
+  outcome: completed
+  completed: [file.dir, file.no_checkout, file.release]
+  not_reached: [file.agent, file.publish]

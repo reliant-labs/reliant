@@ -1,0 +1,8 @@
+name: repo_label_outside_the_allowed_repositories_is_ignored
+description: >-
+  An alert cannot name a repository outside service_repos and default_repo through its own `repo` label.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "1111111111111111", "labels": {"alertname": "A", "repo": "evil/repo", "app": "unknown"}, "annotations": {"summary": "A is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+expect:
+  outcome: completed
+  completed: [plan, nothing]
+  not_reached: [classify, file]

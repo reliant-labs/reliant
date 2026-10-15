@@ -1,0 +1,70 @@
+name: autopilot-set-labels
+title: Autopilot · add and remove labels
+hidden: true
+apiVersion: "0.0.5"
+description: |
+  Adds and removes labels on an issue or pull request, one atomic request per label.
+  Building block of the Autopilot pack; not meant to be started on its own.
+
+  github/issue.labels.add creates a label that does not exist; github/issue.labels.remove answers 404 for
+  a label the item does not carry, which is an error result here, not a failed run: removing a label that
+  is already gone is the outcome that was asked for.
+
+inputs:
+  repo:
+    type: string
+    description: owner/name of the repository
+  number:
+    type: integer
+    description: The issue or pull request number
+  add:
+    type: array
+    default: []
+    description: Labels to add
+  remove:
+    type: array
+    default: []
+    description: Labels to remove
+
+entry: [removing]
+
+nodes:
+  - id: removing
+    type: loop
+    parallel: true
+    items: "{{ inputs.remove }}"
+    key: "{{ iter.item }}"
+    on_failure: continue
+    inline:
+      entry: [drop]
+      nodes:
+        - id: drop
+          type: action
+          uses: github/issue.labels.remove@1
+          with:
+            owner: "{{ inputs.repo.split('/')[0] }}"
+            repo: "{{ inputs.repo.split('/')[1] }}"
+            issue_number: "{{ inputs.number }}"
+            label: "{{ iter.item }}"
+
+  - id: adding
+    type: loop
+    parallel: true
+    items: "{{ inputs.add }}"
+    key: "{{ iter.item }}"
+    on_failure: continue
+    inline:
+      entry: [put]
+      nodes:
+        - id: put
+          type: action
+          uses: github/issue.labels.add@1
+          with:
+            owner: "{{ inputs.repo.split('/')[0] }}"
+            repo: "{{ inputs.repo.split('/')[1] }}"
+            issue_number: "{{ inputs.number }}"
+            label: "{{ iter.item }}"
+
+edges:
+  - from: removing
+    default: adding

@@ -1,0 +1,14 @@
+name: resolved_without_an_issue_does_nothing
+description: >-
+  A resolved notification for a fingerprint no open issue carries (it was closed meanwhile): nothing is filed.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "reliant-labs/control-plane", "group_key": "g", "alerts": [{"status": "resolved", "fingerprint": "469e6b810b31bcc6", "labels": {"alertname": "WorkerDown"}, "annotations": {"summary": "WorkerDown is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 0, "items": []}}
+expect:
+  outcome: completed
+  completed: [classify, fresh]
+  not_reached: [classify.comment, file.created]
+  node_outputs:
+    verdicts: {summary: "469e6b810b31bcc6=resolved_no_issue"}
+    fresh: {new: []}

@@ -1,0 +1,26 @@
+name: skip_review_label_skips
+description: A PR labelled skip-review (labelled after opening, then a re-review requested) is not reviewed and nothing is posted.
+inputs:
+  repos: [reliant-labs/forge]
+  repo: reliant-labs/forge
+  pr_number: 104
+events:
+  - node: me
+    output: {is_error: false, data: {login: reliant-01, id: 225976313}}
+  - node: pr
+    output:
+      is_error: false
+      data:
+        number: 104
+        state: open
+        draft: false
+        user: nunoo
+        title: Docs
+        head: {ref: docs, sha: 0123456789abcdef0123456789abcdef01234567}
+        base: {ref: main, sha: fedcba9876543210fedcba9876543210fedcba98}
+  - node: issue
+    output: {is_error: false, data: {labels: [skip-review], is_pull_request: true, state: open}}
+expect:
+  outcome: completed
+  completed: [eligible, skipped]
+  not_reached: [review, decide, post]

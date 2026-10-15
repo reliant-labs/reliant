@@ -1,0 +1,17 @@
+name: failed_lease_post_is_reported
+description: >-
+  The lease comment cannot be posted: reported, and no race check follows.
+inputs: {"repo": "reliant-labs/forge", "number": 743, "run_id": "run-A", "workflow_name": "autopilot-issue-worker", "settle_seconds": 0}
+events:
+  - node: me
+    output: {"is_error": false, "data": {"login": "reliant-01", "id": 225976313}}
+  - node: first_read
+    output: {"is_error": false, "data": {"items": []}}
+  - node: mirror
+    output: {"is_error": false, "data": {"id": 1}}
+  - node: post
+    output: {"is_error": true, "content": "forbidden"}
+expect:
+  outcome: completed
+  completed: [post, post_failed]
+  not_reached: [settle, won, lost]

@@ -1,0 +1,190 @@
+---
+title: "Autopilot"
+description: "Four built-in workflows that review pull requests, work issues, answer review feedback and triage alerts on your GitHub repositories, and never merge"
+---
+
+**Autopilot** is a pack of four built-in workflows for GitHub. Each is an [automation](/automations/overview): it waits for an event, runs unattended, and leaves its work as ordinary issues, comments, reviews, branches and pull requests that you can read and overrule. You turn each one on, and nothing is on until you do.
+
+| Workflow | Reacts to | Does | Needs a machine |
+|----------|-----------|------|-----------------|
+| **PR review** (`autopilot-pr-review`) | A pull request opened or marked ready; the re-review label; `/autopilot re-review` | Reads the diff and the code around it, posts one review | No |
+| **Issue worker** (`autopilot-issue-worker`) | `agent:ready` added to an issue; an `@reliant` mention | Writes a failing test and the fix in a worktree, runs your fast checks, pushes a branch, opens a PR that closes the issue | Yes |
+| **Review responder** (`autopilot-review-responder`) | A review, an inline comment or a comment on an `agent:authored` PR | Changes the code to address the feedback, pushes to that PR's own branch, replies in each thread | Yes |
+| **Alert triage** (`autopilot-alert-triage`) | An Alertmanager webhook | Files one issue per new alert, investigates it read-only, writes up severity, evidence, cause and a proposed fix | Yes |
+
+The three that touch code form a loop. The issue worker opens a PR labelled `agent:authored`; PR review reviews it; if the review has findings, the review responder acts on them; a human merges. Alert triage feeds the same loop at its front: it files an issue labelled `agent:triage`, and a human who agrees adds `agent:ready` to hand it to the issue worker.
+
+## What it will never do
+
+- **Merge.** There is no merge action in the GitHub integration, and no workflow in the pack calls one.
+- **Approve.** PR review's verdict is `COMMENT` or `REQUEST_CHANGES`. The event is computed in one node from the reviewer's answer by an expression with exactly those two outcomes, so a reviewer that returns `APPROVE` (confused, or steered by text in the PR) still posts a `COMMENT`. The reviewer is also given no tool that can post a review.
+- **Push to your default branch, to a protected branch, to a fork, or with `--force`.** Pushes go through a `git_publish` node, which checks the branch against GitHub's own answers before anything leaves your machine and refuses a push that is not a plain fast-forward. The issue worker may only push `autopilot/*` branches; the review responder only the head branch of the PR it is answering, and only if the PR is in the same repository.
+- **Add `agent:ready`.** Alert triage files issues as `agent:triage`. A human promotes them.
+- **Act for a stranger.** Who may start a run is a filter on the event (below), and the text of issues, PRs and comments reaches an agent only as quoted data from the people you trust.
+- **Hold a credential in a shell.** Every agent shell and every `run` node in the pack is declared `credentials: none`. The push credential exists for the one push, inside `git_publish`, and never reaches a shell, a file or the environment.
+
+<Warning>
+`credentials: none` removes what Reliant and the machine's environment hand a command. It is not a sandbox: a command that goes looking can still read the daemon user's own `~/.config/gh` or `~/.git-credentials`. If you want a wall rather than a seatbelt, also turn on **branch protection** in GitHub (require a pull request and one approval, and do not let administrators bypass it), and run the machine as a user with no stored GitHub login. Autopilot cannot merge, but the branch rule is what makes "nothing merges without a person" true even for a credential that leaked.
+</Warning>
+
+## Turning it on
+
+Open **Workflows → Library**, open the workflow, and choose **Enable**. One dialog turns on every trigger the workflow declares; it asks once for the project, the machine, the GitHub account to listen through and the workflow's inputs (the settings below). An agent can write or edit these workflows but cannot enable them: only you can.
+
+Enable each workflow you want. They are independent, and none requires the others, though the loop above only closes when all three code workflows are on for the same repositories.
+
+PR review needs no machine, so choose **No machine** for it. The other three work in a checkout, so pick the machine that holds your repositories as sibling folders of one project (`forge`, `control-plane`, `reliant`, say), or one project per repository.
+
+Alert triage also shows a **webhook URL and token, once**, when you enable it. See [Wiring Alertmanager](#wiring-alertmanager).
+
+## Settings
+
+These are the workflows' inputs, so they appear in the Enable dialog with their defaults. Each activation has its own values, which is how two projects can run the same workflow on different repositories.
+
+### Shared by PR review, issue worker and review responder
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `repos` | none | The repositories to act in, as `owner/name`. **Nothing else is ever touched.** Empty means the workflow does nothing |
+| `trusted_ids` | none | GitHub numeric user ids (as strings, `"583231"`) allowed to start work, besides you |
+
+`trusted_ids` holds **ids, not logins**: a login can be renamed and then registered by someone else. Find an id with `gh api users/<login> --jq .id`. You are always trusted through the GitHub connection you enabled the workflow with.
+
+### PR review
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `review_model` | `powerful` tag, high thinking | The reviewer. A different tag from the authors' `flagship`, so wherever your providers allow it the reviewer is a different model from the one that wrote the code |
+| `review_guidance` | empty | Extra context appended to the reviewer's instructions: what the repositories are, conventions, what to ignore |
+| `skip_label` | `skip-review` | A PR carrying it is never reviewed |
+| `re_review_label` | `agent:re-review` | Adding it asks for another review; the workflow removes it again afterwards so it can be added again |
+
+PR review covers **every non-draft PR** in `repos` when it is opened or marked ready for review. Add `skip-review` to opt one out. A review can be asked for again by adding the re-review label or by commenting `/autopilot re-review` as you or a trusted person.
+
+### Issue worker
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `model` | `flagship` | The authoring model |
+| `ready_label` | `agent:ready` | Labelling an issue with this opts it in |
+| `working_label`, `in_review_label`, `blocked_label`, `punted_label`, `authored_label` | `agent:working`, `agent:in-review`, `agent:blocked`, `agent:punted`, `agent:authored` | The state labels (see [Labels](#labels)) |
+| `max_turns` | 120 | The most agent turns for one attempt. A retry after a failed gate gets half |
+| `lease_minutes` | 90 | How long a lease lasts if a run dies without releasing it |
+| `gate_command` | gofmt, then `task test:short` or `make test-short` on the changed Go packages | The fast check run, without credentials, before anything is pushed. It must exit 0. Replace it for other languages |
+
+### Review responder
+
+Shares `model`, the labels, `lease_minutes`, `max_turns` and `gate_command` with the issue worker, and adds:
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `max_review_rounds` | 3 | Rounds of changes per PR before it is labelled `agent:blocked` and left to a human |
+| `respond_label` | `agent:respond` | Add it to any other PR to have the responder look after it |
+
+### Alert triage
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `service_repos` | none | Which repository an alert belongs to. Keys are lowercase service names, values are `owner/name`. The first of the alert's `service`, `service_name`, `job`, `workload`, `app`, `container`, `deployment`, `binary` or `component` labels that is listed wins. An alert can also carry a `repo` label naming one of the listed repositories |
+| `default_repo` | empty | The repository for an alert nothing maps. Empty means such alerts are reported in the run and nothing is filed |
+| `model` | `flagship` | The investigator |
+| `max_investigations` | 5 | New alerts investigated per notification; the rest are filed without an investigation |
+| `triage_label` | `agent:triage` | Put on every issue it files |
+| `max_turns` | 45 | Agent turns per investigation |
+
+Example `service_repos`:
+
+```json
+{"reliant-api-server": "acme/platform", "temporal-worker": "acme/platform", "web": "acme/frontend"}
+```
+
+## Who may start work
+
+Trust is plain [CEL](/reference/cel-expressions) over three things the event already carries, so there is no table to maintain and no settings page:
+
+```yaml
+trigger.sender.verified && trigger.sender.id != ''
+&& (trigger.sender.id == trigger.activation.owner.github_id
+    || trigger.sender.id in trigger.activation.params.trusted_ids)
+```
+
+`trigger.sender.id` is the numeric id of whoever GitHub says acted, verified by the webhook's signature. `trigger.activation.owner.github_id` is you, by the connection you enabled the workflow with. A sender with no id, or an unverified one, never passes. The review responder and issue worker also drop any comment from the agent's own thread, so an agent cannot talk itself into more work.
+
+You can check what a filter does before enabling anything:
+
+```bash
+reliant workflow validate autopilot-issue-worker.yaml \
+  --trigger-payload '{"attributes":{"repository":"acme/app"},"data":{"label":"agent:ready","issue":{"number":7,"state":"open","labels":["agent:ready"]}}}' \
+  --trigger-sender '{"id":"583231","verified":true}' \
+  --activation-params '{"repos":["acme/app"],"trusted_ids":["583231"]}' \
+  --owner-github-id 111
+```
+
+## Labels
+
+Each workflow creates the labels it needs on first use, with a colour and a description. Creating a label that already exists changes nothing, so your own colours survive. You can rename any of them in the settings above.
+
+| Label | Meaning | Set by |
+|-------|---------|--------|
+| `agent:triage` | Filed from an alert; a human decides whether to work it | Alert triage |
+| `agent:ready` | An agent may work this issue | **You** |
+| `agent:working` | An agent holds this item right now (mirrors the lease) | The workflows |
+| `agent:in-review` | A PR is open for this | Issue worker |
+| `agent:authored` | A PR an agent wrote; the review responder acts on it | Issue worker |
+| `agent:respond` | Look after review feedback on this PR even though an agent did not write it | **You** |
+| `agent:blocked` | The agent tried and could not finish, or hit the round cap | The workflows |
+| `agent:punted` | The agent needs a human decision (unclear, too large, or it would touch CI, secrets or deploy configuration) | Issue worker |
+| `skip-review` | Do not review this PR | **You** |
+| `agent:re-review` | Review this PR again | **You** |
+| `size:S`, `size:M`, `size:L` | The size of the change an agent opened (under 60, under 400, more changed lines) | Issue worker |
+
+## Leases
+
+Two runs must not work one issue or PR at once, for example a second label added a minute after the first. A run takes a **lease** first: a comment by the connection's own account with a small machine-readable header (the run, an expiry, a state), mirrored by `agent:working`.
+
+- If another run holds a live lease, the new run exits having written nothing.
+- A lease that has expired (its run died) is marked superseded, and the new lease names the run it took over from.
+- After posting, a run waits a few seconds and reads again; if another lease was posted earlier (earliest time, then lowest comment id), it steps aside.
+- At the end the lease is released, and then the run looks for what arrived while it was held. The review responder runs another round for new feedback, up to `max_review_rounds`.
+
+Only comments by the connection's own account count, so a lease header pasted by someone else blocks and releases nothing. The lease is a convention between these workflows, not a lock GitHub enforces; a human can ignore it.
+
+## Wiring Alertmanager
+
+Enabling alert triage shows a webhook URL and a token, **once**. Add a receiver to Alertmanager:
+
+```yaml
+receivers:
+  - name: autopilot
+    webhook_configs:
+      - url: https://api.reliantapi.com/hooks/<trigger id>
+        send_resolved: true
+        http_config:
+          authorization: {type: Bearer, credentials_file: /etc/alertmanager/autopilot-token}
+```
+
+then route the alerts you want triaged to it. The workflow de-duplicates in two layers. Alertmanager sends no idempotency header and repeats a firing group every `repeat_interval`, so the trigger names the event itself (`dedupe_key`): the group, its status and its alerts' fingerprints. A re-sent `firing` group within four hours is one event, and its `resolved` notification is another. Across those windows, each alert's fingerprint is shown in its issue as plain text and searched for among the repository's open issues: a match gets a comment ("Still firing" or "Resolved") instead of a second issue. A failed search files nothing, since a missed alert is cheaper than a duplicate.
+
+Logs and traces are not reachable from the investigator unless you give it a tool for them; its write-up says so rather than guessing.
+
+## What it costs
+
+Nothing here has a budget of its own yet, so this is where your spend comes from:
+
+- **PR review** runs one reviewer per PR, up to 40 turns, on the `powerful` tag with high thinking. It runs for **every** non-draft PR in `repos`, including the ones agents open, so in a busy repository it is the largest line. Use `skip-review` on PRs that do not need it, and consider starting with one quiet repository.
+- **Issue worker** runs an agent for up to 120 turns per issue, plus a retry of up to 60 if the fast checks fail. It runs only for issues someone trusted opted in.
+- **Review responder** runs up to 80 turns per round, three rounds at most per PR, plus a retry.
+- **Alert triage** runs one investigation of up to 45 turns per *new* alert, at most five per notification, nothing for a repeat.
+
+Open a finished run to see each model call's cost. The caps above are inputs, so lower `max_turns`, `max_investigations` and `max_review_rounds` to lower the ceiling.
+
+## Using a different GitHub identity
+
+By default the workflows write as the account of the GitHub connection you enabled them with, so their comments and PRs appear under your name, and GitHub will not let that account request changes on a PR it opened (PR review posts the same review as a comment, saying so). The built-in workflows leave `acting_identity` at its default for now. Once your deployment supports acting as the GitHub App's bot, set the activation's identity to the App to keep the agents' words apart from yours, and to let you approve their PRs.
+
+## Related topics
+
+- [Automations](/automations/overview), for how workflows are enabled, and [Webhooks](/automations/webhooks)
+- [GitHub integration](/integrations/github), for the actions and events the pack uses
+- [Custom workflows](/workflows/custom-workflows), for `compute`, `git_publish` and `credentials: none`
+- [Built-in workflows](/guides/overview)

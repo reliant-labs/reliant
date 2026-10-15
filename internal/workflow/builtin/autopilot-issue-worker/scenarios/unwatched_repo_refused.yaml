@@ -1,0 +1,8 @@
+name: unwatched_repo_refused
+description: >-
+  A repository outside `repos` (a manual start) is refused before anything is read or written.
+inputs: {"repos": ["reliant-labs/forge"], "repo": "evil/repo", "issue_number": 7, "via": "label", "owner_id": "225976313"}
+expect:
+  outcome: completed
+  completed: [check, invalid]
+  not_reached: [labels, issue, lease, wt]

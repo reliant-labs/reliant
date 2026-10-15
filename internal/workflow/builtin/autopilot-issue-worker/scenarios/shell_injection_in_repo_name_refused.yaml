@@ -1,0 +1,8 @@
+name: shell_injection_in_repo_name_refused
+description: >-
+  A repo name that is in `repos` but is not a plain owner/name never reaches a shell command.
+inputs: {"repos": ["a/b;rm -rf x"], "repo": "a/b;rm -rf x", "issue_number": 7, "via": "label", "owner_id": "225976313"}
+expect:
+  outcome: completed
+  completed: [check, invalid]
+  not_reached: [labels, issue, lease, wt, dir]

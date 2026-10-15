@@ -1,0 +1,44 @@
+name: autopilot-ensure-labels
+title: Autopilot · ensure labels exist
+hidden: true
+apiVersion: "0.0.5"
+description: |
+  Makes sure the labels an Autopilot workflow uses exist in a repository, with a colour and a description.
+  Building block of the Autopilot pack; not meant to be started on its own.
+
+  github/labels.create is idempotent: a label that already exists is left exactly as it is (colour and
+  description included), so every run can call this before its first label write. Adding a label that does
+  not exist would create it anyway, in GitHub's default grey; this is what gives the pack's labels their
+  colours and what makes the labels people apply by hand (agent:ready, skip-review, ...) show up in
+  GitHub's label picker. A failure to create one is not an error: the label add that follows still works.
+
+inputs:
+  repo:
+    type: string
+    description: owner/name of the repository
+  labels:
+    type: array
+    description: "The labels to ensure, each {name, color, description}"
+    default: []
+
+entry: [each]
+
+nodes:
+  - id: each
+    type: loop
+    parallel: true
+    items: "{{ inputs.labels }}"
+    key: "{{ iter.item.name }}"
+    on_failure: continue
+    inline:
+      entry: [create]
+      nodes:
+        - id: create
+          type: action
+          uses: github/labels.create@1
+          with:
+            owner: "{{ inputs.repo.split('/')[0] }}"
+            repo: "{{ inputs.repo.split('/')[1] }}"
+            name: "{{ iter.item.name }}"
+            color: "{{ iter.item.color }}"
+            description: "{{ iter.item.description }}"

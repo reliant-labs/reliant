@@ -1,0 +1,9 @@
+name: no_repos_enabled_refuses
+description: With the default empty repos list nothing is reviewed, whatever repo and PR the run is started with.
+inputs:
+  repo: reliant-labs/forge
+  pr_number: 1
+expect:
+  outcome: completed
+  completed: [check, invalid]
+  not_reached: [me, pr, review, post]

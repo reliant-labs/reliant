@@ -1,0 +1,16 @@
+name: same_fingerprint_dedupes
+description: >-
+  Alertmanager re-sends the same alert (repeat_interval): an open issue already carries the fingerprint, so an occurrence comment is added and nothing is filed or investigated.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "reliant-labs/control-plane", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "469e6b810b31bcc6", "labels": {"alertname": "WorkerDown", "app": "temporal-worker"}, "annotations": {"summary": "WorkerDown is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 1, "items": [{"number": 913, "html_url": "https://github.com/x/y/issues/913", "state": "open"}]}}
+  - node: classify.comment
+    output: {"is_error": false, "data": {"id": 5}}
+expect:
+  outcome: completed
+  completed: [classify, classify.comment]
+  not_reached: [file.created, file.agent, file.lease]
+  node_outputs:
+    verdicts: {summary: "469e6b810b31bcc6=occurrence"}
+    fresh: {new: []}

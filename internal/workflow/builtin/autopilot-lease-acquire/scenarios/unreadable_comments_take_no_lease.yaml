@@ -1,0 +1,15 @@
+name: unreadable_comments_take_no_lease
+description: >-
+  If the comments cannot be read (rate limit), no label is added and no lease is posted: better to skip than to lease blind.
+inputs: {"repo": "reliant-labs/forge", "number": 743, "run_id": "run-A", "workflow_name": "autopilot-issue-worker", "settle_seconds": 0}
+events:
+  - node: me
+    output: {"is_error": false, "data": {"login": "reliant-01", "id": 225976313}}
+  - node: first_read
+    output: {"is_error": true, "content": "rate limited"}
+expect:
+  outcome: completed
+  completed: [scan, unreadable]
+  not_reached: [mirror, post, held, won]
+  outputs:
+    status: error

@@ -1,0 +1,51 @@
+name: two_new_alerts_two_investigations
+description: >-
+  A group with two new fingerprints in two repositories files and investigates each.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "reliant-labs/control-plane", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "1111111111111111", "labels": {"alertname": "A"}, "annotations": {"summary": "A is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}, {"status": "firing", "fingerprint": "2222222222222222", "labels": {"alertname": "B", "app": "forge"}, "annotations": {"summary": "B is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 0, "items": []}}
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 0, "items": []}}
+  - node: file.labels
+    black_box: true
+    output: {}
+  - node: file.created
+    output: {"is_error": false, "data": {"number": 10}}
+  - node: file.lease
+    black_box: true
+    output: {"status": "acquired", "lease_id": 77, "started_at": "2026-10-14T20:01:00Z", "expires": "x", "takeover_from": "", "holder": "", "detail": "ACQUIRE"}
+  - node: file.dir
+    output: {"exit_code": 0, "stdout": "/r/x"}
+  - node: file.agent
+    black_box: true
+    output: {"completed": true, "response": {"severity": "high", "summary": "worker is crash-looping", "evidence": "e", "suspected_cause": "c", "proposed_fix": "f", "confidence": "medium"}, "model": "m"}
+  - node: file.publish
+    output: {"is_error": false, "data": {"number": 10}}
+  - node: file.release
+    black_box: true
+    output: {"recheck_found": 0, "other_live_lease": false}
+  - node: file.labels
+    black_box: true
+    output: {}
+  - node: file.created
+    output: {"is_error": false, "data": {"number": 20}}
+  - node: file.lease
+    black_box: true
+    output: {"status": "acquired", "lease_id": 77, "started_at": "2026-10-14T20:01:00Z", "expires": "x", "takeover_from": "", "holder": "", "detail": "ACQUIRE"}
+  - node: file.dir
+    output: {"exit_code": 0, "stdout": "/r/x"}
+  - node: file.agent
+    black_box: true
+    output: {"completed": true, "response": {"severity": "high", "summary": "worker is crash-looping", "evidence": "e", "suspected_cause": "c", "proposed_fix": "f", "confidence": "medium"}, "model": "m"}
+  - node: file.publish
+    output: {"is_error": false, "data": {"number": 20}}
+  - node: file.release
+    black_box: true
+    output: {"recheck_found": 0, "other_live_lease": false}
+expect:
+  outcome: completed
+  completed: [file]
+  node_outputs:
+    capped: {to_investigate: ["1111111111111111", "2222222222222222"]}
+    file: {_iterations: 2}

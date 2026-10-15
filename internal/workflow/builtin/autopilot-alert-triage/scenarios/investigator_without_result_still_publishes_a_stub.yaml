@@ -1,0 +1,37 @@
+name: investigator_without_result_still_publishes_a_stub
+description: >-
+  The investigator ends without submit_triage: the issue is rewritten with an honest "did not finish" body rather than left half-written.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "reliant-labs/control-plane", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "1111111111111111", "labels": {"alertname": "A"}, "annotations": {"summary": "A is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 0, "items": []}}
+  - node: file.labels
+    black_box: true
+    output: {}
+  - node: file.created
+    output: {"is_error": false, "data": {"number": 10}}
+  - node: file.lease
+    black_box: true
+    output: {"status": "acquired", "lease_id": 77, "started_at": "t", "expires": "x", "takeover_from": "", "holder": "", "detail": "ACQUIRE"}
+  - node: file.dir
+    output: {"exit_code": 0, "stdout": "/r/x"}
+  - node: file.agent
+    black_box: true
+    output: {"completed": false, "response": null, "model": "m"}
+  - node: file.publish
+    output: {"is_error": false, "data": {"number": 10}}
+  - node: file.release
+    black_box: true
+    output: {"recheck_found": 0, "other_live_lease": false}
+expect:
+  outcome: completed
+  completed: [file.report, file.publish, file.release]
+  node_outputs:
+    file.report:
+      r:
+        severity: unknown
+        summary: investigation did not finish
+        confidence: low
+        evidence: The investigating agent ended without a result; see the run transcript.
+        suspected_cause: Unknown.
+        proposed_fix: A human should investigate.

@@ -1,0 +1,8 @@
+name: alert_without_a_usable_fingerprint_is_skipped
+description: >-
+  An alert whose fingerprint is not hex (or is missing) is skipped: nothing can dedupe it, so nothing is filed.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "reliant-labs/control-plane", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "not-hex!", "labels": {"alertname": "A"}, "annotations": {"summary": "A is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}, {"status": "firing", "labels": {"alertname": "B"}}]}
+expect:
+  outcome: completed
+  completed: [plan, nothing]
+  not_reached: [classify, file]

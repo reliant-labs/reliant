@@ -1,0 +1,306 @@
+name: autopilot-lease-acquire
+title: Autopilot · take a work-item lease
+hidden: true
+apiVersion: "0.0.5"
+description: |
+  The lease Autopilot's workflows take on an issue or pull request so two runs do not work it at once.
+  Built-in building block of the Autopilot pack; not meant to be started on its own.
+
+  A lease is a comment by the connection's own account on the item:
+    <!-- autopilot-lease run=<run> expires=<RFC3339> state=<held|released|superseded> workflow=<name> -->
+  mirrored by a working label. Only that account's comments count, so a pasted marker can neither block
+  nor release anything.
+
+  1. If another run holds an unexpired lease, stop with status `held`.
+  2. Expired leases are marked `superseded`; the new lease names the run it took over from.
+  3. Add the working label and post the lease, expiring after `ttl_minutes`.
+  4. Race check: wait, then read again. If another held lease was posted earlier (earliest created_at, then
+     lowest comment id), mark ours released and stop with status `lost`.
+  Output status is `acquired`, `held`, `lost` or `error`.
+
+inputs:
+  repo:
+    type: string
+    description: owner/name of the repository
+  number:
+    type: integer
+    description: The issue or pull request number
+  run_id:
+    type: string
+    description: The id of the run taking the lease
+  workflow_name:
+    type: string
+    default: autopilot
+    description: Which workflow takes it, recorded in the lease
+  ttl_minutes:
+    type: integer
+    default: 90
+    min: 5
+    max: 1440
+    description: Minutes until the lease expires if the run never releases it
+  working_label:
+    type: string
+    default: "agent:working"
+    description: The label that mirrors a held lease
+  settle_seconds:
+    type: integer
+    default: 4
+    min: 0
+    max: 30
+    description: Seconds to wait before the race check
+
+outputs:
+  status: "{{ has(nodes.held) ? 'held' : (has(nodes.lost) ? 'lost' : (has(nodes.won) ? 'acquired' : 'error')) }}"
+  lease_id: "{{ has(nodes.won) ? nodes.won.lease_id : (has(nodes.lost) ? nodes.lost.lease_id : 0) }}"
+  started_at: "{{ has(nodes.won) ? nodes.won.started_at : '' }}"
+  expires: "{{ has(nodes.won) ? nodes.won.expires : (has(nodes.held) ? nodes.held.expires : '') }}"
+  takeover_from: "{{ has(nodes.won) ? nodes.won.takeover_from : '' }}"
+  holder: "{{ has(nodes.held) ? nodes.held.holder : (has(nodes.lost) ? nodes.lost.winner : '') }}"
+  detail: "{{ has(nodes.held) ? nodes.held.detail : (has(nodes.lost) ? nodes.lost.detail : (has(nodes.won) ? nodes.won.detail : 'the lease could not be read or written')) }}"
+
+entry: [me]
+
+nodes:
+  - id: me
+    type: action
+    uses: github/user.get@1
+    with: {}
+
+  - id: first_read
+    type: action
+    uses: github/issue.comment.list@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      issue_number: "{{ inputs.number }}"
+
+  # The leases on the item: comments by this account that start with the marker.
+  - id: scan
+    type: compute
+    outputs:
+      ok: "{{ !nodes.me.is_error && !nodes.first_read.is_error }}"
+      live: >-
+        {{ !nodes.me.is_error && !nodes.first_read.is_error ? nodes.first_read.data.items
+             .filter(c, c.user == nodes.me.data.login && c.body.startsWith('<!-- autopilot-lease '))
+             .map(c, {'id': c.id, 'created_at': c.created_at,
+                      'run': regex.extract(c.body, 'run=([^ ]+)').orValue('?'),
+                      'expires': regex.extract(c.body, 'expires=([^ ]+)').orValue('1970-01-01T00:00:00Z'),
+                      'state': regex.extract(c.body, 'state=([^ ]+)').orValue('unknown'),
+                      'workflow': regex.extract(c.body, 'workflow=([^ ]+)').orValue('?')})
+             .filter(l, l.state == 'held' && l.run != inputs.run_id && timestamp(l.expires) > timestamp(now()))
+             .sortBy(l, l.created_at) : [] }}
+      expired: >-
+        {{ !nodes.me.is_error && !nodes.first_read.is_error ? nodes.first_read.data.items
+             .filter(c, c.user == nodes.me.data.login && c.body.startsWith('<!-- autopilot-lease '))
+             .map(c, {'id': c.id, 'created_at': c.created_at,
+                      'run': regex.extract(c.body, 'run=([^ ]+)').orValue('?'),
+                      'expires': regex.extract(c.body, 'expires=([^ ]+)').orValue('1970-01-01T00:00:00Z'),
+                      'state': regex.extract(c.body, 'state=([^ ]+)').orValue('unknown'),
+                      'workflow': regex.extract(c.body, 'workflow=([^ ]+)').orValue('?')})
+             .filter(l, l.state == 'held' && l.run != inputs.run_id && timestamp(l.expires) <= timestamp(now())) : [] }}
+
+  - id: unreadable
+    type: save_message
+    args:
+      role: assistant
+      display_style: warning
+      content: "Could not read the comments on {{ inputs.repo }}#{{ inputs.number }}, so no lease was taken: {{ nodes.first_read.content }}"
+
+  - id: held
+    type: compute
+    outputs:
+      holder: "{{ nodes.scan.live[0].run }}"
+      expires: "{{ nodes.scan.live[0].expires }}"
+      detail: "lease held by run {{ nodes.scan.live[0].run }} ({{ nodes.scan.live[0].workflow }}) until {{ nodes.scan.live[0].expires }}"
+
+  - id: held_note
+    type: save_message
+    args:
+      role: assistant
+      content: "HELD-EXIT {{ inputs.repo }}#{{ inputs.number }}: {{ nodes.held.detail }}"
+
+  # Expired leases are marked superseded, one comment each.
+  - id: supersede
+    type: loop
+    condition: "size(nodes.scan.expired) > 0"
+    parallel: true
+    items: "{{ nodes.scan.expired }}"
+    key: "{{ string(iter.item.id) }}"
+    on_failure: continue
+    inline:
+      entry: [mark]
+      nodes:
+        - id: mark
+          type: action
+          uses: github/issue.comment.update@1
+          with:
+            owner: "{{ inputs.repo.split('/')[0] }}"
+            repo: "{{ inputs.repo.split('/')[1] }}"
+            comment_id: "{{ iter.item.id }}"
+            body: >-
+              <!-- autopilot-lease run={{ iter.item.run }} expires={{ iter.item.expires }} state=superseded workflow={{ iter.item.workflow }} -->
+
+              Lease of run `{{ iter.item.run }}` expired and was taken over by run `{{ inputs.run_id }}` ({{ inputs.workflow_name }}).
+
+  - id: plan
+    type: compute
+    outputs:
+      expires: "{{ string(timestamp(now()) + duration(string(inputs.ttl_minutes) + 'm')) }}"
+      takeover_from: "{{ size(nodes.scan.expired) > 0 ? nodes.scan.expired[size(nodes.scan.expired) - 1].run : '' }}"
+      takeover_expired: "{{ size(nodes.scan.expired) > 0 ? nodes.scan.expired[size(nodes.scan.expired) - 1].expires : '' }}"
+
+  - id: mirror
+    type: action
+    uses: github/issue.labels.add@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      issue_number: "{{ inputs.number }}"
+      label: "{{ inputs.working_label }}"
+
+  - id: post
+    type: action
+    uses: github/issue.comment@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      issue_number: "{{ inputs.number }}"
+      body: >-
+        <!-- autopilot-lease run={{ inputs.run_id }} expires={{ nodes.plan.expires }} state=held workflow={{ inputs.workflow_name }} -->
+
+        🔒 **Autopilot lease**: `{{ inputs.workflow_name }}` run `{{ inputs.run_id }}` is working on this. The lease expires {{ nodes.plan.expires }}; other Autopilot runs leave this item alone until then.{{ nodes.plan.takeover_from != '' ? '\n\nTook over an expired lease from run `' + nodes.plan.takeover_from + '` (expired ' + nodes.plan.takeover_expired + ').' : '' }}
+
+  - id: post_failed
+    type: save_message
+    args:
+      role: assistant
+      display_style: warning
+      content: "Could not post the lease comment on {{ inputs.repo }}#{{ inputs.number }}: {{ nodes.post.content }}"
+
+  # Let a concurrent run's lease land before the race check.
+  - id: settle
+    type: run
+    timeout: 2m
+    args:
+      command: "sleep {{ inputs.settle_seconds }}"
+      credentials: none
+
+  - id: second_read
+    type: action
+    uses: github/issue.comment.list@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      issue_number: "{{ inputs.number }}"
+
+  # Another held, live lease posted before ours (earliest created_at, then lowest id) wins.
+  - id: race
+    type: compute
+    outputs:
+      earlier: >-
+        {{ nodes.second_read.data.items
+             .filter(c, c.user == nodes.me.data.login && c.body.startsWith('<!-- autopilot-lease '))
+             .map(c, {'id': c.id, 'created_at': c.created_at,
+                      'run': regex.extract(c.body, 'run=([^ ]+)').orValue('?'),
+                      'expires': regex.extract(c.body, 'expires=([^ ]+)').orValue('1970-01-01T00:00:00Z'),
+                      'state': regex.extract(c.body, 'state=([^ ]+)').orValue('unknown')})
+             .filter(l, l.state == 'held' && l.run != inputs.run_id && timestamp(l.expires) > timestamp(now())
+                        && (l.created_at < nodes.post.data.created_at
+                            || (l.created_at == nodes.post.data.created_at && l.id < nodes.post.data.id)))
+             .sortBy(l, l.created_at) }}
+      later: >-
+        {{ nodes.second_read.data.items
+             .filter(c, c.user == nodes.me.data.login && c.body.startsWith('<!-- autopilot-lease ') && c.id > nodes.post.data.id)
+             .map(c, regex.extract(c.body, 'run=([^ ]+)').orValue('?'))
+             .filter(r, r != inputs.run_id) }}
+
+  - id: step_aside
+    type: action
+    uses: github/issue.comment.update@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      comment_id: "{{ nodes.post.data.id }}"
+      body: >-
+        <!-- autopilot-lease run={{ inputs.run_id }} expires={{ nodes.plan.expires }} state=released workflow={{ inputs.workflow_name }} -->
+
+        🔓 Stepped aside: run `{{ nodes.race.earlier[0].run }}` posted its lease first.
+
+  - id: lost
+    type: compute
+    outputs:
+      lease_id: "{{ nodes.post.data.id }}"
+      winner: "{{ nodes.race.earlier[0].run }}"
+      detail: "COLLISION-LOST: run {{ nodes.race.earlier[0].run }} leased first ({{ nodes.race.earlier[0].created_at }} vs ours {{ nodes.post.data.created_at }}); this run exits"
+
+  - id: lost_note
+    type: save_message
+    args:
+      role: assistant
+      content: "{{ nodes.lost.detail }}"
+
+  - id: won
+    type: compute
+    outputs:
+      lease_id: "{{ nodes.post.data.id }}"
+      started_at: "{{ nodes.post.data.created_at }}"
+      expires: "{{ nodes.plan.expires }}"
+      takeover_from: "{{ nodes.plan.takeover_from }}"
+      detail: "{{ nodes.plan.takeover_from != '' ? 'TAKEOVER: took over the expired lease of run ' + nodes.plan.takeover_from + '; lease until ' + nodes.plan.expires : 'ACQUIRE: lease until ' + nodes.plan.expires }}{{ size(nodes.race.later) > 0 ? ' (COLLISION-WON: run(s) ' + nodes.race.later.join(',') + ' posted after us and must step aside)' : '' }}"
+
+  - id: won_note
+    type: save_message
+    args:
+      role: assistant
+      content: "{{ nodes.won.detail }} on {{ inputs.repo }}#{{ inputs.number }}"
+
+edges:
+  - from: me
+    default: first_read
+  - from: first_read
+    default: scan
+  - from: scan
+    cases:
+      - to: [unreadable]
+        condition: "!nodes.scan.ok"
+        label: unreadable
+      - to: [held]
+        condition: "size(nodes.scan.live) > 0"
+        label: held
+      - to: [supersede]
+        condition: "true"
+        label: free
+  - from: held
+    default: held_note
+  - from: supersede
+    default: plan
+  - from: plan
+    default: mirror
+  - from: mirror
+    default: post
+  - from: post
+    cases:
+      - to: [post_failed]
+        condition: "nodes.post.is_error"
+        label: failed
+      - to: [settle]
+        condition: "true"
+        label: posted
+  - from: settle
+    default: second_read
+  - from: second_read
+    default: race
+  - from: race
+    cases:
+      - to: [step_aside]
+        condition: "size(nodes.race.earlier) > 0"
+        label: lost
+      - to: [won]
+        condition: "true"
+        label: won
+  - from: step_aside
+    default: lost
+  - from: lost
+    default: lost_note
+  - from: won
+    default: won_note

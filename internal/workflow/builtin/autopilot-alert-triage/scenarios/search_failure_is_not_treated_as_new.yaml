@@ -1,0 +1,14 @@
+name: search_failure_is_not_treated_as_new
+description: >-
+  If the fingerprint search fails (rate limit), the alert is NOT filed: a duplicate issue is worse than a missed one, and the next delivery retries.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "reliant-labs/control-plane", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "1111111111111111", "labels": {"alertname": "A"}, "annotations": {"summary": "A is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": true, "content": "rate limited"}
+expect:
+  outcome: completed
+  completed: [classify, fresh]
+  not_reached: [file.created, file.agent]
+  node_outputs:
+    verdicts: {summary: "1111111111111111=search_failed"}
+    fresh: {new: []}

@@ -1,0 +1,12 @@
+name: creates_each_label_and_tolerates_failure
+description: >-
+  Each label is created once with its colour; one that already exists, or fails, does not stop the others.
+inputs: {"repo": "reliant-labs/forge", "labels": [{"name": "agent:ready", "color": "0e8a16", "description": "d"}, {"name": "agent:working", "color": "fbca04", "description": "d"}]}
+events:
+  - node: each.create
+    output: {"is_error": false, "data": {"created": true}}
+  - node: each.create
+    output: {"is_error": true, "content": "forbidden"}
+expect:
+  outcome: completed
+  completed: [each]

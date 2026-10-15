@@ -1,0 +1,22 @@
+name: recheck_counts_trusted_comments_that_arrived_during_the_run
+description: >-
+  Release first, then re-check: a trusted person's comment newer than the lease counts; a stranger's, an older one and Autopilot's own do not.
+inputs: {"repo": "reliant-labs/forge", "number": 743, "run_id": "run-A", "workflow_name": "autopilot-issue-worker", "lease_id": 100, "since": "2026-10-14T20:00:00Z", "trusted": ["225976313"]}
+events:
+  - node: me
+    output: {"is_error": false, "data": {"login": "reliant-01", "id": 225976313}}
+  - node: mark
+    output: {"is_error": false, "data": {"id": 1}}
+  - node: comments
+    output: {"is_error": false, "data": {"items": [{"id": 100, "user": "reliant-01", "user_id": 225976313, "created_at": "2026-10-14T20:00:00Z", "html_url": "c100", "body": "<!-- autopilot-lease run=run-A expires=2099-01-01T00:00:00Z state=held workflow=w -->\nx"}]}}
+  - node: drop_label
+    output: {"is_error": false, "data": {}}
+  - node: recheck_read
+    output: {"is_error": false, "data": {"items": [{"id": 1, "user": "someone", "user_id": 225976313, "created_at": "2026-10-14T20:10:00Z", "html_url": "h1", "body": "please also fix x"}, {"id": 2, "user": "someone", "user_id": 999, "created_at": "2026-10-14T20:11:00Z", "html_url": "h2", "body": "spam"}, {"id": 3, "user": "someone", "user_id": 225976313, "created_at": "2026-10-14T19:00:00Z", "html_url": "h3", "body": "old"}, {"id": 4, "user": "someone", "user_id": 225976313, "created_at": "2026-10-14T20:12:00Z", "html_url": "h4", "body": "<!-- autopilot -->\nours"}]}}
+expect:
+  outcome: completed
+  completed: [recheck]
+  node_outputs:
+    recheck: {found: 1}
+  outputs:
+    recheck_found: 1

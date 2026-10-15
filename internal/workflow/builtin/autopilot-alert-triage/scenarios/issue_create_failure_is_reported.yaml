@@ -1,0 +1,16 @@
+name: issue_create_failure_is_reported
+description: >-
+  GitHub refuses to create the issue: it is reported and nothing else is attempted for that alert.
+inputs: {"service_repos": {"reliant-api-server": "reliant-labs/reliant", "temporal-worker": "reliant-labs/reliant", "forge": "reliant-labs/forge"}, "default_repo": "reliant-labs/control-plane", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "1111111111111111", "labels": {"alertname": "A"}, "annotations": {"summary": "A is firing"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 0, "items": []}}
+  - node: file.labels
+    black_box: true
+    output: {}
+  - node: file.created
+    output: {"is_error": true, "content": "GitHub validation failed"}
+expect:
+  outcome: completed
+  completed: [file.created, file.create_failed]
+  not_reached: [file.lease, file.agent]

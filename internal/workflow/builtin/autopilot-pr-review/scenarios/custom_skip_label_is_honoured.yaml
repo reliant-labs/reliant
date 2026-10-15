@@ -1,0 +1,27 @@
+name: custom_skip_label_is_honoured
+description: The skip label is an input; a PR carrying the configured label is skipped, and the default label then means nothing.
+inputs:
+  repos: [reliant-labs/forge]
+  skip_label: no-bot
+  repo: reliant-labs/forge
+  pr_number: 105
+events:
+  - node: me
+    output: {is_error: false, data: {login: reliant-01, id: 225976313}}
+  - node: pr
+    output:
+      is_error: false
+      data:
+        number: 105
+        state: open
+        draft: false
+        user: nunoo
+        title: Docs
+        head: {ref: docs, sha: 0123456789abcdef0123456789abcdef01234567}
+        base: {ref: main, sha: fedcba9876543210fedcba9876543210fedcba98}
+  - node: issue
+    output: {is_error: false, data: {labels: [no-bot], is_pull_request: true, state: open}}
+expect:
+  outcome: completed
+  completed: [eligible, skipped]
+  not_reached: [review, post]

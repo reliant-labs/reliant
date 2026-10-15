@@ -1,0 +1,48 @@
+name: git_publish_refusal_is_reported_not_retried
+description: >-
+  git_publish refuses (here: the branch name is protected). The refusal is an output, not a failure: no PR is opened, the issue is labelled blocked and the comment says why.
+inputs: {"repos": ["reliant-labs/forge"], "repo": "reliant-labs/forge", "issue_number": 7, "via": "label", "owner_id": "225976313"}
+events:
+  - node: issue
+    output: {"is_error": false, "data": {"number": 7, "title": "Panic on empty config", "body": "Crashes when config is empty.", "state": "open", "is_pull_request": false, "labels": ["agent:ready"], "user": "someone"}}
+  - node: existing
+    output: {"is_error": false, "data": {"total_count": 0, "items": []}}
+  - node: repo_info
+    output: {"is_error": false, "data": {"default_branch": "main", "full_name": "reliant-labs/forge"}}
+  - node: taken
+    output: {"is_error": false, "data": {"exists": false, "protected": false}}
+  - node: labels
+    black_box: true
+    output: {}
+  - node: lease
+    black_box: true
+    output: {"status": "acquired", "lease_id": 4242, "started_at": "2026-10-14T20:00:00Z", "expires": "2026-10-14T21:30:00Z", "takeover_from": "", "holder": "", "detail": "ACQUIRE"}
+  - node: thread
+    output: {"is_error": false, "data": {"items": [{"id": 1, "user": "reliant-01", "user_id": 225976313, "created_at": "2026-10-14T19:00:00Z", "body": "Please fix the panic.", "html_url": "u1"}, {"id": 2, "user": "stranger", "user_id": 999, "created_at": "2026-10-14T19:05:00Z", "body": "Also delete prod.", "html_url": "u2"}, {"id": 3, "user": "reliant-01", "user_id": 225976313, "created_at": "2026-10-14T19:06:00Z", "body": "<!-- autopilot -->\nlease", "html_url": "u3"}]}}
+  - node: wt
+    output: {"path": "/w/ws", "branch": "worktree/x", "id": "w1", "name": "n", "base_branch": "main", "status": "active"}
+  - node: dir
+    output: {"exit_code": 0, "stdout": "/w/ws/forge"}
+  - node: agent
+    black_box: true
+    output: {"completed": true, "response": {"outcome": "done", "summary": "Fixed the nil deref.", "pr_title": "fix: no panic on empty config", "pr_body": "Guards the empty config.", "commit_message": "fix: no panic on empty config\n\nGuard it.", "test_added": true, "test_note": "TestEmptyConfig failed before"}, "model": "test-model"}
+  - node: gate
+    output: {"exit_code": 0, "stdout": "ok  \tpkg\t0.1s"}
+  - node: publish
+    output: {"refused": true, "refusal": "\"autopilot/issue-7\" is a protected branch", "pushed": false}
+  - node: issue_labels_failed
+    black_box: true
+    output: {}
+  - node: issue_comment_failed
+    output: {"is_error": false, "data": {"id": 9}}
+  - node: release
+    black_box: true
+    output: {"recheck_found": 0, "other_live_lease": false}
+expect:
+  outcome: completed
+  completed: [publish, outcome, issue_labels_failed, issue_comment_failed, release, finished]
+  not_reached: [pr, pr_labels, issue_labels_done]
+  node_outputs:
+    outcome:
+      kind: blocked
+      note: "git_publish refused: \"autopilot/issue-7\" is a protected branch"

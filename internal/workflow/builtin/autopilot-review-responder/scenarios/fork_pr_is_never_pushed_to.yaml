@@ -1,0 +1,27 @@
+name: fork_pr_is_never_pushed_to
+description: >-
+  The PR's head lives in a fork: the responder does nothing, since it never pushes to a fork.
+inputs: {"repos": ["reliant-labs/forge"], "trusted_ids": [], "repo": "reliant-labs/forge", "pr_number": 55, "event": "review by x", "owner_id": "225976313"}
+events:
+  - node: rounds.me
+    output: {"is_error": false, "data": {"login": "reliant-01", "id": 225976313}}
+  - node: rounds.pr
+    output: {"is_error": false, "data": {"number": 55, "state": "open", "title": "fix: x", "body": "Closes #7", "user": "reliant-01", "head": {"ref": "autopilot/issue-7", "sha": "0123456789abcdef0123456789abcdef01234567", "repo": "someone/forge"}, "base": {"ref": "main", "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "repo": "reliant-labs/forge"}}}
+  - node: rounds.issue
+    output: {"is_error": false, "data": {"labels": ["agent:authored"], "state": "open", "is_pull_request": true}}
+  - node: rounds.repo_info
+    output: {"is_error": false, "data": {"default_branch": "main"}}
+  - node: rounds.head_branch
+    output: {"is_error": false, "data": {"exists": true, "protected": false}}
+  - node: rounds.reviews
+    output: {"is_error": false, "data": {"items": [{"id": 900, "state": "CHANGES_REQUESTED", "body": "Please handle the nil case.", "html_url": "r900", "user": "reliant-01", "user_id": 225976313, "submitted_at": "2026-10-14T20:10:00Z"}]}}
+  - node: rounds.inline
+    output: {"is_error": false, "data": {"items": []}}
+  - node: rounds.convo
+    output: {"is_error": false, "data": {"items": []}}
+expect:
+  outcome: completed
+  completed: [rounds.exit_note]
+  not_reached: [rounds.lease, rounds.publish]
+  node_outputs:
+    rounds.plan: {status: fork}
