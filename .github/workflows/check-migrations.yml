@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - "internal/db/migrations/**"
-      - "internal/db/postgres/schema.sql"
+      - "db/migrations/**"
+      - "internal/db/migrate*.go"
+      - "internal/db/goose_bridge.go"
       - "scripts/check-migrations.sh"
       - "cmd/check-migrations/**"
       - "internal/db/migrationcheck/**"
@@ -14,7 +16,9 @@ on:
       - main
     paths:
       - "internal/db/migrations/**"
-      - "internal/db/postgres/schema.sql"
+      - "db/migrations/**"
+      - "internal/db/migrate*.go"
+      - "internal/db/goose_bridge.go"
       - "scripts/check-migrations.sh"
       - "cmd/check-migrations/**"
       - "internal/db/migrationcheck/**"
@@ -164,20 +168,18 @@ jobs:
         run: |
           goose -dir internal/db/migrations/postgres postgres "$DATABASE_URL" up
 
-      - name: Validate schema.sql agrees with the migrations
+      # schema.sql and its drift tests are gone (P5a, reliant #914): the schema
+      # is db/migrations (forge), and goose's history is frozen. This proves the
+      # one migration path (internal/db/migrate.go) applies the baseline to a
+      # fresh database, adopts or catches up goose databases, and refuses what
+      # it must, against a real Postgres.
+      - name: Validate migrations apply, adopt, catch up and refuse
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/reliant_ci?sslmode=disable
+          REQUIRE_TEST_DB: "1"
         run: |
-          go test ./internal/db/ -run 'TestSchemaSQL' -count=1 -v 2>&1 | tee /tmp/drift.log
-          # These guards skip themselves when DATABASE_URL is unset, and a skip
-          # still exits 0. Assert they ran, or a misconfigured env here would
-          # report green having compared nothing.
-          for t in TestSchemaSQLMatchesMigrations TestSchemaSQLColumnsMatchMigrations; do
-            grep -q -- "--- PASS: $t" /tmp/drift.log || {
-              echo "::error::$t did not run — the drift guard verified nothing"
-              exit 1
-            }
-          done
+          go test ./internal/db/ -count=1 \
+            -run 'TestBaselineAdopts|TestGooseHistoryIsFrozen|TestMigrate_|TestPlanMigration|TestPendingMigrations|TestWaitForSchema'
 
       - name: Summary
         if: always()

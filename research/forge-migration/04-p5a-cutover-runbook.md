@@ -307,9 +307,12 @@ release first. So, all of:
    predates the bridge and the re-cut and must be redone, not merged.
 5. Optionally later: a forge migration drops `goose_db_version`.
 
-## 10. For a human with workflow permission
+## 10. CI workflow edit (applied 2026-10-15)
 
-`.github/workflows/check-migrations.yml` (the GitHub App token cannot push it):
+Applied to `.github/workflows/check-migrations.yml` once the merge token could
+push workflow files (it pushed `pr-ci.yml` in #941). Verified by replaying the
+job locally: goose up into a fresh database, then the new step (14 tests pass,
+none skipped). What changed:
 - `paths:` add `db/migrations/**` and `internal/db/migrate*.go`,
   `internal/db/goose_bridge.go`; drop `internal/db/postgres/schema.sql`.
 - Replace "Validate schema.sql agrees with the migrations" (the schema.sql
