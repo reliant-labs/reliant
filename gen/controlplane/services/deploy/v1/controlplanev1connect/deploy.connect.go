@@ -383,6 +383,12 @@ type DeployServiceClient interface {
 	// fails in seconds with the remedy named, rather than after a build; the
 	// enforcement exists because a pre-flight is advisory and a client may skip
 	// it. Allowed=false is a normal response, not an error.
+	//
+	// environment_id MAY BE EMPTY: a first deploy to an environment that does
+	// not exist yet is exactly what the pre-flight is for, and it runs before
+	// anything creates one. Empty excludes no environment from the org-wide
+	// static count, and a refusal carries no hold link (there is no environment
+	// to link it to).
 	CheckDeployCapacity(context.Context, *connect.Request[v1.CheckDeployCapacityRequest]) (*connect.Response[v1.CheckDeployCapacityResponse], error)
 	// ReportLocalSession upserts one `forge env up` worktree's presence.
 	//
@@ -1141,6 +1147,12 @@ type DeployServiceHandler interface {
 	// fails in seconds with the remedy named, rather than after a build; the
 	// enforcement exists because a pre-flight is advisory and a client may skip
 	// it. Allowed=false is a normal response, not an error.
+	//
+	// environment_id MAY BE EMPTY: a first deploy to an environment that does
+	// not exist yet is exactly what the pre-flight is for, and it runs before
+	// anything creates one. Empty excludes no environment from the org-wide
+	// static count, and a refusal carries no hold link (there is no environment
+	// to link it to).
 	CheckDeployCapacity(context.Context, *connect.Request[v1.CheckDeployCapacityRequest]) (*connect.Response[v1.CheckDeployCapacityResponse], error)
 	// ReportLocalSession upserts one `forge env up` worktree's presence.
 	//

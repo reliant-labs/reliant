@@ -4390,7 +4390,9 @@ func (x *DeployCapacityDemand) GetStaticStorageGib() int64 {
 type CheckDeployCapacityRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The environment being deployed to. Its OTHER sites are excluded from the
-	// org-wide static count so a redeploy does not count itself twice.
+	// org-wide static count so a redeploy does not count itself twice. Empty
+	// means the environment does not exist yet (a first deploy): nothing is
+	// excluded, and every static site the org already holds is counted.
 	EnvironmentId string                `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
 	Demand        *DeployCapacityDemand `protobuf:"bytes,2,opt,name=demand,proto3" json:"demand,omitempty"`
 	unknownFields protoimpl.UnknownFields
