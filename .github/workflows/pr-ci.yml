@@ -135,11 +135,14 @@ jobs:
 
           # The nightly schedule and a manual dispatch have no change range at
           # all: they are asked for a verdict on the whole tree, so every job
-          # runs.
+          # runs — except the control-plane contract gate. That one judges a
+          # change made HERE; with no change, all it could report is that
+          # control-plane moved, which is control-plane's gate to catch (see
+          # cp-contract), and it would turn the nightly red for it.
           if [ "${EVENT_NAME}" != "push" ] && [ "${EVENT_NAME}" != "pull_request" ]; then
             echo "non_gomod=true" >> "$GITHUB_OUTPUT"
-            echo "cp_contract=true" >> "$GITHUB_OUTPUT"
-            echo "${EVENT_NAME} run — running everything"
+            echo "cp_contract=false" >> "$GITHUB_OUTPUT"
+            echo "${EVENT_NAME} run — running everything but the cp-contract gate"
             exit 0
           fi
 
