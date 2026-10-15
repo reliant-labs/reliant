@@ -23,8 +23,6 @@ name: PR CI
 # issue when one goes red. `workflow_dispatch` runs the full tier on any branch
 # on demand: use it on a PR that touches code only the full tier exercises.
 on:
-  pull_request:
-    branches: [main]
   push:
     branches: [main]
   schedule:

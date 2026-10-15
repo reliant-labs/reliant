@@ -1,0 +1,110 @@
+name: CI experiment (Go test wall time; never merged)
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go ${{ matrix.variant }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { variant: p4, p: 4, shard: 0, shards: 1 }
+          - { variant: p8, p: 8, shard: 0, shards: 1 }
+          - { variant: p4-shard1of2, p: 4, shard: 0, shards: 2 }
+          - { variant: p4-shard2of2, p: 4, shard: 1, shards: 2 }
+          - { variant: p8-shard1of2, p: 8, shard: 0, shards: 2 }
+          - { variant: p8-shard2of2, p: 8, shard: 1, shards: 2 }
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reliant
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/reliant?sslmode=disable
+      REQUIRE_TEST_DB: "1"
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        id: setup-go
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: go-mod-${{ runner.os }}-
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-build-backend-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-build-backend-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
+            go-build-backend-${{ runner.os }}-
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: go mod download
+        run: time go mod download
+      - name: go test
+        env:
+          P: ${{ matrix.p }}
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ matrix.shards }}
+        run: |
+          set -uo pipefail
+          nproc; free -g
+          pkgs=$(go list ./... | grep -v '^github.com/reliant-labs/reliant/e2e$' | awk -v n="$SHARDS" -v k="$SHARD" '(NR-1) % n == k')
+          echo "$(echo "$pkgs" | wc -l) packages"
+          start=$(date +%s)
+          go test -short -p "$P" -json -timeout 10m $pkgs > results.json
+          rc=$?
+          end=$(date +%s)
+          echo "WALL $((end-start))s rc=$rc"
+          t0=$(jq -r 'select(.Action=="start") | .Time' results.json | sort | head -1)
+          echo "first package start: $t0"
+          echo "--- slowest packages (elapsed, started-at offset) ---"
+          jq -r --arg t0 "$t0" 'select(.Test == null and (.Action=="start")) | [.Package, .Time] | @tsv' results.json > starts.tsv
+          jq -r 'select(.Test == null and (.Action=="pass" or .Action=="fail" or .Action=="skip")) | [.Package, (.Elapsed|tostring), .Time] | @tsv' results.json > ends.tsv
+          python3 - <<'EOF'
+          import csv, datetime
+          def ts(s):
+              s = s.replace('Z', '+00:00')
+              if '.' in s:
+                  head, rest = s.split('.', 1)
+                  frac, tz = rest[:-6], rest[-6:]
+                  s = head + '.' + frac[:6] + tz
+              return datetime.datetime.fromisoformat(s)
+          starts = {r[0]: ts(r[1]) for r in csv.reader(open('starts.tsv'), delimiter='\t')}
+          ends = {r[0]: (float(r[1]), ts(r[2])) for r in csv.reader(open('ends.tsv'), delimiter='\t')}
+          t0 = min(starts.values())
+          rows = sorted(((e[0], (starts[p]-t0).total_seconds(), (e[1]-t0).total_seconds(), p) for p, e in ends.items() if p in starts), key=lambda r: -r[2])
+          for el, st, en, p in rows[:25]:
+              print(f"end+{en:6.1f}s start+{st:6.1f}s run {el:6.1f}s  {p}")
+          print("sum of run time:", round(sum(r[0] for r in rows), 1))
+          EOF
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-${{ matrix.variant }}
+          path: results.json
+          retention-days: 3
