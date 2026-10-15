@@ -23,6 +23,7 @@ import (
 func TestRunCommand_CancelledCommandRunsCleanup(t *testing.T) {
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "cleanup.txt")
+	ready := filepath.Join(dir, "ready.txt")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -31,6 +32,7 @@ func TestRunCommand_CancelledCommandRunsCleanup(t *testing.T) {
 	go func() {
 		res, err := NewLocalClient().RunCommand(ctx, &RunCommandRequest{
 			Command: `trap 'echo cleaned > ` + marker + `; exit 0' TERM
+			          : > ` + ready + `
 			          while true; do sleep 0.05; done`,
 			WorkingDir: dir,
 			TimeoutMs:  60_000,
@@ -41,7 +43,19 @@ func TestRunCommand_CancelledCommandRunsCleanup(t *testing.T) {
 		done <- res
 	}()
 
-	time.Sleep(500 * time.Millisecond) // let the trap install
+	// Cancel only once the script says its trap is installed. A fixed sleep
+	// raced the shell's startup on a loaded host: SIGTERM arrived before the
+	// trap and killed the shell outright, failing a correct implementation.
+	readyBy := time.Now().Add(15 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(readyBy) {
+			t.Fatal("the command never installed its SIGTERM trap")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	cancel()
 
 	select {
