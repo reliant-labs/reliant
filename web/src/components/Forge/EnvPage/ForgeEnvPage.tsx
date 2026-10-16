@@ -14,7 +14,6 @@
  *                                   O-14). Render with the daemon asleep.
  *   Running                         what `forge env up` runs on the daemon's
  *                                   machine — a LOCAL env's first question.
- *   Changes · Checks                read the user's checkout via the daemon.
  *
  * ── WHEN THIS PAGE ASKS THE DAEMON WITHOUT A TAB ASKING ─────────────────────
  *
@@ -76,8 +75,6 @@ import { envHeadline } from "./envHeadline";
 import { QueuedDeployBanner } from "./QueuedDeployBanner";
 import {
   ActivityTab,
-  ChangesTab,
-  ChecksTab,
   DomainsTab,
   ObservabilityTab,
   OverviewTab,
@@ -188,7 +185,6 @@ export function ForgeEnvPage() {
   // Billing, with this page as the way back (and its project in the URL).
   const goToBilling = useGoToBilling("forge");
 
-  const [checkoutPath, setCheckoutPath] = useState("");
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
 
@@ -440,7 +436,7 @@ export function ForgeEnvPage() {
             domainsLoading={domains.isLoading}
             onManageDomains={openDomainsScreen}
           />
-        ) : tab === "secrets" ? (
+        ) : (
           <SecretsTab
             projectId={projectId}
             live={liveEnv}
@@ -448,33 +444,6 @@ export function ForgeEnvPage() {
             forgeProject={projectName.name}
             selectedSecret={secretParam ?? null}
             onSelectSecret={selectSecret}
-          />
-        ) : tab === "changes" ? (
-          <ChangesTab
-            projectId={projectId}
-            envName={envName}
-            daemon={tabDaemon}
-            lifecycle={lifecycle}
-            checkoutPath={checkoutPath}
-            onCheckoutChange={setCheckoutPath}
-            onDeploy={lifecycle === "local" ? undefined : () => setDeployOpen(true)}
-            onRetryDaemon={() => void topology.refetch()}
-          />
-        ) : (
-          <ChecksTab
-            projectId={projectId}
-            envName={envName}
-            daemon={tabDaemon}
-            lifecycle={lifecycle}
-            envStatus={envStatus.data}
-            envStatusLoading={envStatus.isLoading}
-            envStatusError={envStatus.error as Error | null}
-            canVerify={(forgeEnv?.images?.length ?? 0) > 0}
-            projectName={currentProject?.name}
-            onRetryDaemon={() => {
-              void topology.refetch();
-              void envStatus.refetch();
-            }}
           />
         )}
       </div>
@@ -496,7 +465,6 @@ export function ForgeEnvPage() {
           projectId={projectId}
           env={envName}
           projectName={currentProject?.name}
-          checkoutPath={checkoutPath}
         />
       )}
     </div>

@@ -5,24 +5,19 @@
  * environment gets which, and which tabs read the daemon.
  *
  * Every panel is built from existing pieces — LiveState, LiveWorkloads,
- * LiveReleases, LiveSecretsSection, DevStackPanel, WorkloadInventory,
- * AuditStrip, EnvDiffCard, RegisterEnvPanel — re-grouped by the question they
+ * LiveReleases, LiveSecretsSection, DevStackPanel, RegisterEnvPanel —
+ * re-grouped by the question they
  * answer. Sections are forge-ui Cards with a CardHeader, rather than three
  * hand-rolled copies of the same heading-and-rule.
  */
 
 import { lazy, Suspense, useState, type ReactNode } from "react";
-import { Play, RefreshCw, Rocket } from "lucide-react";
+import { Play, RefreshCw } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { Button } from "@/components/ui/Button";
 import type { DomainsState } from "@/hooks/forge-domain-queries";
-import {
-  useForgeAudit,
-  useForgeCheckouts,
-  useVerifyForgeEnv,
-} from "@/hooks/forge-queries";
 import type { CloudEnvStatus, CloudPromotion } from "@/services/forge/cloudEnvs";
 import { declaredNotBuilt, isPlacedKind, neverBuilt, type LiveConvergence, type LiveEnv } from "@/services/forge/live";
 import { devStackRunsHere, type DaemonSide } from "@/services/forge/environments";
@@ -30,11 +25,7 @@ import type { ForgeEnvStatusReport } from "@/services/forge/status";
 import type { ForgeOutcome, ForgeTopologyEnv } from "@/services/forge/topology";
 import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 
-import { AuditStrip } from "../Audit/AuditStrip";
-import { WorkloadInventory } from "../Environments/WorkloadInventory";
 import { formatTimestamp } from "../Overview/EnvironmentTable";
-import { CheckoutPicker } from "../Preview/CheckoutPicker";
-import { EnvDiffCard } from "../Preview/EnvDiffCard";
 import { RegisterEnvPanel } from "../Preview/RegisterEnvPanel";
 import { DevStackPanel } from "../Status/DevStackPanel";
 import { DaemonNeeded } from "./DaemonNeeded";
@@ -516,173 +507,6 @@ export function RunningTab({
         projectName={projectName}
         servicesFirst
       />
-    </div>
-  );
-}
-
-// ── Changes (daemon) ────────────────────────────────────────────────────────
-
-export function ChangesTab({
-  projectId,
-  envName,
-  daemon,
-  lifecycle,
-  checkoutPath,
-  onCheckoutChange,
-  onDeploy,
-  onRetryDaemon,
-}: {
-  projectId: string | null;
-  envName: string;
-  daemon: DaemonSide;
-  lifecycle: "local" | "deployed";
-  checkoutPath: string;
-  onCheckoutChange: (path: string) => void;
-  /** Deploy THIS branch. Absent for a local env. */
-  onDeploy?: () => void;
-  onRetryDaemon?: () => void;
-}) {
-  const daemonOk = daemon === "ok";
-  const checkouts = useForgeCheckouts(daemonOk ? projectId : null);
-
-  if (daemon === "offline") {
-    return <DaemonNeeded what={`what your branch would change in ${envName}`} onRetry={onRetryDaemon} />;
-  }
-  if (daemon === "loading") return <PanelSkeleton testId="changes-loading" />;
-
-  return (
-    <div className="space-y-4" data-testid="changes-tab">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <CheckoutPicker
-          report={checkouts.data?.kind === "report" ? checkouts.data.report : null}
-          selected={checkoutPath}
-          onSelect={onCheckoutChange}
-          isLoading={checkouts.isLoading}
-        />
-        {onDeploy && lifecycle !== "local" && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onDeploy}
-            leftIcon={<Rocket className="h-3.5 w-3.5" />}
-            data-testid="changes-deploy"
-          >
-            Deploy this branch…
-          </Button>
-        )}
-      </div>
-      {/* ONE card, for THIS environment. The page is about one environment;
-          listing every declared env's diff under prod's name answered a
-          question nobody on this page asked. Keyed by checkout so a branch
-          change cannot leave the previous branch's answer open. */}
-      <EnvDiffCard
-        key={`${checkoutPath}:${envName}`}
-        projectId={projectId}
-        env={envName}
-        checkoutPath={checkoutPath}
-        defaultOpen
-      />
-    </div>
-  );
-}
-
-// ── Checks (daemon) ─────────────────────────────────────────────────────────
-
-export function ChecksTab({
-  projectId,
-  envName,
-  daemon,
-  lifecycle,
-  envStatus,
-  envStatusLoading,
-  envStatusError,
-  canVerify,
-  projectName,
-  onRetryDaemon,
-}: {
-  projectId: string | null;
-  envName: string;
-  daemon: DaemonSide;
-  lifecycle: "local" | "deployed";
-  envStatus: ForgeOutcome<ForgeEnvStatusReport> | undefined;
-  envStatusLoading: boolean;
-  envStatusError: Error | null;
-  canVerify: boolean;
-  projectName?: string;
-  onRetryDaemon?: () => void;
-}) {
-  const daemonOk = daemon === "ok";
-  const audit = useForgeAudit(daemonOk ? projectId : null);
-  const { verify, pendingEnv, lastOutcome } = useVerifyForgeEnv(projectId);
-  const [verified, setVerified] = useState(false);
-
-  if (daemon === "offline") {
-    return <DaemonNeeded what={`forge's checks of ${envName} and this project`} onRetry={onRetryDaemon} />;
-  }
-  if (daemon === "loading") return <PanelSkeleton testId="checks-loading" />;
-
-  const verifyNotice =
-    lastOutcome && lastOutcome.env === envName
-      ? lastOutcome.outcome.kind === "unreachable"
-        ? `The cluster could not be read, so ${envName} is still unverified.`
-        : lastOutcome.outcome.kind === "unsupported"
-          ? `forge ${lastOutcome.outcome.meta.forgeVersion} cannot verify this environment.`
-          : `forge's verify report could not be read, so ${envName} is still unverified.`
-      : null;
-
-  return (
-    <div className="space-y-4" data-testid="checks-tab">
-      {lifecycle !== "local" && (
-        <Panel
-          title="What forge sees"
-          description="forge's render of this environment from your checkout, and what it reads from the cluster."
-          actions={
-            canVerify ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setVerified(true);
-                  verify(envName);
-                }}
-                loading={pendingEnv === envName}
-                disabled={pendingEnv === envName}
-                leftIcon={<RefreshCw className="h-3 w-3" />}
-                data-testid={`verify-${envName}`}
-                aria-label={`Verify ${envName} against its live cluster`}
-              >
-                {pendingEnv === envName ? "Reading cluster…" : "Verify against cluster"}
-              </Button>
-            ) : undefined
-          }
-          testId="preview-inventory"
-        >
-          {verified && verifyNotice && (
-            <p data-testid={`verify-notice-${envName}`} className="mb-3 text-xs text-muted-foreground">
-              {verifyNotice}
-            </p>
-          )}
-          <WorkloadInventory
-            outcome={envStatus}
-            isLoading={envStatusLoading}
-            error={envStatusError}
-            env={envName}
-            projectName={projectName}
-          />
-        </Panel>
-      )}
-      <Panel
-        title="Project audit"
-        description="forge's static analysis over this checkout's files. Project-wide, not specific to this environment."
-        testId="preview-audit"
-      >
-        <AuditStrip
-          outcome={audit.data}
-          isLoading={audit.isLoading}
-          error={audit.error as Error | null}
-          projectName={projectName}
-        />
-      </Panel>
     </div>
   );
 }

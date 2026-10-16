@@ -20,7 +20,6 @@ func init() {
 	RegisterCommand("forge.topology", handleForgeTopology)
 	RegisterCommand("forge.env_verify", handleForgeEnvVerify)
 	RegisterCommand("forge.secret_list", handleForgeSecretList)
-	RegisterCommand("forge.audit", handleForgeAudit)
 	RegisterCommand("forge.env_status", handleForgeEnvStatus)
 	RegisterCommand("forge.render_capability", handleForgeRenderCapability)
 }
@@ -561,24 +560,6 @@ func handleForgeSecretList(ctx context.Context, payload []byte) ([]byte, error) 
 		ProjectPath:    req.ProjectPath,
 		Args:           []string{"secret", "list", "--env=" + req.Env, "--json"},
 		WithholdStderr: true,
-	})
-}
-
-// --- forge.audit ---
-
-type forgeAuditRequest struct {
-	ProjectPath string `json:"project_path"`
-}
-
-func handleForgeAudit(ctx context.Context, payload []byte) ([]byte, error) {
-	var req forgeAuditRequest
-	if err := json.Unmarshal(payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid payload: %w", err)
-	}
-
-	return invokeForgeReport(ctx, forgeInvocation{
-		ProjectPath: req.ProjectPath,
-		Args:        []string{"project", "audit", "--json"},
 	})
 }
 

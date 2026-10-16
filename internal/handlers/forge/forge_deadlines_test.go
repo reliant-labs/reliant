@@ -105,8 +105,6 @@ func TestForgeRPCDeadlinesOutliveDispatchBudgets(t *testing.T) {
 		"/reliant.v1.ForgeService/GetEnvStatus": forgeEnvStatusTimeoutMs,
 		"/reliant.v1.ForgeService/GetEnvShape":  forgeEnvStatusTimeoutMs,
 		"/reliant.v1.ForgeService/GetTopology":  forgeTopologyVerifyTimeoutMs,
-		"/reliant.v1.ForgeService/DiffEnv":      forgeDeployPlanTimeoutMs,
-		"/reliant.v1.ForgeService/GetAudit":     forgeAuditTimeoutMs,
 	}
 	for procedure, budgetMs := range cases {
 		budget := time.Duration(budgetMs) * time.Millisecond

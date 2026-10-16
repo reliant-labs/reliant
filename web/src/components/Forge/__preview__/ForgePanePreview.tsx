@@ -129,38 +129,6 @@ const PROD_STATUS = {
   runtime: { env: "prod", destination: "mixed", services: [], checks: [] },
 };
 
-const CHECKOUTS = {
-  project: "control-plane",
-  main_ref: "origin/main",
-  checkouts: [
-    { label: "main", kind: "worktree", path: "/src/control-plane", branch: "main", dirty: false, ahead_of_main: 0, behind_main: 0, selected: true },
-    { label: "feat/deploy-hub", kind: "worktree", path: "/src/wt/deploy-hub", branch: "feat/deploy-hub", dirty: true, ahead_of_main: 4, behind_main: 1 },
-    { label: "fix/egress-policy", kind: "worktree", path: "/src/wt/egress", branch: "fix/egress-policy", dirty: false, ahead_of_main: 1, behind_main: 0 },
-    { label: "spike/flux-local", kind: "worktree", path: "/src/wt/flux", branch: "spike/flux-local", dirty: false },
-  ],
-};
-
-function diffFor(env: string) {
-  return {
-    environments: [
-      {
-        env,
-        status: "ok",
-        live_source: "bundle",
-        diff: {
-          changed: [
-            { kind: "Deployment", name: "admin-server", namespace: `control-plane-${env}`, fields: ["spec.template.spec.containers[0].image"] },
-            { kind: "ConfigMap", name: "admin-server-env", namespace: `control-plane-${env}`, fields: ["data.LOG_LEVEL"] },
-          ],
-          added: [{ kind: "NetworkPolicy", name: "egress-allow-hub", namespace: `control-plane-${env}` }],
-          removed: [],
-          images: [{ image: "control-plane", live: "sha256:3f2a…", candidate: "sha256:9c71…" }],
-        },
-      },
-    ],
-  };
-}
-
 // ── the control plane's answers (the backend) ───────────────────────────────
 
 const ts = (iso: string) => iso;
@@ -344,12 +312,6 @@ function answer(scenario: Scenario, path: string, body: Record<string, unknown>)
             provenance: { commit: "47d0d1525ccc", branch: "main", forge_version: "v0.1.44" },
           }),
         };
-      case "ListCheckouts":
-        return { status: 200, json: forgeReply(CHECKOUTS) };
-      case "DiffEnv":
-        return { status: 200, json: forgeReply(diffFor(String(body.env ?? "prod"))) };
-      case "GetAudit":
-        return { status: 200, json: forgeReply({ project: "control-plane", ok: true, findings: [], summary: { total: 0 } }) };
       default:
         return { status: 200, json: forgeReply({}) };
     }

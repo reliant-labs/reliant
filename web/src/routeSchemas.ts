@@ -580,9 +580,8 @@ export const forgeEnvPageSearchSchema = z.object({
    * env, `running` for a local one — so a bare link to an environment opens
    * whatever that environment leads with.
    *
-   * `live` and `preview` are the retired two-tab names, still accepted so old
-   * links land somewhere sensible: `live` is the default tab, `preview` is
-   * Changes (what the old Preview tab led with).
+   * `live`, `preview`, `changes` and `checks` are retired tab names, still
+   * accepted so old links land on the default tab rather than failing to parse.
    */
   tab: z
     .enum([

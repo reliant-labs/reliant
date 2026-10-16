@@ -174,11 +174,8 @@ var backgroundCommands = map[string]bool{
 	"exec.bg_output": true,
 	"exec.bg_status": true,
 
-	"forge.audit":             true,
-	"forge.checkouts":         true,
 	"forge.deploy_plan":       true,
 	"forge.deploy_status":     true,
-	"forge.env_diff":          true,
 	"forge.env_shape":         true,
 	"forge.env_status":        true,
 	"forge.env_verify":        true,

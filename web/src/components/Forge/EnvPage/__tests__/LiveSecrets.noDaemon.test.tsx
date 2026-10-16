@@ -59,7 +59,6 @@ vi.mock("@/api/forge-grpc", () => ({
     getTopology: daemonTripwire("getTopology"),
     verifyEnv: daemonTripwire("verifyEnv"),
     listSecrets: daemonTripwire("listSecrets"),
-    getAudit: daemonTripwire("getAudit"),
     getEnvStatus: daemonTripwire("getEnvStatus"),
     getEnvShape: daemonTripwire("getEnvShape"),
     planPromote: daemonTripwire("planPromote"),

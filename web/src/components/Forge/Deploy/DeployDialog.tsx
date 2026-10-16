@@ -44,8 +44,6 @@ export interface DeployDialogProps {
   projectId: string | null | undefined;
   env: string;
   projectName?: string;
-  /** The checkout to build and render from. Empty is the main checkout. */
-  checkoutPath?: string;
 }
 
 export function DeployDialog({
@@ -54,7 +52,6 @@ export function DeployDialog({
   projectId,
   env,
   projectName,
-  checkoutPath,
 }: DeployDialogProps) {
   /**
    * The handle being FOLLOWED. Set by a start, or by an already-running refusal
@@ -107,14 +104,14 @@ export function DeployDialog({
     setAcknowledged(new Set());
     start.reset();
     buildAndPlan.mutate(
-      { env, checkoutPath },
+      { env },
       {
         onSuccess: (result) => {
           if (result.kind === "started") setPlanHandle(result.handle);
         },
       }
     );
-  }, [buildAndPlan, start, env, checkoutPath]);
+  }, [buildAndPlan, start, env]);
 
   const handleAcknowledge = useCallback((code: string, accepted: boolean) => {
     setAcknowledged((previous) => {
@@ -138,7 +135,7 @@ export function DeployDialog({
       const guardPlan = plan.data?.kind === "report" ? plan.data.report : null;
       if (!guardPlan) return;
       start.mutate(
-        { guardPlan: guardPlan as ForgeDeployReport, approval, checkoutPath },
+        { guardPlan: guardPlan as ForgeDeployReport, approval },
         {
           onSuccess: (result) => {
             if (result.kind === "started") {
@@ -151,7 +148,7 @@ export function DeployDialog({
         }
       );
     },
-    [start, plan.data, checkoutPath]
+    [start, plan.data]
   );
 
   /**

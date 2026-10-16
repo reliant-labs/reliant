@@ -79,10 +79,6 @@ const DesignSandboxPage = lazyRoute(
 // Proving harness for the forge → reliant token bridge (see index.css).
 const ForgeTokenSandbox = lazyRoute(
   () => import('./components/forge-ui/ForgeTokenSandbox'), 'default')
-// Proving harness for the cluster-workload inventory, rendering REAL captured
-// `forge env status --json` output in every color scheme without a session.
-const WorkloadInventoryPreview = lazyRoute(
-  () => import('./components/Forge/Environments/__preview__/WorkloadInventoryPreview'), 'default')
 const SecretsPreview = lazyRoute(
   () => import('./components/Forge/Secrets/__preview__/SecretsPreview'), 'default')
 // The whole Forge pane against a fake network (control-plane's real state as
@@ -463,12 +459,6 @@ const forgeTokenSandboxRoute = createRoute({
   component: () => <DevOnlyRoute><ForgeTokenSandbox /></DevOnlyRoute>,
 })
 
-const forgeWorkloadsPreviewRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/forge-workloads-preview',
-  component: () => <DevOnlyRoute><WorkloadInventoryPreview /></DevOnlyRoute>,
-})
-
 // The secrets surface, against fabricated store states. Same reasoning as the
 // workloads preview: the complaint it answers was visual, so it has to be
 // LOOKED at in every scheme, and the states that are easiest to get wrong
@@ -839,7 +829,6 @@ const routeTree = rootRoute.addChildren([
   upgradeRoute,
   designSandboxRoute,
   forgeTokenSandboxRoute,
-  forgeWorkloadsPreviewRoute,
   forgeSecretsPreviewRoute,
   forgePanePreviewRoute,
   forgeObservabilityPreviewRoute,

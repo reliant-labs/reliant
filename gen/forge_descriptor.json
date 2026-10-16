@@ -11404,19 +11404,6 @@
           "OutputProtoFile": "reliant/v1/forge.proto"
         },
         {
-          "Name": "GetAudit",
-          "InputType": "GetForgeAuditRequest",
-          "OutputType": "GetForgeAuditResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.GetForgeAuditRequest",
-          "OutputTypeFQ": "reliant.v1.GetForgeAuditResponse",
-          "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
-        },
-        {
           "Name": "GetEnvStatus",
           "InputType": "GetForgeEnvStatusRequest",
           "OutputType": "GetForgeEnvStatusResponse",
@@ -11495,32 +11482,6 @@
           "OutputProtoFile": "reliant/v1/forge.proto"
         },
         {
-          "Name": "ListCheckouts",
-          "InputType": "ListForgeCheckoutsRequest",
-          "OutputType": "ListForgeCheckoutsResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.ListForgeCheckoutsRequest",
-          "OutputTypeFQ": "reliant.v1.ListForgeCheckoutsResponse",
-          "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
-        },
-        {
-          "Name": "DiffEnv",
-          "InputType": "DiffForgeEnvRequest",
-          "OutputType": "DiffForgeEnvResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.DiffForgeEnvRequest",
-          "OutputTypeFQ": "reliant.v1.DiffForgeEnvResponse",
-          "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
-        },
-        {
           "Name": "StartDeploy",
           "InputType": "StartForgeDeployRequest",
           "OutputType": "StartForgeDeployResponse",
@@ -11550,61 +11511,6 @@
       "ProtoFile": "reliant/v1/forge.proto",
       "ModulePath": "",
       "Messages": {
-        "DiffForgeEnvRequest": [
-          {
-            "Name": "project_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "env",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "all",
-            "ProtoType": "bool",
-            "IsOptional": false
-          },
-          {
-            "Name": "checkout_path",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "DiffForgeEnvResponse": [
-          {
-            "Name": "meta",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.ForgeReportMeta"
-          },
-          {
-            "Name": "report_json",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "GetForgeAuditRequest": [
-          {
-            "Name": "project_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "GetForgeAuditResponse": [
-          {
-            "Name": "meta",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.ForgeReportMeta"
-          },
-          {
-            "Name": "report_json",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
         "GetForgeDeployStatusRequest": [
           {
             "Name": "project_id",
@@ -11739,31 +11645,6 @@
           }
         ],
         "GetForgeTopologyResponse": [
-          {
-            "Name": "meta",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.ForgeReportMeta"
-          },
-          {
-            "Name": "report_json",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "ListForgeCheckoutsRequest": [
-          {
-            "Name": "project_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "with_tree",
-            "ProtoType": "bool",
-            "IsOptional": true
-          }
-        ],
-        "ListForgeCheckoutsResponse": [
           {
             "Name": "meta",
             "ProtoType": "message",
@@ -12025,35 +11906,6 @@
         ]
       },
       "Schemas": {
-        "reliant.v1.DiffForgeEnvRequest": [
-          {
-            "name": "project_id",
-            "kind": "string"
-          },
-          {
-            "name": "env",
-            "kind": "string"
-          },
-          {
-            "name": "all",
-            "kind": "bool"
-          },
-          {
-            "name": "checkout_path",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.DiffForgeEnvResponse": [
-          {
-            "name": "meta",
-            "kind": "message",
-            "type_name": "reliant.v1.ForgeReportMeta"
-          },
-          {
-            "name": "report_json",
-            "kind": "string"
-          }
-        ],
         "reliant.v1.ForgeDeployRefusal": [
           {
             "name": "reason",
@@ -12142,23 +11994,6 @@
           },
           {
             "name": "unreachable_reason",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.GetForgeAuditRequest": [
-          {
-            "name": "project_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.GetForgeAuditResponse": [
-          {
-            "name": "meta",
-            "kind": "message",
-            "type_name": "reliant.v1.ForgeReportMeta"
-          },
-          {
-            "name": "report_json",
             "kind": "string"
           }
         ],
@@ -12275,31 +12110,6 @@
           }
         ],
         "reliant.v1.GetForgeTopologyResponse": [
-          {
-            "name": "meta",
-            "kind": "message",
-            "type_name": "reliant.v1.ForgeReportMeta"
-          },
-          {
-            "name": "report_json",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.ListForgeCheckoutsRequest": [
-          {
-            "name": "project_id",
-            "kind": "string",
-            "validate": {
-              "required": true
-            }
-          },
-          {
-            "name": "with_tree",
-            "kind": "bool",
-            "optional": true
-          }
-        ],
-        "reliant.v1.ListForgeCheckoutsResponse": [
           {
             "name": "meta",
             "kind": "message",
@@ -12524,12 +12334,8 @@
         ]
       },
       "SchemaFiles": {
-        "reliant.v1.DiffForgeEnvRequest": "reliant/v1/forge.proto",
-        "reliant.v1.DiffForgeEnvResponse": "reliant/v1/forge.proto",
         "reliant.v1.ForgeDeployRefusal": "reliant/v1/forge.proto",
         "reliant.v1.ForgeReportMeta": "reliant/v1/forge.proto",
-        "reliant.v1.GetForgeAuditRequest": "reliant/v1/forge.proto",
-        "reliant.v1.GetForgeAuditResponse": "reliant/v1/forge.proto",
         "reliant.v1.GetForgeDeployStatusRequest": "reliant/v1/forge.proto",
         "reliant.v1.GetForgeDeployStatusResponse": "reliant/v1/forge.proto",
         "reliant.v1.GetForgeEnvShapeRequest": "reliant/v1/forge.proto",
@@ -12538,8 +12344,6 @@
         "reliant.v1.GetForgeEnvStatusResponse": "reliant/v1/forge.proto",
         "reliant.v1.GetForgeTopologyRequest": "reliant/v1/forge.proto",
         "reliant.v1.GetForgeTopologyResponse": "reliant/v1/forge.proto",
-        "reliant.v1.ListForgeCheckoutsRequest": "reliant/v1/forge.proto",
-        "reliant.v1.ListForgeCheckoutsResponse": "reliant/v1/forge.proto",
         "reliant.v1.ListForgeSecretsRequest": "reliant/v1/forge.proto",
         "reliant.v1.ListForgeSecretsResponse": "reliant/v1/forge.proto",
         "reliant.v1.PlanForgeDeployRequest": "reliant/v1/forge.proto",
@@ -34460,5 +34264,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "a35b9ed3ef2f84ca4d3bcb56a014c8984a5bb8e2368318d1ff98514eb9bf3ffe"
+  "source_hash": "8fbe7baeddc2361a323ff89a62624992707d86fbeb10a3d236ecfbc182744825"
 }

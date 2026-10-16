@@ -35,9 +35,6 @@ service ForgeService {
   // The report carries NAMES and BOOLEANS only, never a secret value.
   rpc ListSecrets(ListForgeSecretsRequest) returns (ListForgeSecretsResponse) {}
 
-  // GetAudit returns the project audit rollup.
-  rpc GetAudit(GetForgeAuditRequest) returns (GetForgeAuditResponse) {}
-
   // GetEnvStatus returns runtime checks for an environment.
   rpc GetEnvStatus(GetForgeEnvStatusRequest) returns (GetForgeEnvStatusResponse) {}
 
@@ -104,24 +101,6 @@ service ForgeService {
   // What comes back is the plan plus its digest. Show the plan, let a human
   // approve THAT, and send the digest to StartDeploy.
   rpc StartDeployPlan(StartForgeDeployPlanRequest) returns (StartForgeDeployResponse) {}
-
-  // ListCheckouts lists the checkouts a preview may render: the project's main
-  // checkout plus every git worktree, each with its branch, current commit,
-  // whether it has uncommitted changes, and how far it is from main.
-  //
-  // It is also the ALLOWLIST. Every other call here that accepts a checkout
-  // honours only a value this one returned, re-derived and checked server-side.
-  // So a request cannot point a build at an arbitrary directory, whatever it
-  // sends.
-  rpc ListCheckouts(ListForgeCheckoutsRequest) returns (ListForgeCheckoutsResponse) {}
-
-  // DiffEnv renders a checkout and compares each environment against what is
-  // deployed. READ-ONLY: no cluster is contacted, nothing is built or pushed.
-  //
-  // This is what the per-environment cards show. The document is forge's and is
-  // passed through verbatim — the comparison belongs to forge, and a second
-  // implementation here would be a copy that eventually disagrees with it.
-  rpc DiffEnv(DiffForgeEnvRequest) returns (DiffForgeEnvResponse) {}
 
   // StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,
   // and returns a handle immediately. Poll it with GetDeployStatus.
@@ -277,21 +256,6 @@ message ListForgeSecretsResponse {
   ForgeReportMeta meta = 1;
 
   // Forge's `secret list --json` document, verbatim. Names and booleans only.
-  string report_json = 2;
-}
-
-// ============================================
-// GetAudit
-// ============================================
-
-message GetForgeAuditRequest {
-  string project_id = 1;
-}
-
-message GetForgeAuditResponse {
-  ForgeReportMeta meta = 1;
-
-  // Forge's `project audit --json` document, verbatim.
   string report_json = 2;
 }
 
@@ -547,7 +511,7 @@ message PlanForgeDeployRequest {
   string env = 2;
 
   // The checkout to render — the project's main checkout when empty. Honoured
-  // only if ListCheckouts returned it for this project.
+  // only if it is one of this project's checkouts (main or a git worktree).
   string checkout_path = 3;
 }
 
@@ -588,74 +552,8 @@ message StartForgeDeployPlanRequest {
   string env = 2;
 
   // The checkout to build and render from — the project's main checkout when
-  // empty. Honoured only if ListCheckouts returned it for this project.
+  // empty. Honoured only if it is one of this project's checkouts (main or a git worktree).
   string checkout_path = 3;
-}
-
-// ============================================
-// ListCheckouts — the picker, and the allowlist
-// ============================================
-
-message ListForgeCheckoutsRequest {
-  string project_id = 1 [(buf.validate.field).required = true];
-
-  // Also compute each checkout's content hash. It costs about half a second per
-  // checkout, so it is opt-in: the picker does not need it, a diff cache does.
-  optional bool with_tree = 2;
-}
-
-message ListForgeCheckoutsResponse {
-  ForgeReportMeta meta = 1;
-
-  // Forge's checkout document, verbatim. Each entry carries the label to show,
-  // whether it is the remote main or a worktree, its path, branch and current
-  // commit, whether it has uncommitted changes, and how far ahead or behind
-  // main it is.
-  //
-  // Two fields read wrong if skimmed. "main" means the REMOTE main, not a local
-  // branch of that name — a local main that has not been fetched is a different
-  // tree. And the ahead/behind counts are OMITTED rather than zero when the
-  // comparison cannot be made at all: "in step with main" and "could not tell"
-  // are different answers, and showing the second as the first would be a
-  // confident lie about how stale a checkout is.
-  string report_json = 2;
-}
-
-// ============================================
-// DiffEnv — per-environment diff against what is deployed
-// ============================================
-
-message DiffForgeEnvRequest {
-  string project_id = 1;
-
-  // The ONE environment to diff. Exactly one of this and all — forge's own
-  // rule, mirrored here so a malformed request is refused before any work
-  // starts.
-  string env = 2;
-
-  // Diff every environment declared in the checkout, in one document. This is
-  // the form the cards use: one render serves them all, so asking once is
-  // cheaper than asking per environment.
-  bool all = 3;
-
-  // The checkout to render — the project's main checkout when empty. Honoured
-  // only if ListCheckouts returned it for this project.
-  string checkout_path = 4;
-}
-
-message DiffForgeEnvResponse {
-  ForgeReportMeta meta = 1;
-
-  // Forge's diff document, verbatim: per environment, what was added, removed
-  // and changed, with image changes separated from configuration changes, plus
-  // secrets newly needed and any runtime or cluster move.
-  //
-  // READ THE PER-ENVIRONMENT STATUS FIRST, because a failure must never be
-  // mistaken for "nothing changed". An environment whose render failed, or
-  // which has no recorded configuration to compare against, reports that
-  // instead of an empty diff — and an empty diff and an unanswerable one mean
-  // opposite things.
-  string report_json = 2;
 }
 
 // ============================================
@@ -740,8 +638,8 @@ message StartForgeDeployRequest {
 
   // The checkout to deploy from — the project's main checkout when empty.
   //
-  // Honoured only if it is one of the checkouts ListCheckouts returned for this
-  // project; the daemon re-derives that list and checks against it. A value
+  // Honoured only if it is one of this project's checkouts (main or a git
+  // worktree); the daemon re-derives that list and checks against it. A value
   // this server cannot authorise is refused rather than used.
   string checkout_path = 9;
 }

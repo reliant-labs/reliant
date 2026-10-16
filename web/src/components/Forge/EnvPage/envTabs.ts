@@ -16,7 +16,9 @@
  *                                   daemon asleep, from any browser.
  *   running                         the dev stack `forge env up` runs on the
  *                                   daemon's machine. Local envs only.
- *   changes   checks                read the user's checkout through the daemon.
+ *
+ * There is no per-branch Changes or Checks tab: a branch's diff and checks are
+ * what the user's CI builds report, not something this page re-derives.
  *
  * RELEASES AND ACTIVITY ARE TWO TABS ON PURPOSE. A release is a thing you
  * pick and compare ("what's on prod, what was before it"); activity is what
@@ -43,9 +45,7 @@ export type EnvTab =
   | "releases"
   | "activity"
   | "secrets"
-  | "domains"
-  | "changes"
-  | "checks";
+  | "domains";
 
 export interface EnvTabSpec {
   id: EnvTab;
@@ -62,15 +62,13 @@ const SPECS: Record<EnvTab, EnvTabSpec> = {
   activity: { id: "activity", label: "Activity", needsDaemon: false },
   secrets: { id: "secrets", label: "Secrets", needsDaemon: false },
   domains: { id: "domains", label: "Domains", needsDaemon: false },
-  changes: { id: "changes", label: "Changes", needsDaemon: true },
-  checks: { id: "checks", label: "Checks", needsDaemon: true },
 };
 
 export function tabsFor(lifecycle: EnvLifecycle): EnvTabSpec[] {
   const ids: EnvTab[] =
     lifecycle === "local"
-      ? ["running", "secrets", "changes", "checks"]
-      : ["overview", "observability", "releases", "activity", "secrets", "domains", "changes", "checks"];
+      ? ["running", "secrets"]
+      : ["overview", "observability", "releases", "activity", "secrets", "domains"];
   return ids.map((id) => SPECS[id]);
 }
 
@@ -82,20 +80,19 @@ export function defaultTab(lifecycle: EnvLifecycle): EnvTab {
 /** Whether a tab reads the daemon — the page asks for nothing else until one is open. */
 export function tabNeedsDaemon(tab: string | undefined): boolean {
   if (!tab) return false;
-  if (tab === "preview") return true;
   return tab in SPECS ? SPECS[tab as EnvTab].needsDaemon : false;
 }
 
 /**
  * The URL's `tab` resolved against this environment's tabs. An unknown or
  * inapplicable value falls back to the default rather than rendering nothing —
- * a link to prod's `running` tab, or a retired `live`, still lands somewhere.
+ * a link to prod's `running` tab, or a retired `live`, `preview`, `changes` or
+ * `checks`, still lands somewhere.
  */
 export function resolveTab(param: string | undefined, lifecycle: EnvLifecycle): EnvTab {
   const fallback = defaultTab(lifecycle);
   if (!param || param === "live") return fallback;
-  const wanted = param === "preview" ? "changes" : param;
-  return tabsFor(lifecycle).some((tab) => tab.id === wanted) ? (wanted as EnvTab) : fallback;
+  return tabsFor(lifecycle).some((tab) => tab.id === param) ? (param as EnvTab) : fallback;
 }
 
 /** What goes in the URL for a tab: absent for the default, so the plain link stays plain. */

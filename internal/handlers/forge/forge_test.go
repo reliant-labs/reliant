@@ -167,14 +167,6 @@ func TestForgeService_Timeouts_ArePerCommand(t *testing.T) {
 			"must outlast forge's own verify budget so forge's UNREACHABLE verdict wins over our timeout")
 	})
 
-	t.Run("audit gets a budget sized for a whole-project rollup", func(t *testing.T) {
-		r := &forgeTestRouter{reply: ok(t)}
-		_, err := svc(r).GetAudit(authedCtx(),
-			connect.NewRequest(&reliantv1.GetForgeAuditRequest{ProjectId: "p"}))
-		require.NoError(t, err)
-		assert.EqualValues(t, forgeAuditTimeoutMs, r.lastTimeoutMs)
-	})
-
 	// No budget may exceed the daemon's own 2-minute per-invocation cap;
 	// waiting longer than the daemon would just wait on a killed process.
 	for name, ms := range map[string]int32{
@@ -182,7 +174,6 @@ func TestForgeService_Timeouts_ArePerCommand(t *testing.T) {
 		"topology+verify": forgeTopologyVerifyTimeoutMs,
 		"env_verify":      forgeEnvVerifyTimeoutMs,
 		"secret_list":     forgeSecretListTimeoutMs,
-		"audit":           forgeAuditTimeoutMs,
 		"env_status":      forgeEnvStatusTimeoutMs,
 	} {
 		assert.LessOrEqual(t, ms, int32(120_000),
@@ -283,11 +274,11 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 	})
 
 	t.Run("timeout on a non-cluster command is a real error", func(t *testing.T) {
-		router := &forgeTestRouter{replyErr: fmt.Errorf("daemon command forge.audit: nats: timeout")}
-		_, err := newForgeTestService(router).GetAudit(authedCtx(),
-			connect.NewRequest(&reliantv1.GetForgeAuditRequest{ProjectId: "p"}))
+		router := &forgeTestRouter{replyErr: fmt.Errorf("daemon command forge.secret_list: nats: timeout")}
+		_, err := newForgeTestService(router).ListSecrets(authedCtx(),
+			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
 
-		require.Error(t, err, "audit reads no cluster, so a timeout says nothing about reachability")
+		require.Error(t, err, "secret_list reads no cluster, so a timeout says nothing about reachability")
 		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 	})
 }
@@ -313,8 +304,8 @@ func TestForgeService_CommandTimedOut_IsATimeoutNotAFailure(t *testing.T) {
 
 	t.Run("elsewhere it is DeadlineExceeded", func(t *testing.T) {
 		router := &forgeTestRouter{replyErr: errors.New(timedOut)}
-		_, err := newForgeTestService(router).GetAudit(authedCtx(),
-			connect.NewRequest(&reliantv1.GetForgeAuditRequest{ProjectId: "p"}))
+		_, err := newForgeTestService(router).ListSecrets(authedCtx(),
+			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
 
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeDeadlineExceeded, connect.CodeOf(err),
@@ -350,10 +341,6 @@ func TestForgeService_CommandFailed_IsFailedPreconditionNotUnavailable(t *testin
 		},
 		"ListSecrets": func(s *Service) error {
 			_, err := s.ListSecrets(authedCtx(), connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
-			return err
-		},
-		"GetAudit": func(s *Service) error {
-			_, err := s.GetAudit(authedCtx(), connect.NewRequest(&reliantv1.GetForgeAuditRequest{ProjectId: "p"}))
 			return err
 		},
 		"ApplyPromote (direct dispatch)": func(s *Service) error {
@@ -439,8 +426,8 @@ func TestForgeService_Validation(t *testing.T) {
 
 	t.Run("project_id is required", func(t *testing.T) {
 		router := &forgeTestRouter{}
-		_, err := newForgeTestService(router).GetAudit(authedCtx(),
-			connect.NewRequest(&reliantv1.GetForgeAuditRequest{ProjectId: ""}))
+		_, err := newForgeTestService(router).ListSecrets(authedCtx(),
+			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "", Env: "prod"}))
 
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -449,8 +436,8 @@ func TestForgeService_Validation(t *testing.T) {
 
 	t.Run("unauthenticated is rejected", func(t *testing.T) {
 		router := &forgeTestRouter{}
-		_, err := newForgeTestService(router).GetAudit(context.Background(),
-			connect.NewRequest(&reliantv1.GetForgeAuditRequest{ProjectId: "p"}))
+		_, err := newForgeTestService(router).ListSecrets(context.Background(),
+			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
 
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))

@@ -18,9 +18,8 @@
  * cloud module uses (services/controlPlane/client.ts). A daemon that is
  * offline, slow, or has never existed changes nothing about what Live shows.
  *
- * The only daemon-dependent surface is PREVIEW, which renders the user's
- * checkout and genuinely cannot be done without their files, and BUILD. Both
- * live under the Preview tab.
+ * The only daemon-dependent surfaces are BUILD/DEPLOY, which need the user's
+ * checkout, and a local env's Running tab.
  *
  * ── ONE CALL, NOT SIX ───────────────────────────────────────────────────────
  *

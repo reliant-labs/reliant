@@ -366,8 +366,7 @@ func TestForgeDaemonArgvNeverCarriesYes(t *testing.T) {
 		"deploy apply":     mustApplyArgs(t, deploy),
 		"promote plan":     promote.planArgs(),
 		"promote apply":    mustPromoteApplyArgs(t, promote),
-		"checkouts":        forgeCheckoutsRequest{ProjectPath: "/p"}.args(),
-		"env diff":         forgeEnvDiffRequest{ProjectPath: "/p", All: true}.args(),
+		"checkouts":        forgeCheckoutsArgs,
 	}
 
 	for name, args := range argv {

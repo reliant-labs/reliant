@@ -91,11 +91,6 @@ const (
 	// existence check. No cluster workload reads. 30s.
 	forgeSecretListTimeoutMs = 30_000
 
-	// forgeAuditTimeoutMs — a whole-project rollup: parses every proto,
-	// migration and handler. No network, but genuinely CPU- and IO-heavy and it
-	// grows with the project (58KB of JSON for control-plane). 60s.
-	forgeAuditTimeoutMs = 60_000
-
 	// forgeEnvStatusTimeoutMs — one environment's runtime AND release halves.
 	// The argv is the same `env status <env> --json` that forge.env_verify
 	// runs (forge v0.1.42 folded verify into status), so it gets the same
@@ -187,15 +182,12 @@ func ForgeRPCDeadlines() map[string]time.Duration {
 		reliantv1connect.ForgeServiceGetTopologyProcedure:     ms(forgeTopologyVerifyTimeoutMs),
 		reliantv1connect.ForgeServiceVerifyEnvProcedure:       ms(forgeEnvVerifyTimeoutMs),
 		reliantv1connect.ForgeServiceListSecretsProcedure:     ms(forgeSecretListTimeoutMs),
-		reliantv1connect.ForgeServiceGetAuditProcedure:        ms(forgeAuditTimeoutMs),
 		reliantv1connect.ForgeServiceGetEnvStatusProcedure:    ms(forgeEnvStatusTimeoutMs),
 		reliantv1connect.ForgeServiceGetEnvShapeProcedure:     ms(forgeEnvStatusTimeoutMs),
 		reliantv1connect.ForgeServicePlanPromoteProcedure:     ms(forgePromotePlanTimeoutMs),
 		reliantv1connect.ForgeServiceApplyPromoteProcedure:    ms(forgePromoteApplyTimeoutMs),
 		reliantv1connect.ForgeServicePlanDeployProcedure:      ms(forgeDeployPlanTimeoutMs),
 		reliantv1connect.ForgeServiceStartDeployPlanProcedure: ms(forgeDeployStartTimeoutMs),
-		reliantv1connect.ForgeServiceListCheckoutsProcedure:   ms(forgeDeployPlanTimeoutMs),
-		reliantv1connect.ForgeServiceDiffEnvProcedure:         ms(forgeDeployPlanTimeoutMs),
 		reliantv1connect.ForgeServiceStartDeployProcedure:     ms(forgeDeployStartTimeoutMs),
 		reliantv1connect.ForgeServiceGetDeployStatusProcedure: ms(forgeDeployStatusTimeoutMs),
 	}
@@ -663,37 +655,6 @@ func (s *Service) ListSecrets(
 	}
 
 	return connect.NewResponse(&reliantv1.ListForgeSecretsResponse{
-		Meta:       forgeMeta(reply, false, unreachable),
-		ReportJson: reply.reportJSON(),
-	}), nil
-}
-
-// GetAudit returns the project audit rollup.
-func (s *Service) GetAudit(
-	ctx context.Context,
-	req *connect.Request[reliantv1.GetForgeAuditRequest],
-) (*connect.Response[reliantv1.GetForgeAuditResponse], error) {
-	userID, err := daemoncmd.UserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	payload := struct {
-		ProjectPath string `json:"project_path"`
-	}{ProjectPath: path}
-
-	// Audit is a static-analysis rollup over local files: no cluster reads, so
-	// a timeout is a genuine failure.
-	reply, unreachable, err := s.forgeDispatch(ctx, userID, "forge.audit", payload, forgeAuditTimeoutMs, false)
-	if err != nil {
-		return nil, err
-	}
-
-	return connect.NewResponse(&reliantv1.GetForgeAuditResponse{
 		Meta:       forgeMeta(reply, false, unreachable),
 		ReportJson: reply.reportJSON(),
 	}), nil
@@ -1321,102 +1282,6 @@ func (s *Service) StartDeployPlan(
 		Env:       env,
 		JobStatus: forgeDeployJobStatus(reply.JobStatus),
 		StartedAt: reply.StartedAt,
-	}), nil
-}
-
-// ListCheckouts lists the checkouts a preview may render — and defines the set
-// any checkout-bearing request may name. Read-only.
-func (s *Service) ListCheckouts(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ListForgeCheckoutsRequest],
-) (*connect.Response[reliantv1.ListForgeCheckoutsResponse], error) {
-	userID, err := daemoncmd.UserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	payload := struct {
-		ProjectPath string `json:"project_path"`
-		WithTree    bool   `json:"with_tree,omitempty"`
-	}{ProjectPath: path, WithTree: req.Msg.GetWithTree()}
-
-	// readsCluster=false: this is git on the daemon's disk, and nothing else.
-	reply, unreachable, err := s.forgeDispatch(
-		ctx, userID, "forge.checkouts", payload, forgeDeployPlanTimeoutMs, false)
-	if err != nil {
-		return nil, err
-	}
-
-	return connect.NewResponse(&reliantv1.ListForgeCheckoutsResponse{
-		Meta:       forgeMeta(reply, false, unreachable),
-		ReportJson: reply.reportJSON(),
-	}), nil
-}
-
-// DiffEnv renders a checkout and diffs it against what is deployed. Read-only:
-// no cluster is contacted, nothing is built or pushed.
-func (s *Service) DiffEnv(
-	ctx context.Context,
-	req *connect.Request[reliantv1.DiffForgeEnvRequest],
-) (*connect.Response[reliantv1.DiffForgeEnvResponse], error) {
-	userID, err := daemoncmd.UserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Forge's rule: one environment or all, not both and not neither. Checked
-	// here so a malformed request costs no daemon round trip, and restated on
-	// the daemon so its command has no unguarded spelling.
-	env := strings.TrimSpace(req.Msg.Env)
-	switch {
-	case req.Msg.All && env != "":
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("env %q and all are contradictory: diff one environment or every one, "+
-				"not both", req.Msg.Env))
-	case !req.Msg.All && env == "":
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("env is required, or set all to diff every environment in this checkout"))
-	}
-	if env != "" {
-		if _, err := forgeEnvArg(req.Msg.Env); err != nil {
-			return nil, err
-		}
-	}
-
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	payload := struct {
-		ProjectPath  string `json:"project_path"`
-		Env          string `json:"env,omitempty"`
-		All          bool   `json:"all,omitempty"`
-		CheckoutPath string `json:"checkout_path,omitempty"`
-	}{
-		ProjectPath:  path,
-		Env:          env,
-		All:          req.Msg.All,
-		CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath),
-	}
-
-	// readsCluster=false: the live side is the last RECORDED bundle's shape,
-	// read from the control plane, not from a cluster. Claiming "cluster
-	// unreachable" over a slow diff would diagnose something that was never
-	// contacted.
-	reply, unreachable, err := s.forgeDispatch(
-		ctx, userID, "forge.env_diff", payload, forgeDeployPlanTimeoutMs, false)
-	if err != nil {
-		return nil, err
-	}
-
-	return connect.NewResponse(&reliantv1.DiffForgeEnvResponse{
-		Meta:       forgeMeta(reply, false, unreachable),
-		ReportJson: reply.reportJSON(),
 	}), nil
 }
 

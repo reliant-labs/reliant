@@ -43,8 +43,6 @@ const (
 	// ForgeServiceListSecretsProcedure is the fully-qualified name of the ForgeService's ListSecrets
 	// RPC.
 	ForgeServiceListSecretsProcedure = "/reliant.v1.ForgeService/ListSecrets"
-	// ForgeServiceGetAuditProcedure is the fully-qualified name of the ForgeService's GetAudit RPC.
-	ForgeServiceGetAuditProcedure = "/reliant.v1.ForgeService/GetAudit"
 	// ForgeServiceGetEnvStatusProcedure is the fully-qualified name of the ForgeService's GetEnvStatus
 	// RPC.
 	ForgeServiceGetEnvStatusProcedure = "/reliant.v1.ForgeService/GetEnvStatus"
@@ -62,11 +60,6 @@ const (
 	// ForgeServiceStartDeployPlanProcedure is the fully-qualified name of the ForgeService's
 	// StartDeployPlan RPC.
 	ForgeServiceStartDeployPlanProcedure = "/reliant.v1.ForgeService/StartDeployPlan"
-	// ForgeServiceListCheckoutsProcedure is the fully-qualified name of the ForgeService's
-	// ListCheckouts RPC.
-	ForgeServiceListCheckoutsProcedure = "/reliant.v1.ForgeService/ListCheckouts"
-	// ForgeServiceDiffEnvProcedure is the fully-qualified name of the ForgeService's DiffEnv RPC.
-	ForgeServiceDiffEnvProcedure = "/reliant.v1.ForgeService/DiffEnv"
 	// ForgeServiceStartDeployProcedure is the fully-qualified name of the ForgeService's StartDeploy
 	// RPC.
 	ForgeServiceStartDeployProcedure = "/reliant.v1.ForgeService/StartDeploy"
@@ -85,8 +78,6 @@ type ForgeServiceClient interface {
 	// ListSecrets returns declared/present/inert secrets for an environment.
 	// The report carries NAMES and BOOLEANS only, never a secret value.
 	ListSecrets(context.Context, *connect.Request[v1.ListForgeSecretsRequest]) (*connect.Response[v1.ListForgeSecretsResponse], error)
-	// GetAudit returns the project audit rollup.
-	GetAudit(context.Context, *connect.Request[v1.GetForgeAuditRequest]) (*connect.Response[v1.GetForgeAuditResponse], error)
 	// GetEnvStatus returns runtime checks for an environment.
 	GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error)
 	// GetEnvShape projects ONE environment's render into the declaration the
@@ -148,22 +139,6 @@ type ForgeServiceClient interface {
 	// What comes back is the plan plus its digest. Show the plan, let a human
 	// approve THAT, and send the digest to StartDeploy.
 	StartDeployPlan(context.Context, *connect.Request[v1.StartForgeDeployPlanRequest]) (*connect.Response[v1.StartForgeDeployResponse], error)
-	// ListCheckouts lists the checkouts a preview may render: the project's main
-	// checkout plus every git worktree, each with its branch, current commit,
-	// whether it has uncommitted changes, and how far it is from main.
-	//
-	// It is also the ALLOWLIST. Every other call here that accepts a checkout
-	// honours only a value this one returned, re-derived and checked server-side.
-	// So a request cannot point a build at an arbitrary directory, whatever it
-	// sends.
-	ListCheckouts(context.Context, *connect.Request[v1.ListForgeCheckoutsRequest]) (*connect.Response[v1.ListForgeCheckoutsResponse], error)
-	// DiffEnv renders a checkout and compares each environment against what is
-	// deployed. READ-ONLY: no cluster is contacted, nothing is built or pushed.
-	//
-	// This is what the per-environment cards show. The document is forge's and is
-	// passed through verbatim — the comparison belongs to forge, and a second
-	// implementation here would be a copy that eventually disagrees with it.
-	DiffEnv(context.Context, *connect.Request[v1.DiffForgeEnvRequest]) (*connect.Response[v1.DiffForgeEnvResponse], error)
 	// StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,
 	// and returns a handle immediately. Poll it with GetDeployStatus.
 	//
@@ -221,12 +196,6 @@ func NewForgeServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(forgeServiceMethods.ByName("ListSecrets")),
 			connect.WithClientOptions(opts...),
 		),
-		getAudit: connect.NewClient[v1.GetForgeAuditRequest, v1.GetForgeAuditResponse](
-			httpClient,
-			baseURL+ForgeServiceGetAuditProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("GetAudit")),
-			connect.WithClientOptions(opts...),
-		),
 		getEnvStatus: connect.NewClient[v1.GetForgeEnvStatusRequest, v1.GetForgeEnvStatusResponse](
 			httpClient,
 			baseURL+ForgeServiceGetEnvStatusProcedure,
@@ -263,18 +232,6 @@ func NewForgeServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(forgeServiceMethods.ByName("StartDeployPlan")),
 			connect.WithClientOptions(opts...),
 		),
-		listCheckouts: connect.NewClient[v1.ListForgeCheckoutsRequest, v1.ListForgeCheckoutsResponse](
-			httpClient,
-			baseURL+ForgeServiceListCheckoutsProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("ListCheckouts")),
-			connect.WithClientOptions(opts...),
-		),
-		diffEnv: connect.NewClient[v1.DiffForgeEnvRequest, v1.DiffForgeEnvResponse](
-			httpClient,
-			baseURL+ForgeServiceDiffEnvProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("DiffEnv")),
-			connect.WithClientOptions(opts...),
-		),
 		startDeploy: connect.NewClient[v1.StartForgeDeployRequest, v1.StartForgeDeployResponse](
 			httpClient,
 			baseURL+ForgeServiceStartDeployProcedure,
@@ -295,15 +252,12 @@ type forgeServiceClient struct {
 	getTopology     *connect.Client[v1.GetForgeTopologyRequest, v1.GetForgeTopologyResponse]
 	verifyEnv       *connect.Client[v1.VerifyForgeEnvRequest, v1.VerifyForgeEnvResponse]
 	listSecrets     *connect.Client[v1.ListForgeSecretsRequest, v1.ListForgeSecretsResponse]
-	getAudit        *connect.Client[v1.GetForgeAuditRequest, v1.GetForgeAuditResponse]
 	getEnvStatus    *connect.Client[v1.GetForgeEnvStatusRequest, v1.GetForgeEnvStatusResponse]
 	getEnvShape     *connect.Client[v1.GetForgeEnvShapeRequest, v1.GetForgeEnvShapeResponse]
 	planPromote     *connect.Client[v1.PlanForgePromoteRequest, v1.PlanForgePromoteResponse]
 	applyPromote    *connect.Client[v1.PromoteForgeEnvRequest, v1.PromoteForgeEnvResponse]
 	planDeploy      *connect.Client[v1.PlanForgeDeployRequest, v1.PlanForgeDeployResponse]
 	startDeployPlan *connect.Client[v1.StartForgeDeployPlanRequest, v1.StartForgeDeployResponse]
-	listCheckouts   *connect.Client[v1.ListForgeCheckoutsRequest, v1.ListForgeCheckoutsResponse]
-	diffEnv         *connect.Client[v1.DiffForgeEnvRequest, v1.DiffForgeEnvResponse]
 	startDeploy     *connect.Client[v1.StartForgeDeployRequest, v1.StartForgeDeployResponse]
 	getDeployStatus *connect.Client[v1.GetForgeDeployStatusRequest, v1.GetForgeDeployStatusResponse]
 }
@@ -321,11 +275,6 @@ func (c *forgeServiceClient) VerifyEnv(ctx context.Context, req *connect.Request
 // ListSecrets calls reliant.v1.ForgeService.ListSecrets.
 func (c *forgeServiceClient) ListSecrets(ctx context.Context, req *connect.Request[v1.ListForgeSecretsRequest]) (*connect.Response[v1.ListForgeSecretsResponse], error) {
 	return c.listSecrets.CallUnary(ctx, req)
-}
-
-// GetAudit calls reliant.v1.ForgeService.GetAudit.
-func (c *forgeServiceClient) GetAudit(ctx context.Context, req *connect.Request[v1.GetForgeAuditRequest]) (*connect.Response[v1.GetForgeAuditResponse], error) {
-	return c.getAudit.CallUnary(ctx, req)
 }
 
 // GetEnvStatus calls reliant.v1.ForgeService.GetEnvStatus.
@@ -358,16 +307,6 @@ func (c *forgeServiceClient) StartDeployPlan(ctx context.Context, req *connect.R
 	return c.startDeployPlan.CallUnary(ctx, req)
 }
 
-// ListCheckouts calls reliant.v1.ForgeService.ListCheckouts.
-func (c *forgeServiceClient) ListCheckouts(ctx context.Context, req *connect.Request[v1.ListForgeCheckoutsRequest]) (*connect.Response[v1.ListForgeCheckoutsResponse], error) {
-	return c.listCheckouts.CallUnary(ctx, req)
-}
-
-// DiffEnv calls reliant.v1.ForgeService.DiffEnv.
-func (c *forgeServiceClient) DiffEnv(ctx context.Context, req *connect.Request[v1.DiffForgeEnvRequest]) (*connect.Response[v1.DiffForgeEnvResponse], error) {
-	return c.diffEnv.CallUnary(ctx, req)
-}
-
 // StartDeploy calls reliant.v1.ForgeService.StartDeploy.
 func (c *forgeServiceClient) StartDeploy(ctx context.Context, req *connect.Request[v1.StartForgeDeployRequest]) (*connect.Response[v1.StartForgeDeployResponse], error) {
 	return c.startDeploy.CallUnary(ctx, req)
@@ -388,8 +327,6 @@ type ForgeServiceHandler interface {
 	// ListSecrets returns declared/present/inert secrets for an environment.
 	// The report carries NAMES and BOOLEANS only, never a secret value.
 	ListSecrets(context.Context, *connect.Request[v1.ListForgeSecretsRequest]) (*connect.Response[v1.ListForgeSecretsResponse], error)
-	// GetAudit returns the project audit rollup.
-	GetAudit(context.Context, *connect.Request[v1.GetForgeAuditRequest]) (*connect.Response[v1.GetForgeAuditResponse], error)
 	// GetEnvStatus returns runtime checks for an environment.
 	GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error)
 	// GetEnvShape projects ONE environment's render into the declaration the
@@ -451,22 +388,6 @@ type ForgeServiceHandler interface {
 	// What comes back is the plan plus its digest. Show the plan, let a human
 	// approve THAT, and send the digest to StartDeploy.
 	StartDeployPlan(context.Context, *connect.Request[v1.StartForgeDeployPlanRequest]) (*connect.Response[v1.StartForgeDeployResponse], error)
-	// ListCheckouts lists the checkouts a preview may render: the project's main
-	// checkout plus every git worktree, each with its branch, current commit,
-	// whether it has uncommitted changes, and how far it is from main.
-	//
-	// It is also the ALLOWLIST. Every other call here that accepts a checkout
-	// honours only a value this one returned, re-derived and checked server-side.
-	// So a request cannot point a build at an arbitrary directory, whatever it
-	// sends.
-	ListCheckouts(context.Context, *connect.Request[v1.ListForgeCheckoutsRequest]) (*connect.Response[v1.ListForgeCheckoutsResponse], error)
-	// DiffEnv renders a checkout and compares each environment against what is
-	// deployed. READ-ONLY: no cluster is contacted, nothing is built or pushed.
-	//
-	// This is what the per-environment cards show. The document is forge's and is
-	// passed through verbatim — the comparison belongs to forge, and a second
-	// implementation here would be a copy that eventually disagrees with it.
-	DiffEnv(context.Context, *connect.Request[v1.DiffForgeEnvRequest]) (*connect.Response[v1.DiffForgeEnvResponse], error)
 	// StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,
 	// and returns a handle immediately. Poll it with GetDeployStatus.
 	//
@@ -520,12 +441,6 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(forgeServiceMethods.ByName("ListSecrets")),
 		connect.WithHandlerOptions(opts...),
 	)
-	forgeServiceGetAuditHandler := connect.NewUnaryHandler(
-		ForgeServiceGetAuditProcedure,
-		svc.GetAudit,
-		connect.WithSchema(forgeServiceMethods.ByName("GetAudit")),
-		connect.WithHandlerOptions(opts...),
-	)
 	forgeServiceGetEnvStatusHandler := connect.NewUnaryHandler(
 		ForgeServiceGetEnvStatusProcedure,
 		svc.GetEnvStatus,
@@ -562,18 +477,6 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(forgeServiceMethods.ByName("StartDeployPlan")),
 		connect.WithHandlerOptions(opts...),
 	)
-	forgeServiceListCheckoutsHandler := connect.NewUnaryHandler(
-		ForgeServiceListCheckoutsProcedure,
-		svc.ListCheckouts,
-		connect.WithSchema(forgeServiceMethods.ByName("ListCheckouts")),
-		connect.WithHandlerOptions(opts...),
-	)
-	forgeServiceDiffEnvHandler := connect.NewUnaryHandler(
-		ForgeServiceDiffEnvProcedure,
-		svc.DiffEnv,
-		connect.WithSchema(forgeServiceMethods.ByName("DiffEnv")),
-		connect.WithHandlerOptions(opts...),
-	)
 	forgeServiceStartDeployHandler := connect.NewUnaryHandler(
 		ForgeServiceStartDeployProcedure,
 		svc.StartDeploy,
@@ -594,8 +497,6 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 			forgeServiceVerifyEnvHandler.ServeHTTP(w, r)
 		case ForgeServiceListSecretsProcedure:
 			forgeServiceListSecretsHandler.ServeHTTP(w, r)
-		case ForgeServiceGetAuditProcedure:
-			forgeServiceGetAuditHandler.ServeHTTP(w, r)
 		case ForgeServiceGetEnvStatusProcedure:
 			forgeServiceGetEnvStatusHandler.ServeHTTP(w, r)
 		case ForgeServiceGetEnvShapeProcedure:
@@ -608,10 +509,6 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 			forgeServicePlanDeployHandler.ServeHTTP(w, r)
 		case ForgeServiceStartDeployPlanProcedure:
 			forgeServiceStartDeployPlanHandler.ServeHTTP(w, r)
-		case ForgeServiceListCheckoutsProcedure:
-			forgeServiceListCheckoutsHandler.ServeHTTP(w, r)
-		case ForgeServiceDiffEnvProcedure:
-			forgeServiceDiffEnvHandler.ServeHTTP(w, r)
 		case ForgeServiceStartDeployProcedure:
 			forgeServiceStartDeployHandler.ServeHTTP(w, r)
 		case ForgeServiceGetDeployStatusProcedure:
@@ -637,10 +534,6 @@ func (UnimplementedForgeServiceHandler) ListSecrets(context.Context, *connect.Re
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.ListSecrets is not implemented"))
 }
 
-func (UnimplementedForgeServiceHandler) GetAudit(context.Context, *connect.Request[v1.GetForgeAuditRequest]) (*connect.Response[v1.GetForgeAuditResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.GetAudit is not implemented"))
-}
-
 func (UnimplementedForgeServiceHandler) GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.GetEnvStatus is not implemented"))
 }
@@ -663,14 +556,6 @@ func (UnimplementedForgeServiceHandler) PlanDeploy(context.Context, *connect.Req
 
 func (UnimplementedForgeServiceHandler) StartDeployPlan(context.Context, *connect.Request[v1.StartForgeDeployPlanRequest]) (*connect.Response[v1.StartForgeDeployResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.StartDeployPlan is not implemented"))
-}
-
-func (UnimplementedForgeServiceHandler) ListCheckouts(context.Context, *connect.Request[v1.ListForgeCheckoutsRequest]) (*connect.Response[v1.ListForgeCheckoutsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.ListCheckouts is not implemented"))
-}
-
-func (UnimplementedForgeServiceHandler) DiffEnv(context.Context, *connect.Request[v1.DiffForgeEnvRequest]) (*connect.Response[v1.DiffForgeEnvResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.DiffEnv is not implemented"))
 }
 
 func (UnimplementedForgeServiceHandler) StartDeploy(context.Context, *connect.Request[v1.StartForgeDeployRequest]) (*connect.Response[v1.StartForgeDeployResponse], error) {

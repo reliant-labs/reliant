@@ -6,7 +6,8 @@
  * Says WHAT this tab needs and that the rest of the page is unaffected — the
  * old one-liner ("Daemon offline. Preview needs it to render your code.") gave
  * no retry and read like the whole environment was in question. The backend
- * tabs (Overview, Releases, Secrets) are fully rendered regardless.
+ * tabs (Overview, Releases, Secrets) are fully rendered regardless. Only a local
+ * env's Running tab needs the daemon.
  */
 
 import { RefreshCw, Unplug } from "lucide-react";
@@ -14,7 +15,7 @@ import { RefreshCw, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 /** The one sentence, kept as a constant so tests and copy cannot drift. */
-export const DAEMON_OFFLINE_COPY = "Your daemon isn't answering, so this tab can't read your checkout.";
+export const DAEMON_OFFLINE_COPY = "Your daemon isn't answering, so this tab can't read your machine.";
 
 export function DaemonNeeded({
   what,
@@ -22,7 +23,7 @@ export function DaemonNeeded({
   onRetry,
   retrying = false,
 }: {
-  /** What this tab would show, e.g. "what this branch would change in prod". */
+  /** What this tab would show, e.g. "what forge env up is running for dev on your machine". */
   what: string;
   detail?: string;
   onRetry?: () => void;

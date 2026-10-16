@@ -27,7 +27,6 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { forgeGrpc, type ApplyPromoteResult, type DeployStatus, type StartDeployResult } from "../api/forge-grpc";
-import type { ForgeAuditReport } from "../services/forge/audit";
 import {
   cloudAvailabilityFromError,
   cloudErrorDetail,
@@ -70,8 +69,6 @@ import {
 } from "../services/forge/environments";
 import { deployTokenFor, type ForgeDeployReport } from "../services/forge/deploy";
 import type { PlanApproval } from "../services/forge/deployPlan";
-import type { ForgeCheckoutsReport } from "../services/forge/checkouts";
-import type { ForgeEnvDiffReport } from "../services/forge/envDiff";
 import { useProjectStore, type Project } from "../store/projectStore";
 import { confirmationTokenFor, type ForgePromotePlan } from "../services/forge/promote";
 import {
@@ -139,7 +136,6 @@ export function forgeRetry(failureCount: number, error: unknown): boolean {
 export const forgeKeys = {
   all: ["forge"] as const,
   topology: (projectId: string) => [...forgeKeys.all, "topology", projectId] as const,
-  audit: (projectId: string) => [...forgeKeys.all, "audit", projectId] as const,
   envStatus: (projectId: string, env: string) =>
     [...forgeKeys.all, "env-status", projectId, env] as const,
   promotePlan: (projectId: string, env: string, release: string) =>
@@ -148,13 +144,6 @@ export const forgeKeys = {
     [...forgeKeys.all, "deploy-plan", projectId, env] as const,
   deployStatus: (projectId: string, handle: string) =>
     [...forgeKeys.all, "deploy-status", projectId, handle] as const,
-  checkouts: (projectId: string, withTree: boolean) =>
-    [...forgeKeys.all, "checkouts", projectId, withTree] as const,
-  // Keyed by the CHECKOUT as well as the environment: the same environment
-  // diffed from two branches is two different answers, and sharing a key would
-  // show one branch's diff under the other's name.
-  envDiff: (projectId: string, env: string, all: boolean, checkoutPath: string) =>
-    [...forgeKeys.all, "env-diff", projectId, env, all, checkoutPath] as const,
   managedSecrets: (projectId: string, env: string) =>
     [...forgeKeys.all, "managed-secrets", projectId, env] as const,
   managedSecretVersions: (projectId: string, env: string, name: string) =>
@@ -724,27 +713,6 @@ export function useForgeEnvStatus(
   });
 }
 
-// ── Project audit ───────────────────────────────────────────────────────────
-
-/**
- * useForgeAudit loads the project-audit roll-up.
- *
- * staleTime is 60s, the longest on this surface, because the audit is static
- * analysis over files on disk: it cannot change without someone editing the
- * project, and on a project the size of control-plane it produces ~58KB. A strip
- * that re-ran it on every mount would pay that repeatedly to learn nothing.
- */
-export function useForgeAudit(projectId: string | null | undefined) {
-  return useQuery<ForgeOutcome<ForgeAuditReport>>({
-    queryKey: forgeKeys.audit(projectId ?? ""),
-    queryFn: () =>
-      forgeGrpc.getAudit(projectId as string) as Promise<ForgeOutcome<ForgeAuditReport>>,
-    enabled: !!projectId,
-    staleTime: 60_000,
-    retry: forgeRetry,
-  });
-}
-
 // ── Promote ─────────────────────────────────────────────────────────────────
 
 /**
@@ -833,7 +801,6 @@ export function useApplyForgePromote(projectId: string | null | undefined) {
       // is still an accurate picture of a binding this call did not touch.
       if (result.kind !== "applied") return;
       void queryClient.invalidateQueries({ queryKey: forgeKeys.topology(projectId ?? "") });
-      void queryClient.invalidateQueries({ queryKey: forgeKeys.audit(projectId ?? "") });
       // A hosted env's binding and workloads live on the control plane too,
       // and the Overview/Environment screens read them from there.
       void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-status"] });
@@ -916,15 +883,13 @@ export interface StartDeployArgs {
   guardPlan: ForgeDeployReport;
   /** The approval derived from the plan the operator read. */
   approval: PlanApproval;
-  /** The checkout this deploy builds from. */
-  checkoutPath?: string;
 }
 
 export function useStartForgeDeploy(projectId: string | null | undefined) {
   const queryClient = useQueryClient();
 
   const mutation = useMutation<StartDeployResult, Error, StartDeployArgs>({
-    mutationFn: async ({ guardPlan, approval, checkoutPath }: StartDeployArgs) => {
+    mutationFn: async ({ guardPlan, approval }: StartDeployArgs) => {
       const token = deployTokenFor(guardPlan);
       // Unreachable through the UI, which does not render a confirm without a
       // token. It throws rather than defaulting because every available default
@@ -940,7 +905,6 @@ export function useStartForgeDeploy(projectId: string | null | undefined) {
         env: guardPlan.env as string,
         token,
         approval,
-        checkoutPath,
       });
     },
     retry: false,
@@ -950,7 +914,6 @@ export function useStartForgeDeploy(projectId: string | null | undefined) {
       // not touch.
       if (result.kind !== "started") return;
       void queryClient.invalidateQueries({ queryKey: forgeKeys.topology(projectId ?? "") });
-      void queryClient.invalidateQueries({ queryKey: forgeKeys.audit(projectId ?? "") });
       // A hosted env's binding and workloads live on the control plane too,
       // and the Overview/Environment screens read them from there.
       void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-status"] });
@@ -975,61 +938,9 @@ export function useStartForgeDeploy(projectId: string | null | undefined) {
  * and a second one would contend for the same environment's claim.
  */
 export function useStartForgeDeployPlan(projectId: string | null | undefined) {
-  return useMutation<StartDeployResult, Error, { env: string; checkoutPath?: string }>({
-    mutationFn: ({ env, checkoutPath }) =>
-      forgeGrpc.startDeployPlan({ projectId: projectId as string, env, checkoutPath }),
+  return useMutation<StartDeployResult, Error, { env: string }>({
+    mutationFn: ({ env }) => forgeGrpc.startDeployPlan({ projectId: projectId as string, env }),
     retry: false,
-  });
-}
-
-/**
- * useForgeCheckouts lists the branches a preview may render.
- *
- * Cheap and git-only — no cluster is touched — so unlike the rest of this
- * surface it is allowed a short staleTime rather than refetching on every
- * mount: the set of worktrees changes on a human timescale, and the picker
- * re-rendering its options underneath a click is worse than a few seconds of
- * staleness.
- */
-export function useForgeCheckouts(
-  projectId: string | null | undefined,
-  options?: { withTree?: boolean }
-) {
-  return useQuery<ForgeOutcome<ForgeCheckoutsReport>>({
-    queryKey: forgeKeys.checkouts(projectId ?? "", options?.withTree === true),
-    queryFn: () =>
-      forgeGrpc.listCheckouts({
-        projectId: projectId as string,
-        withTree: options?.withTree,
-      }),
-    enabled: !!projectId,
-    staleTime: 30_000,
-    retry: forgeRetry,
-  });
-}
-
-/**
- * useForgeEnvDiff compares a checkout against what is deployed, per
- * environment.
- *
- * `enabled` is the caller's, and it is deliberately not defaulted to true: a
- * diff is a REAL render of every environment, which costs seconds, so it runs
- * when someone is looking at the cards rather than on mount of a page that
- * might only ever show the Live tab.
- */
-export function useForgeEnvDiff(
-  projectId: string | null | undefined,
-  args: { env?: string; all?: boolean; checkoutPath?: string; enabled?: boolean }
-) {
-  const { env, all, checkoutPath, enabled } = args;
-  return useQuery<ForgeOutcome<ForgeEnvDiffReport>>({
-    queryKey: forgeKeys.envDiff(projectId ?? "", env ?? "", all === true, checkoutPath ?? ""),
-    queryFn: () =>
-      forgeGrpc.diffEnv({ projectId: projectId as string, env, all, checkoutPath }),
-    enabled: !!projectId && (!!env || all === true) && enabled !== false,
-    staleTime: 0,
-    gcTime: 0,
-    retry: forgeRetry,
   });
 }
 

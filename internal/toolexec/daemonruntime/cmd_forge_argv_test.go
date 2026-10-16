@@ -37,7 +37,6 @@ func forgeArgvUnderTest(t *testing.T) map[string][]string {
 		{"topology verify envs", "forge.topology", map[string]any{"verify": true, "envs": []string{"dev", "prod"}}},
 		{"env_verify", "forge.env_verify", map[string]any{"env": "prod"}},
 		{"secret_list", "forge.secret_list", map[string]any{"env": "dev"}},
-		{"audit", "forge.audit", nil},
 		{"env_status", "forge.env_status", map[string]any{"env": "dev"}},
 		{"render_capability", "forge.render_capability", nil},
 	} {
@@ -59,10 +58,7 @@ func forgeArgvUnderTest(t *testing.T) map[string][]string {
 	deploy := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
 	argv["deploy plan"] = deploy.planArgs()
 	argv["deploy plan-only"] = deploy.planOnlyArgs()
-	argv["checkouts"] = forgeCheckoutsRequest{ProjectPath: "/p"}.args()
-	argv["checkouts with tree"] = forgeCheckoutsRequest{ProjectPath: "/p", WithTree: true}.args()
-	argv["env diff all"] = forgeEnvDiffRequest{ProjectPath: "/p", All: true}.args()
-	argv["env diff one env"] = forgeEnvDiffRequest{ProjectPath: "/p", Env: "prod"}.args()
+	argv["checkouts"] = forgeCheckoutsArgs
 
 	// The acknowledged-codes form of the apply argv parses too. Checked
 	// separately because --acknowledge-destructive is a StringSlice flag,

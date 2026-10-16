@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -44,29 +42,6 @@ func checkoutsJSON(paths ...string) string {
 		panic(err)
 	}
 	return string(raw)
-}
-
-func TestForgeCheckoutsArgs(t *testing.T) {
-	plain := forgeCheckoutsRequest{ProjectPath: "/p"}.args()
-	if want := []string{"project", "checkouts", "--json"}; !reflect.DeepEqual(plain, want) {
-		t.Errorf("checkouts argv = %v, want %v", plain, want)
-	}
-
-	// --tree is opt-in: it costs ~0.5s, and the picker does not need it.
-	withTree := forgeCheckoutsRequest{ProjectPath: "/p", WithTree: true}.args()
-	if !slices.Contains(withTree, "--tree") {
-		t.Errorf("with_tree must add --tree; got %v", withTree)
-	}
-	if slices.Contains(plain, "--tree") {
-		t.Errorf("the default must NOT hash trees; got %v", plain)
-	}
-}
-
-func TestForgeCheckoutsRequiresProjectPath(t *testing.T) {
-	if _, err := handleForgeCheckouts(context.Background(),
-		mustDeployPayload(t, forgeCheckoutsRequest{})); err == nil {
-		t.Error("checkouts accepted a request with no project_path")
-	}
 }
 
 // =============================================================================
@@ -194,100 +169,5 @@ func TestResolveCheckoutPath_RefusesWhenTheListIsUnavailable(t *testing.T) {
 	if got, err := resolveCheckoutPath(context.Background(), project, t.TempDir()); err == nil {
 		t.Errorf("resolved %q with no allowlist available; a checkout must not be authorised "+
 			"by a list that could not be read", got)
-	}
-}
-
-// =============================================================================
-// forge.env_diff
-// =============================================================================
-
-// forge's `env diff` takes ONE environment or --all, never a list. Pinned
-// because the daemon mirrors that rule to fail before a subprocess starts.
-func TestForgeEnvDiffArgs(t *testing.T) {
-	all := forgeEnvDiffRequest{ProjectPath: "/p", All: true}.args()
-	if want := []string{"env", "diff", "--json", "--all"}; !reflect.DeepEqual(all, want) {
-		t.Errorf("env diff --all argv = %v, want %v", all, want)
-	}
-
-	one := forgeEnvDiffRequest{ProjectPath: "/p", Env: "prod"}.args()
-	if want := []string{"env", "diff", "--json", "prod"}; !reflect.DeepEqual(one, want) {
-		t.Errorf("env diff argv = %v, want %v", one, want)
-	}
-}
-
-func TestForgeEnvDiffValidation(t *testing.T) {
-	for name, req := range map[string]forgeEnvDiffRequest{
-		"no project path":     {Env: "prod"},
-		"neither env nor all": {ProjectPath: "/p"},
-		"both env and all":    {ProjectPath: "/p", Env: "prod", All: true},
-		// An env landing in argv as a bare positional would be read by
-		// forge as a flag.
-		"flag-shaped env": {ProjectPath: "/p", Env: "--all"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			if err := req.validate(); err == nil {
-				t.Errorf("validate accepted %+v", req)
-			}
-		})
-	}
-}
-
-// The diff document crosses VERBATIM. The UI renders forge's §8.2 document
-// as-is; a diff computed in reliant would be a second implementation that
-// disagrees with forge's.
-func TestForgeEnvDiffPassesForgeDocumentThrough(t *testing.T) {
-	dir := forgeProject(t)
-	doc := `{"project":"reliant","source":"worktree","against":"live",` +
-		`"environments":[{"env":"prod","status":"ok","config_identical":false}]}`
-	stubForge(t, forgeCommandResult{Stdout: []byte(doc)}, nil)
-
-	raw, err := handle(t, "forge.env_diff", map[string]any{"project_path": dir, "all": true})
-	if err != nil {
-		t.Fatalf("env_diff: %v", err)
-	}
-
-	var resp forgeReportResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	var got, want any
-	if err := json.Unmarshal(resp.Report, &got); err != nil {
-		t.Fatalf("report is not forge's document: %v", err)
-	}
-	if err := json.Unmarshal([]byte(doc), &want); err != nil {
-		t.Fatalf("fixture: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("the diff document was altered in transit:\n got %v\nwant %v", got, want)
-	}
-}
-
-// env_diff authorises its checkout before forge is pointed at it.
-func TestForgeEnvDiffRefusesAnUnlistedCheckout(t *testing.T) {
-	dir := forgeProject(t)
-	stubForge(t, forgeCommandResult{Stdout: []byte(checkoutsJSON(t.TempDir()))}, nil)
-
-	if _, err := handle(t, "forge.env_diff", map[string]any{
-		"project_path": dir, "all": true, "checkout_path": t.TempDir(),
-	}); err == nil {
-		t.Error("env_diff rendered an unlisted checkout")
-	}
-}
-
-// A handler that is written but not registered is invisible to the RPC layer
-// above. Dispatched against a non-forge dir, which short-circuits before forge
-// would run, so this asserts dispatch and nothing else.
-func TestForgeCheckoutCommandsAreRegistered(t *testing.T) {
-	for name, payload := range map[string]map[string]any{
-		"forge.checkouts": {"project_path": "PLACEHOLDER"},
-		"forge.env_diff":  {"project_path": "PLACEHOLDER", "all": true},
-	} {
-		t.Run(name, func(t *testing.T) {
-			stubForge(t, forgeCommandResult{}, nil)
-			payload["project_path"] = t.TempDir()
-			if _, err := handle(t, name, payload); err != nil {
-				t.Fatalf("%s not dispatchable: %v", name, err)
-			}
-		})
 	}
 }

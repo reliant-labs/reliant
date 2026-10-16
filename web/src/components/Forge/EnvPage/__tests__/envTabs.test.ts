@@ -9,7 +9,7 @@ describe("an environment page's tabs", () => {
     // dev runs the working tree via `forge env up`; it is never built or
     // released, so "Releases" and "not built yet" are both the wrong question.
     expect(defaultTab("local")).toBe("running");
-    expect(tabsFor("local").map((tab) => tab.id)).toEqual(["running", "secrets", "changes", "checks"]);
+    expect(tabsFor("local").map((tab) => tab.id)).toEqual(["running", "secrets"]);
   });
 
   it("leads a deployed env with its overview, and has releases", () => {
@@ -21,12 +21,10 @@ describe("an environment page's tabs", () => {
       "activity",
       "secrets",
       "domains",
-      "changes",
-      "checks",
     ]);
   });
 
-  it("keeps the backend tabs daemon-free and marks the checkout ones", () => {
+  it("keeps every deployed-env tab daemon-free", () => {
     const needs = Object.fromEntries(tabsFor("deployed").map((tab) => [tab.id, tab.needsDaemon]));
     expect(needs).toEqual({
       overview: false,
@@ -35,15 +33,17 @@ describe("an environment page's tabs", () => {
       activity: false,
       secrets: false,
       domains: false,
-      changes: true,
-      checks: true,
     });
   });
 
   it("maps the retired two-tab links somewhere sensible", () => {
     expect(resolveTab("live", "deployed")).toBe("overview");
     expect(resolveTab("live", "local")).toBe("running");
-    expect(resolveTab("preview", "deployed")).toBe("changes");
+    // The per-branch Changes and Checks tabs were removed; their links still land.
+    for (const retired of ["preview", "changes", "checks"]) {
+      expect(resolveTab(retired, "deployed")).toBe("overview");
+      expect(resolveTab(retired, "local")).toBe("running");
+    }
   });
 
   it("falls back to the default for a tab this env does not have", () => {
@@ -80,8 +80,9 @@ describe("releases, activity and domains are their own tabs", () => {
     expect(resolveTab("activity", "local")).toBe("running");
     expect(tabNeedsDaemon("activity")).toBe(false);
     expect(tabNeedsDaemon("domains")).toBe(false);
-    expect(tabNeedsDaemon("changes")).toBe(true);
-    expect(tabNeedsDaemon("preview")).toBe(true);
+    expect(tabNeedsDaemon("running")).toBe(true);
+    expect(tabNeedsDaemon("changes")).toBe(false);
+    expect(tabNeedsDaemon("preview")).toBe(false);
     expect(tabNeedsDaemon(undefined)).toBe(false);
   });
 });

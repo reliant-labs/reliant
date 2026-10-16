@@ -90,14 +90,12 @@ const SHAPE_REPORT = {
 const getTopology = vi.fn(OFFLINE);
 const getEnvShape = vi.fn(OFFLINE);
 const getEnvStatus = vi.fn(OFFLINE);
-const getAudit = vi.fn(OFFLINE);
 
 vi.mock("@/api/forge-grpc", () => ({
   forgeGrpc: {
     getTopology: () => getTopology(),
     getEnvShape: () => getEnvShape(),
     getEnvStatus: () => getEnvStatus(),
-    getAudit: () => getAudit(),
     verifyEnv: () => OFFLINE(),
     listSecrets: () => OFFLINE(),
     planPromote: () => OFFLINE(),
@@ -191,7 +189,6 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
 }));
 
 import { ForgeEnvPage } from "../../EnvPage/ForgeEnvPage";
-import { DAEMON_OFFLINE_COPY } from "../../EnvPage/DaemonNeeded";
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -210,25 +207,11 @@ beforeEach(() => {
   getTopology.mockImplementation(OFFLINE);
   getEnvShape.mockImplementation(OFFLINE);
   getEnvStatus.mockImplementation(OFFLINE);
-  getAudit.mockImplementation(OFFLINE);
   getLiveView.mockImplementation(() => Promise.resolve(liveEnvs));
   listSecrets.mockResolvedValue([]);
 });
 
 describe("an environment Reliant has no record of, with the daemon offline", () => {
-  it("says what the daemon-backed tab needs, and offers a retry-free page otherwise", async () => {
-    routeState.tab = "changes";
-    renderPage();
-
-    // Longer than the default 1s: forgeRetry allows ONE retry on a transport
-    // failure, so a daemon that is down is established on the second attempt.
-    const offline = await screen.findByTestId("daemon-needed", {}, { timeout: 5000 });
-    expect(offline).toHaveTextContent(DAEMON_OFFLINE_COPY);
-    // It says the backend tabs are unaffected, rather than reading as if the
-    // whole environment were in question.
-    expect(offline).toHaveTextContent(/don't need it/i);
-  });
-
   it("still renders Overview, saying it is not registered rather than 'not built yet'", async () => {
     renderPage();
 
@@ -244,7 +227,6 @@ describe("Register", () => {
     getTopology.mockResolvedValue({ kind: "report", report: { project: "hounders", environments: [] } });
     getEnvShape.mockResolvedValue({ kind: "report", report: SHAPE_REPORT });
     getEnvStatus.mockResolvedValue({ kind: "report", report: {} });
-    getAudit.mockResolvedValue({ kind: "report", report: {} });
   });
 
   it("shows an unregistered env as 'would be created' and registers forge's shape", async () => {
@@ -330,7 +312,6 @@ describe("acceptance: unregistered → Register → daemon offline → Overview 
     getTopology.mockResolvedValue({ kind: "report", report: { project: "hounders", environments: [] } });
     getEnvShape.mockResolvedValue({ kind: "report", report: SHAPE_REPORT });
     getEnvStatus.mockResolvedValue({ kind: "report", report: {} });
-    getAudit.mockResolvedValue({ kind: "report", report: {} });
 
     const first = renderPage();
     const panel = await screen.findByTestId("register-env-panel", {}, { timeout: 5000 });
@@ -346,7 +327,6 @@ describe("acceptance: unregistered → Register → daemon offline → Overview 
     getTopology.mockImplementation(OFFLINE);
     getEnvShape.mockImplementation(OFFLINE);
     getEnvStatus.mockImplementation(OFFLINE);
-    getAudit.mockImplementation(OFFLINE);
 
     // ── 4. Overview shows "Declared, not built yet"… ──
     routeState.tab = undefined;

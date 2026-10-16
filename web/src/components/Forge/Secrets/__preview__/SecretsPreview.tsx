@@ -3,7 +3,7 @@
 /**
  * Proving harness for the secrets surface. NOT a product surface.
  *
- * It exists for the same reason WorkloadInventoryPreview does: the complaint
+ * It exists for the same reason the other Forge preview harnesses do: the complaint
  * this screen fixes was VISUAL — "secrets tables are fucking ugly" — so "the
  * tests pass" is not evidence that it is fixed. This route renders the REAL
  * components with a scheme and light/dark switcher, so the thing the user will

@@ -86,7 +86,6 @@ func TestForgeCommandsAreRegistered(t *testing.T) {
 		"forge.topology",
 		"forge.env_verify",
 		"forge.secret_list",
-		"forge.audit",
 		"forge.env_status",
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -156,7 +155,7 @@ func TestForgeProjectPathThatIsAFileIsRejected(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	_, err := handle(t, "forge.audit", forgeAuditRequest{ProjectPath: file})
+	_, err := handle(t, "forge.env_status", forgeEnvStatusRequest{ProjectPath: file, Env: "dev"})
 	if err == nil || !strings.HasPrefix(err.Error(), forgeProjectDirNotExistPrefix) {
 		t.Errorf("a file path must be rejected with the dir-not-exist prefix, got %v", err)
 	}
@@ -384,7 +383,6 @@ func TestForgePerCommandArgs(t *testing.T) {
 	}{
 		{"forge.env_verify", map[string]string{"env": "prod"}, []string{"env", "status", "prod", "--json"}},
 		{"forge.secret_list", map[string]string{"env": "dev"}, []string{"secret", "list", "--env=dev", "--json"}},
-		{"forge.audit", nil, []string{"project", "audit", "--json"}},
 		{"forge.env_status", map[string]string{"env": "dev"}, []string{"env", "status", "dev", "--json"}},
 	} {
 		t.Run(tc.command, func(t *testing.T) {
@@ -419,7 +417,7 @@ func TestForgeRequiredFieldsAreValidated(t *testing.T) {
 
 	t.Run("project_path required", func(t *testing.T) {
 		stubForge(t, forgeCommandResult{}, nil)
-		if _, err := handle(t, "forge.audit", forgeAuditRequest{}); err == nil {
+		if _, err := handle(t, "forge.env_status", forgeEnvStatusRequest{Env: "dev"}); err == nil {
 			t.Error("expected an error when project_path is empty")
 		}
 	})
@@ -446,7 +444,7 @@ func TestForgeRunFailureUsesStableErrorPrefix(t *testing.T) {
 	dir := forgeProject(t)
 	stubForge(t, forgeCommandResult{}, fmt.Errorf("run forge: exec format error"))
 
-	_, err := handle(t, "forge.audit", forgeAuditRequest{ProjectPath: dir})
+	_, err := handle(t, "forge.env_status", forgeEnvStatusRequest{ProjectPath: dir, Env: "dev"})
 	if err == nil {
 		t.Fatal("expected an error when forge could not be run")
 	}
@@ -537,7 +535,7 @@ func TestForgeExitZeroWithUnparseableOutputIsAnError(t *testing.T) {
 	dir := forgeProject(t)
 	stubForge(t, forgeCommandResult{Stdout: []byte("not json at all")}, nil)
 
-	if _, err := handle(t, "forge.audit", forgeAuditRequest{ProjectPath: dir}); err == nil {
+	if _, err := handle(t, "forge.env_status", forgeEnvStatusRequest{ProjectPath: dir, Env: "dev"}); err == nil {
 		t.Fatal("expected an error for exit 0 with unparseable output")
 	}
 }
@@ -925,7 +923,7 @@ func TestForgeVersionIsStampedOnEveryResponse(t *testing.T) {
 	// on every path — including the two that never run forge.
 	t.Run("non-forge project", func(t *testing.T) {
 		stubForge(t, forgeCommandResult{}, nil)
-		raw, err := handle(t, "forge.audit", forgeAuditRequest{ProjectPath: t.TempDir()})
+		raw, err := handle(t, "forge.env_status", forgeEnvStatusRequest{ProjectPath: t.TempDir(), Env: "dev"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -937,7 +935,7 @@ func TestForgeVersionIsStampedOnEveryResponse(t *testing.T) {
 	t.Run("successful report", func(t *testing.T) {
 		dir := forgeProject(t)
 		stubForge(t, forgeCommandResult{Stdout: []byte(`{"ok":true}`)}, nil)
-		raw, err := handle(t, "forge.audit", forgeAuditRequest{ProjectPath: dir})
+		raw, err := handle(t, "forge.env_status", forgeEnvStatusRequest{ProjectPath: dir, Env: "dev"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

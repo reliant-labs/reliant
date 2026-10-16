@@ -27,13 +27,10 @@ import {
   ForgeDeployRefusalSchema,
   ForgePromoteRefusalReason,
   ForgePromoteRefusalSchema,
-  DiffForgeEnvRequestSchema,
-  GetForgeAuditRequestSchema,
   GetForgeDeployStatusRequestSchema,
   GetForgeEnvShapeRequestSchema,
   GetForgeEnvStatusRequestSchema,
   GetForgeTopologyRequestSchema,
-  ListForgeCheckoutsRequestSchema,
   ListForgeSecretsRequestSchema,
   PlanForgeDeployRequestSchema,
   PlanForgePromoteRequestSchema,
@@ -50,8 +47,6 @@ import type {
   ForgeDeployReport,
 } from "../services/forge/deploy";
 import type { DeployPlanReport, PlanApproval } from "../services/forge/deployPlan";
-import type { ForgeCheckoutsReport } from "../services/forge/checkouts";
-import type { ForgeEnvDiffReport } from "../services/forge/envDiff";
 import type { ForgePromotePlan, PromoteConfirmationToken, PromoteRefusal } from "../services/forge/promote";
 import type { ForgeEnvShapeReport } from "../services/forge/register";
 import { normalizeEnvStatus, type ForgeEnvStatusReport } from "../services/forge/status";
@@ -111,13 +106,6 @@ export async function listSecrets(
 ): Promise<ForgeOutcome<Record<string, unknown>>> {
   const res = await createForgeClient().listSecrets(
     create(ListForgeSecretsRequestSchema, { projectId, env })
-  );
-  return classifyForgeResponse<Record<string, unknown>>(res.meta, res.reportJson);
-}
-
-export async function getAudit(projectId: string): Promise<ForgeOutcome<Record<string, unknown>>> {
-  const res = await createForgeClient().getAudit(
-    create(GetForgeAuditRequestSchema, { projectId })
   );
   return classifyForgeResponse<Record<string, unknown>>(res.meta, res.reportJson);
 }
@@ -308,14 +296,11 @@ function promoteRefusalOf(error: unknown): PromoteRefusal | null {
 export async function planDeploy(args: {
   projectId: string;
   env: string;
-  /** The checkout to render. Empty means the project's main checkout. */
-  checkoutPath?: string;
 }): Promise<ForgeOutcome<ForgeDeployReport>> {
   const res = await createForgeClient().planDeploy(
     create(PlanForgeDeployRequestSchema, {
       projectId: args.projectId,
       env: args.env,
-      checkoutPath: args.checkoutPath ?? "",
     })
   );
   return classifyForgeResponse<ForgeDeployReport>(res.meta, res.reportJson);
@@ -337,14 +322,12 @@ export async function planDeploy(args: {
 export async function startDeployPlan(args: {
   projectId: string;
   env: string;
-  checkoutPath?: string;
 }): Promise<StartDeployResult> {
   try {
     const res = await createForgeClient().startDeployPlan(
       create(StartForgeDeployPlanRequestSchema, {
         projectId: args.projectId,
         env: args.env,
-        checkoutPath: args.checkoutPath ?? "",
       })
     );
 
@@ -369,49 +352,6 @@ export async function startDeployPlan(args: {
     if (refusal) return { kind: "refused", refusal };
     throw error;
   }
-}
-
-/**
- * listCheckouts lists the checkouts a preview may render.
- *
- * Read-only, and git-only — it reads the daemon's working copies, never a
- * cluster. The server treats this same list as the allowlist for any checkout a
- * later call names, so a UI cannot widen it by sending something else.
- */
-export async function listCheckouts(args: {
-  projectId: string;
-  withTree?: boolean;
-}): Promise<ForgeOutcome<ForgeCheckoutsReport>> {
-  const res = await createForgeClient().listCheckouts(
-    create(ListForgeCheckoutsRequestSchema, {
-      projectId: args.projectId,
-      withTree: args.withTree === true,
-    })
-  );
-  return classifyForgeResponse<ForgeCheckoutsReport>(res.meta, res.reportJson);
-}
-
-/**
- * diffEnv renders a checkout and compares each environment against what is
- * deployed. Read-only: nothing is built, pushed or applied.
- *
- * Exactly one of env and all, mirroring the server.
- */
-export async function diffEnv(args: {
-  projectId: string;
-  env?: string;
-  all?: boolean;
-  checkoutPath?: string;
-}): Promise<ForgeOutcome<ForgeEnvDiffReport>> {
-  const res = await createForgeClient().diffEnv(
-    create(DiffForgeEnvRequestSchema, {
-      projectId: args.projectId,
-      env: args.env ?? "",
-      all: args.all === true,
-      checkoutPath: args.checkoutPath ?? "",
-    })
-  );
-  return classifyForgeResponse<ForgeEnvDiffReport>(res.meta, res.reportJson);
 }
 
 /**
@@ -474,7 +414,6 @@ export async function startDeploy(args: {
    * which is what approving by digest exists to stop.
    */
   approval: PlanApproval;
-  checkoutPath?: string;
 }): Promise<StartDeployResult> {
   try {
     const res = await createForgeClient().startDeploy(
@@ -494,7 +433,6 @@ export async function startDeploy(args: {
         approveDigest: args.approval.approveDigest,
         releaseVersion: args.approval.releaseVersion,
         acknowledgedFindings: args.approval.acknowledgedFindings,
-        checkoutPath: args.checkoutPath ?? "",
       })
     );
 
@@ -741,15 +679,12 @@ export const forgeGrpc = {
   getTopology,
   verifyEnv,
   listSecrets,
-  getAudit,
   getEnvStatus,
   getEnvShape,
   planPromote,
   applyPromote,
   planDeploy,
   startDeployPlan,
-  listCheckouts,
-  diffEnv,
   startDeploy,
   getDeployStatus,
 };

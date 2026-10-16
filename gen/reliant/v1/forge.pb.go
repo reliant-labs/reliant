@@ -767,103 +767,6 @@ func (x *ListForgeSecretsResponse) GetReportJson() string {
 	return ""
 }
 
-type GetForgeAuditRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetForgeAuditRequest) Reset() {
-	*x = GetForgeAuditRequest{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetForgeAuditRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetForgeAuditRequest) ProtoMessage() {}
-
-func (x *GetForgeAuditRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetForgeAuditRequest.ProtoReflect.Descriptor instead.
-func (*GetForgeAuditRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *GetForgeAuditRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
-	}
-	return ""
-}
-
-type GetForgeAuditResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Meta  *ForgeReportMeta       `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	// Forge's `project audit --json` document, verbatim.
-	ReportJson    string `protobuf:"bytes,2,opt,name=report_json,json=reportJson,proto3" json:"report_json,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetForgeAuditResponse) Reset() {
-	*x = GetForgeAuditResponse{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetForgeAuditResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetForgeAuditResponse) ProtoMessage() {}
-
-func (x *GetForgeAuditResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetForgeAuditResponse.ProtoReflect.Descriptor instead.
-func (*GetForgeAuditResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *GetForgeAuditResponse) GetMeta() *ForgeReportMeta {
-	if x != nil {
-		return x.Meta
-	}
-	return nil
-}
-
-func (x *GetForgeAuditResponse) GetReportJson() string {
-	if x != nil {
-		return x.ReportJson
-	}
-	return ""
-}
-
 type GetForgeEnvStatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
@@ -874,7 +777,7 @@ type GetForgeEnvStatusRequest struct {
 
 func (x *GetForgeEnvStatusRequest) Reset() {
 	*x = GetForgeEnvStatusRequest{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[9]
+	mi := &file_reliant_v1_forge_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -886,7 +789,7 @@ func (x *GetForgeEnvStatusRequest) String() string {
 func (*GetForgeEnvStatusRequest) ProtoMessage() {}
 
 func (x *GetForgeEnvStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[9]
+	mi := &file_reliant_v1_forge_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -899,7 +802,7 @@ func (x *GetForgeEnvStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetForgeEnvStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetForgeEnvStatusRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetForgeEnvStatusRequest) GetProjectId() string {
@@ -930,7 +833,7 @@ type GetForgeEnvStatusResponse struct {
 
 func (x *GetForgeEnvStatusResponse) Reset() {
 	*x = GetForgeEnvStatusResponse{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[10]
+	mi := &file_reliant_v1_forge_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -942,7 +845,7 @@ func (x *GetForgeEnvStatusResponse) String() string {
 func (*GetForgeEnvStatusResponse) ProtoMessage() {}
 
 func (x *GetForgeEnvStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[10]
+	mi := &file_reliant_v1_forge_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -955,7 +858,7 @@ func (x *GetForgeEnvStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetForgeEnvStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetForgeEnvStatusResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetForgeEnvStatusResponse) GetMeta() *ForgeReportMeta {
@@ -982,7 +885,7 @@ type GetForgeEnvShapeRequest struct {
 
 func (x *GetForgeEnvShapeRequest) Reset() {
 	*x = GetForgeEnvShapeRequest{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[11]
+	mi := &file_reliant_v1_forge_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -994,7 +897,7 @@ func (x *GetForgeEnvShapeRequest) String() string {
 func (*GetForgeEnvShapeRequest) ProtoMessage() {}
 
 func (x *GetForgeEnvShapeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[11]
+	mi := &file_reliant_v1_forge_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1007,7 +910,7 @@ func (x *GetForgeEnvShapeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetForgeEnvShapeRequest.ProtoReflect.Descriptor instead.
 func (*GetForgeEnvShapeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetForgeEnvShapeRequest) GetProjectId() string {
@@ -1041,7 +944,7 @@ type GetForgeEnvShapeResponse struct {
 
 func (x *GetForgeEnvShapeResponse) Reset() {
 	*x = GetForgeEnvShapeResponse{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[12]
+	mi := &file_reliant_v1_forge_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1053,7 +956,7 @@ func (x *GetForgeEnvShapeResponse) String() string {
 func (*GetForgeEnvShapeResponse) ProtoMessage() {}
 
 func (x *GetForgeEnvShapeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[12]
+	mi := &file_reliant_v1_forge_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1066,7 +969,7 @@ func (x *GetForgeEnvShapeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetForgeEnvShapeResponse.ProtoReflect.Descriptor instead.
 func (*GetForgeEnvShapeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetForgeEnvShapeResponse) GetMeta() *ForgeReportMeta {
@@ -1096,7 +999,7 @@ type PlanForgePromoteRequest struct {
 
 func (x *PlanForgePromoteRequest) Reset() {
 	*x = PlanForgePromoteRequest{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[13]
+	mi := &file_reliant_v1_forge_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1108,7 +1011,7 @@ func (x *PlanForgePromoteRequest) String() string {
 func (*PlanForgePromoteRequest) ProtoMessage() {}
 
 func (x *PlanForgePromoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[13]
+	mi := &file_reliant_v1_forge_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1121,7 +1024,7 @@ func (x *PlanForgePromoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanForgePromoteRequest.ProtoReflect.Descriptor instead.
 func (*PlanForgePromoteRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PlanForgePromoteRequest) GetProjectId() string {
@@ -1164,7 +1067,7 @@ type PlanForgePromoteResponse struct {
 
 func (x *PlanForgePromoteResponse) Reset() {
 	*x = PlanForgePromoteResponse{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[14]
+	mi := &file_reliant_v1_forge_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1176,7 +1079,7 @@ func (x *PlanForgePromoteResponse) String() string {
 func (*PlanForgePromoteResponse) ProtoMessage() {}
 
 func (x *PlanForgePromoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[14]
+	mi := &file_reliant_v1_forge_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1189,7 +1092,7 @@ func (x *PlanForgePromoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanForgePromoteResponse.ProtoReflect.Descriptor instead.
 func (*PlanForgePromoteResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *PlanForgePromoteResponse) GetMeta() *ForgeReportMeta {
@@ -1245,7 +1148,7 @@ type PromoteForgeEnvRequest struct {
 
 func (x *PromoteForgeEnvRequest) Reset() {
 	*x = PromoteForgeEnvRequest{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[15]
+	mi := &file_reliant_v1_forge_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1257,7 +1160,7 @@ func (x *PromoteForgeEnvRequest) String() string {
 func (*PromoteForgeEnvRequest) ProtoMessage() {}
 
 func (x *PromoteForgeEnvRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[15]
+	mi := &file_reliant_v1_forge_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1270,7 +1173,7 @@ func (x *PromoteForgeEnvRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromoteForgeEnvRequest.ProtoReflect.Descriptor instead.
 func (*PromoteForgeEnvRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *PromoteForgeEnvRequest) GetProjectId() string {
@@ -1342,7 +1245,7 @@ type ForgePromoteRefusal struct {
 
 func (x *ForgePromoteRefusal) Reset() {
 	*x = ForgePromoteRefusal{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[16]
+	mi := &file_reliant_v1_forge_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1354,7 +1257,7 @@ func (x *ForgePromoteRefusal) String() string {
 func (*ForgePromoteRefusal) ProtoMessage() {}
 
 func (x *ForgePromoteRefusal) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[16]
+	mi := &file_reliant_v1_forge_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1367,7 +1270,7 @@ func (x *ForgePromoteRefusal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForgePromoteRefusal.ProtoReflect.Descriptor instead.
 func (*ForgePromoteRefusal) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ForgePromoteRefusal) GetReason() ForgePromoteRefusalReason {
@@ -1448,7 +1351,7 @@ type PromoteForgeEnvResponse struct {
 
 func (x *PromoteForgeEnvResponse) Reset() {
 	*x = PromoteForgeEnvResponse{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[17]
+	mi := &file_reliant_v1_forge_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1460,7 +1363,7 @@ func (x *PromoteForgeEnvResponse) String() string {
 func (*PromoteForgeEnvResponse) ProtoMessage() {}
 
 func (x *PromoteForgeEnvResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[17]
+	mi := &file_reliant_v1_forge_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1473,7 +1376,7 @@ func (x *PromoteForgeEnvResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromoteForgeEnvResponse.ProtoReflect.Descriptor instead.
 func (*PromoteForgeEnvResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *PromoteForgeEnvResponse) GetMeta() *ForgeReportMeta {
@@ -1496,7 +1399,7 @@ type PlanForgeDeployRequest struct {
 	// The environment to preview deploying. forge's positional argument.
 	Env string `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
 	// The checkout to render — the project's main checkout when empty. Honoured
-	// only if ListCheckouts returned it for this project.
+	// only if it is one of this project's checkouts (main or a git worktree).
 	CheckoutPath  string `protobuf:"bytes,3,opt,name=checkout_path,json=checkoutPath,proto3" json:"checkout_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1504,7 +1407,7 @@ type PlanForgeDeployRequest struct {
 
 func (x *PlanForgeDeployRequest) Reset() {
 	*x = PlanForgeDeployRequest{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[18]
+	mi := &file_reliant_v1_forge_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1516,7 +1419,7 @@ func (x *PlanForgeDeployRequest) String() string {
 func (*PlanForgeDeployRequest) ProtoMessage() {}
 
 func (x *PlanForgeDeployRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[18]
+	mi := &file_reliant_v1_forge_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1529,7 +1432,7 @@ func (x *PlanForgeDeployRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanForgeDeployRequest.ProtoReflect.Descriptor instead.
 func (*PlanForgeDeployRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PlanForgeDeployRequest) GetProjectId() string {
@@ -1577,7 +1480,7 @@ type PlanForgeDeployResponse struct {
 
 func (x *PlanForgeDeployResponse) Reset() {
 	*x = PlanForgeDeployResponse{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[19]
+	mi := &file_reliant_v1_forge_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1589,7 +1492,7 @@ func (x *PlanForgeDeployResponse) String() string {
 func (*PlanForgeDeployResponse) ProtoMessage() {}
 
 func (x *PlanForgeDeployResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[19]
+	mi := &file_reliant_v1_forge_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1602,7 +1505,7 @@ func (x *PlanForgeDeployResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanForgeDeployResponse.ProtoReflect.Descriptor instead.
 func (*PlanForgeDeployResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *PlanForgeDeployResponse) GetMeta() *ForgeReportMeta {
@@ -1631,7 +1534,7 @@ type StartForgeDeployPlanRequest struct {
 	// The environment to plan a deploy of. forge's positional argument.
 	Env string `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
 	// The checkout to build and render from — the project's main checkout when
-	// empty. Honoured only if ListCheckouts returned it for this project.
+	// empty. Honoured only if it is one of this project's checkouts (main or a git worktree).
 	CheckoutPath  string `protobuf:"bytes,3,opt,name=checkout_path,json=checkoutPath,proto3" json:"checkout_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1639,7 +1542,7 @@ type StartForgeDeployPlanRequest struct {
 
 func (x *StartForgeDeployPlanRequest) Reset() {
 	*x = StartForgeDeployPlanRequest{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[20]
+	mi := &file_reliant_v1_forge_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1651,7 +1554,7 @@ func (x *StartForgeDeployPlanRequest) String() string {
 func (*StartForgeDeployPlanRequest) ProtoMessage() {}
 
 func (x *StartForgeDeployPlanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[20]
+	mi := &file_reliant_v1_forge_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1664,7 +1567,7 @@ func (x *StartForgeDeployPlanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartForgeDeployPlanRequest.ProtoReflect.Descriptor instead.
 func (*StartForgeDeployPlanRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *StartForgeDeployPlanRequest) GetProjectId() string {
@@ -1684,260 +1587,6 @@ func (x *StartForgeDeployPlanRequest) GetEnv() string {
 func (x *StartForgeDeployPlanRequest) GetCheckoutPath() string {
 	if x != nil {
 		return x.CheckoutPath
-	}
-	return ""
-}
-
-type ListForgeCheckoutsRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	// Also compute each checkout's content hash. It costs about half a second per
-	// checkout, so it is opt-in: the picker does not need it, a diff cache does.
-	WithTree      *bool `protobuf:"varint,2,opt,name=with_tree,json=withTree,proto3,oneof" json:"with_tree,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListForgeCheckoutsRequest) Reset() {
-	*x = ListForgeCheckoutsRequest{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[21]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListForgeCheckoutsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListForgeCheckoutsRequest) ProtoMessage() {}
-
-func (x *ListForgeCheckoutsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[21]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListForgeCheckoutsRequest.ProtoReflect.Descriptor instead.
-func (*ListForgeCheckoutsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{21}
-}
-
-func (x *ListForgeCheckoutsRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
-	}
-	return ""
-}
-
-func (x *ListForgeCheckoutsRequest) GetWithTree() bool {
-	if x != nil && x.WithTree != nil {
-		return *x.WithTree
-	}
-	return false
-}
-
-type ListForgeCheckoutsResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Meta  *ForgeReportMeta       `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	// Forge's checkout document, verbatim. Each entry carries the label to show,
-	// whether it is the remote main or a worktree, its path, branch and current
-	// commit, whether it has uncommitted changes, and how far ahead or behind
-	// main it is.
-	//
-	// Two fields read wrong if skimmed. "main" means the REMOTE main, not a local
-	// branch of that name — a local main that has not been fetched is a different
-	// tree. And the ahead/behind counts are OMITTED rather than zero when the
-	// comparison cannot be made at all: "in step with main" and "could not tell"
-	// are different answers, and showing the second as the first would be a
-	// confident lie about how stale a checkout is.
-	ReportJson    string `protobuf:"bytes,2,opt,name=report_json,json=reportJson,proto3" json:"report_json,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListForgeCheckoutsResponse) Reset() {
-	*x = ListForgeCheckoutsResponse{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListForgeCheckoutsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListForgeCheckoutsResponse) ProtoMessage() {}
-
-func (x *ListForgeCheckoutsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListForgeCheckoutsResponse.ProtoReflect.Descriptor instead.
-func (*ListForgeCheckoutsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{22}
-}
-
-func (x *ListForgeCheckoutsResponse) GetMeta() *ForgeReportMeta {
-	if x != nil {
-		return x.Meta
-	}
-	return nil
-}
-
-func (x *ListForgeCheckoutsResponse) GetReportJson() string {
-	if x != nil {
-		return x.ReportJson
-	}
-	return ""
-}
-
-type DiffForgeEnvRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	// The ONE environment to diff. Exactly one of this and all — forge's own
-	// rule, mirrored here so a malformed request is refused before any work
-	// starts.
-	Env string `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
-	// Diff every environment declared in the checkout, in one document. This is
-	// the form the cards use: one render serves them all, so asking once is
-	// cheaper than asking per environment.
-	All bool `protobuf:"varint,3,opt,name=all,proto3" json:"all,omitempty"`
-	// The checkout to render — the project's main checkout when empty. Honoured
-	// only if ListCheckouts returned it for this project.
-	CheckoutPath  string `protobuf:"bytes,4,opt,name=checkout_path,json=checkoutPath,proto3" json:"checkout_path,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DiffForgeEnvRequest) Reset() {
-	*x = DiffForgeEnvRequest{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[23]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DiffForgeEnvRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DiffForgeEnvRequest) ProtoMessage() {}
-
-func (x *DiffForgeEnvRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[23]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DiffForgeEnvRequest.ProtoReflect.Descriptor instead.
-func (*DiffForgeEnvRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{23}
-}
-
-func (x *DiffForgeEnvRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
-	}
-	return ""
-}
-
-func (x *DiffForgeEnvRequest) GetEnv() string {
-	if x != nil {
-		return x.Env
-	}
-	return ""
-}
-
-func (x *DiffForgeEnvRequest) GetAll() bool {
-	if x != nil {
-		return x.All
-	}
-	return false
-}
-
-func (x *DiffForgeEnvRequest) GetCheckoutPath() string {
-	if x != nil {
-		return x.CheckoutPath
-	}
-	return ""
-}
-
-type DiffForgeEnvResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Meta  *ForgeReportMeta       `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	// Forge's diff document, verbatim: per environment, what was added, removed
-	// and changed, with image changes separated from configuration changes, plus
-	// secrets newly needed and any runtime or cluster move.
-	//
-	// READ THE PER-ENVIRONMENT STATUS FIRST, because a failure must never be
-	// mistaken for "nothing changed". An environment whose render failed, or
-	// which has no recorded configuration to compare against, reports that
-	// instead of an empty diff — and an empty diff and an unanswerable one mean
-	// opposite things.
-	ReportJson    string `protobuf:"bytes,2,opt,name=report_json,json=reportJson,proto3" json:"report_json,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DiffForgeEnvResponse) Reset() {
-	*x = DiffForgeEnvResponse{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DiffForgeEnvResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DiffForgeEnvResponse) ProtoMessage() {}
-
-func (x *DiffForgeEnvResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DiffForgeEnvResponse.ProtoReflect.Descriptor instead.
-func (*DiffForgeEnvResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *DiffForgeEnvResponse) GetMeta() *ForgeReportMeta {
-	if x != nil {
-		return x.Meta
-	}
-	return nil
-}
-
-func (x *DiffForgeEnvResponse) GetReportJson() string {
-	if x != nil {
-		return x.ReportJson
 	}
 	return ""
 }
@@ -2013,8 +1662,8 @@ type StartForgeDeployRequest struct {
 	ReleaseVersion string `protobuf:"bytes,8,opt,name=release_version,json=releaseVersion,proto3" json:"release_version,omitempty"`
 	// The checkout to deploy from — the project's main checkout when empty.
 	//
-	// Honoured only if it is one of the checkouts ListCheckouts returned for this
-	// project; the daemon re-derives that list and checks against it. A value
+	// Honoured only if it is one of this project's checkouts (main or a git
+	// worktree); the daemon re-derives that list and checks against it. A value
 	// this server cannot authorise is refused rather than used.
 	CheckoutPath  string `protobuf:"bytes,9,opt,name=checkout_path,json=checkoutPath,proto3" json:"checkout_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2023,7 +1672,7 @@ type StartForgeDeployRequest struct {
 
 func (x *StartForgeDeployRequest) Reset() {
 	*x = StartForgeDeployRequest{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[25]
+	mi := &file_reliant_v1_forge_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2035,7 +1684,7 @@ func (x *StartForgeDeployRequest) String() string {
 func (*StartForgeDeployRequest) ProtoMessage() {}
 
 func (x *StartForgeDeployRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[25]
+	mi := &file_reliant_v1_forge_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2048,7 +1697,7 @@ func (x *StartForgeDeployRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartForgeDeployRequest.ProtoReflect.Descriptor instead.
 func (*StartForgeDeployRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{25}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *StartForgeDeployRequest) GetProjectId() string {
@@ -2166,7 +1815,7 @@ type ForgeDeployRefusal struct {
 
 func (x *ForgeDeployRefusal) Reset() {
 	*x = ForgeDeployRefusal{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[26]
+	mi := &file_reliant_v1_forge_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2178,7 +1827,7 @@ func (x *ForgeDeployRefusal) String() string {
 func (*ForgeDeployRefusal) ProtoMessage() {}
 
 func (x *ForgeDeployRefusal) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[26]
+	mi := &file_reliant_v1_forge_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2191,7 +1840,7 @@ func (x *ForgeDeployRefusal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForgeDeployRefusal.ProtoReflect.Descriptor instead.
 func (*ForgeDeployRefusal) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{26}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ForgeDeployRefusal) GetReason() ForgeDeployRefusalReason {
@@ -2325,7 +1974,7 @@ type StartForgeDeployResponse struct {
 
 func (x *StartForgeDeployResponse) Reset() {
 	*x = StartForgeDeployResponse{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[27]
+	mi := &file_reliant_v1_forge_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2337,7 +1986,7 @@ func (x *StartForgeDeployResponse) String() string {
 func (*StartForgeDeployResponse) ProtoMessage() {}
 
 func (x *StartForgeDeployResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[27]
+	mi := &file_reliant_v1_forge_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2350,7 +1999,7 @@ func (x *StartForgeDeployResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartForgeDeployResponse.ProtoReflect.Descriptor instead.
 func (*StartForgeDeployResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{27}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *StartForgeDeployResponse) GetMeta() *ForgeReportMeta {
@@ -2406,7 +2055,7 @@ type GetForgeDeployStatusRequest struct {
 
 func (x *GetForgeDeployStatusRequest) Reset() {
 	*x = GetForgeDeployStatusRequest{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[28]
+	mi := &file_reliant_v1_forge_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2418,7 +2067,7 @@ func (x *GetForgeDeployStatusRequest) String() string {
 func (*GetForgeDeployStatusRequest) ProtoMessage() {}
 
 func (x *GetForgeDeployStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[28]
+	mi := &file_reliant_v1_forge_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2431,7 +2080,7 @@ func (x *GetForgeDeployStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetForgeDeployStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetForgeDeployStatusRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{28}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetForgeDeployStatusRequest) GetProjectId() string {
@@ -2506,7 +2155,7 @@ type GetForgeDeployStatusResponse struct {
 
 func (x *GetForgeDeployStatusResponse) Reset() {
 	*x = GetForgeDeployStatusResponse{}
-	mi := &file_reliant_v1_forge_proto_msgTypes[29]
+	mi := &file_reliant_v1_forge_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2518,7 +2167,7 @@ func (x *GetForgeDeployStatusResponse) String() string {
 func (*GetForgeDeployStatusResponse) ProtoMessage() {}
 
 func (x *GetForgeDeployStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_forge_proto_msgTypes[29]
+	mi := &file_reliant_v1_forge_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2531,7 +2180,7 @@ func (x *GetForgeDeployStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetForgeDeployStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetForgeDeployStatusResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{29}
+	return file_reliant_v1_forge_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GetForgeDeployStatusResponse) GetMeta() *ForgeReportMeta {
@@ -2642,13 +2291,6 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	"\x18ListForgeSecretsResponse\x12/\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
 	"\vreport_json\x18\x02 \x01(\tR\n" +
-	"reportJson\"5\n" +
-	"\x14GetForgeAuditRequest\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\"i\n" +
-	"\x15GetForgeAuditResponse\x12/\n" +
-	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
-	"\vreport_json\x18\x02 \x01(\tR\n" +
 	"reportJson\"K\n" +
 	"\x18GetForgeEnvStatusRequest\x12\x1d\n" +
 	"\n" +
@@ -2707,27 +2349,7 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
 	"\x03env\x18\x02 \x01(\tR\x03env\x12#\n" +
-	"\rcheckout_path\x18\x03 \x01(\tR\fcheckoutPath\"r\n" +
-	"\x19ListForgeCheckoutsRequest\x12%\n" +
-	"\n" +
-	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12 \n" +
-	"\twith_tree\x18\x02 \x01(\bH\x00R\bwithTree\x88\x01\x01B\f\n" +
-	"\n" +
-	"_with_tree\"n\n" +
-	"\x1aListForgeCheckoutsResponse\x12/\n" +
-	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
-	"\vreport_json\x18\x02 \x01(\tR\n" +
-	"reportJson\"}\n" +
-	"\x13DiffForgeEnvRequest\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
-	"\x03env\x18\x02 \x01(\tR\x03env\x12\x10\n" +
-	"\x03all\x18\x03 \x01(\bR\x03all\x12#\n" +
-	"\rcheckout_path\x18\x04 \x01(\tR\fcheckoutPath\"h\n" +
-	"\x14DiffForgeEnvResponse\x12/\n" +
-	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
-	"\vreport_json\x18\x02 \x01(\tR\n" +
-	"reportJson\"\x91\x03\n" +
+	"\rcheckout_path\x18\x03 \x01(\tR\fcheckoutPath\"\x91\x03\n" +
 	"\x17StartForgeDeployRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
@@ -2805,22 +2427,18 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	")FORGE_DEPLOY_REFUSAL_REASON_GUARD_REFUSED\x10\x03\x12/\n" +
 	"+FORGE_DEPLOY_REFUSAL_REASON_ALREADY_RUNNING\x10\x04\x12*\n" +
 	"&FORGE_DEPLOY_REFUSAL_REASON_PLAN_STALE\x10\x05\x123\n" +
-	"/FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED\x10\x062\x94\n" +
-	"\n" +
+	"/FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED\x10\x062\x8f\b\n" +
 	"\fForgeService\x12Z\n" +
 	"\vGetTopology\x12#.reliant.v1.GetForgeTopologyRequest\x1a$.reliant.v1.GetForgeTopologyResponse\"\x00\x12T\n" +
 	"\tVerifyEnv\x12!.reliant.v1.VerifyForgeEnvRequest\x1a\".reliant.v1.VerifyForgeEnvResponse\"\x00\x12Z\n" +
-	"\vListSecrets\x12#.reliant.v1.ListForgeSecretsRequest\x1a$.reliant.v1.ListForgeSecretsResponse\"\x00\x12Q\n" +
-	"\bGetAudit\x12 .reliant.v1.GetForgeAuditRequest\x1a!.reliant.v1.GetForgeAuditResponse\"\x00\x12]\n" +
+	"\vListSecrets\x12#.reliant.v1.ListForgeSecretsRequest\x1a$.reliant.v1.ListForgeSecretsResponse\"\x00\x12]\n" +
 	"\fGetEnvStatus\x12$.reliant.v1.GetForgeEnvStatusRequest\x1a%.reliant.v1.GetForgeEnvStatusResponse\"\x00\x12Z\n" +
 	"\vGetEnvShape\x12#.reliant.v1.GetForgeEnvShapeRequest\x1a$.reliant.v1.GetForgeEnvShapeResponse\"\x00\x12Z\n" +
 	"\vPlanPromote\x12#.reliant.v1.PlanForgePromoteRequest\x1a$.reliant.v1.PlanForgePromoteResponse\"\x00\x12Y\n" +
 	"\fApplyPromote\x12\".reliant.v1.PromoteForgeEnvRequest\x1a#.reliant.v1.PromoteForgeEnvResponse\"\x00\x12W\n" +
 	"\n" +
 	"PlanDeploy\x12\".reliant.v1.PlanForgeDeployRequest\x1a#.reliant.v1.PlanForgeDeployResponse\"\x00\x12b\n" +
-	"\x0fStartDeployPlan\x12'.reliant.v1.StartForgeDeployPlanRequest\x1a$.reliant.v1.StartForgeDeployResponse\"\x00\x12`\n" +
-	"\rListCheckouts\x12%.reliant.v1.ListForgeCheckoutsRequest\x1a&.reliant.v1.ListForgeCheckoutsResponse\"\x00\x12N\n" +
-	"\aDiffEnv\x12\x1f.reliant.v1.DiffForgeEnvRequest\x1a .reliant.v1.DiffForgeEnvResponse\"\x00\x12Z\n" +
+	"\x0fStartDeployPlan\x12'.reliant.v1.StartForgeDeployPlanRequest\x1a$.reliant.v1.StartForgeDeployResponse\"\x00\x12Z\n" +
 	"\vStartDeploy\x12#.reliant.v1.StartForgeDeployRequest\x1a$.reliant.v1.StartForgeDeployResponse\"\x00\x12f\n" +
 	"\x0fGetDeployStatus\x12'.reliant.v1.GetForgeDeployStatusRequest\x1a(.reliant.v1.GetForgeDeployStatusResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
@@ -2837,7 +2455,7 @@ func file_reliant_v1_forge_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_forge_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_reliant_v1_forge_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_reliant_v1_forge_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_reliant_v1_forge_proto_goTypes = []any{
 	(ForgeReachability)(0),               // 0: reliant.v1.ForgeReachability
 	(ForgePromoteRefusalReason)(0),       // 1: reliant.v1.ForgePromoteRefusalReason
@@ -2850,83 +2468,68 @@ var file_reliant_v1_forge_proto_goTypes = []any{
 	(*VerifyForgeEnvResponse)(nil),       // 8: reliant.v1.VerifyForgeEnvResponse
 	(*ListForgeSecretsRequest)(nil),      // 9: reliant.v1.ListForgeSecretsRequest
 	(*ListForgeSecretsResponse)(nil),     // 10: reliant.v1.ListForgeSecretsResponse
-	(*GetForgeAuditRequest)(nil),         // 11: reliant.v1.GetForgeAuditRequest
-	(*GetForgeAuditResponse)(nil),        // 12: reliant.v1.GetForgeAuditResponse
-	(*GetForgeEnvStatusRequest)(nil),     // 13: reliant.v1.GetForgeEnvStatusRequest
-	(*GetForgeEnvStatusResponse)(nil),    // 14: reliant.v1.GetForgeEnvStatusResponse
-	(*GetForgeEnvShapeRequest)(nil),      // 15: reliant.v1.GetForgeEnvShapeRequest
-	(*GetForgeEnvShapeResponse)(nil),     // 16: reliant.v1.GetForgeEnvShapeResponse
-	(*PlanForgePromoteRequest)(nil),      // 17: reliant.v1.PlanForgePromoteRequest
-	(*PlanForgePromoteResponse)(nil),     // 18: reliant.v1.PlanForgePromoteResponse
-	(*PromoteForgeEnvRequest)(nil),       // 19: reliant.v1.PromoteForgeEnvRequest
-	(*ForgePromoteRefusal)(nil),          // 20: reliant.v1.ForgePromoteRefusal
-	(*PromoteForgeEnvResponse)(nil),      // 21: reliant.v1.PromoteForgeEnvResponse
-	(*PlanForgeDeployRequest)(nil),       // 22: reliant.v1.PlanForgeDeployRequest
-	(*PlanForgeDeployResponse)(nil),      // 23: reliant.v1.PlanForgeDeployResponse
-	(*StartForgeDeployPlanRequest)(nil),  // 24: reliant.v1.StartForgeDeployPlanRequest
-	(*ListForgeCheckoutsRequest)(nil),    // 25: reliant.v1.ListForgeCheckoutsRequest
-	(*ListForgeCheckoutsResponse)(nil),   // 26: reliant.v1.ListForgeCheckoutsResponse
-	(*DiffForgeEnvRequest)(nil),          // 27: reliant.v1.DiffForgeEnvRequest
-	(*DiffForgeEnvResponse)(nil),         // 28: reliant.v1.DiffForgeEnvResponse
-	(*StartForgeDeployRequest)(nil),      // 29: reliant.v1.StartForgeDeployRequest
-	(*ForgeDeployRefusal)(nil),           // 30: reliant.v1.ForgeDeployRefusal
-	(*StartForgeDeployResponse)(nil),     // 31: reliant.v1.StartForgeDeployResponse
-	(*GetForgeDeployStatusRequest)(nil),  // 32: reliant.v1.GetForgeDeployStatusRequest
-	(*GetForgeDeployStatusResponse)(nil), // 33: reliant.v1.GetForgeDeployStatusResponse
+	(*GetForgeEnvStatusRequest)(nil),     // 11: reliant.v1.GetForgeEnvStatusRequest
+	(*GetForgeEnvStatusResponse)(nil),    // 12: reliant.v1.GetForgeEnvStatusResponse
+	(*GetForgeEnvShapeRequest)(nil),      // 13: reliant.v1.GetForgeEnvShapeRequest
+	(*GetForgeEnvShapeResponse)(nil),     // 14: reliant.v1.GetForgeEnvShapeResponse
+	(*PlanForgePromoteRequest)(nil),      // 15: reliant.v1.PlanForgePromoteRequest
+	(*PlanForgePromoteResponse)(nil),     // 16: reliant.v1.PlanForgePromoteResponse
+	(*PromoteForgeEnvRequest)(nil),       // 17: reliant.v1.PromoteForgeEnvRequest
+	(*ForgePromoteRefusal)(nil),          // 18: reliant.v1.ForgePromoteRefusal
+	(*PromoteForgeEnvResponse)(nil),      // 19: reliant.v1.PromoteForgeEnvResponse
+	(*PlanForgeDeployRequest)(nil),       // 20: reliant.v1.PlanForgeDeployRequest
+	(*PlanForgeDeployResponse)(nil),      // 21: reliant.v1.PlanForgeDeployResponse
+	(*StartForgeDeployPlanRequest)(nil),  // 22: reliant.v1.StartForgeDeployPlanRequest
+	(*StartForgeDeployRequest)(nil),      // 23: reliant.v1.StartForgeDeployRequest
+	(*ForgeDeployRefusal)(nil),           // 24: reliant.v1.ForgeDeployRefusal
+	(*StartForgeDeployResponse)(nil),     // 25: reliant.v1.StartForgeDeployResponse
+	(*GetForgeDeployStatusRequest)(nil),  // 26: reliant.v1.GetForgeDeployStatusRequest
+	(*GetForgeDeployStatusResponse)(nil), // 27: reliant.v1.GetForgeDeployStatusResponse
 }
 var file_reliant_v1_forge_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.ForgeReportMeta.reachability:type_name -> reliant.v1.ForgeReachability
 	4,  // 1: reliant.v1.GetForgeTopologyResponse.meta:type_name -> reliant.v1.ForgeReportMeta
 	4,  // 2: reliant.v1.VerifyForgeEnvResponse.meta:type_name -> reliant.v1.ForgeReportMeta
 	4,  // 3: reliant.v1.ListForgeSecretsResponse.meta:type_name -> reliant.v1.ForgeReportMeta
-	4,  // 4: reliant.v1.GetForgeAuditResponse.meta:type_name -> reliant.v1.ForgeReportMeta
-	4,  // 5: reliant.v1.GetForgeEnvStatusResponse.meta:type_name -> reliant.v1.ForgeReportMeta
-	4,  // 6: reliant.v1.GetForgeEnvShapeResponse.meta:type_name -> reliant.v1.ForgeReportMeta
-	4,  // 7: reliant.v1.PlanForgePromoteResponse.meta:type_name -> reliant.v1.ForgeReportMeta
-	1,  // 8: reliant.v1.ForgePromoteRefusal.reason:type_name -> reliant.v1.ForgePromoteRefusalReason
-	4,  // 9: reliant.v1.PromoteForgeEnvResponse.meta:type_name -> reliant.v1.ForgeReportMeta
-	4,  // 10: reliant.v1.PlanForgeDeployResponse.meta:type_name -> reliant.v1.ForgeReportMeta
-	4,  // 11: reliant.v1.ListForgeCheckoutsResponse.meta:type_name -> reliant.v1.ForgeReportMeta
-	4,  // 12: reliant.v1.DiffForgeEnvResponse.meta:type_name -> reliant.v1.ForgeReportMeta
-	3,  // 13: reliant.v1.ForgeDeployRefusal.reason:type_name -> reliant.v1.ForgeDeployRefusalReason
-	4,  // 14: reliant.v1.StartForgeDeployResponse.meta:type_name -> reliant.v1.ForgeReportMeta
-	2,  // 15: reliant.v1.StartForgeDeployResponse.job_status:type_name -> reliant.v1.ForgeDeployJobStatus
-	4,  // 16: reliant.v1.GetForgeDeployStatusResponse.meta:type_name -> reliant.v1.ForgeReportMeta
-	2,  // 17: reliant.v1.GetForgeDeployStatusResponse.job_status:type_name -> reliant.v1.ForgeDeployJobStatus
-	30, // 18: reliant.v1.GetForgeDeployStatusResponse.refusal:type_name -> reliant.v1.ForgeDeployRefusal
-	5,  // 19: reliant.v1.ForgeService.GetTopology:input_type -> reliant.v1.GetForgeTopologyRequest
-	7,  // 20: reliant.v1.ForgeService.VerifyEnv:input_type -> reliant.v1.VerifyForgeEnvRequest
-	9,  // 21: reliant.v1.ForgeService.ListSecrets:input_type -> reliant.v1.ListForgeSecretsRequest
-	11, // 22: reliant.v1.ForgeService.GetAudit:input_type -> reliant.v1.GetForgeAuditRequest
-	13, // 23: reliant.v1.ForgeService.GetEnvStatus:input_type -> reliant.v1.GetForgeEnvStatusRequest
-	15, // 24: reliant.v1.ForgeService.GetEnvShape:input_type -> reliant.v1.GetForgeEnvShapeRequest
-	17, // 25: reliant.v1.ForgeService.PlanPromote:input_type -> reliant.v1.PlanForgePromoteRequest
-	19, // 26: reliant.v1.ForgeService.ApplyPromote:input_type -> reliant.v1.PromoteForgeEnvRequest
-	22, // 27: reliant.v1.ForgeService.PlanDeploy:input_type -> reliant.v1.PlanForgeDeployRequest
-	24, // 28: reliant.v1.ForgeService.StartDeployPlan:input_type -> reliant.v1.StartForgeDeployPlanRequest
-	25, // 29: reliant.v1.ForgeService.ListCheckouts:input_type -> reliant.v1.ListForgeCheckoutsRequest
-	27, // 30: reliant.v1.ForgeService.DiffEnv:input_type -> reliant.v1.DiffForgeEnvRequest
-	29, // 31: reliant.v1.ForgeService.StartDeploy:input_type -> reliant.v1.StartForgeDeployRequest
-	32, // 32: reliant.v1.ForgeService.GetDeployStatus:input_type -> reliant.v1.GetForgeDeployStatusRequest
-	6,  // 33: reliant.v1.ForgeService.GetTopology:output_type -> reliant.v1.GetForgeTopologyResponse
-	8,  // 34: reliant.v1.ForgeService.VerifyEnv:output_type -> reliant.v1.VerifyForgeEnvResponse
-	10, // 35: reliant.v1.ForgeService.ListSecrets:output_type -> reliant.v1.ListForgeSecretsResponse
-	12, // 36: reliant.v1.ForgeService.GetAudit:output_type -> reliant.v1.GetForgeAuditResponse
-	14, // 37: reliant.v1.ForgeService.GetEnvStatus:output_type -> reliant.v1.GetForgeEnvStatusResponse
-	16, // 38: reliant.v1.ForgeService.GetEnvShape:output_type -> reliant.v1.GetForgeEnvShapeResponse
-	18, // 39: reliant.v1.ForgeService.PlanPromote:output_type -> reliant.v1.PlanForgePromoteResponse
-	21, // 40: reliant.v1.ForgeService.ApplyPromote:output_type -> reliant.v1.PromoteForgeEnvResponse
-	23, // 41: reliant.v1.ForgeService.PlanDeploy:output_type -> reliant.v1.PlanForgeDeployResponse
-	31, // 42: reliant.v1.ForgeService.StartDeployPlan:output_type -> reliant.v1.StartForgeDeployResponse
-	26, // 43: reliant.v1.ForgeService.ListCheckouts:output_type -> reliant.v1.ListForgeCheckoutsResponse
-	28, // 44: reliant.v1.ForgeService.DiffEnv:output_type -> reliant.v1.DiffForgeEnvResponse
-	31, // 45: reliant.v1.ForgeService.StartDeploy:output_type -> reliant.v1.StartForgeDeployResponse
-	33, // 46: reliant.v1.ForgeService.GetDeployStatus:output_type -> reliant.v1.GetForgeDeployStatusResponse
-	33, // [33:47] is the sub-list for method output_type
-	19, // [19:33] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	4,  // 4: reliant.v1.GetForgeEnvStatusResponse.meta:type_name -> reliant.v1.ForgeReportMeta
+	4,  // 5: reliant.v1.GetForgeEnvShapeResponse.meta:type_name -> reliant.v1.ForgeReportMeta
+	4,  // 6: reliant.v1.PlanForgePromoteResponse.meta:type_name -> reliant.v1.ForgeReportMeta
+	1,  // 7: reliant.v1.ForgePromoteRefusal.reason:type_name -> reliant.v1.ForgePromoteRefusalReason
+	4,  // 8: reliant.v1.PromoteForgeEnvResponse.meta:type_name -> reliant.v1.ForgeReportMeta
+	4,  // 9: reliant.v1.PlanForgeDeployResponse.meta:type_name -> reliant.v1.ForgeReportMeta
+	3,  // 10: reliant.v1.ForgeDeployRefusal.reason:type_name -> reliant.v1.ForgeDeployRefusalReason
+	4,  // 11: reliant.v1.StartForgeDeployResponse.meta:type_name -> reliant.v1.ForgeReportMeta
+	2,  // 12: reliant.v1.StartForgeDeployResponse.job_status:type_name -> reliant.v1.ForgeDeployJobStatus
+	4,  // 13: reliant.v1.GetForgeDeployStatusResponse.meta:type_name -> reliant.v1.ForgeReportMeta
+	2,  // 14: reliant.v1.GetForgeDeployStatusResponse.job_status:type_name -> reliant.v1.ForgeDeployJobStatus
+	24, // 15: reliant.v1.GetForgeDeployStatusResponse.refusal:type_name -> reliant.v1.ForgeDeployRefusal
+	5,  // 16: reliant.v1.ForgeService.GetTopology:input_type -> reliant.v1.GetForgeTopologyRequest
+	7,  // 17: reliant.v1.ForgeService.VerifyEnv:input_type -> reliant.v1.VerifyForgeEnvRequest
+	9,  // 18: reliant.v1.ForgeService.ListSecrets:input_type -> reliant.v1.ListForgeSecretsRequest
+	11, // 19: reliant.v1.ForgeService.GetEnvStatus:input_type -> reliant.v1.GetForgeEnvStatusRequest
+	13, // 20: reliant.v1.ForgeService.GetEnvShape:input_type -> reliant.v1.GetForgeEnvShapeRequest
+	15, // 21: reliant.v1.ForgeService.PlanPromote:input_type -> reliant.v1.PlanForgePromoteRequest
+	17, // 22: reliant.v1.ForgeService.ApplyPromote:input_type -> reliant.v1.PromoteForgeEnvRequest
+	20, // 23: reliant.v1.ForgeService.PlanDeploy:input_type -> reliant.v1.PlanForgeDeployRequest
+	22, // 24: reliant.v1.ForgeService.StartDeployPlan:input_type -> reliant.v1.StartForgeDeployPlanRequest
+	23, // 25: reliant.v1.ForgeService.StartDeploy:input_type -> reliant.v1.StartForgeDeployRequest
+	26, // 26: reliant.v1.ForgeService.GetDeployStatus:input_type -> reliant.v1.GetForgeDeployStatusRequest
+	6,  // 27: reliant.v1.ForgeService.GetTopology:output_type -> reliant.v1.GetForgeTopologyResponse
+	8,  // 28: reliant.v1.ForgeService.VerifyEnv:output_type -> reliant.v1.VerifyForgeEnvResponse
+	10, // 29: reliant.v1.ForgeService.ListSecrets:output_type -> reliant.v1.ListForgeSecretsResponse
+	12, // 30: reliant.v1.ForgeService.GetEnvStatus:output_type -> reliant.v1.GetForgeEnvStatusResponse
+	14, // 31: reliant.v1.ForgeService.GetEnvShape:output_type -> reliant.v1.GetForgeEnvShapeResponse
+	16, // 32: reliant.v1.ForgeService.PlanPromote:output_type -> reliant.v1.PlanForgePromoteResponse
+	19, // 33: reliant.v1.ForgeService.ApplyPromote:output_type -> reliant.v1.PromoteForgeEnvResponse
+	21, // 34: reliant.v1.ForgeService.PlanDeploy:output_type -> reliant.v1.PlanForgeDeployResponse
+	25, // 35: reliant.v1.ForgeService.StartDeployPlan:output_type -> reliant.v1.StartForgeDeployResponse
+	25, // 36: reliant.v1.ForgeService.StartDeploy:output_type -> reliant.v1.StartForgeDeployResponse
+	27, // 37: reliant.v1.ForgeService.GetDeployStatus:output_type -> reliant.v1.GetForgeDeployStatusResponse
+	27, // [27:38] is the sub-list for method output_type
+	16, // [16:27] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_forge_proto_init() }
@@ -2934,14 +2537,13 @@ func file_reliant_v1_forge_proto_init() {
 	if File_reliant_v1_forge_proto != nil {
 		return
 	}
-	file_reliant_v1_forge_proto_msgTypes[21].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_forge_proto_rawDesc), len(file_reliant_v1_forge_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   30,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

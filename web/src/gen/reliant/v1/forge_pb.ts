@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/forge.proto.
  */
 export const file_reliant_v1_forge: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL2ZvcmdlLnByb3RvEgpyZWxpYW50LnYxItUBCg9Gb3JnZVJlcG9ydE1ldGESGAoQaXNfZm9yZ2VfcHJvamVjdBgBIAEoCBIRCglzdXBwb3J0ZWQYAiABKAgSFQoNZm9yZ2VfdmVyc2lvbhgDIAEoCRIaChJ1bnN1cHBvcnRlZF9yZWFzb24YBCABKAkSEQoJZXhpdF9jb2RlGAUgASgFEjMKDHJlYWNoYWJpbGl0eRgGIAEoDjIdLnJlbGlhbnQudjEuRm9yZ2VSZWFjaGFiaWxpdHkSGgoSdW5yZWFjaGFibGVfcmVhc29uGAcgASgJIksKF0dldEZvcmdlVG9wb2xvZ3lSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDgoGdmVyaWZ5GAIgASgIEgwKBGVudnMYAyADKAkiWgoYR2V0Rm9yZ2VUb3BvbG9neVJlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSI4ChVWZXJpZnlGb3JnZUVudlJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkiWAoWVmVyaWZ5Rm9yZ2VFbnZSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESEwoLcmVwb3J0X2pzb24YAiABKAkiSgoXTGlzdEZvcmdlU2VjcmV0c1JlcXVlc3QSGgoKcHJvamVjdF9pZBgBIAEoCUIGukgDyAEBEhMKA2VudhgCIAEoCUIGukgDyAEBIloKGExpc3RGb3JnZVNlY3JldHNSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESEwoLcmVwb3J0X2pzb24YAiABKAkiKgoUR2V0Rm9yZ2VBdWRpdFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSJXChVHZXRGb3JnZUF1ZGl0UmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEhMKC3JlcG9ydF9qc29uGAIgASgJIjsKGEdldEZvcmdlRW52U3RhdHVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgsKA2VudhgCIAEoCSJbChlHZXRGb3JnZUVudlN0YXR1c1Jlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSI6ChdHZXRGb3JnZUVudlNoYXBlUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgsKA2VudhgCIAEoCSJaChhHZXRGb3JnZUVudlNoYXBlUmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEhMKC3JlcG9ydF9qc29uGAIgASgJIksKF1BsYW5Gb3JnZVByb21vdGVSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJEg8KB3JlbGVhc2UYAyABKAkiWgoYUGxhbkZvcmdlUHJvbW90ZVJlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSKEAQoWUHJvbW90ZUZvcmdlRW52UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgsKA2VudhgCIAEoCRIPCgdyZWxlYXNlGAMgASgJEiAKGGV4cGVjdGVkX2N1cnJlbnRfcmVsZWFzZRgEIAEoCRIWCg5leHBlY3RfdW5ib3VuZBgFIAEoCCLqAQoTRm9yZ2VQcm9tb3RlUmVmdXNhbBI1CgZyZWFzb24YASABKA4yJS5yZWxpYW50LnYxLkZvcmdlUHJvbW90ZVJlZnVzYWxSZWFzb24SIAoYZXhwZWN0ZWRfY3VycmVudF9yZWxlYXNlGAIgASgJEhgKEGV4cGVjdGVkX3VuYm91bmQYAyABKAgSFAoMYWN0dWFsX2JvdW5kGAQgASgIEh4KFmFjdHVhbF9jdXJyZW50X3JlbGVhc2UYBSABKAkSGgoSYWN0dWFsX3Byb21vdGVkX2F0GAYgASgJEg4KBmRldGFpbBgHIAEoCSJZChdQcm9tb3RlRm9yZ2VFbnZSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESEwoLcmVwb3J0X2pzb24YAiABKAkiUAoWUGxhbkZvcmdlRGVwbG95UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgsKA2VudhgCIAEoCRIVCg1jaGVja291dF9wYXRoGAMgASgJIlkKF1BsYW5Gb3JnZURlcGxveVJlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSJVChtTdGFydEZvcmdlRGVwbG95UGxhblJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkSFQoNY2hlY2tvdXRfcGF0aBgDIAEoCSJdChlMaXN0Rm9yZ2VDaGVja291dHNSZXF1ZXN0EhoKCnByb2plY3RfaWQYASABKAlCBrpIA8gBARIWCgl3aXRoX3RyZWUYAiABKAhIAIgBAUIMCgpfd2l0aF90cmVlIlwKGkxpc3RGb3JnZUNoZWNrb3V0c1Jlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSJaChNEaWZmRm9yZ2VFbnZSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJEgsKA2FsbBgDIAEoCBIVCg1jaGVja291dF9wYXRoGAQgASgJIlYKFERpZmZGb3JnZUVudlJlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSL+AQoXU3RhcnRGb3JnZURlcGxveVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkSIQoZZXhwZWN0ZWRfZGVjbGFyZWRfY29udGV4dBgDIAEoCRIgChhleHBlY3RlZF9jdXJyZW50X3JlbGVhc2UYBCABKAkSFgoOZXhwZWN0X3VuYm91bmQYBSABKAgSFgoOYXBwcm92ZV9kaWdlc3QYBiABKAkSHQoVYWNrbm93bGVkZ2VkX2ZpbmRpbmdzGAcgAygJEhcKD3JlbGVhc2VfdmVyc2lvbhgIIAEoCRIVCg1jaGVja291dF9wYXRoGAkgASgJIpsDChJGb3JnZURlcGxveVJlZnVzYWwSNAoGcmVhc29uGAEgASgOMiQucmVsaWFudC52MS5Gb3JnZURlcGxveVJlZnVzYWxSZWFzb24SDgoGZGV0YWlsGAIgASgJEiEKGWV4cGVjdGVkX2RlY2xhcmVkX2NvbnRleHQYAyABKAkSHwoXYWN0dWFsX2RlY2xhcmVkX2NvbnRleHQYBCABKAkSIAoYZXhwZWN0ZWRfY3VycmVudF9yZWxlYXNlGAUgASgJEhgKEGV4cGVjdGVkX3VuYm91bmQYBiABKAgSHgoWYWN0dWFsX2N1cnJlbnRfcmVsZWFzZRgHIAEoCRIUCgxhY3R1YWxfYm91bmQYCCABKAgSFQoNZ3VhcmRfdmVyZGljdBgJIAEoCRIUCgxndWFyZF9yZWFzb24YCiABKAkSEQoJZ3VhcmRfZml4GAsgASgJEhYKDnJ1bm5pbmdfaGFuZGxlGAwgASgJEhkKEWN1cnJlbnRfcGxhbl9qc29uGA0gASgJEhYKDnVuYWNrbm93bGVkZ2VkGA4gAygJIsEBChhTdGFydEZvcmdlRGVwbG95UmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEg4KBmhhbmRsZRgCIAEoCRILCgNlbnYYAyABKAkSNAoKam9iX3N0YXR1cxgEIAEoDjIgLnJlbGlhbnQudjEuRm9yZ2VEZXBsb3lKb2JTdGF0dXMSEgoKc3RhcnRlZF9hdBgFIAEoCRITCgtyZXBvcnRfanNvbhgGIAEoCSJBChtHZXRGb3JnZURlcGxveVN0YXR1c1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIOCgZoYW5kbGUYAiABKAkiuQIKHEdldEZvcmdlRGVwbG95U3RhdHVzUmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEg4KBmhhbmRsZRgCIAEoCRILCgNlbnYYAyABKAkSNAoKam9iX3N0YXR1cxgEIAEoDjIgLnJlbGlhbnQudjEuRm9yZ2VEZXBsb3lKb2JTdGF0dXMSGQoRam9iX3N0YXR1c19kZXRhaWwYBSABKAkSEgoKc3RhcnRlZF9hdBgGIAEoCRITCgtmaW5pc2hlZF9hdBgHIAEoCRITCgtyZXBvcnRfanNvbhgIIAEoCRIRCglwbGFuX29ubHkYCSABKAgSLwoHcmVmdXNhbBgKIAEoCzIeLnJlbGlhbnQudjEuRm9yZ2VEZXBsb3lSZWZ1c2FsKnYKEUZvcmdlUmVhY2hhYmlsaXR5EiIKHkZPUkdFX1JFQUNIQUJJTElUWV9VTlNQRUNJRklFRBAAEhkKFUZPUkdFX1JFQUNIQUJJTElUWV9PSxABEiIKHkZPUkdFX1JFQUNIQUJJTElUWV9VTlJFQUNIQUJMRRACKoEBChlGb3JnZVByb21vdGVSZWZ1c2FsUmVhc29uEiwKKEZPUkdFX1BST01PVEVfUkVGVVNBTF9SRUFTT05fVU5TUEVDSUZJRUQQABI2CjJGT1JHRV9QUk9NT1RFX1JFRlVTQUxfUkVBU09OX1NUQUxFX0NVUlJFTlRfUkVMRUFTRRABKtQBChRGb3JnZURlcGxveUpvYlN0YXR1cxInCiNGT1JHRV9ERVBMT1lfSk9CX1NUQVRVU19VTlNQRUNJRklFRBAAEiMKH0ZPUkdFX0RFUExPWV9KT0JfU1RBVFVTX1JVTk5JTkcQARIlCiFGT1JHRV9ERVBMT1lfSk9CX1NUQVRVU19DT01QTEVURUQQAhIiCh5GT1JHRV9ERVBMT1lfSk9CX1NUQVRVU19GQUlMRUQQAxIjCh9GT1JHRV9ERVBMT1lfSk9CX1NUQVRVU19VTktOT1dOEAQq9wIKGEZvcmdlRGVwbG95UmVmdXNhbFJlYXNvbhIrCidGT1JHRV9ERVBMT1lfUkVGVVNBTF9SRUFTT05fVU5TUEVDSUZJRUQQABI2CjJGT1JHRV9ERVBMT1lfUkVGVVNBTF9SRUFTT05fU1RBTEVfREVDTEFSRURfQ09OVEVYVBABEjUKMUZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9TVEFMRV9DVVJSRU5UX1JFTEVBU0UQAhItCilGT1JHRV9ERVBMT1lfUkVGVVNBTF9SRUFTT05fR1VBUkRfUkVGVVNFRBADEi8KK0ZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9BTFJFQURZX1JVTk5JTkcQBBIqCiZGT1JHRV9ERVBMT1lfUkVGVVNBTF9SRUFTT05fUExBTl9TVEFMRRAFEjMKL0ZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9QTEFOX1VOQUNLTk9XTEVER0VEEAYylAoKDEZvcmdlU2VydmljZRJaCgtHZXRUb3BvbG9neRIjLnJlbGlhbnQudjEuR2V0Rm9yZ2VUb3BvbG9neVJlcXVlc3QaJC5yZWxpYW50LnYxLkdldEZvcmdlVG9wb2xvZ3lSZXNwb25zZSIAElQKCVZlcmlmeUVudhIhLnJlbGlhbnQudjEuVmVyaWZ5Rm9yZ2VFbnZSZXF1ZXN0GiIucmVsaWFudC52MS5WZXJpZnlGb3JnZUVudlJlc3BvbnNlIgASWgoLTGlzdFNlY3JldHMSIy5yZWxpYW50LnYxLkxpc3RGb3JnZVNlY3JldHNSZXF1ZXN0GiQucmVsaWFudC52MS5MaXN0Rm9yZ2VTZWNyZXRzUmVzcG9uc2UiABJRCghHZXRBdWRpdBIgLnJlbGlhbnQudjEuR2V0Rm9yZ2VBdWRpdFJlcXVlc3QaIS5yZWxpYW50LnYxLkdldEZvcmdlQXVkaXRSZXNwb25zZSIAEl0KDEdldEVudlN0YXR1cxIkLnJlbGlhbnQudjEuR2V0Rm9yZ2VFbnZTdGF0dXNSZXF1ZXN0GiUucmVsaWFudC52MS5HZXRGb3JnZUVudlN0YXR1c1Jlc3BvbnNlIgASWgoLR2V0RW52U2hhcGUSIy5yZWxpYW50LnYxLkdldEZvcmdlRW52U2hhcGVSZXF1ZXN0GiQucmVsaWFudC52MS5HZXRGb3JnZUVudlNoYXBlUmVzcG9uc2UiABJaCgtQbGFuUHJvbW90ZRIjLnJlbGlhbnQudjEuUGxhbkZvcmdlUHJvbW90ZVJlcXVlc3QaJC5yZWxpYW50LnYxLlBsYW5Gb3JnZVByb21vdGVSZXNwb25zZSIAElkKDEFwcGx5UHJvbW90ZRIiLnJlbGlhbnQudjEuUHJvbW90ZUZvcmdlRW52UmVxdWVzdBojLnJlbGlhbnQudjEuUHJvbW90ZUZvcmdlRW52UmVzcG9uc2UiABJXCgpQbGFuRGVwbG95EiIucmVsaWFudC52MS5QbGFuRm9yZ2VEZXBsb3lSZXF1ZXN0GiMucmVsaWFudC52MS5QbGFuRm9yZ2VEZXBsb3lSZXNwb25zZSIAEmIKD1N0YXJ0RGVwbG95UGxhbhInLnJlbGlhbnQudjEuU3RhcnRGb3JnZURlcGxveVBsYW5SZXF1ZXN0GiQucmVsaWFudC52MS5TdGFydEZvcmdlRGVwbG95UmVzcG9uc2UiABJgCg1MaXN0Q2hlY2tvdXRzEiUucmVsaWFudC52MS5MaXN0Rm9yZ2VDaGVja291dHNSZXF1ZXN0GiYucmVsaWFudC52MS5MaXN0Rm9yZ2VDaGVja291dHNSZXNwb25zZSIAEk4KB0RpZmZFbnYSHy5yZWxpYW50LnYxLkRpZmZGb3JnZUVudlJlcXVlc3QaIC5yZWxpYW50LnYxLkRpZmZGb3JnZUVudlJlc3BvbnNlIgASWgoLU3RhcnREZXBsb3kSIy5yZWxpYW50LnYxLlN0YXJ0Rm9yZ2VEZXBsb3lSZXF1ZXN0GiQucmVsaWFudC52MS5TdGFydEZvcmdlRGVwbG95UmVzcG9uc2UiABJmCg9HZXREZXBsb3lTdGF0dXMSJy5yZWxpYW50LnYxLkdldEZvcmdlRGVwbG95U3RhdHVzUmVxdWVzdBooLnJlbGlhbnQudjEuR2V0Rm9yZ2VEZXBsb3lTdGF0dXNSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_buf_validate_validate]);
+  fileDesc("ChZyZWxpYW50L3YxL2ZvcmdlLnByb3RvEgpyZWxpYW50LnYxItUBCg9Gb3JnZVJlcG9ydE1ldGESGAoQaXNfZm9yZ2VfcHJvamVjdBgBIAEoCBIRCglzdXBwb3J0ZWQYAiABKAgSFQoNZm9yZ2VfdmVyc2lvbhgDIAEoCRIaChJ1bnN1cHBvcnRlZF9yZWFzb24YBCABKAkSEQoJZXhpdF9jb2RlGAUgASgFEjMKDHJlYWNoYWJpbGl0eRgGIAEoDjIdLnJlbGlhbnQudjEuRm9yZ2VSZWFjaGFiaWxpdHkSGgoSdW5yZWFjaGFibGVfcmVhc29uGAcgASgJIksKF0dldEZvcmdlVG9wb2xvZ3lSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDgoGdmVyaWZ5GAIgASgIEgwKBGVudnMYAyADKAkiWgoYR2V0Rm9yZ2VUb3BvbG9neVJlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSI4ChVWZXJpZnlGb3JnZUVudlJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkiWAoWVmVyaWZ5Rm9yZ2VFbnZSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESEwoLcmVwb3J0X2pzb24YAiABKAkiSgoXTGlzdEZvcmdlU2VjcmV0c1JlcXVlc3QSGgoKcHJvamVjdF9pZBgBIAEoCUIGukgDyAEBEhMKA2VudhgCIAEoCUIGukgDyAEBIloKGExpc3RGb3JnZVNlY3JldHNSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESEwoLcmVwb3J0X2pzb24YAiABKAkiOwoYR2V0Rm9yZ2VFbnZTdGF0dXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJIlsKGUdldEZvcmdlRW52U3RhdHVzUmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEhMKC3JlcG9ydF9qc29uGAIgASgJIjoKF0dldEZvcmdlRW52U2hhcGVSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJIloKGEdldEZvcmdlRW52U2hhcGVSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESEwoLcmVwb3J0X2pzb24YAiABKAkiSwoXUGxhbkZvcmdlUHJvbW90ZVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkSDwoHcmVsZWFzZRgDIAEoCSJaChhQbGFuRm9yZ2VQcm9tb3RlUmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEhMKC3JlcG9ydF9qc29uGAIgASgJIoQBChZQcm9tb3RlRm9yZ2VFbnZSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJEg8KB3JlbGVhc2UYAyABKAkSIAoYZXhwZWN0ZWRfY3VycmVudF9yZWxlYXNlGAQgASgJEhYKDmV4cGVjdF91bmJvdW5kGAUgASgIIuoBChNGb3JnZVByb21vdGVSZWZ1c2FsEjUKBnJlYXNvbhgBIAEoDjIlLnJlbGlhbnQudjEuRm9yZ2VQcm9tb3RlUmVmdXNhbFJlYXNvbhIgChhleHBlY3RlZF9jdXJyZW50X3JlbGVhc2UYAiABKAkSGAoQZXhwZWN0ZWRfdW5ib3VuZBgDIAEoCBIUCgxhY3R1YWxfYm91bmQYBCABKAgSHgoWYWN0dWFsX2N1cnJlbnRfcmVsZWFzZRgFIAEoCRIaChJhY3R1YWxfcHJvbW90ZWRfYXQYBiABKAkSDgoGZGV0YWlsGAcgASgJIlkKF1Byb21vdGVGb3JnZUVudlJlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSJQChZQbGFuRm9yZ2VEZXBsb3lSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJEhUKDWNoZWNrb3V0X3BhdGgYAyABKAkiWQoXUGxhbkZvcmdlRGVwbG95UmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEhMKC3JlcG9ydF9qc29uGAIgASgJIlUKG1N0YXJ0Rm9yZ2VEZXBsb3lQbGFuUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgsKA2VudhgCIAEoCRIVCg1jaGVja291dF9wYXRoGAMgASgJIv4BChdTdGFydEZvcmdlRGVwbG95UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgsKA2VudhgCIAEoCRIhChlleHBlY3RlZF9kZWNsYXJlZF9jb250ZXh0GAMgASgJEiAKGGV4cGVjdGVkX2N1cnJlbnRfcmVsZWFzZRgEIAEoCRIWCg5leHBlY3RfdW5ib3VuZBgFIAEoCBIWCg5hcHByb3ZlX2RpZ2VzdBgGIAEoCRIdChVhY2tub3dsZWRnZWRfZmluZGluZ3MYByADKAkSFwoPcmVsZWFzZV92ZXJzaW9uGAggASgJEhUKDWNoZWNrb3V0X3BhdGgYCSABKAkimwMKEkZvcmdlRGVwbG95UmVmdXNhbBI0CgZyZWFzb24YASABKA4yJC5yZWxpYW50LnYxLkZvcmdlRGVwbG95UmVmdXNhbFJlYXNvbhIOCgZkZXRhaWwYAiABKAkSIQoZZXhwZWN0ZWRfZGVjbGFyZWRfY29udGV4dBgDIAEoCRIfChdhY3R1YWxfZGVjbGFyZWRfY29udGV4dBgEIAEoCRIgChhleHBlY3RlZF9jdXJyZW50X3JlbGVhc2UYBSABKAkSGAoQZXhwZWN0ZWRfdW5ib3VuZBgGIAEoCBIeChZhY3R1YWxfY3VycmVudF9yZWxlYXNlGAcgASgJEhQKDGFjdHVhbF9ib3VuZBgIIAEoCBIVCg1ndWFyZF92ZXJkaWN0GAkgASgJEhQKDGd1YXJkX3JlYXNvbhgKIAEoCRIRCglndWFyZF9maXgYCyABKAkSFgoOcnVubmluZ19oYW5kbGUYDCABKAkSGQoRY3VycmVudF9wbGFuX2pzb24YDSABKAkSFgoOdW5hY2tub3dsZWRnZWQYDiADKAkiwQEKGFN0YXJ0Rm9yZ2VEZXBsb3lSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESDgoGaGFuZGxlGAIgASgJEgsKA2VudhgDIAEoCRI0Cgpqb2Jfc3RhdHVzGAQgASgOMiAucmVsaWFudC52MS5Gb3JnZURlcGxveUpvYlN0YXR1cxISCgpzdGFydGVkX2F0GAUgASgJEhMKC3JlcG9ydF9qc29uGAYgASgJIkEKG0dldEZvcmdlRGVwbG95U3RhdHVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEg4KBmhhbmRsZRgCIAEoCSK5AgocR2V0Rm9yZ2VEZXBsb3lTdGF0dXNSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESDgoGaGFuZGxlGAIgASgJEgsKA2VudhgDIAEoCRI0Cgpqb2Jfc3RhdHVzGAQgASgOMiAucmVsaWFudC52MS5Gb3JnZURlcGxveUpvYlN0YXR1cxIZChFqb2Jfc3RhdHVzX2RldGFpbBgFIAEoCRISCgpzdGFydGVkX2F0GAYgASgJEhMKC2ZpbmlzaGVkX2F0GAcgASgJEhMKC3JlcG9ydF9qc29uGAggASgJEhEKCXBsYW5fb25seRgJIAEoCBIvCgdyZWZ1c2FsGAogASgLMh4ucmVsaWFudC52MS5Gb3JnZURlcGxveVJlZnVzYWwqdgoRRm9yZ2VSZWFjaGFiaWxpdHkSIgoeRk9SR0VfUkVBQ0hBQklMSVRZX1VOU1BFQ0lGSUVEEAASGQoVRk9SR0VfUkVBQ0hBQklMSVRZX09LEAESIgoeRk9SR0VfUkVBQ0hBQklMSVRZX1VOUkVBQ0hBQkxFEAIqgQEKGUZvcmdlUHJvbW90ZVJlZnVzYWxSZWFzb24SLAooRk9SR0VfUFJPTU9URV9SRUZVU0FMX1JFQVNPTl9VTlNQRUNJRklFRBAAEjYKMkZPUkdFX1BST01PVEVfUkVGVVNBTF9SRUFTT05fU1RBTEVfQ1VSUkVOVF9SRUxFQVNFEAEq1AEKFEZvcmdlRGVwbG95Sm9iU3RhdHVzEicKI0ZPUkdFX0RFUExPWV9KT0JfU1RBVFVTX1VOU1BFQ0lGSUVEEAASIwofRk9SR0VfREVQTE9ZX0pPQl9TVEFUVVNfUlVOTklORxABEiUKIUZPUkdFX0RFUExPWV9KT0JfU1RBVFVTX0NPTVBMRVRFRBACEiIKHkZPUkdFX0RFUExPWV9KT0JfU1RBVFVTX0ZBSUxFRBADEiMKH0ZPUkdFX0RFUExPWV9KT0JfU1RBVFVTX1VOS05PV04QBCr3AgoYRm9yZ2VEZXBsb3lSZWZ1c2FsUmVhc29uEisKJ0ZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9VTlNQRUNJRklFRBAAEjYKMkZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9TVEFMRV9ERUNMQVJFRF9DT05URVhUEAESNQoxRk9SR0VfREVQTE9ZX1JFRlVTQUxfUkVBU09OX1NUQUxFX0NVUlJFTlRfUkVMRUFTRRACEi0KKUZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9HVUFSRF9SRUZVU0VEEAMSLworRk9SR0VfREVQTE9ZX1JFRlVTQUxfUkVBU09OX0FMUkVBRFlfUlVOTklORxAEEioKJkZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9QTEFOX1NUQUxFEAUSMwovRk9SR0VfREVQTE9ZX1JFRlVTQUxfUkVBU09OX1BMQU5fVU5BQ0tOT1dMRURHRUQQBjKPCAoMRm9yZ2VTZXJ2aWNlEloKC0dldFRvcG9sb2d5EiMucmVsaWFudC52MS5HZXRGb3JnZVRvcG9sb2d5UmVxdWVzdBokLnJlbGlhbnQudjEuR2V0Rm9yZ2VUb3BvbG9neVJlc3BvbnNlIgASVAoJVmVyaWZ5RW52EiEucmVsaWFudC52MS5WZXJpZnlGb3JnZUVudlJlcXVlc3QaIi5yZWxpYW50LnYxLlZlcmlmeUZvcmdlRW52UmVzcG9uc2UiABJaCgtMaXN0U2VjcmV0cxIjLnJlbGlhbnQudjEuTGlzdEZvcmdlU2VjcmV0c1JlcXVlc3QaJC5yZWxpYW50LnYxLkxpc3RGb3JnZVNlY3JldHNSZXNwb25zZSIAEl0KDEdldEVudlN0YXR1cxIkLnJlbGlhbnQudjEuR2V0Rm9yZ2VFbnZTdGF0dXNSZXF1ZXN0GiUucmVsaWFudC52MS5HZXRGb3JnZUVudlN0YXR1c1Jlc3BvbnNlIgASWgoLR2V0RW52U2hhcGUSIy5yZWxpYW50LnYxLkdldEZvcmdlRW52U2hhcGVSZXF1ZXN0GiQucmVsaWFudC52MS5HZXRGb3JnZUVudlNoYXBlUmVzcG9uc2UiABJaCgtQbGFuUHJvbW90ZRIjLnJlbGlhbnQudjEuUGxhbkZvcmdlUHJvbW90ZVJlcXVlc3QaJC5yZWxpYW50LnYxLlBsYW5Gb3JnZVByb21vdGVSZXNwb25zZSIAElkKDEFwcGx5UHJvbW90ZRIiLnJlbGlhbnQudjEuUHJvbW90ZUZvcmdlRW52UmVxdWVzdBojLnJlbGlhbnQudjEuUHJvbW90ZUZvcmdlRW52UmVzcG9uc2UiABJXCgpQbGFuRGVwbG95EiIucmVsaWFudC52MS5QbGFuRm9yZ2VEZXBsb3lSZXF1ZXN0GiMucmVsaWFudC52MS5QbGFuRm9yZ2VEZXBsb3lSZXNwb25zZSIAEmIKD1N0YXJ0RGVwbG95UGxhbhInLnJlbGlhbnQudjEuU3RhcnRGb3JnZURlcGxveVBsYW5SZXF1ZXN0GiQucmVsaWFudC52MS5TdGFydEZvcmdlRGVwbG95UmVzcG9uc2UiABJaCgtTdGFydERlcGxveRIjLnJlbGlhbnQudjEuU3RhcnRGb3JnZURlcGxveVJlcXVlc3QaJC5yZWxpYW50LnYxLlN0YXJ0Rm9yZ2VEZXBsb3lSZXNwb25zZSIAEmYKD0dldERlcGxveVN0YXR1cxInLnJlbGlhbnQudjEuR2V0Rm9yZ2VEZXBsb3lTdGF0dXNSZXF1ZXN0GigucmVsaWFudC52MS5HZXRGb3JnZURlcGxveVN0YXR1c1Jlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_buf_validate_validate]);
 
 /**
  * ForgeReportMeta is stamped on every response so a client can tell the five
@@ -256,47 +256,6 @@ export const ListForgeSecretsResponseSchema: GenMessage<ListForgeSecretsResponse
   messageDesc(file_reliant_v1_forge, 6);
 
 /**
- * @generated from message reliant.v1.GetForgeAuditRequest
- */
-export type GetForgeAuditRequest = Message<"reliant.v1.GetForgeAuditRequest"> & {
-  /**
-   * @generated from field: string project_id = 1;
-   */
-  projectId: string;
-};
-
-/**
- * Describes the message reliant.v1.GetForgeAuditRequest.
- * Use `create(GetForgeAuditRequestSchema)` to create a new message.
- */
-export const GetForgeAuditRequestSchema: GenMessage<GetForgeAuditRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 7);
-
-/**
- * @generated from message reliant.v1.GetForgeAuditResponse
- */
-export type GetForgeAuditResponse = Message<"reliant.v1.GetForgeAuditResponse"> & {
-  /**
-   * @generated from field: reliant.v1.ForgeReportMeta meta = 1;
-   */
-  meta?: ForgeReportMeta | undefined;
-
-  /**
-   * Forge's `project audit --json` document, verbatim.
-   *
-   * @generated from field: string report_json = 2;
-   */
-  reportJson: string;
-};
-
-/**
- * Describes the message reliant.v1.GetForgeAuditResponse.
- * Use `create(GetForgeAuditResponseSchema)` to create a new message.
- */
-export const GetForgeAuditResponseSchema: GenMessage<GetForgeAuditResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 8);
-
-/**
  * @generated from message reliant.v1.GetForgeEnvStatusRequest
  */
 export type GetForgeEnvStatusRequest = Message<"reliant.v1.GetForgeEnvStatusRequest"> & {
@@ -316,7 +275,7 @@ export type GetForgeEnvStatusRequest = Message<"reliant.v1.GetForgeEnvStatusRequ
  * Use `create(GetForgeEnvStatusRequestSchema)` to create a new message.
  */
 export const GetForgeEnvStatusRequestSchema: GenMessage<GetForgeEnvStatusRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 9);
+  messageDesc(file_reliant_v1_forge, 7);
 
 /**
  * @generated from message reliant.v1.GetForgeEnvStatusResponse
@@ -343,7 +302,7 @@ export type GetForgeEnvStatusResponse = Message<"reliant.v1.GetForgeEnvStatusRes
  * Use `create(GetForgeEnvStatusResponseSchema)` to create a new message.
  */
 export const GetForgeEnvStatusResponseSchema: GenMessage<GetForgeEnvStatusResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 10);
+  messageDesc(file_reliant_v1_forge, 8);
 
 /**
  * @generated from message reliant.v1.GetForgeEnvShapeRequest
@@ -365,7 +324,7 @@ export type GetForgeEnvShapeRequest = Message<"reliant.v1.GetForgeEnvShapeReques
  * Use `create(GetForgeEnvShapeRequestSchema)` to create a new message.
  */
 export const GetForgeEnvShapeRequestSchema: GenMessage<GetForgeEnvShapeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 11);
+  messageDesc(file_reliant_v1_forge, 9);
 
 /**
  * @generated from message reliant.v1.GetForgeEnvShapeResponse
@@ -395,7 +354,7 @@ export type GetForgeEnvShapeResponse = Message<"reliant.v1.GetForgeEnvShapeRespo
  * Use `create(GetForgeEnvShapeResponseSchema)` to create a new message.
  */
 export const GetForgeEnvShapeResponseSchema: GenMessage<GetForgeEnvShapeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 12);
+  messageDesc(file_reliant_v1_forge, 10);
 
 /**
  * @generated from message reliant.v1.PlanForgePromoteRequest
@@ -426,7 +385,7 @@ export type PlanForgePromoteRequest = Message<"reliant.v1.PlanForgePromoteReques
  * Use `create(PlanForgePromoteRequestSchema)` to create a new message.
  */
 export const PlanForgePromoteRequestSchema: GenMessage<PlanForgePromoteRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 13);
+  messageDesc(file_reliant_v1_forge, 11);
 
 /**
  * @generated from message reliant.v1.PlanForgePromoteResponse
@@ -458,7 +417,7 @@ export type PlanForgePromoteResponse = Message<"reliant.v1.PlanForgePromoteRespo
  * Use `create(PlanForgePromoteResponseSchema)` to create a new message.
  */
 export const PlanForgePromoteResponseSchema: GenMessage<PlanForgePromoteResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 14);
+  messageDesc(file_reliant_v1_forge, 12);
 
 /**
  * PromoteForgeEnvRequest carries the CONFIRMATION TOKEN that authorises the
@@ -526,7 +485,7 @@ export type PromoteForgeEnvRequest = Message<"reliant.v1.PromoteForgeEnvRequest"
  * Use `create(PromoteForgeEnvRequestSchema)` to create a new message.
  */
 export const PromoteForgeEnvRequestSchema: GenMessage<PromoteForgeEnvRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 15);
+  messageDesc(file_reliant_v1_forge, 13);
 
 /**
  * ForgePromoteRefusal is the state the guard found, when it refused.
@@ -597,7 +556,7 @@ export type ForgePromoteRefusal = Message<"reliant.v1.ForgePromoteRefusal"> & {
  * Use `create(ForgePromoteRefusalSchema)` to create a new message.
  */
 export const ForgePromoteRefusalSchema: GenMessage<ForgePromoteRefusal> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 16);
+  messageDesc(file_reliant_v1_forge, 14);
 
 /**
  * @generated from message reliant.v1.PromoteForgeEnvResponse
@@ -639,7 +598,7 @@ export type PromoteForgeEnvResponse = Message<"reliant.v1.PromoteForgeEnvRespons
  * Use `create(PromoteForgeEnvResponseSchema)` to create a new message.
  */
 export const PromoteForgeEnvResponseSchema: GenMessage<PromoteForgeEnvResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 17);
+  messageDesc(file_reliant_v1_forge, 15);
 
 /**
  * @generated from message reliant.v1.PlanForgeDeployRequest
@@ -659,7 +618,7 @@ export type PlanForgeDeployRequest = Message<"reliant.v1.PlanForgeDeployRequest"
 
   /**
    * The checkout to render — the project's main checkout when empty. Honoured
-   * only if ListCheckouts returned it for this project.
+   * only if it is one of this project's checkouts (main or a git worktree).
    *
    * @generated from field: string checkout_path = 3;
    */
@@ -671,7 +630,7 @@ export type PlanForgeDeployRequest = Message<"reliant.v1.PlanForgeDeployRequest"
  * Use `create(PlanForgeDeployRequestSchema)` to create a new message.
  */
 export const PlanForgeDeployRequestSchema: GenMessage<PlanForgeDeployRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 18);
+  messageDesc(file_reliant_v1_forge, 16);
 
 /**
  * @generated from message reliant.v1.PlanForgeDeployResponse
@@ -708,7 +667,7 @@ export type PlanForgeDeployResponse = Message<"reliant.v1.PlanForgeDeployRespons
  * Use `create(PlanForgeDeployResponseSchema)` to create a new message.
  */
 export const PlanForgeDeployResponseSchema: GenMessage<PlanForgeDeployResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 19);
+  messageDesc(file_reliant_v1_forge, 17);
 
 /**
  * StartForgeDeployPlanRequest asks for the plan a human will approve.
@@ -735,7 +694,7 @@ export type StartForgeDeployPlanRequest = Message<"reliant.v1.StartForgeDeployPl
 
   /**
    * The checkout to build and render from — the project's main checkout when
-   * empty. Honoured only if ListCheckouts returned it for this project.
+   * empty. Honoured only if it is one of this project's checkouts (main or a git worktree).
    *
    * @generated from field: string checkout_path = 3;
    */
@@ -747,141 +706,7 @@ export type StartForgeDeployPlanRequest = Message<"reliant.v1.StartForgeDeployPl
  * Use `create(StartForgeDeployPlanRequestSchema)` to create a new message.
  */
 export const StartForgeDeployPlanRequestSchema: GenMessage<StartForgeDeployPlanRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 20);
-
-/**
- * @generated from message reliant.v1.ListForgeCheckoutsRequest
- */
-export type ListForgeCheckoutsRequest = Message<"reliant.v1.ListForgeCheckoutsRequest"> & {
-  /**
-   * @generated from field: string project_id = 1;
-   */
-  projectId: string;
-
-  /**
-   * Also compute each checkout's content hash. It costs about half a second per
-   * checkout, so it is opt-in: the picker does not need it, a diff cache does.
-   *
-   * @generated from field: optional bool with_tree = 2;
-   */
-  withTree?: boolean | undefined;
-};
-
-/**
- * Describes the message reliant.v1.ListForgeCheckoutsRequest.
- * Use `create(ListForgeCheckoutsRequestSchema)` to create a new message.
- */
-export const ListForgeCheckoutsRequestSchema: GenMessage<ListForgeCheckoutsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 21);
-
-/**
- * @generated from message reliant.v1.ListForgeCheckoutsResponse
- */
-export type ListForgeCheckoutsResponse = Message<"reliant.v1.ListForgeCheckoutsResponse"> & {
-  /**
-   * @generated from field: reliant.v1.ForgeReportMeta meta = 1;
-   */
-  meta?: ForgeReportMeta | undefined;
-
-  /**
-   * Forge's checkout document, verbatim. Each entry carries the label to show,
-   * whether it is the remote main or a worktree, its path, branch and current
-   * commit, whether it has uncommitted changes, and how far ahead or behind
-   * main it is.
-   *
-   * Two fields read wrong if skimmed. "main" means the REMOTE main, not a local
-   * branch of that name — a local main that has not been fetched is a different
-   * tree. And the ahead/behind counts are OMITTED rather than zero when the
-   * comparison cannot be made at all: "in step with main" and "could not tell"
-   * are different answers, and showing the second as the first would be a
-   * confident lie about how stale a checkout is.
-   *
-   * @generated from field: string report_json = 2;
-   */
-  reportJson: string;
-};
-
-/**
- * Describes the message reliant.v1.ListForgeCheckoutsResponse.
- * Use `create(ListForgeCheckoutsResponseSchema)` to create a new message.
- */
-export const ListForgeCheckoutsResponseSchema: GenMessage<ListForgeCheckoutsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 22);
-
-/**
- * @generated from message reliant.v1.DiffForgeEnvRequest
- */
-export type DiffForgeEnvRequest = Message<"reliant.v1.DiffForgeEnvRequest"> & {
-  /**
-   * @generated from field: string project_id = 1;
-   */
-  projectId: string;
-
-  /**
-   * The ONE environment to diff. Exactly one of this and all — forge's own
-   * rule, mirrored here so a malformed request is refused before any work
-   * starts.
-   *
-   * @generated from field: string env = 2;
-   */
-  env: string;
-
-  /**
-   * Diff every environment declared in the checkout, in one document. This is
-   * the form the cards use: one render serves them all, so asking once is
-   * cheaper than asking per environment.
-   *
-   * @generated from field: bool all = 3;
-   */
-  all: boolean;
-
-  /**
-   * The checkout to render — the project's main checkout when empty. Honoured
-   * only if ListCheckouts returned it for this project.
-   *
-   * @generated from field: string checkout_path = 4;
-   */
-  checkoutPath: string;
-};
-
-/**
- * Describes the message reliant.v1.DiffForgeEnvRequest.
- * Use `create(DiffForgeEnvRequestSchema)` to create a new message.
- */
-export const DiffForgeEnvRequestSchema: GenMessage<DiffForgeEnvRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 23);
-
-/**
- * @generated from message reliant.v1.DiffForgeEnvResponse
- */
-export type DiffForgeEnvResponse = Message<"reliant.v1.DiffForgeEnvResponse"> & {
-  /**
-   * @generated from field: reliant.v1.ForgeReportMeta meta = 1;
-   */
-  meta?: ForgeReportMeta | undefined;
-
-  /**
-   * Forge's diff document, verbatim: per environment, what was added, removed
-   * and changed, with image changes separated from configuration changes, plus
-   * secrets newly needed and any runtime or cluster move.
-   *
-   * READ THE PER-ENVIRONMENT STATUS FIRST, because a failure must never be
-   * mistaken for "nothing changed". An environment whose render failed, or
-   * which has no recorded configuration to compare against, reports that
-   * instead of an empty diff — and an empty diff and an unanswerable one mean
-   * opposite things.
-   *
-   * @generated from field: string report_json = 2;
-   */
-  reportJson: string;
-};
-
-/**
- * Describes the message reliant.v1.DiffForgeEnvResponse.
- * Use `create(DiffForgeEnvResponseSchema)` to create a new message.
- */
-export const DiffForgeEnvResponseSchema: GenMessage<DiffForgeEnvResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 24);
+  messageDesc(file_reliant_v1_forge, 18);
 
 /**
  * StartForgeDeployRequest carries the CONFIRMATION TOKEN that authorises writing
@@ -997,8 +822,8 @@ export type StartForgeDeployRequest = Message<"reliant.v1.StartForgeDeployReques
   /**
    * The checkout to deploy from — the project's main checkout when empty.
    *
-   * Honoured only if it is one of the checkouts ListCheckouts returned for this
-   * project; the daemon re-derives that list and checks against it. A value
+   * Honoured only if it is one of this project's checkouts (main or a git
+   * worktree); the daemon re-derives that list and checks against it. A value
    * this server cannot authorise is refused rather than used.
    *
    * @generated from field: string checkout_path = 9;
@@ -1011,7 +836,7 @@ export type StartForgeDeployRequest = Message<"reliant.v1.StartForgeDeployReques
  * Use `create(StartForgeDeployRequestSchema)` to create a new message.
  */
 export const StartForgeDeployRequestSchema: GenMessage<StartForgeDeployRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 25);
+  messageDesc(file_reliant_v1_forge, 19);
 
 /**
  * ForgeDeployRefusal is the state the guard found, when it refused.
@@ -1131,7 +956,7 @@ export type ForgeDeployRefusal = Message<"reliant.v1.ForgeDeployRefusal"> & {
  * Use `create(ForgeDeployRefusalSchema)` to create a new message.
  */
 export const ForgeDeployRefusalSchema: GenMessage<ForgeDeployRefusal> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 26);
+  messageDesc(file_reliant_v1_forge, 20);
 
 /**
  * @generated from message reliant.v1.StartForgeDeployResponse
@@ -1197,7 +1022,7 @@ export type StartForgeDeployResponse = Message<"reliant.v1.StartForgeDeployRespo
  * Use `create(StartForgeDeployResponseSchema)` to create a new message.
  */
 export const StartForgeDeployResponseSchema: GenMessage<StartForgeDeployResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 27);
+  messageDesc(file_reliant_v1_forge, 21);
 
 /**
  * @generated from message reliant.v1.GetForgeDeployStatusRequest
@@ -1221,7 +1046,7 @@ export type GetForgeDeployStatusRequest = Message<"reliant.v1.GetForgeDeployStat
  * Use `create(GetForgeDeployStatusRequestSchema)` to create a new message.
  */
 export const GetForgeDeployStatusRequestSchema: GenMessage<GetForgeDeployStatusRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 28);
+  messageDesc(file_reliant_v1_forge, 22);
 
 /**
  * @generated from message reliant.v1.GetForgeDeployStatusResponse
@@ -1329,7 +1154,7 @@ export type GetForgeDeployStatusResponse = Message<"reliant.v1.GetForgeDeploySta
  * Use `create(GetForgeDeployStatusResponseSchema)` to create a new message.
  */
 export const GetForgeDeployStatusResponseSchema: GenMessage<GetForgeDeployStatusResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 29);
+  messageDesc(file_reliant_v1_forge, 23);
 
 /**
  * ForgeReachability says whether the state described by a report was actually
@@ -1614,16 +1439,6 @@ export const ForgeService: GenService<{
     output: typeof ListForgeSecretsResponseSchema;
   },
   /**
-   * GetAudit returns the project audit rollup.
-   *
-   * @generated from rpc reliant.v1.ForgeService.GetAudit
-   */
-  getAudit: {
-    methodKind: "unary";
-    input: typeof GetForgeAuditRequestSchema;
-    output: typeof GetForgeAuditResponseSchema;
-  },
-  /**
    * GetEnvStatus returns runtime checks for an environment.
    *
    * @generated from rpc reliant.v1.ForgeService.GetEnvStatus
@@ -1731,38 +1546,6 @@ export const ForgeService: GenService<{
     methodKind: "unary";
     input: typeof StartForgeDeployPlanRequestSchema;
     output: typeof StartForgeDeployResponseSchema;
-  },
-  /**
-   * ListCheckouts lists the checkouts a preview may render: the project's main
-   * checkout plus every git worktree, each with its branch, current commit,
-   * whether it has uncommitted changes, and how far it is from main.
-   *
-   * It is also the ALLOWLIST. Every other call here that accepts a checkout
-   * honours only a value this one returned, re-derived and checked server-side.
-   * So a request cannot point a build at an arbitrary directory, whatever it
-   * sends.
-   *
-   * @generated from rpc reliant.v1.ForgeService.ListCheckouts
-   */
-  listCheckouts: {
-    methodKind: "unary";
-    input: typeof ListForgeCheckoutsRequestSchema;
-    output: typeof ListForgeCheckoutsResponseSchema;
-  },
-  /**
-   * DiffEnv renders a checkout and compares each environment against what is
-   * deployed. READ-ONLY: no cluster is contacted, nothing is built or pushed.
-   *
-   * This is what the per-environment cards show. The document is forge's and is
-   * passed through verbatim — the comparison belongs to forge, and a second
-   * implementation here would be a copy that eventually disagrees with it.
-   *
-   * @generated from rpc reliant.v1.ForgeService.DiffEnv
-   */
-  diffEnv: {
-    methodKind: "unary";
-    input: typeof DiffForgeEnvRequestSchema;
-    output: typeof DiffForgeEnvResponseSchema;
   },
   /**
    * StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,
