@@ -4,12 +4,15 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // These tests never invoke forge. Every one of them substitutes the
@@ -449,6 +452,64 @@ func TestForgeRunFailureUsesStableErrorPrefix(t *testing.T) {
 	}
 	if !strings.HasPrefix(err.Error(), forgeCommandFailedPrefix) {
 		t.Errorf("error must start with %q, got %q", forgeCommandFailedPrefix, err)
+	}
+}
+
+// A forge run stopped by the command's deadline is a TIMEOUT, under its own
+// prefix — not "forge command failed" with whatever forge printed before it
+// was stopped (prod 2026-10-15: a version-skew warning, reported as the
+// failure).
+func TestForgeDeadlineIsReportedAsTimeoutNotFailure(t *testing.T) {
+	dir := forgeProject(t)
+	stubForge(t, forgeCommandResult{Stderr: []byte("⚠️  this forge is vX, but forge.yaml pins vY\n")},
+		fmt.Errorf("run forge: %w", context.DeadlineExceeded))
+
+	_, err := handle(t, "forge.topology", forgeTopologyRequest{ProjectPath: dir})
+	if err == nil {
+		t.Fatal("expected an error when forge was stopped by its deadline")
+	}
+	if !strings.HasPrefix(err.Error(), forgeCommandTimedOutPrefix) {
+		t.Errorf("error must start with %q, got %q", forgeCommandTimedOutPrefix, err)
+	}
+	if strings.Contains(err.Error(), forgeCommandFailedPrefix) {
+		t.Errorf("a timeout must not carry the command-failed marker, got %q", err)
+	}
+	if strings.Contains(err.Error(), "forge.yaml pins") {
+		t.Errorf("stderr printed before the kill is not the reason; got %q", err)
+	}
+}
+
+// runForgeProcess against a REAL child that outlives its deadline. Wait
+// reports such a child as an *exec.ExitError (exit -1), which used to be read
+// as forge's exit code; the context must win.
+func TestRunForgeProcessKilledByDeadlineIsAContextError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell child")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	res, err := runForgeProcess(ctx, t.TempDir(), "sh", "-c", "echo partial >&2; sleep 30")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("want context.DeadlineExceeded, got err=%v exit=%d", err, res.ExitCode)
+	}
+	if res.ExitCode != 0 {
+		t.Errorf("a killed child has no exit verdict; got exit %d", res.ExitCode)
+	}
+}
+
+// And a child that EXITS non-zero before its deadline keeps forge's verdict
+// channel: the code, as data, with no error.
+func TestRunForgeProcessExitCodeIsAVerdict(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell child")
+	}
+	res, err := runForgeProcess(context.Background(), t.TempDir(), "sh", "-c", "echo '{}'; exit 2")
+	if err != nil {
+		t.Fatalf("a non-zero exit is a verdict, not an error: %v", err)
+	}
+	if res.ExitCode != 2 {
+		t.Errorf("exit code = %d, want 2", res.ExitCode)
 	}
 }
 

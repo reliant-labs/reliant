@@ -381,6 +381,30 @@ export function daemonSideOf(
   return error ? "offline" : "loading";
 }
 
+/**
+ * The daemon state a DAEMON TAB acts on: topology's, unless the registry
+ * already knows the machine is up.
+ *
+ * Topology is a whole `forge env status` run on the machine — 26–30s on
+ * control-plane — and a tab that waited for it before asking its own question
+ * waited twice. When it FAILED (the gateway cut it at 15s, prod 2026-10-15)
+ * every daemon tab said "your daemon isn't answering" about a machine that was
+ * answering the whole time. The registry's daemon list knows the machine is
+ * connected in tens of milliseconds, so while topology is still loading, or
+ * after it failed, an awake machine is enough for a tab to ask for itself. Each
+ * tab's own read then fails loudly, with its own message, if the machine
+ * cannot answer it.
+ *
+ * Only ever an upgrade to "ok". forge's own answers (not a forge project, too
+ * old, malformed) say more than "a machine is up" and always win, and a list
+ * with no awake machine leaves topology to decide: a machine that is starting
+ * or asleep may still answer, and the transport is what finds out.
+ */
+export function daemonSideForTab(topology: DaemonSide, machineAwake: boolean): DaemonSide {
+  if (machineAwake && (topology === "loading" || topology === "offline")) return "ok";
+  return topology;
+}
+
 // ── The managed store, keyed on whichever source can name the env ──────────
 
 /**

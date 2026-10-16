@@ -59,10 +59,15 @@ import (
 // already killed.
 // -----------------------------------------------------------------------------
 const (
-	// forgeTopologyTimeoutMs — ledger only. Reads .forge/ JSON and the KCL env
-	// declarations off local disk; no network. 15s is already generous for a
-	// filesystem read and leaves room for a cold page cache on a big project.
-	forgeTopologyTimeoutMs = 15_000
+	// forgeTopologyTimeoutMs — no --verify, so no workload reads, but NOT the
+	// file read it once was. `forge env status --json` renders EVERY declared
+	// environment's KCL to resolve where it runs, and asks the hosted control
+	// plane for a hosted env's status (forge's client allows that call 30s).
+	// Measured on control-plane (four envs, one hosted) on a loaded cloud
+	// machine: 26–30s. The old 15s budget killed every run, and both daemon
+	// tabs of the env page gate on this call (prod, 2026-10-15). 60s is twice
+	// the measurement and half the daemon's cap.
+	forgeTopologyTimeoutMs = 60_000
 
 	// forgeTopologyVerifyTimeoutMs — the same walk, but with --verify it reads
 	// EVERY declared environment's live cluster. Cost scales with the number of
@@ -91,10 +96,13 @@ const (
 	// grows with the project (58KB of JSON for control-plane). 60s.
 	forgeAuditTimeoutMs = 60_000
 
-	// forgeEnvStatusTimeoutMs — runtime checks for one environment. Several
-	// cluster reads, but shallower than a full verify (no per-workload image
-	// reconciliation). 45s.
-	forgeEnvStatusTimeoutMs = 45_000
+	// forgeEnvStatusTimeoutMs — one environment's runtime AND release halves.
+	// The argv is the same `env status <env> --json` that forge.env_verify
+	// runs (forge v0.1.42 folded verify into status), so it gets the same
+	// budget: above forge's own 60s release-half timeout, so forge's
+	// UNREACHABLE verdict wins over ours. Measured on control-plane's prod:
+	// 24–51s on a loaded machine, past the 45s this used to be.
+	forgeEnvStatusTimeoutMs = forgeEnvVerifyTimeoutMs
 
 	// forgePromotePlanTimeoutMs — the read-only promote preview. Reads two
 	// release ledgers and the binding ledger off local disk, then one
@@ -216,6 +224,13 @@ const (
 	// exit that DID produce a report, which the daemon returns as data because
 	// that report is the answer. See remapForgeDispatchError for the code.
 	forgeErrCommandFailedMarker = "forge command failed"
+
+	// forgeErrCommandTimedOutMarker mirrors cmd_forge.go's
+	// forgeCommandTimedOutPrefix: the daemon stopped forge at this command's
+	// budget, before it answered. A timeout, never a forge failure — on a
+	// cluster read it is UNREACHABLE data (isForgeClusterReadTimeout matches
+	// its "timed out"), elsewhere DeadlineExceeded (remapForgeDispatchError).
+	forgeErrCommandTimedOutMarker = "forge command timed out"
 )
 
 // daemon forwards a forge.* command to the caller's daemon, mapping every
@@ -416,16 +431,21 @@ func remapForgeDispatchError(commandType string, err error) error {
 		return err
 	}
 	text := err.Error()
+	message := text
+	var connectErr *connect.Error
+	if errors.As(err, &connectErr) {
+		message = connectErr.Message()
+	}
 	switch {
 	case strings.Contains(text, forgeErrProjectDirNotExistMarker):
 		return connect.NewError(connect.CodeNotFound,
 			fmt.Errorf("forge project path not found on the daemon: %s", commandType))
+	case strings.Contains(text, forgeErrCommandTimedOutMarker):
+		// The daemon answered: forge ran out of this command's budget. Not
+		// an outage (Unavailable reads as "daemon offline") and not a
+		// project defect (FailedPrecondition): a deadline.
+		return connect.NewError(connect.CodeDeadlineExceeded, errors.New(message))
 	case strings.Contains(text, forgeErrCommandFailedMarker):
-		message := text
-		var connectErr *connect.Error
-		if errors.As(err, &connectErr) {
-			message = connectErr.Message()
-		}
 		return connect.NewError(connect.CodeFailedPrecondition, errors.New(message))
 	}
 	return err

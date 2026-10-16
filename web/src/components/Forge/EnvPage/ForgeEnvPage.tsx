@@ -51,7 +51,14 @@ import {
   useLiveView,
 } from "@/hooks/forge-queries";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
-import { daemonSideOf, resolveForgeProjectName, type ForgeProjectName } from "@/services/forge/environments";
+import { useDaemonList } from "@/hooks/useOnboardingQueries";
+import { isAwakeMachine } from "@/lib/chatMachine";
+import {
+  daemonSideForTab,
+  daemonSideOf,
+  resolveForgeProjectName,
+  type ForgeProjectName,
+} from "@/services/forge/environments";
 import { isPlacedKind } from "@/services/forge/live";
 import { lifecycleOf } from "@/services/forge/roster";
 import { isLocalLifecycle } from "@/services/forge/status";
@@ -137,6 +144,16 @@ export function ForgeEnvPage() {
   // daemon is "not asked yet", never "offline".
   const daemonAsked = daemonWanted || topology.data !== undefined || topology.error !== null;
   const daemon = daemonSideOf(topology.data, topology.error);
+
+  // What a daemon TAB waits on. Topology is a whole forge run (~30s on a real
+  // project); the registry knows a machine is up in milliseconds, so an awake
+  // machine lets the tab ask its own question at once (daemonSideForTab). The
+  // list is asked only while a daemon tab is open — a backend tab still makes
+  // no machine read at all — and a disabled read still sees what another
+  // surface fetched. The header actions keep `daemon`: Promote needs forge's
+  // report, not just a machine.
+  const machines = useDaemonList({ enabled: tabWantsDaemon });
+  const tabDaemon = daemonSideForTab(daemon, (machines.data ?? []).some(isAwakeMachine));
 
   // A topology report can name the project when nothing was persisted yet.
   const projectName = scope.forgeProject ? persistedOnly : resolveForgeProjectName(persistedName, topology.data);
@@ -389,7 +406,7 @@ export function ForgeEnvPage() {
         ) : tab === "running" ? (
           <RunningTab
             envName={envName}
-            daemon={daemon}
+            daemon={tabDaemon}
             envStatus={envStatus.data}
             envStatusLoading={envStatus.isLoading}
             envStatusError={envStatus.error as Error | null}
@@ -436,7 +453,7 @@ export function ForgeEnvPage() {
           <ChangesTab
             projectId={projectId}
             envName={envName}
-            daemon={daemon}
+            daemon={tabDaemon}
             lifecycle={lifecycle}
             checkoutPath={checkoutPath}
             onCheckoutChange={setCheckoutPath}
@@ -447,7 +464,7 @@ export function ForgeEnvPage() {
           <ChecksTab
             projectId={projectId}
             envName={envName}
-            daemon={daemon}
+            daemon={tabDaemon}
             lifecycle={lifecycle}
             envStatus={envStatus.data}
             envStatusLoading={envStatus.isLoading}

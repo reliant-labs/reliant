@@ -5,8 +5,9 @@
  *
  * THE LOADING STRATEGY IS THE DESIGN, not an optimisation.
  *
- * `GetTopology` without verify is a local file read under a 15s budget, so it
- * paints the whole matrix essentially at once. With verify it reads EVERY
+ * `GetTopology` without verify reads no workload, so it paints the whole
+ * matrix in one forge run (it renders every env's KCL — ~30s on a real
+ * project, under a 60s budget). With verify it reads EVERY
  * declared environment's live cluster under a 110s budget and can fail as a
  * whole — one unreachable cluster and nobody sees any of the topology.
  *
@@ -107,8 +108,14 @@ import {
  * command refuses) and when the daemon is too old for the command. Both are
  * facts about state a retry does not touch, and retrying them only delays the
  * sentence that says what to fix.
+ *
+ * DeadlineExceeded is a forge command that ran out of its budget — up to a
+ * minute or more of forge on the user's machine. A second identical request
+ * costs the same and almost always ends the same way, doubling the wait before
+ * the tab can say so.
  */
 const NON_RETRYABLE_FORGE_CODES: ReadonlySet<Code> = new Set([
+  Code.DeadlineExceeded,
   Code.FailedPrecondition,
   Code.NotFound,
   Code.InvalidArgument,

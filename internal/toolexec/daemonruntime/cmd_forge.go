@@ -137,12 +137,26 @@ func runForgeSelfExec(ctx context.Context, projectDir string, args []string) (fo
 		return forgeCommandResult{}, fmt.Errorf("resolve own executable: %w", err)
 	}
 
+	return runForgeProcess(ctx, projectDir, self, append([]string{"forge"}, args...)...)
+}
+
+// runForgeProcess runs name in dir under forgeInvocationTimeout (or the
+// caller's shorter deadline) and sorts the outcome into a verdict or an error.
+//
+// A CHILD KILLED BY ITS DEADLINE IS NOT AN EXIT. exec.CommandContext kills the
+// process when the context ends, and Wait then reports an *exec.ExitError with
+// code -1 — it prefers the process's own status over the context's error. Read
+// as an exit, that became "forge command failed: exit -1: <stderr>", with
+// whatever forge had printed so far (prod, 2026-10-15: a version-skew warning)
+// standing in for the reason, and the api-server filed our own timeout under
+// FailedPrecondition. So the context is checked first, and its error is
+// returned wrapped, for invokeForgeReport to report as a timeout.
+func runForgeProcess(ctx context.Context, dir, name string, args ...string) (forgeCommandResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, forgeInvocationTimeout)
 	defer cancel()
 
-	full := append([]string{"forge"}, args...)
-	cmd := exec.CommandContext(ctx, self, full...)
-	cmd.Dir = projectDir
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -155,6 +169,9 @@ func runForgeSelfExec(ctx context.Context, projectDir string, args []string) (fo
 	switch {
 	case runErr == nil:
 		result.ExitCode = 0
+	case ctx.Err() != nil:
+		// Stopped by the deadline (or a cancel), not finished: no verdict.
+		return result, fmt.Errorf("run forge: %w", ctx.Err())
 	case errors.As(runErr, &exitErr):
 		// A non-zero exit is forge's verdict channel, not a transport
 		// failure. Record the code and let the caller decide, based on
@@ -183,6 +200,9 @@ const (
 	// forgeCommandFailedPrefix -> Internal. Forge ran, exited non-zero, and
 	// produced no report to interpret.
 	forgeCommandFailedPrefix = "forge command failed"
+	// forgeCommandTimedOutPrefix -> a timeout. Forge was stopped by the
+	// command's deadline before it answered; it reported nothing.
+	forgeCommandTimedOutPrefix = "forge command timed out"
 )
 
 // forgeResponseMeta is stamped on every response.
@@ -277,6 +297,13 @@ func invokeForgeReport(ctx context.Context, inv forgeInvocation) ([]byte, error)
 	meta.IsForgeProject = true
 
 	res, err := runForge(ctx, inv.ProjectPath, inv.Args)
+	if err != nil && (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) {
+		// Stopped by the command's deadline, not failed: forge said nothing
+		// about the project. Its own prefix, so the proxy reports a timeout
+		// rather than "forge command failed" (see runForgeProcess). No stderr:
+		// what forge printed before it was stopped is not why it stopped.
+		return nil, fmt.Errorf("%s: %v", forgeCommandTimedOutPrefix, err)
+	}
 	if err != nil {
 		// Could not run or was killed. No verdict, no report.
 		//

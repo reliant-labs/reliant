@@ -4,6 +4,7 @@ package forge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"reflect"
@@ -288,6 +289,36 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 
 		require.Error(t, err, "audit reads no cluster, so a timeout says nothing about reachability")
 		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	})
+}
+
+// FORGE STOPPED BY ITS DEADLINE IS A TIMEOUT, NOT A FORGE FAILURE.
+//
+// The daemon reports a forge child its own budget killed as "forge command
+// timed out". Before, it reported "forge command failed: exit -1: <stderr>",
+// which this layer filed under FailedPrecondition with forge's version-skew
+// warning as the message (prod, 2026-10-15) — blaming the project for our
+// timeout.
+func TestForgeService_CommandTimedOut_IsATimeoutNotAFailure(t *testing.T) {
+	const timedOut = "daemon command forge.x: forge command timed out: run forge: context deadline exceeded"
+
+	t.Run("on a cluster read it is UNREACHABLE data", func(t *testing.T) {
+		router := &forgeTestRouter{replyErr: errors.New(timedOut)}
+		resp, err := newForgeTestService(router).GetEnvStatus(authedCtx(),
+			connect.NewRequest(&reliantv1.GetForgeEnvStatusRequest{ProjectId: "p", Env: "prod"}))
+
+		require.NoError(t, err)
+		assert.Equal(t, reliantv1.ForgeReachability_FORGE_REACHABILITY_UNREACHABLE, resp.Msg.Meta.Reachability)
+	})
+
+	t.Run("elsewhere it is DeadlineExceeded", func(t *testing.T) {
+		router := &forgeTestRouter{replyErr: errors.New(timedOut)}
+		_, err := newForgeTestService(router).GetAudit(authedCtx(),
+			connect.NewRequest(&reliantv1.GetForgeAuditRequest{ProjectId: "p"}))
+
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeDeadlineExceeded, connect.CodeOf(err),
+			"a forge run that ran out of budget is neither an outage nor a project defect")
 	})
 }
 

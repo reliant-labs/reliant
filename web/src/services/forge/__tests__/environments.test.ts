@@ -19,6 +19,7 @@ vi.mock("@/services/controlPlane/config", () => ({
 import type { CloudEnv, CloudEnvStatus } from "../cloudEnvs";
 import {
   cloudRunIdOf,
+  daemonSideForTab,
   daemonSideOf,
   devStackRunsHere,
   envFacts,
@@ -257,6 +258,27 @@ describe("devStackRunsHere", () => {
       })
     ).toBe(false);
     expect(devStackRunsHere(null)).toBe(false);
+  });
+});
+
+describe("daemonSideForTab", () => {
+  it("lets a tab ask for itself once the registry shows an awake machine, before or after topology fails", () => {
+    // prod 2026-10-15: topology was cut at 15s by the gateway while the
+    // machine answered the whole time, and both daemon tabs said it wasn't.
+    expect(daemonSideForTab("loading", true)).toBe("ok");
+    expect(daemonSideForTab("offline", true)).toBe("ok");
+  });
+
+  it("leaves topology to decide when no machine is awake", () => {
+    expect(daemonSideForTab("loading", false)).toBe("loading");
+    expect(daemonSideForTab("offline", false)).toBe("offline");
+  });
+
+  it("never overrides forge's own answers", () => {
+    for (const side of ["not-forge-project", "unsupported", "malformed", "unreachable", "ok"] as const) {
+      expect(daemonSideForTab(side, true)).toBe(side);
+      expect(daemonSideForTab(side, false)).toBe(side);
+    }
   });
 });
 

@@ -41,6 +41,62 @@ func TestForgeRPCDeadlinesCoverEveryProcedure(t *testing.T) {
 	}
 }
 
+// forgeGatewayRouteTimeout is the request timeout prod's gateway grants
+// /reliant.v1.ForgeService/* (control-plane deploy/kcl/prod/ingress.k,
+// _forge_routes). The catch-all route keeps Envoy's 15s default; every forge
+// deadline is above that, and prod cut GetTopology and GetEnvStatus at 15s with
+// a bare 504 until the route existed (2026-10-15). It is 120s — the daemon's
+// forgeInvocationTimeout — and a deadline past it would be cut at the gateway
+// instead of answering with its own classified result.
+const forgeGatewayRouteTimeout = 120 * time.Second
+
+func TestForgeRPCDeadlinesFitTheGatewayRoute(t *testing.T) {
+	for procedure, deadline := range ForgeRPCDeadlines() {
+		if deadline >= forgeGatewayRouteTimeout {
+			t.Errorf("%s deadline %s reaches the gateway's %s route timeout; the gateway would answer 504 before the api-server answers",
+				procedure, deadline, forgeGatewayRouteTimeout)
+		}
+	}
+}
+
+// The budgets that both daemon tabs of the env page wait on, against what the
+// commands were measured to take on control-plane (4 envs, one hosted, loaded
+// cloud machine, 2026-10-16): `env status --json` 26–30s, `env status prod
+// --json` 24–51s. A budget under the measurement kills every run — the 15s
+// topology budget did.
+//
+// The floors differ because the commands are bounded differently. Topology
+// (no --verify) has no timeout of its own in forge, so ours is the only bound
+// and needs clear headroom over the measurement. `env status <env>` is bounded
+// by forge's own 60s release-half timeout (defaultEnvStatusReleaseTimeout);
+// ours must sit above THAT, so a slow cluster read ends in forge's considered
+// UNREACHABLE verdict rather than in our kill.
+func TestForgeBudgetsCoverMeasuredRuns(t *testing.T) {
+	const forgeOwnEnvStatusTimeout = 60 * time.Second
+	cases := map[string]struct {
+		budgetMs int32
+		floor    time.Duration
+	}{
+		"topology (env status, every env)": {forgeTopologyTimeoutMs, 30 * time.Second * 3 / 2},
+		"env_status (env status <env>)":    {forgeEnvStatusTimeoutMs, forgeOwnEnvStatusTimeout},
+	}
+	for name, c := range cases {
+		budget := time.Duration(c.budgetMs) * time.Millisecond
+		if budget <= c.floor {
+			t.Errorf("%s: budget %s must exceed %s", name, budget, c.floor)
+		}
+	}
+	if measured := 51 * time.Second; time.Duration(forgeEnvStatusTimeoutMs)*time.Millisecond <= measured {
+		t.Errorf("env_status budget is under the slowest measured run (%s)", measured)
+	}
+	// env_status and env_verify run the same argv; they cannot disagree about
+	// how long it may take.
+	if forgeEnvStatusTimeoutMs != forgeEnvVerifyTimeoutMs {
+		t.Errorf("env_status budget %d != env_verify budget %d for the same `env status <env>` argv",
+			forgeEnvStatusTimeoutMs, forgeEnvVerifyTimeoutMs)
+	}
+}
+
 // The request must outlive the dispatch, or the handler never gets to return
 // its own classified timeout.
 func TestForgeRPCDeadlinesOutliveDispatchBudgets(t *testing.T) {
