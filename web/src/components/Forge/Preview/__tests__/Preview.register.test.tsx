@@ -108,6 +108,14 @@ vi.mock("@/api/forge-grpc", () => ({
   },
 }));
 
+// The registry's daemon list, which a daemon tab reads to learn whether a
+// machine is up before topology answers. Empty: no machine is awake, so the
+// tabs fall back to topology, which is what these tests take offline.
+vi.mock("@/hooks/daemonListQuery", () => ({
+  DAEMON_LIST_QUERY_KEY: ["reliant", "daemonRegistry", "list"],
+  fetchDaemonList: () => Promise.resolve([]),
+}));
+
 // ── The control plane ──
 
 /** What Live holds. Mutated by Register, as the server would. */
