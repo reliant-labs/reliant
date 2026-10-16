@@ -29,6 +29,7 @@ import { fireEvent, render } from "@testing-library/react";
 import { act } from "react";
 import { ContentBlockType, MessageRole, StreamingState } from "../../../../types/chat";
 import type { Message } from "../../../../types/chat";
+import { SurfaceProvider } from "../../../../lib/surfaceContext";
 import { InterleavedTimeline } from "../InterleavedTimeline";
 
 // jsdom has no ResizeObserver, and the timeline constructs one to measure the
@@ -327,4 +328,11 @@ describe("pinned header handoff", () => {
 
     expect(virtualizerOptions.current?.scrollPaddingStart).toBe(HEADER_PX);
   });
+});
+
+it("never overlays a pinned prompt on the mobile transcript", async () => {
+  const {container}=render(<SurfaceProvider surface="mobile"><InterleavedTimeline messages={MESSAGES} chatId="chat-1" isStreaming={false} /></SurfaceProvider>);
+  applyGeometry(container, {0:{top:-3000,height:100},1:{top:-2900,height:2480},2:{top:-420,height:440},3:{top:20,height:3000}});
+  await scroll(container);
+  expect(container.querySelector('[data-testid="pinned-user-message-header"]')).toBeNull();
 });

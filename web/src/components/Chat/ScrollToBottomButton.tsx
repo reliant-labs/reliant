@@ -1,10 +1,12 @@
 import { memo, useState, useEffect, useRef, useCallback } from "react";
 import { ArrowDown } from "lucide-react";
+import { useSurface } from "../../lib/surfaceContext";
 import { cn } from "../../lib/utils";
 
 interface ScrollToBottomButtonProps {
   visible: boolean;
   onClick: () => void;
+  hasNewContent?: boolean;
 }
 
 const IDLE_FADE_MS = 2000;
@@ -29,7 +31,9 @@ const IDLE_FADE_MS = 2000;
 export const ScrollToBottomButton = memo(function ScrollToBottomButton({
   visible,
   onClick,
+  hasNewContent = false,
 }: ScrollToBottomButtonProps) {
+  const isMobile = useSurface() === "mobile";
   const [mounted, setMounted] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [idleFaded, setIdleFaded] = useState(false);
@@ -51,11 +55,19 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
 
   useEffect(() => {
     if (visible) {
-      setMounted(true);
+      // Row expansion can briefly move the measured end before anchoring settles.
+      // Only reveal the mobile arrow after that distance persists.
+      const revealTimer = isMobile ? setTimeout(() => setMounted(true), 180) : null;
+      if (!isMobile) setMounted(true);
       setExpanded(false);
       setIdleFaded(false);
       expandTimerRef.current = setTimeout(() => setExpanded(true), 600);
       startIdleTimer();
+      return () => {
+        if (revealTimer) clearTimeout(revealTimer);
+        if (expandTimerRef.current) clearTimeout(expandTimerRef.current);
+        clearIdleTimer();
+      };
     } else {
       setExpanded(false);
       setIdleFaded(false);
@@ -75,7 +87,7 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
       }
       clearIdleTimer();
     };
-  }, [visible, startIdleTimer, clearIdleTimer]);
+  }, [visible, isMobile, startIdleTimer, clearIdleTimer]);
 
   const handleMouseEnter = useCallback(() => {
     setHovered(true);
@@ -92,31 +104,33 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
   return (
     // Non-interactive full-width strip, so only the button itself takes clicks
     // — the transcript on either side of it stays selectable and clickable.
-    <div className="pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center">
+    <div className={cn("pointer-events-none absolute inset-x-0 bottom-3 z-30 flex", isMobile ? "justify-end pr-4" : "justify-center")}>
       <button
         onClick={onClick}
+        aria-label={hasNewContent ? "Scroll to bottom, new messages" : "Scroll to bottom"}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         className={cn(
           "pointer-events-auto flex items-center justify-center",
           "rounded-full shadow-lg",
-          "bg-primary text-primary-foreground",
-          "hover:bg-primary/90 active:scale-95",
-          "border border-primary-foreground/20",
+          isMobile ? "bg-background text-foreground" : "bg-primary text-primary-foreground",
+          isMobile ? "active:bg-muted" : "hover:bg-primary/90 active:scale-95",
+          isMobile ? "border border-border" : "border border-primary-foreground/20",
           "transition-all duration-300 ease-out",
           "cursor-pointer select-none",
           visible
-            ? idleFaded && !hovered
+            ? !isMobile && idleFaded && !hovered
               ? "opacity-60 translate-y-0 scale-100"
               : "opacity-100 translate-y-0 scale-100"
             : "opacity-0 translate-y-2 scale-95 pointer-events-none",
-          expanded
+          isMobile ? "relative h-[44px] w-[44px]" : expanded
             ? "h-8 px-3.5 gap-1.5"
             : "h-8 w-8 gap-0",
         )}
       >
         <ArrowDown className="w-3.5 h-3.5 flex-shrink-0" />
-        <span
+        {isMobile && hasNewContent && <span aria-hidden className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full border border-background bg-primary" />}
+        {!isMobile && <span
           className={cn(
             "text-xs font-medium whitespace-nowrap overflow-hidden transition-all duration-300",
             expanded
@@ -125,7 +139,7 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
           )}
         >
           Scroll to bottom
-        </span>
+        </span>}
       </button>
     </div>
   );

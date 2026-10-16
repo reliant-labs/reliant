@@ -1,3 +1,4 @@
+import { useSurface } from "../../lib/surfaceContext";
 import { useState, useEffect } from "react";
 import { thinkingMessages } from "../../lib/thinking-messages";
 import {
@@ -15,6 +16,8 @@ import {
 
 interface ChatThinkingIndicatorProps {
   chatId?: string;
+  /** The mobile transcript already shows tool activity or streaming text. */
+  hasInlineProgress?: boolean;
   /** 
    * Thread ID to filter activity for. 
    * - null: Show activity for any thread (All view)
@@ -53,6 +56,7 @@ function isGenericThinking(activityText: string | null): boolean {
 
 export function ChatThinkingIndicator({ 
   chatId, 
+  hasInlineProgress = false,
   filterThreadId = null,
   waitingOnMachine = false,
   messageQueuedForMachine = false,
@@ -65,6 +69,7 @@ export function ChatThinkingIndicator({
   // Use thread activity store for per-thread active checks. A run held for
   // its machine is not RUNNING, so the thread store reports nothing active —
   // yet the run is live and the user is owed a line under their message.
+  const isMobile = useSurface() === "mobile";
   const isThreadActive = useIsThreadActive(chatId || "", filterThreadId ?? null);
   const isActive = isThreadActive || waitingOnMachine;
 
@@ -117,6 +122,8 @@ export function ChatThinkingIndicator({
 
   // Don't render if not active
   // Exception: if no chatId, show indicator (loading state)
+  if (isMobile && !waitingOnMachine && hasInlineProgress && !stillWorking) return null;
+
   if (chatId && !isActive) {
     return null;
   }
@@ -146,7 +153,7 @@ export function ChatThinkingIndicator({
         }
       `}</style>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-        <span className="text-sm text-muted-foreground">{stillWorking ? STILL_WORKING : thinkingMessage}</span>
+        <span className={isMobile && !waitingOnMachine && !stillWorking ? "sr-only" : "text-sm text-muted-foreground"}>{stillWorking ? STILL_WORKING : isMobile && !waitingOnMachine ? "Working…" : thinkingMessage}</span>
         <div className="flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full thinking-dot-1" style={{ backgroundColor: 'hsl(var(--primary))' }} />
           <div className="w-1.5 h-1.5 rounded-full thinking-dot-2" style={{ backgroundColor: 'hsl(var(--primary))' }} />

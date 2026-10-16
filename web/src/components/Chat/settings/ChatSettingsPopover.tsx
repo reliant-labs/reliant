@@ -1,3 +1,5 @@
+import { useSurface } from "../../../lib/surfaceContext";
+import { MobileChatSheet } from "../MobileChatSheet";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   X,
@@ -25,6 +27,8 @@ import type { Preset } from "../../../store/globalDataStore";
 type PageId = "main" | "model" | "preset" | "params";
 
 interface ChatSettingsPopoverProps {
+  embedded?: boolean;
+  disabled?: boolean;
   isOpen: boolean;
   onClose: () => void;
   initialPage?: PageId;
@@ -134,6 +138,8 @@ function countExtraParams(
 
 export function ChatSettingsPopover({
   isOpen,
+  embedded = false,
+  disabled = false,
   onClose,
   initialPage = "main",
   inputs,
@@ -143,6 +149,7 @@ export function ChatSettingsPopover({
   selectedPreset,
   onPresetChange,
 }: ChatSettingsPopoverProps) {
+  const isMobile = useSurface() === "mobile";
   const [currentPage, setCurrentPage] = useState<PageId>(initialPage);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -155,7 +162,7 @@ export function ChatSettingsPopover({
 
   // Close on click outside (but not when clicking the trigger button itself)
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || isMobile || embedded) return;
     const handleClick = (e: MouseEvent) => {
       // The popover is rendered inside a relative wrapper alongside its trigger button.
       // Check the wrapper (parentElement) so clicks on the trigger are ignored here —
@@ -172,7 +179,7 @@ export function ChatSettingsPopover({
       cancelAnimationFrame(raf);
       document.removeEventListener("mousedown", handleClick);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, isMobile, embedded]);
 
   // Find special param keys
   const modelKey = findModelParamKey(inputs);
@@ -219,19 +226,20 @@ export function ChatSettingsPopover({
 
   if (!isOpen) return null;
 
-  return (
+  const content = (
       <div
         ref={popoverRef}
         style={{
           animation: "chatSettingsPopoverIn 0.12s ease-out",
         }}
-        className="absolute bottom-[calc(100%+8px)] left-0 z-[100] w-[360px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden"
+        className={isMobile || embedded ? "mobile-chat-settings min-w-0 w-full" : "absolute bottom-[calc(100%+8px)] left-0 z-[100] w-[360px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden"}
       >
+        <fieldset disabled={disabled} className="min-w-0 border-0 p-0">
         {/* Main page */}
         {currentPage === "main" && (
           <div>
             {/* Header */}
-            <div className="flex items-center px-3 py-2.5 border-b border-border/50 gap-2">
+            <div className={isMobile ? "hidden" : "flex items-center px-3 py-2.5 border-b border-border/50 gap-2"}>
               <h3 className="text-sm font-semibold text-foreground flex-1">
                 Chat Settings
               </h3>
@@ -348,6 +356,7 @@ export function ChatSettingsPopover({
         {/* Model page */}
         {currentPage === "model" && modelKey && (
           <ModelSettingsPage
+            showHeader={!isMobile || embedded}
             value={modelValue}
             onChange={handleModelChange}
             onBack={() => setCurrentPage("main")}
@@ -358,6 +367,7 @@ export function ChatSettingsPopover({
         {/* Preset page */}
         {currentPage === "preset" && presets && (
           <PresetSettingsPage
+            showHeader={!isMobile || embedded}
             presets={presets}
             selectedPreset={selectedPreset ?? null}
             onPresetChange={handlePresetSelect}
@@ -369,6 +379,7 @@ export function ChatSettingsPopover({
         {/* Params page */}
         {currentPage === "params" && inputs && (
           <ParamsSettingsPage
+            showHeader={!isMobile || embedded}
             inputs={inputs}
             values={values}
             onChange={onChange}
@@ -380,6 +391,12 @@ export function ChatSettingsPopover({
             ]}
           />
         )}
+        </fieldset>
       </div>
   );
+  if (isMobile && !embedded) {
+    return <MobileChatSheet title={currentPage === "model" ? "Model settings" : "Chat settings"} onClose={onClose}
+      onBack={currentPage !== "main" ? () => setCurrentPage("main") : undefined}>{content}</MobileChatSheet>;
+  }
+  return content;
 }

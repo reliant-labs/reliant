@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { ScrollToBottomButton } from "../ScrollToBottomButton";
 
 function button(): HTMLElement {
@@ -53,4 +54,21 @@ describe("ScrollToBottomButton", () => {
 
     expect(button()).toHaveClass("opacity-100");
   });
+});
+
+it("uses a fixed touch target and announces unread content on mobile", () => {
+  vi.useFakeTimers();
+  render(<SurfaceProvider surface="mobile"><ScrollToBottomButton visible hasNewContent onClick={() => {}} /></SurfaceProvider>);
+  act(() => vi.advanceTimersByTime(180));
+  expect(screen.getByRole("button", {name:"Scroll to bottom, new messages"})).toHaveClass("h-[44px]", "w-[44px]");
+  expect(screen.queryByText("Scroll to bottom")).not.toBeInTheDocument();
+});
+
+it("does not flash the mobile arrow during a temporary measurement change", () => {
+  vi.useFakeTimers();
+  const { rerender } = render(<SurfaceProvider surface="mobile"><ScrollToBottomButton visible onClick={() => {}} /></SurfaceProvider>);
+  act(() => vi.advanceTimersByTime(100));
+  rerender(<SurfaceProvider surface="mobile"><ScrollToBottomButton visible={false} onClick={() => {}} /></SurfaceProvider>);
+  act(() => vi.advanceTimersByTime(300));
+  expect(screen.queryByRole("button", { name: /scroll to bottom/i })).toBeNull();
 });

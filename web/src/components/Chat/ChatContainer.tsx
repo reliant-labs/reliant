@@ -47,9 +47,11 @@ interface ChatContainerProps {
   isFocused?: boolean;
   /** The host shows the chat's title itself (run detail). */
   hideChatTitle?: boolean;
+  /** Optional host navigation-bar slot for shared chat actions. */
+  headerActionsTarget?: HTMLElement | null;
 }
 
-export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatContainerProps) {
+export function ChatContainer({ tabId, isFocused = true, hideChatTitle, headerActionsTarget }: ChatContainerProps) {
   // In the new navigation system, tabId IS the chatId (no separate tabs)
   // We keep the tabId prop name for compatibility but treat it as chatId
   const chatId = tabId;
@@ -331,6 +333,7 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
       hasOlderMessages={hasOlderMessages}
       isChatSyncing={isChatSyncing}
       hideChatTitle={hideChatTitle}
+      headerActionsTarget={headerActionsTarget}
     />
   );
 }

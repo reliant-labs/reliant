@@ -5,7 +5,7 @@ import type { WorkflowExecutionData } from "../../../types/chat";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, ...props }: { children?: React.ReactNode }) => (
-    <a {...props}>{children}</a>
+    <a href="#" {...props}>{children}</a>
   ),
 }));
 
@@ -53,4 +53,18 @@ describe("MobileWorkflowExecutionEntry", () => {
       "/m/chats/$chatId/workflow",
     );
   });
+});
+
+it("combines the chat title and workflow into one compact navigation control", () => {
+  execution = workflowExecution();
+  render(<MobileWorkflowExecutionEntry chatId="c1" title="Simple Greeting" />);
+  expect(screen.getByRole("heading", { name: "Simple Greeting" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Workflow: Agent" })).toContainElement(screen.getByText("Agent"));
+});
+
+it("keeps the chat title visible before workflow data arrives", () => {
+  execution = null;
+  render(<MobileWorkflowExecutionEntry chatId="c1" title="Simple Greeting" />);
+  expect(screen.getByRole("heading", { name: "Simple Greeting" })).toBeInTheDocument();
+  expect(screen.queryByRole("link")).not.toBeInTheDocument();
 });

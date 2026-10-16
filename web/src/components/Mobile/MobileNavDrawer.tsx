@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useProjectStore } from "../../store/projectStore";
 import { cn } from "../../lib/utils";
+import { MobileInstallMenuItem } from "./MobileInstallMenuItem";
 
 interface MobileNavDrawerProps {
   isOpen: boolean;
@@ -135,10 +136,10 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
     }
   }, [pathname, isOpen, onClose]);
 
-  if (!isOpen) return null;
+
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex">
+    <div className="fixed inset-0 z-[9999] flex" hidden={!isOpen} style={!isOpen ? { display: "none" } : undefined}>
       <div
         className={cn(
           "absolute inset-0 bg-black/50 transition-opacity duration-200",
@@ -229,6 +230,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
               </Link>
             );
           })}
+          <MobileInstallMenuItem />
         </nav>
       </div>
     </div>,

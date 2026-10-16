@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { SurfaceProvider } from "../../../../lib/surfaceContext";
 import { ChatSettingsPopover } from "../ChatSettingsPopover";
 import type { InputDef } from "../../../../lib/inputHelpers";
 
@@ -82,5 +83,21 @@ describe("ChatSettingsPopover thinking levels", () => {
       "High",
       "X-High",
     ]);
+  });
+});
+
+describe("Mobile model settings sheet", () => {
+  it("opens directly to model settings, applies thinking changes, and navigates back", () => {
+    const onChange = vi.fn();
+    const onClose = vi.fn();
+    render(<SurfaceProvider surface="mobile"><ChatSettingsPopover isOpen initialPage="model"
+      inputs={{ model: modelInputWithTagDefault }} values={{}} onChange={onChange} onClose={onClose} /></SurfaceProvider>);
+    expect(screen.getByRole("dialog", { name: "Model settings" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "high" } });
+    expect(onChange).toHaveBeenCalledWith({ model: { tags: ["flagship"], thinking_level: "high" } });
+    fireEvent.click(screen.getByRole("button", { name: "Back", exact: true }));
+    expect(screen.getByRole("dialog", { name: "Chat settings" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close chat options" }));
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

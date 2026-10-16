@@ -22,7 +22,7 @@ export const ChatMessagesContainer = ({
 }: ChatMessagesContainerProps) => (
   <div
     className={cn(
-      "flex-1 overflow-hidden dense-ui chat-background relative",
+      "flex-1 min-h-0 overflow-hidden dense-ui chat-background relative",
       className
     )}
     style={{

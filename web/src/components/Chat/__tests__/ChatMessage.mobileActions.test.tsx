@@ -35,7 +35,7 @@ vi.mock("../../../lib/logger", () => ({
   logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }));
 
-vi.mock("../../../lib/toast-manager", () => ({ toast: { error: vi.fn() } }));
+vi.mock("../../../lib/toast-manager", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 vi.mock("../../../lib/tabSwitchProfiler", () => ({
   tabSwitchProfiler: { isEnabled: () => false },
@@ -69,10 +69,10 @@ function touch(x: number, y: number) {
   return { touches: [{ clientX: x, clientY: y }] };
 }
 
-function renderMobile(role: MessageRole) {
+function renderMobile(role: MessageRole, isLatestMessage = false) {
   return render(
     <SurfaceProvider surface="mobile">
-      <ChatMessage message={buildMessage(role)} chatId="chat-1" />
+      <ChatMessage message={buildMessage(role)} chatId="chat-1" isLatestMessage={isLatestMessage} />
     </SurfaceProvider>,
   );
 }
@@ -90,6 +90,7 @@ describe("ChatMessage long-press actions (mobile)", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it("opens the actions sheet after a 500ms press", () => {
@@ -156,32 +157,33 @@ describe("ChatMessage long-press actions (mobile)", () => {
   it.each([
     ["user", MessageRole.USER],
     ["assistant", MessageRole.ASSISTANT],
-  ] as const)("makes the %s long-press surface non-selectable on mobile", (_n, role) => {
+  ] as const)("keeps the %s message selectable on mobile", (_n, role) => {
     renderMobile(role);
     const surface = messageSurface();
-    expect(surface.className).toContain("select-none");
-    expect(surface.className).toContain("[-webkit-touch-callout:none]");
+    expect(surface.className).toContain("select-text");
+    expect(surface.className).not.toContain("select-none");
   });
 
-  it("prevents the native context menu on the long-press surface", () => {
+  it("allows the native context menu before a long press opens actions", () => {
     renderMobile(MessageRole.USER);
     const surface = messageSurface();
     const notPrevented = fireEvent.contextMenu(surface);
-    expect(notPrevented).toBe(false);
+    expect(notPrevented).toBe(true);
   });
 
-  it("clears an in-progress selection when the long press fires", () => {
+  it("preserves an active text selection without opening actions", () => {
     const removeAllRanges = vi.fn();
     const spy = vi
       .spyOn(window, "getSelection")
-      .mockReturnValue({ removeAllRanges } as unknown as Selection);
+      .mockReturnValue({ removeAllRanges, toString: () => "selected text" } as unknown as Selection);
     try {
       renderMobile(MessageRole.USER);
       fireEvent.touchStart(messageSurface(), touch(10, 10));
       act(() => {
         vi.advanceTimersByTime(500);
       });
-      expect(removeAllRanges).toHaveBeenCalled();
+      expect(removeAllRanges).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     } finally {
       spy.mockRestore();
     }
@@ -194,4 +196,82 @@ describe("ChatMessage long-press actions (mobile)", () => {
     expect(surface.className).not.toContain("touch-callout");
     expect(fireEvent.contextMenu(surface)).toBe(true);
   });
+});
+
+describe("Mobile inline message actions", () => {
+  it("copies on a direct tap without requiring hover", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    renderMobile(MessageRole.ASSISTANT, true);
+    fireEvent.click(screen.getByRole("button", { name: "More message actions" }));
+    const copy = screen.getByRole("button", { name: "Copy message" });
+    await act(async () => { fireEvent.click(copy); });
+    expect(writeText).toHaveBeenCalledWith("Hello there.");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
+  it("opens branch choices immediately on a tap and branches from the selected message", async () => {
+    branchChat.mockClear();
+    renderMobile(MessageRole.ASSISTANT, true);
+    const branch = screen.getByRole("button", { name: "More message actions" });
+    expect(branch).toHaveClass("min-h-[44px]");
+    fireEvent.click(branch);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.parentElement).not.toHaveClass("pointer-events-none");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Branch in place" })); });
+    expect(branchChat).toHaveBeenCalledWith("chat-1", "msg-1");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+it("cancels a pending long press when the transcript scrolls", () => {
+  vi.useFakeTimers();
+  renderMobile(MessageRole.USER);
+  fireEvent.touchStart(messageSurface(), touch(10,10));
+  fireEvent.scroll(document.body);
+  act(()=>vi.advanceTimersByTime(600));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  vi.useRealTimers();
+});
+it("does not start message actions from an interactive descendant", () => {
+  vi.useFakeTimers();
+  renderMobile(MessageRole.USER);
+  const link=document.createElement("a");link.href="#";link.textContent="Link";
+  messageSurface().append(link);
+  fireEvent.touchStart(link,touch(10,10));act(()=>vi.advanceTimersByTime(600));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  vi.useRealTimers();
+});
+
+it("keeps user-message actions available through long press only", () => {
+  renderMobile(MessageRole.USER);
+  expect(screen.queryByRole("button", {name:"More message actions"})).not.toBeInTheDocument();
+});
+it("shows a single menu at the end of an assistant turn and copies the whole turn", async () => {
+  const writeText=vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", {clipboard:{writeText}});
+  const first=buildMessage(MessageRole.ASSISTANT);
+  const last={...first,id:"msg-2", contentBlocks:[{...first.contentBlocks[0],id:"b2",content:"Final answer."}]};
+  render(<SurfaceProvider surface="mobile"><ChatMessage message={first} mobileTurnEnd={false}/><ChatMessage message={last} mobileTurnMessages={[first,last]}/></SurfaceProvider>);
+  expect(screen.getAllByRole("button", {name:"More message actions"})).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", {name:"More message actions"}));
+  await act(async()=>fireEvent.click(screen.getByRole("button", {name:"Copy message"})));
+  expect(writeText).toHaveBeenCalledWith("Hello there.\n\nFinal answer.");
+  vi.unstubAllGlobals();
+});
+
+it("moves the action menu when an unchanged message becomes a turn continuation", () => {
+  const message=buildMessage(MessageRole.ASSISTANT);
+  const {rerender}=render(<SurfaceProvider surface="mobile"><ChatMessage message={message} mobileTurnEnd /></SurfaceProvider>);
+  expect(screen.getByRole("button", {name:"More message actions"})).toBeInTheDocument();
+  rerender(<SurfaceProvider surface="mobile"><ChatMessage message={message} mobileTurnEnd={false} /></SurfaceProvider>);
+  expect(screen.queryByRole("button", {name:"More message actions"})).not.toBeInTheDocument();
+});
+
+it("does not expand a short user message with no hidden content", () => {
+  renderMobile(MessageRole.USER);
+  fireEvent.click(messageSurface());
+  expect(screen.queryByText("Show less")).toBeNull();
+  expect(screen.queryByText("Show more")).toBeNull();
 });

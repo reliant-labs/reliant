@@ -1,5 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
+import { useSurface } from "../../lib/surfaceContext";
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Workflow, ChevronDown, Check, Star } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -50,6 +51,7 @@ export function WorkflowSelector({
   isOpen: controlledIsOpen,
   onOpenChange,
 }: WorkflowSelectorProps) {
+  const isMobile = useSurface() === "mobile";
   const [uncontrolledIsOpen, setUncontrolledIsOpen] = useState(false);
   const isOpen = controlledIsOpen ?? uncontrolledIsOpen;
   const setIsOpen = useCallback(
@@ -177,6 +179,17 @@ export function WorkflowSelector({
   const displayText = selectedWorkflow
     ? workflowDisplayName(selectedWorkflow)
     : getWorkflowDisplayName(effectiveValue, true);
+
+  if (isMobile) {
+    return <label className="flex min-w-0 flex-col gap-1 text-sm">
+      <span className="font-medium">Workflow</span>
+      <select aria-label="Workflow" disabled={!canInteract} value={selectedWorkflow?.name ?? effectiveValue}
+        onChange={event => handleSelect(event.target.value)} className="min-w-0 w-full rounded-lg border border-border bg-popover px-3 text-base disabled:opacity-50">
+        {!selectedWorkflow && <option value={effectiveValue}>{displayText}</option>}
+        {sortedWorkflows.map(workflow => <option key={workflow.name} value={workflow.name}>{workflowDisplayName(workflow)}</option>)}
+      </select>
+    </label>;
+  }
 
   return (
     <div ref={dropdownRef} className={cn("relative", className)}>

@@ -1,5 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
+import { useSurface } from "../../lib/surfaceContext";
 import { useCallback, useState, useRef, useEffect } from "react";
 import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import { ChevronDown, Check, Layers, Code2 } from "lucide-react";
@@ -49,6 +50,7 @@ export function InlinePresetPicker({
   isStreaming = false,
   className = "",
 }: InlinePresetPickerProps) {
+  const isMobile = useSurface() === "mobile";
   const [isOpen, setIsOpen] = useState(false);
   // Escape closes the list, and only the list (useEscapeLayer).
   const escapeLayer = useEscapeLayer(isOpen, useCallback(() => setIsOpen(false), []));
@@ -94,6 +96,19 @@ export function InlinePresetPicker({
     }
     setIsOpen(!isOpen);
   };
+
+  if (isMobile && !valueIsTemplate) {
+    return <label className="flex min-w-0 w-full flex-col gap-1 text-sm">
+      <span className="font-medium">{groupLabel ? `${groupLabel} preset` : "Preset"}</span>
+      <select aria-label={groupLabel ? `${groupLabel} preset` : "Preset"} disabled={!canInteract} value={value ?? ""}
+        onChange={event => handleSelect(presets.find(preset => preset.name === event.target.value) ?? null)}
+        className="min-w-0 w-full rounded-lg border border-border bg-popover px-3 text-base disabled:opacity-50">
+        <option value="">No preset</option>
+        {value && !selectedPreset && <option value={value}>{value}</option>}
+        {presets.map(preset => <option key={preset.id} value={preset.name}>{preset.name}</option>)}
+      </select>
+    </label>;
+  }
 
   return (
     <div ref={dropdownRef} className={cn("relative", className)}>

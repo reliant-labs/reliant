@@ -83,7 +83,7 @@ export function AttachmentPreview({ attachments, onRemove, className = '' }: Att
           ) : (
             <div
               key={attachment.id}
-              className="flex items-center gap-2 px-2 py-1 rounded text-xs transition-all duration-200 w-fit"
+              className="flex items-center gap-2 px-2 py-1 rounded text-xs transition-all duration-200 w-fit max-w-full min-w-0"
               style={{
                 backgroundColor: 'var(--chat-button-bg)',
                 border: '1px solid var(--chat-border)',
@@ -99,7 +99,7 @@ export function AttachmentPreview({ attachments, onRemove, className = '' }: Att
               }}
             >
               <span className="flex-shrink-0"><FileIcon mimeType={attachment.mime_type} /></span>
-              <span className="whitespace-nowrap">{attachment.filename}</span>
+              <span className="min-w-0 truncate">{attachment.filename}</span>
               <button
                 type="button"
                 onClick={(e) => {
@@ -107,6 +107,7 @@ export function AttachmentPreview({ attachments, onRemove, className = '' }: Att
                   e.preventDefault();
                   onRemove(attachment.id);
                 }}
+                aria-label="Remove attachment"
                 className="flex-shrink-0 transition-opacity duration-200 hover:opacity-100"
                 style={{
                   color: 'var(--chat-input-placeholder)',

@@ -290,3 +290,20 @@ describe("SlashCommandMenu", () => {
     });
   });
 });
+
+it("keeps the menu within a narrow viewport when appearance enlarges rem sizing", () => {
+  const previousFontSize = document.documentElement.style.fontSize;
+  document.documentElement.style.fontSize = "24px";
+  vi.stubGlobal("innerWidth", 390);
+  const bounds = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+    left: 34, right: 380, top: 300, bottom: 350, width: 346, height: 50, x: 34, y: 300, toJSON: () => ({}),
+  });
+  try {
+    render(<Harness value="/" />);
+    expect(screen.getByRole("listbox").style.left).toBe("8px");
+  } finally {
+    bounds.mockRestore();
+    vi.unstubAllGlobals();
+    document.documentElement.style.fontSize = previousFontSize;
+  }
+});

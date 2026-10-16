@@ -9,9 +9,10 @@ import {
   Fragment,
   type JSX,
 } from "react";
+import { ApprovalStatus } from "../../gen/reliant/v1/approval_pb";
 import { Tooltip } from "../ui/Tooltip";
-import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
-import { GitBranch, FolderSync, Copy, Check, ChevronDown } from "lucide-react";
+import { ContentBlockType, MessageRole, ToolCallStatus } from "../../gen/reliant/v1/chat_pb";
+import { GitBranch, FolderSync, Copy, Check, ChevronDown, ChevronRight, Loader2, MoreHorizontal } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { tabSwitchProfiler } from "../../lib/tabSwitchProfiler";
 import { ToolExecution, type ToolResultData } from "./ToolExecution";
@@ -40,7 +41,7 @@ import {
   useChat,
 } from "../../store/chatStoreHooks";
 import { useSurface } from "../../lib/surfaceContext";
-import { LONG_PRESS_SURFACE_CLASS, useLongPress } from "../../hooks/useLongPress";
+import { useLongPress } from "../../hooks/useLongPress";
 // import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";
@@ -84,6 +85,8 @@ interface ChatMessageProps {
   onSelectThread?: (threadId: string | null) => void;
   timelineVariant?: ChatTimelineVariant;
   compactToolSpacing?: boolean;
+  mobileTurnEnd?: boolean;
+  mobileTurnMessages?: Message[];
   /**
    * Rendered as the sticky header above the timeline rather than in the flow.
    * Clamps to a single line, drops attachments and hover actions, and never
@@ -177,9 +180,13 @@ function ChatMessageComponent({
   onSelectThread,
   timelineVariant = "compact",
   compactToolSpacing = false,
+  mobileTurnEnd = true,
+  mobileTurnMessages,
   pinned = false,
 }: ChatMessageProps) {
   const isUser = message.role === MessageRole.USER;
+  const actionMessageId = mobileTurnMessages?.[mobileTurnMessages.length - 1]?.id ?? message.id;
+  const [mobileWorkExpanded, setMobileWorkExpanded] = useState(false);
   const activeChatId = useActiveChatId();
   // Prefer chatId from props (command center), fallback to chat navigation store
   const chatId = propChatId || activeChatId;
@@ -219,6 +226,7 @@ function ChatMessageComponent({
   const surface = useSurface();
   const isMobile = surface === "mobile";
   const [showActionsSheet, setShowActionsSheet] = useState(false);
+  const [actionsOpenedByLongPress, setActionsOpenedByLongPress] = useState(true);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -292,9 +300,14 @@ function ChatMessageComponent({
   // Show branch options menu when clicking the branch button
   const handleBranchClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isMobile) {
+      setActionsOpenedByLongPress(false);
+      setShowActionsSheet(true);
+      return;
+    }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setBranchMenuPosition({ x: rect.left, y: rect.bottom + 4 });
-  }, []);
+  }, [isMobile]);
 
   // Branch chat in same worktree (original behavior)
   const handleBranchChat = useCallback(async () => {
@@ -306,16 +319,16 @@ function ChatMessageComponent({
     try {
       logger.info("Branching chat:", {
         chatId: effectiveChatId,
-        messageId: message.id,
+        messageId: actionMessageId,
       });
-      await useChatStore.getState().branchChat(effectiveChatId, message.id);
+      await useChatStore.getState().branchChat(effectiveChatId, actionMessageId);
     } catch (error) {
       logger.error("Failed to branch chat:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
       toast.error(`Failed to branch chat: ${errorMessage}`, { duration: 5000 });
     }
-  }, [activeChatId, chatId, message.id]);
+  }, [activeChatId, chatId, actionMessageId]);
 
   // Open modal to branch chat to a new worktree
   const handleBranchToWorkspace = useCallback(() => {
@@ -332,79 +345,84 @@ function ChatMessageComponent({
       // Copy formatted content instead of raw JSON
       let contentToCopy = "";
 
-      if (parsed.text) {
-        // Include full text with code contexts for copy
-        contentToCopy += parsed.text + "\n\n";
-      }
+      for (const copyMessage of (isMobile && mobileTurnMessages?.length ? mobileTurnMessages : [message])) {
+        const parsed = getProcessedMessage(copyMessage, toolResultsByCallId, approvals);
+        if (parsed.text) {
+          // Include full text with code contexts for copy
+          contentToCopy += parsed.text + "\n\n";
+        }
 
-      if (parsed.toolExecutions && parsed.toolExecutions.length > 0) {
-        parsed.toolExecutions.forEach((execution, index) => {
-          // Format tool call with parameters like Claude does
-          let toolCallText = `Tool: ${execution.call.name}`;
-          if (
-            execution.call.input &&
-            typeof execution.call.input === "object" &&
-            execution.call.input !== null
-          ) {
-            const params = Object.entries(execution.call.input)
-              .map(([key, value]) => {
-                if (typeof value === "string") {
-                  return `${key}: ${value}`;
-                } else if (typeof value === "object") {
-                  return `${key}: ${JSON.stringify(value)}`;
-                } else {
-                  return `${key}: ${value}`;
-                }
-              })
-              .join(", ");
+        if (parsed.toolExecutions && parsed.toolExecutions.length > 0) {
+          parsed.toolExecutions.forEach((execution, index) => {
+            // Format tool call with parameters like Claude does
+            let toolCallText = `Tool: ${execution.call.name}`;
+            if (
+              execution.call.input &&
+              typeof execution.call.input === "object" &&
+              execution.call.input !== null
+            ) {
+              const params = Object.entries(execution.call.input)
+                .map(([key, value]) => {
+                  if (typeof value === "string") {
+                    return `${key}: ${value}`;
+                  } else if (typeof value === "object") {
+                    return `${key}: ${JSON.stringify(value)}`;
+                  } else {
+                    return `${key}: ${value}`;
+                  }
+                })
+                .join(", ");
 
-            // Check if the formatted parameters would be too long or cluttered
-            const totalLength = params.length;
-            const hasLongStrings = Object.values(execution.call.input).some(
-              (val) => typeof val === "string" && val.length > 50,
-            );
-            const hasComplexObjects = Object.values(execution.call.input).some(
-              (val) =>
-                typeof val === "object" &&
-                val !== null &&
-                Object.keys(val).length > 3,
-            );
+              // Check if the formatted parameters would be too long or cluttered
+              const totalLength = params.length;
+              const hasLongStrings = Object.values(execution.call.input).some(
+                (val) => typeof val === "string" && val.length > 50,
+              );
+              const hasComplexObjects = Object.values(execution.call.input).some(
+                (val) =>
+                  typeof val === "object" &&
+                  val !== null &&
+                  Object.keys(val).length > 3,
+              );
 
-            // If parameters are too long, complex, or would be cluttered, just show the tool name
-            if (totalLength > 100 || hasLongStrings || hasComplexObjects) {
-              toolCallText += "()";
+              // If parameters are too long, complex, or would be cluttered, just show the tool name
+              if (totalLength > 100 || hasLongStrings || hasComplexObjects) {
+                toolCallText += "()";
+              } else {
+                toolCallText += `(${params})`;
+              }
             } else {
-              toolCallText += `(${params})`;
+              toolCallText += "()";
             }
-          } else {
-            toolCallText += "()";
-          }
 
-          contentToCopy += `${toolCallText}\n`;
-          if (execution.result && execution.result.content) {
-            contentToCopy += execution.result.content + "\n";
-          } else {
-            contentToCopy += "No output available\n";
-          }
-          if (index < parsed.toolExecutions!.length - 1) {
-            contentToCopy += "\n";
-          }
-        });
+            contentToCopy += `${toolCallText}\n`;
+            if (execution.result && execution.result.content) {
+              contentToCopy += execution.result.content + "\n";
+            } else {
+              contentToCopy += "No output available\n";
+            }
+            if (index < parsed.toolExecutions!.length - 1) {
+              contentToCopy += "\n";
+            }
+          });
+        }
+
+        // If no formatted content, fall back to text from contentBlocks
+        if (!contentToCopy.trim()) {
+          contentToCopy = (copyMessage.contentBlocks || [])
+            .filter((b) => b.type === ContentBlockType.TEXT)
+            .map((b) => b.content || "")
+            .join("");
+        }
+
       }
-
-      // If no formatted content, fall back to text from contentBlocks
-      if (!contentToCopy.trim()) {
-        contentToCopy = (message.contentBlocks || [])
-          .filter((b) => b.type === ContentBlockType.TEXT)
-          .map((b) => b.content || "")
-          .join("");
-      }
-
       await navigator.clipboard.writeText(contentToCopy.trim());
       setCopied(true);
+      if (isMobile) toast.success("Copied", { duration: 2000 });
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       logger.error("Failed to copy message:", error);
+      toast.error("Could not copy the message. Please try again.");
     }
   };
 
@@ -456,8 +474,11 @@ function ChatMessageComponent({
 
     // Also check after a delay for async font loading
     const fontTimeoutId = setTimeout(checkOverflow, 100);
+    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(checkOverflow) : null;
+    resizeObserver?.observe(element);
 
     return () => {
+      resizeObserver?.disconnect();
       cancelAnimationFrame(rafId);
       clearTimeout(timeoutId);
       clearTimeout(fontTimeoutId);
@@ -558,6 +579,7 @@ function ChatMessageComponent({
     if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
       navigator.vibrate(10);
     }
+    setActionsOpenedByLongPress(true);
     setShowActionsSheet(true);
   }, []);
   const longPressHandlers = useLongPress(handleLongPress);
@@ -577,6 +599,15 @@ function ChatMessageComponent({
     return null;
   }
 
+  const lastTextSegment = parsed.segments.reduce((last, segment, index) => segment.kind === "text" && segment.text.trim() ? index : last, -1);
+  const hasMobileWork = isMobile && !isUser && parsed.segments.some((segment, index) => segment.kind === "tools" || (segment.kind === "text" && index !== lastTextSegment));
+  const workNeedsAttention = enhancedToolExecutions?.some(exec => exec.approval?.status === ApprovalStatus.PENDING || exec.status === "failed" || exec.status === "denied" || exec.call.durableStatus === ToolCallStatus.FAILED || exec.result?.is_error || isRequestMachineTool(exec.call.name) || (exec.result?.attachments?.length ?? 0) > 0) || false;
+  const showMobileWork = mobileWorkExpanded || workNeedsAttention;
+  const commandCount = enhancedToolExecutions?.filter(exec => /shell|bash/.test(exec.call.name)).length ?? 0;
+  const otherCount = (enhancedToolExecutions?.length ?? 0) - commandCount;
+  const mobileWorkRunning = isStreaming && parsed.segments[parsed.segments.length - 1]?.kind === "tools";
+  const mobileWorkLabel = workNeedsAttention ? "Activity needs attention" : mobileWorkRunning ? (commandCount ? "Running command…" : "Working…") : [commandCount ? `Ran ${commandCount} command${commandCount === 1 ? "" : "s"}` : "", otherCount ? `${otherCount} other action${otherCount === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ") || "Response details";
+
   // Decide grouping: if more than 1 execution, show single grouped component
   const shouldGroup = (enhancedToolExecutions?.length || 0) > 1;
 
@@ -595,6 +626,7 @@ function ChatMessageComponent({
     keyPrefix: string,
   ): JSX.Element | null => {
     if (executions.length === 0) return null;
+    if (isMobile) return <div data-message-interactive className="space-y-1">{executions.map(exec => <ToolExecution key={exec.call.id} toolCall={exec.call} toolResult={exec.result} status={exec.status} approval={exec.approval} onCancel={exec.onCancel} onConvertToBackground={exec.onConvertToBackground} chatId={chatId || undefined} showRichContent onSelectThread={onSelectThread} density={toolDensity} />)}</div>;
     const readOnlyTools = executions.filter((exec) =>
       isReadOnlyTool(exec.call.name),
     );
@@ -613,7 +645,7 @@ function ChatMessageComponent({
         {readOnlyTools.length > 1 ? (
           <ToolExecutionCollapsibleGroup
             executions={readOnlyTools}
-            messageId={message.id}
+            messageId={actionMessageId}
             chatId={chatId || undefined}
             showRichContent={true}
             onSelectThread={onSelectThread}
@@ -642,7 +674,7 @@ function ChatMessageComponent({
           (shouldGroup && otherTools.length > 1 ? (
             <ToolExecutionGroup
               executions={otherTools}
-              messageId={message.id}
+              messageId={actionMessageId}
               defaultCollapsed={true}
               chatId={chatId || undefined}
               showRichContent={true}
@@ -695,14 +727,14 @@ function ChatMessageComponent({
           key: "branch",
           label: "Branch in place",
           icon: <GitBranch className="h-4 w-4" />,
-          disabled: isOptimistic,
+          disabled: isOptimistic || Boolean(failedClientMessageId),
           onSelect: () => void handleBranchChat(),
         },
         {
           key: "branch-existing",
           label: "Branch to existing workspace",
           icon: <FolderSync className="h-4 w-4" />,
-          disabled: isOptimistic,
+          disabled: isOptimistic || Boolean(failedClientMessageId),
           onSelect: handleBranchToExistingWorkspace,
         },
       ]
@@ -715,10 +747,13 @@ function ChatMessageComponent({
   //
   // The inline variant is in the flow with nothing underneath it and does not
   // disable its box, so these classes are simply redundant there.
-  const revealedControl =
-    "pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto";
+  const revealedControl = isMobile || (isLatestMessage && !pinned)
+    ? "pointer-events-auto"
+    : "pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto";
 
-  const actionControls = (
+  const actionControls = isMobile ? (
+    <button type="button" aria-label="More message actions" className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-muted-foreground active:bg-muted" onClick={(event) => { event.stopPropagation(); setActionsOpenedByLongPress(false); setShowActionsSheet(true); }}><MoreHorizontal className="h-4 w-4" /></button>
+  ) : (
     <>
       {timestampText && (
         <time
@@ -741,6 +776,7 @@ function ChatMessageComponent({
         className={cn(
           "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
           revealedControl,
+          isMobile && "min-h-[44px] min-w-[44px]",
           copied && "text-success-ink"
         )}
         type="button"
@@ -771,6 +807,7 @@ function ChatMessageComponent({
         className={cn(
           "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
           revealedControl,
+          isMobile && "min-h-[44px] min-w-[44px]",
           isOptimistic && "cursor-not-allowed opacity-50"
         )}
         type="button"
@@ -882,7 +919,7 @@ function ChatMessageComponent({
 
   // The pin is a breadcrumb of a message that already exists below; it gets no
   // toolbar at all.
-  const showInlineActions = isLatestMessage && !pinned;
+  const showInlineActions = (isMobile || isLatestMessage) && !pinned;
 
   // Only the floating variant overlaps the message, so only it needs the column
   // to reserve the band. Charging it unconditionally would push every message
@@ -909,6 +946,10 @@ function ChatMessageComponent({
         isOptimistic && !failedClientMessageId && "opacity-60",
       )}
       data-testid={`message-${message.id}`}
+      data-mobile-message={isMobile || undefined}
+      data-mobile-plain-response={isMobile && !isUser && !hasMobileWork && mobileTurnEnd || undefined}
+      data-mobile-turn-end={isMobile && !isUser && mobileTurnEnd || undefined}
+      data-message-role={message.role === MessageRole.USER ? "user" : "assistant"}
       data-chat-timeline-variant={timelineVariant}
     >
       <div className="message-layout lg:message-layout-lg">
@@ -932,7 +973,8 @@ function ChatMessageComponent({
         <div
           className={cn(
             "relative flex-1 min-w-0",
-            reservesToolbarBand && "pt-7"
+            reservesToolbarBand && "pt-7",
+            isMobile && isUser && !pinned && "flex justify-end"
           )}
         >
           {/* User message bubble - stable width */}
@@ -950,13 +992,15 @@ function ChatMessageComponent({
                     "user-message-content relative block overflow-hidden rounded-2xl border border-primary/25 bg-primary/15 text-foreground shadow-sm transition-colors duration-200",
                     pinned
                       ? "w-full cursor-default"
-                      : "cursor-pointer hover:border-primary/35 hover:bg-primary/20",
+                      : isOverflowing || isExpanded
+                        ? "cursor-pointer hover:border-primary/35 hover:bg-primary/20"
+                        : "cursor-text",
                     !pinned && timelineVariant === "card" && "shadow-md",
                     !pinned && timelineVariant === "minimal" && "shadow-none",
-                    isMobile && !pinned && LONG_PRESS_SURFACE_CLASS
+                    isMobile && !pinned && "select-text"
                   )}
                   onClick={() => {
-                    if (pinned) return;
+                    if (pinned || (!isOverflowing && !isExpanded)) return;
                     setIsExpanded((prev) => {
                       const willExpand = !prev;
                       if (willExpand) {
@@ -1039,7 +1083,7 @@ function ChatMessageComponent({
               {failedClientMessageId && chatId && !pinned && (
                 <FailedSendStatus chatId={chatId} clientMessageId={failedClientMessageId} />
               )}
-              {showInlineActions && inlineMessageActions}
+              {showInlineActions && !isMobile && inlineMessageActions}
             </div>
           ) : (
             // Assistant message - full width
@@ -1049,14 +1093,23 @@ function ChatMessageComponent({
                 compactToolSpacing && "py-0",
                 timelineVariant === "card" && "rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm",
                 timelineVariant === "minimal" && "px-0",
-                isMobile && !pinned && LONG_PRESS_SURFACE_CLASS
+                isMobile && !pinned && "select-text"
               )}
               {...(isMobile && !pinned ? longPressHandlers : {})}
             >
+              {hasMobileWork && <div data-message-interactive className="flex min-h-[44px] w-full items-center gap-1">
+                <button type="button" aria-expanded={showMobileWork} onClick={() => setMobileWorkExpanded(value => !value)} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 text-left text-sm text-muted-foreground">
+                  {mobileWorkRunning && <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
+                  <span className="truncate">{mobileWorkLabel}</span>
+                  {showMobileWork ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                </button>
+                {mobileTurnEnd && actionControls}
+              </div>}
               {/* Ordered content: text and tool runs interleaved exactly as
                   they occurred in the message, so a mid-message tool call
                   renders between paragraphs, not after all the prose. */}
               {parsed.segments.map((segment, segIdx) => {
+                if (hasMobileWork && segIdx !== lastTextSegment && !showMobileWork) return null;
                 if (segment.kind === "text") {
                   if (!segment.text) return null;
                   return (
@@ -1144,14 +1197,14 @@ function ChatMessageComponent({
                 />
               )}
 
-              {showInlineActions && inlineMessageActions}
+              {showInlineActions && !isMobile && inlineMessageActions}
             </div>
           )}
 
           {/* Rendered once, outside the role branches, so it anchors to the
               content column rather than to the user bubble or the assistant
               block. The pin is a breadcrumb and gets no toolbar at all. */}
-          {!pinned && !showInlineActions && floatingMessageActions}
+          {!pinned && !showInlineActions && !isMobile && floatingMessageActions}
         </div>
       </div>
 
@@ -1172,7 +1225,7 @@ function ChatMessageComponent({
           isOpen={showBranchToWorktreeModal}
           onClose={() => setShowBranchToWorktreeModal(false)}
           chatId={chatId}
-          messageId={message.id}
+          messageId={actionMessageId}
           projectId={currentProject.id}
           sourceWorktreeId={chatWorktreeId}
         />
@@ -1184,7 +1237,7 @@ function ChatMessageComponent({
           isOpen={showBranchToExistingWorktreeModal}
           onClose={() => setShowBranchToExistingWorktreeModal(false)}
           chatId={chatId}
-          messageId={message.id}
+          messageId={actionMessageId}
           projectId={currentProject.id}
           sourceWorktreeId={chatWorktreeId}
         />
@@ -1192,9 +1245,11 @@ function ChatMessageComponent({
 
       {/* Mobile long-press actions sheet — the touch substitute for the
           desktop hover toolbar (see the long-press wiring above). */}
+      {isMobile && !pinned && !isUser && mobileTurnEnd && !hasMobileWork && <div className="absolute right-0 top-0">{actionControls}</div>}
       {isMobile && (
         <MessageActionsSheet
           isOpen={showActionsSheet}
+          waitForRelease={actionsOpenedByLongPress}
           onClose={() => setShowActionsSheet(false)}
           actions={mobileMessageActions}
           timestampLabel={fullTimestampText || undefined}
@@ -1210,6 +1265,11 @@ function ChatMessageComponent({
 export const ChatMessage = memo(ChatMessageComponent, (prev, next) => {
   // Return TRUE if props are equal (skip re-render)
   // Return FALSE if props changed (do re-render)
+
+  if (prev.mobileTurnEnd !== next.mobileTurnEnd) return false;
+  const previousTurn = prev.mobileTurnMessages || [];
+  const nextTurn = next.mobileTurnMessages || [];
+  if (previousTurn.length !== nextTurn.length || previousTurn.some((message, index) => message !== nextTurn[index])) return false;
 
   // Fast path: if message object reference is the same, only check other props
   if (prev.message === next.message) {

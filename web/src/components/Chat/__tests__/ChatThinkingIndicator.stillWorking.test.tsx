@@ -8,6 +8,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { ChatThinkingIndicator } from "../ChatThinkingIndicator";
 
 const activity = vi.hoisted(() => ({ current: null as string | null }));
@@ -85,5 +86,20 @@ describe("ChatThinkingIndicator: a long silence", () => {
     advance(300_000);
     expect(screen.getByText("Queued — will send when your machine connects")).toBeInTheDocument();
     expect(screen.queryByText("Still working — no response yet")).toBeNull();
+  });
+});
+
+describe("mobile progress", () => {
+  it("uses one consistent waiting label and hides it once inline progress exists", () => {
+    const { rerender } = render(<SurfaceProvider surface="mobile"><ChatThinkingIndicator chatId="c1" /></SurfaceProvider>);
+    expect(screen.getByText("Working…")).toBeInTheDocument();
+    advance(12_000);
+    expect(screen.getByText("Working…")).toBeInTheDocument();
+    rerender(<SurfaceProvider surface="mobile"><ChatThinkingIndicator chatId="c1" hasInlineProgress /></SurfaceProvider>);
+    expect(screen.queryByTestId("thinking-indicator")).toBeNull();
+  });
+  it("preserves machine-wait feedback even with previous inline content", () => {
+    render(<SurfaceProvider surface="mobile"><ChatThinkingIndicator chatId="c1" hasInlineProgress waitingOnMachine messageQueuedForMachine /></SurfaceProvider>);
+    expect(screen.getByText("Queued — will send when your machine connects")).toBeInTheDocument();
   });
 });

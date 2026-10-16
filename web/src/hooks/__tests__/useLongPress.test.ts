@@ -2,8 +2,9 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useLongPress } from "../useLongPress";
 
-function touchEvent(x: number, y: number): Partial<React.TouchEvent> {
+function touchEvent(x: number, y: number, target: Element = document.createElement("div")): Partial<React.TouchEvent> {
   return {
+    target,
     touches: [{ clientX: x, clientY: y }] as unknown as React.TouchList,
     preventDefault: vi.fn(),
   };
@@ -15,6 +16,7 @@ describe("useLongPress", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -116,31 +118,55 @@ describe("useLongPress", () => {
     expect(endEvent.preventDefault).toHaveBeenCalled();
   });
 
-  it("clears any native selection right before firing", () => {
+  it.each(["before the press", "during the press"])("preserves native selection created %s", (when) => {
     const removeAllRanges = vi.fn();
-    const onLongPress = vi.fn(() => {
-      expect(removeAllRanges).toHaveBeenCalledTimes(1);
+    const onLongPress = vi.fn();
+    let selected = when === "before the press" ? "selected text" : "";
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      toString: () => selected,
+      removeAllRanges,
+    } as unknown as Selection);
+    const { result } = renderHook(() => useLongPress(onLongPress));
+    act(() => {
+      result.current.onTouchStart(touchEvent(10, 10) as React.TouchEvent);
+      selected = "selected text";
+      vi.advanceTimersByTime(500);
     });
-    const spy = vi
-      .spyOn(window, "getSelection")
-      .mockReturnValue({ removeAllRanges } as unknown as Selection);
-    try {
-      const { result } = renderHook(() => useLongPress(onLongPress));
-      act(() => {
-        result.current.onTouchStart(touchEvent(10, 10) as React.TouchEvent);
-        vi.advanceTimersByTime(500);
-      });
-      expect(onLongPress).toHaveBeenCalledTimes(1);
-    } finally {
-      spy.mockRestore();
-    }
+    expect(onLongPress).not.toHaveBeenCalled();
+    expect(removeAllRanges).not.toHaveBeenCalled();
+  });
+
+  it.each(["a", "button", "input", "textarea", "pre", "code", "[data-message-interactive]", '[role="button"]'])("ignores a press inside %s", (selector) => {
+    const target = document.createElement(selector.startsWith("[") ? "div" : selector);
+    if (selector === "[data-message-interactive]") target.setAttribute("data-message-interactive", "");
+    if (selector === '[role="button"]') target.setAttribute("role", "button");
+    const child = document.createElement("span");
+    target.append(child);
+    const onLongPress = vi.fn();
+    const { result } = renderHook(() => useLongPress(onLongPress));
+    act(() => {
+      result.current.onTouchStart(touchEvent(10, 10, child) as React.TouchEvent);
+      vi.advanceTimersByTime(500);
+    });
+    expect(onLongPress).not.toHaveBeenCalled();
+  });
+
+  it("cancels when a scroll event occurs without touch movement", () => {
+    const onLongPress = vi.fn();
+    const { result } = renderHook(() => useLongPress(onLongPress));
+    act(() => {
+      result.current.onTouchStart(touchEvent(10, 10) as React.TouchEvent);
+      document.dispatchEvent(new Event("scroll"));
+      vi.advanceTimersByTime(500);
+    });
+    expect(onLongPress).not.toHaveBeenCalled();
   });
 
   it("does not touch the selection when the press never fires", () => {
     const removeAllRanges = vi.fn();
     const spy = vi
       .spyOn(window, "getSelection")
-      .mockReturnValue({ removeAllRanges } as unknown as Selection);
+      .mockReturnValue({ toString: () => "", removeAllRanges } as unknown as Selection);
     try {
       const { result } = renderHook(() => useLongPress(vi.fn()));
       act(() => {
@@ -155,10 +181,19 @@ describe("useLongPress", () => {
     }
   });
 
-  it("returns an onContextMenu handler that prevents the default menu", () => {
-    const { result } = renderHook(() => useLongPress(vi.fn()));
+  it("preserves the native context menu until a long press opens actions", () => {
+    const onLongPress = vi.fn();
+    const { result } = renderHook(() => useLongPress(onLongPress));
     const preventDefault = vi.fn();
-    result.current.onContextMenu({ preventDefault } as unknown as React.SyntheticEvent);
-    expect(preventDefault).toHaveBeenCalled();
+    const event = { preventDefault } as unknown as React.SyntheticEvent;
+    result.current.onContextMenu(event);
+    expect(preventDefault).not.toHaveBeenCalled();
+    act(() => {
+      result.current.onTouchStart(touchEvent(10, 10) as React.TouchEvent);
+      vi.advanceTimersByTime(500);
+    });
+    expect(onLongPress).toHaveBeenCalledOnce();
+    result.current.onContextMenu(event);
+    expect(preventDefault).toHaveBeenCalledOnce();
   });
 });

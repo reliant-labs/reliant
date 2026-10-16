@@ -752,17 +752,19 @@ function ToolExecutionComponent({
   // Expanding is an act of attention, so the open card is drawn more strongly
   // than the collapsed rows around it: brighter border, real elevation. Idle
   // collapsed rows recede.
+  const quietMobileTool = surface === "mobile" && !hasFailed && !toolResult?.is_error && !needsApproval && !isDenied;
   const rootClassName = cn(
     "overflow-hidden transition-colors",
     isExpanded ? "border border-border shadow-md" : "border border-border/30 shadow-sm",
     density === "card" ? "rounded-xl bg-card" : density === "minimal" ? "rounded-md bg-transparent shadow-none" : "rounded-md",
-    leftBorderColor
+    quietMobileTool ? "border-0 bg-transparent shadow-none" : leftBorderColor
   );
   const headerClassName = cn(
     "flex items-center justify-between",
     isExpanded ? "bg-muted/50" : "bg-muted/20",
     density === "card" ? "px-3 py-2" : density === "minimal" ? "px-2 py-0.5" : "px-2 py-1",
-    isExpandable && "cursor-pointer hover:bg-muted/50"
+    isExpandable && "cursor-pointer hover:bg-muted/50",
+    quietMobileTool && "min-h-[44px] bg-transparent px-0 py-0 text-muted-foreground"
   );
   const contentClassName = cn(
     "border-t border-border/30 overflow-hidden overflow-y-auto bg-muted/15 py-1",
@@ -881,12 +883,12 @@ function ToolExecutionComponent({
       >
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-              {getStatusIcon()}
+              {quietMobileTool && isCompleted ? <CheckCircle className="h-3.5 w-3.5 text-muted-foreground" /> : getStatusIcon()}
             </span>
             <span className="min-w-0 text-xs truncate">
               {formatToolCallDisplay(toolCall.name, resolvedWaitTarget.displayInput)}
             </span>
-            <span className={cn(
+            {!(quietMobileTool && isCompleted) && <span className={cn(
               "px-1.5 py-0.5 rounded text-xs font-medium shrink-0",
               toolResult?.is_error ? "bg-warning/10 text-warning-ink"
                 : hasFailed ? "bg-warning/10 text-warning-ink"
@@ -897,7 +899,7 @@ function ToolExecutionComponent({
                 : "bg-muted text-muted-foreground"
             )}>
               {getStatusText()}
-            </span>
+            </span>}
           </div>
 
           <div className="flex items-center gap-1 shrink-0">

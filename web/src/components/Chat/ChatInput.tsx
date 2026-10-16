@@ -9,7 +9,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Settings2, ChevronDown } from "lucide-react";
+import { Plus, Paperclip, Settings2, ChevronDown } from "lucide-react";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
@@ -29,7 +29,9 @@ import { useThinkingCapability } from "../../hooks/useThinkingCapability";
 import { getMessagesFromCache } from "../../hooks/message-queries";
 import { formatTranscript } from "../../lib/transcript";
 import { toast } from "../../lib/toast-manager";
-import { ChatActionButtons } from "./ChatActionButtons";
+import { ChatActionButtons, ButtonLayout } from "./ChatActionButtons";
+import { MobileChatSheet } from "./MobileChatSheet";
+import { useSurface } from "../../lib/surfaceContext";
 import { useChatInputState } from "./useChatInputState";
 import { useDragAndDrop } from "../../hooks/useDragAndDrop";
 import { DragDropOverlay } from "./DragDropOverlay";
@@ -185,12 +187,15 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     },
     ref
   ) {
+    const isMobile = useSurface() === "mobile";
+    const [mobileMenu, setMobileMenu] = useState<"add" | "options" | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     // Guards against double-queueing from a fast second Enter while the RPC is
     // in flight. A ref, not state: it must be readable synchronously.
     const queueingRef = useRef(false);
+    const creatingRef = useRef(false);
     const [isCompact, setIsCompact] = useState(false);
 
     // Actions offered by the "/" menu in the composer.
@@ -341,9 +346,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const [settingsPage, setSettingsPage] = useState<'main' | 'model' | 'preset' | 'params' | null>(null);
     useEffect(() => {
       if (settingsPage !== null) {
+        if (isMobile) setMobileMenu(null);
         window.dispatchEvent(new CustomEvent("contextual-tip-params-opened"));
       }
-    }, [settingsPage]);
+    }, [settingsPage, isMobile]);
     const [isSyncing, setIsSyncing] = useState(false);
 
     // Get user's default workflow preference
@@ -736,9 +742,9 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         targets.push({ name: "", tag: workflowTag, isWorkflow: true });
       }
 
-      // Add group targets if the group has ui: "toolbar" AND a tag
+      // Mobile exposes every tagged group in options; desktop keeps toolbar groups.
       for (const [groupName, groupTag] of Object.entries(groupTags)) {
-        if (groupTag && groupUIs[groupName] === "toolbar") {
+        if (groupTag && (isMobile || groupUIs[groupName] === "toolbar")) {
           targets.push({ name: groupName, tag: groupTag, isWorkflow: false });
         }
       }
@@ -749,7 +755,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         if (b.isWorkflow) return 1;
         return a.name.localeCompare(b.name);
       });
-    }, [workflowTagInfo]);
+    }, [workflowTagInfo, isMobile]);
 
     // Compute which params are covered by the CURRENTLY SELECTED presets
     // (not all presets, just the ones the user has selected)
@@ -1053,7 +1059,9 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     // Use tabId to isolate attachments per tab when no chatId exists
     // Subscribe directly to attachments Map for reactivity
-    const attachmentSessionId = chatId || tabId || "temp";
+    const attachmentSessionId = isMobile && !chatId
+      ? `mobile-new:${currentProjectFromStore?.id ?? "temp"}`
+      : chatId || tabId || "temp";
     const attachmentsMap = useAttachmentStore((state) => state.attachments);
     const attachments = useMemo(
       () => attachmentsMap.get(attachmentSessionId) || [],
@@ -1162,6 +1170,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     }, [chatId, pendingQuestion]);
 
     const handleSend = async () => {
+      if (creatingRef.current) return;
       const hasContent = input.trim().length > 0;
       const hasAttachments = attachments.length > 0;
 
@@ -1174,7 +1183,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
       const hasSomethingToSend = hasContent || hasAttachments || hasCodeContexts;
       const willSend =
-        hasSomethingToSend && !effectiveStreaming && isMessagingAllowed;
+        hasSomethingToSend && !effectiveStreaming && !disabled && !uploading && isMessagingAllowed;
 
       if (willSend) {
         // Markers never appear in the body now — the chips hold them, and the
@@ -1263,10 +1272,13 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         // "Not sent" with Retry (chatStore.markSendFailed), a new chat that
         // fails to start hands its text back (NewChatView), and either raises
         // its own toast.
-        handleClearInput(); // This will clear both input and auto-draft
-        clearAttachments(attachmentSessionId);
-        clearContexts();
+        if (chatId || !isMobile) {
+          handleClearInput();
+          clearAttachments(attachmentSessionId);
+          clearContexts();
+        }
 
+        if (!chatId && isMobile) creatingRef.current = true;
         try {
           await onSend(
             messageWithContexts,
@@ -1276,12 +1288,19 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             undefined, // targetThread
             Object.keys(presetsToSend).length > 0 ? presetsToSend : undefined
           );
+          if (!chatId && isMobile) {
+            handleClearInput();
+            clearAttachments(attachmentSessionId);
+            clearContexts();
+          }
         } catch (error) {
           // ChatContainer already reported this to the user before rethrowing.
           // Swallow it here so an Enter keypress — which cannot await this
           // handler — doesn't surface as an unhandled rejection.
           logger.error("[ChatInput] Send failed", { error, chatId });
           return;
+        } finally {
+          creatingRef.current = false;
         }
 
         // Don't restore params from chatParamsStore after sending - keep current state
@@ -1630,17 +1649,164 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       return (
         <ChatSettingsPopover
           isOpen={true}
+          disabled={disabled || !isMessagingAllowed}
           onClose={() => setSettingsPage(null)}
           initialPage={initialPage}
           inputs={popoverInputs}
           values={popoverValues}
-          onChange={popoverOnChange}
-          presets={presets}
-          selectedPreset={selectedPresets?.["default"] ?? null}
-          onPresetChange={(preset) => handlePresetChange("default", preset)}
+          onChange={disabled || !isMessagingAllowed ? () => {} : popoverOnChange}
+          presets={isMobile ? presetsByTag.get(workflowTagInfo.workflowTag ?? "") : presets}
+          selectedPreset={selectedPresets?.[isMobile ? "" : "default"] ?? null}
+          onPresetChange={(preset) => handlePresetChange(isMobile ? "" : "default", preset)}
           workflowTag={workflowTagInfo?.workflowTag}
           groupTags={workflowTagInfo?.groupTags}
         />
+      );
+    };
+
+    const configurationControls = (
+      <>
+        {/* Workflow Selector - disabled once chat has started (not pending) */}
+        <div>
+          <WorkflowSelector
+            isOpen={workflowSelectorOpen}
+            onOpenChange={setWorkflowSelectorOpen}
+            value={selectedWorkflow}
+            onChange={(wf) => {
+              // Mark the workflow user explicitly changed to - skip loading defaults for it
+              // We need to compute the effective workflow name (wf or userDefaultWorkflow)
+              const effectiveWf = wf || userDefaultWorkflow;
+              skipDefaultPresetsForWorkflowRef.current = effectiveWf;
+              setSelectedWorkflow(wf);
+              // Close settings popover when workflow changes
+              setSettingsPage(null);
+              // Clear workflow params when switching workflows
+              // This prevents stale params from a different workflow
+              // being sent to the new workflow (which would cause validation errors)
+              setWorkflowParams({});
+              setSelectedPresets({});
+              // Also clear persisted params for this chat
+              if (chatId) {
+                useChatParamsStore.getState().setChatParams(chatId, {});
+                // Clear selected_presets in the RQ cache so the
+                // useEffect doesn't reload them.
+                patchChatCaches(
+                  useProjectStore.getState().currentProject?.id,
+                  chatId,
+                  { selectedPresets: {} }
+                );
+              } else {
+                // New chat: also clear temp params/presets so the
+                // workflow-change effect doesn't reapply stale values
+                // from a previous workflow.
+                // Note: we keep tempNewChatWorkflow in sync with the
+                // user's manual selection so the subscription in
+                // useChatInputState doesn't snap us back.
+                useChatParamsStore.getState().setTempNewChatParams({});
+                useChatParamsStore.getState().setTempNewChatPresets({});
+                useChatParamsStore.getState().setTempNewChatWorkflow(wf);
+              }
+            }}
+            isStreaming={effectiveStreaming}
+            disabled={
+              disabled ||
+              !isPendingChat
+            }
+            compact={isMobile ? false : isCompact}
+          />
+        </div>
+
+        {/* Inline Preset Pickers - one per target (workflow or group with tag) */}
+        {/* Note: Presets and params are ALWAYS editable, even while streaming */}
+        {presetTargets.length > 0 && (
+          <div className="flex items-center gap-1">
+            {presetTargets.map((target) => (
+              <InlinePresetPicker
+                key={`preset-${target.name || "workflow"}`}
+                presets={presetsByTag.get(target.tag) || []}
+                value={selectedPresets[target.name]}
+                onChange={(preset) =>
+                  handlePresetChange(target.name, preset)
+                }
+                groupLabel={target.name || undefined} // Empty string = workflow, show "Preset"
+                isLoading={presetsLoading}
+                disabled={disabled || !isMessagingAllowed}
+                isStreaming={false}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Toolbar Params - explicitly marked with ui: "toolbar" */}
+        {toolbarParams.length > 0 && (
+          <div className="flex items-center gap-1">
+            {toolbarParams.map(([paramName, schema]) => (
+              <InlineParamInput
+                key={paramName}
+                name={paramName}
+                schema={schema}
+                value={workflowParams[paramName] ?? getInputDefault(schema)}
+                onChange={(value) =>
+                  handleWorkflowParamsChange({
+                    ...workflowParams,
+                    [paramName]: value,
+                  })
+                }
+                disabled={disabled || !isMessagingAllowed}
+                isStreaming={false}
+              />
+            ))}
+          </div>
+        )}
+
+
+      </>
+    );
+    const renderModelControl = () => {
+      if (!hasConfigurableParams) return null;
+      let modelValue = workflowParams?.model as Record<string, unknown> | undefined
+        ?? Object.entries(workflowParams).find(([k]) => k.endsWith('.model'))?.[1] as Record<string, unknown> | undefined;
+      if (isMobile) {
+        const modelEntry = Object.entries(popoverInputs ?? {}).find(([, schema]) => schema.type === "model");
+        if (!modelEntry) return null;
+        modelValue = (popoverValues[modelEntry[0]] ?? getInputDefault(modelEntry[1])) as Record<string, unknown> | undefined;
+      }
+      const currentModelTag = (modelValue?.tags as string[])?.[0];
+      const currentModelId = modelValue?.id as string | undefined;
+      const tierModelId = currentModelTag ? tiers?.[currentModelTag]?.modelId : undefined;
+      const resolvedModel = currentModelTag
+        ? availableModels.find(m => tierModelId ? m.id === tierModelId : m.tags?.includes(currentModelTag))
+        : currentModelId
+          ? findPinnedModel(currentModelId, availableModels)
+          : null;
+      const getProviderColor = (driverId?: string): string => {
+        switch (driverId) {
+          case 'anthropic': return 'bg-orange-400';
+          case 'openai': case 'codex': return 'bg-green-500';
+          case 'gemini': case 'vertexai': return 'bg-blue-400';
+          default: return 'bg-gray-400';
+        }
+      };
+      const currentModelProvider = resolvedModel?.driverId || (modelValue?.driver_id as string) || undefined;
+      return (
+        <div className={isMobile ? "relative min-w-0 overflow-hidden" : "relative"}>
+          <Tooltip content="Model settings" placement="top" delay={300} wrapperClassName={isMobile ? "inline-flex min-w-0 max-w-full" : "inline-flex"}>
+            <button
+            className={cn(
+              isMobile ? "mobile-composer-model flex min-h-[44px] min-w-0 max-w-full items-center gap-1.5 rounded-full px-3 text-sm font-medium" : "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5",
+              settingsPage === 'model'
+                ? "bg-primary/20 text-primary hover:bg-primary/30"
+                : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
+            )}
+            disabled={disabled || !isMessagingAllowed}
+            onClick={() => setSettingsPage(settingsPage === 'model' ? null : 'model')} aria-label="Model settings">
+            {!isMobile && <span className={cn("w-1.5 h-1.5 rounded-full", getProviderColor(currentModelProvider))} />}
+            <span className={isMobile ? "min-w-0 flex-1 truncate text-left" : undefined}><ComposerModelName name={resolvedModel?.name} pinnedId={currentModelId} /></span>
+            <ChevronDown className="w-2.5 h-2.5 opacity-50" />
+          </button>
+          </Tooltip>
+          {!isMobile && settingsPage === 'model' && renderSettingsPopover('model')}
+        </div>
       );
     };
 
@@ -1651,19 +1817,20 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         }`}
         style={{ minHeight: 0, position: "relative", zIndex: 20 }}
       >
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="max-w-[1200px] mx-auto">
+        <div className={isMobile ? "mobile-chat-composer px-3 pb-2" : "px-4 sm:px-6 lg:px-8"}>
+          <div className={isMobile ? "mx-auto w-full max-w-[760px]" : "max-w-[1200px] mx-auto"}>
             <div ref={containerRef} className="mt-1 mb-1.5">
               <div
-                className={`relative rounded-lg chat-input-container border-2 transition-all duration-200 cursor-text ${hasPendingQuestion ? "border-yellow-500/70" : threadBorderColor ? "" : "border-border/70"}`}
+                className={`relative rounded-lg chat-input-container ${isMobile ? "mobile-composer-card border" : "border-2"} transition-all duration-200 cursor-text ${hasPendingQuestion ? "border-yellow-500/70" : threadBorderColor ? "" : "border-border/70"}`}
+                data-mobile-composer={isMobile || undefined}
                 data-onboarding="chat-input"
                 onClick={handleInputContainerClick}
                 style={{
-                  padding: "4px 8px",
+                  padding: isMobile ? "12px 10px 6px" : "4px 8px",
                   ...(threadBorderColor ? { borderColor: threadBorderColor } : {}),
                   backgroundColor: isDragging
                     ? "var(--chat-drag-bg, var(--transparent-button-hover))"
-                    : effectiveStreaming
+                    : effectiveStreaming && !isMobile
                     ? "hsl(var(--primary) / 0.05)"
                     : "var(--chat-input-bg)",
                   transform: isDragging ? "scale(1.002)" : "none",
@@ -1688,15 +1855,15 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   {/* Normal input UI - hidden when question prompt is shown */}
                   {!showAskOnly && (<>
                   {/* Attachments */}
-                    <div className="pt-3 px-2">
+                    {(!isMobile || attachments.length > 0) && <div className={isMobile ? "pb-2" : "pt-3 px-2"}>
                       <AttachmentPreview
                         attachments={attachments}
                         onRemove={handleRemoveAttachment}
                         className={attachments.length > 0 ? "" : "hidden"}
                       />
-                    </div>
+                    </div>}
 
-                    <div className="px-2">
+                    <div className={isMobile ? "mobile-composer-text px-1" : "px-2"}>
                       <ChatTextArea
                         ref={textareaRef}
                         value={input}
@@ -1707,7 +1874,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         disabled={disabled || !isMessagingAllowed}
                         isStreaming={effectiveStreaming}
                         chatId={chatId}
-                        placeholder={placeholder}
+                        placeholder={isMobile ? "Message Reliant" : placeholder}
                         slashCommands={slashCommandList}
                         contexts={contexts}
                         onRemoveContext={removeContext}
@@ -1735,143 +1902,13 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   )}
 
                   {/* Single Bottom Row: All Controls */}
-                  {<div className="flex items-center justify-between pt-2 mt-2 border-t border-border/50">
+                  {!isMobile && <div className="flex items-center justify-between pt-2 mt-2 border-t border-border/50">
                     {/* Left side: Workflow selector + inline required params + expand button */}
                     <div className="flex items-center gap-1 flex-wrap" data-onboarding="chat-controls">
-                      {/* Workflow Selector - disabled once chat has started (not pending) */}
-                      <div>
-                        <WorkflowSelector
-                          isOpen={workflowSelectorOpen}
-                          onOpenChange={setWorkflowSelectorOpen}
-                          value={selectedWorkflow}
-                          onChange={(wf) => {
-                            // Mark the workflow user explicitly changed to - skip loading defaults for it
-                            // We need to compute the effective workflow name (wf or userDefaultWorkflow)
-                            const effectiveWf = wf || userDefaultWorkflow;
-                            skipDefaultPresetsForWorkflowRef.current = effectiveWf;
-                            setSelectedWorkflow(wf);
-                            // Close settings popover when workflow changes
-                            setSettingsPage(null);
-                            // Clear workflow params when switching workflows
-                            // This prevents stale params from a different workflow
-                            // being sent to the new workflow (which would cause validation errors)
-                            setWorkflowParams({});
-                            setSelectedPresets({});
-                            // Also clear persisted params for this chat
-                            if (chatId) {
-                              useChatParamsStore.getState().setChatParams(chatId, {});
-                              // Clear selected_presets in the RQ cache so the
-                              // useEffect doesn't reload them.
-                              patchChatCaches(
-                                useProjectStore.getState().currentProject?.id,
-                                chatId,
-                                { selectedPresets: {} }
-                              );
-                            } else {
-                              // New chat: also clear temp params/presets so the
-                              // workflow-change effect doesn't reapply stale values
-                              // from a previous workflow.
-                              // Note: we keep tempNewChatWorkflow in sync with the
-                              // user's manual selection so the subscription in
-                              // useChatInputState doesn't snap us back.
-                              useChatParamsStore.getState().setTempNewChatParams({});
-                              useChatParamsStore.getState().setTempNewChatPresets({});
-                              useChatParamsStore.getState().setTempNewChatWorkflow(wf);
-                            }
-                          }}
-                          isStreaming={effectiveStreaming}
-                          disabled={
-                            disabled ||
-                            !isPendingChat
-                          }
-                          compact={isCompact}
-                        />
-                      </div>
-
-                      {/* Inline Preset Pickers - one per target (workflow or group with tag) */}
-                      {/* Note: Presets and params are ALWAYS editable, even while streaming */}
-                      {presetTargets.length > 0 && (
-                        <div className="flex items-center gap-1">
-                          {presetTargets.map((target) => (
-                            <InlinePresetPicker
-                              key={`preset-${target.name || "workflow"}`}
-                              presets={presetsByTag.get(target.tag) || []}
-                              value={selectedPresets[target.name]}
-                              onChange={(preset) =>
-                                handlePresetChange(target.name, preset)
-                              }
-                              groupLabel={target.name || undefined} // Empty string = workflow, show "Preset"
-                              isLoading={presetsLoading}
-                              disabled={disabled || !isMessagingAllowed}
-                              isStreaming={false}
-                            />
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Toolbar Params - explicitly marked with ui: "toolbar" */}
-                      {toolbarParams.length > 0 && (
-                        <div className="flex items-center gap-1">
-                          {toolbarParams.map(([paramName, schema]) => (
-                            <InlineParamInput
-                              key={paramName}
-                              name={paramName}
-                              schema={schema}
-                              value={workflowParams[paramName] ?? getInputDefault(schema)}
-                              onChange={(value) =>
-                                handleWorkflowParamsChange({
-                                  ...workflowParams,
-                                  [paramName]: value,
-                                })
-                              }
-                              disabled={disabled || !isMessagingAllowed}
-                              isStreaming={false}
-                            />
-                          ))}
-                        </div>
-                      )}
+                      {configurationControls}
 
                       {/* Model pill - opens settings popover directly to model page */}
-                      {hasConfigurableParams && (() => {
-                        const modelValue = workflowParams?.model as Record<string, unknown> | undefined
-                          ?? Object.entries(workflowParams).find(([k]) => k.endsWith('.model'))?.[1] as Record<string, unknown> | undefined;
-                        const currentModelTag = (modelValue?.tags as string[])?.[0];
-                        const currentModelId = modelValue?.id as string | undefined;
-                        const tierModelId = currentModelTag ? tiers?.[currentModelTag]?.modelId : undefined;
-                        const resolvedModel = currentModelTag
-                          ? availableModels.find(m => tierModelId ? m.id === tierModelId : m.tags?.includes(currentModelTag))
-                          : currentModelId
-                            ? findPinnedModel(currentModelId, availableModels)
-                            : null;
-                        const getProviderColor = (driverId?: string): string => {
-                          switch (driverId) {
-                            case 'anthropic': return 'bg-orange-400';
-                            case 'openai': case 'codex': return 'bg-green-500';
-                            case 'gemini': case 'vertexai': return 'bg-blue-400';
-                            default: return 'bg-gray-400';
-                          }
-                        };
-                        const currentModelProvider = resolvedModel?.driverId || (modelValue?.driver_id as string) || undefined;
-                        return (
-                          <div className="relative">
-                            <Tooltip content="Model settings" placement="top" delay={300} wrapperClassName="inline-flex">
-<button
-                              className={cn(
-                                "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5",
-                                settingsPage === 'model'
-                                  ? "bg-primary/20 text-primary hover:bg-primary/30"
-                                  : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
-                              )}
-                              onClick={() => setSettingsPage(settingsPage === 'model' ? null : 'model')} aria-label="Model settings">
-                              <span className={cn("w-1.5 h-1.5 rounded-full", getProviderColor(currentModelProvider))} />
-                              <ComposerModelName name={resolvedModel?.name} pinnedId={currentModelId} />
-                              <ChevronDown className="w-2.5 h-2.5 opacity-50" />
-                            </button>
-</Tooltip>
-                            {settingsPage === 'model' && renderSettingsPopover('model')}
-                          </div>
-                        );
-                      })()}
+                      {renderModelControl()}
 
                       {/* Settings Button - opens settings popover */}
                       {(hasConfigurableParams || isViewingThreadParams) && (
@@ -1932,6 +1969,32 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                       />
                     </div>
                   </div>}
+                  {isMobile && <div className="mobile-composer-toolbar flex min-w-0 items-center gap-1 pt-2">
+                    <button type="button" aria-label="Add files or chat options" onClick={() => setMobileMenu("add")} disabled={disabled || uploading}
+                      className="mobile-composer-add relative flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full bg-foreground/5 active:bg-foreground/10 disabled:opacity-50">
+                      <Plus className="h-6 w-6" strokeWidth={1.75} />
+                      {hasUnsetParams && <span aria-label="Required settings missing" className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />}
+                    </button>
+                    <div className="min-w-0 flex-1">{renderModelControl() ?? <button type="button" aria-label="Open chat options" onClick={() => setMobileMenu("options")} className="flex min-h-[44px] max-w-full items-center gap-1.5 rounded-full bg-foreground/5 px-3 text-sm text-muted-foreground"><Settings2 className="h-4 w-4 shrink-0" /><span className="truncate">Chat options</span></button>}</div>
+                    <ButtonLayout layout={["sendStop"]} onSend={handleSend} onStop={handleStop} onQueue={handleQueue}
+                      canSend={input.trim().length > 0 || attachments.length > 0} isStreaming={effectiveStreaming}
+                      disabled={disabled || uploading || !isMessagingAllowed} onAttach={handleAttachClick} uploading={uploading} />
+                  </div>}
+                  {isMobile && mobileMenu && <MobileChatSheet title={mobileMenu === "add" ? "Add to chat" : "Chat options"}
+                    onClose={() => setMobileMenu(null)} onBack={mobileMenu === "options" ? () => setMobileMenu("add") : undefined}>
+                    {mobileMenu === "add" ? <div className="mobile-composer-menu flex flex-col gap-2">
+                      <button type="button" disabled={disabled || uploading} className="flex min-h-[60px] items-center gap-3 rounded-2xl bg-foreground/5 px-4 text-left active:bg-foreground/10 disabled:opacity-50"
+                        onClick={() => { setMobileMenu(null); handleAttachClick(); }}><Paperclip className="h-5 w-5" />{uploading ? "Uploading…" : "Attach files"}</button>
+                      <button type="button" className="flex min-h-[60px] items-center gap-3 rounded-2xl bg-foreground/5 px-4 text-left active:bg-foreground/10" onClick={() => setMobileMenu("options")}>
+                        <Settings2 className="h-5 w-5" />Chat options{hasUnsetParams && <span className="text-xs text-destructive-ink">Required settings missing</span>}
+                      </button>
+                    </div> : <div className="mobile-chat-configuration space-y-4">
+                      <div className="flex flex-col gap-3">{configurationControls}</div>
+                      {popoverInputs && <ChatSettingsPopover isOpen disabled={disabled || !isMessagingAllowed} onClose={() => setMobileMenu(null)} embedded
+                        inputs={popoverInputs} values={popoverValues} onChange={disabled || !isMessagingAllowed ? () => {} : popoverOnChange} />}
+                    </div>}
+                  </MobileChatSheet>}
+                  {isMobile && settingsPage !== null && renderSettingsPopover(settingsPage)}
                   </>)}
 
                   {/* Hidden file input */}

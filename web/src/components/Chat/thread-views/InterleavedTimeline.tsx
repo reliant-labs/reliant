@@ -1,3 +1,7 @@
+import { consolidateMobileAssistantTurns } from "../mobileAssistantTurns";
+import { mobileMessageTimeLabels } from "../mobileMessageTimeLabels";
+import { useComposerKeyboardScroll } from "../../../hooks/useComposerKeyboardScroll";
+import { useSurface } from "../../../lib/surfaceContext";
 /**
 /**
  * InterleavedTimeline - Single chronological timeline with workflow context
@@ -99,7 +103,7 @@ interface WorkflowDisplay {
 }
 
 type TimelineItem =
-  | { type: "message"; message: Message; workflow: WorkflowDisplay }
+  | { type: "message"; message: Message; workflow: WorkflowDisplay; mobileTurnMessages?: Message[] }
   | { type: "thread-start"; workflow: WorkflowDisplay; parentName: string }
   | { type: "handoff"; toName: string; color: string }
   /**
@@ -617,8 +621,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     timelineVariant === "card" && "chat-timeline-card",
     timelineVariant === "minimal" && "chat-timeline-minimal"
   );
-  const contentMaxWidthClass = timelineVariant === "minimal" ? "max-w-[900px]" : "max-w-[1200px]";
-  const timelineHorizontalPaddingClass = timelineVariant === "minimal" ? "px-4 sm:px-8" : "px-4 sm:px-6 lg:px-8";
+  const isMobile = useSurface() === "mobile";
+  const contentMaxWidthClass = isMobile ? "max-w-[760px]" : timelineVariant === "minimal" ? "max-w-[900px]" : "max-w-[1200px]";
+  const timelineHorizontalPaddingClass = isMobile ? "px-[16px]" : timelineVariant === "minimal" ? "px-4 sm:px-8" : "px-4 sm:px-6 lg:px-8";
   const timelineGapClass = timelineVariant === "card" ? "py-1" : timelineVariant === "minimal" ? "py-0.5" : "";
   const timelineItems = useMemo(() => {
     // Build workflow lookups from execution tree
@@ -917,8 +922,13 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       });
     }
 
-    return items;
-  }, [messages, chatId, workflowExecution, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads]);
+    return isMobile ? consolidateMobileAssistantTurns(items, (left, right) =>
+      left.type === "message" && right.type === "message" &&
+      !left.message.displayStyle && !right.message.displayStyle &&
+      !isCompactionMessage(left.message) && !isCompactionMessage(right.message) &&
+      left.message.thread === right.message.thread && left.workflow.thread === right.workflow.thread
+    ) : items;
+  }, [isMobile, messages, chatId, workflowExecution, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads]);
 
   // `timelineItems` IS the list the virtualizer renders. There is deliberately
   // no per-row wrapper carrying `key`/`isLast`: both are derivable from the
@@ -959,7 +969,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // the header left, and a shorter header (an attachment-only message) would
   // otherwise move the line and flip the very swap that showed it.
   const [measuredPinnedHeaderPx, setMeasuredPinnedHeaderPx] = useState<number | null>(null);
-  const pinnedHeaderLine = measuredPinnedHeaderPx ?? PINNED_HEADER_ESTIMATED_PX;
+  const pinnedHeaderLine = isMobile ? 0 : measuredPinnedHeaderPx ?? PINNED_HEADER_ESTIMATED_PX;
 
   // --- Per-thread scroll position memory ---
   // Derive a stable key for the current thread filter
@@ -992,6 +1002,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const pinnedUserMessageIdxRef = useRef<number | null>(null);
   const setScrollerEl = timeline.scrollerRef;
 
+  useComposerKeyboardScroll(isMobile, () => {
+    pinnedUserMessageIdxRef.current = null;
+    setPinnedUserMessageIdx(null);
+    scrollToBottom();
+  });
+
   // Report at-bottom upward for the scroll-to-bottom button.
   useEffect(() => {
     onAtBottomStateChange?.(atBottom);
@@ -1021,6 +1037,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // the row-to-section mapping changes (rows inserted above shift indices) or
   // the header's measured height moves the line.
   const applyPinnedUserMessage = useCallback(() => {
+    if (isMobile) {
+      if (pinnedUserMessageIdxRef.current !== null) { pinnedUserMessageIdxRef.current = null; setPinnedUserMessageIdx(null); }
+      return;
+    }
     const scroller = scrollerElRef.current;
     if (!scroller) return;
     const nextPinned = resolvePinnedUserMessage({
@@ -1034,7 +1054,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       pinnedUserMessageIdxRef.current = nextPinned;
       setPinnedUserMessageIdx(nextPinned);
     }
-  }, [userMessageForItem, pinnedHeaderLine]);
+  }, [userMessageForItem, pinnedHeaderLine, isMobile]);
 
   // Scroll-back paging: load the next page when the user nears the top.
   // Prepending needs no compensation here — the virtualizer is anchored to
@@ -1087,7 +1107,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   // Get the pinned user message data
   const pinnedMessage = pinnedUserMessageIdx !== null ? timelineItems[pinnedUserMessageIdx] : null;
-  const pinnedUserMsg = pinnedMessage?.type === "message" ? pinnedMessage.message : null;
+  const pinnedUserMsg = !isMobile && pinnedMessage?.type === "message" ? pinnedMessage.message : null;
 
   // Jump to a specific message, e.g. from a chat-search hit. The target is
   // usually not rendered, so the jump is by index through the virtualizer.
@@ -1098,7 +1118,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       const messageId = (event as CustomEvent<{ messageId?: string }>).detail?.messageId;
       if (!messageId) return;
       const index = timelineItems.findIndex(
-        (item) => item.type === "message" && item.message.id === messageId,
+        (item) => item.type === "message" && (item.message.id === messageId || item.mobileTurnMessages?.some(message => message.id === messageId)),
       );
       // Not in the loaded window — the message lives in a page we have not
       // fetched yet, so there is nothing to scroll to.
@@ -1270,6 +1290,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
             onSelectThread={onSelectThread}
             timelineVariant={timelineVariant}
             compactToolSpacing={compactToolSpacing}
+            mobileTurnEnd
+            mobileTurnMessages={item.mobileTurnMessages}
           />
         )}
       </div>
@@ -1280,6 +1302,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // One virtual row: absolutely positioned at its measured offset, and handed
   // to the virtualizer to measure. The ref is called for every rendered row;
   // the virtualizer watches it with a ResizeObserver from then on.
+  const mobileTimeLabels = useMemo(() => {
+    return isMobile ? mobileMessageTimeLabels(timelineItems.flatMap(item => item.type === "message" ? [item.message] : [])) : new Map<string, string>();
+  }, [isMobile, timelineItems]);
   const measureRow = virtualizer.measureElement;
   const renderRow = useCallback((index: number, item: TimelineItem) => {
     // After a search jump, briefly ring the target so the eye can find it —
@@ -1287,7 +1312,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     const isHighlighted =
       highlightedMessageId !== null &&
       item.type === "message" &&
-      item.message.id === highlightedMessageId;
+      (item.message.id === highlightedMessageId || item.mobileTurnMessages?.some(message => message.id === highlightedMessageId));
 
     const rowKey = timelineItemKey(item, index);
     const toolRowSpacing = getToolRowSpacing(timelineItems, index);
@@ -1322,11 +1347,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
               "rounded-lg ring-2 ring-primary/60 transition-shadow duration-500",
           )}
         >
+          {isMobile && item.type === "message" && mobileTimeLabels.get(item.message.id) && <div className="py-1.5 text-center text-2xs text-muted-foreground/70"><time dateTime={item.message.createdAt}>{mobileTimeLabels.get(item.message.id)}</time></div>}
           {renderItem(index, item, toolRowSpacing.compact)}
         </div>
       </div>
     );
-  }, [contentMaxWidthClass, highlightedMessageId, measureRow, renderItem, timelineGapClass, timelineHorizontalPaddingClass, timelineItems]);
+  }, [isMobile, mobileTimeLabels, contentMaxWidthClass, highlightedMessageId, measureRow, renderItem, timelineGapClass, timelineHorizontalPaddingClass, timelineItems]);
 
   if (timelineItems.length === 0) {
     return (
@@ -1381,7 +1407,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
                     // The overlay no longer receives hover, so the button
                     // reveals on its own hover and on keyboard focus rather
                     // than on hovering the header.
-                    "opacity-40 hover:opacity-100 focus-visible:opacity-100"
+                    "opacity-40 hover:opacity-100 focus-visible:opacity-100",
+                    isMobile && "min-h-[44px] min-w-[44px]"
                   )}
                   aria-label="Jump to message"
                 >
@@ -1437,7 +1464,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
                 <div className={cn(contentMaxWidthClass, "mx-auto")}>{footer}</div>
               </div>
             ) : (
-              <div className="pb-10" />
+              <div className={isMobile ? "pb-2" : "pb-10"} />
             )}
           </div>
         </div>

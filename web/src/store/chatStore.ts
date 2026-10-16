@@ -1004,7 +1004,7 @@ interface ChatStoreState {
   // The chat stream patches that cache directly — no store-side copy here.
 
   // Branch chat
-  _navigateToBranchedChat: (newChat: Chat, worktreeId?: string) => void;
+  _navigateToBranchedChat: (newChat: Chat, worktreeId?: string) => Promise<void>;
   branchChat: (chatId: string, messageId: string) => Promise<void>;
   // "Continue without machine": a no-machine branch that carries the
   // conversation and leaves the original chat as it is. Navigates to it.
@@ -3850,10 +3850,15 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   // Branch chat - helper to handle post-branch navigation
-  _navigateToBranchedChat: (newChat: Chat, _worktreeId?: string) => {
+  _navigateToBranchedChat: async (newChat: Chat, _worktreeId?: string) => {
     // Navigate to the branched chat
     const { navigateToChat } = useChatNavigationStore.getState();
     navigateToChat(newChat.id);
+    // Mobile renders the URL's chat, while desktop renders the active selection.
+    if (window.location.pathname.startsWith("/m/")) {
+      const { router } = await import("../routes");
+      await router.navigate({ to: "/m/chats/$chatId", params: { chatId: newChat.id } });
+    }
   },
 
   branchChat: async (chatId: string, messageId: string) => {
@@ -3885,7 +3890,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       get().selectChat(newChat);
 
       // Navigate to the branched chat
-      get()._navigateToBranchedChat(newChat);
+      await get()._navigateToBranchedChat(newChat);
     } catch (error) {
       // Extract error message from ConnectError or other error types
       const errorMessage =
@@ -3918,7 +3923,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
 
     get().selectChat(newChat);
-    get()._navigateToBranchedChat(newChat, newChat.worktreeId);
+    await get()._navigateToBranchedChat(newChat, newChat.worktreeId);
     trackEvent("chat_branched_without_machine", {});
     return newChat;
   },
@@ -3975,7 +3980,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       get().selectChat(newChat);
 
       // Navigate to the branched chat
-      get()._navigateToBranchedChat(newChat, worktreeId);
+      await get()._navigateToBranchedChat(newChat, worktreeId);
     } catch (error) {
       logger.error("Failed to branch chat to worktree:", error);
       throw error;

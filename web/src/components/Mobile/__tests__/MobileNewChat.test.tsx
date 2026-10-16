@@ -1,14 +1,6 @@
-/**
- * The new-chat screen — what it sends, and what it refuses to show.
- *
- * The scope assertions matter as much as the happy path: `chatAttachments`
- * and `chatWorkflowParams` are false for this surface, and the way that
- * regresses is someone porting one more control over from the desktop
- * composer "since it was right there". Where the chat runs is the one
- * deliberate exception (`chatDaemonSelection`, research/NO_MACHINE_CHATS.md
- * §2.5): a phone often has no machine awake, and No machine is the default
- * then.
- */
+import { useState } from "react";
+import { useChatParamsStore } from "../../../store/chatParamsStore";
+/** Machine/workspace routing and configuration forwarding from the shared composer. */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
@@ -17,6 +9,35 @@ import userEvent from '@testing-library/user-event'
 const startChat = vi.fn()
 const selectChat = vi.fn()
 const navigate = vi.fn()
+
+const transferTempToChat = vi.fn();
+
+// Test this screen's routing contract; the real composer is covered separately.
+vi.mock('../../Chat/ChatInput', () => ({
+  ChatInput: ({ onSend, disabled, mobileOptionsContent }: { onSend: (...args: any[]) => Promise<void>; disabled: boolean; mobileOptionsContent?: (onClose: () => void) => React.ReactNode }) => {
+    const [showOptions, setShowOptions] = useState(false);
+    const [message, setMessage] = useState('');
+    const workflow = useChatParamsStore(state => state.tempNewChatWorkflow) ?? 'builtin://forge-one-shot';
+    const setWorkflow = useChatParamsStore.getState().setTempNewChatWorkflow;
+    const [configured, setConfigured] = useState(false);
+    return <>
+      <button onClick={() => setShowOptions(true)}>Chat options</button>
+      {showOptions && mobileOptionsContent?.(() => setShowOptions(false))}
+      <span>Forge One Shot</span>
+      <label>Workflow<select aria-label="Composer workflow" value={workflow} onChange={event => setWorkflow(event.target.value)}><option value="builtin://forge-one-shot">Forge</option><option value="builtin://agent">Agent</option></select></label>
+      <button onClick={() => setConfigured(true)}>Configure attachments and parameters</button>
+      <textarea aria-label="Message" value={message} onChange={event => setMessage(event.target.value)} />
+      <button aria-label="Send" disabled={disabled || (!message.trim() && !configured)} onClick={async () => {
+        try {
+          await onSend(message, configured ? ['attachment-1'] : undefined, workflow,
+            configured ? { model: { id: 'model-1' }, 'agent.temperature': 0.4 } : undefined, undefined,
+            configured ? { agent: 'coding', default: null } : undefined);
+          setMessage('');
+        } catch { /* The real composer retains the draft on failure too. */ }
+      }}>Send</button>
+    </>;
+  },
+}));
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, ...props }: { children?: React.ReactNode }) => (
@@ -110,6 +131,7 @@ vi.mock('@/hooks/useOnboardingQueries', () => ({
 const { MobileNewChat } = await import('../MobileNewChat')
 
 beforeEach(() => {
+  useChatParamsStore.setState({ tempNewChatWorkflow: null, tempNewChatParams: {}, tempNewChatPresets: {}, transferTempToChat });
   worktreeList.current = [MAIN_WORKTREE]
   daemonList.current = [{ daemonId: 'd-laptop', hostname: 'laptop', status: 1 }]
   startChat.mockReset()
@@ -118,19 +140,19 @@ beforeEach(() => {
   navigate.mockReset()
 })
 
+async function renderNewChat() {
+  render(<MobileNewChat />);
+}
+
 describe('MobileNewChat', () => {
-  it('shows the current project as context', () => {
-    render(<MobileNewChat />)
+  it('shows the current project as context', async () => {
+    await renderNewChat()
     expect(screen.getByText('reliant')).toBeInTheDocument()
   })
 
-  it("preselects the user's default workflow, not the hardcoded fallback", () => {
-    render(<MobileNewChat />)
-    expect(screen.getByText('Forge One Shot')).toBeInTheDocument()
-  })
 
   it('creates the chat against the main worktree and navigates to it', async () => {
-    render(<MobileNewChat />)
+    await renderNewChat()
 
     await userEvent.type(screen.getByLabelText('Message'), 'ship it')
     await userEvent.click(screen.getByLabelText('Send'))
@@ -140,8 +162,7 @@ describe('MobileNewChat', () => {
       startChat.mock.calls[0]
     expect(worktreeId).toBe('wt-main')
     expect(content).toBe('ship it')
-    // Attachments and workflow params are out of scope on this surface —
-    // they must go over the wire as absent, not as empty containers.
+    // Untouched composer configuration stays absent over the wire.
     expect(attachments).toBeUndefined()
     expect(params).toBeUndefined()
     expect(workflow).toBe('builtin://forge-one-shot')
@@ -155,11 +176,10 @@ describe('MobileNewChat', () => {
   })
 
   it('sends the workflow the user picked over their default', async () => {
-    render(<MobileNewChat />)
+    await renderNewChat()
 
     // Open the workflow picker sheet and choose a different workflow.
-    await userEvent.click(screen.getByText('Workflow'))
-    await userEvent.click(screen.getByRole('button', { name: /^Agent/ }))
+    await userEvent.selectOptions(screen.getByLabelText('Composer workflow'), 'builtin://agent')
 
     await userEvent.type(screen.getByLabelText('Message'), 'hello')
     await userEvent.click(screen.getByLabelText('Send'))
@@ -168,15 +188,9 @@ describe('MobileNewChat', () => {
     expect(startChat.mock.calls[0][4]).toBe('builtin://agent')
   })
 
-  it('does not offer a workflow whose Chat trigger is off', async () => {
-    render(<MobileNewChat />)
-    await userEvent.click(screen.getByText('Workflow'))
-    expect(screen.getByRole('button', { name: /^Agent/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Nightly Digest/i })).not.toBeInTheDocument()
-  })
 
   it('will not send an empty message', async () => {
-    render(<MobileNewChat />)
+    await renderNewChat()
     expect(screen.getByLabelText('Send')).toBeDisabled()
 
     await userEvent.type(screen.getByLabelText('Message'), '   ')
@@ -186,7 +200,7 @@ describe('MobileNewChat', () => {
 
   it('keeps the typed message when creation fails', async () => {
     startChat.mockRejectedValue(new Error('no daemon available'))
-    render(<MobileNewChat />)
+    await renderNewChat()
 
     const input = screen.getByLabelText('Message')
     await userEvent.type(input, 'retry me')
@@ -198,12 +212,17 @@ describe('MobileNewChat', () => {
     expect(navigate).not.toHaveBeenCalled()
   })
 
-  it('offers no attachment or params controls', () => {
-    render(<MobileNewChat />)
-    expect(screen.queryByLabelText(/attach/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/parameters/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/daemon/i)).not.toBeInTheDocument()
-  })
+  it('forwards attachments, model settings, grouped parameters and presets from the composer', async () => {
+    await renderNewChat();
+    await userEvent.click(screen.getByText('Configure attachments and parameters'));
+    await userEvent.click(screen.getByLabelText('Send'));
+    await waitFor(() => expect(startChat).toHaveBeenCalled());
+    expect(startChat.mock.calls[0].slice(1, 6)).toEqual([
+      '', ['attachment-1'], { model: { id: 'model-1' }, 'agent.temperature': 0.4 },
+      'builtin://forge-one-shot', { agent: 'coding' },
+    ]);
+    expect(transferTempToChat).toHaveBeenCalledWith('chat-9');
+  });
 
   it('starts the chat in the workspace the user picks', async () => {
     worktreeList.current = [
@@ -212,7 +231,7 @@ describe('MobileNewChat', () => {
       // Never got a checkout, so a chat cannot run in it.
       { id: 'wt-failed', is_main: false, name: 'broken', branch: 'broken', status: 6 },
     ]
-    render(<MobileNewChat />)
+    await renderNewChat()
 
     await userEvent.click(screen.getByText('Workspace'))
     expect(screen.queryByRole('button', { name: /^broken/ })).not.toBeInTheDocument()
@@ -225,14 +244,14 @@ describe('MobileNewChat', () => {
   })
 
   it('creates a workspace from the picker and selects it', async () => {
-    render(<MobileNewChat />)
+    await renderNewChat()
 
     await userEvent.click(screen.getByText('Workspace'))
     await userEvent.click(screen.getByRole('button', { name: 'New workspace' }))
     await userEvent.click(screen.getByRole('button', { name: 'Create stub' }))
 
     expect(screen.queryByRole('dialog', { name: 'New workspace' })).not.toBeInTheDocument()
-    // Still CREATING: it is offered, labelled as such, and selected.
+      // Still CREATING: it is offered, labelled as such, and selected.
     expect(screen.getByText('fresh')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Message'), 'go')
@@ -241,15 +260,15 @@ describe('MobileNewChat', () => {
     expect(startChat.mock.calls[0][0]).toBe('wt-new')
   })
 
-  it('hides the workspace row for a chat with no machine', () => {
+  it('hides the workspace row for a chat with no machine', async () => {
     daemonList.current = [{ daemonId: 'd-laptop', hostname: 'laptop', status: 5 }]
-    render(<MobileNewChat />)
+    await renderNewChat()
     expect(screen.getByText('No machine')).toBeInTheDocument()
     expect(screen.queryByText('Workspace')).not.toBeInTheDocument()
   })
 
   it('runs on the awake machine by default, sending no daemon', async () => {
-    render(<MobileNewChat />)
+    await renderNewChat()
     expect(screen.getByText('Runs on')).toBeInTheDocument()
     expect(screen.getByText('laptop')).toBeInTheDocument()
 
@@ -263,7 +282,7 @@ describe('MobileNewChat', () => {
 
   it('preselects No machine when none of the machines is awake', async () => {
     daemonList.current = [{ daemonId: 'd-laptop', hostname: 'laptop', status: 5 }]
-    render(<MobileNewChat />)
+    await renderNewChat()
     expect(screen.getByText('No machine')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Message'), 'read the news')
@@ -276,7 +295,7 @@ describe('MobileNewChat', () => {
 
   it('wakes an asleep machine the user picks', async () => {
     daemonList.current = [{ daemonId: 'd-laptop', hostname: 'laptop', status: 5 }]
-    render(<MobileNewChat />)
+    await renderNewChat()
 
     await userEvent.click(screen.getByText('Runs on'))
     await userEvent.click(screen.getByRole('button', { name: /^laptop/ }))
@@ -288,3 +307,26 @@ describe('MobileNewChat', () => {
     expect(startChat.mock.calls[0][6]).toEqual({ daemonId: 'd-laptop', noMachine: undefined })
   })
 })
+
+it('shows Start with choices directly above the compact composer', () => {
+  render(<MobileNewChat />);
+  expect(screen.getByText('Start with')).toBeInTheDocument();
+  expect(screen.getByText('Runs on')).toBeInTheDocument();
+  expect(screen.getByText('Workspace')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'How can I help?' })).not.toBeInTheDocument();
+});
+
+it('shares the Start with workflow selection with the composer and clears previous configuration', async () => {
+  useChatParamsStore.setState({ tempNewChatParams: { old: true }, tempNewChatPresets: { coder: 'old' } });
+  render(<MobileNewChat />);
+  await userEvent.click(screen.getByRole('button', { name: /^Workflow/ }));
+  expect(screen.queryByRole('button', { name: /Nightly Digest/ })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /^Agent/ }));
+  expect(useChatParamsStore.getState().tempNewChatWorkflow).toBe('builtin://agent');
+  expect(useChatParamsStore.getState().tempNewChatParams).toEqual({});
+  expect(useChatParamsStore.getState().tempNewChatPresets).toEqual({});
+  await userEvent.type(screen.getByLabelText('Message'), 'hello');
+  await userEvent.click(screen.getByLabelText('Send'));
+  await waitFor(() => expect(startChat).toHaveBeenCalled());
+  expect(startChat.mock.calls[0][4]).toBe('builtin://agent');
+});

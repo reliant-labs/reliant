@@ -1,3 +1,5 @@
+import { useSurface } from "../../lib/surfaceContext";
+import { useMobileViewport } from "../../hooks/useMobileViewport";
 import { X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useCallback, useEffect, useRef } from "react";
@@ -35,6 +37,8 @@ export function Modal({
   hideCloseButton = false,
   headerActions,
 }: ModalProps) {
+  const isMobile = useSurface() === "mobile";
+  const viewport = useMobileViewport(isOpen && isMobile);
   const modalRef = useRef<HTMLDivElement>(null);
   const hasOpenedRef = useRef(false);
   // Track the element that was focused before modal opened
@@ -124,6 +128,7 @@ export function Modal({
       // viewport on mobile, so centring inside it puts the panel's midpoint
       // below the visible centre and it drifts as browser chrome animates.
       className="fixed inset-0 h-[100dvh] z-50 isolate flex items-center justify-center p-4 sm:p-6"
+      style={isMobile ? { top: viewport.top, left: viewport.left, width: viewport.width, height: viewport.height } : undefined}
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? "modal-title" : undefined}
@@ -137,6 +142,7 @@ export function Modal({
 
       <div
         ref={modalRef}
+        style={isMobile ? { maxHeight: "90%" } : undefined}
         className={cn(
           "relative border border-border/50 rounded-xl",
           // `dvh`, not `vh`: on mobile browsers `vh` is locked to the viewport

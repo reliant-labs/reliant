@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("../../../store/activityStore", () => ({
   useActivityStore: () => undefined,
@@ -16,6 +16,7 @@ vi.mock("../ToolExecution", () => ({
   workflowStatusToDisplayStatus: () => undefined,
 }));
 
+import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { ToolExecutionGroup } from "../ToolExecutionGroup";
 
 const mk = (name: string, id: string) => ({
@@ -35,3 +36,13 @@ describe("ToolExecutionGroup default expansion", () => {
     expect(screen.queryAllByTestId("tool-row")).toHaveLength(2);
   });
 });
+
+ it("keeps mobile runs collapsed by default and preserves expansion as tools arrive", () => {
+   const wrap = (count: number) => <SurfaceProvider surface="mobile"><ToolExecutionGroup executions={Array.from({length:count}, (_, i) => mk("edit", String(i)))} /></SurfaceProvider>;
+   const {rerender} = render(wrap(2));
+   expect(screen.queryAllByTestId("tool-row")).toHaveLength(0);
+   fireEvent.click(screen.getByRole("button", {name:/Edited 2 files/}));
+   rerender(wrap(3));
+   expect(screen.getAllByTestId("tool-row")).toHaveLength(3);
+   expect(screen.getByRole("button", {name:/Edited 3 files/})).toHaveAttribute("aria-expanded", "true");
+ });

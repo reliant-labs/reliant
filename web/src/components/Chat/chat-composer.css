@@ -9,3 +9,174 @@
 .chat-composer::placeholder {
   color: var(--chat-input-placeholder);
 }
+
+/* Mobile layout changes presentation without changing desktop controls. */
+.mobile-chat-composer [data-mobile-composer] {
+  border-radius: 28px;
+  border-color: hsl(var(--border) / 0.65);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 3%);
+}
+.mobile-chat-composer .chat-composer {
+  font-size: max(16px, 1rem);
+}
+.mobile-chat-composer .chat-button {
+  min-height: 44px;
+  min-width: 44px;
+}
+.mobile-chat-composer [aria-label="Model settings"] span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mobile-chat-sheet button, .mobile-chat-sheet select {
+  min-height: 44px;
+}
+.mobile-chat-sheet input, .mobile-chat-sheet textarea {
+  font-size: max(16px, 1rem);
+}
+.mobile-chat-sheet .mobile-chat-settings {
+  overflow-wrap: anywhere;
+}
+.mobile-chat-sheet .mobile-chat-settings > div {
+  max-height: none;
+}
+.mobile-chat-configuration > div > div,
+.mobile-chat-configuration > div > div > div {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+[data-surface="mobile"] .chat-input-container {
+  min-width: 0;
+}
+[data-surface="mobile"] .chat-input-container button[aria-label="Remove attachment"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.mobile-chat-configuration [class*="bottom-full"] {
+  position: relative;
+  bottom: auto;
+  left: auto;
+  width: 100%;
+  max-width: 100%;
+}
+[data-surface="mobile"] .chat-input-container button {
+  min-height: 44px;
+}
+.mobile-chat-sheet button:has(> svg:only-child) {
+  min-width: 44px;
+}
+
+.mobile-composer-text .chat-composer {
+  display: block;
+  min-height: 32px;
+  line-height: 1.5;
+}
+.mobile-composer-toolbar .chat-button {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+  border: 0;
+}
+.mobile-composer-toolbar .chat-button:disabled {
+  background: hsl(var(--foreground) / 0.12);
+  color: hsl(var(--foreground) / 0.4);
+  opacity: 1;
+}
+.mobile-composer-toolbar .chat-button svg {
+  width: 20px;
+  height: 20px;
+}
+.mobile-composer-toolbar .chat-button[data-testid="queue-send-button"] {
+  background: hsl(var(--foreground) / 0.08);
+  color: hsl(var(--foreground));
+}
+.mobile-composer-model {
+  max-height: 44px;
+}
+
+/* Mobile transcript hierarchy, independent of desktop density preferences. */
+[data-mobile-message] {
+  margin-bottom: 8px;
+}
+[data-mobile-message] .message-content {
+  padding-inline: 0;
+}
+[data-mobile-message] .message-bubble {
+  font-size: max(16px, 1rem);
+  line-height: 1.5;
+}
+[data-mobile-message] .message-bubble p,
+[data-mobile-message] .message-bubble li {
+  font-size: inherit;
+  line-height: inherit;
+}
+[data-mobile-message] .message-bubble > * + * {
+  margin-top: 8px;
+}
+[data-mobile-question] button {
+  min-height: 44px;
+  min-width: 44px;
+}
+[data-mobile-question] textarea {
+  font-size: 16px;
+}
+[data-mobile-question] button,
+[data-mobile-question] p {
+  overflow-wrap: anywhere;
+}
+/* The global font preference rules wrap preformatted content by default. */
+@layer utilities {
+.mobile-thread-code,
+.mobile-thread-code code {
+  white-space: pre !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+}
+[data-mobile-message] .prose,
+[data-mobile-message] .user-message-content > div {
+  font-size: max(16px, 1rem);
+  line-height: 1.5;
+}
+[data-mobile-question] {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  padding-inline: 16px;
+}
+
+[data-mobile-message][data-message-role="user"] {
+  margin-top: 8px;
+}
+[data-surface="mobile"] .chat-background {
+  background-image: none;
+}
+
+[data-mobile-turn-end] {
+  margin-bottom: 8px;
+}
+/* Plain replies share their first line with More; activity turns use the summary row. */
+[data-mobile-plain-response] {
+  min-height: 44px;
+  padding-right: 44px;
+}
+
+/* Smaller visual controls retain a full 44px touch area. */
+.mobile-composer-toolbar .mobile-composer-add,
+.mobile-composer-toolbar .chat-button {
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  border: 4px solid var(--chat-input-bg);
+}
+.mobile-composer-toolbar .mobile-composer-add svg {
+  width: 20px;
+  height: 20px;
+}
+.mobile-composer-toolbar .mobile-composer-model,
+.mobile-composer-toolbar button[aria-label="Open chat options"] {
+  box-sizing: border-box;
+  border: 4px solid var(--chat-input-bg);
+  font-size: 13px;
+}
