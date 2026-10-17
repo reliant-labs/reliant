@@ -134,7 +134,6 @@ func TestNewServerNamesEveryMissingCollaborator(t *testing.T) {
 // route (a 404, which Connect reports as Unimplemented). These are the
 // services that used to be mounted only when a collaborator was present.
 func TestNewServerMountsEveryService(t *testing.T) {
-	t.Setenv("RELIANT_DISABLE_FORGE_API", "")
 	_, baseURL := startTestServer(t, testServerConfig(t, drainTestRepo{}))
 
 	for _, procedure := range []string{

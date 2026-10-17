@@ -130,6 +130,10 @@ type Config struct {
 	JWKSURL             string   // JWKS endpoint URL for JWT validation (alternative to JWTPublicKey)
 	CORSAllowedOrigins  []string // Allowed CORS origins; defaults to ["*"] if empty
 	AllowedEmailDomains []string // If non-empty, only these email domains may access the system
+	// DisableForgeAPI is the operator's kill switch for the forge RPC surface
+	// (RELIANT_DISABLE_FORGE_API): ForgeService stays mounted and answers
+	// every rpc with FailedPrecondition. See forgeAPIDisabled.
+	DisableForgeAPI bool
 	// ControlPlane is the control plane hosting this deployment; the zero
 	// value is self-hosted. It picks the token store, where git tokens come
 	// from, whether suspended workspaces can be woken, and the dial policy
@@ -603,33 +607,25 @@ func NewServer(cfg *Config) (*Server, error) {
 	// ForgeService reads a forge project's release/env/secret state off the
 	// DAEMON's filesystem, through the router.
 	//
-	// It is gated by RELIANT_DISABLE_FORGE_API, a server-side kill switch
-	// independent of the frontend's own experimental flag. Two gates rather than
-	// one because they answer different questions and fail differently: the
-	// frontend flag hides the UI, while this one makes the RPCs unroutable. The
-	// frontend flag is per-browser localStorage, so it cannot be relied on to
-	// keep a deploy path unreachable — anyone who can craft a request bypasses
-	// it. StartDeploy applies to a live cluster, so the operator needs a way to
-	// shut the surface off at the server regardless of what any browser thinks.
-	//
-	// Default ON (not disabled) so it stays a kill switch rather than a second
-	// thing to remember to enable: the RPCs are inert until the UI or a caller
-	// exercises them, and forgetting to set an env var should not silently break
-	// a feature the operator deliberately turned on in the UI.
-	var forgePath string
-	var forgeHandler http.Handler
-	if !forgeAPIDisabled() {
-		forgeService, err := forge.New(forge.Deps{
-			Logger: handlerLogger,
-			Config: handlerConfig,
-			Router: router,
-			Repo:   database,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("forge service: %w", err)
-		}
-		forgePath, forgeHandler = reliantv1connect.NewForgeServiceHandler(forgeService, opts...)
+	// It is always mounted. cfg.DisableForgeAPI, the operator's kill switch,
+	// puts forgeAPIDisabled innermost in its chain instead: every rpc then
+	// answers FailedPrecondition, after auth, before the handler runs.
+	forgeService, err := forge.New(forge.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Router: router,
+		Repo:   database,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("forge service: %w", err)
 	}
+	forgeOpts := opts
+	if cfg.DisableForgeAPI {
+		logging.Info("forge API disabled in this deployment (RELIANT_DISABLE_FORGE_API): ForgeService answers FailedPrecondition")
+		// Cloned so the shared opts slice is never appended into.
+		forgeOpts = append(slices.Clone(opts), connect.WithInterceptors(forgeAPIDisabled{}))
+	}
+	forgePath, forgeHandler := reliantv1connect.NewForgeServiceHandler(forgeService, forgeOpts...)
 
 	streamingPath, streamingHandler := reliantv1connect.NewStreamingServiceHandler(streamingService, opts...)
 
@@ -800,9 +796,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	mux.Handle(filesystemPath, filesystemHandler)
 	mux.Handle(packageCommandsPath, packageCommandsHandler)
 	mux.Handle(toolCallPath, toolCallHandler)
-	if forgeHandler != nil {
-		mux.Handle(forgePath, forgeHandler)
-	}
+	mux.Handle(forgePath, forgeHandler)
 
 	mux.Handle(streamingPath, streamingHandler)
 
@@ -1323,26 +1317,6 @@ func (v *jwtConnectorValidator) ValidateToken(token string) (string, error) {
 		return "", err
 	}
 	return claims.Sub, nil
-}
-
-// forgeAPIDisabled reports whether the operator has switched the forge RPC
-// surface off at the server.
-//
-// A KILL SWITCH, so it is opt-OUT: unset means the surface is available, and
-// only an explicit truthy value removes it. An opt-in spelling would mean a
-// deployment that forgot the variable would find the feature mysteriously
-// missing, which is a worse failure than the one this guards against.
-//
-// The values accepted are the conventional truthy set rather than just "1",
-// because an operator reaching for a kill switch under pressure should not have
-// to remember which spelling this particular flag wants.
-func forgeAPIDisabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("RELIANT_DISABLE_FORGE_API"))) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
 }
 
 // cleartextHTTP2Protocols is the protocol set for a listener with no TLS:

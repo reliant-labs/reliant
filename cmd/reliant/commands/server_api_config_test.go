@@ -20,7 +20,7 @@ import (
 
 // serverAPIConfigEnv is every variable `server api` reads through
 // ApiServerConfig.
-var serverAPIConfigEnv = []string{"JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "ALLOWED_EMAIL_DOMAINS", "RELIANT_CONFIG"}
+var serverAPIConfigEnv = []string{"JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "ALLOWED_EMAIL_DOMAINS", "RELIANT_DISABLE_FORGE_API", "RELIANT_CONFIG"}
 
 // TestServerAPIConfigEnvContract pins that the variables `server api` now
 // reads through ApiServerConfig reach serverapi.Options exactly as the flag
@@ -85,6 +85,32 @@ func TestServerAPIAllowedEmailDomainsKeepTheirEffect(t *testing.T) {
 				assert.Equal(t, admits(t, before, email), admits(t, opts.AllowedEmailDomains, email),
 					"%s: loaded %q, previously %q", email, opts.AllowedEmailDomains, before)
 			}
+		})
+	}
+}
+
+// RELIANT_DISABLE_FORGE_API is the forge API's kill switch: opt-OUT, so unset
+// or empty leaves the surface on. It is a bool, and a value that is not one
+// stops the process: the raw read it replaced ignored an unrecognised value,
+// which for a kill switch left the surface ON after an operator's typo.
+func TestServerAPIDisableForgeAPI(t *testing.T) {
+	for raw, want := range map[string]bool{"": false, "false": false, "0": false, "true": true, "1": true, "TRUE": true} {
+		t.Run("RELIANT_DISABLE_FORGE_API="+raw, func(t *testing.T) {
+			isolateServerAPIConfigEnv(t)
+			t.Setenv("RELIANT_DISABLE_FORGE_API", raw)
+			assert.Equal(t, want, loadServerAPIOptions(t).DisableForgeAPI)
+		})
+	}
+	for _, raw := range []string{"yes", "on", "maybe"} {
+		t.Run("RELIANT_DISABLE_FORGE_API="+raw+" stops the process", func(t *testing.T) {
+			isolateServerAPIConfigEnv(t)
+			t.Setenv("RELIANT_DISABLE_FORGE_API", raw)
+			cmd, _, err := NewRootCmd().Find([]string{"server", "api"})
+			require.NoError(t, err)
+			var opts serverapi.Options
+			err = loadServerAPIConfig(cmd, &opts)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "RELIANT_DISABLE_FORGE_API")
 		})
 	}
 }

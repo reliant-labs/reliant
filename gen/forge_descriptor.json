@@ -34100,6 +34100,20 @@
           "Category": "",
           "MessageType": "ControlPlaneConfig",
           "ProtoFile": "config/v1/api_server_config.proto"
+        },
+        {
+          "Name": "disable_forge_api",
+          "GoName": "DisableForgeApi",
+          "GoType": "bool",
+          "ProtoType": "bool",
+          "EnvVar": "RELIANT_DISABLE_FORGE_API",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Turn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/api_server_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -34264,5 +34278,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "8fbe7baeddc2361a323ff89a62624992707d86fbeb10a3d236ecfbc182744825"
+  "source_hash": "5b00001d4e7b43fbecf76a2d68ace6ecc85ce42e6043a72220b86410681cbe12"
 }

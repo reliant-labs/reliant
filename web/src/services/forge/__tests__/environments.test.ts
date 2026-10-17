@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 vi.mock("@/services/controlPlane/config", () => ({
   CONTROL_PLANE_API_URL: "http://127.0.0.1:8090",
@@ -290,6 +291,18 @@ describe("daemonSideOf", () => {
     expect(
       daemonSideOf({ kind: "report", meta: meta(), report: {} } as ForgeOutcome<ForgeTopologyReport>, null)
     ).toBe("ok");
+  });
+
+  it("is disabled, not offline, when the server has the forge API turned off", () => {
+    const disabled = new ConnectError(
+      "the forge API is disabled in this deployment",
+      Code.FailedPrecondition,
+      new Headers({ "x-reliant-reason": "forge_api_disabled" })
+    );
+    expect(daemonSideOf(undefined, disabled)).toBe("disabled");
+    // Without the reason it is not the switch: FailedPrecondition alone is
+    // also what a forge rpc answers when forge ran and failed.
+    expect(daemonSideOf(undefined, new ConnectError("render failed", Code.FailedPrecondition))).toBe("offline");
   });
 });
 

@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file config/v1/api_server_config.proto.
  */
 export const file_config_v1_api_server_config: GenFile = /*@__PURE__*/
-  fileDesc("CiFjb25maWcvdjEvYXBpX3NlcnZlcl9jb25maWcucHJvdG8SCWNvbmZpZy52MSKrBAoPQXBpU2VydmVyQ29uZmlnEmUKDmp3dF9wdWJsaWNfa2V5GAEgASgJQk2CzhhJCg5KV1RfUFVCTElDX0tFWRIOand0LXB1YmxpYy1rZXkqJ0pXVCBwdWJsaWMga2V5IFBFTSBmb3IgdG9rZW4gdmFsaWRhdGlvbhJsChNqd3RfcHVibGljX2tleV9maWxlGAIgASgJQk+CzhhLChNKV1RfUFVCTElDX0tFWV9GSUxFEhNqd3QtcHVibGljLWtleS1maWxlKh9QYXRoIHRvIEpXVCBwdWJsaWMga2V5IFBFTSBmaWxlEnEKCGp3a3NfdXJsGAMgASgJQl+CzhhbChBSRUxJQU5UX0pXS1NfVVJMEghqd2tzLXVybCo9SldLUyBlbmRwb2ludCBVUkwgZm9yIEpXVCB2YWxpZGF0aW9uIChhbHRlcm5hdGl2ZSB0byBQRU0ga2V5KRJ+ChVhbGxvd2VkX2VtYWlsX2RvbWFpbnMYBCADKAlCX4LOGFsKFUFMTE9XRURfRU1BSUxfRE9NQUlOUypCQ29tbWEtc2VwYXJhdGVkIGVtYWlsIGRvbWFpbnMgYWxsb3dlZCB0byBzaWduIGluIChub25lIGFsbG93cyBhbGwpEjQKDWNvbnRyb2xfcGxhbmUYBSABKAsyHS5jb25maWcudjEuQ29udHJvbFBsYW5lQ29uZmlnOhrKwRgWCgdyZWxpYW50EgZzZXJ2ZXISA2FwaUI4WjZnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_config_v1_control_plane_config, file_forge_v1_forge]);
+  fileDesc("CiFjb25maWcvdjEvYXBpX3NlcnZlcl9jb25maWcucHJvdG8SCWNvbmZpZy52MSK8BQoPQXBpU2VydmVyQ29uZmlnEmUKDmp3dF9wdWJsaWNfa2V5GAEgASgJQk2CzhhJCg5KV1RfUFVCTElDX0tFWRIOand0LXB1YmxpYy1rZXkqJ0pXVCBwdWJsaWMga2V5IFBFTSBmb3IgdG9rZW4gdmFsaWRhdGlvbhJsChNqd3RfcHVibGljX2tleV9maWxlGAIgASgJQk+CzhhLChNKV1RfUFVCTElDX0tFWV9GSUxFEhNqd3QtcHVibGljLWtleS1maWxlKh9QYXRoIHRvIEpXVCBwdWJsaWMga2V5IFBFTSBmaWxlEnEKCGp3a3NfdXJsGAMgASgJQl+CzhhbChBSRUxJQU5UX0pXS1NfVVJMEghqd2tzLXVybCo9SldLUyBlbmRwb2ludCBVUkwgZm9yIEpXVCB2YWxpZGF0aW9uIChhbHRlcm5hdGl2ZSB0byBQRU0ga2V5KRJ+ChVhbGxvd2VkX2VtYWlsX2RvbWFpbnMYBCADKAlCX4LOGFsKFUFMTE9XRURfRU1BSUxfRE9NQUlOUypCQ29tbWEtc2VwYXJhdGVkIGVtYWlsIGRvbWFpbnMgYWxsb3dlZCB0byBzaWduIGluIChub25lIGFsbG93cyBhbGwpEjQKDWNvbnRyb2xfcGxhbmUYBSABKAsyHS5jb25maWcudjEuQ29udHJvbFBsYW5lQ29uZmlnEo4BChFkaXNhYmxlX2ZvcmdlX2FwaRgGIAEoCEJzgs4YbwoZUkVMSUFOVF9ESVNBQkxFX0ZPUkdFX0FQSSpSVHVybiB0aGUgZm9yZ2UgUlBDIHN1cmZhY2Ugb2ZmIGF0IHRoaXMgc2VydmVyIChpdHMgcnBjcyBhbnN3ZXIgRmFpbGVkUHJlY29uZGl0aW9uKToaysEYFgoHcmVsaWFudBIGc2VydmVyEgNhcGlCOFo2Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_config_v1_control_plane_config, file_forge_v1_forge]);
 
 /**
  * ApiServerConfig is the `reliant server api` process's own config: the knobs
@@ -60,6 +60,22 @@ export type ApiServerConfig = Message<"config.v1.ApiServerConfig"> & {
    * @generated from field: config.v1.ControlPlaneConfig control_plane = 5;
    */
   controlPlane?: ControlPlaneConfig | undefined;
+
+  /**
+   * Turns the forge RPC surface (ForgeService) off at this server: every forge
+   * rpc then answers FailedPrecondition, saying the forge API is disabled in
+   * this deployment. A kill switch, so unset means ON. StartDeploy applies to
+   * a live cluster, and the web app's own forge flag is per-browser
+   * localStorage that any crafted request bypasses, so the operator needs a
+   * switch at the server.
+   *
+   * Parsed as a bool (1/true/0/false, any case). The raw read this replaced
+   * also took yes/on and silently ignored anything else, which for a kill
+   * switch failed OPEN on a typo; an unrecognised value now stops the process.
+   *
+   * @generated from field: bool disable_forge_api = 6;
+   */
+  disableForgeApi: boolean;
 };
 
 /**

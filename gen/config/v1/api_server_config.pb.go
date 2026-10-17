@@ -42,8 +42,19 @@ type ApiServerConfig struct {
 	// b.com alone.
 	AllowedEmailDomains []string            `protobuf:"bytes,4,rep,name=allowed_email_domains,json=allowedEmailDomains,proto3" json:"allowed_email_domains,omitempty"`
 	ControlPlane        *ControlPlaneConfig `protobuf:"bytes,5,opt,name=control_plane,json=controlPlane,proto3" json:"control_plane,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Turns the forge RPC surface (ForgeService) off at this server: every forge
+	// rpc then answers FailedPrecondition, saying the forge API is disabled in
+	// this deployment. A kill switch, so unset means ON. StartDeploy applies to
+	// a live cluster, and the web app's own forge flag is per-browser
+	// localStorage that any crafted request bypasses, so the operator needs a
+	// switch at the server.
+	//
+	// Parsed as a bool (1/true/0/false, any case). The raw read this replaced
+	// also took yes/on and silently ignored anything else, which for a kill
+	// switch failed OPEN on a typo; an unrecognised value now stops the process.
+	DisableForgeApi bool `protobuf:"varint,6,opt,name=disable_forge_api,json=disableForgeApi,proto3" json:"disable_forge_api,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ApiServerConfig) Reset() {
@@ -111,11 +122,18 @@ func (x *ApiServerConfig) GetControlPlane() *ControlPlaneConfig {
 	return nil
 }
 
+func (x *ApiServerConfig) GetDisableForgeApi() bool {
+	if x != nil {
+		return x.DisableForgeApi
+	}
+	return false
+}
+
 var File_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	"!config/v1/api_server_config.proto\x12\tconfig.v1\x1a$config/v1/control_plane_config.proto\x1a\x14forge/v1/forge.proto\"\xf8\x04\n" +
+	"!config/v1/api_server_config.proto\x12\tconfig.v1\x1a$config/v1/control_plane_config.proto\x1a\x14forge/v1/forge.proto\"\x9a\x06\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -125,7 +143,9 @@ const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x10RELIANT_JWKS_URL\x12\bjwks-url*=JWKS endpoint URL for JWT validation (alternative to PEM key)R\ajwksUrl\x12\x93\x01\n" +
 	"\x15allowed_email_domains\x18\x04 \x03(\tB_\x82\xce\x18[\n" +
 	"\x15ALLOWED_EMAIL_DOMAINS*BComma-separated email domains allowed to sign in (none allows all)R\x13allowedEmailDomains\x12B\n" +
-	"\rcontrol_plane\x18\x05 \x01(\v2\x1d.config.v1.ControlPlaneConfigR\fcontrolPlane:\x1a\xca\xc1\x18\x16\n" +
+	"\rcontrol_plane\x18\x05 \x01(\v2\x1d.config.v1.ControlPlaneConfigR\fcontrolPlane\x12\x9f\x01\n" +
+	"\x11disable_forge_api\x18\x06 \x01(\bBs\x82\xce\x18o\n" +
+	"\x19RELIANT_DISABLE_FORGE_API*RTurn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)R\x0fdisableForgeApi:\x1a\xca\xc1\x18\x16\n" +
 	"\areliant\x12\x06server\x12\x03apiB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 
 var (

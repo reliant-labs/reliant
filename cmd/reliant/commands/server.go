@@ -142,6 +142,7 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	opts.JWTPublicKeyFile = api.GetJwtPublicKeyFile()
 	opts.JWKSURL = api.GetJwksUrl()
 	opts.AllowedEmailDomains = api.GetAllowedEmailDomains()
+	opts.DisableForgeAPI = api.GetDisableForgeApi()
 	opts.ControlPlane = controlPlaneEndpoint(api.GetControlPlane())
 	return nil
 }

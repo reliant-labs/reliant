@@ -86,6 +86,10 @@ type Options struct {
 	// Domain whitelist
 	AllowedEmailDomains []string
 
+	// DisableForgeAPI turns the forge RPC surface off at this server
+	// (ApiServerConfig.disable_forge_api, RELIANT_DISABLE_FORGE_API).
+	DisableForgeAPI bool
+
 	// TLS
 	TLSCertFile string
 	TLSKeyFile  string
@@ -432,6 +436,7 @@ func Run(ctx context.Context, opts Options) error {
 		OAuthIssuers:        splitAndTrim(os.Getenv("MCP_OAUTH_ISSUERS")),
 		CORSAllowedOrigins:  opts.CORSAllowedOrigins,
 		AllowedEmailDomains: opts.AllowedEmailDomains,
+		DisableForgeAPI:     opts.DisableForgeAPI,
 		ControlPlane:        opts.ControlPlane,
 		Database:            repo,
 		SQL:                 repo.DB.SQLDB(),

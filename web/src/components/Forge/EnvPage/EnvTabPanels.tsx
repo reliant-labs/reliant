@@ -18,6 +18,7 @@ import Card, { CardHeader } from "@/components/forge-ui/card";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { Button } from "@/components/ui/Button";
 import type { DomainsState } from "@/hooks/forge-domain-queries";
+import { isForgeAPIDisabled } from "@/lib/forgeApiDisabled";
 import type { CloudEnvStatus, CloudPromotion } from "@/services/forge/cloudEnvs";
 import { declaredNotBuilt, isPlacedKind, neverBuilt, type LiveConvergence, type LiveEnv } from "@/services/forge/live";
 import { devStackRunsHere, type DaemonSide } from "@/services/forge/environments";
@@ -175,7 +176,10 @@ export function OverviewTab(props: OverviewTabProps) {
           ) : props.daemon === "loading" ? (
             <SkeletonLoader variant="form-field" />
           ) : (
-            <DaemonNeeded what={`the shape forge renders for ${envName}, which registering records`} />
+            <DaemonNeeded
+              what={`the shape forge renders for ${envName}, which registering records`}
+              forgeDisabled={props.daemon === "disabled"}
+            />
           )}
         </Panel>
         {props.forgeEnv && <ForgeLedgerFacts env={props.forgeEnv} />}
@@ -448,13 +452,14 @@ export function RunningTab({
   retrying: boolean;
   projectName?: string;
 }) {
-  if (daemon === "offline" || (envStatusError && !envStatus)) {
+  if (daemon === "offline" || daemon === "disabled" || (envStatusError && !envStatus)) {
     return (
       <DaemonNeeded
         what={`what forge env up is running for ${envName} on your machine`}
         detail={envStatusError?.message}
         onRetry={onRetry}
         retrying={retrying}
+        forgeDisabled={daemon === "disabled" || isForgeAPIDisabled(envStatusError)}
       />
     );
   }

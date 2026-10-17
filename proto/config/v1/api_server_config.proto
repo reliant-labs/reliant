@@ -48,4 +48,19 @@ message ApiServerConfig {
   }];
 
   ControlPlaneConfig control_plane = 5;
+
+  // Turns the forge RPC surface (ForgeService) off at this server: every forge
+  // rpc then answers FailedPrecondition, saying the forge API is disabled in
+  // this deployment. A kill switch, so unset means ON. StartDeploy applies to
+  // a live cluster, and the web app's own forge flag is per-browser
+  // localStorage that any crafted request bypasses, so the operator needs a
+  // switch at the server.
+  //
+  // Parsed as a bool (1/true/0/false, any case). The raw read this replaced
+  // also took yes/on and silently ignored anything else, which for a kill
+  // switch failed OPEN on a typo; an unrecognised value now stops the process.
+  bool disable_forge_api = 6 [(forge.v1.config) = {
+    env_var: "RELIANT_DISABLE_FORGE_API"
+    description: "Turn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)"
+  }];
 }

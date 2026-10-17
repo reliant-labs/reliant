@@ -52,6 +52,7 @@ import {
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { isAwakeMachine } from "@/lib/chatMachine";
+import { FORGE_API_DISABLED_COPY } from "@/lib/forgeApiDisabled";
 import {
   daemonSideForTab,
   daemonSideOf,
@@ -259,7 +260,9 @@ export function ForgeEnvPage() {
       ? null
       : daemon === "loading"
         ? "Checking your daemon…"
-        : "Needs your daemon: forge plans this against your checkout.";
+        : daemon === "disabled"
+          ? FORGE_API_DISABLED_COPY
+          : "Needs your daemon: forge plans this against your checkout.";
   const promoteReason =
     daemonReason ??
     (!daemonAsked

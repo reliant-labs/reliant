@@ -23,6 +23,7 @@
  * every derived fact is testable with object literals.
  */
 
+import { isForgeAPIDisabled } from "@/lib/forgeApiDisabled";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 
 import type { CloudEnv, CloudEnvStatus, CloudPromotion } from "./cloudEnvs";
@@ -357,13 +358,16 @@ export function envFacts(
 
 /**
  * What forge's side of the list is doing. `offline` is the daemon not
- * answering at all (a transport failure); the other non-report states are
- * forge's own answers, each rendered as itself by ForgeStates.
+ * answering at all (a transport failure); `disabled` is the API server
+ * refusing the forge API outright (its operator's kill switch), so no daemon
+ * was asked. The other non-report states are forge's own answers, each
+ * rendered as itself by ForgeStates.
  */
 export type DaemonSide =
   | "loading"
   | "ok"
   | "offline"
+  | "disabled"
   | "not-forge-project"
   | "unsupported"
   | "malformed"
@@ -378,7 +382,8 @@ export function daemonSideOf(
   }
   // No answer yet and no error is "still asking" — including the tick before
   // a project id resolves, when the query has not been enabled at all.
-  return error ? "offline" : "loading";
+  if (!error) return "loading";
+  return isForgeAPIDisabled(error) ? "disabled" : "offline";
 }
 
 /**

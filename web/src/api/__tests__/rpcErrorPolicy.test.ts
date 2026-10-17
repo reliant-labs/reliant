@@ -54,6 +54,22 @@ describe("classifyRpcFailure", () => {
   });
 });
 
+describe("forge_api_disabled", () => {
+  // The API server's operator turned the forge API off: ForgeService is
+  // mounted and answers FailedPrecondition with this reason. It used to be
+  // unmounted, and its 404 was read as this app being out of date.
+  it("is an expected answer, not a report and not version skew", () => {
+    const disabled = new ConnectError(
+      "the forge API is disabled in this deployment (RELIANT_DISABLE_FORGE_API)",
+      Code.FailedPrecondition,
+      new Headers({ "x-reliant-reason": "forge_api_disabled" }),
+    );
+    expect(
+      classifyRpcFailure(disabled, { serviceTypeName: "reliant.v1.ForgeService", signalAborted: false }),
+    ).toBe("expected");
+  });
+});
+
 describe("account_required", () => {
   const accountRequired = new ConnectError(
     "sign in with an email account to start a cloud machine",
