@@ -247,40 +247,34 @@ describe("Sidebar forge nav entry", () => {
     });
   });
 
-  // Forge is promoted, so it sits ABOVE Projects, directly after the entries
-  // that outrank every surface: New chat, the Inbox, and the Workflows area
-  // (WORKFLOW_UI.md §1.2, §14.1 decision 1). Pinned because the position is
-  // the product decision, not an accident of where the JSX was appended.
-  //
-  // This used to assert Inbox → Deployments. Phase 3 moved Workflows up to
-  // sit under the Inbox (§1.2's nav), so Deployments now follows Workflows;
-  // it still sits directly above Projects, which is the part that matters.
-  it("sits between Workflows and Projects", () => {
+  // Apps (the forge entry) sits directly under New chat: after writing code,
+  // the next place to go is what that code runs as. Pinned because the
+  // position is the product decision, not an accident of where the JSX was
+  // appended.
+  it("sits directly under New chat", () => {
     setProject(true);
     renderSidebar();
     const labels = screen
       .getByRole("navigation", { name: /chat sidebar navigation/i })
       .querySelectorAll("button");
     const text = Array.from(labels).map((b) => b.textContent?.trim());
-    expect(text.slice(0, 5)).toEqual(["New chat", "Inbox", "Workflows", "Deployments", "Projects"]);
+    expect(text.slice(0, 2)).toEqual(["New chat", "Apps"]);
   });
 
-  // The whole nav, in order (WORKFLOW_UI.md §1.2). Workflows is ONE entry for
-  // the area — Library, Runs and Automations are its tabs — and it sits
-  // directly under the Inbox, above Projects, because "what can run / what
-  // ran / what runs on its own" outranks switching project. Deployments is the
-  // gated forge entry and keeps its place just above Projects.
-  it("orders the nav New chat, Inbox, Workflows, Deployments, Projects, Search", () => {
+  // The whole nav, in order. Workflows is ONE entry for the area — Library,
+  // Runs and Automations are its tabs (WORKFLOW_UI.md §1.2) — and still sits
+  // under the Inbox, above Projects.
+  it("orders the nav New chat, Apps, Inbox, Workflows, Projects, Search", () => {
     setProject(true);
     renderSidebar();
     const labels = screen
       .getByRole("navigation", { name: /chat sidebar navigation/i })
       .querySelectorAll("button");
     const text = Array.from(labels).map((b) => b.textContent?.trim());
-    expect(text).toEqual(["New chat", "Inbox", "Workflows", "Deployments", "Projects", "Search"]);
+    expect(text).toEqual(["New chat", "Apps", "Inbox", "Workflows", "Projects", "Search"]);
   });
 
-  it("orders the nav New chat, Inbox, Workflows, Projects, Search with Deployments gated off", () => {
+  it("orders the nav New chat, Inbox, Workflows, Projects, Search with Apps gated off", () => {
     experimentalGate.enabled = false;
     setProject(true);
     renderSidebar();
@@ -291,26 +285,26 @@ describe("Sidebar forge nav entry", () => {
     expect(text).toEqual(["New chat", "Inbox", "Workflows", "Projects", "Search"]);
   });
 
-  // The entry is LABELLED Deployments but is still the forge entry underneath:
-  // the test id (and the route it opens) keep the forge name.
-  it("is labelled Deployments under the forge test id", () => {
+  // The entry is LABELLED Apps but is still the forge entry underneath: the
+  // test id (and the route it opens) keep the forge name.
+  it("is labelled Apps under the forge test id", () => {
     setProject(true);
     renderSidebar();
-    expect(screen.getByTestId("sidebar-forge-button")).toHaveTextContent("Deployments");
+    expect(screen.getByTestId("sidebar-forge-button")).toHaveTextContent("Apps");
   });
 
   // Observability is the project-level area of the same forge surface (console
   // v2, owner decision 1: environment is a filter, not a place), so it sits
-  // directly under Deployments and follows the same flag.
+  // directly under Apps and follows the same flag.
   describe("the Observability entry", () => {
-    it("sits directly under Deployments and opens the area", () => {
+    it("sits directly under Apps and opens the area", () => {
       const onOpenObservability = vi.fn();
       setProject(true);
       renderSidebar({ onOpenObservability });
       const text = Array.from(
         screen.getByRole("navigation", { name: /chat sidebar navigation/i }).querySelectorAll("button")
       ).map((b) => b.textContent?.trim());
-      expect(text).toEqual(["New chat", "Inbox", "Workflows", "Deployments", "Observability", "Projects", "Search"]);
+      expect(text).toEqual(["New chat", "Apps", "Observability", "Inbox", "Workflows", "Projects", "Search"]);
       screen.getByTestId("sidebar-observability-button").click();
       expect(onOpenObservability).toHaveBeenCalledTimes(1);
     });

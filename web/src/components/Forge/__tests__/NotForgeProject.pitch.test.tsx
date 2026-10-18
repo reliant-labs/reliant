@@ -4,7 +4,7 @@
  * The not-a-forge-project state: the fact first, then the case for forge.
  *
  * Most reliant projects have no forge.yaml, so this is the screen most people
- * see the first time they open Deployments. It used to say only "this is
+ * see the first time they open Apps. It used to say only "this is
  * expected" — accurate, and a dead end. It now states the same fact and then
  * says what forge would give this project and how to start.
  *

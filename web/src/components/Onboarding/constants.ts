@@ -74,16 +74,16 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: "deployments",
     type: "spotlight",
-    title: "Deployments",
+    title: "Apps",
     description:
-      "See every environment your project ships to — what's running where, and what changes before you promote or deploy.",
-    targetSelector: "[data-onboarding='deployments-button']",
+      "Everything your project runs: each environment, what's deployed where, its releases, and its logs, metrics and alerts.",
+    targetSelector: "[data-onboarding='apps-button']",
     skippable: true,
     spotlightConfig: {
       padding: 4,
       detectBorderRadius: true,
     },
-    // The Deployments entry is the forge UI's, which a user can switch off in
+    // The Apps entry is the forge UI's, which a user can switch off in
     // Settings → Developer — and then there is nothing to point at.
     isAvailable: isForgeUIEnabled,
   },

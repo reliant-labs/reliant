@@ -189,7 +189,7 @@ export function ForgeShell({
             style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}
           >
             {exit}
-            <span className="text-sm font-semibold tracking-tight text-ink">Deployments</span>
+            <span className="text-sm font-semibold tracking-tight text-ink">Apps</span>
           </div>
         }
         brandAccessory={scope}

@@ -1534,6 +1534,27 @@ function SidebarComponent({
             onClick={handleNewChat}
             testId="create-chat-button"
           />
+          {/* Apps is the running side of a project (environments, releases,
+              observability), so it sits directly under New chat: after
+              writing code, the next place to go is what that code runs as. */}
+          {showForgeEntry && (
+            <SidebarNavButton
+              icon={<Boxes className="h-4 w-4" />}
+              label="Apps"
+              onClick={onOpenForge}
+              testId="sidebar-forge-button"
+              onboardingId="apps-button"
+            />
+          )}
+          {/* Same gate as Apps: it is the same forge surface. */}
+          {showForgeEntry && onOpenObservability && (
+            <SidebarNavButton
+              icon={<Activity className="h-4 w-4" />}
+              label="Observability"
+              onClick={onOpenObservability}
+              testId="sidebar-observability-button"
+            />
+          )}
           <InboxNavItem onOpen={onOpenInbox} />
           {/* One entry for the whole area: Library, Runs and Automations are
               its tabs (WORKFLOW_UI.md §1.2), so they get no entries here. */}
@@ -1543,24 +1564,6 @@ function SidebarComponent({
             onClick={onOpenWorkflows}
             onboardingId="workflow-button"
           />
-          {showForgeEntry && (
-            <SidebarNavButton
-              icon={<Boxes className="h-4 w-4" />}
-              label="Deployments"
-              onClick={onOpenForge}
-              testId="sidebar-forge-button"
-              onboardingId="deployments-button"
-            />
-          )}
-          {/* Same gate as Deployments: it is the same forge surface. */}
-          {showForgeEntry && onOpenObservability && (
-            <SidebarNavButton
-              icon={<Activity className="h-4 w-4" />}
-              label="Observability"
-              onClick={onOpenObservability}
-              testId="sidebar-observability-button"
-            />
-          )}
           <SidebarNavButton
             icon={<FolderOpen className="h-4 w-4" />}
             label="Projects"

@@ -120,7 +120,7 @@ export function ForgeProjectSwitcher({ onProjectSelected }: ForgeProjectSwitcher
 /** The exit, as an icon in the sidebar's brand row. */
 export function ForgeCloseButton({ onClose }: { onClose: () => void }) {
   const { isElectron, noDragRegionStyle } = useTitleBarChrome({ alignedToWindowEdge: false });
-  const label = isElectron ? "Close Deployments" : "Back to app";
+  const label = isElectron ? "Close Apps" : "Back to app";
   return (
     <Tooltip content={`${label} (Esc)`} placement="bottom" delay={300}>
       <button
