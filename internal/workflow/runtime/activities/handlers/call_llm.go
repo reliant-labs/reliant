@@ -31,7 +31,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/rctx"
-	"github.com/reliant-labs/reliant/internal/skills/suggest"
 
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -1441,13 +1440,8 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	if projectCfg != nil {
 		requestedSkills, harnessSkills = withForgeStartHere(requestedSkills, projectCfg.Skills)
 	}
-	// The skills whose bodies this call actually seeded. Read again further
-	// down by injectSkillSuggestions, which must not tell the model to load
-	// what the seed just told it not to.
-	var preloadedSkillNames []string
 	if len(requestedSkills) > 0 {
 		seededMsgs, injectedSkills, oversizedSkills, missingSkills := buildSeededSkillMessages(projectCfg, requestedSkills)
-		preloadedSkillNames = injectedSkills
 		catalogSize := 0
 		snapshotSynced := false
 		if projectCfg != nil {
@@ -1533,16 +1527,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// backstop threshold scales with the prompt ceiling, matching the
 	// compaction trigger above.
 	history = prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, ceiling)
-
-	// Inject skill suggestions into the latest user message based on token matching.
-	// Skills come from the synced project config — no filesystem access.
-	if projectCfg != nil {
-		if n := injectSkillSuggestions(&history, projectCfg.Skills, preloadedSkillNames); n > 0 {
-			activity.GetLogger(ctx).Debug("[CallLLM] Injected skill suggestions",
-				"chatID", chat.ID,
-				"count", n)
-		}
-	}
 
 	toolNameDebug := summarizeToolNamesForLogging(availableTools)
 	activity.GetLogger(ctx).Debug("[CallLLM] Starting stream",
@@ -3122,109 +3106,6 @@ func trimBashWorkspaceCD(toolInput string, workspaceDir string) string {
 // handleError handles error events from the stream
 func (a *CallLLMActivity) handleError(event llm.DriverEvent) error {
 	return fmt.Errorf("LLM streaming error: %w", event.Error)
-}
-
-// isPreloadSeed reports whether m is the turn buildSeededSkillMessages emits.
-func isPreloadSeed(m message.Message) bool {
-	return strings.HasPrefix(m.Content().Text, preloadedSkillsPreamble)
-}
-
-// latestUserRequestText returns the text of the user's latest genuine request,
-// the thing the skill suggester scores.
-//
-// A user-role message is not always the user's. The harness writes some too:
-// the preload seed, mailbox envelopes and agent-result bodies, an inject brief.
-// Scoring those ranks harness prose the user never wrote, and on a thread that
-// preloaded skills the seed is the LAST user message, so the real request was
-// never scored. So the seed is skipped, and a message persisted hidden is only
-// a fallback: with no visible user message (a forked sub-agent whose brief was
-// injected hidden) the earliest user message, which is the brief, stands in.
-func latestUserRequestText(history []message.Message) string {
-	var brief string
-	for i := len(history) - 1; i >= 0; i-- {
-		m := history[i]
-		if m.Role != message.User || isPreloadSeed(m) {
-			continue
-		}
-		text := m.Content().Text
-		if text == "" {
-			continue
-		}
-		if !m.Hidden {
-			return text
-		}
-		brief = text // ends as the earliest hidden user message
-	}
-	return brief
-}
-
-// injectSkillSuggestions appends a reminder naming skills that match the
-// user's latest request (see latestUserRequestText). It returns the number
-// suggested, and 0 when it added nothing.
-//
-// A skill in preloaded is never suggested: the seed has just told the model it
-// is already loaded, and a reminder naming it directly beneath that is the
-// contradiction preloadedSkillsPreamble exists to prevent. Everything else that
-// matches is fair game, which is the point: a chat that preloads its starting
-// skills still has to be pointed at the one its request is about.
-//
-// The reminder is its OWN message and never edits another turn. Appending it to
-// the user's text made the user's words not be the user's words, and appending
-// it to the seed would break the prefix the seed is pinned for: the seed sits at
-// a stable early offset so the prompt cache reuses it, and a catalog-dependent
-// suffix invalidates that on every turn.
-//
-// It takes history by pointer because it appends; a slice passed by value
-// cannot grow for its caller.
-func injectSkillSuggestions(history *[]message.Message, catalog []cfgpkg.StoredSkill, preloaded []string) int {
-	const maxSuggestions = 5
-	if history == nil || len(catalog) == 0 {
-		return 0
-	}
-	request := latestUserRequestText(*history)
-	if request == "" {
-		return 0
-	}
-	loaded := make(map[string]bool, len(preloaded))
-	for _, name := range preloaded {
-		loaded[name] = true
-	}
-	var suggestions []suggest.Suggested
-	for _, s := range suggest.Suggest(catalog, request, 0) {
-		if loaded[s.Skill.Name] {
-			continue
-		}
-		suggestions = append(suggestions, s)
-		if len(suggestions) == maxSuggestions {
-			break
-		}
-	}
-	if len(suggestions) == 0 {
-		return 0
-	}
-
-	// Positioned after the request it is about, so the model reads the guidance
-	// with the request already in view.
-	*history = append(*history, message.Message{
-		Role:  message.User,
-		Parts: []message.ContentPart{message.TextContent{Text: buildSkillSuggestionReminder(suggestions)}},
-	})
-	return len(suggestions)
-}
-
-// buildSkillSuggestionReminder formats suggested skills as a system-reminder block.
-func buildSkillSuggestionReminder(suggestions []suggest.Suggested) string {
-	var sb strings.Builder
-	sb.WriteString("<system-reminder>\nPotentially relevant skills (use the skill tool to load if needed):\n")
-	for _, s := range suggestions {
-		desc := s.Skill.Description
-		if len(desc) > 80 {
-			desc = desc[:77] + "..."
-		}
-		fmt.Fprintf(&sb, "- %s: %s\n", s.Skill.Name, desc)
-	}
-	sb.WriteString("</system-reminder>")
-	return sb.String()
 }
 
 func formatStoredMemories(projectCfg *cfgpkg.Config) string {

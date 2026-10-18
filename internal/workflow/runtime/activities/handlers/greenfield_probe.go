@@ -67,10 +67,9 @@ import (
 // started with WorkflowInput.GreenfieldProbe on its first turn and calls this
 // activity once, after preflight and before its first LLM call. The guidance
 // therefore lands AFTER the user's first message rather than before it, which
-// is the position the run already uses for its other framing about a request
-// (skill suggestions, see injectSkillSuggestions): the model reads the ask,
-// then the note about the directory it is being asked to build in. Every
-// driver delivers a trailing System message (as a <system> user turn, or a
+// is the position the run already uses for its other framing about a request:
+// the model reads the ask, then the note about the directory it is being asked
+// to build in. Every driver delivers a trailing System message (as a <system> user turn, or a
 // developer message), and CallLLM's end-of-history guard only refuses an
 // assistant tail.
 //
