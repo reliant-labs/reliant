@@ -23,7 +23,7 @@ func TestTierResolutions_ReportModelAndEffortPerTag(t *testing.T) {
 	flagship, ok := tiers["flagship"]
 	require.True(t, ok, "flagship must resolve on anthropic")
 	assert.Equal(t, "claude-5.5-opus@anthropic", flagship.ModelId)
-	assert.Equal(t, "xhigh", flagship.ThinkingLevel)
+	assert.Equal(t, "high", flagship.ThinkingLevel)
 
 	moderate, ok := tiers["moderate"]
 	require.True(t, ok, "moderate must resolve on anthropic")

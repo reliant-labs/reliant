@@ -13,7 +13,7 @@
 #
 # The same model may appear under several tags at different efforts — that is
 # how one model serves several tiers. Each tier is tuned independently:
-# [flagship] is claude-5.5-opus at xhigh, [moderate] is claude-5.5-sonnet at
+# [flagship] is claude-5.5-opus at high, [moderate] is claude-5.5-sonnet at
 # high. No entry runs below high: output quality drops sharply under it (#649).
 # Retuning a tier is an edit HERE, never in a preset.
 #
@@ -61,7 +61,7 @@ tags:
     - {model: claude-5-sonnet, thinking_level: xhigh}   # copilot
 
   flagship:
-    - {model: claude-5.5-opus, thinking_level: xhigh}
+    - {model: claude-5.5-opus, thinking_level: high}
     - {model: claude-5-opus, thinking_level: high}
     - {model: claude-5.1-fable, thinking_level: xhigh}
     - {model: claude-4.8-opus, thinking_level: high}
@@ -81,7 +81,7 @@ tags:
     - {model: gemini-3.8-flash, thinking_level: high}
     - {model: gemini-3.7-flash, thinking_level: high}
     - {model: gemini-3.1-pro-preview, thinking_level: high}
-    - {model: vertex-claude-5.5-opus, thinking_level: xhigh}
+    - {model: vertex-claude-5.5-opus, thinking_level: high}
     - {model: vertex-claude-5-opus, thinking_level: high}
     - {model: vertex-claude-4.8-opus, thinking_level: high}
     - {model: vertex-claude-5.5-sonnet, thinking_level: high}
@@ -341,7 +341,7 @@ models:
   # max_tokens claude-cli sends (claudeCodeMaxTokens), not these maxima.
   # TestCatalogContextLimitsMatchProviders pins every value.
   #
-  # Claude 5.5 Opus leads [flagship] (at xhigh) in the tags section above: the
+  # Claude 5.5 Opus leads [flagship] (at high) in the tags section above: the
   # general agent and orchestrators ask for flagship. It is deliberately NOT
   # in [moderate] — implementation runs on Sonnet 5.5 at high. Nor is it
   # listed under `powerful` — that would collapse the powerful tier onto the
@@ -1820,7 +1820,7 @@ models:
 
   # The Vertex-only twin of claude-5.5-opus (which carries its own vertexai
   # mapping and so is what tag selectors actually reach). Its tier entries
-  # mirror claude-5.5-opus exactly — flagship @ xhigh, not moderate or
+  # mirror claude-5.5-opus exactly — flagship @ high, not moderate or
   # powerful — so the two spellings of one model can never disagree on effort.
   - id: vertex-claude-5.5-opus
     name: Vertex Claude 5.5 Opus

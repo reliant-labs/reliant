@@ -78,12 +78,12 @@ func TestResolveLLMCall_AppliesTagThinkingLevel(t *testing.T) {
 			wantThinking: "high",
 		},
 		{
-			// The general preset: [flagship] → 5.5 at the flagship entry's xhigh.
-			name:         "flagship tier runs claude-5.5-opus at xhigh",
+			// The general preset: [flagship] → 5.5 at the flagship entry's high.
+			name:         "flagship tier runs claude-5.5-opus at high",
 			selector:     models.ModelSelector{Tags: []string{models.TagFlagship}},
 			providers:    []string{"anthropic"},
 			wantModelID:  "claude-5.5-opus@anthropic",
-			wantThinking: "xhigh",
+			wantThinking: "high",
 		},
 		{
 			// The implementer preset: [moderate] → claude-5.5-sonnet at the

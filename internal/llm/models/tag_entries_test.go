@@ -15,7 +15,7 @@ import (
 
 // Agent presets name a TIER, never an effort: `general` asks for [flagship],
 // `implementer` asks for [moderate]. The two tiers are deliberately DIFFERENT
-// models: flagship is claude-5.5-opus @ xhigh for orchestration, moderate is
+// models: flagship is claude-5.5-opus @ high for orchestration, moderate is
 // claude-5.5-sonnet @ medium for implementation. These are the shipping pins —
 // changing either is a cost/speed/quality decision, so it must fail here.
 func TestResolve_AgentTiersPinModelAndEffort(t *testing.T) {
@@ -27,7 +27,7 @@ func TestResolve_AgentTiersPinModelAndEffort(t *testing.T) {
 		vertex    string // the vertex-only twin, which must mirror the entry
 		wantLevel string
 	}{
-		{TagFlagship, "claude-5.5-opus", "vertex-claude-5.5-opus", "xhigh"},
+		{TagFlagship, "claude-5.5-opus", "vertex-claude-5.5-opus", "high"},
 		{TagModerate, "claude-5.5-sonnet", "vertex-claude-5.5-sonnet", "high"},
 	} {
 		t.Run(tt.tag, func(t *testing.T) {
@@ -251,7 +251,7 @@ func TestMergeUserConfig_UserTagEntriesLeadAndRetune(t *testing.T) {
 	fallback, err := reg.Resolve(ModelSelector{Tags: []string{TagFlagship}}, []string{"anthropic"})
 	require.NoError(t, err)
 	assert.Equal(t, "claude-5.5-opus", fallback.Definition.ID)
-	assert.Equal(t, "xhigh", fallback.ThinkingLevel)
+	assert.Equal(t, "high", fallback.ThinkingLevel)
 
 	// The model appears exactly once in the merged list.
 	count := 0

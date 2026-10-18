@@ -517,7 +517,7 @@ func TestAgentPresetThinkingLevels(t *testing.T) {
 		pinned    string // explicit preset thinking_level; "" = none
 		effective string // what an Anthropic user's request carries
 	}{
-		"general.yaml":     {pinned: "", effective: "xhigh"},
+		"general.yaml":     {pinned: "", effective: "high"},
 		"implementer.yaml": {pinned: "", effective: "high"},
 		"researcher.yaml":  {pinned: "low", effective: "low"},
 	}
