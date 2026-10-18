@@ -587,6 +587,7 @@ export const forgeEnvPageSearchSchema = z.object({
     .enum([
       "overview",
       "observability",
+      "identity",
       "running",
       "releases",
       "activity",

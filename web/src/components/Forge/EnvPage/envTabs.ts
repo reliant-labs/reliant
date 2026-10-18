@@ -10,7 +10,7 @@
  *
  * The boundary still holds — per TAB:
  *
- *   overview  observability
+ *   overview  observability  identity
  *   releases  activity
  *   secrets   domains               the control plane only. Render with the
  *                                   daemon asleep, from any browser.
@@ -31,6 +31,12 @@
  * up` runs its own ClickStack on the developer's machine, and the hosted store
  * this tab reads only receives telemetry from deployed environments.
  *
+ * IDENTITY sits beside them for the same reason: "who can sign in to it?" is a
+ * question about the running environment, answered by the control plane's
+ * identity reconciler with no daemon. A local environment has the tab too, but
+ * its IdP is forge's dev IdP on the developer's machine, which reports nothing
+ * to the control plane — the tab says so rather than inventing a status.
+ *
  * A LOCAL environment has no releases (it runs the working tree) and leads
  * with what is running. An environment the control plane has no record of
  * leads with Overview, which is where Register lives.
@@ -41,6 +47,7 @@ import type { EnvLifecycle } from "@/services/forge/roster";
 export type EnvTab =
   | "overview"
   | "observability"
+  | "identity"
   | "running"
   | "releases"
   | "activity"
@@ -57,6 +64,7 @@ export interface EnvTabSpec {
 const SPECS: Record<EnvTab, EnvTabSpec> = {
   overview: { id: "overview", label: "Overview", needsDaemon: false },
   observability: { id: "observability", label: "Observability", needsDaemon: false },
+  identity: { id: "identity", label: "Identity", needsDaemon: false },
   running: { id: "running", label: "Running", needsDaemon: true },
   releases: { id: "releases", label: "Releases", needsDaemon: false },
   activity: { id: "activity", label: "Activity", needsDaemon: false },
@@ -67,8 +75,8 @@ const SPECS: Record<EnvTab, EnvTabSpec> = {
 export function tabsFor(lifecycle: EnvLifecycle): EnvTabSpec[] {
   const ids: EnvTab[] =
     lifecycle === "local"
-      ? ["running", "secrets"]
-      : ["overview", "observability", "releases", "activity", "secrets", "domains"];
+      ? ["running", "identity", "secrets"]
+      : ["overview", "observability", "identity", "releases", "activity", "secrets", "domains"];
   return ids.map((id) => SPECS[id]);
 }
 

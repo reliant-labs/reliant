@@ -1,0 +1,315 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+import "buf/validate/validate.proto";
+import "controlplane/v1/identity.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/identity/v1;identityv1";
+
+// === IdentityService (controlplane.v1.IdentityService) ===
+//
+// The console's window onto an environment's managed identity (a Zitadel
+// instance the control plane runs for the environment): its status, and the
+// day-to-day user administration an org does not want to do in KCL.
+//
+// ADDRESSED BY (org_id, environment_id), NEVER BY INSTANCE. Every RPC carries
+// both. org_id is a request field and is never trusted: the handler verifies
+// the caller's membership of THAT org, then that environment_id is a live
+// environment of it, before anything is relayed. A Zitadel instance id, a
+// System API credential or an owner key never reaches this server (DESIGN 3.4):
+// it relays the request, unchanged, to the identity reconciler's internal API
+// (IdentityInternalService), which alone maps (org, env) to an instance.
+//
+// AUTHORIZATION. Members may read (GetIdentityStatus, ListUsers). Every verb
+// that changes anything, and RequestExport, needs the org role admin or above.
+// Machine credentials are refused on every RPC. Every mutation is audited.
+//
+// DECLARED ROLES ARE READ-ONLY. A role the environment's identity declares with
+// members_from = declared is converged from KCL; invite, role and delete verbs
+// refuse to touch it ("managed in deploy/kcl/identity.k").
+//
+// ERRORS: InvalidArgument (missing id, unknown role), PermissionDenied (not a
+// member / not an admin / machine credential), NotFound (no such environment,
+// instance or user in it), FailedPrecondition (declared role, instance not
+// ready, export not enabled for this deployment), Unavailable (identity
+// management is not configured on this server).
+service IdentityService {
+  option (forge.v1.service) = {
+    name: "IdentityService"
+    version: "1.0.0"
+    description: "Managed-identity status and user administration for an environment"
+  };
+
+  // GetIdentityStatus reports the environment's identity instance: state, issuer,
+  // apps, deliveries and sharers. Read from the reconciler's rows; it dials no
+  // Zitadel and returns no secret.
+  rpc GetIdentityStatus(GetIdentityStatusRequest) returns (GetIdentityStatusResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListUsers lists the instance's human users with their state and roles.
+  rpc ListUsers(ListIdentityUsersRequest) returns (ListIdentityUsersResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // InviteUser creates the account if needed, grants the console-managed roles
+  // and has the instance email the invitee a link to set a credential.
+  rpc InviteUser(InviteIdentityUserRequest) returns (InviteIdentityUserResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // SetUserRoles replaces the user's console-managed roles. Declared roles are
+  // left as they are.
+  rpc SetUserRoles(SetIdentityUserRolesRequest) returns (SetIdentityUserRolesResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // SendPasswordReset emails the user a link to set a new password.
+  rpc SendPasswordReset(SendIdentityPasswordResetRequest) returns (SendIdentityPasswordResetResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // LockUser blocks sign-in for the user. Reversible with UnlockUser.
+  rpc LockUser(LockIdentityUserRequest) returns (LockIdentityUserResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  rpc UnlockUser(UnlockIdentityUserRequest) returns (UnlockIdentityUserResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // DeleteUser removes the account. A user who holds a declared role is
+  // refused: the next reconcile would recreate them.
+  rpc DeleteUser(DeleteIdentityUserRequest) returns (DeleteIdentityUserResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // RevokeSessions ends the user's sign-in sessions. Access tokens already
+  // issued stay valid until they expire.
+  rpc RevokeSessions(RevokeIdentitySessionsRequest) returns (RevokeIdentitySessionsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // RequestExport returns a signed, short-lived download URL for the
+  // environment's identity export. Exports are written when an environment's
+  // identity is withdrawn, so on a live instance with no export this is
+  // Unimplemented until on-demand export lands. FailedPrecondition where export
+  // is not enabled for this deployment.
+  rpc RequestExport(RequestIdentityExportRequest) returns (RequestIdentityExportResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // GetExportURL returns a fresh signed URL for the export that already exists
+  // (the one written when the identity was withdrawn). NotFound when there is
+  // none; FailedPrecondition where export is not enabled.
+  rpc GetExportURL(GetIdentityExportURLRequest) returns (GetIdentityExportURLResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+}
+
+message GetIdentityStatusRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetIdentityStatusResponse {
+  // False when the environment has no identity instance (it declares none, or
+  // its declaration was refused: see refused). Every other field is then zero.
+  bool has_instance = 1;
+  IdentityState state = 2;
+  string issuer = 3;
+  // The issuer's host, https://<domain>.
+  string domain = 4;
+  // Whether a public route to the instance exists. Private by default.
+  bool public = 5;
+  bool adopted = 6;
+  repeated IdentityApp apps = 7;
+  repeated IdentityDelivery deliveries = 8;
+  // The environment that owns the instance. Equals environment_id unless the
+  // environment shares another's (share_with).
+  string owner_environment_id = 9;
+  // Environments (other than the owner) with applications in the instance.
+  repeated string sharer_environment_ids = 10;
+  google.protobuf.Timestamp last_reconciled_at = 11;
+  google.protobuf.Timestamp next_attempt_at = 12;
+  string last_error = 13;
+  int32 failures = 14;
+  // When a withdrawn instance will be deleted.
+  google.protobuf.Timestamp grace_until = 15;
+  // Whether an export of the instance exists to download.
+  bool export_url_available = 16;
+  // Why the environment's declaration was refused on the reconciler's latest
+  // sweep, if it was.
+  string refused = 17;
+  // Whether the CALLER may use the mutating verbs here (org admin or above, on
+  // a server that can audit them). Set by admin-server, never by the
+  // reconciler, so a console can hide controls a member would be refused.
+  // A courtesy, not a control: every mutating RPC checks again.
+  bool caller_can_manage = 18;
+  // Whether this deployment can export identities at all. False means
+  // RequestExport and GetExportURL answer FailedPrecondition for every
+  // environment, so a console can say so without calling them.
+  bool export_enabled = 19;
+}
+
+message ListIdentityUsersRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+  // Case-insensitive substring of the email address.
+  optional string query = 3 [(buf.validate.field).string.max_len = 200];
+  optional IdentityUserState state = 4;
+  int32 page_size = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
+  string page_token = 6 [(buf.validate.field).string.max_len = 64];
+}
+
+message ListIdentityUsersResponse {
+  repeated IdentityUser users = 1;
+  string next_page_token = 2;
+  // The roles the environment declares, so a console can show which are
+  // read-only.
+  repeated IdentityRole roles = 3;
+}
+
+message InviteIdentityUserRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+  string email = 3 [
+    (buf.validate.field).string.email = true,
+    (buf.validate.field).string.max_len = 254
+  ];
+  // Console-managed roles to grant. A declared role is refused.
+  repeated string roles = 4 [(buf.validate.field).repeated = {
+    max_items: 20
+    items: {
+      string: {
+        min_len: 1
+        max_len: 200
+      }
+    }
+  }];
+}
+
+message InviteIdentityUserResponse {
+  string user_id = 1;
+  // False when the email already had an account (its roles were added to).
+  bool created = 2;
+}
+
+message SetIdentityUserRolesRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+  string user_id = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+  // The complete set of console-managed roles the user should hold. Declared
+  // roles the user holds are left as they are; naming one is refused.
+  repeated string roles = 4 [(buf.validate.field).repeated = {
+    max_items: 20
+    items: {
+      string: {
+        min_len: 1
+        max_len: 200
+      }
+    }
+  }];
+}
+
+message SetIdentityUserRolesResponse {
+  IdentityUser user = 1;
+}
+
+message SendIdentityPasswordResetRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+  string user_id = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+}
+
+message SendIdentityPasswordResetResponse {}
+
+message LockIdentityUserRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+  string user_id = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+}
+
+message LockIdentityUserResponse {}
+
+message UnlockIdentityUserRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+  string user_id = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+}
+
+message UnlockIdentityUserResponse {}
+
+message DeleteIdentityUserRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+  string user_id = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+}
+
+message DeleteIdentityUserResponse {}
+
+message RevokeIdentitySessionsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+  string user_id = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+}
+
+message RevokeIdentitySessionsResponse {
+  int32 sessions_revoked = 1;
+}
+
+message RequestIdentityExportRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+}
+
+message RequestIdentityExportResponse {
+  // A signed, short-lived download URL for the freshly written export.
+  string export_url = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message GetIdentityExportURLRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetIdentityExportURLResponse {
+  // A signed, short-lived download URL for the export that already exists
+  // (written when the identity was withdrawn).
+  string export_url = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}

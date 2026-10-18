@@ -9,7 +9,8 @@
  * on screen. The tabs now follow what a reader asks (envTabs.ts), and the
  * boundary is held per tab instead:
  *
- *   Overview · Releases · Activity
+ *   Overview · Observability · Identity
+ *   Releases · Activity
  *   Secrets · Domains               the control plane only (design §8.0,
  *                                   O-14). Render with the daemon asleep.
  *   Running                         what `forge env up` runs on the daemon's
@@ -73,6 +74,7 @@ import { CloudNotice } from "../SourceNotices";
 import { EnvLifecycleControls } from "./EnvLifecycleControls";
 import { EnvPageHeader } from "./EnvPageHeader";
 import { envHeadline } from "./envHeadline";
+import { IdentityTab } from "./IdentityTab";
 import { QueuedDeployBanner } from "./QueuedDeployBanner";
 import {
   ActivityTab,
@@ -159,6 +161,12 @@ export function ForgeEnvPage() {
   const liveEnv = useMemo(
     () => (live.data?.envs ?? []).find((candidate) => candidate.name === envName) ?? null,
     [live.data, envName]
+  );
+
+  // The identity status names owners and sharers by control-plane id.
+  const envNameById = useCallback(
+    (id: string) => (live.data?.envs ?? []).find((candidate) => candidate.id === id)?.name,
+    [live.data]
   );
 
   const forgeEnv = useMemo(() => {
@@ -401,6 +409,14 @@ export function ForgeEnvPage() {
             search={obsSearch}
             navigate={navigateObs}
             onWiden={openObservabilityArea}
+          />
+        ) : tab === "identity" ? (
+          <IdentityTab
+            envName={envName}
+            lifecycle={lifecycle}
+            live={liveEnv}
+            liveLoading={live.isLoading}
+            envNameById={envNameById}
           />
         ) : tab === "running" ? (
           <RunningTab
