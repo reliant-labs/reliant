@@ -91,7 +91,7 @@ func IsManagedDriver(id DriverID) bool {
 // driverPriority returns the ProviderPriority rank for a driver. Unknown
 // drivers rank last.
 func driverPriority(id DriverID) int {
-	if p, ok := ProviderPriority[string(id)]; ok && p != 0 {
+	if p, ok := ProviderPriority[string(id)]; ok {
 		return p
 	}
 	return 99

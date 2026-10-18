@@ -42,6 +42,7 @@ func TestClaude55SonnetProviderMappings(t *testing.T) {
 	reg := MustGetRegistry()
 
 	assert.Equal(t, map[string]string{
+		"claude":     "claude-sonnet-5-5",
 		"anthropic":  "claude-sonnet-5-5",
 		"openrouter": "anthropic/claude-sonnet-5.5",
 		"reliant":    "claude-sonnet-5-5",

@@ -202,12 +202,8 @@ func ParseModelIDWithDriver(modelID string) (string, string) {
 // sign-in appeared to work, nowhere near the code that was actually wrong. A
 // map has no default: an unregistered driver id returns nothing and the caller
 // installs no refresher, which fails visibly and immediately instead.
-//
-// Note the KEY is the driver id, which is not always the provider name: Claude
-// OAuth registers under "anthropic" because its access token routes to the
-// anthropic driver (see BuildAvailableDrivers).
 var oauthRefresherBuilders = map[models.DriverID]func(ctx context.Context, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)){
-	models.DriverID("anthropic"): func(ctx context.Context, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {
+	models.DriverID("claude"): func(ctx context.Context, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {
 		return BuildClaudeTokenRefresher(ctx, userID), BuildClaudeTokenReloader(ctx, userID)
 	},
 	models.DriverID("codex"): func(ctx context.Context, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {

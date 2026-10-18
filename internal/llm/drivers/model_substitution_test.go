@@ -24,10 +24,10 @@ import (
 
 // claudeOnly is prod user 30542add's providers on 2026-10-10: Codex
 // disconnected (UpdateProviderAPIKey 2026-10-09T22:56:22Z), Claude connected
-// (CompleteClaudeOAuth 22:56:40Z), which the resolver registers as anthropic.
+// (CompleteClaudeOAuth 22:56:40Z), which the resolver registers as claude.
 func claudeOnly() models.AvailableDrivers {
 	return models.AvailableDrivers{Drivers: map[models.DriverID]models.DriverConfig{
-		"anthropic": cfgFor("anthropic"),
+		"claude": cfgFor("claude"),
 	}}
 }
 
@@ -42,22 +42,22 @@ func TestSubstituteUnservableModel_PinnedToDisconnectedProviderMovesToSameTier(t
 	sub, ok := SubstituteUnservableModel(selector, claudeOnly())
 	require.True(t, ok, "a pin no connected provider serves must be substituted when a connected provider serves its tier")
 
-	want, err := models.MustGetRegistry().Resolve(models.ModelSelector{Tags: []string{models.TagPowerful}}, []string{"anthropic"})
+	want, err := models.MustGetRegistry().Resolve(models.ModelSelector{Tags: []string{models.TagPowerful}}, []string{"claude"})
 	require.NoError(t, err)
 	assert.Equal(t, "gpt-5.6-sol@codex", sub.From)
-	assert.Equal(t, want.Definition.ID+"@anthropic", sub.To, "gpt-5.6-sol's tier is powerful; the substitute is powerful's pick on anthropic")
+	assert.Equal(t, want.Definition.ID+"@claude", sub.To, "gpt-5.6-sol's tier is powerful; the substitute is powerful's pick on claude")
 	assert.Equal(t, sub.To, sub.Selector["id"], "the replacement is pinned like the picker pins")
 	assert.Equal(t, want.ThinkingLevel, sub.Selector["thinking_level"], "a different model runs at its tier's effort, not the old model's")
 	assert.Equal(t, "max", selector["thinking_level"], "the caller's selector is not mutated")
 
 	assert.Equal(t,
 		"gpt-5.6-sol runs only on Codex (ChatGPT), and Codex (ChatGPT) is not connected. So this chat continues on "+
-			want.Definition.ID+" via Anthropic (Claude), the same tier on a provider you have connected. "+
+			want.Definition.ID+" via Claude subscription, the same tier on a provider you have connected. "+
 			"To go back, reconnect Codex (ChatGPT) in Settings → Providers, then pick gpt-5.6-sol in the composer's model picker.",
 		sub.Notice)
 
 	reg := models.MustGetRegistry()
-	_, err = reg.Resolve(models.ModelSelector{ID: sub.To}, []string{"anthropic"})
+	_, err = reg.Resolve(models.ModelSelector{ID: sub.To}, []string{"claude"})
 	assert.NoError(t, err, "the substitute must be servable by the providers it was chosen from")
 }
 
@@ -81,7 +81,7 @@ func TestSubstituteUnservableModel_SameModelElsewhereKeepsTheEffort(t *testing.T
 	t.Parallel()
 	sub, ok := SubstituteUnservableModel(map[string]interface{}{"id": "claude-5.5-opus@copilot", "thinking_level": "low"}, claudeOnly())
 	require.True(t, ok)
-	assert.Equal(t, "claude-5.5-opus@anthropic", sub.To)
+	assert.Equal(t, "claude-5.5-opus@claude", sub.To)
 	assert.Equal(t, "low", sub.Selector["thinking_level"])
 }
 

@@ -90,11 +90,10 @@ func configuredDrivers(ctx context.Context, repo db.Repository, userID string) (
 			if claude.IsTokenExpired(tokens.ExpiresAt) && strings.TrimSpace(tokens.RefreshToken) == "" {
 				continue
 			}
-			// Claude OAuth tokens are sk-ant-oat keys that route to the anthropic driver
-			// (which auto-detects and uses ClaudeCodeClient for sk-ant-oat keys).
-			// We register under the "anthropic" driver ID so the resolver picks it up.
-			drivers[models.DriverID("anthropic")] = models.DriverConfig{
-				DriverID:         models.DriverID("anthropic"),
+			// The subscription is its own provider, "claude", distinct from an
+			// Anthropic API key ("anthropic"): both can be connected at once.
+			drivers[models.DriverID(driverID)] = models.DriverConfig{
+				DriverID:         models.DriverID(driverID),
 				APIKey:           accessToken,
 				Enabled:          true,
 				UserID:           userID,
@@ -303,13 +302,9 @@ func withAccountAvailability(ctx context.Context, drivers map[models.DriverID]mo
 }
 
 // hasRegisteredDriver reports whether a stored provider id has a registered
-// driver factory. The "claude" credential routes to the anthropic driver.
+// driver factory.
 func hasRegisteredDriver(providerID string) bool {
-	family := models.Family(providerID)
-	if providerID == "claude" {
-		family = models.Family("anthropic")
-	}
-	_, ok := registry.GetDriverFactory(family)
+	_, ok := registry.GetDriverFactory(models.Family(providerID))
 	return ok
 }
 

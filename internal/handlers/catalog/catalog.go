@@ -315,7 +315,8 @@ func capabilitiesToStrings(caps models.ModelCapabilities) []string {
 // getDriverDisplayName returns a human-readable name for a driver
 func getDriverDisplayName(driverID string) string {
 	displayNames := map[string]string{
-		"anthropic":  "Anthropic",
+		"anthropic":  "Anthropic API",
+		"claude":     "Claude subscription",
 		"openai":     "OpenAI",
 		"codex":      "Codex",
 		"gemini":     "Google AI",

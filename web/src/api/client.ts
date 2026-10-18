@@ -57,7 +57,8 @@ export const api = {
     // when a model is only known via ListAvailableModels (no catalog match).
     _driverDisplayName: (driverId: string): string => {
       const names: Record<string, string> = {
-        anthropic: "Anthropic",
+        anthropic: "Anthropic API",
+        claude: "Claude subscription",
         openai: "OpenAI",
         codex: "Codex",
         gemini: "Google AI",

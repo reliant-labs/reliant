@@ -54,7 +54,11 @@ func (r *ModelRegistry) WithAvailability(avail AvailabilityFunc) *ModelRegistry 
 
 // ProviderPriority defines the resolution priority for providers.
 // Lower numbers have higher priority.
+//
+// "claude" (a Claude subscription: prepaid) is 0 so it wins over "anthropic"
+// (the same models, metered per token) when a user has both connected.
 var ProviderPriority = map[string]int{
+	"claude":      0,
 	"anthropic":   1,
 	"antigravity": 1,
 	"codex":       1,

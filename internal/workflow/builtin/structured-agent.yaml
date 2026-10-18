@@ -23,7 +23,7 @@ inputs:
     description: LLM model to use
     default:
       tags: ["flagship"]
-      providers: ["anthropic"]
+      providers: ["claude", "anthropic"]
 
   tools:
     type: tools

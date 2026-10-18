@@ -57,8 +57,8 @@ func TestStreamIdleTimeoutIsRetryable(t *testing.T) {
 func TestStalledStreamWithMarkerIsRetryable(t *testing.T) {
 	markered := chatmarkers.Wrap(
 		chatmarkers.KindProviderStreamStalled,
-		"claude-code",
-		"the claude-code provider accepted the request but sent no content for 5m0s; retrying. If this repeats, check that the subscription has remaining credit",
+		"claude",
+		"the claude provider accepted the request but sent no content for 5m0s; retrying. If this repeats, check that the subscription has remaining credit",
 	)
 	err := fmt.Errorf("failed to stream LLM response: %s: %w", markered, llm.ErrStreamContentStalled)
 
@@ -75,7 +75,7 @@ func TestStalledStreamWithMarkerIsRetryable(t *testing.T) {
 	kind, payload, found := chatmarkers.Extract(classified.Error())
 	require.True(t, found, "marker must survive error wrapping and classification")
 	assert.Equal(t, chatmarkers.KindProviderStreamStalled, kind)
-	assert.Equal(t, "claude-code", payload)
+	assert.Equal(t, "claude", payload)
 }
 
 // TestStreamContentStalledIsRetryable is the same contract for the

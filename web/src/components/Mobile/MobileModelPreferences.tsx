@@ -43,11 +43,6 @@ const TAG_LABELS: Record<PreferenceTag, string> = {
   cheap: "Cheap",
 };
 
-// "claude" provider uses the "anthropic" driver — models report driverId
-// "anthropic", so matching only on provider name would miss them. Module
-// scope since it's a constant, not derived state.
-const PROVIDER_TO_DRIVER: Record<string, string> = { claude: "anthropic" };
-
 interface MobileModelPreferencesProps {
   providers: Array<{ provider: string; hasApiKey: boolean }>;
 }
@@ -64,9 +59,7 @@ export function MobileModelPreferences({
     const set = new Set<string>();
     for (const p of providers) {
       if (!p.hasApiKey) continue;
-      const key = p.provider.toLowerCase();
-      set.add(key);
-      if (PROVIDER_TO_DRIVER[key]) set.add(PROVIDER_TO_DRIVER[key]);
+      set.add(p.provider.toLowerCase());
     }
     return set;
   }, [providers]);

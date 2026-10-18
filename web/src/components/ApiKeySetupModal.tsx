@@ -31,7 +31,7 @@ import {
 const PROVIDERS = [
   {
     id: "claude" as const,
-    name: "Claude Code",
+    name: "Claude subscription",
     docsUrl: "https://claude.ai",
     keyFormat: "",
     usesOAuth: "claude" as const,
@@ -59,7 +59,7 @@ const PROVIDERS = [
   },
   {
     id: "anthropic" as const,
-    name: "Anthropic",
+    name: "Anthropic API",
     docsUrl: "https://console.anthropic.com/settings/keys",
     keyFormat: "sk-ant-...",
     usesOAuth: false as const,

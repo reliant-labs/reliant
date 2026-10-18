@@ -32,7 +32,7 @@ export type OAuthProviderKind = RedirectOAuthProvider | 'copilot'
  * must supply one.
  */
 export const REDIRECT_OAUTH_DISPLAY_NAMES: Record<RedirectOAuthProvider, string> = {
-  claude: 'Claude Code',
+  claude: 'Claude subscription',
   codex: 'Codex',
   antigravity: 'Antigravity',
 }

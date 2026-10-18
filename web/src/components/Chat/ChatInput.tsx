@@ -1845,7 +1845,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             : null;
                         const getProviderColor = (driverId?: string): string => {
                           switch (driverId) {
-                            case 'anthropic': return 'bg-orange-400';
+                            case 'anthropic': case 'claude': return 'bg-orange-400';
                             case 'openai': case 'codex': return 'bg-green-500';
                             case 'gemini': case 'vertexai': return 'bg-blue-400';
                             default: return 'bg-gray-400';

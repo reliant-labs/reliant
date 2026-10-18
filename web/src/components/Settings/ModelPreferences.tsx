@@ -149,17 +149,11 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
   const [expandedTag, setExpandedTag] = useState<string | null>(null);
 
   // Build a set of configured provider/driver names for matching models.
-  // Settings providers use names like "claude", "codex", "anthropic", "openai".
-  // Models have provider ("Anthropic") and driverId ("anthropic").
-  // "claude" provider uses the "anthropic" driver, so we map it.
-  const PROVIDER_TO_DRIVER: Record<string, string> = { claude: "anthropic" };
   const configuredProviders = useMemo(() => {
     const set = new Set<string>();
     for (const p of providers) {
       if (!p.hasApiKey) continue;
-      const key = p.provider.toLowerCase();
-      set.add(key);
-      if (PROVIDER_TO_DRIVER[key]) set.add(PROVIDER_TO_DRIVER[key]);
+      set.add(p.provider.toLowerCase());
     }
     return set;
   }, [providers]);

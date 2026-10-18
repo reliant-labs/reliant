@@ -363,6 +363,8 @@ models:
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
+      - driver: claude
+        api_model: claude-opus-5-5
       - driver: anthropic
         api_model: claude-opus-5-5
       - driver: openrouter
@@ -391,6 +393,8 @@ models:
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
+      - driver: claude
+        api_model: claude-opus-5
       - driver: anthropic
         api_model: claude-opus-5
       - driver: openrouter
@@ -421,6 +425,8 @@ models:
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
+      - driver: claude
+        api_model: claude-fable-5-1
       - driver: anthropic
         api_model: claude-fable-5-1
       - driver: openrouter
@@ -447,6 +453,8 @@ models:
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
+      - driver: claude
+        api_model: claude-opus-4-8
       - driver: anthropic
         api_model: claude-opus-4-8
       - driver: openrouter
@@ -493,6 +501,8 @@ models:
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
+      - driver: claude
+        api_model: claude-sonnet-5-5
       - driver: anthropic
         api_model: claude-sonnet-5-5
       - driver: openrouter
@@ -523,6 +533,8 @@ models:
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
+      - driver: claude
+        api_model: claude-sonnet-5
       - driver: anthropic
         api_model: claude-sonnet-5
       - driver: openrouter
@@ -555,6 +567,8 @@ models:
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
+      - driver: claude
+        api_model: claude-fable-5
       - driver: anthropic
         api_model: claude-fable-5
       - driver: openrouter
@@ -579,6 +593,8 @@ models:
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
     providers:
+      - driver: claude
+        api_model: claude-opus-4-6
       - driver: anthropic
         api_model: claude-opus-4-6
       - driver: openrouter
@@ -601,6 +617,8 @@ models:
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
     providers:
+      - driver: claude
+        api_model: claude-opus-4-5-20251101
       - driver: anthropic
         api_model: claude-opus-4-5-20251101
       - driver: openrouter
@@ -1309,6 +1327,8 @@ models:
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
     providers:
+      - driver: claude
+        api_model: claude-sonnet-4-6
       - driver: anthropic
         api_model: claude-sonnet-4-6
       - driver: openrouter
@@ -1335,6 +1355,9 @@ models:
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
     providers:
+      - driver: claude
+        api_model: claude-sonnet-4-5-20250929
+        max_context_window: 200000
       - driver: anthropic
         api_model: claude-sonnet-4-5-20250929
         max_context_window: 200000
@@ -1471,6 +1494,8 @@ models:
       max_output_tokens: 64000
       supported_file_types: [image, pdf, text]
     providers:
+      - driver: claude
+        api_model: claude-haiku-4-5-20251001
       - driver: anthropic
         api_model: claude-haiku-4-5-20251001
       - driver: openrouter

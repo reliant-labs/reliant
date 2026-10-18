@@ -102,6 +102,7 @@ func TestClaude55OpusProviderMappings(t *testing.T) {
 	}
 
 	assert.Equal(t, map[string]string{
+		"claude":     "claude-opus-5-5",
 		"anthropic":  "claude-opus-5-5",
 		"openrouter": "anthropic/claude-opus-5.5",
 		"reliant":    "claude-opus-5-5",
@@ -320,6 +321,7 @@ func TestClaude51FableProviderMappings(t *testing.T) {
 	}
 
 	assert.Equal(t, map[string]string{
+		"claude":     "claude-fable-5-1",
 		"anthropic":  "claude-fable-5-1",
 		"openrouter": "anthropic/claude-fable-5.1",
 		"reliant":    "claude-fable-5-1",

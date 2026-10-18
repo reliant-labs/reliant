@@ -115,7 +115,7 @@ func TestCacheControlTTL_AnthropicAPI(t *testing.T) {
 	requireTTLOrdering(t, ccs)
 }
 
-// TestCacheControlTTL_ClaudeCode pins the claude-code driver: the two base
+// TestCacheControlTTL_ClaudeCode pins the claude (subscription) driver: the two base
 // system blocks keep real Claude Code's ttl "1h" (see .dev/claude captures);
 // every other breakpoint (caller system block, message) carries no ttl, and the
 // 1h blocks precede all of them.

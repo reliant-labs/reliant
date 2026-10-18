@@ -146,20 +146,12 @@ func excerpt(s string, n int) string {
 	return s
 }
 
-// servedByAliases maps a driver Name() onto the provider id it serves when the
-// two differ. Claude OAuth registers under the "anthropic" driver id (its
-// sk-ant-oat token routes there) but its client reports "claude-code".
-var servedByAliases = map[string]string{"claude-code": "anthropic"}
-
 // servedElsewhere reports whether a cell pinned to provider was actually run by
 // a different driver. A cell that passes on the wrong provider is not a pass:
 // it is exactly the failure this check exists to surface.
 func servedElsewhere(provider, servedBy string) bool {
 	if provider == "" || servedBy == "" {
 		return false
-	}
-	if alias, ok := servedByAliases[servedBy]; ok {
-		servedBy = alias
 	}
 	return servedBy != provider
 }

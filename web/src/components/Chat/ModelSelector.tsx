@@ -55,6 +55,7 @@ function ModelSelectorComponent({
     const colors: Record<string, string> = {
       codex: "#10b981", // emerald-500 (ChatGPT Codex)
       anthropic: "#f97316", // orange-500
+      claude: "#fb923c", // orange-400 (Claude subscription)
       openai: "#22c55e", // green-500
       gemini: "#3b82f6", // blue-500
       "google ai": "#3b82f6", // blue-500

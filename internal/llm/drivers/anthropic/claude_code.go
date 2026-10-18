@@ -395,7 +395,7 @@ func (t *lowercaseHeaderTransport) RoundTrip(req *http.Request) (*http.Response,
 
 // Name returns the driver name
 func (c *ClaudeCodeClient) Name() string {
-	return "claude-code"
+	return string(ClaudeFamily)
 }
 
 // mcpToolName returns the name a tool is presented under in the request, which
@@ -577,8 +577,8 @@ func (c *ClaudeCodeClient) SendMessages(ctx context.Context, prompts []string, m
 	anthropicResponse, err := c.client.Messages.New(ctx, preparedMessages)
 	if err != nil {
 		logging.Error("Error in ClaudeCode API call", "error", err)
-		observability.LLMRequestsTotal.WithLabelValues("claude-code", "error").Inc()
-		observability.LLMRequestDuration.WithLabelValues("claude-code").Observe(time.Since(start).Seconds())
+		observability.LLMRequestsTotal.WithLabelValues(string(ClaudeFamily), "error").Inc()
+		observability.LLMRequestDuration.WithLabelValues(string(ClaudeFamily)).Observe(time.Since(start).Seconds())
 		return nil, err
 	}
 
@@ -601,21 +601,21 @@ func (c *ClaudeCodeClient) SendMessages(ctx context.Context, prompts []string, m
 	if err != nil {
 		// MalformedJSONError indicates transient streaming corruption
 		logging.Warn("ClaudeCode SendMessages: Tool call JSON validation failed (will retry)", "error", err)
-		observability.LLMRequestsTotal.WithLabelValues("claude-code", "error").Inc()
-		observability.LLMRequestDuration.WithLabelValues("claude-code").Observe(time.Since(start).Seconds())
+		observability.LLMRequestsTotal.WithLabelValues(string(ClaudeFamily), "error").Inc()
+		observability.LLMRequestDuration.WithLabelValues(string(ClaudeFamily)).Observe(time.Since(start).Seconds())
 		return nil, err
 	}
 
 	usage := c.usage(*anthropicResponse)
 
 	// Record metrics
-	observability.LLMRequestsTotal.WithLabelValues("claude-code", "success").Inc()
-	observability.LLMRequestDuration.WithLabelValues("claude-code").Observe(time.Since(start).Seconds())
+	observability.LLMRequestsTotal.WithLabelValues(string(ClaudeFamily), "success").Inc()
+	observability.LLMRequestDuration.WithLabelValues(string(ClaudeFamily)).Observe(time.Since(start).Seconds())
 	if usage.InputTokens > 0 {
-		observability.LLMTokensTotal.WithLabelValues("claude-code", "input").Add(float64(usage.InputTokens))
+		observability.LLMTokensTotal.WithLabelValues(string(ClaudeFamily), "input").Add(float64(usage.InputTokens))
 	}
 	if usage.OutputTokens > 0 {
-		observability.LLMTokensTotal.WithLabelValues("claude-code", "output").Add(float64(usage.OutputTokens))
+		observability.LLMTokensTotal.WithLabelValues(string(ClaudeFamily), "output").Add(float64(usage.OutputTokens))
 	}
 
 	return &llm.DriverResponse{
@@ -666,9 +666,4 @@ func (c *ClaudeCodeClient) ValidateKey(ctx context.Context) error {
 
 	_, err := validationClient.SendMessages(ctx, []string{}, testMessages, []toolsPkg.Tool{})
 	return err
-}
-
-// IsClaudeCodeKey returns true if the API key is a Claude Code key (sk-ant-oat prefix)
-func IsClaudeCodeKey(apiKey string) bool {
-	return strings.HasPrefix(apiKey, "sk-ant-oat")
 }

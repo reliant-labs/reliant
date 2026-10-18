@@ -75,11 +75,11 @@ describe("extractChatMarker", () => {
 
   it("extracts provider-stall marker with a provider-name payload", () => {
     const got = extractChatMarker(
-      "the claude-code provider accepted the request but sent no content for 5m0s; retrying. If this repeats, check that the subscription has remaining credit. [RELIANT_PROVIDER_STREAM_STALLED:claude-code]",
+      "the claude provider accepted the request but sent no content for 5m0s; retrying. If this repeats, check that the subscription has remaining credit. [RELIANT_PROVIDER_STREAM_STALLED:claude]",
     );
     expect(got).toEqual({
       kind: "RELIANT_PROVIDER_STREAM_STALLED" satisfies ChatMarkerKind,
-      payload: "claude-code",
+      payload: "claude",
     });
   });
 
