@@ -153,7 +153,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ledger import`](#reliant-forge-ledger-import) | Import a ledger from a checkout's committed history, or from another ledger directory |
 | [`reliant forge ledger show`](#reliant-forge-ledger-show) | Print this machine's ledger records — promotions, applies and local sessions |
 | [`reliant forge ledger where`](#reliant-forge-ledger-where) | Print which backend holds an environment's ledger, and the declaration that chose it |
-| [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project |
+| [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project (auto-fixes formatting in place first; --no-fix to only check) |
 | [`reliant forge login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`reliant forge logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
 | [`reliant forge observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
@@ -835,7 +835,7 @@ reliant forge
 | [`generate`](#reliant-forge-generate) | Generate code from proto files |
 | [`kcl`](#reliant-forge-kcl) | Evaluate this project's KCL directly |
 | [`ledger`](#reliant-forge-ledger) | Move and inspect deploy ledgers |
-| [`lint`](#reliant-forge-lint) | Run linters on the project |
+| [`lint`](#reliant-forge-lint) | Run linters on the project (auto-fixes formatting in place first; --no-fix to only check) |
 | [`login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
 | [`observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
@@ -4973,8 +4973,9 @@ Hooks:
   still passes. A run narrowed with --steps or --templates-only does not run
   them, and says so.
   FORGE_NO_GIT_HOOKS=1 is about GIT hooks, not these: it stops forge setting
-  core.hooksPath=.githooks and its merge driver in your clone. FORGE_NO_HOOKS=1
-  is its older name and means the same.
+  core.hooksPath=.githooks in your clone. FORGE_NO_HOOKS=1 is its older name
+  and means the same. Neither stops forge pointing the clone's merge driver
+  for generated files at the pinned forge; FORGE_NO_MERGE_DRIVER=1 does.
 
 Skipping:
   A full run that changes nothing records the tree as a verified fixed point
@@ -5331,7 +5332,7 @@ reliant forge ledger where <environment> [flags]
 
 ### reliant forge lint
 
-Run linters on the project
+Run linters on the project (auto-fixes formatting in place first; --no-fix to only check)
 
 Run various linters on the Forge project.
 
@@ -5347,14 +5348,17 @@ This command will:
   --conventions, --tests). Name several to run them all under one verdict:
   forge lint --conventions --contract
 
-By default 'forge lint' AUTO-FIXES deterministic-safe issues first, then
-gates on the residue: it canonicalizes Go formatting (goimports/gofmt import
-grouping + whitespace) across generated AND owned/hand-edited files, applies
-golangci-lint's safe autofixes, runs each frontend's own prettier over the
-src/ files you own (never generated or forge-refreshed ones), and runs
-eslint --fix on frontends — so mechanical formatting never surfaces as a
-gating error. Pass --no-fix to gate only and mutate nothing (CI / read-only
-checks); --json is always detect-only.
+By default 'forge lint' AUTO-FIXES deterministic-safe issues first, REWRITING
+FILES IN PLACE, then gates on the residue: it formats your Go source (never
+generated files) to the project's own gate — gofmt, plus goimports' import
+grouping with the local-prefixes your golangci-lint config declares, only
+when that config enables goimports — applies golangci-lint's safe autofixes,
+runs each frontend's own prettier over the src/ files you own (never
+generated or forge-refreshed ones), and runs eslint --fix on frontends — so
+mechanical formatting never surfaces as a gating error. It never rewrites a
+file the project's own formatter gate accepts. Under --scope it touches only
+files inside the scope. Pass --no-fix to gate only and mutate nothing (CI /
+read-only checks); --json is always detect-only.
 
 Examples:
   forge lint                     # Auto-fix deterministic-safe issues, then gate
@@ -5480,9 +5484,9 @@ reliant forge lint [paths...] [flags]
 | `--optional-deps-guard` | `bool` | - | Flag unguarded derefs of // forge:optional-dep Deps fields (warnings only; suppress with // forge:optional-checked on the deref line) |
 | `--proto-markers` | `bool` | - | Flag .proto comments containing forge: that match no known proto marker — a misspelled marker is inert and warns nowhere (warnings only) |
 | `--proto-options` | `bool` | - | Flag (forge.v1.*) annotation fields this forge binary's descriptors do not define — a retired or misspelled option field compiles under buf and is read by nothing (warnings only) |
-| `--quiet`, `-q` | `bool` | - | Print only what failed: a one-line summary per failing linter, its error findings, and the verdict as the LAST line (a clean run is one line). Auto-fix still applies; combines with the targeted flags and --scope |
+| `--quiet`, `-q` | `bool` | - | Print only what failed: a one-line summary per failing linter, its error findings, and the verdict as the LAST line (a clean run is one line). Auto-fix still rewrites files in place, silently (--no-fix to only check); combines with the targeted flags and --scope |
 | `--read-only-fields` | `bool` | - | Flag a forge:read-only field whose column nothing populates — no non-generated Go file assigns it, no meaningful DEFAULT, not GENERATED — so every row ships as the type's zero with no error anywhere. FAILS the build, except while the service still holds forge-scaffolded unwired rpc stubs (then a warning naming them) |
-| `--scope` | `stringSlice` | `[]` | Report only findings in files under `PATH` (repeatable or comma-separated, project-relative). Go linters run on PATH's packages only; file-anchored linters report only findings under PATH; whole-project linters (frontend lint, component-drift, config-reach) cannot be scoped, are skipped, and are named in the verdict. Auto-fix touches only files under PATH |
+| `--scope` | `stringSlice` | `[]` | Report only findings in files under `PATH` (repeatable or comma-separated, project-relative). Go linters run on PATH's packages only; file-anchored linters report only findings under PATH; whole-project linters (frontend lint, component-drift, config-reach) cannot be scoped, are skipped, and are named in the verdict. Auto-fix still rewrites files in place, only those under PATH (--no-fix to only check) |
 | `--show-suppressed` | `bool` | - | List every suppression the project declares, with file:line, what it covers and the stated reason: forge.yaml lint.rules (off/warn) and contracts.exclude, //forge:exclude-contract markers, forge:lint-disable* and nolint directives, and the migration and optional-dep pragmas. Read-only: runs no linter and exits 0; combines with --json and --scope |
 | `--skip-frontends` | `bool` | - | Skip the whole frontend lane (eslint/stylelint + TypeScript typecheck + static-export) for a backend-only gate that needs no Node toolchain |
 | `--static-export` | `bool` | - | For each Next.js frontend that must build to a static export (forge.yaml output: static, or bound to forge.OnHosted / OnBucket / OnFirebase in any env), report with file:line what the export cannot serve. FAILS on what next build refuses (a dynamic route without generateStaticParams, server actions, next/headers, next/image without images.unoptimized, a build that is not an export); WARNS on what it silently drops (middleware, non-GET route handlers, ungated rewrites/redirects/headers, a bucket-bound export without trailingSlash) |
