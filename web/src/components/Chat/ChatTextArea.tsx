@@ -17,6 +17,7 @@ import {
   type SlashCommandMenuHandle,
 } from "./SlashCommandMenu";
 import "./chat-composer.css";
+import { useSurface } from "../../lib/surfaceContext";
 
 /**
  * The chat composer.
@@ -140,6 +141,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
     },
     ref,
   ) {
+    const isMobile = useSurface() === "mobile";
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const slashMenuRef = useRef<SlashCommandMenuHandle>(null);
 
@@ -245,14 +247,14 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
       const handleFocusEvent = () => {
         const el = textareaRef.current;
         if (!el) return;
-        el.focus();
+        el.focus({ preventScroll: isMobile });
         el.setSelectionRange(el.value.length, el.value.length);
       };
 
       window.addEventListener("focus-chat-input", handleFocusEvent);
       return () =>
         window.removeEventListener("focus-chat-input", handleFocusEvent);
-    }, []);
+    }, [isMobile]);
 
     // Cmd+Enter inserts a newline while the composer has focus.
     //
@@ -339,7 +341,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
           className="chat-composer w-full resize-none border-0 bg-transparent px-0 py-0 text-base chat-input outline-none disabled:cursor-not-allowed disabled:opacity-50"
           style={{
             color: "var(--chat-input-text)",
-            maxHeight: 200,
+            maxHeight: isMobile ? "min(200px, calc(var(--mobile-viewport-height, 100dvh) * 0.3))" : 200,
           }}
         />
         {slashCommands && slashCommands.length > 0 && (

@@ -35,11 +35,40 @@
 
 import type { ReactNode } from "react";
 import { useEffect } from "react";
+import { useMobileViewport } from "../../hooks/useMobileViewport";
+import type { CSSProperties } from "react";
 import { SurfaceProvider } from "../../lib/surfaceContext";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 
 export function MobileLayout({ children }: { children: ReactNode }) {
+  const viewport = useMobileViewport();
+  // Safari can scroll the document while revealing a focused input even when
+  // the chat itself fits. Keep document scrolling separate from list scrolling.
+  useEffect(() => {
+    const targets = [
+      { element: document.documentElement, properties: { overflow: "hidden", height: "100%", "overscroll-behavior": "none" } },
+      { element: document.body, properties: { position: "fixed", top: "0", right: "0", bottom: "0", left: "0", width: "100%", height: "100%", overflow: "hidden", "overscroll-behavior": "none" } },
+    ];
+    const previous = targets.flatMap(({ element, properties }) => Object.entries(properties).map(([name, value]) => {
+      const saved = { element, name, value: element.style.getPropertyValue(name), priority: element.style.getPropertyPriority(name) };
+      element.style.setProperty(name, value);
+      return saved;
+    }));
+    return () => previous.forEach(({ element, name, value, priority }) => {
+      if (value) element.style.setProperty(name, value, priority);
+      else element.style.removeProperty(name);
+    });
+  }, []);
+  useEffect(() => {
+    const style = document.documentElement.style;
+    const previous = style.getPropertyValue("--mobile-bottom-inset");
+    style.setProperty("--mobile-bottom-inset", viewport.keyboardVisible ? "0px" : "env(safe-area-inset-bottom)");
+    return () => {
+      if (previous) style.setProperty("--mobile-bottom-inset", previous);
+      else style.removeProperty("--mobile-bottom-inset");
+    };
+  }, [viewport.keyboardVisible]);
   // The pre-hydration bootstrap in index.html only runs on a full page load,
   // but users reach /m/* by client-side redirect — so without this the mobile
   // type scale would only apply to hard navigations. Re-applying on mount (and
@@ -57,22 +86,29 @@ export function MobileLayout({ children }: { children: ReactNode }) {
   return (
     <SurfaceProvider surface="mobile">
       {/*
-        `100dvh` rather than `100vh`: on mobile Safari the visual viewport
-        shrinks when the URL bar is shown and `vh` does not follow, which puts
-        a sticky composer underneath the browser chrome. `dvh` tracks it.
+        The fixed frame tracks visualViewport rather than allowing Safari to
+        pan a scrolling document past the composer when the keyboard opens.
       */}
       <div
-        className="flex h-[100dvh] w-full flex-col overflow-hidden bg-background text-foreground"
+        className="fixed flex h-[100dvh] w-full flex-col overflow-hidden overscroll-none bg-background text-foreground"
         style={{
           // Top inset keeps content clear of the notch. Inline because these
           // are `env()` values Tailwind has no token for.
           paddingTop: "env(safe-area-inset-top)",
+          top: viewport.top,
+          left: viewport.left,
+          width: viewport.width,
+          height: viewport.height,
+          paddingLeft: "env(safe-area-inset-left)",
+          paddingRight: "env(safe-area-inset-right)",
+          "--mobile-viewport-height": `${viewport.height}px`,
           // The BOTTOM inset is deliberately not applied here. Padding on this
           // container would stop the tab bar's background short of the screen
           // edge, leaving a strip of page behind the home indicator. The bar
           // absorbs the inset itself so its background reaches the edge while
           // its tappable row stays above the indicator.
-        }}
+        } as CSSProperties}
+        data-keyboard-visible={viewport.keyboardVisible || undefined}
         data-surface="mobile"
       >
         {children}

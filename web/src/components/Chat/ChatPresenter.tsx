@@ -38,8 +38,8 @@ import type {
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useViewerStore } from "../../store/viewerStore";
-import { ChatActivity, MessageRole } from "../../gen/reliant/v1/chat_pb";
-import { useCapability } from "../../lib/surfaceContext";
+import { ChatActivity, ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
+import { useCapability, useSurface } from "../../lib/surfaceContext";
 import { useThreadMessages } from "../../hooks/message-queries";
 import { useChat } from "../../hooks/chat-queries";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
@@ -109,6 +109,8 @@ interface ChatPresenterProps {
 
   /** The host shows the chat's title itself; see ChatHeader.hideTitle. */
   hideChatTitle?: boolean;
+  /** Optional host navigation-bar slot for shared chat actions. */
+  headerActionsTarget?: HTMLElement | null;
 }
 
 export const ChatPresenter = memo(function ChatPresenter({
@@ -137,6 +139,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   hasOlderMessages,
   isChatSyncing = false,
   hideChatTitle,
+  headerActionsTarget,
 }: ChatPresenterProps) {
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -146,6 +149,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   // touch equivalent. chatExecutionSidebar is false for both mobile and
   // embed, so this single flag decides whether any of that state, effects,
   // or markup mount at all — never render-and-hide.
+  const isMobile = useSurface() === "mobile";
   const showDesktopChrome = useCapability("chatExecutionSidebar");
 
   // Thread selection state (lifted up to share between header and timeline)
@@ -525,6 +529,17 @@ export const ChatPresenter = memo(function ChatPresenter({
     void onStopStreaming();
   }, [onStopStreaming]);
 
+  const timelineMessages = useMemo(() => {
+    if (!selectedThreadMessages) return messages;
+    return selectedThreadMessages.filter(
+      (message: Message) => message.role !== MessageRole.TOOL
+    );
+  }, [selectedThreadMessages, messages]);
+  const mobileTail = timelineMessages[timelineMessages.length - 1];
+  const hasMobileInlineProgress = isMobile && mobileTail?.role === MessageRole.ASSISTANT && mobileTail.contentBlocks.some(block =>
+    block.type === ContentBlockType.TOOL_CALL || (block.type === ContentBlockType.TEXT && Boolean(block.content?.trim()))
+  );
+
   // Memoized because it is a prop of the memo()'d timeline: a fresh element
   // on every render would re-render the whole transcript on each pass —
   // which, during streaming, is many times per second.
@@ -535,6 +550,7 @@ export const ChatPresenter = memo(function ChatPresenter({
     if (hasThinkingFooter) {
       return (
         <ChatThinkingIndicator
+          hasInlineProgress={hasMobileInlineProgress}
           chatId={chatId || undefined}
           filterThreadId={selectedThreadId}
           waitingOnMachine={waitingOnMachine}
@@ -548,6 +564,7 @@ export const ChatPresenter = memo(function ChatPresenter({
     return hasQueuedForMachineFooter ? <QueuedForMachineNote /> : undefined;
   }, [
     machineNotice,
+    hasMobileInlineProgress,
     hasThinkingFooter,
     hasQueuedForMachineFooter,
     chatId,
@@ -576,12 +593,19 @@ export const ChatPresenter = memo(function ChatPresenter({
   // this array is InterleavedTimeline's `messages` prop and the timeline is
   // memo()'d — filtering on every render would hand it a fresh array each
   // pass and defeat that memo entirely.
-  const timelineMessages = useMemo(() => {
-    if (!selectedThreadMessages) return messages;
-    return selectedThreadMessages.filter(
-      (message: Message) => message.role !== MessageRole.TOOL
-    );
-  }, [selectedThreadMessages, messages]);
+
+
+  const [hasNewContent, setHasNewContent] = useState(false);
+  const assistantTail = [...timelineMessages].reverse().find(message => message.role === MessageRole.ASSISTANT);
+  const assistantSignature = assistantTail ? `${assistantTail.id}:${(assistantTail.contentBlocks || []).map(block => block.content || "").join("")}:${assistantTail.contentBlocks?.length ?? 0}` : "";
+  const seenAssistant = useRef({ scope: `${chatId}:${selectedThreadId}`, signature: assistantSignature });
+  useEffect(() => {
+    const scope = `${chatId}:${selectedThreadId}`;
+    const previous = seenAssistant.current;
+    if (timelineAtBottom || previous.scope !== scope) setHasNewContent(false);
+    else if (isMobile && !isLoadingOlderMessages && previous.signature && assistantSignature !== previous.signature) setHasNewContent(true);
+    seenAssistant.current = { scope, signature: assistantSignature };
+  }, [assistantSignature, chatId, selectedThreadId, timelineAtBottom, isMobile, isLoadingOlderMessages]);
 
   // Render the timeline
   const renderTimeline = () => (
@@ -624,6 +648,7 @@ export const ChatPresenter = memo(function ChatPresenter({
           onToggleWorkflowViewer={showDesktopChrome ? handleToggleWorkflowViewer : undefined}
           isWorkflowViewerOpen={isWorkflowViewerOpen}
           hideTitle={hideChatTitle}
+          actionsTarget={headerActionsTarget}
         />
 
         {!noMachine && <ResumeDaemonPill />}
@@ -718,7 +743,8 @@ export const ChatPresenter = memo(function ChatPresenter({
               background-work pill, permissions) can never sit on top of it. */}
           <ScrollToBottomButton
             visible={!timelineAtBottom}
-            onClick={scrollToBottom}
+            hasNewContent={hasNewContent}
+            onClick={() => { setHasNewContent(false); scrollToBottom(); }}
           />
         </ChatMessagesContainer>
         )}

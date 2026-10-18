@@ -34,6 +34,7 @@ export function MobileChatScreen() {
   const currentProject = useProjectStore((s) => s.currentProject);
   const worktrees = useWorktreeStore((s) => s.worktrees);
   const loadWorktrees = useWorktreeStore((s) => s.loadWorktrees);
+  const [headerActionsTarget, setHeaderActionsTarget] = useState<HTMLDivElement | null>(null);
   const [showWorkspace, setShowWorkspace] = useState(false);
 
   // A chat with no worktreeId runs against the project's main checkout — the
@@ -63,6 +64,7 @@ export function MobileChatScreen() {
         // three words, which tells the user less than the full line does.
         title={chat?.title || "Chat"}
         titleClassName="text-base font-semibold"
+        titleContent={<MobileWorkflowExecutionEntry chatId={chatId} title={chat?.title || "Chat"} />}
         leading={
           <Link
             to="/m/chats"
@@ -76,7 +78,9 @@ export function MobileChatScreen() {
           </Link>
         }
         trailing={
-          effectiveWorktreeId ? (
+          <div className="flex shrink-0 items-center">
+          <div ref={setHeaderActionsTarget} className="flex items-center" />
+          {effectiveWorktreeId ? (
             <button
               type="button"
               onClick={() => setShowWorkspace(true)}
@@ -85,15 +89,11 @@ export function MobileChatScreen() {
             >
               <FolderGit2 className="h-5 w-5" />
             </button>
-          ) : undefined
+          ) : null}
+          </div>
         }
       />
 
-      {/* Renders only while a workflow is actually executing — "what is my
-          agent doing right now" is the highest-value thing a phone can answer,
-          and it's the one workflow affordance mobile has (the desktop panel is
-          gated off via chatExecutionSidebar). */}
-      <MobileWorkflowExecutionEntry chatId={chatId} />
 
       {effectiveWorktreeId && (
         <MobileWorkspaceSheet
@@ -114,9 +114,9 @@ export function MobileChatScreen() {
           otherwise sit under the home indicator. */}
       <div
         className="min-h-0 flex-1"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        style={{ paddingBottom: "var(--mobile-bottom-inset, env(safe-area-inset-bottom))" }}
       >
-        <ChatContainer tabId={chatId} />
+        <ChatContainer tabId={chatId} hideChatTitle headerActionsTarget={headerActionsTarget} />
       </div>
     </div>
   );

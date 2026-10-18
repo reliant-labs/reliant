@@ -35,8 +35,8 @@ describe('shouldRedirectToMobile', () => {
     // A narrow desktop window still has a mouse, so the desktop layout and its
     // resize handles remain usable — redirecting it would be wrong.
     expect(shouldRedirectToMobile(phone({ coarsePointer: false }))).toBe(false)
-    // A touch device with a large screen (tablet, kiosk) fits the desktop shell.
-    expect(shouldRedirectToMobile(phone({ width: 1024 }))).toBe(false)
+    // Wider desktop/kiosk surfaces keep the desktop shell.
+    expect(shouldRedirectToMobile(phone({ width: 1440 }))).toBe(false)
   })
 
   it('treats the breakpoint as inclusive', () => {
@@ -98,3 +98,9 @@ describe('shouldRedirectToMobile', () => {
     expect(shouldRedirectToMobile(phone({ pathname: '/' }))).toBe(true)
   })
 })
+
+it.each([768, 820, 1024, 1366])('uses touch-friendly layout for a %ipx tablet', width => {
+  expect(shouldRedirectToMobile(phone({ width }))).toBe(true);
+  expect(shouldRedirectToMobile(phone({ width, optedOutOfMobile: true }))).toBe(false);
+  expect(shouldRedirectToMobile(phone({ width, coarsePointer: false }))).toBe(false);
+});

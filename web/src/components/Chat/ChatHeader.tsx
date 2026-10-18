@@ -1,12 +1,15 @@
 /**
  * ChatHeader - Chat header with title and stats
- * 
+ *
  * Shows:
  * - Chat title (editable)
  * - Menu button
  * - Stats row: file changes, processes, tasks, context usage, time ago
  */
 
+import { createPortal } from "react-dom";
+import { useSurface, useCapability } from "../../lib/surfaceContext";
+import { MobileChatSheet } from "./MobileChatSheet";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useContextUsage, useContextUsageByThread } from "../../store/chatStoreHooks";
 import { useWorktreeStore } from "../../store/worktreeStore";
@@ -58,6 +61,7 @@ interface ChatHeaderProps {
    * menu, context usage and thread tabs stay; the title and time-ago go.
    */
   hideTitle?: boolean;
+  actionsTarget?: HTMLElement | null;
 }
 
 export function ChatHeader({
@@ -70,7 +74,10 @@ export function ChatHeader({
   onToggleWorkflowViewer,
   isWorkflowViewerOpen,
   hideTitle = false,
+  actionsTarget,
 }: ChatHeaderProps) {
+  const isMobile = useSurface() === "mobile";
+  const canUseTerminal = useCapability("terminal");
   const chatQuery = useChat(chatId || undefined);
   const chat = chatQuery.data;
   const messagesQuery = useMessages(chatId || undefined);
@@ -124,7 +131,7 @@ export function ChatHeader({
     if (!wtId) return { workspaceName: null, workspacePath: null, worktree: null };
     const worktree = worktrees.find((w) => w.id === wtId);
     if (!worktree) return { workspaceName: null, workspacePath: null, worktree: null };
-    
+
     // Use branch name if available, otherwise use name
     return {
       workspaceName: worktree.branch || worktree.name || null,
@@ -156,11 +163,11 @@ export function ChatHeader({
       }
     };
 
-    if (isMenuOpen) {
+    if (isMenuOpen && !isMobile) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [isMenuOpen]);
+  }, [isMenuOpen, isMobile]);
 
   // Handle inline title editing
   const handleTitleClick = () => {
@@ -215,7 +222,7 @@ export function ChatHeader({
 
   const handleExportChat = () => {
     setIsMenuOpen(false);
-    
+
     if (!chatId || !chat) {
       console.error('No chat to export');
       return;
@@ -235,7 +242,7 @@ export function ChatHeader({
         const role = message.role === MessageRole.USER ? 'User' : 'Assistant';
         const timestamp = new Date(message.createdAt || '').toLocaleString();
         markdown += `## ${role} - ${timestamp}\n\n`;
-        
+
         // Iterate typed contentBlocks directly
         const blocks = message.contentBlocks || [];
         blocks.forEach((block) => {
@@ -258,7 +265,7 @@ export function ChatHeader({
             }
           }
         });
-        
+
         markdown += `---\n\n`;
       });
 
@@ -280,7 +287,7 @@ export function ChatHeader({
 
   const handleOpenTerminal = () => {
     setIsMenuOpen(false);
-    
+
     if (!workspacePath || !worktree) {
       console.error('No workspace path available');
       return;
@@ -289,7 +296,7 @@ export function ChatHeader({
     try {
       // Check if there are existing sessions for this worktree
       const existingSessions = getWorktreeSessions(effectiveWorktreeId);
-      
+
       if (existingSessions.length > 0) {
         // Activate the first existing session
         setActiveSession(existingSessions[0].id);
@@ -301,7 +308,7 @@ export function ChatHeader({
           effectiveWorktreeId // worktreeId
         );
       }
-      
+
       // Show the terminal panel
       showTerminal();
     } catch (err) {
@@ -326,162 +333,180 @@ export function ChatHeader({
     }
   }, [isEditingTitle]);
 
+  const menuItems = (<>
+      <button
+        onClick={() => {
+          handleTitleClick();
+          setIsMenuOpen(false);
+        }}
+        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+      >
+        <Edit2 className="h-4 w-4" />
+        Edit Title
+      </button>
+
+      {workflowExecution && onToggleWorkflowViewer && (
+        <button
+          onClick={() => {
+            onToggleWorkflowViewer();
+            setIsMenuOpen(false);
+          }}
+          className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+        >
+          <Workflow className="h-4 w-4" />
+          {isWorkflowViewerOpen ? "Hide" : "Show"} Workflow
+        </button>
+      )}
+
+      {workspacePath && canUseTerminal && (
+        <button
+          onClick={handleOpenTerminal}
+          className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+        >
+          <Terminal className="h-4 w-4" />
+          Open Terminal
+        </button>
+      )}
+
+      {worktree && chatId && (
+        <WorkspaceRecoveryMenuItems
+          chatId={chatId}
+          worktree={worktree}
+          mainWorktree={mainWorktree}
+          onSelect={() => setIsMenuOpen(false)}
+        />
+      )}
+
+      <button
+        onClick={handleExportChat}
+        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+      >
+        <Download className="h-4 w-4" />
+        Export Chat
+      </button>
+
+      <button
+        onClick={handleCopyChatId}
+        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+      >
+        <Copy className="h-4 w-4" />
+        Copy Chat ID
+      </button>
+
+      <div className="border-t border-border my-1" />
+
+      <button
+        onClick={handleDeleteChat}
+        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2 text-destructive-ink"
+      >
+        <Trash2 className="h-4 w-4" />
+        Delete Chat
+      </button>
+  </>);
+  const headerControls = (
+    <div className="flex items-center gap-1">
+      {/* Back to parent thread - only when viewing a spawned/child thread */}
+      {showBackButton && (
+        <Tooltip
+          content={backTargetThread ? `Back to ${backTargetThread.name}` : "Back to main thread"}
+          placement="bottom"
+        >
+          <button
+            onClick={() => onSelectThread?.(backTargetThread ? backTargetThread.id : null)}
+            className={isMobile ? "flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full active:bg-foreground/5" : "p-1 hover:bg-accent rounded transition-colors flex-shrink-0"}
+            aria-label="Back to parent thread"
+          >
+            <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </Tooltip>
+      )}
+
+      {/* Title - click to edit inline */}
+      {isMobile || (hideTitle && !isEditingTitle) ? null : isEditingTitle ? (
+        <input
+          ref={titleInputRef}
+          type="text"
+          value={editedTitle}
+          onChange={(e) => setEditedTitle(e.target.value)}
+          onKeyDown={handleTitleKeyDown}
+          onBlur={handleTitleBlur}
+          className="text-base font-semibold text-foreground leading-tight bg-transparent border-b border-primary focus:outline-none focus:border-primary flex-1 min-w-0"
+        />
+      ) : (
+        <h1
+          onClick={handleTitleClick}
+          className={`text-base font-semibold text-foreground leading-tight truncate ${
+            isNewChat ? '' : 'cursor-text hover:text-foreground/80'
+          } transition-colors`}
+        >
+          {title}
+        </h1>
+      )}
+
+      {/* Menu button - right after title */}
+      {!isNewChat && chatId && (
+        <div className="relative flex-shrink-0" ref={menuRef}>
+<Tooltip content="Chat options" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <button
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className={isMobile ? "flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full active:bg-foreground/5" : "p-1 hover:bg-accent rounded transition-colors"}
+            aria-label="More options"
+          >
+            <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+          </button>
+</Tooltip>
+
+          {/* Dropdown menu */}
+          {isMenuOpen && (isMobile ? (
+            <MobileChatSheet title="Chat actions" onClose={() => setIsMenuOpen(false)}>
+      <div className="flex flex-col">{menuItems}</div>
+            </MobileChatSheet>
+          ) : (
+            <div className="absolute left-0 top-full mt-1 w-64 bg-popover border border-border rounded-md shadow-lg py-1 z-50">{menuItems}</div>
+          ))}
+
+        </div>
+      )}
+
+      {/* A chat with no machine says so where the user looks first, and
+          the pill is the way to connect one (NO_MACHINE_CHATS.md §2.4). */}
+      {!isNewChat && chatId && chat?.noMachine && !isMobile && <NoMachinePill chatId={chatId} />}
+
+      {/* Spacer to push time to the right */}
+      {!isMobile && <div className="flex-1" />}
+
+      {/* Context usage - the one stat that changes what you do next */}
+      {!isNewChat && (!isMobile || (contextUsage?.threadTokenCount ?? 0) > 0) && (
+        <ContextUsageIndicator
+          threadTokenCount={contextUsage?.threadTokenCount ?? 0}
+          compactionThreshold={contextUsage?.compactionThreshold ?? 200000}
+          compact={true}
+        />
+      )}
+
+      {/* Time ago - top right */}
+      {timeAgo && !hideTitle && !isMobile && (
+        <span className="text-xs text-muted-foreground flex-shrink-0">{timeAgo}</span>
+      )}
+    </div>
+  );
+
   return (
-    <div className="flex items-center bg-card/30 flex-shrink-0">
-      <div className="px-4 sm:px-6 lg:px-8 py-1 w-full">
+    <div className={isMobile ? "mobile-chat-header shrink-0 bg-background" : "flex items-center bg-card/30 flex-shrink-0"}>
+      <div className={isMobile ? "w-full px-3" : "px-4 sm:px-6 lg:px-8 py-1 w-full"}>
         <div className="max-w-[1200px] mx-auto">
+          {isMobile && isEditingTitle && <MobileChatSheet title="Edit chat title" onClose={handleCancelEdit}>
+            <form onSubmit={event => { event.preventDefault(); void handleSaveTitle(); }} className="space-y-3">
+              <input ref={titleInputRef} aria-label="Chat title" value={editedTitle} onChange={event => setEditedTitle(event.target.value)} className="min-h-[44px] w-full rounded-xl border border-border bg-background px-3 text-base" />
+              <button type="submit" disabled={!editedTitle.trim() || renameMutation.isPending} className="min-h-[44px] w-full rounded-xl bg-foreground px-3 text-background disabled:opacity-50">Save title</button>
+            </form>
+          </MobileChatSheet>}
+          {isMobile && chatId && chat?.noMachine && <div className="py-1"><NoMachinePill chatId={chatId} /></div>}
+
           <div className="flex flex-col gap-0.5">
             {/* Row 1: Title, Menu, and Time */}
-            <div className="flex items-center gap-1">
-              {/* Back to parent thread - only when viewing a spawned/child thread */}
-              {showBackButton && (
-                <Tooltip
-                  content={backTargetThread ? `Back to ${backTargetThread.name}` : "Back to main thread"}
-                  placement="bottom"
-                >
-                  <button
-                    onClick={() => onSelectThread?.(backTargetThread ? backTargetThread.id : null)}
-                    className="p-1 hover:bg-accent rounded transition-colors flex-shrink-0"
-                    aria-label="Back to parent thread"
-                  >
-                    <ArrowLeft className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                </Tooltip>
-              )}
+            {isMobile && actionsTarget ? createPortal(headerControls, actionsTarget) : headerControls}
 
-              {/* Title - click to edit inline */}
-              {hideTitle && !isEditingTitle ? null : isEditingTitle ? (
-                <input
-                  ref={titleInputRef}
-                  type="text"
-                  value={editedTitle}
-                  onChange={(e) => setEditedTitle(e.target.value)}
-                  onKeyDown={handleTitleKeyDown}
-                  onBlur={handleTitleBlur}
-                  className="text-base font-semibold text-foreground leading-tight bg-transparent border-b border-primary focus:outline-none focus:border-primary flex-1 min-w-0"
-                />
-              ) : (
-                <h1 
-                  onClick={handleTitleClick}
-                  className={`text-base font-semibold text-foreground leading-tight truncate ${
-                    isNewChat ? '' : 'cursor-text hover:text-foreground/80'
-                  } transition-colors`}
-                >
-                  {title}
-                </h1>
-              )}
-              
-              {/* Menu button - right after title */}
-              {!isNewChat && chatId && (
-                <div className="relative flex-shrink-0" ref={menuRef}>
-<Tooltip content="Chat options" placement="bottom" delay={300} wrapperClassName="inline-flex">
-                  <button 
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="p-1 hover:bg-accent rounded transition-colors"
-                    aria-label="More options"
-                  >
-                    <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-                  </button>
-</Tooltip>
-                  
-                  {/* Dropdown menu */}
-                  {isMenuOpen && (
-                    <div className="absolute left-0 top-full mt-1 w-64 bg-popover border border-border rounded-md shadow-lg py-1 z-50">
-                      <button
-                        onClick={() => {
-                          handleTitleClick();
-                          setIsMenuOpen(false);
-                        }}
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                        Edit Title
-                      </button>
-                      
-                      {workflowExecution && onToggleWorkflowViewer && (
-                        <button
-                          onClick={() => {
-                            onToggleWorkflowViewer();
-                            setIsMenuOpen(false);
-                          }}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                        >
-                          <Workflow className="h-4 w-4" />
-                          {isWorkflowViewerOpen ? "Hide" : "Show"} Workflow
-                        </button>
-                      )}
-
-                      {workspacePath && (
-                        <button
-                          onClick={handleOpenTerminal}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                        >
-                          <Terminal className="h-4 w-4" />
-                          Open Terminal
-                        </button>
-                      )}
-
-                      {worktree && (
-                        <WorkspaceRecoveryMenuItems
-                          chatId={chatId}
-                          worktree={worktree}
-                          mainWorktree={mainWorktree}
-                          onSelect={() => setIsMenuOpen(false)}
-                        />
-                      )}
-                      
-                      <button
-                        onClick={handleExportChat}
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                      >
-                        <Download className="h-4 w-4" />
-                        Export Chat
-                      </button>
-                      
-                      <button
-                        onClick={handleCopyChatId}
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                      >
-                        <Copy className="h-4 w-4" />
-                        Copy Chat ID
-                      </button>
-                      
-                      <div className="border-t border-border my-1" />
-                      
-                      <button
-                        onClick={handleDeleteChat}
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2 text-destructive-ink"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete Chat
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {/* A chat with no machine says so where the user looks first, and
-                  the pill is the way to connect one (NO_MACHINE_CHATS.md §2.4). */}
-              {!isNewChat && chatId && chat?.noMachine && <NoMachinePill chatId={chatId} />}
-
-              {/* Spacer to push time to the right */}
-              <div className="flex-1" />
-
-              {/* Context usage - the one stat that changes what you do next */}
-              {!isNewChat && (
-                <ContextUsageIndicator
-                  threadTokenCount={contextUsage?.threadTokenCount ?? 0}
-                  compactionThreshold={contextUsage?.compactionThreshold ?? 200000}
-                  compact={true}
-                />
-              )}
-
-              {/* Time ago - top right */}
-              {timeAgo && !hideTitle && (
-                <span className="text-xs text-muted-foreground flex-shrink-0">{timeAgo}</span>
-              )}
-            </div>
-            
             {/* Row 2: Thread tabs (only show if multiple threads) */}
             {!isNewChat && hasMultipleThreads && onSelectThread && (
               <ThreadTabs

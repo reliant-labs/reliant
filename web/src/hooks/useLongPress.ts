@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useEffect } from "react";
 
 const LONG_PRESS_MS = 500;
 // Movement past this many px cancels the press — without it, the start of a
@@ -14,14 +14,7 @@ export interface LongPressHandlers {
   onContextMenu: (e: React.SyntheticEvent) => void;
 }
 
-/**
- * Classes for any element that carries the long-press handlers. iOS starts a
- * native text selection (plus the callout) at about the same 500ms the press
- * fires; a selection anchored in the message extends to the end of the
- * document and ends up under the actions sheet, where a tap toggles the
- * system edit menu instead of dispatching `click`. "Copy message" in the
- * sheet replaces native copy on these surfaces.
- */
+/** Action sheets suppress native selection; message text remains selectable. */
 export const LONG_PRESS_SURFACE_CLASS = "select-none [-webkit-touch-callout:none]";
 
 /**
@@ -44,22 +37,29 @@ export function useLongPress(onLongPress: () => void): LongPressHandlers {
     startRef.current = null;
   }, []);
 
+  useEffect(() => {
+    document.addEventListener("scroll", clear, true);
+    return () => { document.removeEventListener("scroll", clear, true); clear(); };
+  }, [clear]);
+
   const onTouchStart = useCallback(
     (e: React.TouchEvent) => {
+      clear();
+      firedRef.current = false;
+      if ((e.target as Element).closest("a, button, input, textarea, pre, code, [data-message-interactive], [role=button]") || Boolean(window.getSelection()?.toString())) return;
       const touch = e.touches[0];
       if (!touch) return;
       startRef.current = { x: touch.clientX, y: touch.clientY };
       firedRef.current = false;
       timerRef.current = setTimeout(() => {
-        firedRef.current = true;
         timerRef.current = null;
-        // Drop any selection the browser already began for this press, so it
-        // can't survive under the sheet that is about to open.
-        window.getSelection()?.removeAllRanges();
+        // Native text selection takes priority over the secondary action gesture.
+        if (window.getSelection()?.toString()) return;
+        firedRef.current = true;
         onLongPress();
       }, LONG_PRESS_MS);
     },
-    [onLongPress],
+    [onLongPress, clear],
   );
 
   const onTouchMove = useCallback(
@@ -94,7 +94,7 @@ export function useLongPress(onLongPress: () => void): LongPressHandlers {
 
   // Android Chrome opens its own selection/context menu on long-press.
   const onContextMenu = useCallback((e: React.SyntheticEvent) => {
-    e.preventDefault();
+    if (firedRef.current) e.preventDefault();
   }, []);
 
   return { onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, onContextMenu };

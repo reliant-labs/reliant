@@ -48,7 +48,7 @@ vi.mock("../../Chat/ChatContainer", () => ({
 // React Query client (useWorkflowExecutions) that this suite has no provider
 // for, and its own behavior is covered in MobileWorkflowExecutionEntry.test.
 vi.mock("../MobileWorkflowExecutionEntry", () => ({
-  MobileWorkflowExecutionEntry: () => null,
+  MobileWorkflowExecutionEntry: ({ title }: { title?: string }) => title ? <h1>{title}</h1> : null,
 }));
 
 vi.mock("../MobileWorkspaceSheet", () => ({

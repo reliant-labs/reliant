@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Check, Send, MessageSquare, ChevronRight } from "lucide-react";
+import { useSurface } from "../../lib/surfaceContext";
 import { cn } from "../../lib/utils";
 
 interface QuestionOption {
@@ -26,6 +27,7 @@ export interface QuestionPromptProps {
 }
 
 export function QuestionPrompt({ questions, onSubmit }: QuestionPromptProps) {
+  const isMobile = useSurface() === "mobile";
   const totalSteps = questions.length;
   const isMultiStep = totalSteps > 1;
 
@@ -138,7 +140,7 @@ export function QuestionPrompt({ questions, onSubmit }: QuestionPromptProps) {
   }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="px-2 py-3 max-h-[40vh] overflow-y-auto overscroll-contain">
+    <div data-mobile-question={isMobile || undefined} className="px-2 py-3 max-h-[40vh] overflow-y-auto overscroll-contain" style={isMobile ? {maxHeight: "min(40vh, calc(var(--mobile-viewport-height, 100dvh) * 0.4))"} : undefined}>
       {/* Step indicator (multi-question only) */}
       {isMultiStep && (
         <div className="flex items-center gap-1.5 mb-2">
@@ -255,7 +257,7 @@ export function QuestionPrompt({ questions, onSubmit }: QuestionPromptProps) {
           />
 
           {/* Navigation buttons */}
-          <div className="flex items-center justify-between pt-1">
+          <div className={cn("flex items-center justify-between pt-1", isMobile && "sticky bottom-0 bg-background py-2")}>
             <div>
               {isMultiStep && currentStep > 0 && (
                 <button

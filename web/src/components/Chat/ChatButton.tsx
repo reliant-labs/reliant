@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { useSurface } from "../../lib/surfaceContext";
 import { Tooltip } from "../ui/Tooltip";
 
 interface ChatButtonProps {
@@ -20,12 +21,12 @@ export function ChatButton({
   testId,
   compact = false,
 }: ChatButtonProps) {
-  return (
-    <Tooltip content={tooltip} placement="top" delay={300} wrapperClassName="inline-flex">
+  const isMobile = useSurface() === "mobile";
+  const button = (
       <button
         onClick={onClick}
         disabled={disabled}
-        aria-label={tooltip}
+        aria-label={isMobile ? tooltip.replace(/\s+\((?:Esc|Enter)\)$/, "") : tooltip}
         className={`chat-button flex items-center justify-center rounded-full text-2xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
           compact
             ? "p-1 h-6 w-6"
@@ -35,6 +36,10 @@ export function ChatButton({
       >
         {children}
       </button>
+  );
+  return isMobile ? button : (
+    <Tooltip content={tooltip} placement="top" delay={300} wrapperClassName="inline-flex">
+      {button}
     </Tooltip>
   );
 }

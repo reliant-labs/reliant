@@ -20,8 +20,9 @@
  * `:active` state was the only feedback a tap got, and it read as a dead button.
  */
 
+import { MobileChatSheet } from "../Chat/MobileChatSheet";
 import { useState, type ReactNode } from "react";
-import { Check, ChevronRight, X } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 export interface MobileSettingOption {
@@ -108,8 +109,10 @@ export function MobileSelectRow({
   sheetTitle,
   placeholder,
   action,
+  icon,
 }: {
   label: string;
+  icon?: ReactNode;
   description?: string;
   value: string;
   options: MobileSettingOption[];
@@ -130,17 +133,18 @@ export function MobileSelectRow({
         onClick={() => setOpen(true)}
         className="flex min-h-[44px] w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-foreground/5"
       >
+        {icon && <span className="flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-xl bg-foreground/5 text-muted-foreground">{icon}</span>}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground">{label}</p>
           {description && (
             <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground">
-          <span className="max-w-[140px] truncate">
+        <div className="flex min-w-0 max-w-[50%] items-center gap-1 text-sm text-muted-foreground">
+          <span className="min-w-0 truncate">
             {selected?.label ?? (value || placeholder)}
           </span>
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4 shrink-0" />
         </div>
       </button>
       {open && (
@@ -187,29 +191,8 @@ export function MobileOptionSheet({
   action?: MobileSheetAction;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end">
-      <button
-        type="button"
-        aria-label="Dismiss"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/40"
-      />
-      <div
-        className="relative flex max-h-[75vh] flex-col rounded-t-2xl border-t border-border bg-background shadow-lg"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="text-sm font-semibold text-foreground">{title}</span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-muted-foreground active:bg-muted"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+    <MobileChatSheet title={title} onClose={onClose} closeLabel="Close">
+        <div className="py-1">
           {options.map((option) => {
             const isSelected = option.value === value;
             return (
@@ -249,8 +232,7 @@ export function MobileOptionSheet({
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </MobileChatSheet>
   );
 }
 

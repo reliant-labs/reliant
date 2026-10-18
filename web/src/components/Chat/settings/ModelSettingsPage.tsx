@@ -1,3 +1,4 @@
+import { useSurface } from "../../../lib/surfaceContext";
 import { useState, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, X, Search, Settings2 } from "lucide-react";
@@ -20,6 +21,7 @@ import { preferredThinkingLevel, resolveThinkingCapabilityForModel } from "../..
 interface ModelSettingsPageProps {
   value: unknown; // { tags: [...] }, { id: "..." }, or { tags: [...], temperature: 0.4, thinking_level: "high", ... }
   onChange: (value: unknown) => void;
+  showHeader?: boolean;
   onBack: () => void;
   onClose: () => void;
 }
@@ -103,10 +105,12 @@ function buildModelValue(
 export function ModelSettingsPage({
   value,
   onChange,
+  showHeader = true,
   onBack,
   onClose,
 }: ModelSettingsPageProps) {
   const navigate = useNavigate();
+  const isMobile = useSurface() === "mobile";
   const parsed = parseModelValue(value);
 
   // Determine initial tab from current value
@@ -292,9 +296,10 @@ export function ModelSettingsPage({
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/50">
+      <div hidden={!showHeader} className={showHeader ? "flex items-center gap-2 px-3 py-2.5 border-b border-border/50" : "hidden"}>
         <button
           onClick={onBack}
+          aria-label="Back to chat settings"
           className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
@@ -305,20 +310,28 @@ export function ModelSettingsPage({
         <button
           onClick={() => {
             onClose();
-            navigate({ to: '/settings/$section', params: { section: 'general' } });
+            if (isMobile) void navigate({ to: '/m/settings' });
+            else void navigate({ to: '/settings/$section', params: { section: 'general' } });
           }}
           title="Model preferences"
+          aria-label="Model preferences"
           className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
         >
           <Settings2 className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={onClose}
+          aria-label="Close model settings"
           className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
         >
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {!showHeader && <button type="button" aria-label="Model preferences" className="ml-auto flex min-h-[44px] items-center gap-2 px-3 text-xs text-muted-foreground" onClick={() => {
+        onClose();
+        void navigate({ to: '/m/settings' });
+      }}><Settings2 className="h-4 w-4" />Model preferences</button>}
 
       {/* Tab bar */}
       <div className="flex border-b border-border/50 px-3">

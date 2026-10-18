@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useMobileViewport } from "../../hooks/useMobileViewport";
 import { cn } from "../../lib/utils";
 import { LONG_PRESS_SURFACE_CLASS } from "../../hooks/useLongPress";
 
@@ -21,6 +22,8 @@ export interface MessageActionsSheetAction {
 
 interface MessageActionsSheetProps {
   isOpen: boolean;
+  /** Long presses must wait for the opening finger to lift; clicks are already released. */
+  waitForRelease?: boolean;
   onClose: () => void;
   actions: MessageActionsSheetAction[];
   /** Full formatted timestamp shown as a non-interactive header row. */
@@ -29,10 +32,12 @@ interface MessageActionsSheetProps {
 
 export function MessageActionsSheet({
   isOpen,
+  waitForRelease = true,
   onClose,
   actions,
   timestampLabel,
 }: MessageActionsSheetProps) {
+  const viewport = useMobileViewport(isOpen);
   const sheetRef = useRef<HTMLDivElement>(null);
   // Mounted a frame before `open` so the transition can animate in rather
   // than snapping to its final position on first paint.
@@ -55,6 +60,10 @@ export function MessageActionsSheet({
       return;
     }
 
+    if (!waitForRelease) {
+      setAcceptsInput(true);
+      return;
+    }
     const arm = () => setAcceptsInput(true);
     // `pointerup` rather than `touchend`: the portal steals the touch sequence
     // from the pressed element, and a document-level pointer listener is what
@@ -75,7 +84,7 @@ export function MessageActionsSheet({
       }
       window.clearTimeout(timer);
     };
-  }, [isOpen]);
+  }, [isOpen, waitForRelease]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -102,7 +111,7 @@ export function MessageActionsSheet({
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-[9999] flex items-end justify-center",
+        "fixed z-[9999] flex items-end justify-center",
         // A selection must never be able to cover the buttons (iOS swallows
         // taps on selected text).
         LONG_PRESS_SURFACE_CLASS,
@@ -119,6 +128,7 @@ export function MessageActionsSheet({
         // the upper screen lands there and dismissed the sheet instantly.
         !acceptsInput && "pointer-events-none",
       )}
+      style={{ top: viewport.top, left: viewport.left, width: viewport.width, height: viewport.height }}
     >
       {/* Backdrop */}
       <div
@@ -134,11 +144,12 @@ export function MessageActionsSheet({
         ref={sheetRef}
         role="dialog"
         aria-modal="true"
+        aria-label="Message actions"
         className={cn(
-          "relative w-full max-w-lg rounded-t-2xl border-t border-border bg-popover shadow-2xl transition-transform duration-200",
+          "relative flex max-h-[90%] w-full max-w-lg flex-col rounded-t-2xl border-t border-border bg-popover shadow-2xl transition-transform duration-200",
           visible ? "translate-y-0" : "translate-y-full",
         )}
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        style={{ paddingBottom: "var(--mobile-bottom-inset, env(safe-area-inset-bottom))" }}
       >
         {/* Grab handle — decorative, signals "this is a sheet" at a glance. */}
         <div className="flex justify-center pt-2">
@@ -151,7 +162,7 @@ export function MessageActionsSheet({
           </div>
         )}
 
-        <div className="flex flex-col px-2 pb-2 pt-1">
+        <div className="flex min-h-0 flex-col overflow-y-auto overscroll-contain px-2 pb-2 pt-1">
           {actions.map((action) => (
             <button
               key={action.key}

@@ -17,6 +17,7 @@ interface ParamsSettingsPageProps {
   inputs: Record<string, InputDef>;
   values: Record<string, unknown>;
   onChange: (values: Record<string, unknown>) => void;
+  showHeader?: boolean;
   onBack: () => void;
   onClose: () => void;
   excludeParams?: string[];
@@ -26,6 +27,7 @@ export function ParamsSettingsPage({
   inputs,
   values,
   onChange,
+  showHeader = true,
   onBack,
   onClose,
   excludeParams = DEFAULT_EXCLUDE,
@@ -99,8 +101,8 @@ export function ParamsSettingsPage({
   if (groups.length === 0) {
     return (
       <div>
-        <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2.5">
-          <button onClick={onBack} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+        <div className={showHeader ? "flex items-center gap-2 border-b border-border/50 px-3 py-2.5" : "hidden"}>
+          <button onClick={onBack} aria-label="Back to chat settings" className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
             <ChevronLeft className="h-4 w-4" />
           </button>
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -109,7 +111,7 @@ export function ParamsSettingsPage({
             </div>
             <h3 className="text-sm font-semibold">Settings</h3>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+          <button onClick={onClose} aria-label="Close chat settings" className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -123,8 +125,8 @@ export function ParamsSettingsPage({
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2.5">
-        <button onClick={onBack} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+      <div className={showHeader ? "flex items-center gap-2 border-b border-border/50 px-3 py-2.5" : "hidden"}>
+        <button onClick={onBack} aria-label="Back to chat settings" className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
           <ChevronLeft className="h-4 w-4" />
         </button>
         <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -138,7 +140,7 @@ export function ParamsSettingsPage({
             </p>
           </div>
         </div>
-        <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+        <button onClick={onClose} aria-label="Close chat settings" className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>

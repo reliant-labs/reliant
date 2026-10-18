@@ -19,11 +19,10 @@ describe('surface capabilities', () => {
 
   it('keeps authoring off the mobile surface', () => {
     // The central product decision for mobile: monitor and trigger, do not
-    // author. These four are the ones most likely to be re-litigated by a
+    // author. These are the ones most likely to be re-litigated by a
     // reasonable-sounding feature request, so pin them.
     const caps = capabilitiesFor('mobile')
     expect(caps.workflowAuthoring).toBe(false)
-    expect(caps.chatWorkflowParams).toBe(false)
     expect(caps.terminal).toBe(false)
     expect(caps.chatExecutionSidebar).toBe(false)
   })
@@ -90,7 +89,6 @@ describe('surface capabilities', () => {
     const caps = capabilitiesFor('mobile')
     expect(caps.gitManagement).toBe(false)
     expect(caps.worktreeManage).toBe(false)
-    expect(caps.chatAttachments).toBe(false)
   })
 
   it('lets mobile manage machines through the dedicated machine surface', () => {
@@ -215,3 +213,9 @@ describe('surface capabilities', () => {
     })
   })
 })
+
+it('enables shared mobile composer attachments and configuration', () => {
+  const caps = capabilitiesFor('mobile');
+  expect(caps.chatAttachments).toBe(true);
+  expect(caps.chatWorkflowParams).toBe(true);
+});

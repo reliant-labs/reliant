@@ -33,6 +33,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useSurface } from "../../lib/surfaceContext";
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 
@@ -88,9 +89,10 @@ export const SlashCommandMenu = forwardRef<
   SlashCommandMenuHandle,
   SlashCommandMenuProps
 >(function SlashCommandMenu({ value, commands, anchorRef, onConsume }, ref) {
+  const isMobile = useSurface() === "mobile";
   const [highlighted, setHighlighted] = useState(0);
   const [dismissed, setDismissed] = useState(false);
-  const [position, setPosition] = useState<{ left: number; top: number } | null>(
+  const [position, setPosition] = useState<{ left: number; top: number; maxHeight: number } | null>(
     null,
   );
   const listRef = useRef<HTMLDivElement>(null);
@@ -152,14 +154,32 @@ export const SlashCommandMenu = forwardRef<
     const anchor = anchorRef.current;
     if (!anchor) return;
 
-    const rect = anchor.getBoundingClientRect();
-    const height = Math.min(MENU_MAX_HEIGHT, matches.length * ROW_HEIGHT + 16);
+    const updatePosition = () => {
+      const rect = anchor.getBoundingClientRect();
+      const viewport = window.visualViewport;
+      const viewportTop = viewport?.offsetTop ?? 0;
+      const viewportHeight = viewport?.height ?? window.innerHeight;
+      const rootFontSize = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+      const width = Math.min(rootFontSize * 20, window.innerWidth - VIEWPORT_PADDING * 2);
+      const height = Math.min(MENU_MAX_HEIGHT, matches.length * ROW_HEIGHT + 16, viewportHeight - VIEWPORT_PADDING * 2);
 
-    // Prefer opening upward: the composer sits at the bottom of the window.
-    let top = rect.top - height - 8;
-    if (top < VIEWPORT_PADDING) top = rect.bottom + 8;
+      // Prefer opening upward: the composer sits at the bottom of the window.
+      let top = rect.top - height - 8;
+      if (top < viewportTop + VIEWPORT_PADDING) top = rect.bottom + 8;
+      top = Math.max(viewportTop + VIEWPORT_PADDING, Math.min(top, viewportTop + viewportHeight - height - VIEWPORT_PADDING));
 
-    setPosition({ left: Math.max(VIEWPORT_PADDING, rect.left), top });
+      setPosition({ maxHeight: Math.max(44, viewportTop + viewportHeight - top - VIEWPORT_PADDING), left: Math.max(VIEWPORT_PADDING, Math.min(rect.left, window.innerWidth - width - VIEWPORT_PADDING)), top });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.visualViewport?.addEventListener("resize", updatePosition);
+    window.visualViewport?.addEventListener("scroll", updatePosition);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.visualViewport?.removeEventListener("resize", updatePosition);
+      window.visualViewport?.removeEventListener("scroll", updatePosition);
+    };
+
   }, [visible, matches.length, anchorRef]);
 
   // Keep the highlighted row scrolled into view.
@@ -238,10 +258,10 @@ export const SlashCommandMenu = forwardRef<
       data-slash-menu-open="true"
       role="listbox"
       aria-label="Slash commands"
-      className="fixed z-50 w-80 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
-      style={{ left: position.left, top: position.top }}
+      className="fixed z-50 flex flex-col w-80 max-w-[calc(100vw-16px)] overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
+      style={{ left: position.left, top: position.top, maxHeight: position.maxHeight }}
     >
-      <div ref={listRef} className="max-h-80 overflow-y-auto py-1">
+      <div ref={listRef} className="min-h-0 max-h-80 overflow-y-auto py-1">
         {matches.map((command, index) => (
           <button
             key={command.id}
@@ -251,6 +271,7 @@ export const SlashCommandMenu = forwardRef<
             aria-selected={index === highlighted}
             className={cn(
               "flex w-full items-start gap-3 px-3 py-2 text-left transition-colors",
+              isMobile && "min-h-[44px]",
               index === highlighted ? "bg-accent" : "hover:bg-accent/50",
             )}
             // Keep focus in the composer: losing it moves the caret and closes
@@ -282,7 +303,7 @@ export const SlashCommandMenu = forwardRef<
           </button>
         ))}
       </div>
-      <div className="border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
+      <div className={cn("shrink-0 border-t border-border px-3 py-1.5 text-xs text-muted-foreground", isMobile && "hidden")}>
         ↑↓ navigate · ↵ run · esc dismiss
       </div>
     </div>,

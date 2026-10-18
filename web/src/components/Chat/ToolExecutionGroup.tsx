@@ -72,7 +72,7 @@ function ToolExecutionGroupComponent({
   // while its rows were individually collapsed would hide them twice over.
   const surface = useSurface();
   const [expanded, setExpanded] = useState(() =>
-    executions.some(({ call }) => !shouldToolBeCollapsed(call.name, surface))
+    surface !== "mobile" && executions.some(({ call }) => !shouldToolBeCollapsed(call.name, surface))
   );
 
   useEffect(() => {
@@ -84,6 +84,7 @@ function ToolExecutionGroupComponent({
   // Pick up preference changes made in Settings without a reload.
   useEffect(() => {
     const applyNewDefault = () => {
+      if (surface === "mobile") return;
       setExpanded(executions.some(({ call }) => !shouldToolBeCollapsed(call.name, surface)));
     };
     window.addEventListener(TOOL_COLLAPSE_SETTINGS_EVENT, applyNewDefault);
@@ -168,6 +169,32 @@ function ToolExecutionGroupComponent({
     return `${head} and ${rest} other ${rest === 1 ? "tool" : "tools"}`;
   }, [executions]);
 
+  const mobileLabel = useMemo(() => {
+    if (executions.length === 1) {
+      const call = executions[0].call;
+      let input = call.input;
+      if (typeof input === "string") { try { input = JSON.parse(input); } catch { input = undefined; } }
+      if (/shell|bash/.test(call.name) && input && typeof input === "object") {
+        const command = input.command ?? input.cmd;
+        if (typeof command === "string") return `${summary.running ? "Running" : "Ran"} ${truncate(command, 72)}`;
+      }
+      const formatted = formatToolParams(call.name, call.input as ToolInput);
+      return formatted?.summary ? truncate(formatted.summary, 72) : call.name.replace(/^mcp__.*__/, "");
+    }
+    const counts = new Map<string, number>();
+    executions.forEach(({ call }) => {
+      const label = /shell|bash/.test(call.name) ? "commands" : /read|view_file/.test(call.name) ? "files read" : /search|grep|glob/.test(call.name) ? "searches" : /edit|write|patch/.test(call.name) ? "file edits" : "other actions";
+      counts.set(label, (counts.get(label) || 0) + 1);
+    });
+    return Array.from(counts, ([label, count]) => {
+      if (label === "commands") return `${summary.running ? "Running" : "Ran"} ${count} command${count === 1 ? "" : "s"}`;
+      if (label === "files read") return `Read ${count} file${count === 1 ? "" : "s"}`;
+      if (label === "file edits") return `Edited ${count} file${count === 1 ? "" : "s"}`;
+      if (label === "searches") return `${count} search${count === 1 ? "" : "es"}`;
+      return `${count} other action${count === 1 ? "" : "s"}`;
+    }).join(" · ");
+  }, [executions, summary.running]);
+
   const hasAnyErrors = summary.errors > 0;
   const hasAnyCancelled = summary.cancelled > 0;
   const isAllCompleted = summary.completed === summary.total && summary.total > 0;
@@ -175,10 +202,10 @@ function ToolExecutionGroupComponent({
   return (
     <div
       className={cn(
-        "border overflow-hidden",
+        surface === "mobile" ? "overflow-hidden rounded-lg" : "border overflow-hidden",
         density === "card" ? "rounded-xl shadow-sm" : "rounded-lg",
         density === "minimal" && "rounded-md shadow-none",
-        hasAnyErrors
+        surface === "mobile" && !hasAnyErrors ? "bg-transparent" : hasAnyErrors
           ? "border-warning/40 bg-warning/5"
           : hasAnyCancelled
           ? "border-muted/60 bg-muted/10"
@@ -189,37 +216,39 @@ function ToolExecutionGroupComponent({
           : "border-muted/50 elevation-1"
       )}
     >
-      <div
+      <button
+        type="button"
+        aria-expanded={expanded}
         className={cn(
-          "flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors",
-          density === "card" ? "px-3 py-2" : "px-1.5 py-1"
+          "w-full text-left flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors",
+          surface === "mobile" ? "min-h-[44px] px-3 py-2" : density === "card" ? "px-3 py-2" : "px-1.5 py-1"
         )}
         onClick={() => setExpanded((v) => !v)}
       >
-        <div className="flex items-center gap-1">
-          <ListTree className="w-3.5 h-3.5 text-muted-foreground/60" />
-          <span className="text-xs font-mono font-medium text-muted-foreground">
-            {headerLabel}
+        <div className="flex min-w-0 items-center gap-2">
+          {surface === "mobile" && summary.running > 0 ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" /> : <ListTree className="w-3.5 h-3.5 shrink-0 text-muted-foreground/60" />}
+          <span className={cn("min-w-0 text-muted-foreground", surface === "mobile" ? "truncate text-sm" : "text-xs font-mono font-medium")} >
+            {surface === "mobile" ? `${mobileLabel}${hasAnyErrors ? " · Failed" : hasAnyCancelled ? " · Cancelled" : ""}` : headerLabel}
           </span>
         </div>
 
         <div className="flex items-center gap-1">
-          {summary.running > 0 && (
+          {surface !== "mobile" && summary.running > 0 && (
             <span className="inline-flex items-center gap-1 text-xs font-mono text-primary">
               <Loader2 className="w-3.5 h-3.5 animate-spin" /> {summary.running}
             </span>
           )}
-          {summary.completed > 0 && (
+          {surface !== "mobile" && summary.completed > 0 && (
             <span className="inline-flex items-center gap-1 text-xs font-mono text-success-ink/60">
               <CheckCircle2 className="w-3.5 h-3.5" /> {summary.completed}
             </span>
           )}
-          {summary.cancelled > 0 && (
+          {surface !== "mobile" && summary.cancelled > 0 && (
             <span className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground">
               <XCircle className="w-3.5 h-3.5" /> {summary.cancelled}
             </span>
           )}
-          {summary.errors > 0 && (
+          {surface !== "mobile" && summary.errors > 0 && (
             <span className="inline-flex items-center gap-1 text-xs font-mono text-warning-ink">
               <AlertCircle className="w-3.5 h-3.5" /> {summary.errors}
             </span>
@@ -231,7 +260,7 @@ function ToolExecutionGroupComponent({
             <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
           )}
         </div>
-      </div>
+      </button>
 
       {/* Show all tool calls when expanded */}
       {expanded && (

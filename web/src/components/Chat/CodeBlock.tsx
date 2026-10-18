@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { Tooltip } from "../ui/Tooltip";
-import { Copy, Check } from 'lucide-react';
+import { useSurface } from '../../lib/surfaceContext';
+import { MobileChatSheet } from './MobileChatSheet';
+import { toast } from 'sonner';
+import { Copy, Check, Maximize2 } from 'lucide-react';
 
 interface CodeBlockProps {
   language?: string;
@@ -13,6 +16,8 @@ interface CodeBlockProps {
  * Used by MarkdownRenderer for fenced code blocks
  */
 export function CodeBlock({ language, children, className }: CodeBlockProps) {
+  const isMobile = useSurface() === "mobile";
+  const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -22,12 +27,28 @@ export function CodeBlock({ language, children, className }: CodeBlockProps) {
     try {
       await navigator.clipboard.writeText(textContent);
       setCopied(true);
+      if (isMobile) toast.success("Copied");
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       console.error('Failed to copy code:', error);
+      if (isMobile) toast.error('Could not copy code. Please try again.');
     }
   };
 
+  if (isMobile) return (
+    <div data-message-interactive className="not-prose my-2 min-w-0 w-full overflow-hidden rounded-lg border border-border bg-[var(--code-bg)]">
+      <div className="flex min-h-[44px] items-center gap-2 px-2">
+        <span className="min-w-0 flex-1 break-words text-xs text-muted-foreground">{language || "Code"}</span>
+        <button type="button" aria-label={copied ? "Copied" : "Copy code"} onClick={() => void handleCopy()} className="flex min-h-[44px] min-w-[44px] items-center justify-center">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
+        <button type="button" aria-label="Expand code" onClick={() => setExpanded(true)} className="flex min-h-[44px] min-w-[44px] items-center justify-center"><Maximize2 className="h-4 w-4" /></button>
+      </div>
+      <pre className="mobile-thread-code m-0 overflow-x-auto p-3 text-sm leading-relaxed"><code className={`language-${language || ''} whitespace-pre font-mono ${className || ''}`}>{children}</code></pre>
+      {expanded && <MobileChatSheet closeLabel="Close code" title={language || "Code"} onClose={() => setExpanded(false)}>
+        <button type="button" className="min-h-[44px] px-3" onClick={() => void handleCopy()}>{copied ? "Copied" : "Copy code"}</button>
+        <pre className="mobile-thread-code overflow-x-auto p-3 text-sm leading-relaxed select-text"><code className="whitespace-pre font-mono">{children}</code></pre>
+      </MobileChatSheet>}
+    </div>
+  );
   return (
     <div className="not-prose relative my-4 w-full group/codeblock">
       <pre className="hljs relative w-full overflow-x-auto rounded-md border border-black/10 dark:border-white/10 bg-[var(--code-bg)] text-[var(--code-fg)] whitespace-pre-wrap break-words">

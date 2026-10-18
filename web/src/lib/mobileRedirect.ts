@@ -15,8 +15,8 @@
  *
  * The coarse-pointer check is the second half: a 700px desktop browser window
  * has a mouse, so the desktop layout is still usable and its resize handles
- * still work. A phone has neither. Requiring both signals means we only
- * redirect devices that are genuinely phone-shaped.
+ * still work. Requiring both signals gives phones and tablets the touch
+ * layout while keeping mouse-driven browsers on desktop.
  *
  * ## Why this is an escapable default, not a lock
  *
@@ -25,8 +25,8 @@
  * on a small screen. A redirect with no exit is worse than no redirect.
  */
 
-/** Below this width the desktop shell's sidebars and panels stop fitting. */
-export const MOBILE_MAX_WIDTH = 768;
+/** Touch-first default for phones and tablets; mouse users and explicit desktop choices remain desktop. */
+export const MOBILE_MAX_WIDTH = 1366;
 
 /** Query param and storage key for the "give me the desktop app" opt-out. */
 export const DESKTOP_OPT_OUT_PARAM = "desktop";

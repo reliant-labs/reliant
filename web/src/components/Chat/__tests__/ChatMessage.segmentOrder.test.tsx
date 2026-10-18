@@ -1,5 +1,6 @@
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { ChatMessage } from "../ChatMessage";
 import {
   ContentBlockType,
@@ -108,4 +109,11 @@ describe("ChatMessage segment ordering", () => {
 
     expect(markers).toEqual(["Here is the plan.", "tool:bash", "All done."]);
   });
+});
+it("folds mobile work above the final answer and preserves expanded order", () => {
+  render(<SurfaceProvider surface="mobile"><ChatMessage message={assistantMessage()} chatId="chat-1" /></SurfaceProvider>);
+  expect(screen.queryByText("Here is the plan.")).toBeNull();
+  expect(screen.getByText("All done.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Ran 1 command" }));
+  expect(Array.from(document.querySelectorAll('[data-testid="text-run"], [data-testid="tool-card"]')).map(el => el.textContent)).toEqual(["Here is the plan.", "tool:bash", "All done."]);
 });
