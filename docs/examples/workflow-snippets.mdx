@@ -174,15 +174,14 @@ edges:
       - to: execute_tools
         condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0
         label: has_tools
-      # LLM responded without tools (done)
-      - to: complete
-        label: no_tools
+    # LLM responded without tools (done)
+    default: complete
 ```
 
 **Key points:**
 
 - Always check both `!= null` and `size() > 0`
-- The label-only case acts as default (no condition)
+- Every case needs a `condition`; `default:` is where the edge goes when none matches
 
 ### Loop While Condition Met
 
@@ -287,7 +286,6 @@ nodes:
     ref: builtin://agent
     thread:
       mode: fork
-      key: impl_1
       inject:
         role: user
         content: "Implement approach A"
@@ -297,7 +295,6 @@ nodes:
     ref: builtin://agent
     thread:
       mode: fork
-      key: impl_2
       inject:
         role: user
         content: "Implement approach B"
@@ -520,43 +517,31 @@ Save messages only under certain conditions.
 
 ## Approvals and Oversight
 
-### Custom Approval with Multiple Actions
+### Approval with a Timeout
 
-Offer multiple response options beyond approve/deny.
+Ask a person before a step runs, and decide what happens if nobody answers.
 
 ```yaml
 - id: approval
   type: approval
   args:
     title: "Review proposed changes"
-    description: "The agent wants to modify files"
     timeout: 30m
-    actions:
-      - type: approve
-        label: "Approve All"
-      - type: approve
-        label: "Approve with Caution"
-        value: "caution"
-      - type: deny
-        label: "Reject"
-      - type: custom
-        label: "Modify Request"
-        value: "modify"
 
 edges:
   - from: approval
     cases:
       - to: execute_tools
         condition: nodes.approval.status == 'approved'
-      - to: get_modifications
-        condition: nodes.approval.action_value == 'modify'
+      - to: report_timeout
+        condition: nodes.approval.status == 'timeout'
 ```
 
 **Key points:**
 
-- Multiple approve actions can have different `value` fields
-- Access chosen action via `nodes.approval.action_value`
-- `type: custom` for non-standard responses
+- `status` is `approved`, `denied` or `timeout`
+- With no edge for `denied`, the branch simply ends there, as the built-in agent's does when you deny a tool call
+- The approval appears in the chat and in the [Inbox](/automations/overview#the-inbox). In an unattended run (an automation) nobody can answer, so it resolves at once with status `unattended`: neither granted nor denied. Gate on `status == 'approved'` and that case takes the not-approved branch
 
 ### Audit Check Before Tool Execution
 
@@ -577,9 +562,17 @@ nodes:
       response_tool:
         name: audit_result
         description: Report audit findings
-        options:
-          approved: "Agent is on track - provide brief confirmation"
-          denied: "Agent needs guidance - explain what is wrong and how to fix it"
+        schema:
+          type: object
+          required: [choice, value]
+          properties:
+            choice:
+              type: string
+              enum: [approved, denied]
+              description: "approved: the agent is on track. denied: it needs guidance"
+            value:
+              type: string
+              description: A brief confirmation, or what is wrong and how to fix it
       messages:
         - role: user
           content: |
@@ -616,45 +609,41 @@ edges:
 
 **Key points:**
 
-- Use `response_tool` to force structured output
-- Define `options` as choice names with descriptions
-- LLM returns `{ choice: "option_name", value: "explanation" }`
-- Access response data via `nodes.<execute_tools_node>.response_data.<tool_name>.choice` or `.value`
+- Use `response_tool` to ask for structured output, described by a JSON `schema`
+- A `choice` enum plus a `value` explanation is a convenient shape for a decision
+- Access response data via `nodes.<execute_tools_node>.response_data.<tool_name>.choice` or `.value`, or directly on the Call LLM node as `nodes.audit_check.response_data.choice`
 - Auditor can use cheaper/faster model
 
 ### Response Tools for Structured Feedback
 
-Force LLM to provide structured responses via a "response tool." Response tools use a simplified options-based format where output is always `{ choice, value }`.
+Ask the LLM for a structured response through a "response tool": a tool only the model can call, whose input is the answer, shaped by a JSON `schema`.
 
 ```yaml
 - id: validation_report
   type: call_llm
   args:
+    model: {tags: [moderate]}
     response_tool:
       name: validation_result
       description: Report validation results
-      options:
-        passed: "Validation passed - explain what was verified"
-        failed: "Validation failed - describe the issues found"
-
-- id: execute_response
-  type: execute_tools
-  args:
-    tool_calls: "{{nodes.validation_report.tool_calls}}"
+      schema:
+        type: object
+        required: [choice, value]
+        properties:
+          choice: {type: string, enum: [passed, failed]}
+          value: {type: string, description: What was verified, or the issues found}
 
 # Access structured data
 outputs:
-  passed: "{{nodes.execute_response.response_data.validation_result.choice == 'passed'}}"
-  details: "{{nodes.execute_response.response_data.validation_result.value}}"
+  passed: "{{has(nodes.validation_report.response_data.choice) && nodes.validation_report.response_data.choice == 'passed'}}"
+  details: "{{has(nodes.validation_report.response_data.value) ? nodes.validation_report.response_data.value : ''}}"
 ```
 
 **Key points:**
 
 - `response_tool` is a synthetic tool only the LLM can call
-- Define options as `option_name: "description for LLM"`
-- Output is always `{ choice: string, value: string }`
-- Must execute tools to capture the structured data
-- Access via `nodes.<node>.response_data.<tool_name>.choice` or `.value`
+- The Call LLM node parses the call into `response_data`; an `execute_tools` node that runs the call also has it, keyed by tool name
+- The tool is offered, not forced: guard reads with `has()`, or use `builtin://structured-agent` to keep the model working until it answers through the tool
 
 ---
 
@@ -669,7 +658,7 @@ Give an agent its own working directory.
   type: create_worktree
   args:
     name: "feature-{{workflow.id}}"
-    base_branch: "{{has(workflow.current_branch) ? workflow.current_branch : 'main'}}"
+    base_branch: "{{has(workflow.branch) ? workflow.branch : 'main'}}"
     force: true
 
 - id: implement
@@ -744,7 +733,6 @@ nodes:
     ref: builtin://agent
     thread:
       mode: new
-      key: impl_1
       inject:
         role: user
         content: "Work in: {{nodes.create_wt_1.path}}"
@@ -754,7 +742,6 @@ nodes:
     ref: builtin://agent
     thread:
       mode: new
-      key: impl_2
       inject:
         role: user
         content: "Work in: {{nodes.create_wt_2.path}}"
@@ -803,7 +790,6 @@ nodes:
     ref: builtin://agent
     thread:
       mode: fork
-      key: security
       inject:
         role: user
         content: |
@@ -824,7 +810,6 @@ nodes:
     ref: builtin://agent
     thread:
       mode: fork
-      key: style
       inject:
         role: user
         content: |
@@ -1070,7 +1055,6 @@ nodes:
     ref: builtin://agent
     thread:
       mode: new
-      key: impl_a
       inject:
         role: user
         content: |
@@ -1086,7 +1070,6 @@ nodes:
     ref: builtin://agent
     thread:
       mode: new
-      key: impl_b
       inject:
         role: user
         content: |

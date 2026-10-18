@@ -241,7 +241,7 @@ The router's decision quality is dominated by two things: the descriptions you g
 - id: triage
   type: router
   model:
-    tags: [smart]  # or a specific model ref
+    tags: [flagship]  # or a specific model: {id: <model id>}
   workflows: [...]
 ```
 
@@ -255,15 +255,20 @@ system_prompt: |
 
 ## Fallback behavior
 
-The `fallback` field is narrower than it might look. It's a preset name, and it's only consulted when the classifier picks a **valid workflow** but an **invalid preset** for that workflow — for example, if the LLM hallucinates a preset name or picks one that isn't in the candidate's allowed list. When that happens, the router retries the selection with the fallback preset on the same workflow the LLM picked.
+The `fallback` field is narrower than it might look, and it means different things in the two modes.
+
+In **workflow routing** it's a preset name, and it's only consulted when the classifier picks a **valid workflow** but an **invalid preset** for that workflow — for example, if the LLM hallucinates a preset name or picks one that isn't in the candidate's allowed list. When that happens, the router uses the fallback preset on the same workflow the LLM picked.
+
+In **node routing** it's a node id, used when the classifier names a node that is not one of the candidates. The fallback must itself be a candidate.
 
 `fallback` does **not** rescue other failure modes:
 
 - If the CallLLM activity itself fails (network, rate limit, model error), the router errors out.
 - If the classifier picks a workflow that isn't in the candidate list, the router errors out.
-- If `fallback` itself isn't valid for the selected workflow, the router errors out.
+- If `fallback` itself isn't valid for the selected workflow, or isn't a candidate node, the router errors out.
+- With no `fallback`, an invalid choice is an error.
 
-In short, `fallback` is a correctness guard against hallucinated presets, not a general-purpose error handler. If you need to recover from classification failures, wrap the router in an edge that catches the error and routes to a default workflow.
+In short, `fallback` is a correctness guard against hallucinated choices, not a general-purpose error handler. A router that errors fails its step like any other node, so the run pauses for you, as described in [Workflow control](/workflows/workflow-control#automatic-pause-on-failure).
 
 ## Interaction with threads
 

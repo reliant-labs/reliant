@@ -202,8 +202,11 @@ condition: has(nodes.conditional_node)
 | `message.text` | string | Response text content |
 | `response_text` | string | Same as `message.text` |
 | `tool_calls` | array | Tool calls requested by model |
-| `input_tokens` | int | Input tokens consumed |
-| `output_tokens` | int | Output tokens generated |
+| `token_count` | int | Total tokens the call used: input, output and cached |
+| `response_data` | map | The parsed input of a `response_tool` call, when the node has one |
+| `cost` | double | The call's cost in USD, when the provider reports it |
+| `compaction_threshold` | int | The token count at which the thread should be compacted for this model |
+| `pending_inbox` | bool | Messages are queued for this thread, so an agent loop should take another turn |
 | `stop_reason` | string | Why the turn ended — the field loop conditions should read |
 | `finish_reason` | string | The raw provider stop reason behind `stop_reason` (escape hatch) |
 
@@ -234,7 +237,7 @@ while: "outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrup
 
 **Loop outputs:**
 
-Loop outputs contain the last iteration's sub-workflow outputs directly. Access them via `nodes.<loop_id>.<output_name>` where `<output_name>` matches outputs declared in the loop's inline workflow.
+Loop outputs contain the last iteration's sub-workflow outputs directly. Access them via `nodes.<loop_id>.<output_name>` where `<output_name>` matches outputs declared in the loop's inline workflow. `nodes.<loop_id>._iterations` is the number of iterations that ran; a parallel loop also has `_results` (each iteration's outputs, by key), `_completed` and `_failed`.
 
 ### workflow.*
 
@@ -288,6 +291,7 @@ The event that started the run, fixed at launch. Also the only namespace a trigg
 | `trigger.name` | string | The trigger's name |
 | `trigger.payload.*` | dynamic | The event's data. Untrusted input |
 | `trigger.sender.{kind,id,display_name,verified}` | string, bool | Who sent the event, as its source authenticated it |
+| `trigger.activation.{id,params,owner.user_id,owner.github_id}` | string, map | The activation the event fires for: its id, its values for the workflow's inputs, and its owner. Only in a trigger's `filter`, `inputs`, `prompt` and `dedupe_key` (see [Automations](/automations/overview#one-declaration-many-activations-triggeractivation)) |
 | `trigger.origin.*` | see below | Whether Reliant caused the event, and which run did |
 
 `trigger.origin` has eight fields, **all always present**, so an expression never fails with "no such key". An event nothing attributed reads `caused_by_reliant: false`, `confidence: 'none'`, empty strings, `same_workflow: false` and `lineage_depth: 0`.
@@ -326,6 +330,9 @@ Provides loop iteration context. Only available inside loop constructs.
 | Field | Type | Description |
 |-------|------|-------------|
 | `iter.iteration` | int | Current iteration (0-indexed in loop body; increments before while check) |
+| `iter.item` | dynamic | The current element, in a loop with `items` (for a map, its value) |
+| `iter.index` | int | The current element's position, in a loop with `items` |
+| `iter.key` | string | The current key, in a loop over a map |
 
 ```yaml
 # Display human-readable iteration number
@@ -802,9 +809,8 @@ edges:
         condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
         label: "require_approval"
       
-      # Default case (no condition or always true)
-      - to: done
-        label: "complete"
+    # Every case needs a condition. Where to go when none matches:
+    default: done
 ```
 
 ---

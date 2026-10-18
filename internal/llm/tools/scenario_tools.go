@@ -399,7 +399,7 @@ expect:
 
 **Events — typed mode (usually shorter than a raw output map):**
   - node: call_llm
-    type: llm_response       # llm_response | tool_result | tool_error | llm_error | user_input
+    type: llm_response       # llm_response | tool_result; any other node takes a raw output
     text: "Hello!"
     tool_calls: [{name: bash, input: {command: ls}}]
   - node: execute_tools

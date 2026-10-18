@@ -28,10 +28,12 @@ import (
 
 	// Import activities package to trigger registration via init()
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	_ "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -125,6 +127,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// The builder palette is a subset of what a workflow may declare: approval,
+	// for one, is a node type every agent loop uses but has no palette entry.
+	// The reference documents every node type, so register the rest here, in
+	// this process only. This runs after generateGoDescriptions, so the runtime
+	// descriptions file stays exactly the palette's.
+	nodeTypeByName := registerUndocumentedNodeTypes()
+
 	// Get all node types from the registry (already proto-powered)
 	nodeTypes := schema.ListVisibleActivities()
 
@@ -137,7 +146,7 @@ func main() {
 	nodeBaseFields := parseNodeBaseFromProto()
 
 	// Generate Hugo markdown (with frontmatter)
-	hugoMarkdown := generateMarkdown(nodeTypes, nodeBaseFields, true)
+	hugoMarkdown := generateMarkdown(nodeTypes, nodeTypeByName, nodeBaseFields, true)
 	if err := os.MkdirAll(filepath.Dir(hugoOutput), 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", err)
 		os.Exit(1)
@@ -224,6 +233,39 @@ func init() {
 	return os.WriteFile(outputPath, formatted, 0644)
 }
 
+// registerUndocumentedNodeTypes registers, in this process, every node type
+// of the Node.args oneof that the builder palette leaves out, the same way
+// activities.registerNodeTypeActivities registers the palette's structural
+// nodes. It returns every node type, palette or not, keyed by the display
+// name its section is titled with, so each section can say what to write in
+// `type:`.
+func registerUndocumentedNodeTypes() map[string]string {
+	listed := make(map[string]bool)
+	for _, a := range schema.ListVisibleActivities() {
+		listed[a.DisplayName] = true
+	}
+
+	outputs := wfcel.NewTypeRegistry()
+	byName := make(map[string]string)
+	args := (&reliantv1.Node{}).ProtoReflect().Descriptor().Oneofs().ByName("args")
+	for i := 0; i < args.Fields().Len(); i++ {
+		md := args.Fields().Get(i).Message()
+		if md == nil {
+			continue
+		}
+		meta, ok := proto.GetExtension(md.Options(), reliantv1.E_NodeMeta).(*reliantv1.NodeMeta)
+		if !ok || meta == nil || meta.NodeType == "" {
+			continue
+		}
+		byName[meta.DisplayName] = meta.NodeType
+		if !listed[meta.DisplayName] {
+			outputDesc, _ := outputs.OutputForNodeType(meta.NodeType)
+			schema.RegisterNodeTypeActivity(meta.NodeType, meta, md, outputDesc)
+		}
+	}
+	return byName
+}
+
 // NodeBaseField holds metadata for a common node field from V2Node proto.
 type NodeBaseField struct {
 	Name        string
@@ -292,25 +334,20 @@ func protoFieldTypeDisplay(fd protoreflect.FieldDescriptor) string {
 	}
 }
 
-// getFieldDescription extracts the description from proto field's leading comment.
+// getFieldDescription reads a field's (reliant) description annotation, the
+// same source every node type's own fields are documented from. Leading
+// comments cannot serve: protoc-gen-go drops source info from the compiled
+// descriptor, so they read as empty here.
 func getFieldDescription(fd protoreflect.FieldDescriptor) string {
-	loc := fd.ParentFile().SourceLocations().ByDescriptor(fd)
-	if loc.LeadingComments != "" {
-		return cleanComment(loc.LeadingComments)
+	meta, ok := proto.GetExtension(fd.Options(), reliantv1.E_Reliant).(*reliantv1.FieldMeta)
+	if !ok || meta == nil {
+		return ""
 	}
-	return ""
-}
-
-func cleanComment(s string) string {
-	s = strings.TrimSpace(s)
-	lines := strings.Split(s, "\n")
-	var cleaned []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		line = strings.TrimPrefix(line, "// ")
-		cleaned = append(cleaned, line)
+	desc := meta.GetDescription()
+	if values := meta.GetEnumValues(); values != "" {
+		desc += fmt.Sprintf(" (enum: %s)", values)
 	}
-	return strings.TrimSpace(strings.Join(cleaned, " "))
+	return desc
 }
 
 // escapeMarkdownTable escapes characters that would break markdown table formatting.
@@ -331,7 +368,7 @@ func generateCommonNodeFields(fields []NodeBaseField) string {
 
 	sb.WriteString(`## Common Node Fields
 
-These fields are available on **all** node types. They provide shared functionality for node identification, conditional execution, thread management, and output handling.
+These fields are available on **all** node types. They provide shared functionality for node identification, conditional execution, machine placement, and output handling. Everything else a node takes is specific to its type, listed in its section below.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -350,11 +387,12 @@ These fields are available on **all** node types. They provide shared functional
 	sb.WriteString(`
 ### Thread Configuration
 
-The ` + "`thread`" + ` field controls conversation context:
+Workflow, loop and router nodes take a ` + "`thread`" + ` field that controls conversation context:
 
 ` + "```yaml" + `
 - id: analyze
-  type: call_llm
+  type: workflow
+  ref: builtin://agent
   thread:
     mode: fork      # fork, new, or inherit (default)
     memo: true      # reuse across loop iterations
@@ -371,7 +409,7 @@ Use ` + "`condition`" + ` to skip nodes based on runtime state:
 - id: cleanup
   type: run
   condition: "nodes.process.exit_code != 0"
-  run: "rm -rf temp/"
+  command: "rm -rf temp/"
 ` + "```" + `
 
 ### Automatic Message Saving
@@ -381,12 +419,12 @@ Use ` + "`save_message`" + ` to capture output without a separate save_message n
 ` + "```yaml" + `
 - id: summarize
   type: workflow
-  ref: builtin://summarizer
+  ref: builtin://agent
   thread:
     mode: fork
   save_message:
     role: assistant
-    content: "{{output.summary}}"
+    content: "{{output.response_text}}"
 ` + "```" + `
 
 ---
@@ -396,7 +434,7 @@ Use ` + "`save_message`" + ` to capture output without a separate save_message n
 	return sb.String()
 }
 
-func generateMarkdown(nodeTypes []schema.ActivityMetadata, nodeBaseFields []NodeBaseField, withHugoFrontmatter bool) string {
+func generateMarkdown(nodeTypes []schema.ActivityMetadata, nodeTypeByName map[string]string, nodeBaseFields []NodeBaseField, withHugoFrontmatter bool) string {
 	var sb strings.Builder
 
 	if withHugoFrontmatter {
@@ -440,6 +478,10 @@ description: Auto-generated API reference for workflow node type Input/Output sc
 
 	for _, nodeType := range nodeTypes {
 		fmt.Fprintf(&sb, "## %s\n\n", nodeType.DisplayName)
+
+		if yamlType := nodeTypeByName[nodeType.DisplayName]; yamlType != "" {
+			fmt.Fprintf(&sb, "`type: %s`\n\n", yamlType)
+		}
 
 		if nodeType.Description != "" {
 			fmt.Fprintf(&sb, "%s\n\n", cleanDescription(nodeType.Description))
@@ -489,7 +531,16 @@ description: Auto-generated API reference for workflow node type Input/Output sc
 			sb.WriteString("| Field | Type | Description |\n")
 			sb.WriteString("|-------|------|-------------|\n")
 
+			readNames := outputReadNames[nodeTypeByName[nodeType.DisplayName]]
 			for _, f := range nodeType.OutputFields {
+				name := f.Name
+				if readName, renamed := readNames[name]; renamed {
+					if readName == "" {
+						continue
+					}
+					name = readName
+				}
+
 				desc := f.Description
 				if desc == "" {
 					desc = "-"
@@ -497,7 +548,7 @@ description: Auto-generated API reference for workflow node type Input/Output sc
 					desc = cleanDescription(desc)
 				}
 
-				fmt.Fprintf(&sb, "| `%s` | %s | %s |\n", f.Name, f.Type, escapeMarkdownTable(desc))
+				fmt.Fprintf(&sb, "| `%s` | %s | %s |\n", name, f.Type, escapeMarkdownTable(desc))
 
 				// Expand nested types inline if this is an object or array field
 				if shouldExpandField(f.Type) {
@@ -511,12 +562,43 @@ description: Auto-generated API reference for workflow node type Input/Output sc
 				}
 			}
 			sb.WriteString("\n")
+			if note := outputNotes[nodeTypeByName[nodeType.DisplayName]]; note != "" {
+				sb.WriteString(note + "\n\n")
+			}
 		}
 
 		sb.WriteString("---\n\n")
 	}
 
 	return sb.String()
+}
+
+// outputReadNames maps a node type's proto output fields to the names a
+// workflow reads them by, where the two differ. The runtime stores loop and
+// join outputs through model.ProtoLoopOutputToMap and model.JoinOutputToMap,
+// which write these system fields with a leading underscore; the proto field
+// names are not readable. An empty name drops the field: a loop's `outputs`
+// struct is flattened onto the node rather than kept under that key.
+var outputReadNames = map[string]map[string]string{
+	model.NodeTypeLoop: {
+		"iterations": model.LoopOutputIterationsField,
+		"results":    model.LoopOutputResultsField,
+		"completed":  model.LoopOutputCompletedField,
+		"failed":     model.LoopOutputFailedField,
+		"parallel":   model.LoopOutputParallelField,
+		"outputs":    "",
+	},
+	model.NodeTypeJoin: {
+		"sources": model.JoinOutputSourcesField,
+	},
+}
+
+// outputNotes says what an output table cannot: outputs that are named by
+// the workflow author rather than by the node type.
+var outputNotes = map[string]string{
+	model.NodeTypeLoop: "A sequential loop also exposes each output its body declares, by name, from the last iteration " +
+		"(`nodes.<id>.<output>`). `_results`, `_completed`, `_failed` and `_parallel` are set by parallel loops.",
+	model.NodeTypeWorkflow: "Each output the sub-workflow declares is also on the node, by name (`nodes.<id>.<output>`).",
 }
 
 func cleanDescription(desc string) string {

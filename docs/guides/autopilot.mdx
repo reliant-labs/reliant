@@ -74,7 +74,7 @@ PR review covers **every non-draft PR** in `repos` when it is opened or marked r
 
 ### Review responder
 
-Shares `model`, the labels, `lease_minutes`, `max_turns` and `gate_command` with the issue worker, and adds:
+Shares `model`, the `working_label`, `blocked_label` and `authored_label` labels, `lease_minutes`, `max_turns` (80 here) and `gate_command` with the issue worker, and adds:
 
 | Setting | Default | What it does |
 |---------|---------|--------------|
@@ -90,6 +90,8 @@ Shares `model`, the labels, `lease_minutes`, `max_turns` and `gate_command` with
 | `model` | `flagship` | The investigator |
 | `max_investigations` | 5 | New alerts investigated per notification; the rest are filed without an investigation |
 | `triage_label` | `agent:triage` | Put on every issue it files |
+| `working_label` | `agent:working` | Mirrors its lease while it investigates |
+| `lease_minutes` | 60 | How long a lease lasts if a run dies without releasing it |
 | `max_turns` | 45 | Agent turns per investigation |
 
 Example `service_repos`:
@@ -180,7 +182,9 @@ Open a finished run to see each model call's cost. The caps above are inputs, so
 
 ## Using a different GitHub identity
 
-By default the workflows write as the account of the GitHub connection you enabled them with, so their comments and PRs appear under your name, and GitHub will not let that account request changes on a PR it opened (PR review posts the same review as a comment, saying so). The built-in workflows leave `acting_identity` at its default for now. Once your deployment supports acting as the GitHub App's bot, set the activation's identity to the App to keep the agents' words apart from yours, and to let you approve their PRs.
+By default the workflows write as the account of the GitHub connection you enabled them with, so their comments and PRs appear under your name, and GitHub will not let that account request changes on a PR it opened (PR review posts the same review as a comment, saying so).
+
+To keep the agents' words apart from yours, have them write as the Reliant bot (`reliant-labs[bot]`) instead: open each automation in **Workflows → Automations**, choose **Edit**, and set **Writes as** to **Reliant bot**. Their comments, reviews and PRs then appear as the bot, with a footer naming the automation and you, and you can approve and merge the PRs they open. The bot still writes only where your own account can push, and needs the Reliant GitHub App installed on the repository. See [Who an automation acts as](/automations/overview#who-an-automation-acts-as).
 
 ## Related topics
 

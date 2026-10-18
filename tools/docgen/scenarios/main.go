@@ -353,11 +353,9 @@ Events are always keyed by node path, never by ref URL: ` + "`node: \"builtin://
 
 | Type | Description | Required Fields |
 |------|-------------|-----------------|
-| ` + "`llm_response`" + ` | Simulate LLM returning text and/or tool_calls | ` + "`text`" + ` or ` + "`tool_calls`" + ` |
-| ` + "`tool_result`" + ` | Simulate tool returning output | ` + "`tool`" + `, ` + "`tool_output`" + ` |
-| ` + "`tool_error`" + ` | Simulate tool error | ` + "`tool`" + `, ` + "`tool_output`" + ` (with error) |
-| ` + "`llm_error`" + ` | Simulate LLM error | ` + "`output`" + ` (with error structure) |
-| ` + "`user_input`" + ` | Simulate user message | ` + "`text`" + ` |
+| ` + "`llm_response`" + ` | Simulate a Call LLM node returning text and/or tool_calls | ` + "`text`" + ` or ` + "`tool_calls`" + ` |
+| ` + "`tool_result`" + ` | Simulate an Execute Tools node returning one tool's result; add ` + "`is_error: true`" + ` for a failed call | ` + "`tool`" + `, ` + "`tool_output`" + ` (` + "`output`" + ` is accepted as a shorthand) |
+| (none) | Any other node: ` + "`output`" + ` is the node's whole output, checked against its output schema (an approval's ` + "`status`" + `, an ask_question's ` + "`response`" + `, a run's ` + "`exit_code`" + `) | ` + "`output`" + ` |
 
 ---
 

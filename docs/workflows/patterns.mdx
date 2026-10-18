@@ -40,7 +40,7 @@ edges:
   - from: execute_tools
     cases:
       - to: compact
-        condition: nodes.execute_tools.thread_token_count > inputs.compaction_threshold
+        condition: nodes.execute_tools.thread_token_count > nodes.call_llm.compaction_threshold
 ```
 
 **Result filtering** uses a secondary LLM call to extract only relevant information from large tool results:
@@ -164,7 +164,7 @@ Control which tools the model starts with, based on mode, using `tools_config.pr
       preloaded_tools: "{{inputs.mode == 'plan' ? ['tag:coding:plan'] : inputs.tools}}"
 ```
 
-Filter options: tags (`['tag:default']`), specific tools (`['view', 'grep']`), or exclusions.
+Filter options: tags (`['tag:coding:default']`), specific tools (`['view', 'shell']`), or exclusions (`'!tag:shell'`).
 
 **When to use:** Planning modes (read-only), sandboxed exploration, role-specific tool access.
 
@@ -172,39 +172,40 @@ Filter options: tags (`['tag:default']`), specific tools (`['view', 'grep']`), o
 
 Response tools force the LLM to produce structured output you can programmatically use for routing, classification, or data extraction.
 
-**Simple options-based response:**
+**A choice and an explanation:**
+
+A response tool's `schema` is a JSON Schema for the answer. A common shape is a `choice` from a fixed list and a `value` explaining it:
 
 ```yaml
 - id: classify
   type: call_llm
   args:
+    model: {tags: [fast]}
     response_tool:
       name: classification
       description: Classify the user's request
-      options:
-        bug_report: "User is reporting a bug"
-        feature_request: "User wants a new feature"
-        question: "User has a question"
-        other: "Doesn't fit other categories"
-
-- id: execute_classify
-  type: execute_tools
-  args:
-    tool_calls: "{{nodes.classify.tool_calls}}"
+      schema:
+        type: object
+        required: [choice, value]
+        properties:
+          choice:
+            type: string
+            enum: [bug_report, feature_request, question, other]
+          value:
+            type: string
+            description: One sentence on why
 
 edges:
   - from: classify
-    default: execute_classify
-  - from: execute_classify
     cases:
       - to: handle_bug
-        condition: nodes.execute_classify.response_data.classification.choice == 'bug_report'
+        condition: has(nodes.classify.response_data.choice) && nodes.classify.response_data.choice == 'bug_report'
       - to: handle_feature
-        condition: nodes.execute_classify.response_data.classification.choice == 'feature_request'
+        condition: has(nodes.classify.response_data.choice) && nodes.classify.response_data.choice == 'feature_request'
     default: handle_question
 ```
 
-**Output structure:** Options-based response tools always return:
+The Call LLM node parses the tool call into its own `response_data`:
 
 ```json
 {
@@ -213,9 +214,9 @@ edges:
 }
 ```
 
-**Advanced JSON schema response:**
+**A larger JSON schema:**
 
-For complex structured data, use a full JSON schema:
+For complex structured data, describe every field:
 
 ```yaml
 response_tool:
@@ -250,10 +251,9 @@ response_tool:
 
 **Key points:**
 
-1. **ExecuteTools required** — You must execute the tool call to access `response_data`
-2. **Access path** — `nodes.<execute_node>.response_data.<tool_name>.<field>`
-3. **LLM must call it** — The response tool is the only way to complete; LLM cannot just respond with text
-4. **Use for routing** — Perfect for decisions that control workflow branching
+1. **Two access paths** — On the Call LLM node itself, `nodes.<call_llm_node>.response_data.<field>`. On an `execute_tools` node that ran the call, keyed by the tool's name: `nodes.<execute_node>.response_data.<tool_name>.<field>`
+2. **The model may not call it** — A response tool is offered alongside any other tools, not forced, so a model can answer in text instead. Guard reads with `has()`, and for an agent that must answer through the tool use `builtin://structured-agent`, which reminds the model until it does
+3. **Use for routing** — Perfect for decisions that control workflow branching
 
 **When to use:** Classification, routing decisions, structured data extraction, code reviews, approval workflows.
 
@@ -657,4 +657,4 @@ These techniques compose naturally. A sophisticated workflow might combine: pipe
 
 Start simple. A basic agent with compaction handles most tasks. Add verification loops for reliability, parallelism for exploration, and auditing for oversight.
 
-See [Examples](/examples) for complete workflow files.
+See [Workflow Examples](/examples/workflow-snippets) for complete workflow files.

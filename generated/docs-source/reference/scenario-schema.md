@@ -153,7 +153,7 @@ content: "Custom response"
 | `type` | string | No | Type specifies the event type for automatic conversion. |
 | `text` | string | No | Text is the LLM response text (for type: llm_response). |
 | `tool_calls` | SimToolCall[] | No | ToolCalls are tool invocations from the LLM (for type: llm_response). |
-| `tool` | string | No | Tool is the tool name (for type: tool_result or tool_error). |
+| `tool` | string | No | Tool is the tool name (for type: tool_result). |
 | `tool_output` | object | No | ToolOutput is the tool execution result (for type: tool_result). |
 | `is_error` | boolean | No | IsError marks a tool_result as failed (for type: tool_result). |
 | `black_box` | boolean | No | BlackBox mocks a loop or workflow node AS A UNIT: its body is not |
@@ -260,11 +260,9 @@ Events are always keyed by node path, never by ref URL: `node: "builtin://agent"
 
 | Type | Description | Required Fields |
 |------|-------------|-----------------|
-| `llm_response` | Simulate LLM returning text and/or tool_calls | `text` or `tool_calls` |
-| `tool_result` | Simulate tool returning output | `tool`, `tool_output` |
-| `tool_error` | Simulate tool error | `tool`, `tool_output` (with error) |
-| `llm_error` | Simulate LLM error | `output` (with error structure) |
-| `user_input` | Simulate user message | `text` |
+| `llm_response` | Simulate a Call LLM node returning text and/or tool_calls | `text` or `tool_calls` |
+| `tool_result` | Simulate an Execute Tools node returning one tool's result; add `is_error: true` for a failed call | `tool`, `tool_output` (`output` is accepted as a shorthand) |
+| (none) | Any other node: `output` is the node's whole output, checked against its output schema (an approval's `status`, an ask_question's `response`, a run's `exit_code`) | `output` |
 
 ---
 

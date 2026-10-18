@@ -40,14 +40,14 @@ Once an agent has spawned at least one child, `spawn_status`, `spawn_send` and `
 
 ### When a sub-agent stops on an error
 
-A sub-agent whose step fails — its retries are used up, the provider returns an error, or the provider's usage limit is reached — stops on its own. Nothing else in the chat pauses. Its parent is told why, and so are you, in the sub-agent's thread.
+A sub-agent whose step fails — its retries are used up, or the provider returns an error — stops on its own. Nothing else in the chat pauses. Its parent is told why, and so are you, in the sub-agent's thread.
 
 A stopped sub-agent is not finished. A message sent to it resumes it where it stopped, and it reads that message on its first turn:
 
 - From the app: select the sub-agent's thread and send it a message, or use **Message this agent to resume it** on its spawn card.
 - From its parent: `spawn_send` to the agent's id, or `spawn` with its `agent_id`.
 
-If it stopped on a provider usage limit, the error says when the limit resets. To carry on before then, switch the sub-agent's thread to a model from another provider first: the resumed agent runs on the model you chose.
+A provider usage limit is not a failure: a sub-agent that hits one waits for the limit to reset and then carries on by itself, and `spawn_status` reports it as waiting.
 
 A stopped sub-agent stays resumable after the chat goes idle. If the chat has finished its turn when you message the sub-agent, the chat starts again where it was: the sub-agent resumes first, and the main agent picks up when the sub-agent reports back. Switching a sub-agent's model needs the chat to be running or paused; while it is idle, the sub-agent resumes on the model it had.
 
@@ -84,54 +84,43 @@ Spawn availability is controlled by the `spawn_presets` input in workflows that 
 
 ### The spawn_presets Input
 
-In the built-in agent workflow, `spawn_presets` is configured as a multi-select enum:
+In the built-in agent workflow, `spawn_presets` is a multi-select preset input:
 
 ```yaml
 spawn_presets:
-  type: enum
+  type: preset
+  tags: [agent]
   multi: true
-  enum:
-    - general
-    - researcher
-    - planner
-    - reviewer
-    - documentation
-    - refactor
-    - debug
-    - tester
-    - reproducer
-    - git
-    - ux
-    - workflow_builder
-    - auditor
   default:
     - general
     - researcher
-    - reviewer
+    - code_reviewer
   description: Presets available for spawn tool (empty = spawn disabled)
 ```
 
 The key points:
 
 - **Empty selection disables spawn**: If no presets are selected, the spawn tool does not appear in the agent's toolset.
-- **Default includes common presets**: By default, agents can spawn general, researcher, and reviewer sub-workflows.
-- **Enum values must be valid presets**: Each value must correspond to a preset that exists, built-in or custom.
+- **Default includes common presets**: By default, agents can spawn the general, researcher, and code_reviewer presets. A [preset](/workflows/presets) can set its own list, as most built-in presets do.
+- **Any `agent` preset can be listed**: The picker offers every preset tagged `agent`, built-in, project or your own.
 
-### Tool Filter Syntax
+### The spawn field
 
-Behind the scenes, spawn configuration flows through the tool filter system. The spawn filter syntax is:
+Behind the scenes, the agent's Call LLM node lists what it may spawn in its `tools_config`, as `spawn:<workflow>(<presets>)` specs:
 
 ```text
-spawn:builtin://agent(preset1,preset2,preset3)
+spawn:builtin://agent(general,researcher,code_reviewer)
 ```
 
-For example, the agent workflow builds its tool filter using the `spawn()` CEL function:
+The agent workflow builds its spec with the `spawn()` CEL function:
 
 ```yaml
-tool_filter: "{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"
+tools_config:
+  preloaded_tools: "{{inputs.tools}}"
+  spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
 ```
 
-The `spawn()` function takes a workflow reference and a list of presets, returning the spawn filter spec string. If the presets list is empty, it returns an empty string, disabling spawn.
+The `spawn()` function takes a workflow reference and a list of presets and returns the spec string. If the presets list is empty, it returns an empty string, which disables spawn.
 
 ### Disabling Spawn
 
@@ -139,21 +128,14 @@ To disable spawn entirely:
 
 **Via UI**: Deselect all presets in the `spawn_presets` parameter.
 
-**Via workflow configuration**: Omit the spawn filter or use empty presets:
+**Via workflow configuration**: Leave `spawn` out of the node's `tools_config`, or pass `builtin://agent` an empty `spawn_presets`:
 
 ```yaml
-# Spawn disabled - empty presets
-tool_filter:
-  - tag:default
-  - spawn:builtin://agent()  # Empty parens = disabled
-```
-
-Or simply do not include any spawn filter:
-
-```yaml
-# Spawn disabled - no spawn filter at all
-tool_filter:
-  - tag:default
+- id: solo
+  type: workflow
+  ref: builtin://agent
+  args:
+    spawn_presets: []   # No sub-agents
 ```
 
 ## Spawn Tool Parameters
@@ -162,11 +144,11 @@ When an agent has access to spawn, the tool accepts these parameters:
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `preset` | Yes | Name of the preset to use and it must be in the allowed list |
+| `preset` | Yes | Name of the preset to use; it must be in the allowed list |
 | `prompt` | Yes | Detailed task description for the spawned workflow |
+| `title` | No | A readable title for the sub-agent's thread; defaults to the preset name |
 | `agent_id` | No | Agent ID to resume an existing conversation |
-| `worktree` | No | Worktree name to run this workflow in |
-| `create_worktree` | No | Configuration to create a new worktree |
+| `worktree` | No | The name of a worktree created with the `worktree` tool. The sub-agent works in that workspace, on its own branch, instead of the parent's |
 | `providers` | No | Provider policy for this sub-agent only: `{ "prefer": ["codex"], "on_limit": "wait" \| "fallback", "fallback": "<model>@<driver>" }`. Beats the preset's `providers:` and the chat's policy; see [Presets](/workflows/presets#provider-policy-providers). |
 
 ### Basic Example
@@ -192,18 +174,17 @@ If a spawned agent was previously used, you can resume its conversation:
 
 ### Running in a Worktree
 
-For tasks that modify files, you can isolate changes in a worktree:
+For tasks that modify files, you can isolate changes in a worktree. The parent creates one with the `worktree` tool (`action: create`, a `name` and optionally a `base_branch`), then names it in the spawn:
 
 ```json
 {
   "preset": "refactor",
   "prompt": "Rename the UserService class to AccountService throughout the codebase.",
-  "create_worktree": {
-    "name": "refactor-user-service",
-    "base_branch": "main"
-  }
+  "worktree": "refactor-user-service"
 }
 ```
+
+The worktree appears in the app's Workspaces like any other, so you can open it, review its branch, and archive it when you are done.
 
 ## Use Cases
 
@@ -233,8 +214,8 @@ Get focused feedback from a specialist:
 ```text
 Agent receives: "Review my changes to the authentication module"
 
-Agent spawns reviewer:
-  preset: reviewer
+Agent spawns a reviewer:
+  preset: code_reviewer
   prompt: "Review the recent changes to the auth/ directory. Focus on security implications, error handling, and whether the changes follow the existing patterns in the codebase."
 
 Structured review feedback arrives when the reviewer finishes
@@ -306,7 +287,9 @@ If the child workflow encounters an error, the error message is delivered with a
 
 **Do not idle while children run**: The parent is free during a fan-out. Use that time to prepare the next brief, read files, or start more units — not to poll.
 
-**Choose appropriate presets**: Match the task to the specialist. Use researcher for investigation, reviewer for quality feedback, refactor for systematic changes.
+**Keep about six running at once**: Past roughly six concurrent sub-agents the provider starts throttling, and every agent slows down. More units of work than that is fine: start six, and start the next as each one finishes. The spawn tool tells the model the same.
+
+**Choose appropriate presets**: Match the task to the specialist. Use researcher for investigation, code_reviewer for quality feedback, refactor for systematic changes.
 
 **Handle results appropriately**: The spawn result is just information. The parent agent should interpret the findings and decide what to do next.
 
