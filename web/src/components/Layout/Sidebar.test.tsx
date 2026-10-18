@@ -291,10 +291,9 @@ describe("Sidebar selected chat scroll", () => {
     );
 
     expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
-    // Inbox sits directly under New chat (WORKFLOW_UI.md §1.2), with its badge.
+    // Inbox is in the nav with its badge; its position (after Apps) is pinned in Sidebar.forge-nav.test.tsx.
     const nav = screen.getByRole("navigation", { name: "Chat sidebar navigation" });
-    const navButtons = Array.from(nav.querySelectorAll("button"));
-    expect(navButtons[1]).toHaveAttribute("data-testid", "sidebar-inbox-button");
+    expect(nav).toContainElement(screen.getByTestId("sidebar-inbox-button"));
     expect(screen.getByTestId("inbox-badge-count")).toHaveTextContent("2");
     expect(screen.getByRole("button", { name: "Projects" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Workflows" })).toBeInTheDocument();
