@@ -671,8 +671,8 @@ export const DaemonService: GenService<{
   },
   /**
    * GrowDaemonDisk grows a MANAGED daemon's disk so it holds storage_gib of
-   * data — the billed part; the unbilled docker/cache allowance is added on
-   * top. Disks only grow: a smaller target is InvalidArgument, the current
+   * data; the docker/cache allowance is added on top, and the whole disk is
+   * billed. Disks only grow: a smaller target is InvalidArgument, the current
    * size is a successful no-op. Running or suspended: the cloud disk grows at
    * once, and a running machine uses the space after its next restart.
    *

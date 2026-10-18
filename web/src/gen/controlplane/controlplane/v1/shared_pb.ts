@@ -249,8 +249,8 @@ export const DaemonSchema: GenMessage<Daemon> = /*@__PURE__*/
 
 /**
  * DaemonDisk is a managed daemon's disk, in GiB of DATA: the part the customer
- * holds and is billed for. The unbilled docker/cache allowance that shares the
- * disk is never counted here.
+ * asks for and grows. The docker/cache allowance that shares the disk is billed
+ * too but is never counted in these data figures.
  *
  * @generated from message controlplane.v1.DaemonDisk
  */
@@ -273,8 +273,9 @@ export type DaemonDisk = Message<"controlplane.v1.DaemonDisk"> & {
   capacityGib: number;
 
   /**
-   * included_gib is the machine size's standard disk: the part its hourly
-   * price includes. requested_gib above it is billed while running too.
+   * included_gib is the machine size's standard DATA disk. The hourly price
+   * includes the standard whole disk (this plus the docker/cache allowance);
+   * data requested above this is billed while running too.
    *
    * @generated from field: int32 included_gib = 3;
    */
@@ -902,10 +903,10 @@ export type DaemonSizePrice = Message<"controlplane.v1.DaemonSizePrice"> & {
   hourlyPriceCents: string;
 
   /**
-   * The data (home) disk a daemon of this size is given, in GiB
-   * (config.DaemonTierStorageGiB) — the number the suspended-disk fee is
-   * charged on. The docker/cache volume every daemon also gets is platform
-   * overhead and is not included.
+   * The standard disk a daemon of this size is given, in GiB
+   * (WorkspaceConfig.DaemonTierDiskGiB): the tier's data volume plus the
+   * docker/cache allowance every daemon's single disk also carries — the number
+   * the suspended-disk fee is charged on. Both parts are billed.
    *
    * @generated from field: int64 storage_gib = 4;
    */

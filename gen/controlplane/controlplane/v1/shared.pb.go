@@ -952,8 +952,8 @@ func (x *Daemon) GetDisk() *DaemonDisk {
 }
 
 // DaemonDisk is a managed daemon's disk, in GiB of DATA: the part the customer
-// holds and is billed for. The unbilled docker/cache allowance that shares the
-// disk is never counted here.
+// asks for and grows. The docker/cache allowance that shares the disk is billed
+// too but is never counted in these data figures.
 type DaemonDisk struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// requested_gib is the size the machine holds: max(tier standard, grown).
@@ -963,8 +963,9 @@ type DaemonDisk struct {
 	// observed. Below requested_gib while a grow is in flight. Zero when not
 	// yet observed.
 	CapacityGib int32 `protobuf:"varint,2,opt,name=capacity_gib,json=capacityGib,proto3" json:"capacity_gib,omitempty"`
-	// included_gib is the machine size's standard disk: the part its hourly
-	// price includes. requested_gib above it is billed while running too.
+	// included_gib is the machine size's standard DATA disk. The hourly price
+	// includes the standard whole disk (this plus the docker/cache allowance);
+	// data requested above this is billed while running too.
 	IncludedGib int32           `protobuf:"varint,3,opt,name=included_gib,json=includedGib,proto3" json:"included_gib,omitempty"`
 	State       DaemonDiskState `protobuf:"varint,4,opt,name=state,proto3,enum=controlplane.v1.DaemonDiskState" json:"state,omitempty"`
 	// message is user-facing text explaining a FAILED (or slow) grow.
@@ -1965,10 +1966,10 @@ type DaemonSizePrice struct {
 	// Overage price per wall-clock hour at this size, in cents, as an exact
 	// decimal string: multiplier × the small hourly price.
 	HourlyPriceCents string `protobuf:"bytes,3,opt,name=hourly_price_cents,json=hourlyPriceCents,proto3" json:"hourly_price_cents,omitempty"`
-	// The data (home) disk a daemon of this size is given, in GiB
-	// (config.DaemonTierStorageGiB) — the number the suspended-disk fee is
-	// charged on. The docker/cache volume every daemon also gets is platform
-	// overhead and is not included.
+	// The standard disk a daemon of this size is given, in GiB
+	// (WorkspaceConfig.DaemonTierDiskGiB): the tier's data volume plus the
+	// docker/cache allowance every daemon's single disk also carries — the number
+	// the suspended-disk fee is charged on. Both parts are billed.
 	StorageGib    int64 `protobuf:"varint,4,opt,name=storage_gib,json=storageGib,proto3" json:"storage_gib,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
