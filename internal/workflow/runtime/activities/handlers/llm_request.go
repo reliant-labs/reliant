@@ -44,6 +44,12 @@ type llmCallSpec struct {
 	// fallback rather than a secondary preference.
 	FallbackSelector models.ModelSelector
 
+	// RunProviders are the provider(s) the user chose for the run
+	// (RuntimeContext.ProviderPreference). They apply only to a selector that
+	// names no provider of its own (see withRunProviders), and then rank above
+	// the user's tag preference model and the tier's own order.
+	RunProviders []string
+
 	// Explicit per-call overrides. Zero values mean "use the resolved model's
 	// default" — exactly like an unset workflow arg on a normal request.
 	Temperature   *float64
@@ -160,6 +166,11 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 	effectiveThinkingLevel := spec.ThinkingLevel
 	var tagCompactionThreshold int32
 
+	// A selector that names no provider takes the run's: the user's choice of
+	// provider for the run outranks the user's per-tag model preference and
+	// the tier's own order. runPinned records that it did.
+	selector, runPinned := withRunProviders(spec.Selector, spec.RunProviders)
+
 	if resolver != nil {
 		// Probe the injected resolver for its model. Explicit spec values are
 		// used directly (no model defaults available), but are still
@@ -182,7 +193,7 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 			return nil, err
 		}
 		providerDriver = string(local.Family)
-	} else if pinned, pinnedSpec, ok := resolvePinnedLocalPref(ctx, spec); ok {
+	} else if pinned, pinnedSpec, ok := resolvePinnedLocalPref(ctx, spec); ok && !runPinned {
 		legacyModel, definition, modelIDForDriver, effectiveThinkingLevel, localTransport = pinned.legacy, pinned.definition, pinned.modelID, pinned.thinkingLevel, pinned.transport
 		providerDriver = string(local.Family)
 		if effectiveTemperature == nil {
@@ -207,15 +218,19 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 
 		prefs := loadTagPrefs(ctx, spec, registry)
 		var resolved *models.ResolvedModel
-		if preferred := prefs.PreferredModel(registry, spec.Selector, availableProviders); preferred != nil {
+		var runProviders []string
+		if runPinned {
+			runProviders = selector.Providers
+		}
+		if preferred := prefs.PreferredModelOn(registry, selector, availableProviders, runProviders); preferred != nil {
 			resolved = preferred
 		} else {
-			if prefs.ModelID != "" && !prefs.IsLocalModel() {
+			if prefs.ModelID != "" && !prefs.IsLocalModel() && !runPinned {
 				logging.Warn("[LLMRequest] Ignoring tag preference model_id: not available for this user",
 					"userID", spec.UserID, "tag", modelprefs.TagFor(spec.Selector), "modelID", prefs.ModelID)
 			}
 			var err error
-			resolved, err = resolve(spec.Selector, availableProviders)
+			resolved, err = resolve(selector, availableProviders)
 			if err != nil {
 				return nil, resolutionError(err, availableDrivers)
 			}
@@ -431,6 +446,23 @@ func resolutionError(err error, available models.AvailableDrivers) error {
 		msg += ". Connect a provider that serves this model in Settings → Providers"
 	}
 	return &resolveFailure{msg: msg, cause: err}
+}
+
+// withRunProviders gives a model selector that names no provider the
+// provider(s) the user chose for the run (RuntimeContext.ProviderPreference).
+//
+// A selector that already names a provider — a pinned "<model>@<driver>" id or
+// its own providers list — is the more specific choice and is returned
+// unchanged. For a tier selector the providers rank the tier's candidates
+// (ModelRegistry.Resolve); where they serve none, the tier's own order
+// decides, so a preference never makes a call unresolvable. The bool reports
+// whether the run's providers were applied.
+func withRunProviders(selector models.ModelSelector, runProviders []string) (models.ModelSelector, bool) {
+	if len(runProviders) == 0 || len(selector.Providers) > 0 || strings.Contains(selector.ID, "@") {
+		return selector, false
+	}
+	selector.Providers = append([]string(nil), runProviders...)
+	return selector, true
 }
 
 // configuredProviderIDs returns the driver IDs the user has properly

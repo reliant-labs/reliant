@@ -1312,6 +1312,7 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 	propagateUnattended(e.workflowInputs, iterInputs)
 	propagateActingIdentity(e.workflowInputs, iterInputs)
 	propagateTrigger(e.workflowInputs, iterInputs)
+	propagateProviderPreference(e.workflowInputs, iterInputs)
 	iterInputs["loop"] = map[string]interface{}{"iteration": e.iteration}
 	iterInputs["iter"] = e.buildIterCtx()
 	return iterInputs, nil

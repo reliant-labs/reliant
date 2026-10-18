@@ -977,6 +977,51 @@ func TestResolve_WithForcedProvider(t *testing.T) {
 			wantID:       "claude-4-opus", // First flagship with openrouter
 			wantProvider: "openrouter",
 		},
+		{
+			// The tier leads with Claude, which openai does not serve. The
+			// preference picks the tier's best-ranked model ON openai rather
+			// than settling for the leader on another provider.
+			name:         "preferred provider picks the tier's best-ranked model it serves",
+			selector:     ModelSelector{Tags: []string{"flagship"}, Providers: []string{"openai"}},
+			available:    []string{"anthropic", "openai"},
+			wantID:       "gpt-4o",
+			wantProvider: "openai",
+		},
+		{
+			name:         "preferred providers are tried in the order named",
+			selector:     ModelSelector{Tags: []string{"fast"}, Providers: []string{"openai", "anthropic"}},
+			available:    []string{"anthropic", "openai"},
+			wantID:       "gpt-4o",
+			wantProvider: "openai",
+		},
+		{
+			name:         "a later preferred provider is used when the first serves nothing",
+			selector:     ModelSelector{Tags: []string{"fast"}, Providers: []string{"gemini", "openai"}},
+			available:    []string{"anthropic", "openai"},
+			wantID:       "gpt-4o",
+			wantProvider: "openai",
+		},
+		{
+			name:         "preferred provider serving nothing in the tier falls back to the tier's order",
+			selector:     ModelSelector{Tags: []string{"flagship"}, Providers: []string{"gemini"}},
+			available:    []string{"anthropic", "openai"},
+			wantID:       "claude-4-opus",
+			wantProvider: "anthropic",
+		},
+		{
+			name:         "preferred provider that is not connected falls back to the tier's order",
+			selector:     ModelSelector{Tags: []string{"flagship"}, Providers: []string{"openai"}},
+			available:    []string{"anthropic"},
+			wantID:       "claude-4-opus",
+			wantProvider: "anthropic",
+		},
+		{
+			name:         "preferred provider serving only a model outside the tier is not used",
+			selector:     ModelSelector{Tags: []string{"reasoning"}, Providers: []string{"openai"}},
+			available:    []string{"anthropic", "openai"},
+			wantID:       "claude-4-opus",
+			wantProvider: "anthropic",
+		},
 	}
 
 	for _, tt := range tests {

@@ -3032,6 +3032,10 @@ func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]int
 	propagateUnattended(workflowInputs, childInputs)
 	propagateActingIdentity(workflowInputs, childInputs)
 	propagateTrigger(workflowInputs, childInputs)
+	// The child's model comes from its preset, which names a tier; the
+	// parent's provider choice is what makes that tier resolve on the
+	// provider the user picked. See provider_preference.go.
+	propagateProviderPreference(workflowInputs, childInputs)
 
 	// Derive parent_permission so child permission is capped to parent's level.
 	// If the parent already has a parent_permission (chained spawn), propagate the

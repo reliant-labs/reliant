@@ -365,7 +365,11 @@ func (r *ModelRegistry) ListAllTags() []string {
 //     earliest matching tag's list
 //     - Falls back gracefully if no perfect match exists
 //  3. For each candidate, find a provider that's in availableProviders
-//  4. If selector.Providers is set, try each in order (first available wins)
+//  4. If selector.Providers is set, it picks the MODEL as well as the provider
+//     for tags: for each preferred provider, in the order named, the
+//     best-ranked candidate it serves wins, even over a higher-ranked
+//     candidate only other providers serve. Only when no preferred provider
+//     serves any candidate does the tier's own order decide
 //  5. Return error if no match found
 //
 // The result's ThinkingLevel is the effort to run at absent an explicit one:
@@ -412,16 +416,28 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 		}
 	}
 
+	// Preferred providers pick the tier ON those providers: for each, in the
+	// order named, the best-ranked candidate it serves wins. Asking
+	// findBestProvider per candidate in tier order (below) honors the
+	// preference only among the providers of whichever candidate ranks first,
+	// so a tier led by another provider's model ignored it entirely:
+	// {tags:[fast], providers:[codex]} resolved to Claude whenever Claude was
+	// connected and led the tier.
+	for _, preferred := range selector.Providers {
+		for _, candidate := range candidates {
+			servable, _ := restrictProviders(candidate.model, availableSet, avail)
+			if provider, err := r.findBestProvider(candidate.model, []string{preferred}, servable, true); err == nil {
+				return resolvedWithAvailability(candidate.model, provider, candidate.thinkingLevel(), avail), nil
+			}
+		}
+	}
+
 	// The first candidate with an available provider wins, at its entry's effort.
 	for _, candidate := range candidates {
 		servable, _ := restrictProviders(candidate.model, availableSet, avail)
-		provider, err := r.findBestProvider(candidate.model, selector.Providers, servable, false)
+		provider, err := r.findBestProvider(candidate.model, nil, servable, false)
 		if err == nil {
-			level := ThinkingLevelFor(candidate.model)
-			if candidate.entry.ThinkingLevel != "" {
-				level = ClampThinkingLevel(ResolveThinkingCapability(candidate.model.Capabilities), candidate.entry.ThinkingLevel)
-			}
-			return resolvedWithAvailability(candidate.model, provider, level, avail), nil
+			return resolvedWithAvailability(candidate.model, provider, candidate.thinkingLevel(), avail), nil
 		}
 	}
 
@@ -506,6 +522,16 @@ type tagCandidate struct {
 	// rank orders ties: (index of the entry's tag in the selector, position of
 	// the entry within that tag's list).
 	tagIndex, position int
+}
+
+// thinkingLevel is the effort the candidate runs at when it wins: its entry's
+// level, clamped to what the model supports, or the model's capability
+// default when the entry declares none.
+func (c tagCandidate) thinkingLevel() string {
+	if c.entry.ThinkingLevel != "" {
+		return ClampThinkingLevel(ResolveThinkingCapability(c.model.Capabilities), c.entry.ThinkingLevel)
+	}
+	return ThinkingLevelFor(c.model)
 }
 
 // findCandidatesByBestMatch returns every model listed under any selector tag,

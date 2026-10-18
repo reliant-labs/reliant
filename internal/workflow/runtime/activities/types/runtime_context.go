@@ -83,6 +83,13 @@ type RuntimeContext struct {
 	// capability set with it, so it is set on call_llm nodes only.
 	Unattended bool `json:"unattended,omitempty"`
 
+	// ProviderPreference is the run's runtime.ProviderPreference: the
+	// provider(s) the user chose for the run. call_llm hands it to a model
+	// selector that names no provider of its own, so a sub-agent's tier
+	// resolves on the provider the user picked instead of whichever connected
+	// provider leads the tier. Set on call_llm nodes only.
+	ProviderPreference []string `json:"provider_preference,omitempty"`
+
 	// ActingIdentity is who this run's integration writes speak as, read off
 	// the run's inputs (runtime.ActingIdentity): "app" for the GitHub App's bot,
 	// empty for the owner. Set on every node, because an `action` node and an

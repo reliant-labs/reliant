@@ -106,6 +106,9 @@ var RuntimeInjectedInputs = map[string]bool{
 	// The run the chat's launch started, as opposed to one a person's reply
 	// started later (runtime.InputKeyLaunchRun). Injected by the launcher only.
 	"__launch_run": true,
+	// The provider(s) the user chose for the run, carried to every child
+	// (runtime.InputKeyProviderPreference). Injected by the runtime only.
+	"__provider_preference": true,
 	// Who the run's integration writes speak as, and which automation it is
 	// (runtime.InputKeyActingIdentity / InputKeyAutomation). Injected by the
 	// launcher only; a reply's run never carries them.

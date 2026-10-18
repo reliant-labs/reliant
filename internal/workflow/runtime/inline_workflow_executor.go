@@ -524,6 +524,7 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputsWithOwnership() (map[stri
 	propagateUnattended(e.workflowInputs, subInputs)
 	propagateActingIdentity(e.workflowInputs, subInputs)
 	propagateTrigger(e.workflowInputs, subInputs)
+	propagateProviderPreference(e.workflowInputs, subInputs)
 
 	return subInputs, ownedKeys, nil
 }

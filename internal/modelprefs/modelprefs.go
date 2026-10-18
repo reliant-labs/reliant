@@ -9,6 +9,14 @@
 // (this package) > tier/model default. This package only supplies the tag
 // preference layer; callers own the layers above it.
 //
+// One more fact sits between the model value and the tag preference: the
+// provider the user chose for the run (a chat on "gpt-…@codex" and everything
+// it spawns). It fills in only for a selector that names no provider, and it is
+// more specific than the per-tag preference, so a tag preference that pins its
+// tier to a model the run's provider cannot serve gives up its MODEL
+// (PreferredModelOn returns nil) and keeps its thinking level, temperature and
+// compaction threshold.
+//
 //forge:exclude-contract: decodes and applies tag preference settings over the consumer-declared SettingsReader; pure precedence logic
 package modelprefs
 
@@ -17,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -130,6 +139,16 @@ func (p TagPrefs) LocalSelector() models.ModelSelector {
 // resolution is by-id, so its ThinkingLevel is the model's capability default,
 // not the tier entry's.
 func (p TagPrefs) PreferredModel(registry *models.ModelRegistry, selector models.ModelSelector, providers []string) *models.ResolvedModel {
+	return p.PreferredModelOn(registry, selector, providers, nil)
+}
+
+// PreferredModelOn is PreferredModel for a run whose user chose a provider
+// (runProviders, non-empty). The run's provider is the more specific fact: a
+// tag preference pinning its tier to a model that provider cannot serve
+// yields nil, so the tier resolves on the run's provider. The preference's
+// thinking level, temperature and compaction threshold are read separately
+// (ValidThinkingLevel, Temperature, CompactionThreshold) and still apply.
+func (p TagPrefs) PreferredModelOn(registry *models.ModelRegistry, selector models.ModelSelector, providers, runProviders []string) *models.ResolvedModel {
 	if p.ModelID == "" || p.IsLocalModel() {
 		return nil
 	}
@@ -143,6 +162,9 @@ func (p TagPrefs) PreferredModel(registry *models.ModelRegistry, selector models
 		RequireOutputModality: selector.RequireOutputModality,
 	}, providers)
 	if err != nil {
+		return nil
+	}
+	if len(runProviders) > 0 && !slices.Contains(runProviders, resolved.Provider.Driver) {
 		return nil
 	}
 	return resolved

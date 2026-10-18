@@ -282,6 +282,15 @@ func provisionProviderKeys(t *testing.T, ctx context.Context, userID string, pro
 			require.NoError(t, repo.SetProviderAPIKey(ctx, userID, provider, db.ProviderOAuthMarker))
 			continue
 		}
+		if provider == "codex" {
+			// Codex's credential lives in its own token table too.
+			require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
+				AccessToken:  "codex-access",
+				RefreshToken: "codex-refresh",
+			}))
+			require.NoError(t, repo.SetProviderAPIKey(ctx, userID, provider, db.ProviderOAuthMarker))
+			continue
+		}
 		require.NoError(t, repo.SetProviderAPIKey(ctx, userID, provider, "test-key-"+provider))
 	}
 }

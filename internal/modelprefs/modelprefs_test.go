@@ -71,3 +71,23 @@ func TestDecode_EndpointPinIsALocalModel(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, empty.IsLocalModel(), "a bare prefix names nothing")
 }
+
+// The run's provider is more specific than the user's per-tag model: a
+// preference pinning its tier to a model that provider cannot serve gives up
+// its model, and one the provider does serve still applies.
+func TestPreferredModelOn_RunProviderOutranksTheTagModel(t *testing.T) {
+	registry := models.MustGetRegistry()
+	fast := models.ModelSelector{Tags: []string{models.TagFast}}
+	both := []string{"anthropic", "codex"}
+	haiku := TagPrefs{ModelID: "claude-4.5-haiku"}
+
+	require.NotNil(t, haiku.PreferredModelOn(registry, fast, both, nil))
+	require.NotNil(t, haiku.PreferredModelOn(registry, fast, both, []string{"anthropic"}))
+	assert.Nil(t, haiku.PreferredModelOn(registry, fast, both, []string{"codex"}),
+		"codex does not serve the pinned model, so the tier resolves on codex instead")
+
+	luna := TagPrefs{ModelID: "gpt-6-luna"}
+	got := luna.PreferredModelOn(registry, fast, both, []string{"codex"})
+	require.NotNil(t, got)
+	assert.Equal(t, "codex", got.Provider.Driver)
+}
