@@ -16,6 +16,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/anthropicwire"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -47,6 +48,10 @@ type baseClient struct {
 	options llm.DriverOptions
 	client  anthropic.Client
 
+	// ladder overrides the retry ladder's defaults; tests inject the sleeper
+	// and clock here.
+	ladder ratelimit.Retryer
+
 	// wireToolPrefix is the prefix tool names carry on the wire, stripped from
 	// every tool name the model returns so callers only ever see Reliant's own
 	// names. Empty for the plain Anthropic driver; ClaudeCodeClient presents
@@ -57,6 +62,16 @@ type baseClient struct {
 	// baseClient's stream loop. Overriding meant forking the whole loop, and
 	// the fork silently missed the retry ladder in stream_retry.go.
 	wireToolPrefix string
+}
+
+// retryer returns the streaming request's retry ladder.
+func (b *baseClient) retryer() ratelimit.Retryer {
+	r := b.ladder
+	if r.Provider == "" {
+		r.Provider = "Anthropic"
+		r.Log = "Anthropic stream request"
+	}
+	return r
 }
 
 func newBase(opts llm.DriverOptions, clientOptions []option.RequestOption) *baseClient {
@@ -581,31 +596,28 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 		// beta sends nothing else for as long as the model thinks, and the
 		// most it can think is max_tokens.
 		requestCtx := llm.WithStreamOutputBudget(ctx, params.MaxTokens)
-		for attempt := 1; ; attempt++ {
+		emitCancelled := false
+		openErr = b.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
 			stream = b.client.Messages.NewStreaming(requestCtx, params, option.WithMaxRetries(0))
 			if hasNext = stream.Next(); hasNext {
-				break
+				return ratelimit.Failure{}, true
 			}
-			wait, retry, err := streamRetryDecision(attempt, stream.Err())
-			if !retry {
-				openErr = err
-				break
-			}
+			return anthropicFailure(stream.Err()), false
+		}, func(wait llm.RetryWait) error {
 			_ = stream.Close()
-			logging.Warn("Anthropic stream request failed; retrying",
-				"attempt", wait.Attempt, "delay", wait.Delay, "status", wait.StatusCode,
-				"reason", wait.Reason, "error", stream.Err())
 			select {
 			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
 			case <-ctx.Done():
-				return
+				emitCancelled = true
+				return ctx.Err()
 			}
-			select {
-			case <-time.After(wait.Delay):
-			case <-ctx.Done():
+		})
+		if openErr != nil && openErr == ctx.Err() {
+			if !emitCancelled {
 				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
-				return
 			}
+			return
 		}
 
 		accumulated := anthropic.Message{}
@@ -716,7 +728,7 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 		streamErr := stream.Err()
 		if openErr != nil {
 			// The ladder's verdict, which may wrap the SDK error with why it
-			// stopped retrying (RetryAfterTooLongError).
+			// stopped retrying (ratelimit.UsageLimitError).
 			streamErr = openErr
 		}
 		if err := streamErr; err != nil && !errors.Is(err, io.EOF) {

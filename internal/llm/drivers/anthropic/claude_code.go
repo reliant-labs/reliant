@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -148,6 +149,8 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 		clientOptions = append(clientOptions, option.WithRequestTimeout(10*time.Second))
 	}
 
+	clientOptions = append(clientOptions,
+		option.WithMiddleware(ratelimit.Middleware("claude-code", ratelimit.ParseAnthropic)))
 	base := newBase(opts, clientOptions)
 	base.wireToolPrefix = mcpToolPrefix
 	return &ClaudeCodeClient{baseClient: base}

@@ -17,6 +17,7 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
+	"github.com/openai/openai-go/v3/packages/ssestream"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -24,6 +25,7 @@ import (
 	openaidriver "github.com/reliant-labs/reliant/internal/llm/drivers/openai"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/responseswire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -94,6 +96,9 @@ type CodexClient struct {
 	accessToken    string // OAuth access token
 	sessionID      string
 	installationID string // Stable per-process installation identifier (codex-tui telemetry)
+
+	// ladder overrides the retry ladder's defaults; tests inject the sleeper.
+	ladder ratelimit.Retryer
 }
 
 // Name returns the name of the driver
@@ -151,6 +156,7 @@ func NewClient(opts llm.DriverOptions) (*CodexClient, error) {
 		option.WithHeader("session-id", sessionID),
 		option.WithHeader("thread-id", sessionID),
 		option.WithHeader("x-codex-window-id", sessionID+":0"),
+		option.WithMiddleware(ratelimit.Middleware("codex", ratelimit.ParseCodex)),
 	}
 
 	bearerToken := strings.TrimSpace(opts.BearerToken)
@@ -579,6 +585,9 @@ func (c *CodexClient) newTurnContext() turnContext {
 func (c *CodexClient) requestOptions(tc turnContext, into **http.Response) []option.RequestOption {
 	opts := []option.RequestOption{
 		option.WithResponseInto(into),
+		// Retries live in the driver (retry.go) so every wait is published as
+		// EventRetryWait; the SDK's own would sleep invisibly.
+		option.WithMaxRetries(0),
 		option.WithHeader("x-client-request-id", tc.requestID),
 		option.WithHeader("x-codex-turn-metadata", tc.turnMetadataJSON),
 	}
@@ -724,9 +733,18 @@ func (c *CodexClient) SendMessages(ctx context.Context, prompts []string, messag
 	c.applyClientMetadata(&params, tc)
 	c.logRequestShape(&params)
 
-	var rawResp *http.Response
-	resp, err := c.client.Responses.New(ctx, params, c.requestOptions(tc, &rawResp)...)
-	if err != nil {
+	var (
+		rawResp *http.Response
+		resp    *responses.Response
+	)
+	if err := c.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
+		var callErr error
+		resp, callErr = c.client.Responses.New(ctx, params, c.requestOptions(tc, &rawResp)...)
+		if callErr != nil {
+			return codexFailure(callErr), false
+		}
+		return ratelimit.Failure{}, true
+	}, nil); err != nil {
 		return nil, fmt.Errorf("codex API request failed: %w", AugmentAPIError(err))
 	}
 	if resp.Error.Message != "" {
@@ -789,14 +807,52 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 		c.applyClientMetadata(&params, tc)
 		c.logRequestShape(&params)
 
-		var streamResp *http.Response
-		stream := c.client.Responses.NewStreaming(ctx, params, c.requestOptions(tc, &streamResp)...)
+		var (
+			streamResp *http.Response
+			stream     *ssestream.Stream[responses.ResponseStreamEventUnion]
+			hasNext    bool
+		)
+		defer func() {
+			if stream != nil {
+				_ = stream.Close()
+			}
+		}()
+		emitCancelled := false
+		openErr := c.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
+			streamResp = nil
+			stream = c.client.Responses.NewStreaming(ctx, params, c.requestOptions(tc, &streamResp)...)
+			if hasNext = stream.Next(); hasNext {
+				return ratelimit.Failure{}, true
+			}
+			return codexFailure(stream.Err()), false
+		}, func(wait llm.RetryWait) error {
+			_ = stream.Close()
+			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
+			case <-ctx.Done():
+				emitCancelled = true
+				return ctx.Err()
+			}
+		})
+		if openErr != nil {
+			if openErr == ctx.Err() {
+				if !emitCancelled {
+					eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
+				}
+				return
+			}
+			openErr = AugmentAPIError(openErr)
+			logging.Error("[Codex] Stream error", "error", openErr)
+			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: openErr}
+			return
+		}
 
 		currentContent := ""
 		toolCallsByID := make(map[string]*message.ToolCall)
 		var finalResp *responses.Response
 
-		for stream.Next() {
+		for ; hasNext; hasNext = stream.Next() {
 			ev := stream.Current()
 
 			switch v := ev.AsAny().(type) {
@@ -900,7 +956,14 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				finalResp = &v.Response
 
 			default:
-				// Unhandled event type — ignore
+				// codex.rate_limits is a Codex-specific event the SDK has no
+				// type for; its raw JSON still survives decoding.
+				// Verified: codex-rs codex-api/src/rate_limits.rs parse_rate_limit_event.
+				if ev.Type == "codex.rate_limits" {
+					if snap, ok := ratelimit.ParseCodexEvent([]byte(ev.RawJSON()), time.Now()); ok {
+						ratelimit.Observe(ctx, "codex", snap)
+					}
+				}
 			}
 		}
 

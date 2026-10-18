@@ -16,18 +16,23 @@ import (
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestStreamRetryDecision(t *testing.T) {
-	apiErr := func(status int, header http.Header) error {
+func TestAnthropicLadderDecisions(t *testing.T) {
+	apiErr := func(status int, header http.Header, body string) error {
 		return &anthropic.Error{StatusCode: status, Response: &http.Response{StatusCode: status, Header: header}}
 	}
 	hdr := func(k, v string) http.Header { h := http.Header{}; h.Set(k, v); return h }
+	r := ratelimit.Retryer{Provider: "Anthropic", Jitter: func(time.Duration) time.Duration { return 0 }}
+	decide := func(attempt int, err error) (llm.RetryWait, bool, error) {
+		return r.Decide(attempt, anthropicFailure(err))
+	}
 
 	t.Run("429 honors Retry-After seconds", func(t *testing.T) {
-		wait, retry, err := streamRetryDecision(1, apiErr(429, hdr("Retry-After", "3")))
+		wait, retry, err := decide(1, apiErr(429, hdr("Retry-After", "3"), ""))
 		require.NoError(t, err)
 		assert.True(t, retry)
 		assert.Equal(t, 3*time.Second, wait.Delay)
@@ -37,37 +42,56 @@ func TestStreamRetryDecision(t *testing.T) {
 	t.Run("retry-after-ms wins over Retry-After", func(t *testing.T) {
 		h := hdr("Retry-After", "30")
 		h.Set("Retry-After-Ms", "250")
-		wait, retry, _ := streamRetryDecision(1, apiErr(529, h))
+		wait, retry, _ := decide(1, apiErr(529, h, ""))
 		assert.True(t, retry)
 		assert.Equal(t, 250*time.Millisecond, wait.Delay)
 	})
 	t.Run("a Retry-After past the cap is surfaced, not slept", func(t *testing.T) {
-		_, retry, err := streamRetryDecision(1, apiErr(429, hdr("Retry-After", "3600")))
+		_, retry, err := decide(1, apiErr(429, hdr("Retry-After", "3600"), ""))
 		assert.False(t, retry)
-		var tooLong *RetryAfterTooLongError
-		require.ErrorAs(t, err, &tooLong)
-		assert.Equal(t, time.Hour, tooLong.RetryAfter)
+		var limit *ratelimit.UsageLimitError
+		require.ErrorAs(t, err, &limit)
+		assert.Equal(t, time.Hour, limit.RetryAfter)
 	})
 	t.Run("a client error is not retried", func(t *testing.T) {
-		orig := apiErr(400, nil)
-		_, retry, err := streamRetryDecision(1, orig)
+		orig := apiErr(400, nil, "")
+		_, retry, err := decide(1, orig)
 		assert.False(t, retry)
 		assert.Same(t, orig, err)
 	})
 	t.Run("a connection error is retried with backoff", func(t *testing.T) {
-		wait, retry, err := streamRetryDecision(2, errors.New("remote error: tls: bad record MAC"))
+		wait, retry, err := decide(2, errors.New("remote error: tls: bad record MAC"))
 		require.NoError(t, err)
 		assert.True(t, retry)
 		assert.Equal(t, "connection_error", wait.Reason)
-		assert.GreaterOrEqual(t, wait.Delay, 4*time.Second)
+		assert.Equal(t, 4*time.Second, wait.Delay)
 	})
 	t.Run("cancellation is never retried", func(t *testing.T) {
-		_, retry, _ := streamRetryDecision(1, fmt.Errorf("stream: %w", context.Canceled))
+		_, retry, _ := decide(1, fmt.Errorf("stream: %w", context.Canceled))
 		assert.False(t, retry)
 	})
 	t.Run("the ladder ends at MaxRetries", func(t *testing.T) {
-		_, retry, _ := streamRetryDecision(models.MaxRetries+1, apiErr(503, nil))
+		_, retry, _ := decide(models.MaxRetries+1, apiErr(503, nil, ""))
 		assert.False(t, retry)
+	})
+	t.Run("an explicit rejected status is a usage window even with a short Retry-After", func(t *testing.T) {
+		h := hdr("Retry-After", "2")
+		h.Set("anthropic-ratelimit-unified-status", "rejected")
+		h.Set("anthropic-ratelimit-unified-representative-claim", "five_hour")
+		h.Set("anthropic-ratelimit-unified-reset", "1790712000")
+		_, retry, err := decide(1, apiErr(429, h, ""))
+		assert.False(t, retry, "no point retrying against an exhausted window")
+		var limit *ratelimit.UsageLimitError
+		require.ErrorAs(t, err, &limit)
+		assert.Equal(t, time.Unix(1790712000, 0).UTC(), limit.ResetAt)
+		assert.Equal(t, "five_hour", limit.Window)
+	})
+	t.Run("allowed_warning does not stop the ladder", func(t *testing.T) {
+		h := hdr("Retry-After", "2")
+		h.Set("anthropic-ratelimit-unified-status", "allowed_warning")
+		_, retry, err := decide(1, apiErr(429, h, ""))
+		require.NoError(t, err)
+		assert.True(t, retry)
 	})
 }
 
@@ -168,7 +192,7 @@ func TestStreamSurfacesARetryAfterPastTheCap(t *testing.T) {
 	var sawErr bool
 	for _, ev := range events {
 		if ev.Type == llm.EventError {
-			var tooLong *RetryAfterTooLongError
+			var tooLong *ratelimit.UsageLimitError
 			require.ErrorAs(t, ev.Error, &tooLong)
 			assert.Equal(t, 2*time.Hour, tooLong.RetryAfter)
 			assert.Equal(t, time.Unix(1790712000, 0).UTC(), tooLong.ResetAt, "the provider's own reset time wins over now+Retry-After")

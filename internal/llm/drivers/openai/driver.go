@@ -25,12 +25,14 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
+	"github.com/openai/openai-go/v3/packages/ssestream"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/cache"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/responseswire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -39,6 +41,9 @@ import (
 type OpenaiClient struct {
 	Options llm.DriverOptions
 	Client  openai.Client
+
+	// ladder overrides the retry ladder's defaults; tests inject the clock.
+	ladder ratelimit.Retryer
 
 	// MintToolCallIDs gives every tool call an id of ours (llm.NewToolCallID)
 	// instead of the one the server returned. Set by drivers that relay
@@ -67,7 +72,9 @@ func NewClient(opts llm.DriverOptions) *OpenaiClient {
 		opts.ReasoningEffort = "medium"
 	}
 	// Note: "disabled" is a valid value that means no reasoning - don't override it
-	openaiClientOptions := []option.RequestOption{}
+	openaiClientOptions := []option.RequestOption{
+		option.WithMiddleware(ratelimit.Middleware("openai", ratelimit.ParseOpenAI)),
+	}
 	if opts.ApiKey != "" {
 		openaiClientOptions = append(openaiClientOptions, option.WithAPIKey(opts.ApiKey))
 	}
@@ -367,23 +374,21 @@ func (o *OpenaiClient) SendMessages(ctx context.Context, prompts []string, messa
 			ctx,
 			params,
 			option.WithResponseInto(&rawResp),
+			option.WithMaxRetries(0),
 		)
 		// If there is an error we are going to see if we can retry the call
 		if err != nil {
-			retry, after, retryErr := o.shouldRetry(attempts, err)
-			if retryErr != nil {
+			wait, retry, retryErr := o.retryDecision(attempts, err)
+			if !retry {
 				return nil, retryErr
 			}
-			if retry {
-				logging.Warn(fmt.Sprintf("Retrying due to rate limit... attempt %d of %d", attempts, models.MaxRetries))
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(time.Duration(after) * time.Millisecond):
-					continue
-				}
+			logging.Warn("OpenAI request failed; retrying", "attempt", wait.Attempt, "delay", wait.Delay, "status", wait.StatusCode, "reason", wait.Reason)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(wait.Delay):
+				continue
 			}
-			return nil, retryErr
 		}
 
 		content := ""
@@ -432,6 +437,7 @@ func (o *OpenaiClient) StreamResponse(ctx context.Context, prompts []string, mes
 				ctx,
 				params,
 				option.WithResponseInto(&streamResp),
+				option.WithMaxRetries(0),
 			)
 
 			acc := openai.ChatCompletionAccumulator{}
@@ -508,61 +514,74 @@ func (o *OpenaiClient) StreamResponse(ctx context.Context, prompts []string, mes
 			}
 
 			// If there is an error we are going to see if we can retry the call
-			retry, after, retryErr := o.shouldRetry(attempts, err)
-			if retryErr != nil {
+			wait, retry, retryErr := o.retryDecision(attempts, err)
+			if !retry {
 				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
 				close(eventChan)
 				return
 			}
-			if retry {
-				logging.Warn(fmt.Sprintf("Retrying due to rate limit... attempt %d of %d", attempts, models.MaxRetries))
-				select {
-				case <-ctx.Done():
-					// context cancelled
-					if ctx.Err() != nil {
-						eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
-					}
-					close(eventChan)
-					return
-				case <-time.After(time.Duration(after) * time.Millisecond):
-					continue
-				}
+			logging.Warn("OpenAI stream request failed; retrying", "attempt", wait.Attempt, "delay", wait.Delay, "status", wait.StatusCode, "reason", wait.Reason)
+			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+			case <-ctx.Done():
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
+				close(eventChan)
+				return
 			}
-			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
-			close(eventChan)
-			return
+			select {
+			case <-ctx.Done():
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
+				close(eventChan)
+				return
+			case <-time.After(wait.Delay):
+				continue
+			}
 		}
 	}()
 
 	return eventChan
 }
 
-func (o *OpenaiClient) shouldRetry(attempts int, err error) (bool, int64, error) {
-	var apierr *openai.Error
-	if !errors.As(err, &apierr) {
-		return false, 0, err
+// retryDecision runs the shared ladder (ratelimit.Retryer) for a failed chat
+// attempt. Unlike the private ladder it replaced, it caps a Retry-After at five
+// minutes (a longer one becomes a ratelimit.UsageLimitError carrying the
+// KindProviderUsageLimit marker), honors the HTTP-date and millisecond forms,
+// and — through the stream path — publishes each wait as EventRetryWait so
+// CallLLM records provider_backoff.
+func (o *OpenaiClient) retryer() ratelimit.Retryer {
+	r := o.ladder
+	if r.Provider == "" {
+		r.Provider = "OpenAI"
+		r.Log = "OpenAI request"
 	}
+	return r
+}
 
-	if apierr.StatusCode != 429 && apierr.StatusCode != 500 {
-		return false, 0, err
+// retryDecision runs the shared ladder (ratelimit.Retryer) for a failed chat
+// attempt. Unlike the private ladder it replaced, it caps a Retry-After at five
+// minutes (a longer one becomes a ratelimit.UsageLimitError carrying the
+// KindProviderUsageLimit marker), honors the HTTP-date and millisecond forms,
+// and on the streaming paths publishes each wait as EventRetryWait so CallLLM
+// records provider_backoff.
+func (o *OpenaiClient) retryDecision(attempt int, err error) (llm.RetryWait, bool, error) {
+	return o.retryer().Decide(attempt, openaiFailure(err))
+}
+
+// openaiFailure describes a failed attempt to the shared ladder.
+// insufficient_quota is a 429 that no wait fixes; it is returned unchanged for
+// drivererrors.IsProviderCreditExhaustion to classify downstream.
+func openaiFailure(err error) ratelimit.Failure {
+	f := ratelimit.Failure{Err: err}
+	var apiErr *openai.Error
+	if !errors.As(err, &apiErr) {
+		return f
 	}
-
-	if attempts > models.MaxRetries {
-		return false, 0, fmt.Errorf("maximum retry attempts reached for rate limit: %d retries", models.MaxRetries)
+	f.Status = apiErr.StatusCode
+	if apiErr.Response != nil {
+		f.Header = apiErr.Response.Header
 	}
-
-	retryMs := 0
-	retryAfterValues := apierr.Response.Header.Values("Retry-After")
-
-	backoffMs := 2000 * (1 << (attempts - 1))
-	jitterMs := int(float64(backoffMs) * 0.2)
-	retryMs = backoffMs + jitterMs
-	if len(retryAfterValues) > 0 {
-		if _, err := fmt.Sscanf(retryAfterValues[0], "%d", &retryMs); err == nil {
-			retryMs = retryMs * 1000
-		}
-	}
-	return true, int64(retryMs), nil
+	f.Fatal = apiErr.Code == "insufficient_quota" || apiErr.Type == "insufficient_quota"
+	return f
 }
 
 func (o *OpenaiClient) toolCalls(completion openai.ChatCompletion) []message.ToolCall {
@@ -874,9 +893,18 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 		params.Reasoning = shared.ReasoningParam{Effort: reasoningEffort(o.Options.ReasoningEffort)}
 	}
 
-	var rawResp *http.Response
-	resp, err := o.Client.Responses.New(ctx, params, option.WithResponseInto(&rawResp))
-	if err != nil {
+	var (
+		rawResp *http.Response
+		resp    *responses.Response
+	)
+	if err := o.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
+		var callErr error
+		resp, callErr = o.Client.Responses.New(ctx, params, option.WithResponseInto(&rawResp), option.WithMaxRetries(0))
+		if callErr != nil {
+			return openaiFailure(callErr), false
+		}
+		return ratelimit.Failure{}, true
+	}, nil); err != nil {
 		return nil, err
 	}
 	if resp.Error.Message != "" {
@@ -944,14 +972,50 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 			}
 		}
 
-		var streamResp *http.Response
-		stream := o.Client.Responses.NewStreaming(ctx, params, option.WithResponseInto(&streamResp))
+		var (
+			streamResp *http.Response
+			stream     *ssestream.Stream[responses.ResponseStreamEventUnion]
+			hasNext    bool
+		)
+		defer func() {
+			if stream != nil {
+				_ = stream.Close()
+			}
+		}()
+		emitCancelled := false
+		openErr := o.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
+			streamResp = nil
+			stream = o.Client.Responses.NewStreaming(ctx, params, option.WithResponseInto(&streamResp), option.WithMaxRetries(0))
+			if hasNext = stream.Next(); hasNext {
+				return ratelimit.Failure{}, true
+			}
+			return openaiFailure(stream.Err()), false
+		}, func(wait llm.RetryWait) error {
+			_ = stream.Close()
+			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
+			case <-ctx.Done():
+				emitCancelled = true
+				return ctx.Err()
+			}
+		})
+		if openErr != nil {
+			if openErr == ctx.Err() {
+				if !emitCancelled {
+					eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
+				}
+				return
+			}
+			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: openErr}
+			return
+		}
 
 		currentContent := ""
 		toolCallsByID := make(map[string]*message.ToolCall)
 		var finalResp *responses.Response
 
-		for stream.Next() {
+		for ; hasNext; hasNext = stream.Next() {
 			ev := stream.Current()
 
 			switch v := ev.AsAny().(type) {
