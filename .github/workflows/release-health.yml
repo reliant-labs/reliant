@@ -1,0 +1,158 @@
+# Makes a failed release loud.
+#
+# WHY THIS EXISTS
+# ===============
+#
+# v1.8.1 was tagged on 2026-10-11 and its "Release Electron App" run failed at
+# "Verify the built bundle" (a false positive, fixed hours later in #716).
+# Nothing reported it and nobody re-cut the release. downloads.reliantlabs.io
+# kept serving 1.7.16 for a week, and 1.7.16 calls ChatService/CreateChat,
+# which the server had retired in #391: every new download 404'd on its first
+# send.
+#
+# A failed tag run notifies only whoever pushed the tag. The tag itself looks
+# released, and the update feeds keep serving the previous version without
+# complaint. Nothing anywhere distinguishes "released" from "tagged".
+#
+# WHAT IT DOES
+# ============
+#
+# After every release.yml run for a TAG PUSH, `.github/scripts/check-release-health.mjs`
+# judges the newest tag run with a verdict, and this workflow keeps ONE issue
+# labelled `release:failed` open for as long as that verdict is red:
+#
+#   - red   no open issue: open one naming the tag, the run, and the failed
+#           jobs and steps (with their ::error:: text). An open issue: retitle
+#           it to the newest tag and comment, once per run attempt.
+#   - green close the open issue, if any.
+#
+# Red also covers a run that succeeded while the update feeds clients poll
+# (latest-mac.yml, latest.yml, latest-linux.yml) still serve an older version.
+# release.yml's Finalize already fails when a manifest is MISSING, but it never
+# reads one, and it only warns when the CDN purge is refused.
+#
+# Passed over: workflow_dispatch runs of release.yml (dry runs and rebuilds,
+# not releases) and cancelled runs (no verdict; the previous one stands). A
+# successful re-run of the failed tag closes the issue, and so does a later tag
+# that ships.
+#
+# Known gap: verdicts are not per channel. A successful prerelease tag
+# (alpha channel) closes an issue opened for a failed stable tag. Prerelease
+# tags are rare (the last was v1.6.4-rc1); push a stable tag to fix stable.
+#
+# WHY A SEPARATE WORKFLOW AND NOT A JOB IN gate-health.yml
+# ========================================================
+#
+# A workflow has one `workflow_run` trigger, with one `branches` filter for all
+# of its `workflows`. gate-health.yml filters to `branches: [main]`, which
+# drops every tag run (a tag run's head branch is the tag). Lifting the filter
+# would start gate-health.yml after every PR CI run, hundreds a week, only for
+# each one to be skipped.
+
+name: Release health
+
+on:
+  # No `branches` filter: the job's `if` selects tag pushes, and the script
+  # re-checks the vX.Y.Z shape.
+  workflow_run:
+    workflows: ["Release Electron App"]
+    types: [completed]
+  # Backstop for a run whose completion did not reach this workflow (this file
+  # was broken at the time, or GitHub dropped the event). It also notices a
+  # feed that regressed after a green release. Daily, unlike gate-health's
+  # weekly audit: every day here is a day of new users on a stale build. A run
+  # with nothing new to say writes nothing.
+  schedule:
+    - cron: "41 15 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-health:
+    name: The newest release tag shipped
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event == 'push' &&
+       startsWith(github.event.workflow_run.head_branch, 'v') &&
+       github.event.workflow_run.conclusion != 'cancelled')
+    runs-on: ubuntu-latest
+    # The audit waits up to 10 minutes for the feeds after a green run (below).
+    timeout-minutes: 15
+    permissions:
+      # gh run list / gh run view.
+      actions: read
+      # The failed jobs' annotations: the ::error:: text in the issue.
+      checks: read
+      contents: read
+      # The one write: the `release:failed` issue.
+      issues: write
+    # Two audits finishing together must not both open an issue.
+    concurrency:
+      group: release-health
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+
+      # Exit 1 means red and still writes the verdict. Anything else without a
+      # verdict means the audit itself broke, and that must not touch the issue.
+      #
+      # --with-run: the run that fired this counts even if `gh run list` has not
+      # caught up with its completion yet.
+      #
+      # --feed-wait 600: this starts seconds after Finalize purged the CDN, so a
+      # green run re-reads the feeds for up to 10 minutes before calling them
+      # stale. A run that is red anyway does not wait. Applies to every event,
+      # so a scheduled audit that lands just after a release cannot flap the
+      # issue open.
+      - name: Audit the newest release tag's run
+        id: audit
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIGGER_RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          node .github/scripts/check-release-health.mjs \
+            ${TRIGGER_RUN:+--with-run "${TRIGGER_RUN}"} \
+            --check-feeds --feed-wait 600 \
+            --report "${RUNNER_TEMP}/release-health.md"
+
+      - name: Open, update or close the release:failed issue
+        if: steps.audit.outputs.verdict == 'red' || steps.audit.outputs.verdict == 'green'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERDICT: ${{ steps.audit.outputs.verdict }}
+          RUN_URL: ${{ steps.audit.outputs.run_url }}
+          TITLE: ${{ steps.audit.outputs.title }}
+        run: |
+          set -euo pipefail
+          label="release:failed"
+          report="${RUNNER_TEMP}/release-health.md"
+          open="$(gh issue list --label "${label}" --state open --limit 1 --json number --jq '.[0].number // empty')"
+
+          if [ "${VERDICT}" = "red" ]; then
+            if [ -z "${open}" ]; then
+              gh label create "${label}" --force --color B60205 \
+                --description "A release tag's run failed; opened and closed by release-health.yml" >/dev/null
+              gh issue create --title "${TITLE}" --label "${label}" --body-file "${report}"
+            else
+              # The report links the attempt as "(<url>)". Matching the parens
+              # keeps attempts/1 from matching attempts/10. Read into a variable
+              # first so a SIGPIPE from an early grep exit cannot fail the check
+              # under pipefail.
+              seen="$(gh issue view "${open}" --json body,comments --jq '[.body, .comments[].body] | join("\n")')"
+              if ! grep -qF "(${RUN_URL})" <<<"${seen}"; then
+                gh issue edit "${open}" --title "${TITLE}"
+                gh issue comment "${open}" --body-file "${report}"
+              fi
+            fi
+          elif [ -n "${open}" ]; then
+            gh issue close "${open}" --comment "$(cat "${report}")"
+          fi
+
+      - name: Fail if the release is red or the audit could not decide
+        if: steps.audit.outputs.verdict != 'green'
+        run: |
+          echo "::error::release-health verdict: '${{ steps.audit.outputs.verdict || 'none (audit failed)' }}'. See the audit step above."
+          exit 1

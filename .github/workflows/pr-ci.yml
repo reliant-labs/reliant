@@ -276,6 +276,26 @@ jobs:
       - name: Validate committed electron/release.config.json values
         run: node .github/scripts/sync-release-config.mjs --check
 
+  # The unit tests of the scripts the release and health workflows run
+  # (.github/scripts/*.test.mjs). Those scripts decide whether a release is
+  # reported as failed and whether a PR's bundle is shippable, and nothing else
+  # exercises them before they are relied on. No npm install: the tests use
+  # node:test and node's standard library only.
+  ci-scripts:
+    name: CI scripts (node --test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Unit-test .github/scripts
+        run: node --test '.github/scripts/*.test.mjs'
+
   # proto-vendor/controlplane/ is a GENERATED `buf export` of control-plane's
   # public protos (.github/scripts/sync-controlplane-proto.mjs), and every
   # control-plane client here is generated from it.
@@ -973,8 +993,8 @@ jobs:
   web:
     name: Web (lint, typecheck, build)
     # SAFE TO SKIP on a go.mod/go.sum-only PR. This job is pure Node — npm
-    # lint / typecheck / vite build (vitest is `web-test`, below) — with no Go
-    # toolchain in it at all (see the note below on why the generators were
+    # lint / typecheck / vite build / verify-bundle (vitest is `web-test`,
+    # below) — with no Go toolchain in it at all (see the note below on why the generators were
     # removed). The generated TypeScript under web/src/gen/** is COMMITTED, so
     # nothing here is derived from a Go dependency at build time. Changing the
     # version of a Go module cannot alter eslint, tsc, vitest or vite output.
@@ -1020,17 +1040,58 @@ jobs:
         # Block PRs on lint errors, but allow warnings.
         run: npm run lint
 
-      - name: Type check
-        working-directory: web
-        run: npm run typecheck
-
       # The unit tests are the `web-test` job, sharded, in parallel with this.
 
-      - name: Build (alpha)
-        working-directory: web
-        run: npm run build:alpha
+      # ── The release's renderer build and artifact gate, on every PR. ──────
+      #
+      # v1.8.1's release failed at release.yml's "Verify the built bundle":
+      # ActivateTriggerDialog's `typeof window !== "undefined" ?
+      # window.location.origin : ""` minified to verify-bundle's [2/4]
+      # dev-leak marker. This job had built a bare `vite build` with no release
+      # config and never ran verify-bundle, so the marker merged green, and the
+      # check only ever ran once a tag was pushed. So this job now builds the
+      # bundle the way release.yml's prepare job does and runs the same gate.
+      #
+      # WHY HERE, IN PLACE, AND NOT A SEPARATE BUILD. Nothing consumes this
+      # job's `web-dist` artifact. release.yml uploads and downloads its own
+      # web-dist inside its own run. e2e-frontend and electron each build
+      # their own bundle and are untouched. So changing this build's env
+      # breaks no consumer, and it is the cheapest option: no extra job, no
+      # second install, no second vite build. `npm run build` is
+      # `tsc -b && vite build`, and that `tsc -b` IS `npm run typecheck`, so
+      # the separate "Type check" step is folded in rather than run twice.
+      # Type errors fail this step. The added cost is verify-bundle itself,
+      # a sub-second grep.
+      #
+      # WHAT TRIGGERS IT. The job's `if` skips only a go.mod/go.sum-only
+      # change. A change to verify-bundle.mjs, electron/release.config.json
+      # or anything under web/ makes `non_gomod` true, so it runs.
+      #
+      # NO SECRETS. Every hostname verify-bundle's [3/4] check expects,
+      # including the Sentry DSN's, comes from release.config.json's `.vite`
+      # block, the file this step exports. release.yml layers its secret DSN
+      # and Statsig key on top, but the check never reads those.
+      #
+      # .github/scripts/verify-bundle.test.mjs pins these steps to
+      # release.yml's, so the two builds cannot drift apart silently.
+      - name: Export renderer build config
+        run: jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
+      # NODE_ENV=production is scoped to this command, exactly as in
+      # release.yml (see the reason there). Never set it on `npm ci`, which
+      # would skip devDependencies, vite and typescript among them.
+      - name: Type check and build (as release.yml builds it)
+        id: build
+        working-directory: web
+        run: NODE_ENV=production npm run build
+
+      - name: Verify the built bundle (release.yml's artifact gate)
+        run: node .github/scripts/verify-bundle.mjs --dist web/dist
+
+      # Also uploaded when verification fails, so the offending asset can be
+      # downloaded and grepped.
       - name: Upload build artifacts
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: web-dist

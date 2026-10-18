@@ -253,6 +253,12 @@ jobs:
       #
       # Cost is a grep over dist/assets: sub-second, on a build already paid
       # for.
+      #
+      # PR CI's `web` job runs this same build and this same check on every PR
+      # and every push to main (pinned by .github/scripts/verify-bundle.test.mjs),
+      # so a failure that first shows up here means the two have diverged. If
+      # this run fails anyway, release-health.yml opens a `release:failed`
+      # issue for the tag.
       - name: Verify the built bundle
         run: node .github/scripts/verify-bundle.mjs --dist web/dist
 

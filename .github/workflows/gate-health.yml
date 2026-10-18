@@ -50,6 +50,10 @@
 # open for exactly as long as main's newest verdict is red. It also fails when
 # main's run has no "Backend (Go, full)" job: the full tier stopping on main is
 # the PR and full tiers silently merging into one, and must not read as green.
+#
+# A failed RELEASE (a tag's "Release Electron App" run) is release-health.yml's
+# job, not this workflow's: its tag runs never pass this workflow's
+# `branches: [main]` filter. See that file's header.
 
 name: Gate health
 
