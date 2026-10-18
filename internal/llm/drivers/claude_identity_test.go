@@ -153,3 +153,18 @@ func TestPinToRemovedClaudeCodeIdIsSubstituted(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "claude-5.5-opus@claude", sub.To)
 }
+
+// A run's provider preference (a chat pinned to one of the two) steers a tier
+// to that credential even though the subscription leads by priority.
+func TestProviderPreferenceSteersTierBetweenSubscriptionAndKey(t *testing.T) {
+	t.Parallel()
+	available := bothConnected(t)
+	reg := models.MustGetRegistry().WithAvailability(available.Availability)
+	providers := servableProviderIDs(available)
+
+	for _, driver := range []string{"claude", "anthropic"} {
+		resolved, err := reg.Resolve(models.ModelSelector{Tags: []string{models.TagFlagship}, Providers: []string{driver}}, providers)
+		require.NoError(t, err, driver)
+		assert.Equal(t, driver, resolved.Provider.Driver)
+	}
+}

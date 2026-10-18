@@ -17,13 +17,16 @@ func TestProviderPreference(t *testing.T) {
 		inputs map[string]interface{}
 		want   []string
 	}{
-		"nil inputs":                  {nil, nil},
-		"no model, nothing inherited": {map[string]interface{}{}, nil},
-		"pinned model id":             {map[string]interface{}{"model": "gpt-5.6-sol@codex"}, []string{"codex"}},
-		"model object with pinned id": {map[string]interface{}{"model": map[string]interface{}{"id": "gpt-5.6-sol@codex", "tags": []interface{}{"flagship"}}}, []string{"codex"}},
-		"model object with providers": {map[string]interface{}{"model": map[string]interface{}{"tags": []interface{}{"fast"}, "providers": []interface{}{"openai", "codex"}}}, []string{"openai", "codex"}},
-		"tier-only model inherits":    {map[string]interface{}{"model": map[string]interface{}{"tags": []interface{}{"fast"}}, InputKeyProviderPreference: []string{"codex"}}, []string{"codex"}},
-		"own pin beats inherited":     {map[string]interface{}{"model": "claude-x@anthropic", InputKeyProviderPreference: []string{"codex"}}, []string{"anthropic"}},
+		"nil inputs":                                   {nil, nil},
+		"no model, nothing inherited":                  {map[string]interface{}{}, nil},
+		"pinned model id":                              {map[string]interface{}{"model": "gpt-5.6-sol@codex"}, []string{"codex"}},
+		"model object with pinned id":                  {map[string]interface{}{"model": map[string]interface{}{"id": "gpt-5.6-sol@codex", "tags": []interface{}{"flagship"}}}, []string{"codex"}},
+		"model object with providers":                  {map[string]interface{}{"model": map[string]interface{}{"tags": []interface{}{"fast"}, "providers": []interface{}{"openai", "codex"}}}, []string{"openai", "codex"}},
+		"tier-only model inherits":                     {map[string]interface{}{"model": map[string]interface{}{"tags": []interface{}{"fast"}}, InputKeyProviderPreference: []string{"codex"}}, []string{"codex"}},
+		"own pin beats inherited":                      {map[string]interface{}{"model": "claude-x@anthropic", InputKeyProviderPreference: []string{"codex"}}, []string{"anthropic"}},
+		"subscription pin is a registry provider":      {map[string]interface{}{"model": "claude-5.5-opus@claude"}, []string{"claude"}},
+		"subscription and key are distinct":            {map[string]interface{}{"model": map[string]interface{}{"tags": []interface{}{"fast"}, "providers": []interface{}{"claude", "anthropic"}}}, []string{"claude", "anthropic"}},
+		"inherited subscription preference is carried": {map[string]interface{}{"model": map[string]interface{}{"tags": []interface{}{"fast"}}, InputKeyProviderPreference: []interface{}{"claude"}}, []string{"claude"}},
 		"local models are not carried": {
 			map[string]interface{}{"model": "qwen3:latest@local", InputKeyProviderPreference: []interface{}{"local:gpu", "endpoint:e1"}}, nil,
 		},
