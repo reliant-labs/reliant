@@ -1659,6 +1659,25 @@ message DeployConvergence {
   // appending a row. "Running X · confirmed 30s ago" is this field. Never
   // earlier than observed_at; equal to it for a row that was never re-confirmed.
   google.protobuf.Timestamp last_observed_at = 12;
+
+  // The rollout allowance this reading was judged against, in seconds: the
+  // bundle's own budget for the tree (the largest progressDeadlineSeconds plus
+  // two minutes for a rollout tree; the Job allowance for pre/post). Zero for
+  // a flat Kustomization, which has no bounded attempt. A tree is `progressing`
+  // while Flux reports a timeout-type HealthCheckFailed and this is unspent;
+  // it is recorded `failed` on a fail-fast reason or once it is spent.
+  int32 budget_seconds = 13;
+
+  // Flux's own timestamps for this revision, from the Kustomization's
+  // status.history. Unset when Flux recorded none.
+  //
+  // first_attempt_at is when Flux began its first reconcile of the revision:
+  // promotion.created_at to this is the queue wait behind other tenants (the
+  // head-of-line SLI). healthy_at is when a reconcile of the revision first
+  // finished with its health checks passing: promotion to this is
+  // promotion-to-healthy.
+  google.protobuf.Timestamp first_attempt_at = 14;
+  google.protobuf.Timestamp healthy_at = 15;
 }
 
 // DeployLocalSession is one `forge env up` worktree, present in Live.
@@ -1801,6 +1820,36 @@ message DeployLiveEnvironment {
   reserved 8; // findings — #516
 
   DeployDrift drift = 9;
+
+  // The newest convergence reading of each TREE of the bundle, one per
+  // `<cluster>/<unit>/<phase>` (the convergence's `cluster`; a flat bundle has
+  // one per cluster). Each carries the promotion it was judged against, so a
+  // reading older than current_promotion is a tree that has not reported on it
+  // yet. Empty means nothing has been observed, which is not "all healthy".
+  repeated DeployConvergence trees = 10;
+
+  // How long the current promotion has taken, from Flux's own timestamps.
+  // Unset when the environment has no current promotion or no tree has
+  // reported on it.
+  DeployRolloutTimings timings = 11;
+}
+
+// DeployRolloutTimings is the §8.5 SLO timeline of an environment's CURRENT
+// promotion. Each field is unset until it is true of EVERY tree that must
+// satisfy it, because a figure taken from the trees that happen to have
+// reported would be a flattering lie about a half-applied release.
+message DeployRolloutTimings {
+  // When the current promotion was recorded.
+  google.protobuf.Timestamp promoted_at = 1;
+  // The earliest first_attempt_at across the trees at the current promotion:
+  // promotion to this is "promotion to first tree started".
+  google.protobuf.Timestamp first_tree_started_at = 2;
+  // The latest first_attempt_at, set once EVERY tree has started: promotion to
+  // this is "promotion to all trees started" (excluding health waits).
+  google.protobuf.Timestamp all_trees_started_at = 3;
+  // The latest healthy_at, set once EVERY tree is healthy: promotion to this
+  // is "promotion to healthy".
+  google.protobuf.Timestamp healthy_at = 4;
 }
 
 // DeployDrift is whether what is RUNNING still matches what was applied.
