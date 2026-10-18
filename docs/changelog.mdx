@@ -13,6 +13,18 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.8.2" description="October 18, 2026">
+### Agents that ride out disconnects, an Apps console, and shortcuts everywhere
+
+- **Agents keep going when a machine blinks** A tool call no longer fails the instant a machine drops for a few seconds during an update, and a chat that was paused because its machine stayed offline resumes by itself once the machine is back. A sub-agent that stopped on an error can be resumed by sending it a message, a message to an agent now cuts short a long wait instead of sitting unread, and agents can wait out a machine disconnect.
+- **Cloud machines sleep when nobody asked for work, and warn before the disk fills** A machine is now kept awake only by work a person or an agent asked for, so background polling and an open tab no longer stop it from sleeping. Disk warnings now cover the volumes that actually fill up, the storage item in your Inbox returns only when the disk gets worse, and where your plan allows it you can grow a machine's disk from its settings. Creating a workspace shows Creating… and reports success only once it is ready.
+- **Apps, with logs, traces and metrics for each environment** Deployments is now called Apps and sits directly under New chat. Each deployed environment gains an observability console with logs, traces, metrics, profiles and dashboards, plus alerts and release dashboards, and usage shows your allowance, any overage and quota messages. The per-branch Changes and Checks tabs are gone; look at your CI builds instead.
+- **Enable a workflow's triggers in one step** A workflow's page now has Enable and Disable for all of its triggers at once, with a card showing the state of each one; if one trigger is missing a connection, nothing is enabled and the dialog names it. Automations can act as the Reliant bot instead of as you, trigger filters can read who the automation belongs to, and built-in workflows now review pull requests, work issues you opt in, respond to review feedback and triage alerts.
+- **Keyboard shortcuts on every screen and in the browser** Shortcuts now work in Settings, the Inbox, Workflows, Runs and Apps, not only in the chat view. In the browser they match the physical key, so they work on non-Latin layouts, and they no longer collide with browser shortcuts. In the desktop app the Navigate menu items now work, they no longer break text selection in the composer, and Cmd+Tab brings a window back when none is open.
+- **Your chosen provider follows into sub-agents** The provider you pick for a chat now carries down to its sub-agents. Chats pinned to Gemini previews, Gemini 2.5 on Vertex or gpt-5.2-codex, which their providers have shut down, move to the provider's replacement with a notice, and gpt-6.1-sol now works through a ChatGPT account in Codex.
+- **Smaller fixes** Agents create worktrees where the app shows them, instead of folders inside your project, and a clean, squash-merged worktree is now cleaned up. A bad branch or base name is reported as a clear message. The detected-ports chip opens its menu when clicked, and the terminal takes focus only when you ask for it.
+</Update>
+
 <Update label="v1.8.1" description="October 11, 2026">
 ### Messages that always arrive, GPT-6.1, and cloud machines you can resize
 
