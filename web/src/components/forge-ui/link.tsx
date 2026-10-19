@@ -41,12 +41,19 @@ export type LinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & {
   href: string;
 };
 
-export default function Link({ href, children, onClick, ...rest }: LinkProps) {
+export default function Link({ href, children, onClick, className, ...rest }: LinkProps) {
   const navigate = useNavigate();
+  // `no-color` opts every forge-ui link out of index.css's global
+  // `a:not(.no-color)` accent rule. That rule sits in the utilities layer
+  // with a higher specificity than a utility class, so without this a
+  // breadcrumb's inherited muted ink, or a link's own `text-ink`, renders in
+  // the accent — which marks the primary action, focus and selection only
+  // (console v3 D8). forge-ui components set their link colours themselves.
+  const classes = className ? `no-color ${className}` : "no-color";
 
   if (isExternalHref(href)) {
     return (
-      <a href={href} onClick={onClick} {...rest}>
+      <a href={href} onClick={onClick} className={classes} {...rest}>
         {children}
       </a>
     );
@@ -78,7 +85,7 @@ export default function Link({ href, children, onClick, ...rest }: LinkProps) {
   };
 
   return (
-    <a href={href} onClick={handleClick} {...rest}>
+    <a href={href} onClick={handleClick} className={classes} {...rest}>
       {children}
     </a>
   );

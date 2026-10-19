@@ -7,11 +7,13 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { RELEASES, createReleasesFixtureApi } from "../__fixtures__/releaseFixtures";
+import { releaseKeys } from "@/hooks/release-queries";
+
+import { PROMOTIONS, RELEASES, createReleasesFixtureApi } from "../__fixtures__/releaseFixtures";
 import { fixtureObsApi, renderList } from "./releasesTestUtils";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -134,7 +136,7 @@ describe("row actions name their environment (D1)", () => {
     const dialog = await screen.findByTestId("promote-target");
     expect(within(dialog).getAllByText("now 20261018.155157")).toHaveLength(2);
     expect(within(dialog).getByText("now 20261018.052711")).toBeInTheDocument();
-    await user.click(within(dialog).getByTestId("promote-target-confirm"));
+    await user.click(screen.getByTestId("promote-target-confirm"));
     expect(harness.promote).toHaveBeenCalledWith({ version: V[1], env: "prod", intent: "promote" });
   });
 
@@ -146,7 +148,7 @@ describe("row actions name their environment (D1)", () => {
     await user.click(screen.getByTestId("release-menu-promote"));
     const dialog = await screen.findByTestId("promote-target");
     expect(within(dialog).getByRole("radio", { name: /prod/ })).toBeDisabled();
-    expect(within(dialog).getByTestId("promote-target-confirm")).toHaveTextContent("Promote to e2e…");
+    expect(screen.getByTestId("promote-target-confirm")).toHaveTextContent("Promote to e2e…");
   });
 
   it("offers a rollback only to an older release, naming the env and what runs there now", async () => {
@@ -174,6 +176,32 @@ describe("row actions name their environment (D1)", () => {
     expect(screen.getByTestId("release-menu-promote")).toBeDisabled();
     expect(screen.getByTestId("release-menu-promote")).toHaveAttribute("title", "Open the project in Reliant to promote.");
     expect(screen.getByTestId("release-menu-rollback")).toBeDisabled();
+  });
+});
+
+describe("review edge cases", () => {
+  it("offers no rollback when the env's live release is outside the loaded list", async () => {
+    const user = userEvent.setup();
+    // prod runs V[0], which this list does not hold: nothing here is known to be older than it.
+    renderList({ ...createReleasesFixtureApi(), listReleases: async () => RELEASES.slice(1) });
+    await ready();
+    await user.click(screen.getByTestId(`release-menu-${V[2]}`));
+    expect(screen.getByTestId("release-menu-promote")).toBeInTheDocument();
+    expect(screen.queryByTestId("release-menu-rollback")).not.toBeInTheDocument();
+  });
+
+  it("shows a check recorded after the promotion as soon as the ledger has it", async () => {
+    const harness = renderList(createReleasesFixtureApi());
+    await ready();
+    expect(row(V[1]!)).toHaveTextContent("2/2");
+    // A gate recorded later changes neither the newest promotion's id nor the ledger's length.
+    const ledger = PROMOTIONS["env-prod"]!;
+    const index = ledger.findIndex((p) => p.releaseVersion === V[1]);
+    const late = { ...ledger[index]!, gates: [...ledger[index]!.gates, { name: "smoke", status: "failed" as const, rawStatus: "", summary: "", url: "", recordedBy: "", finishedAt: new Date().toISOString(), source: "recorded" as const }] };
+    act(() => {
+      harness.client.setQueryData(releaseKeys.promotions("env-prod"), ledger.map((p, i) => (i === index ? late : p)));
+    });
+    await waitFor(() => expect(row(V[1]!)).toHaveTextContent("2/3"));
   });
 });
 

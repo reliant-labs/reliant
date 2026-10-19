@@ -456,6 +456,16 @@ export const forgeConsoleReleasesSearchSchema = z.object({
 });
 
 /**
+ * Activity: the scope, and the target an object's History link pre-filters to
+ * (`release:<version>`, PROPOSAL §4.5) — kept in the URL so the link means
+ * the same thing once the Activity page reads it.
+ */
+export const forgeConsoleActivitySearchSchema = z.object({
+  env: envScopeParam,
+  target: textParam,
+});
+
+/**
  * One release: the scope, the tab, the release Changes compares with, and the
  * environment the environment-bound tabs read (`in`, a name).
  */

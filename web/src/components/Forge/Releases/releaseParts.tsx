@@ -15,7 +15,7 @@ import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { Modal } from "@/components/ui/Modal";
+import Modal from "@/components/forge-ui/modal";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +28,16 @@ const BUTTON =
   "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 export const BUTTON_PRIMARY = `${BUTTON} border border-accent bg-accent text-on-accent hover:bg-accent-hover`;
 export const BUTTON_SECONDARY = `${BUTTON} border border-border bg-surface text-ink hover:bg-ink/5`;
+/**
+ * A link in running text: ink with a quiet underline, never the accent (D8 —
+ * the accent marks the primary action, focus and selection only). `no-color`
+ * opts out of index.css's global `a:not(.no-color)` accent rule, which sits
+ * in the utilities layer and would otherwise beat `text-ink`.
+ */
+export const INK_LINK =
+  "no-color text-ink underline decoration-ink-muted/50 underline-offset-2 transition-colors hover:decoration-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+/** An inline text button styled as INK_LINK. */
+export const INK_BUTTON = "text-ink underline decoration-ink-muted/50 underline-offset-2 hover:decoration-ink";
 export const ICON_BUTTON =
   "inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
@@ -179,7 +189,7 @@ export function Note({ tone = "neutral", children, testId }: { tone?: "neutral" 
 /** Label / value pairs in a two-column grid (the detail rail). */
 export function Facts({ items }: { items: [string, ReactNode][] }) {
   return (
-    <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+    <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
       {items.map(([label, value]) => (
         <div key={label} className="contents">
           <dt className="text-ink-muted">{label}</dt>
@@ -202,7 +212,7 @@ export function Chain({ entries, testId }: { entries: TimelineEntry[]; testId?: 
   return (
     <ol className="space-y-3.5" data-testid={testId}>
       {entries.map((entry, index) => (
-        <li key={entry.key} className="relative pl-6 text-sm" data-tone={entry.tone}>
+        <li key={entry.key} className="relative pl-6 text-xs" data-tone={entry.tone}>
           <span aria-hidden="true" className={cn("absolute left-1 top-1.5 h-2 w-2 rounded-full border", CHAIN_DOT[entry.tone])} />
           {index < entries.length - 1 && <span aria-hidden="true" className="absolute -bottom-3.5 left-2 top-4 w-px bg-border" />}
           <span data-part="title" className={cn("block", entry.tone === "bad" ? "text-danger-ink" : "text-ink")}>
@@ -275,7 +285,7 @@ export function RowMenu({ label, items, testId }: { label: string; items: MenuIt
               </>
             );
             return item.href && !item.disabled ? (
-              <Link key={item.label} href={item.href} role="menuitem" data-testid={item.testId} onClick={() => setOpen(false)} className={cls}>
+              <Link key={item.label} href={item.href} role="menuitem" data-testid={item.testId} onClick={() => setOpen(false)} className={`no-color ${cls}`}>
                 {body}
               </Link>
             ) : (
@@ -328,18 +338,44 @@ export function PromoteTargetDialog({
   onConfirm: (env: string) => void;
 }) {
   const candidates = envs.filter((env) => env.kind === "long");
+  const runsIt = (name: string) => bases.get(name) === version;
+  // Only an environment that does not already run the release can be picked:
+  // when every one does, nothing is, and the confirm stays disabled.
   const [picked, setPicked] = useState(() => {
-    const preferred = candidates.find((env) => env.name === initialEnv && bases.get(env.name) !== version);
-    return (preferred ?? candidates.find((env) => bases.get(env.name) !== version) ?? candidates[0])?.name ?? "";
+    const preferred = candidates.find((env) => env.name === initialEnv && !runsIt(env.name));
+    return (preferred ?? candidates.find((env) => !runsIt(env.name)))?.name ?? "";
   });
+  const confirmable = picked !== "" && !runsIt(picked);
+  const everywhere = candidates.length > 0 && candidates.every((env) => runsIt(env.name));
   return (
-    <Modal isOpen onClose={onCancel} size="sm" title={`Promote ${shortVersion(version)}`}>
-      <div className="space-y-4" data-testid="promote-target">
-        <p className="text-sm text-ink-muted">Choose the environment. The plan is shown before anything applies.</p>
+    <Modal
+      open
+      onClose={onCancel}
+      size="sm"
+      title={`Promote ${shortVersion(version)}`}
+      description="Choose the environment. The plan is shown before anything applies."
+      footer={
+        <>
+          <button type="button" className={BUTTON_SECONDARY} onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={BUTTON_PRIMARY}
+            disabled={!confirmable}
+            onClick={() => confirmable && onConfirm(picked)}
+            data-testid="promote-target-confirm"
+          >
+            {confirmable ? `Promote to ${picked}…` : "Promote…"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-2" data-testid="promote-target">
         <div role="radiogroup" aria-label="Environment" className="space-y-2">
           {candidates.map((env) => {
             const base = bases.get(env.name) ?? null;
-            const here = base === version;
+            const here = runsIt(env.name);
             return (
               <label
                 key={env.name}
@@ -366,20 +402,11 @@ export function PromoteTargetDialog({
             );
           })}
         </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className={BUTTON_SECONDARY} onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className={BUTTON_PRIMARY}
-            disabled={!picked}
-            onClick={() => onConfirm(picked)}
-            data-testid="promote-target-confirm"
-          >
-            {picked ? `Promote to ${picked}…` : "Promote…"}
-          </button>
-        </div>
+        {everywhere && (
+          <p className="pt-1 text-xs text-ink-muted" data-testid="promote-target-everywhere">
+            Every environment already runs this release.
+          </p>
+        )}
       </div>
     </Modal>
   );

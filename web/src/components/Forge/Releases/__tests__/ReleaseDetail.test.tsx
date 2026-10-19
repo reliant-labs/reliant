@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { shortVersion } from "../releaseModel";
 import { RELEASES, createReleasesFixtureApi } from "../__fixtures__/releaseFixtures";
 import { renderDetail } from "./releasesTestUtils";
 
@@ -29,7 +30,8 @@ describe("the header", () => {
     await ready();
     const header = screen.getByRole("heading", { level: 1 });
     expect(header).toHaveTextContent(V[0]!);
-    expect(screen.getByText("Live on prod, dev, pr-984, pr-986")).toBeInTheDocument();
+    // Previews are counted, not named (D2).
+    expect(screen.getByText("Live on prod, dev and 2 previews")).toBeInTheDocument();
     expect(screen.getByText("scoped: admin-web, internal-console")).toBeInTheDocument();
     expect(screen.getByText("cut by sean from main")).toBeInTheDocument();
     // Prod already runs it: no rollback to offer.
@@ -45,6 +47,13 @@ describe("the header", () => {
     expect(harness.promote).toHaveBeenCalledWith({ version: V[2], env: "prod", intent: "rollback" });
   });
 
+  it("offers no rollback when the env's live release is outside the loaded list", async () => {
+    renderDetail({ ...createReleasesFixtureApi(), listReleases: async () => RELEASES.slice(1) }, V[2]!);
+    await ready();
+    expect(screen.queryByRole("button", { name: /Roll back/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Promote…" })).toBeEnabled();
+  });
+
   it("names the scoped env in the rollback when it is not prod", async () => {
     renderDetail(createReleasesFixtureApi(), V[5]!, { env: "e2e" });
     await ready();
@@ -56,7 +65,7 @@ describe("the header", () => {
     const harness = renderDetail(createReleasesFixtureApi(), V[1]!);
     await ready();
     await user.click(screen.getByRole("button", { name: "Promote…" }));
-    await user.click(within(await screen.findByTestId("promote-target")).getByTestId("promote-target-confirm"));
+    await user.click((await screen.findByTestId("promote-target-confirm")));
     expect(harness.promote).toHaveBeenCalledWith({ version: V[1], env: "prod", intent: "promote" });
   });
 
@@ -75,7 +84,7 @@ describe("Changes", () => {
     await ready();
     const changes = await screen.findByTestId("release-changes");
     await waitFor(() => expect(changes).toHaveAttribute("data-state", "ready"));
-    expect(screen.getByTestId("release-base")).toHaveValue(V[3]);
+    expect(screen.getByTestId("release-base")).toHaveTextContent(shortVersion(V[3]!));
     expect(screen.getByTestId("release-compare-with")).toHaveTextContent("the release prod ran before");
     expect(screen.getByTestId("release-commits-panel")).toHaveTextContent("feat(identity): identity reconciler goes apply (#987)");
     expect(screen.getByTestId("release-images-panel")).toHaveTextContent(/1 changed · 4 unchanged|2 changed · 3 unchanged/);
@@ -114,7 +123,8 @@ describe("Changes", () => {
     const user = userEvent.setup();
     const harness = renderDetail(createReleasesFixtureApi(), V[1]!);
     await ready();
-    await user.selectOptions(await screen.findByTestId("release-base"), V[4]!);
+    await user.click(await screen.findByTestId("release-base"));
+    await user.click(screen.getByRole("menuitemradio", { name: new RegExp(shortVersion(V[4]!)) }));
     expect(harness.current().base).toBe(V[4]);
     expect(screen.getByTestId("release-compare-with")).toHaveTextContent("chosen by you");
   });
@@ -164,6 +174,21 @@ describe("the other tabs", () => {
 });
 
 describe("the rail and the edges", () => {
+  it("links Activity pre-filtered to the release", async () => {
+    renderDetail(createReleasesFixtureApi(), V[1]!);
+    await ready();
+    expect(within(screen.getByTestId("release-history")).getByRole("link", { name: /Activity in prod/ })).toHaveAttribute(
+      "href",
+      `/activity?env=prod&target=release:${V[1]}`
+    );
+  });
+
+  it("keeps the env picker on Changes, whose objects are env-bound", async () => {
+    renderDetail(createReleasesFixtureApi(), V[0]!);
+    await ready();
+    expect(screen.getByTestId("release-env-picker")).toBeInTheDocument();
+  });
+
   it("tells the promotion story", async () => {
     renderDetail(createReleasesFixtureApi(), V[2]!);
     await ready();

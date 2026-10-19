@@ -42,6 +42,8 @@ import {
   PreviewsMark,
   PromoteTargetDialog,
   ReleaseTags,
+  INK_BUTTON,
+  INK_LINK,
   RowMenu,
   scopedLabel,
   type MenuItem,
@@ -121,6 +123,10 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
   const bases = useMemo(() => new Map(model?.pipeline.map((cell) => [cell.env.name, cell.base]) ?? []), [model]);
 
   const loading = envsLoading || data.releases.isLoading;
+  // No "Cut release" action, though the mockup draws one: a release is cut by
+  // `forge env deploy` / `forge release cut` from the checkout, and there is no
+  // console flow that cuts without deploying (the mockup's button only says so
+  // in a toast). Deploying lives on each environment's page.
   const header = <PageHeader title="Releases" meta={<DeliveryFacts project={project} env={env} scopedEnv={scopedEnv} />} className="mb-0" />;
 
   if (data.releases.error) {
@@ -233,14 +239,14 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
             filtered ? (
               <>
                 No release matches these filters.{" "}
-                <button type="button" className="text-ink underline-offset-2 hover:underline" onClick={() => onSearch({ q: undefined, author: undefined, status: undefined })}>
+                <button type="button" className={INK_BUTTON} onClick={() => onSearch({ q: undefined, author: undefined, status: undefined })}>
                   Clear them
                 </button>
               </>
             ) : (
               <>
                 No release has run in {env} yet.{" "}
-                <button type="button" className="text-ink underline-offset-2 hover:underline" onClick={() => onSearch({ every: true })}>
+                <button type="button" className={INK_BUTTON} onClick={() => onSearch({ every: true })}>
                   Show every release
                 </button>
               </>
@@ -255,7 +261,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
                   {hiddenByScope > 0 && (
                     <>
                       {" "}
-                      <button type="button" className="text-ink underline-offset-2 hover:underline" onClick={() => onSearch({ every: true })} data-testid="releases-show-hidden">
+                      <button type="button" className={INK_BUTTON} onClick={() => onSearch({ every: true })} data-testid="releases-show-hidden">
                         Show {hiddenByScope} more that never did
                       </button>
                     </>
@@ -301,8 +307,10 @@ function rowMenu(
   const items: MenuItem[] = [
     { label: "Promote to…", disabled: !!blocked, hint: blocked, testId: "release-menu-promote", onSelect: () => openPromote(version) },
   ];
-  // Rolling back is promoting an OLDER release than the one live there.
-  if (target && base && rank(version) > rank(base)) {
+  // Rolling back is promoting an OLDER release than the one live there. When
+  // the live release is outside the loaded list (rank -1) nothing here is
+  // known to be older than it, so no rollback is offered.
+  if (target && base && rank(base) >= 0 && rank(version) > rank(base)) {
     items.push({
       label: `Roll back ${target} to this`,
       detail: `now ${shortVersion(base)}`,
@@ -419,7 +427,7 @@ function Pipeline({
             <EnvButton name={cell.env.name} selected={selected} onSelect={onSelectEnv} />
             <div className="mt-1 truncate text-sm font-medium text-ink">
               {cell.base ? (
-                <Link href={releaseHref(cell.base)} className="hover:underline" title={cell.base}>
+                <Link href={releaseHref(cell.base)} className={INK_LINK} title={cell.base}>
                   {cell.base}
                 </Link>
               ) : (
@@ -514,7 +522,9 @@ function PipelineSkeleton() {
 // ── Toolbar chips ───────────────────────────────────────────────────────────
 
 const CHIP =
-  "inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+/** Solid border on the surface fill, as the mockup's chips; a set filter reads in ink with a stronger border. */
+const chipState = (on: boolean) => (on ? "border-ink-subtle text-ink" : "border-border text-ink-muted hover:border-ink-subtle hover:text-ink");
 
 function Chip({ on, onClick, children, title, testId }: { on: boolean; onClick: () => void; children: ReactNode; title?: string; testId?: string }) {
   return (
@@ -524,7 +534,7 @@ function Chip({ on, onClick, children, title, testId }: { on: boolean; onClick: 
       aria-pressed={on}
       title={title}
       data-testid={testId}
-      className={cn(CHIP, on ? "border-solid border-border bg-surface text-ink" : "border-dashed border-border text-ink-muted hover:border-ink-subtle hover:text-ink")}
+      className={cn(CHIP, chipState(on))}
     >
       {children}
     </button>
@@ -560,7 +570,7 @@ function ChipMenu({
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
         data-testid={testId}
-        className={cn(CHIP, current ? "border-solid border-border bg-surface text-ink" : "border-dashed border-border text-ink-muted hover:border-ink-subtle hover:text-ink")}
+        className={cn(CHIP, chipState(!!current))}
       >
         {current ? `${label}: ${current.label}` : label}
         <ChevronDown className="h-3 w-3" aria-hidden="true" />
@@ -631,7 +641,11 @@ function ReleaseTable({
   const hasPreviews = (model?.previews.length ?? 0) > 0;
   const previewSelected = !!model?.previews.some((candidate) => candidate.name === env);
   const columns = 5 + longEnvs.length + (hasPreviews ? 1 : 0);
-  const sel = (on: boolean) => (on ? "bg-surface-muted" : "");
+  // The scoped environment's column is a SELECTION, the one structural use
+  // the web-styling contract allows `bg-muted` (interaction state): it lifts
+  // the column in dark and tints it in light, as the mockup's muted-55% does.
+  // `bg-surface-muted` (= --background) would recess it into a black stripe.
+  const sel = (on: boolean) => (on ? "bg-muted/60" : "");
   // Scoped deploys that sit on top of a release, by version, for the follow-up line under its row.
   const followUps = new Map<string, { env: string; targets: string[]; by: string; at?: string }[]>();
   for (const cell of model?.pipeline ?? []) {
@@ -704,7 +718,7 @@ function ReleaseTable({
                         <Link
                           href={releaseHref(version)}
                           title={version}
-                          className="shrink-0 font-medium after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent"
+                          className="no-color shrink-0 font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent"
                         >
                           {version}
                         </Link>

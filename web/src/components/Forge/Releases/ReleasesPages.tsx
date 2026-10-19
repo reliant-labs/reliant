@@ -147,7 +147,7 @@ export function ReleasePage() {
     [href]
   );
   const activityHref = useCallback(
-    (name: string) => withSearch(consolePath(forgeProject, { kind: "activity" }), { env: name }),
+    (name: string, target: string) => withSearch(consolePath(forgeProject, { kind: "activity" }), { env: name, target }),
     [forgeProject]
   );
   return (

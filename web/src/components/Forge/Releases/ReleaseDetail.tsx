@@ -34,7 +34,7 @@ import type { ReleasePromotion } from "@/services/forge/releases";
 
 import { formatSpan } from "../Observability/deliveryScope";
 import { ArtifactsTab, ChangesTab, ChecksTab, EnvPicker, HealthTab, RolloutTab } from "./ReleaseTabs";
-import { Ago, Chain, ChecksMark, Facts, Panel, PromoteTargetDialog } from "./releaseParts";
+import { Ago, Chain, ChecksMark, Facts, INK_LINK, Panel, PromoteTargetDialog } from "./releaseParts";
 import {
   RELEASE_TABS,
   defaultBaseOf,
@@ -78,7 +78,8 @@ export interface ReleaseDetailProps {
   onSearch: (next: Partial<ReleaseDetailSearch>) => void;
   listHref: string;
   releaseHref: (version: string, search?: Record<string, unknown>) => string;
-  activityHref: (env: string) => string;
+  /** The Activity page in `env`, pre-filtered to `target` ("release:<version>"). */
+  activityHref: (env: string, target: string) => string;
   promote: PromoteControl;
 }
 
@@ -147,7 +148,7 @@ export function ReleaseDetail({
           title="No such release"
           description={`${project} has no release ${version}. It may have been cut in another project, or the link is mistyped.`}
         />
-        <Link href={listHref} className="text-sm text-ink underline-offset-2 hover:underline">
+        <Link href={listHref} className={`text-sm ${INK_LINK}`}>
           All releases
         </Link>
       </div>
@@ -160,7 +161,10 @@ export function ReleaseDetail({
   const actionEnv = envs.find((candidate) => candidate.kind === "long" && candidate.name === env) ?? reference;
   const actionBase = actionEnv ? (bases.get(actionEnv.name) ?? null) : null;
   const rank = (v: string | null) => (v ? data.ordered.findIndex((r) => r.version === v) : -1);
-  const canRollBack = !!actionEnv && !!actionBase && actionBase !== version && rank(version) > rank(actionBase);
+  // Only to a release known to be older than the live one: a live release
+  // outside the loaded list (rank -1) is older than nothing we can name.
+  const canRollBack =
+    !!actionEnv && !!actionBase && actionBase !== version && rank(actionBase) >= 0 && rank(version) > rank(actionBase);
   const blocked = promote.blockedReason;
 
   const actions: PageHeaderAction[] = [
@@ -199,7 +203,9 @@ export function ReleaseDetail({
           title={version}
           titleAccessory={
             <>
-              <Status tone={status.tone} label={status.label} />
+              <span title={status.previews.length ? `Previews: ${status.previews.join(", ")}` : undefined}>
+                <Status tone={status.tone} label={status.label} />
+              </span>
               {row.scoped.length > 0 && <Tag title={`A scoped deploy moved only ${row.scoped.join(", ")}`}>scoped: {row.scoped.join(", ")}</Tag>}
               {row.rolledBack.map((name) => (
                 <Tag key={name} tone="danger">
@@ -240,9 +246,10 @@ export function ReleaseDetail({
         ariaLabel="Release"
       />
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
+      {/* The rail is 340px, PROPOSAL §3.4 and the mockup; its text is text-xs (the mockup's .8125rem). */}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4" role="tabpanel" aria-label={TAB_LABELS[tab]}>
-          {envBound && tab !== "changes" && (
+          {envBound && (
             <EnvPicker envs={promotedIn} value={target?.env.name ?? null} onChange={(name) => onSearch({ in: name })} />
           )}
           {tab === "changes" && (
@@ -289,7 +296,7 @@ export function ReleaseDetail({
                   ? ([
                       [
                         "CI run",
-                        <a key="run" href={record.run.url} target="_blank" rel="noreferrer" className="text-ink underline-offset-2 hover:underline">
+                        <a key="run" href={record.run.url} target="_blank" rel="noreferrer" className={INK_LINK}>
                           {record.run.provider || "run"} {record.run.id}
                         </a>,
                       ],
@@ -299,8 +306,11 @@ export function ReleaseDetail({
             />
           </Panel>
           <Panel title="History" testId="release-history">
-            <div className="divide-y divide-border/70 text-sm">
-              <Link href={activityHref(target?.env.name ?? env)} className="flex h-8 items-center justify-between text-ink-muted hover:text-ink">
+            <div className="divide-y divide-border/70 text-xs">
+              <Link
+                href={activityHref(target?.env.name ?? env, `release:${version}`)}
+                className="no-color flex h-8 items-center justify-between text-ink-muted hover:text-ink"
+              >
                 Activity in {target?.env.name ?? (env === "all" ? "every environment" : env)}
                 <span aria-hidden="true">›</span>
               </Link>
@@ -341,7 +351,8 @@ function DetailSkeleton({ crumbs, version }: { crumbs: { label: string; href?: s
     <div className="space-y-6" data-testid="release-detail" data-state="loading" aria-busy="true">
       <PageHeader breadcrumbs={crumbs} title={version} meta={<span className="inline-flex h-4 w-72 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />} className="mb-0" />
       <div className="h-8 border-b border-border" />
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
+      {/* The rail is 340px, PROPOSAL §3.4 and the mockup; its text is text-xs (the mockup's .8125rem). */}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
           {[0, 1].map((i) => (
             <Card key={i} className="space-y-3">

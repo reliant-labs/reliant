@@ -24,6 +24,7 @@ import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tans
 
 import { isObsNavView } from './components/Forge/Console/paths'
 import {
+  forgeConsoleActivitySearchSchema,
   forgeConsoleEnvSearchSchema,
   forgeConsoleObsSearchSchema,
   forgeConsoleReleaseSearchSchema,
@@ -181,7 +182,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const activityRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'activity',
-    validateSearch: forgeConsoleSearchSchema,
+    validateSearch: forgeConsoleActivitySearchSchema,
     component: components.activity,
   })
   const settingsRoute = createRoute({

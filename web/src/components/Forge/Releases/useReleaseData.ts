@@ -8,7 +8,7 @@
  * so moving from the list to a release and back costs no request.
  */
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 
 import { useObservabilityOrg, useReleases } from "@/hooks/observability-queries";
 import { useEnvPromotions, useProjectReleases } from "@/hooks/release-queries";
@@ -37,6 +37,14 @@ export function usePromoterNames(project: string): ReadonlyMap<string, string> {
   }, [ledger.data]);
 }
 
+/** `list`, or the previous render's list when every element is the same object — a memo key for a variable-length list. */
+function useStableList<T>(list: T[]): T[] {
+  const ref = useRef(list);
+  const prev = ref.current;
+  if (prev.length !== list.length || prev.some((item, index) => item !== list[index])) ref.current = list;
+  return ref.current;
+}
+
 /**
  * `extra` is a release the page is about that may be older than the listed
  * window (a link to a months-old release): it joins the model in cut order,
@@ -52,13 +60,15 @@ export function useReleaseData(project: string, envs: readonly ReleaseEnv[], ext
   const ledgers = useEnvPromotions(longIds);
   const names = usePromoterNames(project);
 
-  // A stable key for the ledgers' contents, so the model is rebuilt only when one moved.
-  const ledgerKey = longIds.map((id) => `${id}:${ledgers.get(id)?.data?.[0]?.id ?? ""}:${ledgers.get(id)?.data?.length ?? -1}`).join("|");
+  // Keyed on the ledgers' query DATA: react-query's structural sharing keeps a
+  // ledger's array identity until something in it changes — including a gate
+  // recorded after the promotion, which moves neither its first id nor its
+  // length — so the model rebuilds exactly when a ledger moved.
+  const ledgerData = useStableList(longIds.map((id) => ledgers.get(id)?.data));
   const promotions = useMemo<PromotionsByEnv>(() => {
-    const byId = new Map<string, ReleasePromotion[] | undefined>(longIds.map((id) => [id, ledgers.get(id)?.data]));
+    const byId = new Map<string, ReleasePromotion[] | undefined>(longIds.map((id, index) => [id, ledgerData[index]]));
     return { get: (id) => byId.get(id) };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- ledgerKey stands for the ledgers' contents
-  }, [ledgerKey]);
+  }, [longIds, ledgerData]);
 
   const model = useMemo(
     () => (releases ? buildReleaseModel(releases, envs, promotions, names) : null),

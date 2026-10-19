@@ -140,14 +140,22 @@ function envState(env: ReleaseEnv, promotions: ReleasePromotion[] | undefined): 
   if (!promotions || promotions.length === 0) {
     return { base: env.current || null, basePromotion: null, followUps: [], ran: new Set(env.current ? [env.current] : []), fromLedger: false };
   }
+  // Scoped deploys since the last whole-release promotion, newest first. A
+  // component runs what its NEWEST scoped deploy put there, so a newer one
+  // masks the components it moved from every older one (D5): an older
+  // follow-up keeps only its unmasked components, and one left with none runs
+  // nowhere any more.
   const followUps: ReleasePromotion[] = [];
+  const masked = new Set<string>();
   let basePromotion: ReleasePromotion | null = null;
   for (const promotion of promotions) {
     if (promotion.targets.length === 0) {
       basePromotion = promotion;
       break;
     }
-    followUps.push(promotion);
+    const live = promotion.targets.filter((target) => !masked.has(target));
+    promotion.targets.forEach((target) => masked.add(target));
+    if (live.length > 0) followUps.push({ ...promotion, targets: live });
   }
   return {
     base: basePromotion?.releaseVersion ?? null,
@@ -158,19 +166,37 @@ function envState(env: ReleaseEnv, promotions: ReleasePromotion[] | undefined): 
   };
 }
 
-/** The versions a whole-release promotion replaced with an OLDER release, per the ledger (oldest → newest walk). */
+/**
+ * The versions that stand rolled back in one environment: walked oldest →
+ * newest over the whole-release promotions, the classification
+ * control-plane's dora.Classify makes (internal/dora/dora.go):
+ *
+ *   - a promotion of a release OLDER than the one running rolls the running
+ *     one back. Older is cut order when both releases are in the list, else
+ *     which one this environment ran FIRST (a release outside the loaded
+ *     window is judged by the env's own history, as dora's rule 3 does);
+ *   - a promotion of a release that stood rolled back puts it back: that is a
+ *     roll-forward, and the tag goes. So v1 → v2 → v1 → v2 leaves v2 live and
+ *     untagged, as dora calls the last step a deployment.
+ */
 function rolledBackVersions(promotions: readonly ReleasePromotion[], rank: ReadonlyMap<string, number>): Set<string> {
   const out = new Set<string>();
+  const firstRun = new Map<string, number>();
   let previous: string | null = null;
+  let step = 0;
   for (const promotion of [...promotions].reverse()) {
     if (promotion.targets.length > 0) continue;
     const version = promotion.releaseVersion;
+    if (!firstRun.has(version)) firstRun.set(version, step++);
     if (previous !== null && previous !== version) {
       const before = rank.get(previous);
       const now = rank.get(version);
       // Larger rank = older (the list is newest first).
-      if (before !== undefined && now !== undefined && now > before) out.add(previous);
+      const older =
+        before !== undefined && now !== undefined ? now > before : firstRun.get(version)! < firstRun.get(previous)!;
+      if (older) out.add(previous);
     }
+    out.delete(version);
     previous = version;
   }
   return out;
@@ -347,19 +373,27 @@ export function authorsOf(rows: readonly ReleaseRow[]): string[] {
 
 // ── One release ─────────────────────────────────────────────────────────────
 
-/** "Live on prod, dev", "Live on prod for admin-web", "Ran before on prod", "Not deployed". */
-export function releaseStatus(row: ReleaseRow): { tone: "success" | "neutral"; label: string } {
+/**
+ * "Live on prod, dev", "Live on prod, dev and 2 previews", "Live on prod for
+ * admin-web", "Ran before on prod", "Not deployed". Previews are counted, not
+ * named: there can be dozens, and D2 collapses them into one.
+ */
+export function releaseStatus(row: ReleaseRow): { tone: "success" | "neutral"; label: string; previews: string[] } {
   const live = Object.entries(row.cells).filter(([, cell]) => cell.state === "live").map(([env]) => env);
   const partial = Object.entries(row.cells).filter(([, cell]) => cell.state === "partial");
-  const where = [...live, ...row.previewsLive];
-  if (where.length > 0) return { tone: "success", label: `Live on ${where.join(", ")}` };
+  const previews = row.previewsLive;
+  const previewWords = previews.length === 1 ? "1 preview" : `${previews.length} previews`;
+  if (live.length > 0) {
+    return { tone: "success", label: `Live on ${live.join(", ")}${previews.length ? ` and ${previewWords}` : ""}`, previews };
+  }
   if (partial.length > 0) {
     const [env, cell] = partial[0]!;
-    return { tone: "success", label: `Live on ${env} for ${cell.targets.join(", ")}` };
+    return { tone: "success", label: `Live on ${env} for ${cell.targets.join(", ")}`, previews };
   }
+  if (previews.length > 0) return { tone: "success", label: `Live on ${previewWords}`, previews };
   const ran = Object.entries(row.cells).filter(([, cell]) => cell.state === "ran").map(([env]) => env);
-  if (ran.length > 0) return { tone: "neutral", label: `Ran before on ${ran.join(", ")}` };
-  return { tone: "neutral", label: "Not deployed" };
+  if (ran.length > 0) return { tone: "neutral", label: `Ran before on ${ran.join(", ")}`, previews };
+  return { tone: "neutral", label: "Not deployed", previews };
 }
 
 /**

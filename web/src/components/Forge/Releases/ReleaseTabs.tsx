@@ -17,16 +17,21 @@
  *              comparison the Observability area already draws).
  */
 
-import { useMemo, useState, type ReactNode } from "react";
-import { ExternalLink } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, ExternalLink } from "lucide-react";
 
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Mono from "@/components/forge-ui/mono";
 import Status, { type StatusTone } from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
 import { useObservabilityOrg } from "@/hooks/observability-queries";
+import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { usePromotionBundle, usePromotionRollout, useReleaseComparison } from "@/hooks/release-queries";
 import type {
+  ArtifactChange,
   ChangeKind,
+  ObjectDelta,
+  ReleaseArtifact,
   ReleaseComparison as Comparison,
   ReleaseCommit,
   ReleaseGate,
@@ -39,27 +44,46 @@ import { cn } from "@/lib/utils";
 
 import { DEFAULT_COMPARE_WINDOW, type CompareWindow } from "../Observability/deliveryScope";
 import { ReleaseComparison } from "../Observability/ReleaseComparison";
-import { Ago, Facts, Note, Panel } from "./releaseParts";
+import { Ago, Facts, INK_BUTTON, Note, Panel } from "./releaseParts";
 import { shortVersion, type ReleaseEnv } from "./releaseModel";
 
-const TH = "h-9 whitespace-nowrap px-4 text-left text-xs font-medium text-ink-muted";
-const TD = "h-10 whitespace-nowrap px-4 text-sm text-ink";
-const ROW = "border-t border-border/70 first:border-t-0";
-
-function Table({ label, head, children, testId }: { label: string; head?: ReactNode; children: ReactNode; testId?: string }) {
+/**
+ * A flush forge-ui DataTable inside a Panel, with a test id on its frame. Rows
+ * are spread into plain objects because DataTable's rows are records.
+ */
+function Table<T extends object>({
+  label,
+  columns,
+  rows,
+  rowKey,
+  testId,
+}: {
+  label: string;
+  columns: DataTableColumn<T & Record<string, unknown>>[];
+  rows: T[];
+  rowKey: (row: T) => string;
+  testId?: string;
+}) {
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full border-collapse" aria-label={label} data-testid={testId}>
-        {head && (
-          <thead>
-            <tr className="border-b border-border">{head}</tr>
-          </thead>
-        )}
-        <tbody>{children}</tbody>
-      </table>
+    <div data-testid={testId}>
+      <DataTable
+        flush
+        ariaLabel={label}
+        columns={columns}
+        data={rows.map((row) => ({ ...row }) as T & Record<string, unknown>)}
+        getRowKey={(row) => rowKey(row)}
+      />
     </div>
   );
 }
+
+/** A cell whose text truncates in a column that takes the remaining width. */
+const GROW = "w-full max-w-0";
+const truncated = (text: ReactNode, title?: string) => (
+  <div className="truncate" title={title}>
+    {text}
+  </div>
+);
 
 function PanelSkeleton({ rows = 3, testId }: { rows?: number; testId?: string }) {
   return (
@@ -82,7 +106,7 @@ function ErrorNote({ what, error, onRetry, testId }: { what: string; error: unkn
       {onRetry && (
         <>
           {" "}
-          <button type="button" onClick={onRetry} className="font-medium text-ink underline-offset-2 hover:underline">
+          <button type="button" onClick={onRetry} className={`font-medium ${INK_BUTTON}`}>
             Try again
           </button>
         </>
@@ -128,24 +152,23 @@ const CHANGE_STATUS: Record<ChangeKind, { label: string; tone: StatusTone }> = {
 
 function CommitRows({ commits }: { commits: ReleaseCommit[] }) {
   return (
-    <Table label="Commits" testId="release-commits">
-      {commits.map((commit) => (
-        <tr key={commit.sha} className={ROW}>
-          <td className={cn(TD, "w-24")}>
-            <Mono value={commit.sha} />
-          </td>
-          <td className={cn(TD, "w-full max-w-0")}>
-            <div className="truncate" title={commit.subject}>
-              {commit.subject || <span className="text-ink-muted">No subject recorded</span>}
-            </div>
-          </td>
-          <td className={cn(TD, "text-ink-muted")}>{commit.author}</td>
-          <td className={cn(TD, "text-ink-muted")}>
-            <Ago at={commit.time} />
-          </td>
-        </tr>
-      ))}
-    </Table>
+    <Table<ReleaseCommit>
+      label="Commits"
+      testId="release-commits"
+      rows={commits}
+      rowKey={(commit) => commit.sha}
+      columns={[
+        { key: "sha", header: "Commit", width: "6rem", render: (_, commit) => <Mono value={commit.sha} /> },
+        {
+          key: "subject",
+          header: "Subject",
+          className: GROW,
+          render: (_, commit) => truncated(commit.subject || <span className="text-ink-muted">No subject recorded</span>, commit.subject),
+        },
+        { key: "author", header: "Author", className: "text-ink-muted" },
+        { key: "time", header: "When", className: "text-ink-muted", render: (_, commit) => <Ago at={commit.time} /> },
+      ]}
+    />
   );
 }
 
@@ -176,41 +199,23 @@ export interface ChangesTabProps {
 
 export function ChangesTab({ project, release, base, baseReason, baseOptions, onBaseChange, env, note }: ChangesTabProps) {
   const comparison = useReleaseComparison(project, base, release.version, env?.id ?? null);
-  const picker = (
-    <div className="flex flex-wrap items-center gap-2 text-sm text-ink-muted" data-testid="release-compare-with">
-      {base ? (
-        <>
-          <span>Compared with</span>
-          <label className="sr-only" htmlFor="release-base">
-            Release to compare with
-          </label>
-          <select
-            id="release-base"
-            value={base}
-            onChange={(event) => onBaseChange(event.target.value)}
-            className="h-7 max-w-72 rounded-md border border-border bg-surface px-2 text-sm font-medium text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            data-testid="release-base"
-          >
-            {baseOptions.map((option) => (
-              <option key={option.version} value={option.version}>
-                {shortVersion(option.version)}
-                {option.subject ? ` — ${option.subject.slice(0, 60)}` : ""}
-              </option>
-            ))}
-          </select>
-          <span>{baseReason}</span>
-        </>
-      ) : (
-        <span>The first release recorded for {project}: there is nothing earlier to compare it with.</span>
-      )}
+  const picker = base ? (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-ink-muted" data-testid="release-compare-with">
+      <span>Compared with</span>
+      <BaseMenu value={base} options={baseOptions} onChange={onBaseChange} />
+      <span>{baseReason}</span>
+    </div>
+  ) : (
+    <div className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-ink-muted" data-testid="release-compare-with">
+      The first release recorded for {project}: there is nothing earlier to compare it with.
     </div>
   );
 
   const noteBlock = (
-    <Card transparent testId="release-deploy-note">
+    <NotePanel testId="release-deploy-note">
       <div className="mb-1 text-xs text-ink-muted">Deploy note{note?.by ? ` · ${note.by}` : ""}</div>
       <div className="text-sm text-ink">{note?.text || <span className="text-ink-muted">No deploy note.</span>}</div>
-    </Card>
+    </NotePanel>
   );
 
   if (!base) {
@@ -247,11 +252,74 @@ export function ChangesTab({ project, release, base, baseReason, baseOptions, on
   );
 }
 
-function Card({ transparent, testId, children }: { transparent?: boolean; testId?: string; children: ReactNode }) {
+/** The deploy note: demoted to an unfilled, bordered panel (PROPOSAL §4.4). */
+function NotePanel({ testId, children }: { testId?: string; children: ReactNode }) {
   return (
-    <section data-testid={testId} className={cn("rounded-lg border border-border p-4", transparent ? "bg-transparent" : "bg-surface")}>
+    <section data-testid={testId} className="rounded-lg border border-border bg-transparent p-4">
       {children}
     </section>
+  );
+}
+
+/**
+ * The release Changes compares with: a button naming it, opening the earlier
+ * releases (the mockup's note-panel control). The DROPDOWN_STANDARDS
+ * outside-click pattern; Escape closes it.
+ */
+function BaseMenu({ value, options, onChange }: { value: string; options: ReleaseRecord[]; onChange: (version: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const escapeLayer = useEscapeLayer(open, () => setOpen(false));
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Compare with ${value}`}
+        onClick={() => setOpen((prev) => !prev)}
+        className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-surface px-2 text-xs font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        data-testid="release-base"
+      >
+        {shortVersion(value)}
+        <ChevronDown className="h-3 w-3 text-ink-muted" aria-hidden="true" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          {...escapeLayer}
+          className="absolute left-0 top-8 z-50 max-h-80 w-96 max-w-[80vw] overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-md"
+        >
+          {options.map((option) => (
+            <button
+              key={option.version}
+              type="button"
+              role="menuitemradio"
+              aria-checked={option.version === value}
+              onClick={() => {
+                setOpen(false);
+                onChange(option.version);
+              }}
+              className={cn(
+                "flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ink transition-colors hover:bg-ink/5",
+                option.version === value && "font-medium"
+              )}
+            >
+              <span className="shrink-0">{shortVersion(option.version)}</span>
+              <span className="truncate text-xs text-ink-muted">{option.subject}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -306,11 +374,17 @@ function ComparisonPanels({ comparison, base, env }: { comparison: Comparison; b
         {artifacts.length === 0 ? (
           <p className="px-4 pb-4 text-sm text-ink-muted">No artifact changed: every image and asset is byte-identical.</p>
         ) : (
-          <Table label="Changed artifacts">
-            {artifacts.map((artifact) => (
-              <tr key={artifact.name} className={ROW}>
-                <td className={cn(TD, "w-44 font-medium")}>{artifact.name}</td>
-                <td className={cn(TD, "w-full max-w-0")}>
+          <Table<ArtifactChange>
+            label="Changed artifacts"
+            rows={artifacts}
+            rowKey={(artifact) => artifact.name}
+            columns={[
+              { key: "name", header: "Artifact", width: "11rem", className: "font-medium" },
+              {
+                key: "change",
+                header: "Digest",
+                className: GROW,
+                render: (_, artifact) => (
                   <span className="flex min-w-0 items-center gap-1.5">
                     {artifact.from ? <Mono value={artifact.from} /> : <span className="text-xs text-ink-muted">new</span>}
                     <span aria-hidden="true" className="text-ink-muted">
@@ -319,10 +393,10 @@ function ComparisonPanels({ comparison, base, env }: { comparison: Comparison; b
                     <span className="sr-only">to</span>
                     {artifact.to ? <Mono value={artifact.to} /> : <span className="text-xs text-ink-muted">removed</span>}
                   </span>
-                </td>
-              </tr>
-            ))}
-          </Table>
+                ),
+              },
+            ]}
+          />
         )}
       </Panel>
 
@@ -340,23 +414,34 @@ function ComparisonPanels({ comparison, base, env }: { comparison: Comparison; b
             {objects.deltas.length === 0 ? (
               <p className="px-4 pb-4 text-sm text-ink-muted">No object changed in {env?.name ?? "this environment"}{objects.unchanged ? ` (${objects.unchanged} unchanged)` : ""}.</p>
             ) : (
-              <Table label="Changed objects">
-                {objects.deltas.map((delta) => (
-                  <tr key={`${delta.cluster}/${delta.kind}/${delta.namespace}/${delta.name}`} className={ROW}>
-                    <td className={cn(TD, "w-28")}>
-                      <Status tone={CHANGE_STATUS[delta.change].tone} label={CHANGE_STATUS[delta.change].label} />
-                    </td>
-                    <td className={TD}>
-                      <span className="text-ink-muted">{delta.kind}</span> <span className="font-medium">{delta.name}</span>
-                    </td>
-                    <td className={cn(TD, "w-full max-w-0")}>
-                      <div className="truncate text-ink-muted" title={delta.summary}>
-                        {delta.summary || "—"}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </Table>
+              <Table<ObjectDelta>
+                label="Changed objects"
+                rows={objects.deltas}
+                rowKey={(delta) => `${delta.cluster}/${delta.kind}/${delta.namespace}/${delta.name}`}
+                columns={[
+                  {
+                    key: "change",
+                    header: "Change",
+                    width: "7rem",
+                    render: (_, delta) => <Status tone={CHANGE_STATUS[delta.change].tone} label={CHANGE_STATUS[delta.change].label} />,
+                  },
+                  {
+                    key: "name",
+                    header: "Object",
+                    render: (_, delta) => (
+                      <>
+                        <span className="text-ink-muted">{delta.kind}</span> <span className="font-medium">{delta.name}</span>
+                      </>
+                    ),
+                  },
+                  {
+                    key: "summary",
+                    header: "What changed",
+                    className: `${GROW} text-ink-muted`,
+                    render: (_, delta) => truncated(delta.summary || "—", delta.summary),
+                  },
+                ]}
+              />
             )}
           </>
         ) : (
@@ -420,39 +505,42 @@ export function RolloutTab({ env, promotion }: { env: ReleaseEnv | null; promoti
       {workloads.length === 0 ? (
         <p className="px-4 pb-4 text-sm text-ink-muted">This promotion pinned no workloads.</p>
       ) : (
-        <Table
+        <Table<WorkloadRollout>
           label="Workloads"
-          head={
-            <>
-              <th className={TH}>Workload</th>
-              <th className={TH}>Status</th>
-              <th className={cn(TH, "text-right")}>Replicas</th>
-              <th className={TH}>Serving</th>
-              <th className={TH}>Converged</th>
-            </>
-          }
-        >
-          {workloads.map((workload) => (
-            <tr key={workload.name} className={ROW}>
-              <td className={cn(TD, "font-medium")}>
-                {workload.name}
-                {data.unpinned.includes(workload) && <span className="ml-2 text-xs font-normal text-ink-muted">not in this release</span>}
-              </td>
-              <td className={TD}>
+          rows={workloads}
+          rowKey={(workload) => workload.name}
+          columns={[
+            {
+              key: "name",
+              header: "Workload",
+              className: "font-medium",
+              render: (_, workload) => (
+                <>
+                  {workload.name}
+                  {data.unpinned.some((w) => w.name === workload.name) && (
+                    <span className="ml-2 text-xs font-normal text-ink-muted">not in this release</span>
+                  )}
+                </>
+              ),
+            },
+            {
+              key: "phase",
+              header: "Status",
+              render: (_, workload) => (
                 <span title={workload.lastError || undefined}>
                   <PhaseStatus phase={workload.phase} />
                 </span>
-              </td>
-              <td className={cn(TD, "text-right tabular-nums")}>
-                {workload.updatedReplicas}/{workload.desiredReplicas}
-              </td>
-              <td className={TD}>{workload.observedDigest ? <Mono value={workload.observedDigest} /> : <span className="text-ink-muted">—</span>}</td>
-              <td className={cn(TD, "text-ink-muted")}>
-                <Ago at={workload.convergedAt} />
-              </td>
-            </tr>
-          ))}
-        </Table>
+              ),
+            },
+            { key: "replicas", header: "Replicas", numeric: true, render: (_, w) => `${w.updatedReplicas}/${w.desiredReplicas}` },
+            {
+              key: "observedDigest",
+              header: "Serving",
+              render: (_, w) => (w.observedDigest ? <Mono value={w.observedDigest} /> : <span className="text-ink-muted">—</span>),
+            },
+            { key: "convergedAt", header: "Converged", className: "text-ink-muted", render: (_, w) => <Ago at={w.convergedAt} /> },
+          ]}
+        />
       )}
     </Panel>
   );
@@ -462,8 +550,17 @@ export function RolloutTab({ env, promotion }: { env: ReleaseEnv | null; promoti
 
 const GATE_TONE: Record<ReleaseGate["status"], StatusTone> = { passed: "success", failed: "danger", error: "danger", skipped: "neutral" };
 
+interface CheckRow {
+  key: string;
+  env: ReleaseEnv;
+  promotion: ReleasePromotion;
+  gate: ReleaseGate;
+}
+
 export function ChecksTab({ entries }: { entries: { env: ReleaseEnv; promotion: ReleasePromotion }[] }) {
-  const rows = entries.flatMap(({ env, promotion }) => promotion.gates.map((gate) => ({ env, promotion, gate })));
+  const rows: CheckRow[] = entries.flatMap(({ env, promotion }) =>
+    promotion.gates.map((gate, index) => ({ key: `${promotion.id}-${gate.name}-${index}`, env, promotion, gate }))
+  );
   if (rows.length === 0) {
     return (
       <Note testId="release-checks-none">
@@ -474,58 +571,54 @@ export function ChecksTab({ entries }: { entries: { env: ReleaseEnv; promotion: 
   }
   return (
     <Panel title="Checks" meta={`${rows.length} recorded`} flush testId="release-checks">
-      <Table
+      <Table<CheckRow>
         label="Checks"
-        head={
-          <>
-            <th className={TH}>Check</th>
-            <th className={TH}>Result</th>
-            <th className={TH}>Summary</th>
-            <th className={TH}>Environment</th>
-            <th className={TH}>Recorded</th>
-            <th className={cn(TH, "w-10")}>
-              <span className="sr-only">Report</span>
-            </th>
-          </>
-        }
-      >
-        {rows.map(({ env, promotion, gate }, index) => (
-          <tr key={`${promotion.id}-${gate.name}-${index}`} className={ROW}>
-            <td className={cn(TD, "font-medium")}>{gate.name}</td>
-            <td className={TD}>
-              <Status tone={GATE_TONE[gate.status]} label={gate.rawStatus ? `${gate.status} (${gate.rawStatus})` : gate.status} />
-            </td>
-            <td className={cn(TD, "w-full max-w-0")}>
-              <div className="truncate text-ink-muted" title={gate.summary}>
-                {gate.summary || "—"}
-              </div>
-            </td>
-            <td className={TD}>
-              <Tag>{env.name}</Tag>
-            </td>
-            <td className={cn(TD, "text-ink-muted")}>
-              <span title={gate.source === "claimed" ? "Claimed by the promoter when they promoted" : "Recorded after the promotion"}>
-                {gate.source === "claimed" ? "at promote" : "after"}
-              </span>
-              {gate.finishedAt && " · "}
-              <Ago at={gate.finishedAt} />
-            </td>
-            <td className="h-10 px-2">
-              {gate.url && (
+        rows={rows}
+        rowKey={(row) => row.key}
+        columns={[
+          { key: "name", header: "Check", className: "font-medium", render: (_, { gate }) => gate.name },
+          {
+            key: "result",
+            header: "Result",
+            render: (_, { gate }) => <Status tone={GATE_TONE[gate.status]} label={gate.rawStatus ? `${gate.status} (${gate.rawStatus})` : gate.status} />,
+          },
+          { key: "summary", header: "Summary", className: `${GROW} text-ink-muted`, render: (_, { gate }) => truncated(gate.summary || "—", gate.summary) },
+          { key: "env", header: "Environment", render: (_, { env }) => <Tag>{env.name}</Tag> },
+          {
+            key: "recorded",
+            header: "Recorded",
+            className: "text-ink-muted",
+            render: (_, { gate }) => (
+              <>
+                <span title={gate.source === "claimed" ? "Claimed by the promoter when they promoted" : "Recorded after the promotion"}>
+                  {gate.source === "claimed" ? "at promote" : "after"}
+                </span>
+                {gate.finishedAt && " · "}
+                <Ago at={gate.finishedAt} />
+              </>
+            ),
+          },
+          {
+            key: "report",
+            header: "Report",
+            srHeader: true,
+            width: "2.5rem",
+            className: "px-2",
+            render: (_, { gate }) =>
+              gate.url ? (
                 <a
                   href={gate.url}
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`Open the ${gate.name} report`}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink"
+                  className="no-color inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink"
                 >
                   <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                 </a>
-              )}
-            </td>
-          </tr>
-        ))}
-      </Table>
+              ) : null,
+          },
+        ]}
+      />
     </Panel>
   );
 }
@@ -540,29 +633,31 @@ export function ArtifactsTab({ release, env, promotion }: { release: ReleaseReco
         {release.artifacts.length === 0 ? (
           <p className="px-4 pb-4 text-sm text-ink-muted">This release recorded no artifacts.</p>
         ) : (
-          <Table
+          <Table<ReleaseArtifact>
             label="Artifacts"
-            head={
-              <>
-                <th className={TH}>Name</th>
-                <th className={TH}>Kind</th>
-                <th className={TH}>Digest</th>
-                <th className={TH}>Platforms</th>
-              </>
-            }
-          >
-            {release.artifacts.map((artifact) => (
-              <tr key={`${artifact.name}${artifact.variant}`} className={ROW}>
-                <td className={cn(TD, "font-medium")}>
-                  {artifact.name}
-                  {artifact.variant && <span className="ml-1 text-ink-muted">[{artifact.variant}]</span>}
-                </td>
-                <td className={cn(TD, "text-ink-muted")}>{artifact.kind || "—"}</td>
-                <td className={TD}>{artifact.digest ? <Mono value={artifact.digest} /> : artifact.version || <span className="text-ink-muted">—</span>}</td>
-                <td className={cn(TD, "text-ink-muted")}>{artifact.platforms.join(", ") || "—"}</td>
-              </tr>
-            ))}
-          </Table>
+            rows={release.artifacts}
+            rowKey={(artifact) => `${artifact.name}${artifact.variant}`}
+            columns={[
+              {
+                key: "name",
+                header: "Name",
+                className: "font-medium",
+                render: (_, artifact) => (
+                  <>
+                    {artifact.name}
+                    {artifact.variant && <span className="ml-1 text-ink-muted">[{artifact.variant}]</span>}
+                  </>
+                ),
+              },
+              { key: "kind", header: "Kind", className: "text-ink-muted", render: (_, a) => a.kind || "—" },
+              {
+                key: "digest",
+                header: "Digest",
+                render: (_, a) => (a.digest ? <Mono value={a.digest} /> : a.version || <span className="text-ink-muted">—</span>),
+              },
+              { key: "platforms", header: "Platforms", className: "text-ink-muted", render: (_, a) => a.platforms.join(", ") || "—" },
+            ]}
+          />
         )}
       </Panel>
       <Panel title={env ? `Bundle applied in ${env.name}` : "Bundle"} testId="release-bundle">

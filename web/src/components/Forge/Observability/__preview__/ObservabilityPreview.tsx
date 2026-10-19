@@ -87,7 +87,6 @@ function searchFromUrl(params: URLSearchParams): ObsSearch {
         // A malformed edit is dropped, as the real route's schema drops it.
       }
     } else if (key === "live" || key === "errors") out[key] = params.get(key) === "true";
-    else if (key === "failureHours") out[key] = Number(params.get(key));
     else out[key] = params.get(key);
   }
   return out as ObsSearch;

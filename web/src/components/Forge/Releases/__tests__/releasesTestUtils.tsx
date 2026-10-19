@@ -9,7 +9,7 @@
 
 import { useState, type ReactElement } from "react";
 import { render, type RenderResult } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
@@ -35,9 +35,9 @@ export function fixtureObsApi(over: Partial<ObservabilityApi> = {}): Observabili
   };
 }
 
-function wrap(api: ReleasesApi, obs: ObservabilityApi, ui: ReactElement): RenderResult {
+function wrap(api: ReleasesApi, obs: ObservabilityApi, ui: ReactElement, client = createTestQueryClient()): RenderResult {
   return render(
-    <QueryClientProvider client={createTestQueryClient()}>
+    <QueryClientProvider client={client}>
       <ObservabilityApiProvider api={obs}>
         <ReleasesApiProvider api={api}>{ui}</ReleasesApiProvider>
       </ObservabilityApiProvider>
@@ -46,6 +46,7 @@ function wrap(api: ReleasesApi, obs: ObservabilityApi, ui: ReactElement): Render
 }
 
 export interface Harness<S> extends RenderResult {
+  client: QueryClient;
   current: () => S;
   promote: ReturnType<typeof vi.fn>;
   selectEnv: ReturnType<typeof vi.fn>;
@@ -80,7 +81,8 @@ export function renderList(
       />
     );
   }
-  return { ...wrap(api, obs, <Stateful />), current: () => latest, promote, selectEnv };
+  const client = createTestQueryClient();
+  return { ...wrap(api, obs, <Stateful />, client), client, current: () => latest, promote, selectEnv };
 }
 
 export function renderDetail(
@@ -108,10 +110,11 @@ export function renderDetail(
         }
         listHref="/releases"
         releaseHref={(v) => `/r/${v}`}
-        activityHref={(name) => `/activity?env=${name}`}
+        activityHref={(name, target) => `/activity?env=${name}&target=${target}`}
         promote={{ onPromote: promote, blockedReason: blocked }}
       />
     );
   }
-  return { ...wrap(api, fixtureObsApi(), <Stateful />), current: () => latest, promote, selectEnv: vi.fn() };
+  const client = createTestQueryClient();
+  return { ...wrap(api, fixtureObsApi(), <Stateful />, client), client, current: () => latest, promote, selectEnv: vi.fn() };
 }
