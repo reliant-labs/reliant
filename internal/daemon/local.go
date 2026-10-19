@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/fileutil"
+	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
@@ -38,11 +39,22 @@ var _ Client = (*LocalClient)(nil)
 
 // LocalClient implements Client by making direct OS and exec calls.
 // It is used when running on the daemon itself.
-type LocalClient struct{}
+type LocalClient struct {
+	// heavy queues heavy commands behind the machine's heavy slots. Nil runs
+	// every command at once.
+	heavy *heavyjob.Gate
+}
 
 // NewLocalClient creates a new LocalClient.
 func NewLocalClient() *LocalClient {
 	return &LocalClient{}
+}
+
+// WithHeavyGate makes the client queue heavy commands — foreground and
+// background — behind g. Returns the client.
+func (c *LocalClient) WithHeavyGate(g *heavyjob.Gate) *LocalClient {
+	c.heavy = g
+	return c
 }
 
 // ---------------------------------------------------------------------------
@@ -789,6 +801,10 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 		}
 	}
 
+	// A heavy command runs under the slot wrapper, waiting for one of the
+	// machine's heavy slots first; its timeout counts the wait.
+	heavy := c.heavy.Prepare(cmd, heavyjob.Job{Command: req.Command, Declared: req.Heavy})
+
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
@@ -875,6 +891,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	// drift on what a failure looks like — see daemon.ClassifyExecOutcome.
 	stdout := stdoutBuf.String()
 	outcome := ClassifyExecOutcome(err, deadline.Err(), stdout, stderrBuf.String(), localMemReader, oomSnap, diskwatch.Default())
+	outcome.NoteHeavyTimeout(heavy)
 
 	return &CommandResult{
 		ExitCode:         outcome.ExitCode,
@@ -904,6 +921,8 @@ func (c *LocalClient) StartBackground(ctx context.Context, req *RunCommandReques
 		WorkingDir:  req.WorkingDir,
 		Env:         req.Env,
 		Credentials: credentials,
+		HeavyGate:   c.heavy,
+		Heavy:       req.Heavy,
 	})
 	if err != nil {
 		return "", fmt.Errorf("starting background process: %w", err)

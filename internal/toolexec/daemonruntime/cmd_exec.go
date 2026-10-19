@@ -10,14 +10,26 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/osutil"
 )
+
+// heavyGateRef is the gate exec.run and exec.bg_start queue heavy commands
+// behind; nil queues nothing. Set once by the runtime at start.
+var heavyGateRef atomic.Pointer[heavyjob.Gate]
+
+// SetHeavyGate sets the gate exec.run and exec.bg_start queue heavy commands
+// behind. Safe for concurrent use.
+func SetHeavyGate(g *heavyjob.Gate) {
+	heavyGateRef.Store(g)
+}
 
 func init() {
 	RegisterCommand("exec.run", handleExecRun)
@@ -106,6 +118,10 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	}
 	cmd.Env = daemonpolicy.ChildEnv(ctx, req.Env, credentials)
 
+	// A heavy command runs under the slot wrapper, waiting for one of the
+	// machine's heavy slots first; its timeout counts the wait.
+	heavy := heavyGateRef.Load().Prepare(cmd, heavyjob.Job{Command: req.Command, Argv: req.Argv, Declared: req.Heavy})
+
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
@@ -175,6 +191,7 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// Shared with LocalClient.RunCommand so the two exec paths cannot drift on
 	// what a failure looks like — see daemon.ClassifyExecOutcome.
 	outcome := daemon.ClassifyExecOutcome(err, deadline.Err(), stdoutBuf.String(), stderrBuf.String(), memReader, oomSnap, diskwatch.Default())
+	outcome.NoteHeavyTimeout(heavy)
 
 	logExecFinished(outcome, duration)
 
@@ -224,7 +241,9 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 		// Tag the process with the grant that started it, so a later
 		// bg_output/bg_kill from a different connector cannot reach it.
 		// Empty for first-party callers.
-		GrantID: daemonpolicy.GrantIDFromContext(ctx),
+		GrantID:   daemonpolicy.GrantIDFromContext(ctx),
+		HeavyGate: heavyGateRef.Load(),
+		Heavy:     req.Heavy,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start background: %w", err)

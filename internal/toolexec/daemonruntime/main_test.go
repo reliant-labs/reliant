@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/heavyjob"
 )
 
 // Start on a managed daemon (RELIANT_DAEMON_TYPE=managed) rewrites the GLOBAL
@@ -18,6 +20,9 @@ import (
 // variables that make Start behave as a pod, before any test runs.
 
 func TestMain(m *testing.M) {
+	// This test binary also stands in for the reliant binary as the
+	// heavy-slot wrapper (cmd_exec_heavy_test.go).
+	heavyjob.Dispatch()
 	os.Exit(runIsolated(m))
 }
 

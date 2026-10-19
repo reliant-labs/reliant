@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
+	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/osutil"
 )
 
@@ -254,6 +255,16 @@ func waitErrorText(cmdErr error, timedOut bool) string {
 
 // appendStderr joins an explanation onto captured stderr, newline-separated,
 // without leading a blank line when there was no captured stderr.
+// NoteHeavyTimeout explains a heavy command's timeout that counted time spent
+// queued for a heavy slot: without it, "aborted" on a build that needs a
+// minute, after it waited nine, reads as the build hanging. heavy is whether
+// the command ran under the slot wrapper (heavyjob.Gate.Prepare).
+func (o *ExecOutcome) NoteHeavyTimeout(heavy bool) {
+	if heavy && o.TimedOut && heavyjob.WaitedFor(o.Stderr) {
+		o.Stderr = appendStderr(o.Stderr, heavyjob.TimeoutNote)
+	}
+}
+
 func appendStderr(stderr, msg string) string {
 	if msg == "" {
 		return stderr

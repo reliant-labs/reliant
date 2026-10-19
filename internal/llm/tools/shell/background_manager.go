@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
 )
@@ -340,6 +341,13 @@ type StartProcessOptions struct {
 	// Argv, when set, runs the command with no shell (see
 	// daemon.RunCommandRequest.Argv). Command is used for display only.
 	Argv []string
+	// HeavyGate queues a heavy command behind the machine's heavy slots:
+	// the process starts at once, prints that it is waiting, and runs its
+	// command when a slot frees. Nil queues nothing.
+	HeavyGate *heavyjob.Gate
+	// Heavy declares the command heavy whatever its words are (see
+	// daemon.RunCommandRequest.Heavy).
+	Heavy bool
 }
 
 // StartProcessWithEnv starts a new background process with custom environment variables
@@ -398,6 +406,7 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		env[key] = value
 	}
 	cmd.Env = daemonpolicy.ChildEnv(ctx, env, opts.Credentials)
+	opts.HeavyGate.Prepare(cmd, heavyjob.Job{Command: opts.Command, Argv: opts.Argv, Declared: opts.Heavy})
 
 	// Create buffers for output
 	stdout := &bytes.Buffer{}

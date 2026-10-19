@@ -770,6 +770,7 @@ var generatedToolParams = map[string]ToolParams{
 			"credentials":       {},
 			"description":       {},
 			"env":               {},
+			"heavy":             {},
 			"max_output":        {},
 			"repo":              {},
 			"run_in_background": {},

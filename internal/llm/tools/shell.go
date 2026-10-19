@@ -43,6 +43,10 @@ type ShellParams struct {
 	// environment.
 	Credentials string `json:"credentials,omitempty" jsonschema:"enum=none,enum=inherit"`
 	Repo        string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo to run the command in: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Omit in single-repo projects. The system prompt lists available repos when this matters."`
+	// Heavy declares the command heavy so it queues for one of the machine's
+	// heavy slots (see daemon.RunCommandRequest.Heavy). Its schema
+	// description is attached in JSONSchemaExtend.
+	Heavy bool `json:"heavy,omitempty"`
 }
 
 // shellDescriptionParamDoc is the schema description for ShellParams.Description.
@@ -82,7 +86,13 @@ func (ShellParams) JSONSchemaExtend(s *jsonschema.Schema) {
 	if prop, ok := s.Properties.Get("credentials"); ok {
 		prop.Description = shellCredentialsParamDoc
 	}
+	if prop, ok := s.Properties.Get("heavy"); ok {
+		prop.Description = shellHeavyParamDoc
+	}
 }
+
+// shellHeavyParamDoc is the schema description for ShellParams.Heavy.
+const shellHeavyParamDoc = "Set true when the command saturates CPU or memory for a while — a whole-project build, a test suite, codegen — but the daemon would not recognize it (a project script, a Makefile target). Heavy commands queue for one of the machine's heavy slots, shared by every agent, before they run; go build/test/vet, vitest, npm test/build, forge generate/lint, make test* and task test* are recognized without it. A queued command's timeout includes the wait, so run long ones with run_in_background."
 
 // ShellPermissionsParams is used for permission checking
 type ShellPermissionsParams struct {
@@ -415,6 +425,7 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		Env:         params.Env,
 		TimeoutMs:   params.Timeout,
 		Credentials: credentials,
+		Heavy:       params.Heavy,
 	}
 	if credentials == daemonpolicy.CredentialsNone {
 		// A daemon older than the credentials field ignores it but applies env,

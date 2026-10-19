@@ -229,6 +229,11 @@ type RunCommandRequest struct {
 	// own environment. It is a seatbelt for what Reliant hands out, not a
 	// sandbox: the daemon user's files stay readable.
 	Credentials string `json:"credentials,omitempty"`
+	// Heavy declares the command heavy — a whole-module build, a test suite,
+	// codegen — whatever its words are, so it queues for one of the machine's
+	// heavy slots like the commands the daemon recognizes by itself (see
+	// internal/heavyjob). There is no way to declare a command light.
+	Heavy bool `json:"heavy,omitempty"`
 }
 
 // CommandResult is the result of a synchronous command execution.

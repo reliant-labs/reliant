@@ -31,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
@@ -405,11 +406,24 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)
 	sort.Strings(caps)
 
+	// Every agent on this machine runs its commands through this daemon, so
+	// this is where their heavy ones (builds, test suites, codegen) are held
+	// to the machine's heavy slots — the pool forge's own lanes draw from. A
+	// gate that cannot be built (slots switched off, own binary not found)
+	// runs every command unqueued: a broken limiter must never stop work.
+	heavyGate, err := heavyjob.New(heavyjob.ConfigFromEnv(os.Environ()))
+	if err != nil {
+		logging.Warn(logPrefix+" Heavy commands run unqueued", "reason", err)
+	} else {
+		logging.Info(logPrefix + " " + heavyGate.String())
+	}
+	SetHeavyGate(heavyGate)
+
 	localExec := toolexec.NewLocalToolExecutor(toolsFactory)
 	localExec.SetMCPContextBinder(toolexec.NewLocalMCPContextBinder(mcpManager))
 	// The daemon runtime IS the local machine, so give the executor a
 	// LocalClient so filesystem tools (glob, view, etc.) can operate.
-	localExec.SetDaemonClient(daemon.NewLocalClient())
+	localExec.SetDaemonClient(daemon.NewLocalClient().WithHeavyGate(heavyGate))
 
 	// Initialize the terminal manager so terminal.* daemon commands can
 	// create and manage PTY sessions on the user's machine.

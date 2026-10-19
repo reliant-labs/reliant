@@ -207,6 +207,15 @@ message ServiceOptions {
 
   // Authentication configuration for the service.
   AuthConfig auth = 6;
+
+  // The trust domain whose callers this service serves: "user" (the
+  // default, when empty) for the product's own signed-in users, or a name
+  // the project chooses for another kind of caller ("daemon", "operator").
+  // A serverkit.Listener refuses to start when it mounts a service whose
+  // audience differs from its chain's Authenticator.Audience(), so a
+  // listener authenticating one kind of caller can never serve another
+  // kind's RPCs.
+  string audience = 7;
 }
 
 // ServiceVisibility determines how a service is exposed.
