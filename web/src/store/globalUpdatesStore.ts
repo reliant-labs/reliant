@@ -31,7 +31,7 @@ import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
 import { invalidateDaemonList, reconcileDaemonHeartbeat } from "../hooks/useDaemonStatus";
 import { useGlobalDataStore } from "./globalDataStore";
-import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat, setChatSelection } from "../hooks/chat-queries";
+import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat, setChatSelection, markChatSelectionsUnmaintained } from "../hooks/chat-queries";
 import { isNewerSelection, selectionFromPayload, type SelectionPayload } from "../lib/chatSelection";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalKeys } from "../hooks/approval-queries";
@@ -276,6 +276,9 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       logger.info(`${LOG_PREFIX} Disconnecting unified gRPC stream`);
       state.wsService.stop();
       set({ wsService: null, connectionStatus: "disconnected", subscribedChatId: null });
+      // Selections are kept current only by this stream (they never revalidate
+      // on mount), and nothing delivers their changes while it is closed.
+      markChatSelectionsUnmaintained();
     }
   },
 

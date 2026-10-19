@@ -236,17 +236,37 @@ export function useChat(chatId?: string) {
  * other param, kept so any device, restart or branch starts from it. `null` is
  * a definite "this chat has none"; `undefined` data means not loaded yet.
  *
- * Always revalidated on mount: the cache is kept current by this device's own
- * writes and by the update stream, but a stream that was down missed nothing
- * the GetChat behind this will not repair. A read-only observer that only
- * wants what the composer already loaded passes a long `staleTime`.
+ * The fetch is only the cold-start seed (the project chat list omits the
+ * selection, so a chat's first open reads it once). Freshness comes from this
+ * device's own writes and from the update stream: every server-side change is
+ * announced as a durable CHAT_CONFIG_CHANGED update, which the stream patches
+ * live and replays on a cursor resume. What the stream cannot vouch for is
+ * marked stale instead: a disruption invalidates what was read before it
+ * (globalUpdatesStore.handleStatusChange), and closing the stream — a project
+ * switch, which re-scopes it — marks every selection stale
+ * (markChatSelectionsUnmaintained). Revalidating on every mount re-read
+ * GetChat on each chat switch for an answer the stream already had.
  */
-export function useChatSelection(chatId?: string, options?: { staleTime?: number }) {
+export function useChatSelection(chatId?: string) {
   return useQuery({
     queryKey: chatKeys.selection(chatId),
     queryFn: async () => (await api.chatsV2.get(chatId!)).selection ?? null,
     enabled: !!chatId,
-    staleTime: options?.staleTime ?? 0,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * The stream stopped maintaining every chat's selection (it was closed, e.g. to
+ * re-scope it to another project, whose updates it filters out until then).
+ * Marks them stale without refetching: each is re-read when a composer next
+ * mounts it.
+ */
+export function markChatSelectionsUnmaintained(): void {
+  void queryClient.invalidateQueries({
+    queryKey: chatKeys.details(),
+    predicate: (query) => query.queryKey[3] === "selection",
+    refetchType: "none",
   });
 }
 

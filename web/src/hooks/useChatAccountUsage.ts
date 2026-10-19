@@ -67,7 +67,7 @@ const NO_ACCOUNTS: ProviderAccount[] = [];
  * the composer already loaded) and the user's model list.
  */
 export function useChatModelFallback(chatId: string | undefined): UsageLimitFallback {
-  const selection = useChatSelection(chatId, { staleTime: Infinity }).data;
+  const selection = useChatSelection(chatId).data;
   const { models, tiers } = useModels();
   return usageLimitFallbackOf({
     params: selection?.params,

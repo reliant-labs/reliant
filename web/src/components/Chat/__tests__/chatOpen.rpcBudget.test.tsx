@@ -45,7 +45,11 @@ import { workflowGrpc } from "../../../api/workflow-grpc";
 import { presetGrpc } from "../../../api/preset-grpc";
 import { queryClient } from "../../../lib/query-client";
 import { useProjectStore } from "../../../store/projectStore";
-import { seedChatDetail, useChat } from "../../../hooks/chat-queries";
+import {
+  markChatSelectionsUnmaintained,
+  seedChatDetail,
+  useChat,
+} from "../../../hooks/chat-queries";
 import { useMessages } from "../../../hooks/message-queries";
 import {
   useApprovals,
@@ -169,17 +173,22 @@ describe("RPCs issued by opening a chat", () => {
     const issued = await openChat(CHAT_A);
     console.info("[rpc-budget] cold open", JSON.stringify(issued));
 
-    expect(issued).toMatchObject({
+    expect(issued).toEqual({
       ListMessages: 1,
       ListApprovalsByChat: 1,
       GetPendingQuestion: 1,
       GetWorkflowExecutions: 1,
       GetWorkflow: 1,
       ListPresetsForWorkflow: 1,
-      GetDefaultPresets: 1,
+      // The chat list seeded the detail, but the list omits the chat's
+      // server-side selection (its model and params), so the composer reads it
+      // once — the only GetChat a chat costs until the stream stops vouching
+      // for it.
+      GetChat: 1,
     });
-    // The chat list seeded the detail.
-    expect(issued.GetChat).toBeUndefined();
+    // An existing chat's default presets are the server's to apply (the
+    // composer no longer writes them back as a pick), so it does not read them.
+    expect(issued.GetDefaultPresets).toBeUndefined();
   });
 
   it("returning to the same chat a minute later issues nothing the stream already keeps current", async () => {
@@ -215,6 +224,18 @@ describe("RPCs issued by opening a chat", () => {
     const issued = await openChat(CHAT_A);
 
     expect(issued.ListPresetsForWorkflow).toBe(1);
-    expect(issued.GetDefaultPresets).toBe(1);
+    // Only a new chat applies default presets client-side.
+    expect(issued.GetDefaultPresets).toBeUndefined();
+  });
+
+  it("re-reads a selection once the stream stops maintaining it", async () => {
+    await openChat(CHAT_A);
+    // The stream closed (a project switch re-scopes it): nothing delivered the
+    // selection's changes meanwhile.
+    markChatSelectionsUnmaintained();
+
+    const issued = await openChat(CHAT_A);
+
+    expect(issued).toEqual({ GetChat: 1 });
   });
 });
