@@ -455,6 +455,9 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		if err := osutil.LowerChildPriority(cmd.Process.Pid); err != nil {
 			logging.Debug("Failed to lower background process priority", "pid", cmd.Process.Pid, "error", err)
 		}
+		if err := osutil.LowerChildIOPriority(cmd.Process.Pid); err != nil {
+			logging.Debug("Failed to lower background process I/O priority", "pid", cmd.Process.Pid, "error", err)
+		}
 	}
 
 	// Start goroutines to capture output

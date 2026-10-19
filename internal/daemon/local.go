@@ -833,6 +833,9 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 			if err := osutil.LowerChildPriority(cmd.Process.Pid); err != nil {
 				logging.Debug("Failed to lower command priority", "pid", cmd.Process.Pid, "error", err)
 			}
+			if err := osutil.LowerChildIOPriority(cmd.Process.Pid); err != nil {
+				logging.Debug("Failed to lower command I/O priority", "pid", cmd.Process.Pid, "error", err)
+			}
 		}
 
 		// Wait in a goroutine so the command can be detached into a background
