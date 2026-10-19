@@ -62,8 +62,36 @@ func (d rewriteDoer) Do(r *http.Request) (*http.Response, error) {
 	return d.srv.Client().Do(r2)
 }
 
-func TestParseClaudeUsage_LimitsArrayAndWindows(t *testing.T) {
+func TestParseClaudeUsage_Live(t *testing.T) {
 	s, err := ParseClaudeUsage(fixture(t, "claude_usage.json"), fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Provider != ProviderClaude || s.Status != ratelimit.StatusAllowed {
+		t.Fatalf("snapshot: %+v", s)
+	}
+	h5 := win(t, s, "5h")
+	wantUsed(t, h5, 0.37)
+	if want := time.Date(2026, 10, 19, 18, 0, 0, 62260000, time.UTC); !h5.ResetsAt.Equal(want) || h5.Length != 5*time.Hour {
+		t.Fatalf("5h: %+v", h5)
+	}
+	d7 := win(t, s, "7d")
+	wantUsed(t, d7, 0.72)
+	if want := time.Date(2026, 10, 21, 22, 0, 0, 62284000, time.UTC); !d7.ResetsAt.Equal(want) || d7.Length != 7*24*time.Hour {
+		t.Fatalf("7d: %+v", d7)
+	}
+	// The weekly_scoped row for a model; the session and weekly_all limits[] rows
+	// duplicate five_hour / seven_day and must not add windows. The live body also
+	// carries non-window siblings (seven_day_breakdown, null seven_day_oauth_apps,
+	// codename keys) that must not become windows either.
+	wantUsed(t, win(t, s, "7d.fable"), 0)
+	if len(s.Windows) != 3 {
+		t.Fatalf("want exactly 5h, 7d, 7d.fable; got %+v", s.Windows)
+	}
+}
+
+func TestParseClaudeUsage_LimitsArrayAndWindows(t *testing.T) {
+	s, err := ParseClaudeUsage(fixture(t, "claude_usage_synthetic_scoped.json"), fixedNow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,17 +186,19 @@ func TestParseClaudeUsage_Errors(t *testing.T) {
 	}
 }
 
-func TestParseClaudeProfile(t *testing.T) {
+func TestParseClaudeProfile_Live(t *testing.T) {
 	p, err := ParseClaudeProfile(fixture(t, "claude_profile.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.AccountUUID != "00000000-aaaa-4000-8000-000000000001" || p.OrganizationUUID != "00000000-bbbb-4000-8000-000000000002" {
+	if p.AccountUUID != "00000000-0000-4000-8000-000000000007" || p.OrganizationUUID != "00000000-0000-4000-8000-000000000009" {
 		t.Fatalf("ids: %+v", p)
 	}
-	if p.Email != "test.user@example.invalid" || p.OrganizationType != "claude_max" || p.RateLimitTier != "default_claude_max_20x" {
+	if p.Email != "user5@example.invalid" || p.OrganizationType != "claude_max" || p.RateLimitTier != "default_claude_max_20x" || p.SubscriptionStatus != "active" {
 		t.Fatalf("fields: %+v", p)
 	}
+	// The live profile has has_claude_max but no plan string of its own: the plan
+	// comes from organization_type + rate_limit_tier.
 	if p.Plan != "max_20x" {
 		t.Fatalf("plan = %q", p.Plan)
 	}
@@ -187,8 +217,33 @@ func TestParseClaudeProfile_FallbacksAndErrors(t *testing.T) {
 	}
 }
 
-func TestParseCodexUsage(t *testing.T) {
+func TestParseCodexUsage_Live(t *testing.T) {
 	s, err := ParseCodexUsage(fixture(t, "codex_usage.json"), fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Provider != ProviderCodex || s.PlanType != "prolite" || NormalizePlan(ProviderCodex, s.PlanType, "") != "pro_lite" {
+		t.Fatalf("snapshot: %+v", s)
+	}
+	// A pro_lite account has one weekly window, delivered in the PRIMARY slot with
+	// secondary_window null. It is spent (used_percent 100) while the live body
+	// still says allowed:true and limit_reached:false, so the status must come
+	// from the window math.
+	if s.Status != ratelimit.StatusRejected {
+		t.Fatalf("status = %s, want rejected from used_percent 100", s.Status)
+	}
+	pr := win(t, s, "primary")
+	wantUsed(t, pr, 1)
+	if pr.Length != 7*24*time.Hour || !pr.ResetsAt.Equal(time.Unix(1792885568, 0).UTC()) {
+		t.Fatalf("primary: %+v", pr)
+	}
+	if len(s.Windows) != 1 {
+		t.Fatalf("null secondary_window / additional_rate_limits must add nothing: %+v", s.Windows)
+	}
+}
+
+func TestParseCodexUsage(t *testing.T) {
+	s, err := ParseCodexUsage(fixture(t, "codex_usage_synthetic_plus.json"), fixedNow)
 	if err != nil {
 		t.Fatal(err)
 	}

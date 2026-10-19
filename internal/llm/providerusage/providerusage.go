@@ -5,8 +5,9 @@
 // each usage window is consumed.
 //
 // Three endpoints are called with the credential's own bearer token (evidence
-// in research/provider-load-balancing/DESIGN.md §4.4; none of it was verified
-// live by us — see UsageAPIEnabled):
+// in research/provider-load-balancing/DESIGN.md §4.4). All three were verified
+// live on 2026-10-19 with the owner's own Claude Max and ChatGPT pro-lite
+// credentials: each answered HTTP 200 and testdata/ holds the redacted bodies:
 //
 //   - GET https://api.anthropic.com/api/oauth/usage    (Claude, windows)
 //   - GET https://api.anthropic.com/api/oauth/profile  (Claude, plan + org)
@@ -82,10 +83,12 @@ const (
 // OAuth token": flip the provider to false and the system runs on response
 // headers alone.
 //
-// Both are true on public evidence only. No credential of ours was used to call
-// them (the P2.3 implementer had none), so `reliant-dev provider-usage probe`
-// has not been run for either; run it with your own account before relying on
-// the polled numbers, and flip the entry here if it reports 401/403/404.
+// Both are true on live evidence (2026-10-19, owner's own accounts, bearer
+// access token, no refresh): GET /api/oauth/usage and /api/oauth/profile
+// answered 200 for a Claude Max 20x credential, and GET /backend-api/wham/usage
+// answered 200 for a ChatGPT pro-lite credential. Re-run
+// `reliant-dev provider-usage probe` and flip the entry if one starts to answer
+// 401/403/404.
 var usageAPIEnabled = map[string]bool{
 	ProviderClaude: true,
 	ProviderCodex:  true,

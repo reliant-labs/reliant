@@ -1,27 +1,50 @@
 {
-  "plan_type": "plus",
+  "account_id": "00000000-0000-4000-8000-000000000002",
+  "additional_rate_limits": null,
+  "code_review_rate_limit": null,
+  "credits": {
+    "approx_cloud_messages": [
+      0,
+      0
+    ],
+    "approx_local_messages": [
+      0,
+      0
+    ],
+    "balance": "redacted-3",
+    "has_credits": false,
+    "overage_limit_reached": false,
+    "unlimited": false
+  },
+  "email": "user4@example.invalid",
+  "model_usage": {
+    "gpt-6-astra": {
+      "available": true,
+      "available_at": null,
+      "credits_would_enable": false
+    }
+  },
+  "plan_type": "prolite",
+  "promo": null,
   "rate_limit": {
     "allowed": true,
     "limit_reached": false,
-    "primary_window": {"used_percent": 25, "limit_window_seconds": 18000, "reset_after_seconds": 900, "reset_at": 1790000900},
-    "secondary_window": {"used_percent": 61, "limit_window_seconds": 604800, "reset_after_seconds": 86400, "reset_at": 1790086400}
-  },
-  "additional_rate_limits": [
-    {
-      "limit_name": "GPT-5.3-Codex-Spark",
-      "metered_feature": "codex_bengalfox",
-      "normal_model_slug": "gpt-5.3-codex",
-      "rate_limit": {
-        "allowed": true,
-        "limit_reached": false,
-        "primary_window": {"used_percent": 3, "limit_window_seconds": 18000, "reset_after_seconds": 1000, "reset_at": 1790001000},
-        "secondary_window": null
-      }
+    "primary_window": {
+      "limit_window_seconds": 604800,
+      "reset_after_seconds": 456281,
+      "reset_at": 1792885568,
+      "used_percent": 100
     },
-    {"limit_name": "Broken", "metered_feature": "", "rate_limit": null}
-  ],
-  "credits": {"has_credits": false, "unlimited": false, "balance": "0"},
+    "secondary_window": null
+  },
   "rate_limit_reached_type": null,
-  "account_id": "acct-fixture-0001",
-  "user_id": "user-fixture-0001"
+  "rate_limit_reset_credits": {
+    "applicable_available_count": 0,
+    "available_count": 3
+  },
+  "spend_control": {
+    "individual_limit": null,
+    "reached": false
+  },
+  "user_id": "redacted-1"
 }

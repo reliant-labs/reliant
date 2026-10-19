@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // CodexIdentityInfo is what a Codex token pair says about its account.
@@ -170,32 +172,4 @@ func normalizeClaudePlan(orgType, tier string) string {
 	return r
 }
 
-func normalizeCodexPlan(raw string) string {
-	p := strings.ToLower(strings.TrimSpace(raw))
-	switch p {
-	case "":
-		return ""
-	case "free", "guest", "free_workspace":
-		return "free"
-	case "go":
-		return "go"
-	case "plus":
-		return "plus"
-	case "pro":
-		return "pro"
-	case "prolite":
-		return "pro_lite"
-	case "promax":
-		return "pro_max"
-	case "team":
-		return "team"
-	case "business", "self_serve_business_prolite", "self_serve_business_usage_based":
-		return "business"
-	case "education", "edu", "edu_plus", "edu_pro", "k12", "quorum":
-		return "edu"
-	}
-	if strings.HasPrefix(p, "enterprise") || strings.HasPrefix(p, "ent") && len(p) > 3 && p[3] >= '0' && p[3] <= '9' {
-		return "enterprise"
-	}
-	return p
-}
+func normalizeCodexPlan(raw string) string { return core.NormalizeCodexPlan(raw) }

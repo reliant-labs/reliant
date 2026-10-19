@@ -156,7 +156,8 @@ var (
 		"kind": true, "type": true, "status": true, "plan_type": true, "organization_type": true,
 		"rate_limit_tier": true, "subscription_status": true, "resets_at": true, "reset_at": true,
 		"expires_at": true, "limit_name": true, "metered_feature": true, "display_name_model": true,
-		"ineligible_reason": true, "slug": true,
+		"ineligible_reason": true, "slug": true, "severity": true, "group": true, "as_of": true,
+		"window_started_at": true,
 	}
 )
 

@@ -412,7 +412,11 @@ func TestNormalizePlan(t *testing.T) {
 		{"claude", "claude_pro", "pro"},
 		{"claude", "", ""},
 		{"codex", "plus", "plus"},
-		{"codex", "weird", ""},
+		{"codex", "prolite", "pro_lite"},
+		{"codex", "promax", "pro_max"},
+		{"codex", "self_serve_business_usage_based", "business"},
+		{"codex", "FutureTier", "futuretier"},
+		{"codex", "", ""},
 	} {
 		assert.Equal(t, c.want, core.NormalizePlan(c.provider, c.raw), "%s %q", c.provider, c.raw)
 	}

@@ -1,18 +1,34 @@
 {
   "account": {
-    "uuid": "00000000-aaaa-4000-8000-000000000001",
-    "full_name": "Test User",
-    "display_name": "Test",
-    "email": "test.user@example.invalid",
+    "created_at": "redacted-6",
+    "display_name": "redacted-4",
+    "email": "user5@example.invalid",
+    "full_name": "redacted-4",
     "has_claude_max": true,
-    "has_claude_pro": false
+    "has_claude_pro": false,
+    "uuid": "00000000-0000-4000-8000-000000000007"
   },
+  "application": {
+    "name": "redacted-2",
+    "slug": "redacted-3",
+    "uuid": "00000000-0000-4000-8000-000000000001"
+  },
+  "enabled_plugins": [],
   "organization": {
-    "uuid": "00000000-bbbb-4000-8000-000000000002",
-    "name": "Test User's Organization",
+    "billing_type": "stripe_subscription",
+    "cc_onboarding_flags": {},
+    "claude_ai_completion_feedback_enabled": true,
+    "claude_ai_safety_feedback_enabled": true,
+    "claude_code_trial_duration_days": null,
+    "claude_code_trial_ends_at": null,
+    "has_extra_usage_enabled": false,
+    "name": "redacted-8",
     "organization_type": "claude_max",
+    "payment_auth_hosted_invoice_url": null,
     "rate_limit_tier": "default_claude_max_20x",
-    "subscription_status": "active"
-  },
-  "application": {"uuid": "00000000-cccc-4000-8000-000000000003", "name": "Claude Code", "slug": "claude-code"}
+    "seat_tier": null,
+    "subscription_created_at": "redacted-10",
+    "subscription_status": "active",
+    "uuid": "00000000-0000-4000-8000-000000000009"
+  }
 }

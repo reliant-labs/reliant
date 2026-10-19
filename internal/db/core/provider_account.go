@@ -381,11 +381,40 @@ func NormalizePlan(provider, raw string) string {
 		}
 		return ""
 	case "codex":
-		switch r {
-		case "free", "plus", "pro", "team", "business", "enterprise":
-			return r
-		}
-		return ""
+		return NormalizeCodexPlan(r)
 	}
 	return ""
+}
+
+// NormalizeCodexPlan maps a ChatGPT plan string (id_token chatgpt_plan_type or wham/usage
+// plan_type) to the stored vocabulary. "" is unknown; an unrecognised non-empty plan passes
+// through lowercased so a new tier is shown rather than lost.
+func NormalizeCodexPlan(raw string) string {
+	p := strings.ToLower(strings.TrimSpace(raw))
+	switch p {
+	case "":
+		return ""
+	case "free", "guest", "free_workspace":
+		return "free"
+	case "go":
+		return "go"
+	case "plus":
+		return "plus"
+	case "pro":
+		return "pro"
+	case "prolite":
+		return "pro_lite"
+	case "promax":
+		return "pro_max"
+	case "team":
+		return "team"
+	case "business", "self_serve_business_prolite", "self_serve_business_usage_based":
+		return "business"
+	case "education", "edu", "edu_plus", "edu_pro", "k12", "quorum":
+		return "edu"
+	}
+	if strings.HasPrefix(p, "enterprise") || strings.HasPrefix(p, "ent") && len(p) > 3 && p[3] >= '0' && p[3] <= '9' {
+		return "enterprise"
+	}
+	return p
 }
