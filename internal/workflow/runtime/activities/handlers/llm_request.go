@@ -367,7 +367,7 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 		}
 	} else {
 		if account != nil {
-			if d, aerr := spec.Routing.DriverFor(ctx, spec.UserID, account.Config.DriverConfig, legacyModel, accountDriverOpts(driverOpts, legacyModel, effectiveTemperature)...); aerr != nil {
+			if d, aerr := spec.Routing.DriverFor(ctx, spec.UserID, account.Config.DriverConfig, legacyModel, append(drivers.PreferenceDriverOptions(legacyModel, preferences[0]), driverOpts...)...); aerr != nil {
 				// A driver for the chosen account that cannot be built is not
 				// worth a failed turn: the provider's default account serves.
 				logging.Warn("[LLMRequest] Could not build a driver for the thread's account; using the provider's default account",
@@ -660,19 +660,4 @@ func definitionID(def *models.ModelDefinition) string {
 		return ""
 	}
 	return def.ID
-}
-
-// accountDriverOpts is the option list a per-account driver is built with: the
-// request's standard options plus the sampling temperature, which the default
-// resolver would have carried in its preferences. A model that takes only its
-// default temperature never receives one.
-func accountDriverOpts(opts []llm.DriverOption, model models.Model, temperature *float64) []llm.DriverOption {
-	out := append([]llm.DriverOption(nil), opts...)
-	if temperature != nil {
-		switch model.TemperatureMode {
-		case "", models.TemperatureModeAny:
-			out = append(out, llm.WithTemperature(*temperature))
-		}
-	}
-	return out
 }

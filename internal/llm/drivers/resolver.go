@@ -277,29 +277,7 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		// carries an explicit budget.
 		model.ContextWindow = int64(models.EffectiveContextWindow(def, string(driverConfig.DriverID)))
 		model.DefaultMaxTokens = int64(models.EffectiveMaxOutputTokens(def, string(driverConfig.DriverID)))
-		maxTokens := model.DefaultMaxTokens
-		if pref.TokenBudget != nil {
-			maxTokens = *pref.TokenBudget
-		}
-		driverOpts := []llm.DriverOption{llm.WithMaxTokens(maxTokens)}
-
-		// Add temperature if specified in preference AND supported by the model.
-		// Some models only support their default temperature and will hard-error if we send a value.
-		if pref.Temperature != nil {
-			switch model.TemperatureMode {
-			case "", models.TemperatureModeAny:
-				driverOpts = append(driverOpts, llm.WithTemperature(*pref.Temperature))
-			case models.TemperatureModeOmit:
-				// Intentionally omit temperature
-			default:
-				// Unknown mode: fail safe by omitting temperature
-			}
-		}
-		if pref.DisableCache {
-			driverOpts = append(driverOpts, llm.WithDisableCache())
-		}
-		driverOpts = append(driverOpts, llm.WithReasoningEffort(pref.ThinkingMode))
-		driverOpts = append(driverOpts, opts...)
+		driverOpts := append(PreferenceDriverOptions(model, pref), opts...)
 
 		agentProvider, err := GetDriverForAccount(ctx, userID, driverConfig, model, driverOpts...)
 		logging.Debug("provider, err", "provider", agentProvider, "err", err)
@@ -316,6 +294,32 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		return nil, fmt.Errorf("failed to get driver for preferences (tried %d): %w", len(preferences), lastErr)
 	}
 	return nil, fmt.Errorf("failed to get driver for preferences: no suitable models available: %v", preferences[0])
+}
+
+// PreferenceDriverOptions is the one place a model preference becomes driver options: the
+// output cap (the preference's token budget, else the model's default), the temperature when
+// the model accepts one, cache-disabling and the reasoning effort. Every path that builds a
+// driver (the default resolver and the account-routed request path) goes through it, so a
+// routed turn carries exactly the options a default turn does. model is the model as the
+// serving provider offers it (window and output already adjusted).
+func PreferenceDriverOptions(model models.Model, pref models.Preference) []llm.DriverOption {
+	maxTokens := model.DefaultMaxTokens
+	if pref.TokenBudget != nil {
+		maxTokens = *pref.TokenBudget
+	}
+	opts := []llm.DriverOption{llm.WithMaxTokens(maxTokens)}
+
+	// Some models only support their default temperature and hard-error on a value.
+	if pref.Temperature != nil {
+		switch model.TemperatureMode {
+		case "", models.TemperatureModeAny:
+			opts = append(opts, llm.WithTemperature(*pref.Temperature))
+		}
+	}
+	if pref.DisableCache {
+		opts = append(opts, llm.WithDisableCache())
+	}
+	return append(opts, llm.WithReasoningEffort(pref.ThinkingMode))
 }
 
 // GetDriverForAccount builds the driver for one explicit account: its credential, base URL,
