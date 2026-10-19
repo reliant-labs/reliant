@@ -127,7 +127,6 @@ func TestRetryUsageLimitWait_UseModel(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	chatID := seedWaitingRun(t, repo, ctx)
 
-	type capture struct{ payload []interface{} }
 	temporal := &usageLimitPayloadClient{}
 	svc := &Service{deps: Deps{Repo: repo, Temporal: temporal}}
 
@@ -153,7 +152,6 @@ func TestRetryUsageLimitWait_UseModel(t *testing.T) {
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	})
 
-	_ = capture{}
 }
 
 type usageLimitPayloadClient struct {
