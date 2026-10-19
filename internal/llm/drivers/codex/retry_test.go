@@ -3,6 +3,9 @@ package codex
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -10,7 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/responses"
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -256,4 +261,147 @@ func TestStream_ObserverSeesHeadersOfErrorAndSuccessAndTheStreamEvent(t *testing
 	assert.Equal(t, ratelimit.StatusAllowed, rec.snaps[1].Status)
 	assert.Equal(t, "pro", rec.snaps[2].PlanType, "the codex.rate_limits event")
 	assert.Equal(t, 300*time.Minute, rec.snaps[2].Windows[0].Length)
+}
+
+const unverifiableReasoningBody = `{"error":{"message":"The encrypted content gAAAA... could not be verified. Reason: Encrypted content organization_id did not match the target organization.","type":"invalid_request_error","code":"invalid_encrypted_content"}}`
+
+func reasoningHistory() []message.Message {
+	return []message.Message{
+		{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "hello"}}},
+	}
+}
+
+func TestWithoutReasoningItemsKeepsEverythingElse(t *testing.T) {
+	params := responses.ResponseNewParams{Input: responses.ResponseNewParamsInputUnion{OfInputItemList: responses.ResponseInputParam{
+		responses.ResponseInputItemParamOfMessage("hi", responses.EasyInputMessageRoleUser),
+		{OfReasoning: &responses.ResponseReasoningItemParam{ID: "rs_1", EncryptedContent: openai.String("gAAAA")}},
+		responses.ResponseInputItemParamOfFunctionCall("{}", "call_1", "tool"),
+	}}}
+	got, n := withoutReasoningItems(params)
+	assert.Equal(t, 1, n)
+	require.Len(t, got.Input.OfInputItemList, 2)
+	assert.Nil(t, got.Input.OfInputItemList[0].OfReasoning)
+	assert.NotNil(t, got.Input.OfInputItemList[1].OfFunctionCall)
+	assert.Len(t, params.Input.OfInputItemList, 3, "input untouched")
+}
+
+func TestRecoverUnverifiableReasoningIsOneShot(t *testing.T) {
+	c := &CodexClient{sessionID: "chat-1"}
+	params := responses.ResponseNewParams{Input: responses.ResponseNewParamsInputUnion{OfInputItemList: responses.ResponseInputParam{
+		{OfReasoning: &responses.ResponseReasoningItemParam{ID: "rs_1"}},
+	}}}
+	err := &openai.Error{StatusCode: 400, Response: &http.Response{StatusCode: 400}}
+	require.NoError(t, json.Unmarshal([]byte(unverifiableReasoningBody), err))
+	require.True(t, isUnverifiableReasoningError(err))
+
+	done := false
+	assert.True(t, c.recoverUnverifiableReasoning(err, &params, &done))
+	assert.Empty(t, params.Input.OfInputItemList)
+	assert.False(t, c.recoverUnverifiableReasoning(err, &params, &done), "at most one recovery")
+}
+
+func TestRecoverIgnoresUnrelatedErrors(t *testing.T) {
+	c := &CodexClient{}
+	params := responses.ResponseNewParams{Input: responses.ResponseNewParamsInputUnion{OfInputItemList: responses.ResponseInputParam{
+		{OfReasoning: &responses.ResponseReasoningItemParam{ID: "rs_1"}},
+	}}}
+	other := &openai.Error{StatusCode: 400, Response: &http.Response{StatusCode: 400}}
+	require.NoError(t, json.Unmarshal([]byte(`{"error":{"message":"bad schema"}}`), other))
+	done := false
+	assert.False(t, c.recoverUnverifiableReasoning(other, &params, &done))
+	assert.False(t, c.recoverUnverifiableReasoning(errors.New("boom"), &params, &done))
+	assert.Len(t, params.Input.OfInputItemList, 1)
+}
+
+// The request path: a 400 naming unverifiable encrypted content is retried
+// exactly once, and the retry body carries no reasoning items.
+func TestStreamRetriesOnceWithoutReasoningItems(t *testing.T) {
+	var (
+		mu     sync.Mutex
+		bodies []string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		bodies = append(bodies, string(b))
+		n := len(bodies)
+		mu.Unlock()
+		if n == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(unverifiableReasoningBody))
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(codexOKStream))
+	}))
+	defer srv.Close()
+
+	var sleeps []time.Duration
+	c := retryTestClient(srv, &sleeps)
+	c.finalizeParams = func(p *responses.ResponseNewParams) {
+		p.Input.OfInputItemList = append(responses.ResponseInputParam{
+			{OfReasoning: &responses.ResponseReasoningItemParam{ID: "rs_1", EncryptedContent: openai.String("gAAAA")}},
+		}, p.Input.OfInputItemList...)
+	}
+	events := drain(t, context.Background(), c)
+
+	require.Len(t, bodies, 2, "one original request and exactly one recovery")
+	assert.Contains(t, bodies[0], `"type":"reasoning"`)
+	assert.NotContains(t, bodies[1], `"type":"reasoning"`)
+	assert.Contains(t, bodies[1], "hello", "the rest of the history is kept")
+	assert.Empty(t, sleeps, "recovery is not a ladder wait")
+	for _, ev := range events {
+		assert.NotEqual(t, llm.EventError, ev.Type, "%v", ev.Error)
+	}
+}
+
+func TestStreamUnverifiableReasoningRetryIsBounded(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(unverifiableReasoningBody))
+	}))
+	defer srv.Close()
+
+	var sleeps []time.Duration
+	c := retryTestClient(srv, &sleeps)
+	c.finalizeParams = func(p *responses.ResponseNewParams) {
+		p.Input.OfInputItemList = append(p.Input.OfInputItemList,
+			responses.ResponseInputItemUnionParam{OfReasoning: &responses.ResponseReasoningItemParam{ID: "rs_1"}})
+	}
+	events := drain(t, context.Background(), c)
+
+	assert.Equal(t, int32(2), hits.Load())
+	var sawErr bool
+	for _, ev := range events {
+		sawErr = sawErr || ev.Type == llm.EventError
+	}
+	assert.True(t, sawErr)
+}
+
+func TestSendMessagesRetriesOnceWithoutReasoningItems(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if hits.Add(1) == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(unverifiableReasoningBody))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"resp_1","object":"response","status":"completed","output":[]}`))
+	}))
+	defer srv.Close()
+
+	var sleeps []time.Duration
+	c := retryTestClient(srv, &sleeps)
+	c.finalizeParams = func(p *responses.ResponseNewParams) {
+		p.Input.OfInputItemList = append(p.Input.OfInputItemList,
+			responses.ResponseInputItemUnionParam{OfReasoning: &responses.ResponseReasoningItemParam{ID: "rs_1"}})
+	}
+	_, err := c.SendMessages(context.Background(), []string{"be helpful"}, reasoningHistory(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), hits.Load())
 }

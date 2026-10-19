@@ -99,6 +99,10 @@ type CodexClient struct {
 
 	// ladder overrides the retry ladder's defaults; tests inject the sleeper.
 	ladder ratelimit.Retryer
+
+	// finalizeParams, when set, runs on the assembled request. Tests use it to
+	// put reasoning items into a request the driver does not build itself yet.
+	finalizeParams func(*responses.ResponseNewParams)
 }
 
 // Name returns the name of the driver
@@ -720,6 +724,9 @@ func (c *CodexClient) buildParams(prompts []string, messages []message.Message, 
 		params.ServiceTier = astraServiceTier
 	}
 
+	if c.finalizeParams != nil {
+		c.finalizeParams(&params)
+	}
 	return params, nil
 }
 
@@ -737,9 +744,13 @@ func (c *CodexClient) SendMessages(ctx context.Context, prompts []string, messag
 		rawResp *http.Response
 		resp    *responses.Response
 	)
+	reasoningRecovered := false
 	if err := c.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
 		var callErr error
 		resp, callErr = c.client.Responses.New(ctx, params, c.requestOptions(tc, &rawResp)...)
+		if callErr != nil && c.recoverUnverifiableReasoning(callErr, &params, &reasoningRecovered) {
+			resp, callErr = c.client.Responses.New(ctx, params, c.requestOptions(tc, &rawResp)...)
+		}
 		if callErr != nil {
 			return codexFailure(callErr), false
 		}
@@ -818,11 +829,20 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 			}
 		}()
 		emitCancelled := false
+		reasoningRecovered := false
 		openErr := c.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
 			streamResp = nil
 			stream = c.client.Responses.NewStreaming(ctx, params, c.requestOptions(tc, &streamResp)...)
 			if hasNext = stream.Next(); hasNext {
 				return ratelimit.Failure{}, true
+			}
+			if c.recoverUnverifiableReasoning(stream.Err(), &params, &reasoningRecovered) {
+				_ = stream.Close()
+				streamResp = nil
+				stream = c.client.Responses.NewStreaming(ctx, params, c.requestOptions(tc, &streamResp)...)
+				if hasNext = stream.Next(); hasNext {
+					return ratelimit.Failure{}, true
+				}
 			}
 			return codexFailure(stream.Err()), false
 		}, func(wait llm.RetryWait) error {

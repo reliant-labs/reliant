@@ -597,10 +597,21 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 		// most it can think is max_tokens.
 		requestCtx := llm.WithStreamOutputBudget(ctx, params.MaxTokens)
 		emitCancelled := false
+		signatureRecovered := false
 		openErr = b.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
 			stream = b.client.Messages.NewStreaming(requestCtx, params, option.WithMaxRetries(0))
 			if hasNext = stream.Next(); hasNext {
 				return ratelimit.Failure{}, true
+			}
+			// A replayed thinking signature the API cannot verify is retried
+			// once without thinking blocks (signature_recovery.go), outside the
+			// ladder: it is not a transient failure and needs no wait.
+			if b.recoverInvalidSignature(stream.Err(), &params, &signatureRecovered) {
+				_ = stream.Close()
+				stream = b.client.Messages.NewStreaming(requestCtx, params, option.WithMaxRetries(0))
+				if hasNext = stream.Next(); hasNext {
+					return ratelimit.Failure{}, true
+				}
 			}
 			return anthropicFailure(stream.Err()), false
 		}, func(wait llm.RetryWait) error {
