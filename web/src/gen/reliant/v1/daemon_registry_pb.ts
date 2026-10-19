@@ -433,6 +433,9 @@ export type DaemonInfo = Message<"reliant.v1.DaemonInfo"> & {
    * daemons in a cgroup-limited pod). Stored on the daemon's attachment
    * (liveness) record, so it is only present while the daemon is attached.
    * memory_limit_bytes == 0 means "not reported" (local daemons, no cgroup).
+   * memory_used_bytes is the cgroup working set (memory.current minus
+   * reclaimable page cache and slab), not raw memory.current: compare it to
+   * memory_limit_bytes, never to a cache-inclusive figure.
    *
    * @generated from field: uint64 memory_used_bytes = 10;
    */
@@ -444,8 +447,8 @@ export type DaemonInfo = Message<"reliant.v1.DaemonInfo"> & {
   memoryLimitBytes: bigint;
 
   /**
-   * Hysteresis-smoothed pressure bit: asserts at >= 85% of the limit,
-   * clears below 75%.
+   * Hysteresis-smoothed pressure bit on the working set: asserts at >= 85%
+   * of the limit, clears below 75%.
    *
    * @generated from field: bool memory_pressure = 12;
    */

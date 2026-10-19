@@ -50,8 +50,12 @@ func TestReaderStats(t *testing.T) {
 	if !ok {
 		t.Fatal("expected stats to be readable")
 	}
-	if stats.UsedBytes != 1<<30 {
-		t.Errorf("UsedBytes = %d, want %d", stats.UsedBytes, 1<<30)
+	if stats.CurrentBytes != 1<<30 {
+		t.Errorf("CurrentBytes = %d, want %d", stats.CurrentBytes, 1<<30)
+	}
+	// No memory.stat in this fixture: nothing is provably reclaimable.
+	if stats.WorkingSetBytes != 1<<30 {
+		t.Errorf("WorkingSetBytes = %d, want %d (memory.current when memory.stat is absent)", stats.WorkingSetBytes, 1<<30)
 	}
 	if stats.LimitBytes != 4<<30 {
 		t.Errorf("LimitBytes = %d, want %d", stats.LimitBytes, uint64(4<<30))
@@ -196,12 +200,12 @@ func TestOOMKillMessageFallbacks(t *testing.T) {
 		t.Errorf("unexpected fallback message: %q", msgNoStats)
 	}
 	// No limit — also falls back (can't say "of Y").
-	msgNoLimit := OOMKillMessage(Stats{UsedBytes: 123}, true)
+	msgNoLimit := OOMKillMessage(Stats{CurrentBytes: 123}, true)
 	if !strings.Contains(msgNoLimit, "workspace out of memory.") {
 		t.Errorf("expected generic message without limit, got %q", msgNoLimit)
 	}
 	// Peak preferred over (post-kill, already dropped) current.
-	msg := OOMKillMessage(Stats{UsedBytes: 1 << 20, LimitBytes: 4 << 30, PeakBytes: 4 << 30}, true)
+	msg := OOMKillMessage(Stats{CurrentBytes: 1 << 20, LimitBytes: 4 << 30, PeakBytes: 4 << 30}, true)
 	if !strings.Contains(msg, "used ~4.0 GiB of 4.0 GiB") {
 		t.Errorf("expected peak-based usage, got %q", msg)
 	}

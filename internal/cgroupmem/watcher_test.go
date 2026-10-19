@@ -80,7 +80,7 @@ func TestWatcherPollAndChanged(t *testing.T) {
 	if sample.Pressure {
 		t.Error("10% usage must not be pressure")
 	}
-	if sample.UsedBytes != 100 || sample.LimitBytes != 1000 {
+	if sample.WorkingSetBytes != 100 || sample.LimitBytes != 1000 {
 		t.Errorf("sample = %+v, want used=100 limit=1000", sample)
 	}
 

@@ -14,11 +14,11 @@ const (
 	// Reading two small kernfs files is effectively free.
 	DefaultPollInterval = 5 * time.Second
 
-	// PressureHighWatermark is the used/limit fraction at which memory
+	// PressureHighWatermark is the working-set/limit fraction at which memory
 	// pressure is asserted (early warning before the OOM killer fires).
 	PressureHighWatermark = 0.85
 
-	// PressureClearWatermark is the used/limit fraction below which an
+	// PressureClearWatermark is the working-set/limit fraction below which an
 	// asserted pressure state clears. The 10-point gap (hysteresis) prevents
 	// flapping when usage hovers around a single threshold.
 	PressureClearWatermark = 0.75
@@ -27,9 +27,15 @@ const (
 // Sample is the watcher's latest memory observation, shaped for the
 // daemon->gateway heartbeat (used_bytes, limit_bytes, pressure).
 type Sample struct {
-	UsedBytes  uint64
-	LimitBytes uint64
-	Pressure   bool
+	// WorkingSetBytes is Stats.WorkingSetBytes: what pressure is judged on and
+	// what the heartbeat reports as memory used. Compare it only to
+	// LimitBytes, never to the cache-inclusive CurrentBytes.
+	WorkingSetBytes uint64
+	// CurrentBytes is memory.current (reclaimable cache included), for
+	// diagnostics only.
+	CurrentBytes uint64
+	LimitBytes   uint64
+	Pressure     bool
 	// OOMKills counts the kernel OOM kills in the workspace cgroup since the
 	// watcher started (memory.events oom_kill growth; the counter's value at
 	// start is the baseline). It covers every process in the workspace, the
@@ -139,9 +145,10 @@ func (w *Watcher) poll() {
 
 	w.mu.Lock()
 	prev := w.latest.Pressure
-	next := nextPressure(prev, stats.UsedBytes, stats.LimitBytes)
+	next := nextPressure(prev, stats.WorkingSetBytes, stats.LimitBytes)
 	w.latest = Sample{
-		UsedBytes: stats.UsedBytes, LimitBytes: stats.LimitBytes, Pressure: next,
+		WorkingSetBytes: stats.WorkingSetBytes, CurrentBytes: stats.CurrentBytes,
+		LimitBytes: stats.LimitBytes, Pressure: next,
 		OOMKills: w.oomKills, LastOOMKillAt: w.lastOOMKillAt,
 	}
 	w.valid = true
@@ -150,11 +157,14 @@ func (w *Watcher) poll() {
 	if next != prev {
 		if next {
 			logging.Warn("[cgroupmem] Workspace memory pressure",
-				"used", FormatBytes(stats.UsedBytes), "limit", FormatBytes(stats.LimitBytes),
-				"memory_used_bytes", stats.UsedBytes, "memory_limit_bytes", stats.LimitBytes)
+				"working_set", FormatBytes(stats.WorkingSetBytes), "limit", FormatBytes(stats.LimitBytes),
+				"memory_working_set_bytes", stats.WorkingSetBytes, "memory_current_bytes", stats.CurrentBytes,
+				"memory_inactive_file_bytes", stats.InactiveFileBytes,
+				"memory_slab_reclaimable_bytes", stats.SlabReclaimableBytes,
+				"memory_limit_bytes", stats.LimitBytes)
 		} else {
 			logging.Info("[cgroupmem] Workspace memory pressure cleared",
-				"used", FormatBytes(stats.UsedBytes), "limit", FormatBytes(stats.LimitBytes))
+				"working_set", FormatBytes(stats.WorkingSetBytes), "limit", FormatBytes(stats.LimitBytes))
 		}
 	}
 	// A new OOM kill is news as much as a pressure flip: the user should hear
@@ -205,7 +215,8 @@ func (w *Watcher) logEvents(stats Stats) (newKill bool) {
 			"oom_kills", ev.OOMKill-prev.OOMKill,
 			"oom_kills_total", ev.OOMKill,
 			"memory_limit_bytes", stats.LimitBytes,
-			"memory_used_bytes", stats.UsedBytes,
+			"memory_working_set_bytes", stats.WorkingSetBytes,
+			"memory_current_bytes", stats.CurrentBytes,
 			"memory_peak_bytes", stats.PeakBytes)
 	}
 	if logSqueeze {
@@ -213,19 +224,20 @@ func (w *Watcher) logEvents(stats Stats) (newKill bool) {
 			"high_events", ev.High-prev.High,
 			"max_events", ev.Max-prev.Max,
 			"memory_limit_bytes", stats.LimitBytes,
-			"memory_used_bytes", stats.UsedBytes)
+			"memory_working_set_bytes", stats.WorkingSetBytes,
+			"memory_current_bytes", stats.CurrentBytes)
 	}
 	return newKill
 }
 
-// nextPressure is the pure hysteresis transition: assert at >= 85% of the
-// limit, clear only below 75%. A cgroup without a limit is never under
+// nextPressure is the pure hysteresis transition on the working set: assert
+// at >= 85% of the limit, clear only below 75%. A cgroup without a limit is never under
 // pressure.
-func nextPressure(current bool, used, limit uint64) bool {
+func nextPressure(current bool, workingSet, limit uint64) bool {
 	if limit == 0 {
 		return false
 	}
-	frac := float64(used) / float64(limit)
+	frac := float64(workingSet) / float64(limit)
 	if current {
 		return frac >= PressureClearWatermark
 	}

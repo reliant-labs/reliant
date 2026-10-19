@@ -644,8 +644,11 @@ export const ToolResponseSchema: GenMessage<ToolResponse> = /*@__PURE__*/
 /**
  * DaemonHeartbeat is sent periodically to keep connection alive.
  * Cloud daemons additionally piggyback workspace memory telemetry read from
- * the pod cgroup (memory.current / memory.max) so the gateway can surface
- * memory pressure before the kernel OOM killer fires. All memory fields are
+ * the pod cgroup (working set / memory.max) so the gateway can surface
+ * memory pressure before the kernel OOM killer fires. The working set is
+ * memory.current minus reclaimable page cache and slab (inactive_file +
+ * slab_reclaimable from memory.stat), never raw memory.current, which sits
+ * near the limit on healthy machines. All memory fields are
  * zero for daemons without cgroup v2 accounting (macOS, local daemons) —
  * consumers must treat memory_limit_bytes == 0 as "not reported".
  *
@@ -658,7 +661,7 @@ export type DaemonHeartbeat = Message<"reliant.v1.DaemonHeartbeat"> & {
   timestamp: bigint;
 
   /**
-   * cgroup memory.current
+   * cgroup working set (same basis as memory_limit_bytes and memory_pressure)
    *
    * @generated from field: uint64 memory_used_bytes = 2;
    */
@@ -672,7 +675,7 @@ export type DaemonHeartbeat = Message<"reliant.v1.DaemonHeartbeat"> & {
   memoryLimitBytes: bigint;
 
   /**
-   * hysteresis-smoothed: asserts >= 85% of limit, clears < 75%
+   * hysteresis-smoothed on the working set: asserts >= 85% of limit, clears < 75%
    *
    * @generated from field: bool memory_pressure = 4;
    */

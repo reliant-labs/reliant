@@ -269,9 +269,11 @@ type DaemonAttachment struct {
 	LastStreamActivity time.Time
 	// Workspace memory telemetry from the daemon heartbeat (cloud daemons in
 	// a cgroup-limited pod). MemoryLimitBytes == 0 means "not reported"
-	// (local daemons without cgroup accounting). MemoryPressure is the
-	// daemon's hysteresis-smoothed pressure bit (asserts >= 85% of the
-	// limit, clears below 75%).
+	// (local daemons without cgroup accounting). MemoryUsedBytes is the
+	// cgroup working set (memory.current minus reclaimable page cache and
+	// slab), the same basis as MemoryPressure, the daemon's
+	// hysteresis-smoothed pressure bit (asserts >= 85% of the limit, clears
+	// below 75%).
 	MemoryUsedBytes  int64
 	MemoryLimitBytes int64
 	MemoryPressure   bool

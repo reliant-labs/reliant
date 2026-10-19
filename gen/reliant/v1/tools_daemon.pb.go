@@ -1279,16 +1279,19 @@ func (x *ToolResponse) GetBackgrounded() bool {
 
 // DaemonHeartbeat is sent periodically to keep connection alive.
 // Cloud daemons additionally piggyback workspace memory telemetry read from
-// the pod cgroup (memory.current / memory.max) so the gateway can surface
-// memory pressure before the kernel OOM killer fires. All memory fields are
+// the pod cgroup (working set / memory.max) so the gateway can surface
+// memory pressure before the kernel OOM killer fires. The working set is
+// memory.current minus reclaimable page cache and slab (inactive_file +
+// slab_reclaimable from memory.stat), never raw memory.current, which sits
+// near the limit on healthy machines. All memory fields are
 // zero for daemons without cgroup v2 accounting (macOS, local daemons) —
 // consumers must treat memory_limit_bytes == 0 as "not reported".
 type DaemonHeartbeat struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Timestamp        int64                  `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	MemoryUsedBytes  uint64                 `protobuf:"varint,2,opt,name=memory_used_bytes,json=memoryUsedBytes,proto3" json:"memory_used_bytes,omitempty"`    // cgroup memory.current
+	MemoryUsedBytes  uint64                 `protobuf:"varint,2,opt,name=memory_used_bytes,json=memoryUsedBytes,proto3" json:"memory_used_bytes,omitempty"`    // cgroup working set (same basis as memory_limit_bytes and memory_pressure)
 	MemoryLimitBytes uint64                 `protobuf:"varint,3,opt,name=memory_limit_bytes,json=memoryLimitBytes,proto3" json:"memory_limit_bytes,omitempty"` // cgroup memory.max (0 = unlimited/unknown)
-	MemoryPressure   bool                   `protobuf:"varint,4,opt,name=memory_pressure,json=memoryPressure,proto3" json:"memory_pressure,omitempty"`         // hysteresis-smoothed: asserts >= 85% of limit, clears < 75%
+	MemoryPressure   bool                   `protobuf:"varint,4,opt,name=memory_pressure,json=memoryPressure,proto3" json:"memory_pressure,omitempty"`         // hysteresis-smoothed on the working set: asserts >= 85% of limit, clears < 75%
 	// TCP ports with a LISTEN socket on loopback/wildcard inside the workspace
 	// netns (deduped v4/v6, sorted, daemon's own ports excluded) — the set the
 	// in-pod preview forwarder can reach. Piggybacked here the same way the

@@ -10,6 +10,10 @@
 // cgroup v2 controllers are mounted at /sys/fs/cgroup, so:
 //
 //	/sys/fs/cgroup/memory.current — bytes currently charged to the cgroup
+//	                                (page cache and kernel slab included)
+//	/sys/fs/cgroup/memory.stat    — breakdown of memory.current; inactive_file
+//	                                and slab_reclaimable are what the kernel
+//	                                frees before it considers an OOM kill
 //	/sys/fs/cgroup/memory.max     — limit in bytes, or "max" (unlimited)
 //	/sys/fs/cgroup/memory.peak    — high-watermark (kernel >= 5.19; optional)
 //	/sys/fs/cgroup/memory.events  — flat keyed counters, incl. "oom_kill"
@@ -38,15 +42,95 @@ import (
 const DefaultRoot = "/sys/fs/cgroup"
 
 // Stats is a point-in-time reading of the cgroup's memory accounting.
+//
+// memory.current is not a measure of memory in use: it also charges
+// reclaimable page cache and kernel slab, which grow to fill whatever the
+// cgroup allows and are freed on demand. A healthy machine that has read a
+// lot of files sits at 90%+ of its limit on memory.current alone. Decisions
+// about pressure therefore use WorkingSetBytes; CurrentBytes is kept only for
+// diagnostics and for comparison against PeakBytes, which has the same basis.
 type Stats struct {
-	// UsedBytes is memory.current.
-	UsedBytes uint64
+	// WorkingSetBytes is memory.current minus the memory the kernel reclaims
+	// before anything is killed: inactive_file and slab_reclaimable (see
+	// workingSet). Compare it to LimitBytes for pressure; never negative.
+	WorkingSetBytes uint64
+	// CurrentBytes is memory.current verbatim, reclaimable cache included.
+	CurrentBytes uint64
+	// InactiveFileBytes and SlabReclaimableBytes are the memory.stat values
+	// subtracted from CurrentBytes to get WorkingSetBytes; 0 when memory.stat
+	// is absent or lacks the key.
+	InactiveFileBytes    uint64
+	SlabReclaimableBytes uint64
 	// LimitBytes is memory.max; 0 means unlimited or unknown.
 	LimitBytes uint64
-	// PeakBytes is memory.peak (high-watermark); 0 when the kernel doesn't
-	// expose it. After an OOM kill memory.current has already dropped, so the
-	// peak is the honest "how high did it get" number for error messages.
+	// PeakBytes is memory.peak (high-watermark of memory.current, so on the
+	// CurrentBytes basis); 0 when the kernel doesn't expose it. After an OOM
+	// kill memory.current has already dropped, so the peak is the honest "how
+	// high did it get" number for error messages.
 	PeakBytes uint64
+}
+
+// MemoryStat holds the memory.stat counters the working set is built from.
+// A Has* flag is false when the key was absent or its value unparsable.
+type MemoryStat struct {
+	InactiveFile, SlabReclaimable       uint64
+	HasInactiveFile, HasSlabReclaimable bool
+}
+
+// parseMemoryStat reads the keys it knows from the flat "<key> <value>" format
+// of memory.stat and ignores every other line, malformed ones included. When a
+// key repeats the last value wins.
+func parseMemoryStat(data []byte) MemoryStat {
+	var st MemoryStat
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		switch fields[0] {
+		case "inactive_file", "slab_reclaimable":
+		default:
+			continue
+		}
+		v, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		if fields[0] == "inactive_file" {
+			st.InactiveFile, st.HasInactiveFile = v, true
+		} else {
+			st.SlabReclaimable, st.HasSlabReclaimable = v, true
+		}
+	}
+	return st
+}
+
+// workingSet is memory.current less the reclaimable memory memory.stat
+// reports: inactive_file (the cadvisor / kubelet working-set definition) and
+// slab_reclaimable.
+//
+// slab_reclaimable is excluded as well because it is the same kind of memory:
+// dentry and inode caches that the kernel's shrinkers free under pressure
+// before it invokes the OOM killer, and that Linux itself counts as available
+// in MemAvailable. Docker and build workloads inflate it by tens of GB. It is
+// not guaranteed reclaimable (pinned dentries), but the pressure signal is an
+// early warning of imminent OOM, which pinned slab alone does not cause.
+// active_file stays in: the kernel demotes it only when reclaim is already
+// under way, and evicting hot pages thrashes, so it is genuinely working set.
+//
+// The result is clamped at 0 (memory.current and memory.stat are separate
+// reads, so the stat can be newer than the current). With neither key present
+// nothing can be proven reclaimable and it falls back to memory.current, the
+// conservative answer.
+func workingSet(current uint64, st MemoryStat) uint64 {
+	if !st.HasInactiveFile && !st.HasSlabReclaimable {
+		return current
+	}
+	reclaimable := st.InactiveFile + st.SlabReclaimable
+	if reclaimable < st.InactiveFile || reclaimable >= current {
+		return 0
+	}
+	return current - reclaimable
 }
 
 // Reader reads memory accounting from a cgroup v2 directory. The zero-cost
@@ -81,7 +165,15 @@ func (r *Reader) Stats() (stats Stats, ok bool) {
 	if err != nil {
 		return Stats{}, false
 	}
-	stats.UsedBytes = used
+	stats.CurrentBytes = used
+	var st MemoryStat
+	// memory.stat is how the reclaimable share is known; without it the
+	// working set is memory.current.
+	if data, err := os.ReadFile(filepath.Join(r.root, "memory.stat")); err == nil {
+		st = parseMemoryStat(data)
+	}
+	stats.WorkingSetBytes = workingSet(used, st)
+	stats.InactiveFileBytes, stats.SlabReclaimableBytes = st.InactiveFile, st.SlabReclaimable
 	// "max" (unlimited) parses to 0 — LimitBytes==0 means no limit.
 	if limit, err := readLimit(filepath.Join(r.root, "memory.max")); err == nil {
 		stats.LimitBytes = limit
@@ -214,7 +306,9 @@ func (r *Reader) CheckOOMKill(exitCode int, snap OOMSnapshot) (bool, string) {
 // command. Both the LLM tool-result path and user RPC errors carry this text.
 func OOMKillMessage(stats Stats, statsOK bool) string {
 	if statsOK && stats.LimitBytes > 0 {
-		used := stats.UsedBytes
+		// memory.peak is a high-watermark of memory.current, so the kill
+		// message stays on that basis.
+		used := stats.CurrentBytes
 		if stats.PeakBytes > used {
 			used = stats.PeakBytes
 		}
