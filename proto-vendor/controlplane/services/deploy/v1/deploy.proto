@@ -558,6 +558,11 @@ message GetDeployCapabilitiesResponse {
   repeated string snapshot_schema_versions = 1;
   bool immutable_snapshot_seals = 2;
   bool frozen_promotion_bundles = 3;
+  // The optional bundle-document features this server's strict bundle decoder
+  // accepts (forge release.BundleDocFeatures: e.g. "provenance-commit-identity",
+  // "object-summaries"). forge sends a hosted bundle only the parts named here;
+  // a server that names none gets the document every older decoder knew.
+  repeated string bundle_document_features = 4;
 }
 
 message GetDeployTenantRequest {}

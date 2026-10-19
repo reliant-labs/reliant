@@ -307,6 +307,11 @@ type GetDeployCapabilitiesResponse struct {
 	SnapshotSchemaVersions []string               `protobuf:"bytes,1,rep,name=snapshot_schema_versions,json=snapshotSchemaVersions,proto3" json:"snapshot_schema_versions,omitempty"`
 	ImmutableSnapshotSeals bool                   `protobuf:"varint,2,opt,name=immutable_snapshot_seals,json=immutableSnapshotSeals,proto3" json:"immutable_snapshot_seals,omitempty"`
 	FrozenPromotionBundles bool                   `protobuf:"varint,3,opt,name=frozen_promotion_bundles,json=frozenPromotionBundles,proto3" json:"frozen_promotion_bundles,omitempty"`
+	// The optional bundle-document features this server's strict bundle decoder
+	// accepts (forge release.BundleDocFeatures: e.g. "provenance-commit-identity",
+	// "object-summaries"). forge sends a hosted bundle only the parts named here;
+	// a server that names none gets the document every older decoder knew.
+	BundleDocumentFeatures []string `protobuf:"bytes,4,rep,name=bundle_document_features,json=bundleDocumentFeatures,proto3" json:"bundle_document_features,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -360,6 +365,13 @@ func (x *GetDeployCapabilitiesResponse) GetFrozenPromotionBundles() bool {
 		return x.FrozenPromotionBundles
 	}
 	return false
+}
+
+func (x *GetDeployCapabilitiesResponse) GetBundleDocumentFeatures() []string {
+	if x != nil {
+		return x.BundleDocumentFeatures
+	}
+	return nil
 }
 
 type GetDeployTenantRequest struct {
@@ -6586,11 +6598,12 @@ var File_services_deploy_v1_deploy_proto protoreflect.FileDescriptor
 const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"\x1fservices/deploy/v1/deploy.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x1e\n" +
-	"\x1cGetDeployCapabilitiesRequest\"\xcd\x01\n" +
+	"\x1cGetDeployCapabilitiesRequest\"\x87\x02\n" +
 	"\x1dGetDeployCapabilitiesResponse\x128\n" +
 	"\x18snapshot_schema_versions\x18\x01 \x03(\tR\x16snapshotSchemaVersions\x128\n" +
 	"\x18immutable_snapshot_seals\x18\x02 \x01(\bR\x16immutableSnapshotSeals\x128\n" +
-	"\x18frozen_promotion_bundles\x18\x03 \x01(\bR\x16frozenPromotionBundles\"\x18\n" +
+	"\x18frozen_promotion_bundles\x18\x03 \x01(\bR\x16frozenPromotionBundles\x128\n" +
+	"\x18bundle_document_features\x18\x04 \x03(\tR\x16bundleDocumentFeatures\"\x18\n" +
 	"\x16GetDeployTenantRequest\"P\n" +
 	"\x17GetDeployTenantResponse\x125\n" +
 	"\x06tenant\x18\x01 \x01(\v2\x1d.controlplane.v1.DeployTenantR\x06tenant\"/\n" +
