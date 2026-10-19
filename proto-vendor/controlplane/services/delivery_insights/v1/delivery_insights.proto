@@ -128,6 +128,12 @@ message ReleaseMarker {
   // "promote" or "rollback", as recorded. A promote of an older release is NOT
   // rewritten to "rollback" here; GetDoraMetrics classifies those.
   string kind = 11;
+  // The components a scoped deploy moved (DeployPromotion.targets); empty when
+  // the whole release moved. A marker with targets must not be read as the
+  // whole environment running the release.
+  repeated string targets = 12;
+  // The release commit's subject line, when the cut recorded one.
+  string commit_subject = 13;
 }
 
 message GetDoraMetricsRequest {

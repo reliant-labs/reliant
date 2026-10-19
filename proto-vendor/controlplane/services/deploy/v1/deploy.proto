@@ -285,6 +285,21 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
 
+  // CompareReleases says what changed between two releases of one project,
+  // from what the ledger recorded when each was cut: the commits between them,
+  // the artifacts whose identity moved (digest -> digest), and, in one
+  // environment, the Kubernetes objects their bundles add, modify and remove,
+  // each with a one-line summary. It reads only records (forge's
+  // release.CompareCommits / CompareArtifacts / CompareObjects), so it answers
+  // with no repository and no registry at hand. Release detail's Changes tab.
+  //
+  // Either order works: comparing a newer release FROM an older one lists what
+  // it adds; the other way round sets commits.reverts and lists what moving
+  // to it takes away.
+  rpc CompareReleases(CompareDeployReleasesRequest) returns (CompareDeployReleasesResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
   // --- Rollout, evidence and runs -------------------------------------
 
   // GetRollout reports how far ONE promotion has rolled out, judged against
@@ -859,6 +874,16 @@ message PromoteReleaseRequest {
   // future destructive change to that environment. A finding code cannot be
   // pre-approved, because it is not known until the plan is computed.
   repeated string acknowledged_findings = 14;
+
+  // The components a SCOPED deploy moves (`--target api`, `--frontends-only`),
+  // recorded on the promotion as DeployPromotion.targets. Empty for a
+  // whole-release deploy.
+  //
+  // It takes part in the idempotency rule (forge's release.Decide): promoting
+  // the bound release again is a no-op only when the current promotion already
+  // moved everything this one names, so a whole deploy after a scoped one is a
+  // real move and is recorded.
+  repeated string targets = 15;
 }
 
 message PromoteReleaseResponse {
@@ -1037,6 +1062,11 @@ message CutReleaseRequest {
   // Strict forge release.Release JSON. Exclusive with legacy artifact, git,
   // provenance and run fields; version/project must match this envelope.
   google.protobuf.Struct snapshot_release = 9;
+
+  // The commits this release adds over the release it was cut after
+  // (DeployRelease.commits). Recorded as the claim it is; not part of the
+  // release's identity, so a retry with a different range is still a retry.
+  DeployCommitRange commits = 10;
 }
 
 message CutReleaseResponse {
@@ -1051,6 +1081,148 @@ message CutReleaseResponse {
   // pipeline that cut a release it believed to be new, and learns it was not,
   // may legitimately want to say so in its summary.
   bool created = 2;
+}
+
+message CompareDeployReleasesRequest {
+  // The release compared FROM (typically what the environment ran before) and
+  // the one compared TO.
+  string from_version = 1 [(buf.validate.field).string.min_len = 1];
+  string to_version = 2 [(buf.validate.field).string.min_len = 1];
+  // The forge project both belong to, resolved as GetRelease resolves it: a
+  // version not found in the project falls back to the pre-project namespace.
+  string project = 3;
+  // The environment whose bundles the object comparison reads. A bundle is ONE
+  // environment's render, and two environments render one release into
+  // different objects, so there is no environment-free answer: unset leaves
+  // objects.state NO_ENVIRONMENT and compares commits and artifacts only.
+  string environment_id = 4;
+}
+
+message CompareDeployReleasesResponse {
+  DeployRelease from = 1;
+  DeployRelease to = 2;
+  DeployCommitComparison commits = 3;
+  // The artifacts whose identity differs, sorted by name: an image's digest
+  // (one entry per variant of a variant image, "web[staging]"), a source
+  // pin's commit, a package's version.
+  repeated DeployArtifactChange artifacts = 4;
+  // How many artifacts are the same in both.
+  int32 unchanged_artifacts = 5;
+  DeployObjectComparison objects = 6;
+}
+
+// DeployCommitComparison is the source history between two releases, composed
+// from their recorded commit ranges.
+message DeployCommitComparison {
+  DeployCommitComparisonState state = 1;
+  // True when `to` is the OLDER release: commits are then the ones `from` has
+  // and `to` does not, which is what moving from -> to takes away.
+  bool reverts = 2;
+  // Newest first, at most 250.
+  repeated DeployCommit commits = 3;
+  // The number of commits between the two when every composed range could
+  // count its own; 0 when one could not (a shallow-clone cut).
+  int32 total = 4;
+  // The list is not every commit between the two. Never render a truncated
+  // comparison as complete.
+  bool truncated = 5;
+  // The versions whose recorded ranges were composed, newest first.
+  repeated string releases = 6;
+}
+
+// How a DeployCommitComparison was assembled. Read it before the commits: an
+// empty list means "nothing between them" only when COMPUTED.
+enum DeployCommitComparisonState {
+  DEPLOY_COMMIT_COMPARISON_STATE_UNSPECIFIED = 0;
+  // The later release's range was walked back, base by base, to the earlier.
+  DEPLOY_COMMIT_COMPARISON_STATE_COMPUTED = 1;
+  // The two are one release.
+  DEPLOY_COMMIT_COMPARISON_STATE_SAME = 2;
+  // No base chain joins them (a shallow-clone cut, or one that predates
+  // ranges): the commits recorded by the releases cut between them on the
+  // later one's branch. Approximate; truncated when any of those ranges was.
+  DEPLOY_COMMIT_COMPARISON_STATE_BY_CUT_TIME = 3;
+  // Nothing between them recorded any commits.
+  DEPLOY_COMMIT_COMPARISON_STATE_UNRECORDED = 4;
+}
+
+// How one artifact, object or object section differs between two releases.
+enum DeployChangeKind {
+  DEPLOY_CHANGE_KIND_UNSPECIFIED = 0;
+  DEPLOY_CHANGE_KIND_ADDED = 1;
+  DEPLOY_CHANGE_KIND_MODIFIED = 2;
+  DEPLOY_CHANGE_KIND_REMOVED = 3;
+}
+
+message DeployArtifactChange {
+  string name = 1;
+  // The artifact kind: oci, npm, gomod, file, git.
+  string kind = 2;
+  DeployChangeKind change = 3;
+  // The identity on each side: a digest, a commit, a version. Empty on the
+  // side where the artifact does not exist.
+  string from = 4;
+  string to = 5;
+}
+
+// DeployObjectComparison is the Kubernetes-object half of a comparison: the
+// two releases' bundles for one environment, object by object.
+message DeployObjectComparison {
+  DeployObjectComparisonState state = 1;
+  // Why the objects were not compared, when they were not.
+  string detail = 2;
+  string environment_id = 3;
+  // The bundles compared, when both were found.
+  string from_bundle_digest = 4;
+  string to_bundle_digest = 5;
+  // Added, then modified, then removed; by object within each.
+  repeated DeployObjectDelta deltas = 6;
+  int32 unchanged = 7;
+  // At least one bundle was recorded by a forge that wrote no per-object
+  // summaries: objects are named without saying what they are or what in them
+  // changed.
+  bool summaries_missing = 8;
+}
+
+enum DeployObjectComparisonState {
+  DEPLOY_OBJECT_COMPARISON_STATE_UNSPECIFIED = 0;
+  DEPLOY_OBJECT_COMPARISON_STATE_COMPARED = 1;
+  // The request named no environment.
+  DEPLOY_OBJECT_COMPARISON_STATE_NO_ENVIRONMENT = 2;
+  // The environment recorded no bundle for one of the releases (it never ran
+  // there, or ran before bundles were recorded). detail names which.
+  DEPLOY_OBJECT_COMPARISON_STATE_BUNDLE_MISSING = 3;
+}
+
+// DeployObjectDelta is one object the two bundles disagree on.
+message DeployObjectDelta {
+  DeployChangeKind change = 1;
+  string cluster = 2;
+  string kind = 3;
+  string namespace = 4;
+  string name = 5;
+  // The forge workload the object belongs to, for grouping.
+  string workload = 6;
+  // One line: the object's own summary when it was added or removed
+  // ("alerts DeployConvergeForcedReconcile"), and what changed when it was
+  // modified ("image control-plane; env FORCE_RECONCILE removed").
+  string summary = 7;
+  // The release-bound images whose digest moved in this object.
+  repeated DeployImageChange images = 8;
+  // The sections that moved, when both bundles recorded them
+  // ("api.env.FORCE_RECONCILE", "data.force_reconcile", "replicas").
+  repeated DeployPartChange parts = 9;
+}
+
+message DeployImageChange {
+  string artifact = 1;
+  string from = 2;
+  string to = 3;
+}
+
+message DeployPartChange {
+  string part = 1;
+  DeployChangeKind change = 2;
 }
 
 message ListDeployReleasesRequest {
@@ -1441,6 +1613,9 @@ message LedgerImportRelease {
   // Keyed by CONTENTS rather than by filename, so a file whose name disagrees
   // with the version inside it imports as what it actually is.
   string imported_from = 5;
+
+  // The commits the release recorded at its cut, when it did.
+  DeployCommitRange commits = 6;
 }
 
 // LedgerImportEnvironment is one historical environment.
@@ -1495,6 +1670,9 @@ message LedgerImportPromotion {
   // imported. It is also what makes a re-import recognise what it already
   // wrote.
   string id = 11;
+
+  // The scope the promotion recorded (DeployPromotion.targets).
+  repeated string targets = 12;
 }
 
 // LedgerImportBundle is one historical bundle. Empty for every project whose

@@ -108,6 +108,9 @@ const (
 	// DeployServiceListPromotionsProcedure is the fully-qualified name of the DeployService's
 	// ListPromotions RPC.
 	DeployServiceListPromotionsProcedure = "/controlplane.v1.DeployService/ListPromotions"
+	// DeployServiceCompareReleasesProcedure is the fully-qualified name of the DeployService's
+	// CompareReleases RPC.
+	DeployServiceCompareReleasesProcedure = "/controlplane.v1.DeployService/CompareReleases"
 	// DeployServiceGetRolloutProcedure is the fully-qualified name of the DeployService's GetRollout
 	// RPC.
 	DeployServiceGetRolloutProcedure = "/controlplane.v1.DeployService/GetRollout"
@@ -272,6 +275,18 @@ type DeployServiceClient interface {
 	// including every release the env moved away from, which a current-pointer
 	// read cannot show.
 	ListPromotions(context.Context, *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error)
+	// CompareReleases says what changed between two releases of one project,
+	// from what the ledger recorded when each was cut: the commits between them,
+	// the artifacts whose identity moved (digest -> digest), and, in one
+	// environment, the Kubernetes objects their bundles add, modify and remove,
+	// each with a one-line summary. It reads only records (forge's
+	// release.CompareCommits / CompareArtifacts / CompareObjects), so it answers
+	// with no repository and no registry at hand. Release detail's Changes tab.
+	//
+	// Either order works: comparing a newer release FROM an older one lists what
+	// it adds; the other way round sets commits.reverts and lists what moving
+	// to it takes away.
+	CompareReleases(context.Context, *connect.Request[v1.CompareDeployReleasesRequest]) (*connect.Response[v1.CompareDeployReleasesResponse], error)
 	// GetRollout reports how far ONE promotion has rolled out, judged against
 	// THAT promotion's frozen pins — never against whatever the deployment rows
 	// declare now. An empty promotion_id means the environment's current
@@ -600,6 +615,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("ListPromotions")),
 			connect.WithClientOptions(opts...),
 		),
+		compareReleases: connect.NewClient[v1.CompareDeployReleasesRequest, v1.CompareDeployReleasesResponse](
+			httpClient,
+			baseURL+DeployServiceCompareReleasesProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("CompareReleases")),
+			connect.WithClientOptions(opts...),
+		),
 		getRollout: connect.NewClient[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse](
 			httpClient,
 			baseURL+DeployServiceGetRolloutProcedure,
@@ -714,6 +735,7 @@ type deployServiceClient struct {
 	listReleases           *connect.Client[v1.ListDeployReleasesRequest, v1.ListDeployReleasesResponse]
 	getRelease             *connect.Client[v1.GetDeployReleaseRequest, v1.GetDeployReleaseResponse]
 	listPromotions         *connect.Client[v1.ListDeployPromotionsRequest, v1.ListDeployPromotionsResponse]
+	compareReleases        *connect.Client[v1.CompareDeployReleasesRequest, v1.CompareDeployReleasesResponse]
 	getRollout             *connect.Client[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse]
 	recordGate             *connect.Client[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse]
 	listGates              *connect.Client[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse]
@@ -853,6 +875,11 @@ func (c *deployServiceClient) GetRelease(ctx context.Context, req *connect.Reque
 // ListPromotions calls controlplane.v1.DeployService.ListPromotions.
 func (c *deployServiceClient) ListPromotions(ctx context.Context, req *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error) {
 	return c.listPromotions.CallUnary(ctx, req)
+}
+
+// CompareReleases calls controlplane.v1.DeployService.CompareReleases.
+func (c *deployServiceClient) CompareReleases(ctx context.Context, req *connect.Request[v1.CompareDeployReleasesRequest]) (*connect.Response[v1.CompareDeployReleasesResponse], error) {
+	return c.compareReleases.CallUnary(ctx, req)
 }
 
 // GetRollout calls controlplane.v1.DeployService.GetRollout.
@@ -1050,6 +1077,18 @@ type DeployServiceHandler interface {
 	// including every release the env moved away from, which a current-pointer
 	// read cannot show.
 	ListPromotions(context.Context, *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error)
+	// CompareReleases says what changed between two releases of one project,
+	// from what the ledger recorded when each was cut: the commits between them,
+	// the artifacts whose identity moved (digest -> digest), and, in one
+	// environment, the Kubernetes objects their bundles add, modify and remove,
+	// each with a one-line summary. It reads only records (forge's
+	// release.CompareCommits / CompareArtifacts / CompareObjects), so it answers
+	// with no repository and no registry at hand. Release detail's Changes tab.
+	//
+	// Either order works: comparing a newer release FROM an older one lists what
+	// it adds; the other way round sets commits.reverts and lists what moving
+	// to it takes away.
+	CompareReleases(context.Context, *connect.Request[v1.CompareDeployReleasesRequest]) (*connect.Response[v1.CompareDeployReleasesResponse], error)
 	// GetRollout reports how far ONE promotion has rolled out, judged against
 	// THAT promotion's frozen pins — never against whatever the deployment rows
 	// declare now. An empty promotion_id means the environment's current
@@ -1374,6 +1413,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("ListPromotions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceCompareReleasesHandler := connect.NewUnaryHandler(
+		DeployServiceCompareReleasesProcedure,
+		svc.CompareReleases,
+		connect.WithSchema(deployServiceMethods.ByName("CompareReleases")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceGetRolloutHandler := connect.NewUnaryHandler(
 		DeployServiceGetRolloutProcedure,
 		svc.GetRollout,
@@ -1510,6 +1555,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetReleaseHandler.ServeHTTP(w, r)
 		case DeployServiceListPromotionsProcedure:
 			deployServiceListPromotionsHandler.ServeHTTP(w, r)
+		case DeployServiceCompareReleasesProcedure:
+			deployServiceCompareReleasesHandler.ServeHTTP(w, r)
 		case DeployServiceGetRolloutProcedure:
 			deployServiceGetRolloutHandler.ServeHTTP(w, r)
 		case DeployServiceRecordGateProcedure:
@@ -1645,6 +1692,10 @@ func (UnimplementedDeployServiceHandler) GetRelease(context.Context, *connect.Re
 
 func (UnimplementedDeployServiceHandler) ListPromotions(context.Context, *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListPromotions is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) CompareReleases(context.Context, *connect.Request[v1.CompareDeployReleasesRequest]) (*connect.Response[v1.CompareDeployReleasesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.CompareReleases is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) GetRollout(context.Context, *connect.Request[v1.GetDeployRolloutRequest]) (*connect.Response[v1.GetDeployRolloutResponse], error) {

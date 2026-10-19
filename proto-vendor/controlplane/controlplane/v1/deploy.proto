@@ -1000,6 +1000,13 @@ message DeployRelease {
   // Complete immutable forge release document, including catalog and snapshot intent.
   // Absent on historical cuts that predate snapshots.
   google.protobuf.Struct snapshot_release = 13;
+
+  // The commits this release adds over the release it was cut after, as forge
+  // recorded them at the cut. Unset when none were recorded (a non-git tree, a
+  // forge that predates it, or a capture that failed). Evidence about the
+  // release, not part of its identity: a re-cut with a different range is
+  // still the same release.
+  DeployCommitRange commits = 14;
 }
 
 // DeployGate is one check's result, recorded against a promotion.
@@ -1447,6 +1454,18 @@ message DeployPromotion {
   string bundle_id = 27;
   string bundle_digest = 28;
   google.protobuf.Struct snapshot = 29;
+
+  // The components a SCOPED deploy moved (`forge env deploy prod v2 --target
+  // api`, `--frontends-only`): workload, frontend or group names as the env
+  // declares them, sorted. Empty means the whole release moved.
+  //
+  // This row still binds the environment to the release — the release whose
+  // pins the deploy shipped — and targets says only these took them. So "what
+  // does workload X run" is the newest promotion whose targets are empty or
+  // name X, and a release is live on an env only for what it moved (forge's
+  // release.Promotion.Moved). Without it a one-workload deploy read as the whole
+  // environment running the release.
+  repeated string targets = 30;
 }
 
 // === Source of truth: provenance, bundles, applies, plans ===
@@ -1510,6 +1529,50 @@ message DeploySourceProvenance {
   // what turns DeliveryInsightsService's lead time from unknown into a figure.
   // A producer that predates it sends nothing, which reads as "not recorded".
   google.protobuf.Timestamp commit_time = 10;
+
+  // The commit's subject line and author name, as forge read them from git —
+  // what a release row shows beside its short sha ("fix(gateway): … · sean").
+  // Claims like branch, one line each (256 / 128 bytes). Set whenever commit
+  // is, dirty or not: a dirty build's commit is the base it was built on.
+  // Never an email: the ledger is shown to every member of the org.
+  string commit_subject = 11;
+  string commit_author = 12;
+}
+
+// DeployCommit is one commit of a recorded range. A claim, as forge's git
+// reported it at the cut.
+message DeployCommit {
+  // The full object id.
+  string sha = 1;
+  // The first line of the message.
+  string subject = 2;
+  // The author's name, never an email.
+  string author = 3;
+  // The committer date, the same clock as DeploySourceProvenance.commit_time.
+  google.protobuf.Timestamp time = 4;
+}
+
+// DeployCommitRange is the source history a release adds over the release it
+// was cut after, recorded at the cut (forge's release.CommitRange): the cut is
+// the one moment a checkout is at the release's commit, and no reader of this
+// ledger has the repository.
+//
+// CAPPED, AND THE CAP IS EXPLICIT. At most 100 commits, newest first.
+// `truncated` says the list is not the whole range: either it is longer
+// (`total` says how long), or the checkout's history ended before the base —
+// a shallow clone, which is how CI checks out — and then `total` is 0 because
+// nobody could count. A reader must never present a truncated range as
+// complete.
+message DeployCommitRange {
+  // The earlier release this range starts after (the newest one whose clean
+  // commit is an ancestor of this release's), and its commit. Empty when the
+  // cutting checkout held no such release in its history: the project's first
+  // release, or a shallow clone.
+  string base_release = 1;
+  string base_commit = 2;
+  repeated DeployCommit commits = 3;
+  int32 total = 4;
+  bool truncated = 5;
 }
 
 // DeployWorktree identifies one checkout on one machine.

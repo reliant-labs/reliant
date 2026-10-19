@@ -287,7 +287,13 @@ type ReleaseMarker struct {
 	PromotedByUserId string `protobuf:"bytes,10,opt,name=promoted_by_user_id,json=promotedByUserId,proto3" json:"promoted_by_user_id,omitempty"`
 	// "promote" or "rollback", as recorded. A promote of an older release is NOT
 	// rewritten to "rollback" here; GetDoraMetrics classifies those.
-	Kind          string `protobuf:"bytes,11,opt,name=kind,proto3" json:"kind,omitempty"`
+	Kind string `protobuf:"bytes,11,opt,name=kind,proto3" json:"kind,omitempty"`
+	// The components a scoped deploy moved (DeployPromotion.targets); empty when
+	// the whole release moved. A marker with targets must not be read as the
+	// whole environment running the release.
+	Targets []string `protobuf:"bytes,12,rep,name=targets,proto3" json:"targets,omitempty"`
+	// The release commit's subject line, when the cut recorded one.
+	CommitSubject string `protobuf:"bytes,13,opt,name=commit_subject,json=commitSubject,proto3" json:"commit_subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -395,6 +401,20 @@ func (x *ReleaseMarker) GetPromotedByUserId() string {
 func (x *ReleaseMarker) GetKind() string {
 	if x != nil {
 		return x.Kind
+	}
+	return ""
+}
+
+func (x *ReleaseMarker) GetTargets() []string {
+	if x != nil {
+		return x.Targets
+	}
+	return nil
+}
+
+func (x *ReleaseMarker) GetCommitSubject() string {
+	if x != nil {
+		return x.CommitSubject
 	}
 	return ""
 }
@@ -929,7 +949,7 @@ const file_services_delivery_insights_v1_delivery_insights_proto_rawDesc = "" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\"p\n" +
 	"\x14ListReleasesResponse\x12:\n" +
 	"\breleases\x18\x01 \x03(\v2\x1e.controlplane.v1.ReleaseMarkerR\breleases\x12\x1c\n" +
-	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"\x96\x03\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"\xd7\x03\n" +
 	"\rReleaseMarker\x12!\n" +
 	"\fpromotion_id\x18\x01 \x01(\tR\vpromotionId\x12%\n" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12)\n" +
@@ -946,7 +966,9 @@ const file_services_delivery_insights_v1_delivery_insights_proto_rawDesc = "" +
 	"promotedBy\x12-\n" +
 	"\x13promoted_by_user_id\x18\n" +
 	" \x01(\tR\x10promotedByUserId\x12\x12\n" +
-	"\x04kind\x18\v \x01(\tR\x04kind\"\x7f\n" +
+	"\x04kind\x18\v \x01(\tR\x04kind\x12\x18\n" +
+	"\atargets\x18\f \x03(\tR\atargets\x12%\n" +
+	"\x0ecommit_subject\x18\r \x01(\tR\rcommitSubject\"\x7f\n" +
 	"\x15GetDoraMetricsRequest\x124\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1e.controlplane.v1.DeliveryScopeR\x05scope\x120\n" +
 	"\x14failure_window_hours\x18\x02 \x01(\x05R\x12failureWindowHours\"\xf1\x04\n" +
