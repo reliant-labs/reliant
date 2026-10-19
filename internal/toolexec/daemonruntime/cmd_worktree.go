@@ -2618,12 +2618,69 @@ func sharedWorktreeReclaimer() (*worktreereclaim.Reclaimer, error) {
 	r := worktreeReclaimers[root]
 	if r == nil {
 		r = worktreereclaim.NewReclaimer(root)
+		r.OnRepair = logRepairReport
 		worktreeReclaimers[root] = r
 		// Checkouts parked by a clean-up that a crash interrupted go back to
 		// their paths before anything else looks at this root.
 		r.RecoverQuarantined(context.Background(), "")
 	}
 	return r, nil
+}
+
+// repairSharedClones runs crash repair (worktreereclaim.RepairRepo) once over
+// every repository reliant's checkouts belong to: zero-byte loose objects,
+// torn worktree indexes, stale gc.log, registrations of checkouts that are
+// gone. A VM that dies mid-write leaves exactly that, and until it is repaired
+// every git command in those repositories fails. Called off the startup path;
+// the sweep repeats it per repository before it reads one.
+func repairSharedClones(ctx context.Context) {
+	r, err := sharedWorktreeReclaimer()
+	if err != nil {
+		return
+	}
+	if fi, err := os.Stat(r.Root); err != nil || !fi.IsDir() {
+		return
+	}
+	repos := worktreereclaim.DiscoverCommonDirs(r.Root)
+	repaired := 0
+	for _, rep := range r.RepairRepos(ctx, repos) {
+		if rep.Repaired() {
+			repaired++
+		}
+	}
+	logging.Info(logPrefix+" [gitrepair] Startup crash repair finished", "repositories", len(repos), "repaired", repaired)
+}
+
+// logRepairReport logs one repository's repair: what was fixed at INFO,
+// registrations left for their owner at WARN, and damage that remains — lost
+// objects above all — at ERROR, so it is never silently absorbed.
+func logRepairReport(rep worktreereclaim.RepairReport) {
+	attrs := []any{"repo", rep.CommonDir}
+	add := func(key string, v []string) {
+		if len(v) > 0 {
+			attrs = append(attrs, key, strings.Join(v, "; "))
+		}
+	}
+	add("empty_objects_removed", rep.EmptyObjects)
+	add("indexes_rebuilt", rep.RebuiltIndexes)
+	add("heads_restored", rep.RestoredHEADs)
+	add("debris_removed", rep.RemovedDebris)
+	add("registrations_pruned", rep.PrunedRegistrations)
+	if rep.RemovedGCLog != "" {
+		attrs = append(attrs, "gc_log_removed", rep.RemovedGCLog)
+	}
+	add("registrations_skipped", rep.SkippedRegistrations)
+	add("lost_objects", rep.LostObjects)
+	add("fsck_problems", rep.FsckProblems)
+	add("problems", rep.Problems)
+	switch {
+	case rep.Unhealthy():
+		logging.Error(logPrefix+" [gitrepair] Repository has damage that was not repaired", attrs...)
+	case rep.Repaired():
+		logging.Info(logPrefix+" [gitrepair] Repaired crash damage", attrs...)
+	default:
+		logging.Warn(logPrefix+" [gitrepair] Left registrations of missing checkouts locked by someone else", attrs...)
+	}
 }
 
 func handleWorktreeReconcile(ctx context.Context, payload []byte) ([]byte, error) {

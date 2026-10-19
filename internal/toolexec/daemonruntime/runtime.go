@@ -280,6 +280,10 @@ func Start(ctx context.Context, opts StartOptions) error {
 	}
 	go client.diskGuard.Run(ctx)
 
+	// Repair what a crash left in the shared clones (empty objects, torn
+	// indexes, stale gc.log, dead registrations) before agents run git there.
+	go repairSharedClones(ctx)
+
 	// Managed daemons: route github.com auth through the credential helper and
 	// scrub any token an older release left on disk. Local daemons are left
 	// alone. Best-effort and off the startup path.

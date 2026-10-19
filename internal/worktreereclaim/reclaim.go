@@ -62,6 +62,13 @@ type Reclaimer struct {
 	// Reclaimer built as a literal decides from local refs alone.
 	PRMerged  func(ctx context.Context, checkout, branch, head string) bool
 	FetchBase func(ctx context.Context, checkout, base string)
+	// RepairInterval is how often settle re-runs crash repair (RepairRepo) on
+	// a parent repository before reading it; 0 means DefaultRepairInterval,
+	// negative disables it.
+	RepairInterval time.Duration
+	// OnRepair receives every repair report that changed something or found
+	// damage; the daemon logs it. Nil discards them.
+	OnRepair func(RepairReport)
 
 	mu       sync.Mutex
 	netCache map[string]netEntry
@@ -69,6 +76,7 @@ type Reclaimer struct {
 	paths    map[string]*sync.Mutex
 	cwdCache []string
 	cwdAt    time.Time
+	repairs  repairState
 }
 
 type cachedSize struct {
@@ -331,6 +339,10 @@ func (r *Reclaimer) settle(ctx context.Context, w Worktree, confirmed bool) Resu
 			return r.heldQuarantined(w, parked, "its original path is not free, or it could not be moved back; free the path and retry")
 		}
 	}
+
+	// Crash damage in the parent repositories (empty objects, a torn index)
+	// makes every git answer below an error; repair it before asking.
+	r.ensureRepaired(ctx, w)
 
 	// A row with checkouts parked under .reclaim is never "gone": the files
 	// exist, in quarantine, still locked. Say so before anything else.
