@@ -50,7 +50,7 @@ type signInResult struct {
 
 // unidentified is the identity of a sign-in that carried nothing to tell accounts apart. It is a
 // legacy placeholder so the first refresh that does learn the identity renames it in place.
-func unidentified(provider string) string { return core.LegacyIdentityKey("signin-" + provider) }
+func unidentified(provider string) string { return core.PlaceholderIdentityKey("signin-" + provider) }
 
 // connectAccount stores a completed sign-in as a provider account.
 func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, error) {
@@ -75,7 +75,7 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 			// Another user's account, or one of another provider: NotFound, never a hint it exists.
 			return signInResult{}, connect.NewError(connect.CodeNotFound, fmt.Errorf("provider account not found"))
 		}
-		if core.IsLegacyIdentityKey(target.IdentityKey) {
+		if core.IsPlaceholderIdentityKey(target.IdentityKey) {
 			// A placeholder cannot be compared with a real identity; this sign-in is what teaches it.
 			in.upsert.ReplaceIdentityOf = target.IdentityKey
 		}

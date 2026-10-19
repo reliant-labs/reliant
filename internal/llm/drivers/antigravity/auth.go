@@ -8,10 +8,9 @@
 // same string here. That is NOT universal in this tree — Claude's OAuth
 // credential registers under the driver id "anthropic", because its access
 // token is an sk-ant-oat key the anthropic driver auto-detects. Antigravity
-// has its own driver, its own token endpoint and its own credential row, so it
-// keeps its own id everywhere: the provider marker written by
-// SetProviderAPIKey, the models.DriverID the resolver switches on, and the
-// package name.
+// has its own driver, its own token endpoint and its own credential, so it
+// keeps its own id everywhere: the provider_accounts.provider value, the
+// models.DriverID the resolver switches on, and the package name.
 package antigravity
 
 import (

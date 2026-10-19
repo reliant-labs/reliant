@@ -22,7 +22,7 @@ type Service interface {
 
 // KeyStore reads the stored automation tokens. *db.Repo satisfies it.
 type KeyStore interface {
-	GetProviderAPIKey(ctx context.Context, userID, provider string) (string, error)
+	GetAutomationToken(ctx context.Context, userID, daemonID string) (string, error)
 }
 
 // Deps are the resolver's collaborators.

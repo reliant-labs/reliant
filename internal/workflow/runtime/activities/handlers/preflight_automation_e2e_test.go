@@ -121,7 +121,7 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 	t.Cleanup(nc.Close)
 
 	userID, daemonID := "user-"+uuid.NewString(), "daemon-"+uuid.NewString()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, automationcred.Provider(daemonID), "rlat_stored"))
+	require.NoError(t, repo.SetAutomationToken(ctx, userID, daemonID, "rlat_stored"))
 	auth.SetUserJWT(userID, "") // unattended: no JWT
 
 	// A managed machine the control plane has parked: its record is the

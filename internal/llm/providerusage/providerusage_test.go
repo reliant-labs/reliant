@@ -172,9 +172,6 @@ func TestParseClaudeProfile(t *testing.T) {
 	if p.Plan != "max_20x" {
 		t.Fatalf("plan = %q", p.Plan)
 	}
-	if got, want := p.IdentityKey(), "acct:00000000-aaaa-4000-8000-000000000001/org:00000000-bbbb-4000-8000-000000000002"; got != want {
-		t.Fatalf("identity key = %q", got)
-	}
 }
 
 func TestParseClaudeProfile_FallbacksAndErrors(t *testing.T) {
@@ -182,9 +179,6 @@ func TestParseClaudeProfile_FallbacksAndErrors(t *testing.T) {
 	p, err := ParseClaudeProfile([]byte(`{"account":{"uuid":"A","email_address":"x@y.z","has_claude_pro":true}}`))
 	if err != nil || p.Email != "x@y.z" || p.Plan != "pro" {
 		t.Fatalf("%+v, %v", p, err)
-	}
-	if p.IdentityKey() != "" {
-		t.Fatalf("no org uuid must give no identity key, got %q", p.IdentityKey())
 	}
 	for _, body := range []string{`nope`, `{}`, `{"application":{"name":"x"}}`} {
 		if _, err := ParseClaudeProfile([]byte(body)); !errors.Is(err, ErrUnexpectedResponse) {
@@ -542,47 +536,6 @@ func TestCodexIdentity(t *testing.T) {
 			t.Fatalf("%+v, %v", id, err)
 		}
 	})
-}
-
-func TestClaudeIdentityKey(t *testing.T) {
-	if got := ClaudeIdentityKey(" ABC ", "Org-1"); got != "acct:abc/org:org-1" {
-		t.Fatalf("got %q", got)
-	}
-	if ClaudeIdentityKey("a", "") != "" || ClaudeIdentityKey("", "o") != "" {
-		t.Fatal("a missing half must give no key")
-	}
-	if ClaudeIdentityKey("a", "o1") == ClaudeIdentityKey("a", "o2") {
-		t.Fatal("two organizations must be two identities")
-	}
-}
-
-func TestAPIKeyFingerprint(t *testing.T) {
-	a := APIKeyFingerprint("user-1", "anthropic", "sk-ant-key")
-	if len(a) != 32 || strings.Trim(a, "0123456789abcdef") != "" {
-		t.Fatalf("fingerprint = %q", a)
-	}
-	if a != APIKeyFingerprint("user-1", "anthropic", " sk-ant-key\n") {
-		t.Fatal("deterministic and whitespace-insensitive")
-	}
-	for name, other := range map[string]string{
-		"user":     APIKeyFingerprint("user-2", "anthropic", "sk-ant-key"),
-		"provider": APIKeyFingerprint("user-1", "openai", "sk-ant-key"),
-		"key":      APIKeyFingerprint("user-1", "anthropic", "sk-ant-key2"),
-	} {
-		if other == a {
-			t.Fatalf("fingerprint must depend on %s", name)
-		}
-	}
-	// The separator is part of the hash input: ("ab","c") differs from ("a","bc").
-	if APIKeyFingerprint("ab", "c", "k") == APIKeyFingerprint("a", "bc", "k") {
-		t.Fatal("fields must be delimited")
-	}
-	if got := APIKeyIdentityKey("user-1", "anthropic", "sk-ant-key"); got != "key:"+a {
-		t.Fatalf("identity key = %q", got)
-	}
-	if strings.Contains(a, "sk-ant") {
-		t.Fatal("fingerprint leaks the key")
-	}
 }
 
 func TestNormalizePlan(t *testing.T) {

@@ -743,13 +743,13 @@ func TestMergeOnIdentityRewrite(t *testing.T) {
 	ctx := context.Background()
 
 	legacy := claudeUpsert("u1", "x", "o", "old-tok", "old-ref")
-	legacy.IdentityKey = core.LegacyIdentityKey("row-1")
+	legacy.IdentityKey = core.PlaceholderIdentityKey("row-1")
 	placeholder := mustUpsert(t, repo, legacy)
 	other := mustUpsert(t, repo, claudeUpsert("u1", "bob", "o", "t", "r"))
 
 	t.Run("rewrite in place", func(t *testing.T) {
 		u := claudeUpsert("u1", "alice", "org1", "new-tok", "new-ref")
-		u.ReplaceIdentityOf = core.LegacyIdentityKey("row-1")
+		u.ReplaceIdentityOf = core.PlaceholderIdentityKey("row-1")
 		got, created, err := repo.UpsertProviderAccount(ctx, u)
 		require.NoError(t, err)
 		assert.False(t, created)
@@ -764,17 +764,17 @@ func TestMergeOnIdentityRewrite(t *testing.T) {
 
 	t.Run("replacing an identity nobody holds is a plain upsert", func(t *testing.T) {
 		u := claudeUpsert("u1", "carol", "org1", "t", "r")
-		u.ReplaceIdentityOf = core.LegacyIdentityKey("gone")
+		u.ReplaceIdentityOf = core.PlaceholderIdentityKey("gone")
 		_, created, err := repo.UpsertProviderAccount(ctx, u)
 		require.NoError(t, err)
 		assert.True(t, created)
 	})
 
-	t.Run("merge when the real identity already exists", func(t *testing.T) {
+	t.Run("merge keeps the account that already holds the real identity", func(t *testing.T) {
 		repo2, cleanup2 := SetupTestDB(t)
 		defer cleanup2()
 		ph := claudeUpsert("u1", "x", "o", "ph-tok", "ph-ref")
-		ph.IdentityKey = core.LegacyIdentityKey("row-2")
+		ph.IdentityKey = core.PlaceholderIdentityKey("row-2")
 		phAcct := mustUpsert(t, repo2, ph) // priority 0
 		real := mustUpsert(t, repo2, claudeUpsert("u1", "dave", "o", "real-tok", "real-ref"))
 		label := "mine"
@@ -792,22 +792,23 @@ func TestMergeOnIdentityRewrite(t *testing.T) {
 			require.True(t, ok)
 		}
 
-		// The placeholder was written after the real row: it is the newer lineage.
+		// Even though the placeholder is the NEWER row, the account with the real identity survives.
 		time.Sleep(10 * time.Millisecond)
-		u := claudeUpsert("u1", "dave", "o", "fresh-tok", "fresh-ref")
-		u.ReplaceIdentityOf = core.LegacyIdentityKey("row-2")
 		_, err = repo2.PatchProviderAccount(ctx, "u1", phAcct.ID, core.AccountPatch{})
 		require.NoError(t, err)
+		u := claudeUpsert("u1", "dave", "o", "fresh-tok", "fresh-ref")
+		u.ReplaceIdentityOf = core.PlaceholderIdentityKey("row-2")
 		merged, created, err := repo2.UpsertProviderAccount(ctx, u)
 		require.NoError(t, err)
 		assert.False(t, created)
+		assert.Equal(t, real.ID, merged.ID, "the real-identity account survives")
 		assert.Equal(t, core.ClaudeIdentityKey("dave", "o"), merged.IdentityKey)
 
 		all, err := repo2.ListProviderAccounts(ctx, "u1")
 		require.NoError(t, err)
 		require.Len(t, all, 1, "two identical upstream accounts never coexist")
-		assert.Equal(t, 0, all[0].Priority)
-		assert.Equal(t, "mine", all[0].Label, "the user's label survives the merge")
+		assert.Equal(t, 0, all[0].Priority, "takes the smaller priority")
+		assert.Equal(t, "mine", all[0].Label, "the user's label carries over when the survivor has none")
 		s, err := repo2.GetProviderAccountWithSecrets(ctx, "u1", all[0].ID)
 		require.NoError(t, err)
 		assert.Equal(t, "fresh-tok", s.Secrets.Secret)
@@ -816,8 +817,98 @@ func TestMergeOnIdentityRewrite(t *testing.T) {
 			asg, err := repo2.GetThreadAssignment(ctx, th, "claude")
 			require.NoError(t, err)
 			require.NotNil(t, asg, th)
-			assert.Equal(t, all[0].ID, asg.AccountID, "assignments are repointed to the survivor")
+			assert.Equal(t, real.ID, asg.AccountID, "assignments are repointed to the survivor")
 		}
+	})
+}
+
+// S9: an account with a distinct identity must never be deleted by an identity merge, whatever
+// the relative ages of the rows, and what the user set on it (pause, bench, poll schedule) stays.
+func TestIdentityMergeNeverDeletesTheAccountWithADistinctIdentity(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("its pause, label, bench and poll schedule survive a merge with a newer placeholder", func(t *testing.T) {
+		repo, cleanup := SetupTestDB(t)
+		defer cleanup()
+		real := mustUpsert(t, repo, claudeUpsert("u1", "erin", "o", "real-tok", "real-ref"))
+		paused, label := true, "work"
+		_, err := repo.PatchProviderAccount(ctx, "u1", real.ID, core.AccountPatch{Paused: &paused, Label: &label})
+		require.NoError(t, err)
+		until := time.Now().Add(time.Hour).UTC()
+		require.NoError(t, repo.BenchAccount(ctx, "u1", real.ID, until, "five_hour", false))
+		require.NoError(t, repo.ScheduleUsagePoll(ctx, real.ID, time.Now().Add(time.Minute), 0, ""))
+
+		time.Sleep(10 * time.Millisecond)
+		ph := claudeUpsert("u1", "x", "o", "ph-tok", "ph-ref")
+		ph.IdentityKey = core.PlaceholderIdentityKey("legacy-row")
+		mustUpsert(t, repo, ph) // newer than real
+
+		u := claudeUpsert("u1", "erin", "o", "fresh-tok", "fresh-ref")
+		u.ReplaceIdentityOf = core.PlaceholderIdentityKey("legacy-row")
+		merged, _, err := repo.UpsertProviderAccount(ctx, u)
+		require.NoError(t, err)
+		assert.Equal(t, real.ID, merged.ID)
+		assert.NotNil(t, merged.PausedAt, "a pause is never lost in a merge")
+		assert.Equal(t, "work", merged.Label)
+
+		limits, err := repo.GetAccountLimits(ctx, real.ID)
+		require.NoError(t, err)
+		require.NotNil(t, limits, "limit row (and its bench and poll schedule) is still there")
+		require.NotNil(t, limits.LimitedUntil)
+		assert.True(t, limits.LimitedUntil.After(time.Now()))
+		assert.NotNil(t, limits.UsageAPINextAt)
+	})
+
+	t.Run("a placeholder's pause carries over to the survivor", func(t *testing.T) {
+		repo, cleanup := SetupTestDB(t)
+		defer cleanup()
+		ph := claudeUpsert("u1", "x", "o", "ph-tok", "ph-ref")
+		ph.IdentityKey = core.PlaceholderIdentityKey("row")
+		phAcct := mustUpsert(t, repo, ph)
+		real := mustUpsert(t, repo, claudeUpsert("u1", "frank", "o", "t", "r"))
+		paused := true
+		_, err := repo.PatchProviderAccount(ctx, "u1", phAcct.ID, core.AccountPatch{Paused: &paused})
+		require.NoError(t, err)
+
+		u := claudeUpsert("u1", "frank", "o", "fresh", "fresh-r")
+		u.ReplaceIdentityOf = core.PlaceholderIdentityKey("row")
+		merged, _, err := repo.UpsertProviderAccount(ctx, u)
+		require.NoError(t, err)
+		assert.Equal(t, real.ID, merged.ID)
+		assert.NotNil(t, merged.PausedAt)
+	})
+
+	t.Run("an account with a real identity is never treated as a placeholder to rewrite", func(t *testing.T) {
+		repo, cleanup := SetupTestDB(t)
+		defer cleanup()
+		a := mustUpsert(t, repo, claudeUpsert("u1", "gina", "o", "ta", "ra"))
+		b := mustUpsert(t, repo, claudeUpsert("u1", "hank", "o", "tb", "rb"))
+
+		// A caller asks to "replace" gina's real identity with hank's: it is ignored and hank's
+		// upsert is a plain update of hank. Neither account is deleted or merged.
+		u := claudeUpsert("u1", "hank", "o", "tb2", "rb2")
+		u.ReplaceIdentityOf = a.IdentityKey
+		got, created, err := repo.UpsertProviderAccount(ctx, u)
+		require.NoError(t, err)
+		assert.False(t, created)
+		assert.Equal(t, b.ID, got.ID)
+		all, err := repo.ListProviderAccounts(ctx, "u1")
+		require.NoError(t, err)
+		assert.Len(t, all, 2)
+	})
+
+	t.Run("a placeholder is rewritten in place when no one holds the real identity", func(t *testing.T) {
+		repo, cleanup := SetupTestDB(t)
+		defer cleanup()
+		ph := claudeUpsert("u1", "x", "o", "ph-tok", "ph-ref")
+		ph.IdentityKey = core.PlaceholderIdentityKey("solo")
+		phAcct := mustUpsert(t, repo, ph)
+		u := claudeUpsert("u1", "iris", "o", "new", "new-r")
+		u.ReplaceIdentityOf = core.PlaceholderIdentityKey("solo")
+		got, _, err := repo.UpsertProviderAccount(ctx, u)
+		require.NoError(t, err)
+		assert.Equal(t, phAcct.ID, got.ID)
+		assert.Equal(t, core.ClaudeIdentityKey("iris", "o"), got.IdentityKey)
 	})
 }
 

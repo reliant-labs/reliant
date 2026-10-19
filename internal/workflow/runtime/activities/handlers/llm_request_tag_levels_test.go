@@ -273,25 +273,14 @@ func provisionProviderKeys(t *testing.T, ctx context.Context, userID string, pro
 	t.Cleanup(func() { drivers.AccountAvailabilityClient = original })
 
 	for _, provider := range providers {
-		if provider == "copilot" {
-			// Copilot's credential lives in its own token table; the
-			// api_keys row is only the connection marker.
-			require.NoError(t, repo.SetCopilotAuthTokens(ctx, userID, db.CopilotAuthTokens{
-				GitHubAccessToken: "gho_test-key-copilot",
-			}))
-			require.NoError(t, repo.SetProviderAPIKey(ctx, userID, provider, db.ProviderOAuthMarker))
-			continue
+		switch provider {
+		case "copilot":
+			db.SeedProviderAccount(t, repo, userID, provider, "gho_test-key-copilot")
+		case "codex":
+			db.SeedProviderAccount(t, repo, userID, provider, "codex-access")
+		default:
+			db.SeedProviderAccount(t, repo, userID, provider, "test-key-"+provider)
 		}
-		if provider == "codex" {
-			// Codex's credential lives in its own token table too.
-			require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
-				AccessToken:  "codex-access",
-				RefreshToken: "codex-refresh",
-			}))
-			require.NoError(t, repo.SetProviderAPIKey(ctx, userID, provider, db.ProviderOAuthMarker))
-			continue
-		}
-		require.NoError(t, repo.SetProviderAPIKey(ctx, userID, provider, "test-key-"+provider))
 	}
 }
 

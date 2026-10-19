@@ -10,6 +10,7 @@ import (
 
 	accesstoken "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,12 +41,7 @@ func TestBuildAvailableDrivers_CodexUsesPersistedAccessToken(t *testing.T) {
 	userID := "test-user"
 	validToken := makeCodexJWT(t, time.Now().Add(1*time.Hour))
 
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "codex", "oauth"))
-	require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
-		AccessToken:  validToken,
-		RefreshToken: "refresh-token",
-		AccountID:    "test-account-id",
-	}))
+	seedCodex(t, repo, userID, validToken, "refresh-token")
 
 	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
@@ -69,13 +65,8 @@ func TestBuildAvailableDrivers_CodexExpiredTokenIsRefreshable(t *testing.T) {
 	userID := "test-user"
 	expiredToken := makeCodexJWT(t, time.Now().Add(-10*time.Minute))
 
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "codex", "oauth"))
-	require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
-		AccessToken:  expiredToken,
-		RefreshToken: "refresh-token",
-		AccountID:    "test-account-id",
-	}))
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "openai", "sk-openai-test"))
+	seedCodex(t, repo, userID, expiredToken, "refresh-token")
+	db.SeedProviderAccount(t, repo, userID, "openai", "sk-openai-test")
 
 	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
@@ -102,12 +93,7 @@ func TestBuildAvailableDrivers_CodexExpiredWithoutRefreshTokenIsSkipped(t *testi
 	userID := "test-user"
 	expiredToken := makeCodexJWT(t, time.Now().Add(-10*time.Minute))
 
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "codex", "oauth"))
-	require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
-		AccessToken:  expiredToken,
-		RefreshToken: "",
-		AccountID:    "test-account-id",
-	}))
+	seedCodex(t, repo, userID, expiredToken, "")
 
 	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
@@ -125,7 +111,7 @@ func TestBuildAvailableDrivers_ReliantConfiguredViaProviderAPIKey(t *testing.T) 
 	ctx := context.Background()
 	userID := "test-user"
 
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", validRlat))
+	db.SeedProviderAccount(t, repo, userID, "reliant", validRlat)
 
 	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
@@ -144,62 +130,13 @@ func TestBuildAvailableDrivers_ReliantNotConfiguredWithoutKey(t *testing.T) {
 	ctx := context.Background()
 	userID := "test-user"
 
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "anthropic", "sk-ant-test"))
+	db.SeedProviderAccount(t, repo, userID, "anthropic", "sk-ant-test")
 
 	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
 
 	_, hasReliant := availableDrivers.Drivers["reliant"]
 	assert.False(t, hasReliant, "reliant should not be available without a stored API key")
-}
-
-func TestBuildAvailableDrivers_CodexMarkerWithoutTokensIsSkipped(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	userID := "test-user"
-
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "codex", "oauth"))
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "anthropic", "sk-ant-test"))
-
-	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
-	require.NoError(t, err)
-
-	_, hasCodex := availableDrivers.Drivers["codex"]
-	assert.False(t, hasCodex, "codex should be skipped when marker exists but tokens are missing")
-
-	anthropic, hasAnthropic := availableDrivers.Drivers["anthropic"]
-	require.True(t, hasAnthropic)
-	assert.Equal(t, "sk-ant-test", anthropic.APIKey)
-}
-
-// The "oauth" row in api_keys is a connection MARKER every OAuth provider
-// writes beside its token row; it is never a credential. Migration
-// 20261006124843 truncated the token tables and left the markers, and the
-// Copilot branch fell back to reading the marker as a GitHub token: every
-// request went out as `Authorization: Bearer oauth`, which GitHub answers with
-// 400 "Authorization header is badly formatted" — for a user who never had
-// Copilot connected in Settings (chat dfd85515, 2026-10-09).
-func TestBuildAvailableDrivers_CopilotMarkerWithoutTokensIsSkipped(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	userID := "test-user"
-
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "copilot", db.ProviderOAuthMarker))
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "anthropic", "sk-ant-test"))
-
-	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
-	require.NoError(t, err)
-
-	copilotCfg, hasCopilot := availableDrivers.Drivers["copilot"]
-	assert.False(t, hasCopilot,
-		"copilot must not be available from its connection marker alone (got APIKey %q)", copilotCfg.APIKey)
-
-	_, hasAnthropic := availableDrivers.Drivers["anthropic"]
-	assert.True(t, hasAnthropic, "an unrelated configured provider is unaffected")
 }
 
 // A well-formed rlat_ access token: prefix plus base62 padding to TokenLen.
@@ -213,7 +150,7 @@ func TestBuildAvailableDrivers_ReliantLegacyKeyIsSkippedAndReported(t *testing.T
 
 	ctx := context.Background()
 	userID := "test-user"
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "rlnt_abcdef0123456789"))
+	db.SeedProviderAccount(t, repo, userID, "reliant", "rlnt_abcdef0123456789")
 
 	available, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
@@ -224,7 +161,7 @@ func TestBuildAvailableDrivers_ReliantLegacyKeyIsSkippedAndReported(t *testing.T
 	require.NoError(t, err)
 	assert.True(t, stale)
 
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", validRlat))
+	db.SeedProviderAccount(t, repo, userID, "reliant", validRlat)
 	stale, err = HasStaleReliantKey(ctx, repo, userID)
 	require.NoError(t, err)
 	assert.False(t, stale, "a valid rlat_ key is not stale")
@@ -236,4 +173,15 @@ func TestHasStaleReliantKey_FalseWithoutKey(t *testing.T) {
 	stale, err := HasStaleReliantKey(context.Background(), repo, "test-user")
 	require.NoError(t, err)
 	assert.False(t, stale)
+}
+
+// seedCodex connects userID to Codex with the given tokens.
+func seedCodex(t *testing.T, repo *db.Repo, userID, access, refresh string) {
+	t.Helper()
+	_, _, err := repo.UpsertProviderAccount(context.Background(), core.AccountUpsert{
+		UserID: userID, Provider: "codex", AuthKind: core.AuthKindOAuth,
+		IdentityKey: core.CodexIdentityKey("test-account-id", "test-user"), ExternalAccountID: "test-account-id",
+		Secrets: core.AccountSecrets{Secret: access, Refresh: refresh},
+	})
+	require.NoError(t, err)
 }

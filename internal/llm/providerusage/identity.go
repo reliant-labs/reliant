@@ -2,48 +2,12 @@
 package providerusage
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
 )
-
-// ClaudeIdentityKey is the dedupe key of a Claude subscription account:
-// "acct:<account uuid>/org:<organization uuid>" (DESIGN §1.2). The organization
-// is part of the key because limits and prompt cache are per organization: one
-// login in two organizations is two accounts. Returns "" when either uuid is
-// missing, so the caller falls back to its "legacy:" key until a refresh
-// supplies both.
-func ClaudeIdentityKey(accountUUID, organizationUUID string) string {
-	a := strings.ToLower(strings.TrimSpace(accountUUID))
-	o := strings.ToLower(strings.TrimSpace(organizationUUID))
-	if a == "" || o == "" {
-		return ""
-	}
-	return "acct:" + a + "/org:" + o
-}
-
-// APIKeyFingerprint is the 32-hex-char salted fingerprint of an API key:
-// hex(sha256(userID ‖ 0 ‖ provider ‖ 0 ‖ key))[:32]. The user salt makes the
-// value useless for correlating the same key across users. It is deterministic,
-// so connecting the same key twice finds the same account.
-func APIKeyFingerprint(userID, provider, key string) string {
-	h := sha256.New()
-	h.Write([]byte(userID))
-	h.Write([]byte{0})
-	h.Write([]byte(provider))
-	h.Write([]byte{0})
-	h.Write([]byte(strings.TrimSpace(key)))
-	return hex.EncodeToString(h.Sum(nil))[:32]
-}
-
-// APIKeyIdentityKey is "key:" + APIKeyFingerprint, the stored identity key.
-func APIKeyIdentityKey(userID, provider, key string) string {
-	return "key:" + APIKeyFingerprint(userID, provider, key)
-}
 
 // CodexIdentityInfo is what a Codex token pair says about its account.
 type CodexIdentityInfo struct {

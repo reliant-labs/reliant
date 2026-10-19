@@ -37,79 +37,30 @@ func isolationContext(userID string) context.Context {
 func seedProviders(t *testing.T, ctx context.Context, repo *db.Repo, userID string, providers ...string) {
 	t.Helper()
 	for _, provider := range providers {
-		marker := db.ProviderOAuthMarker
+		secret := "key-for-" + provider
 		switch provider {
 		case "claude":
-			require.NoError(t, repo.SetClaudeAuthTokens(ctx, userID, db.ClaudeAuthTokens{
-				AccessToken:  "sk-ant-oat01-claude-access",
-				RefreshToken: "claude-refresh",
-				ExpiresAt:    time.Now().Add(time.Hour),
-			}))
+			secret = "sk-ant-oat01-claude-access"
 		case "codex":
-			require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
-				AccessToken:  makeCodexJWTForSettingsTest(t, time.Now().Add(time.Hour)),
-				RefreshToken: "codex-refresh",
-				AccountID:    "codex-account",
-			}))
+			secret = makeCodexJWTForSettingsTest(t, time.Now().Add(time.Hour))
 		case "copilot":
-			require.NoError(t, repo.SetCopilotAuthTokens(ctx, userID, db.CopilotAuthTokens{
-				GitHubAccessToken:  "gho_copilot-access",
-				GitHubRefreshToken: "copilot-refresh",
-			}))
+			secret = "gho_copilot-access"
 		case "antigravity":
-			require.NoError(t, repo.SetAntigravityAuthTokens(ctx, userID, db.AntigravityAuthTokens{
-				AccessToken:  "ya29.antigravity-access",
-				RefreshToken: "antigravity-refresh",
-				ExpiresAt:    time.Now().Add(time.Hour),
-			}))
-		default:
-			marker = "key-for-" + provider
+			secret = "ya29.antigravity-access"
 		}
-		require.NoError(t, repo.SetProviderAPIKey(ctx, userID, provider, marker))
+		db.SeedProviderAccount(t, repo, userID, provider, secret)
 	}
-	// Existing connections become accounts the way they do in production: the boot copy.
-	_, err := repo.CopyLegacyCredentials(ctx)
-	require.NoError(t, err)
 }
 
-// providerCredentials reports, per provider, exactly what is stored for
-// userID: the api_keys value and, for OAuth providers, the access token.
-// A provider with nothing stored is absent.
+// providerCredentials reports, per provider, exactly what is stored for userID: each account's
+// access token or key. A provider with nothing stored is absent.
 func providerCredentials(t *testing.T, ctx context.Context, repo *db.Repo, userID string) map[string]string {
 	t.Helper()
-	keys, err := repo.GetProviderAPIKeys(ctx, userID)
+	accounts, err := repo.ListProviderAccountsWithSecrets(ctx, userID)
 	require.NoError(t, err)
-
-	tokens := map[string]string{}
-	claudeTokens, err := repo.GetClaudeAuthTokens(ctx, userID)
-	require.NoError(t, err)
-	if claudeTokens != nil {
-		tokens["claude"] = claudeTokens.AccessToken
-	}
-	codexTokens, err := repo.GetCodexAuthTokens(ctx, userID)
-	require.NoError(t, err)
-	if codexTokens != nil {
-		tokens["codex"] = codexTokens.AccessToken
-	}
-	copilotTokens, err := repo.GetCopilotAuthTokens(ctx, userID)
-	require.NoError(t, err)
-	if copilotTokens != nil {
-		tokens["copilot"] = copilotTokens.GitHubAccessToken
-	}
-	antigravityTokens, err := repo.GetAntigravityAuthTokens(ctx, userID)
-	require.NoError(t, err)
-	if antigravityTokens != nil {
-		tokens["antigravity"] = antigravityTokens.AccessToken
-	}
-
 	stored := map[string]string{}
-	for _, provider := range isolationProviders {
-		key, hasKey := keys[provider]
-		token, hasToken := tokens[provider]
-		if !hasKey && !hasToken {
-			continue
-		}
-		stored[provider] = fmt.Sprintf("api_keys=%q token=%q", key, token)
+	for _, a := range accounts {
+		stored[a.Provider] += fmt.Sprintf("%q ", a.Secrets.Secret)
 	}
 	return stored
 }

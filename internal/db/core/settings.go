@@ -38,60 +38,13 @@ type ItemDefault struct {
 	UpdatedAt time.Time
 }
 
-// CodexAuthTokens stores persisted Codex OAuth credentials for a user.
-type CodexAuthTokens struct {
-	AccessToken  string
-	RefreshToken string
-	IDToken      string
-	AccountID    string
-}
-
-// CopilotAuthTokens stores persisted GitHub Copilot OAuth credentials for a user.
-type CopilotAuthTokens struct {
-	UserID             string
-	GitHubAccessToken  string
-	GitHubRefreshToken string
-	Tier               string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-}
-
-// ClaudeAuthTokens stores persisted Claude OAuth credentials for a user.
-type ClaudeAuthTokens struct {
-	AccessToken      string
-	RefreshToken     string
-	ExpiresAt        time.Time
-	AccountUUID      string
-	AccountEmail     string
-	OrganizationUUID string
-	OrganizationName string
-	Scope            string
-}
-
-// AntigravityAuthTokens stores persisted Antigravity (Google) OAuth
-// credentials for a user. The expiry is stored rather than derived: Google's
-// access token is opaque and its token response carries expires_in directly.
-type AntigravityAuthTokens struct {
-	AccessToken  string
-	RefreshToken string
-	ExpiresAt    time.Time
-	IDToken      string
-	Scope        string
-}
-
-// ProviderOAuthMarker is the api_keys value an OAuth provider (Claude, Codex,
-// GitHub Copilot, Antigravity) stores when it connects. It records THAT the
-// provider was connected; the credential itself lives in that provider's
-// sealed token table. It is never a credential: a reader that finds it must
-// load the token row, and a provider with a marker but no token row is not
-// connected.
+// ProviderOAuthMarker is the value the legacy api_keys rows of OAuth providers held to record that
+// the provider was connected. It is never a credential; the one-time legacy copy skips it.
 const ProviderOAuthMarker = "oauth"
 
 // AutomationProviderPrefix namespaces the api_keys rows that hold a user's
-// delegated automation credentials ("reliant-automation:<daemonID>"). They share
-// the table because it is the existing per-user secret store, but they are NOT
-// provider credentials: GetProviderAPIKeys never returns them, so no settings
-// surface lists them and no LLM driver is ever built from one.
+// delegated automation credentials ("reliant-automation:<daemonID>"). api_keys holds nothing
+// else any more: LLM credentials live in provider_accounts.
 const AutomationProviderPrefix = "reliant-automation:"
 
 // SettingStore is the shared contract for settings persistence across drivers.
@@ -103,48 +56,10 @@ type SettingStore interface {
 	UpdateSetting(ctx context.Context, setting *Setting) error
 	DeleteSetting(ctx context.Context, id string) error
 
-	GetProviderAPIKey(ctx context.Context, userID string, provider string) (string, error)
-	SetProviderAPIKey(ctx context.Context, userID string, provider, apiKey string) error
-	DeleteProviderAPIKey(ctx context.Context, userID string, provider string) error
-	GetProviderAPIKeys(ctx context.Context, userID string) (map[string]string, error)
-
-	GetCodexAuthTokens(ctx context.Context, userID string) (*CodexAuthTokens, error)
-	SetCodexAuthTokens(ctx context.Context, userID string, tokens CodexAuthTokens) error
-	// CompareAndSwapCodexAuthTokens persists tokens only if the currently
-	// stored refresh token still equals expectedRefreshToken, i.e. no
-	// concurrent rotation has been persisted since the caller read it.
-	// Returns true when the row was updated. Codex OAuth refresh tokens are
-	// single-use (rotated on every exchange), so a plain last-writer-wins
-	// upsert would let a stale rotation clobber the live token lineage.
-	CompareAndSwapCodexAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens CodexAuthTokens) (bool, error)
-	DeleteCodexAuthTokens(ctx context.Context, userID string) error
-
-	GetCopilotAuthTokens(ctx context.Context, userID string) (*CopilotAuthTokens, error)
-	SetCopilotAuthTokens(ctx context.Context, userID string, tokens CopilotAuthTokens) error
-	DeleteCopilotAuthTokens(ctx context.Context, userID string) error
-
-	GetClaudeAuthTokens(ctx context.Context, userID string) (*ClaudeAuthTokens, error)
-	SetClaudeAuthTokens(ctx context.Context, userID string, tokens ClaudeAuthTokens) error
-	// CompareAndSwapClaudeAuthTokens persists tokens only if the currently
-	// stored refresh token still equals expectedRefreshToken, i.e. no
-	// concurrent rotation has been persisted since the caller read it.
-	// Returns true when the row was updated. Claude OAuth refresh tokens are
-	// single-use (rotated on every exchange), so a plain last-writer-wins
-	// upsert would let a stale rotation clobber the live token lineage.
-	CompareAndSwapClaudeAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens ClaudeAuthTokens) (bool, error)
-	DeleteClaudeAuthTokens(ctx context.Context, userID string) error
-
-	GetAntigravityAuthTokens(ctx context.Context, userID string) (*AntigravityAuthTokens, error)
-	SetAntigravityAuthTokens(ctx context.Context, userID string, tokens AntigravityAuthTokens) error
-	// CompareAndSwapAntigravityAuthTokens persists tokens only if the
-	// currently stored refresh token still equals expectedRefreshToken.
-	// Returns true when the row was updated. Google does not rotate the
-	// refresh token on refresh, so the expected value is usually unchanged —
-	// but the row can still be replaced by a fresh sign-in (which DOES issue a
-	// new refresh token) or deleted by a disconnect, and last-writer-wins
-	// would let a stale in-flight rotation clobber either.
-	CompareAndSwapAntigravityAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens AntigravityAuthTokens) (bool, error)
-	DeleteAntigravityAuthTokens(ctx context.Context, userID string) error
+	// Automation tokens: the daemon:resume credential minted for one (user, daemon), kept in api_keys.
+	GetAutomationToken(ctx context.Context, userID, daemonID string) (string, error)
+	SetAutomationToken(ctx context.Context, userID, daemonID, token string) error
+	DeleteAutomationToken(ctx context.Context, userID, daemonID string) error
 
 	GetVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string) (*bool, error)
 	ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error)

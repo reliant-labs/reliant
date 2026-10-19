@@ -21,8 +21,8 @@ import (
 type automationGrants struct {
 	client AutomationTokens
 	keys   interface {
-		SetProviderAPIKey(ctx context.Context, userID, provider, apiKey string) error
-		DeleteProviderAPIKey(ctx context.Context, userID, provider string) error
+		SetAutomationToken(ctx context.Context, userID, daemonID, token string) error
+		DeleteAutomationToken(ctx context.Context, userID, daemonID string) error
 	}
 	triggers interface {
 		ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
@@ -46,7 +46,7 @@ func (g *automationGrants) ensure(ctx context.Context, userID, daemonID string) 
 			"user_id", userID, "daemon_id", daemonID, "error", err)
 		return
 	}
-	if err := g.keys.SetProviderAPIKey(ctx, userID, automationcred.Provider(daemonID), tok.Plaintext); err != nil {
+	if err := g.keys.SetAutomationToken(ctx, userID, daemonID, tok.Plaintext); err != nil {
 		logging.Warn("automation access not granted: could not store daemon:resume token",
 			"user_id", userID, "daemon_id", daemonID, "error", err)
 	}
@@ -78,7 +78,7 @@ func (g *automationGrants) releaseIfUnused(ctx context.Context, userID, daemonID
 		logging.Warn("daemon:resume token forgotten locally but not revoked remotely: no signed-in session",
 			"user_id", userID, "daemon_id", daemonID)
 	}
-	if err := g.keys.DeleteProviderAPIKey(ctx, userID, automationcred.Provider(daemonID)); err != nil {
+	if err := g.keys.DeleteAutomationToken(ctx, userID, daemonID); err != nil {
 		logging.Warn("could not delete stored automation token", "user_id", userID, "daemon_id", daemonID, "error", err)
 	}
 }

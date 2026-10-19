@@ -25,7 +25,7 @@ func (e *triggerTestEnv) createNamed(t *testing.T, name string) string {
 }
 
 func (e *triggerTestEnv) stored(t *testing.T) (string, error) {
-	return e.repo.GetProviderAPIKey(e.ctx, e.userID, automationcred.Provider(e.daemonID))
+	return e.repo.GetAutomationToken(e.ctx, e.userID, e.daemonID)
 }
 
 func TestTriggerCreateMintsDaemonBoundResumeToken(t *testing.T) {
@@ -44,7 +44,7 @@ func TestTriggerCreateMintsDaemonBoundResumeToken(t *testing.T) {
 	assert.Equal(t, "rlat_resume_"+env.daemonID, got)
 
 	// Never visible as a provider credential.
-	all, err := env.repo.GetProviderAPIKeys(env.ctx, env.userID)
+	all, err := env.repo.ListProviderAccounts(env.ctx, env.userID)
 	require.NoError(t, err)
 	assert.Empty(t, all)
 }

@@ -9,14 +9,10 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // KeyName is the device name the token is minted under.
 const KeyName = "reliant-automation"
-
-// Provider is the reserved api_keys provider for one daemon's token.
-func Provider(daemonID string) string { return core.AutomationProviderPrefix + daemonID }
 
 type allowedKey struct{}
 
@@ -42,7 +38,7 @@ func (r *resolver) BearerFor(ctx context.Context, userID, daemonID string) (stri
 	if !allowed(ctx) || r.keys == nil || daemonID == "" || userID == "" {
 		return "", nil
 	}
-	token, err := r.keys.GetProviderAPIKey(ctx, userID, Provider(daemonID))
+	token, err := r.keys.GetAutomationToken(ctx, userID, daemonID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}

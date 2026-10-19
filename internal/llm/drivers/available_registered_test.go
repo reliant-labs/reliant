@@ -22,7 +22,7 @@ func TestBuildAvailableDrivers_SkipsProvidersWithoutRegisteredDriver(t *testing.
 	for id, key := range map[string]string{
 		"xai": "xai-key", "groq": "gsk-key", "openai": "sk-openai", "openrouter": "sk-or",
 	} {
-		require.NoError(t, repo.SetProviderAPIKey(ctx, userID, id, key))
+		db.SeedProviderAccount(t, repo, userID, id, key)
 	}
 
 	avail, err := BuildAvailableDrivers(ctx, repo, userID)

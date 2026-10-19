@@ -135,7 +135,7 @@ func connectOnlyAnthropic(t *testing.T, ctx context.Context, repo *db.Repo, user
 		return nil, errors.New("no provider catalog in this test")
 	}
 	t.Cleanup(func() { llmdrivers.AccountAvailabilityClient = original })
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "anthropic", "test-key-anthropic"))
+	db.SeedProviderAccount(t, repo, userID, "anthropic", "test-key-anthropic")
 }
 
 // retiredModelID is a model the registry does not know — what a composer

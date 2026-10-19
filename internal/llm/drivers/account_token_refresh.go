@@ -42,19 +42,12 @@ import (
 // fails (network, 5xx) never does: the credential is not in question.
 
 // AccountTokenStore is the slice of the account store the coordinator needs. db.Repository
-// satisfies it. A store that also implements legacyAdopter gets the expand-period adoption.
+// satisfies it.
 type AccountTokenStore interface {
 	GetProviderAccountWithSecrets(ctx context.Context, userID, accountID string) (*core.AccountWithSecrets, error)
 	CompareAndSwapAccountTokens(ctx context.Context, userID, accountID, expectedRefresh string, next core.AccountTokens) (bool, error)
 	PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
 	UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error)
-}
-
-// legacyAdopter is the expand-period view of the legacy credential tables, which the previous
-// release (still live during a rolling deploy) may rotate behind our back.
-type legacyAdopter interface {
-	core.LegacyCredentialSource
-	SyncLegacyCredentials(ctx context.Context, userID string) error
 }
 
 // ProviderRefresh is one provider's token exchange: refresh token in, the new credential out.
@@ -221,10 +214,9 @@ func refreshAndPersistAccount(ctx context.Context, store AccountTokenStore, user
 		if rerr == nil {
 			break
 		}
-		// The refresh token may have been consumed elsewhere in the window since our re-read:
-		// by another process (the store now holds a newer rotation) or by the previous release
-		// (the legacy table does). Adopt that lineage rather than surface a terminal error for
-		// a session that is actually fine.
+		// The refresh token may have been consumed elsewhere in the window since our re-read
+		// (the store now holds a newer rotation from another process). Adopt that lineage
+		// rather than surface a terminal error for a session that is actually fine.
 		adopted, retryWith := adoptNewerLineage(ctx, store, userID, accountID, held, consumed)
 		if adopted != nil {
 			logging.Warn("Account token refresh failed but another writer rotated the tokens; adopting them",
@@ -278,27 +270,12 @@ func refreshAndPersistAccount(ctx context.Context, store AccountTokenStore, user
 // adopt, or the refresh token to retry with when the lineage moved but its access token is not
 // usable yet.
 func adoptNewerLineage(ctx context.Context, store AccountTokenStore, userID, accountID string, held llm.OAuthTokens, consumed string) (*llm.OAuthTokens, string) {
-	if live, ok := newerLive(loadAccount(ctx, store, userID, accountID), held); ok {
+	stored := loadAccount(ctx, store, userID, accountID)
+	if live, ok := newerLive(stored, held); ok {
 		return &live, ""
 	}
-	// Expand period: the previous release rotates the legacy row, not this one. Pull a newer
-	// legacy credential into the account before giving up on it.
-	if la, ok := store.(legacyAdopter); ok {
-		cred, err := la.ReadLegacyCredential(ctx, userID, accountID)
-		if err != nil {
-			logging.Warn("Failed to read the legacy credential during refresh recovery", "user_id", userID, "account_id", accountID, "error", err)
-		} else if cred != nil && cred.Secrets.Refresh != "" && cred.Secrets.Refresh != consumed {
-			if err := la.SyncLegacyCredentials(ctx, userID); err != nil {
-				logging.Warn("Failed to adopt the legacy credential during refresh recovery", "user_id", userID, "account_id", accountID, "error", err)
-			}
-			fresh := loadAccount(ctx, store, userID, accountID)
-			if live, ok := newerLive(fresh, held); ok {
-				return &live, ""
-			}
-			if fresh != nil && fresh.Secrets.Refresh != "" && fresh.Secrets.Refresh != consumed {
-				return nil, fresh.Secrets.Refresh
-			}
-		}
+	if stored != nil && stored.Secrets.Refresh != "" && stored.Secrets.Refresh != consumed {
+		return nil, stored.Secrets.Refresh
 	}
 	return nil, ""
 }
@@ -315,10 +292,10 @@ func markNeedsReauth(ctx context.Context, store AccountTokenStore, userID, accou
 		"user_id", userID, "account_id", accountID)
 }
 
-// rewriteIdentity replaces a `legacy:` placeholder identity with the one the refresh response
+// rewriteIdentity replaces a placeholder identity with the one the refresh response
 // states (design §3.3). The store merges with an account that already owns that identity.
 func rewriteIdentity(ctx context.Context, store AccountTokenStore, before *core.AccountWithSecrets, next core.AccountTokens, state llm.OAuthTokens) {
-	if before == nil || next.IdentityKey == "" || next.IdentityKey == before.IdentityKey || !core.IsLegacyIdentityKey(before.IdentityKey) {
+	if before == nil || next.IdentityKey == "" || next.IdentityKey == before.IdentityKey || !core.IsPlaceholderIdentityKey(before.IdentityKey) {
 		return
 	}
 	first := func(a, b string) string {

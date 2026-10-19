@@ -38,16 +38,21 @@ func newHealFixture(t *testing.T, minter *fakeMinter) (*db.Repo, *ReliantKeyHeal
 
 func storedReliantKey(t *testing.T, repo *db.Repo, user string) string {
 	t.Helper()
-	k, err := repo.GetProviderAPIKey(context.Background(), user, "reliant")
+	accounts, err := repo.ListProviderAccountsWithSecrets(context.Background(), user)
 	require.NoError(t, err)
-	return k
+	for _, a := range accounts {
+		if a.Provider == "reliant" {
+			return a.Secrets.Secret
+		}
+	}
+	return ""
 }
 
 func TestHeal_ReplacesLegacyKey(t *testing.T) {
 	minter := &fakeMinter{key: validRlat}
 	repo, h := newHealFixture(t, minter)
 	ctx := context.Background()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u1", "reliant", legacyKey))
+	db.SeedProviderAccount(t, repo, "u1", "reliant", legacyKey)
 
 	key, healed, err := h.Heal(ctx, "u1")
 	require.NoError(t, err)
@@ -65,7 +70,7 @@ func TestHeal_FailureKeepsOldKeyAndReports(t *testing.T) {
 	minter := &fakeMinter{err: errors.New("control-plane down")}
 	repo, h := newHealFixture(t, minter)
 	ctx := context.Background()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u1", "reliant", legacyKey))
+	db.SeedProviderAccount(t, repo, "u1", "reliant", legacyKey)
 
 	_, healed, err := h.Heal(ctx, "u1")
 	require.Error(t, err)
@@ -83,7 +88,7 @@ func TestHeal_ConcurrentHealsMintOnce(t *testing.T) {
 	minter := &fakeMinter{key: validRlat}
 	repo, h := newHealFixture(t, minter)
 	ctx := context.Background()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u1", "reliant", legacyKey))
+	db.SeedProviderAccount(t, repo, "u1", "reliant", legacyKey)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
@@ -110,7 +115,7 @@ func TestHeal_NoKeyAndValidKeyAreUntouched(t *testing.T) {
 	assert.False(t, healed)
 	assert.Empty(t, key)
 
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u2", "reliant", validRlat))
+	db.SeedProviderAccount(t, repo, "u2", "reliant", validRlat)
 	_, healed, err = h.Heal(ctx, "u2")
 	require.NoError(t, err)
 	assert.False(t, healed)
@@ -122,9 +127,9 @@ func TestSweep_HealsAllAndContinuesPastFailures(t *testing.T) {
 	repo, h := newHealFixture(t, minter)
 	ctx := context.Background()
 	for _, u := range []string{"a", "b", "c"} {
-		require.NoError(t, repo.SetProviderAPIKey(ctx, u, "reliant", legacyKey))
+		db.SeedProviderAccount(t, repo, u, "reliant", legacyKey)
 	}
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "ok", "reliant", validRlat))
+	db.SeedProviderAccount(t, repo, "ok", "reliant", validRlat)
 
 	healed, failed, err := h.Sweep(ctx)
 	require.NoError(t, err)
@@ -134,7 +139,7 @@ func TestSweep_HealsAllAndContinuesPastFailures(t *testing.T) {
 		assert.Equal(t, validRlat, storedReliantKey(t, repo, u))
 	}
 
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "d", "reliant", legacyKey))
+	db.SeedProviderAccount(t, repo, "d", "reliant", legacyKey)
 	minter.err = errors.New("boom")
 	healed, failed, err = h.Sweep(ctx)
 	require.NoError(t, err)
@@ -149,7 +154,7 @@ func TestBuildAvailableDrivers_HealsLegacyKeyOnRead(t *testing.T) {
 	SetReliantKeyHealer(h)
 	t.Cleanup(func() { SetReliantKeyHealer(nil) })
 	ctx := context.Background()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u1", "reliant", legacyKey))
+	db.SeedProviderAccount(t, repo, "u1", "reliant", legacyKey)
 
 	available, err := BuildAvailableDrivers(ctx, repo, "u1")
 	require.NoError(t, err)

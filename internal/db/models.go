@@ -174,18 +174,6 @@ type ReapedWorkflow = core.ReapedWorkflow
 // Setting is an alias to the shared core setting model.
 type Setting = core.Setting
 
-// CodexAuthTokens is an alias to the shared core Codex OAuth token model.
-type CodexAuthTokens = core.CodexAuthTokens
-
-// CopilotAuthTokens is an alias to the shared core Copilot OAuth token model.
-type CopilotAuthTokens = core.CopilotAuthTokens
-
-// AntigravityAuthTokens is an alias to the shared core Antigravity OAuth token model.
-type AntigravityAuthTokens = core.AntigravityAuthTokens
-
-// ClaudeAuthTokens is an alias to the shared core Claude OAuth token model.
-type ClaudeAuthTokens = core.ClaudeAuthTokens
-
 // VisibilityOverride is an alias to the shared core visibility override model.
 type VisibilityOverride = core.VisibilityOverride
 

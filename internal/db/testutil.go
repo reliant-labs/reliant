@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/crypto"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -535,4 +536,31 @@ func processAlive(pid int) bool {
 // DDL (database names cannot be parameterized).
 func quoteIdent(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+}
+
+// SeedProviderAccount connects userID to provider with secret, the way a sign-in or an added key
+// would: managed for "reliant", a device token for "copilot", an OAuth session (with refresh
+// token) for the other subscription providers, an API key for the rest. For tests that need a
+// connected provider and care about nothing else.
+func SeedProviderAccount(t *testing.T, repo *Repo, userID, provider, secret string) core.ProviderAccount {
+	t.Helper()
+	u := core.AccountUpsert{UserID: userID, Provider: provider, Secrets: core.AccountSecrets{Secret: secret}}
+	switch provider {
+	case "reliant":
+		u.AuthKind, u.IdentityKey = core.AuthKindManaged, core.ManagedIdentityKey
+	case "copilot":
+		u.AuthKind, u.IdentityKey = core.AuthKindDevice, core.GitHubIdentityKey("seed")
+	case "claude", "codex", "antigravity":
+		u.AuthKind, u.IdentityKey = core.AuthKindOAuth, core.PlaceholderIdentityKey("seed-"+provider)
+		u.Secrets.Refresh = provider + "-refresh"
+		u.ExpiresAt = time.Now().Add(time.Hour)
+	default:
+		u.AuthKind, u.IdentityKey = core.AuthKindAPIKey, core.APIKeyIdentityKey(userID, provider, secret)
+		u.KeyHint = core.KeyHint(secret)
+	}
+	acct, _, err := repo.UpsertProviderAccount(context.Background(), u)
+	if err != nil {
+		t.Fatalf("seed %s account: %v", provider, err)
+	}
+	return acct
 }

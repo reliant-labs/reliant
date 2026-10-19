@@ -14,7 +14,6 @@ import (
 
 	cpdaemonv1 "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1"
 	"github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1/controlplanev1connect"
-	"github.com/reliant-labs/reliant/internal/automationcred"
 )
 
 // stubDaemonService is the control plane's controlplane.v1.DaemonService —
@@ -130,7 +129,7 @@ func TestResumerRefusesConnectorCallerEvenWithStoredAutomationToken(t *testing.T
 	r := NewControlPlaneResumer(srv.URL)
 
 	// The stored token exists for (user-1, daemon-1) — the strongest case.
-	keys := map[string]string{"user-1|" + automationcred.Provider("daemon-1"): "rlat_resume"}
+	keys := map[string]string{"user-1|daemon-1": "rlat_resume"}
 	require.NotEmpty(t, keys)
 
 	err := r.ResumeDaemon(context.Background(), "user-1", "daemon-1") // no caller token

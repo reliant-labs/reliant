@@ -38,7 +38,7 @@ func TestCheckMediaAvailable_NoProviderYieldsSharedError(t *testing.T) {
 	ctx := context.Background()
 
 	// Only an anthropic key: serves neither image nor video.
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "media-none", "anthropic", "sk-ant-test"))
+	db.SeedProviderAccount(t, repo, "media-none", "anthropic", "sk-ant-test")
 
 	for _, modality := range []models.Modality{models.ModalityVideo, models.ModalityImage} {
 		err := CheckMediaAvailable(ctx, "media-none", modality)
@@ -64,12 +64,12 @@ func TestCheckMediaAvailable_ProvidersThatServeTheModality(t *testing.T) {
 	InitializeAPIKeyProvider(repo)
 	ctx := context.Background()
 
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "media-gem", "gemini", "AIza-test"))
+	db.SeedProviderAccount(t, repo, "media-gem", "gemini", "AIza-test")
 	assert.NoError(t, CheckMediaAvailable(ctx, "media-gem", models.ModalityVideo))
 	assert.NoError(t, CheckMediaAvailable(ctx, "media-gem", models.ModalityImage))
 
 	// Managed credit serves both image and video.
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "media-managed", "reliant", "rlat_abcdef0123456789abcdef0123456789"))
+	db.SeedProviderAccount(t, repo, "media-managed", "reliant", "rlat_abcdef0123456789abcdef0123456789")
 	assert.NoError(t, CheckMediaAvailable(ctx, "media-managed", models.ModalityVideo))
 	assert.NoError(t, CheckMediaAvailable(ctx, "media-managed", models.ModalityImage))
 }
@@ -80,7 +80,7 @@ func TestResolveVideo_TierSelectsModelAndPreferenceOnlyAppliesToDefault(t *testi
 	InitializeAPIKeyProvider(repo)
 	ctx := context.Background()
 	userID := "media-prefs"
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "gemini", "AIza-test"))
+	db.SeedProviderAccount(t, repo, userID, "gemini", "AIza-test")
 
 	resolve := func(tags ...string) string {
 		resolved, _, err := resolveMediaModel(ctx, userID, models.ModelSelector{Tags: tags}, models.ModalityVideo)
@@ -96,7 +96,7 @@ func TestResolveVideo_TierSelectsModelAndPreferenceOnlyAppliesToDefault(t *testi
 	}
 
 	// Veo is served on Reliant credits, from Vertex.
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "rlat_abcdef0123456789abcdef0123456789"))
+	db.SeedProviderAccount(t, repo, userID, "reliant", "rlat_abcdef0123456789abcdef0123456789")
 	assert.Equal(t, "gemini-omni-1.1-flash", resolve("video-gen", "flagship"), "standard -> Omni")
 	assert.Equal(t, "veo-3.1-generate", resolve("video-gen", "cinematic"), "cinematic -> Veo 3.1")
 	assert.Equal(t, "veo-3.1-lite-generate", resolve("video-gen", "cheap"), "fast -> Veo Lite")
@@ -120,7 +120,7 @@ func TestResolveImage_FastTierAndPreference(t *testing.T) {
 	InitializeAPIKeyProvider(repo)
 	ctx := context.Background()
 	userID := "media-img-prefs"
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "gemini", "AIza-test"))
+	db.SeedProviderAccount(t, repo, userID, "gemini", "AIza-test")
 
 	resolve := func(tags ...string) string {
 		resolved, _, err := resolveMediaModel(ctx, userID, models.ModelSelector{Tags: tags}, models.ModalityImage)

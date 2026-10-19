@@ -53,7 +53,7 @@ func TestCatalogService_ListModels_ReliantOnlyExposesCuratedAllowlist(t *testing
 	// provision it here to represent a real authenticated user. It must have
 	// the rlat_ access-token shape: a legacy rlnt_ key is not a usable gateway
 	// credential and is skipped by BuildAvailableDrivers.
-	require.NoError(t, repo.SetProviderAPIKey(context.Background(), "test-user", "reliant", "rlat_abcdef0123456789abcdef0123456789"))
+	db.SeedProviderAccount(t, repo, "test-user", "reliant", "rlat_abcdef0123456789abcdef0123456789")
 
 	svc := NewTestCatalog(t)
 	resp, err := svc.ListModels(ctx, connect.NewRequest(&reliantv1.ListModelsRequest{}))
@@ -108,8 +108,8 @@ func TestCatalogService_ListModels_HidesUnregisteredDriversAndReportsTemperature
 
 	llmdrivers.InitializeAPIKeyProvider(repo)
 	ctx := newCatalogServiceTestContext()
-	require.NoError(t, repo.SetProviderAPIKey(context.Background(), "test-user", "xai", "xai-test-key"))
-	require.NoError(t, repo.SetProviderAPIKey(context.Background(), "test-user", "openrouter", "sk-or-test"))
+	db.SeedProviderAccount(t, repo, "test-user", "xai", "xai-test-key")
+	db.SeedProviderAccount(t, repo, "test-user", "openrouter", "sk-or-test")
 
 	resp, err := NewTestCatalog(t).ListModels(ctx, connect.NewRequest(&reliantv1.ListModelsRequest{}))
 	require.NoError(t, err)

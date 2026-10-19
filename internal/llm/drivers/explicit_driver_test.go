@@ -30,8 +30,8 @@ func TestDefaultGetDriver_ExplicitDriverThatCannotServeTheModelFails(t *testing.
 	userID := "explicit-driver-user"
 	// openrouter CAN serve claude-5-sonnet, so the old fallback had somewhere
 	// to go; reliant (the explicit pick) cannot.
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "openrouter", "sk-or-test"))
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "rlat_abcdef0123456789abcdef0123456789"))
+	db.SeedProviderAccount(t, repo, userID, "openrouter", "sk-or-test")
+	db.SeedProviderAccount(t, repo, userID, "reliant", "rlat_abcdef0123456789abcdef0123456789")
 	require.False(t, models.CanDriverUseModel("reliant", models.ModelID("claude-5-sonnet")),
 		"precondition: the reliant gateway does not serve claude-5-sonnet")
 	require.True(t, models.CanDriverUseModel("openrouter", models.ModelID("claude-5-sonnet")),
@@ -53,7 +53,7 @@ func TestDefaultGetDriver_UnpinnedModelStillAutoSelects(t *testing.T) {
 
 	ctx := context.Background()
 	userID := "unpinned-driver-user"
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "openrouter", "sk-or-test"))
+	db.SeedProviderAccount(t, repo, userID, "openrouter", "sk-or-test")
 
 	driver, err := defaultGetDriver(ctx, userID, models.Preferences{{ModelID: "claude-5-sonnet"}})
 

@@ -122,10 +122,12 @@ type AccountUpsert struct {
 	KeyHint, Scope    string
 	Secrets           AccountSecrets
 	ExpiresAt         time.Time
-	// ReplaceIdentityOf names a `legacy:<…>` identity this write supersedes: the row holding it is
-	// rewritten to IdentityKey in place (design §3.3). If another row already owns IdentityKey the
-	// two merge: the row with the newer updated_at keeps its tokens and takes the smaller
-	// priority, thread assignments are repointed to it, and the other row is deleted.
+	// ReplaceIdentityOf names a placeholder identity (PlaceholderIdentityKey) this write supersedes:
+	// the row holding it is rewritten to IdentityKey in place (design §3.3). A non-placeholder value
+	// is ignored: a real identity is never rewritten. If another row already owns IdentityKey the
+	// two are the same upstream account and merge INTO that row (the placeholder is the one deleted):
+	// it keeps its id, label, pause and limit state, takes the smaller priority and the newer tokens,
+	// and thread assignments are repointed to it.
 	ReplaceIdentityOf string
 }
 
@@ -144,7 +146,7 @@ type AccountTokens struct {
 	Email, OrganizationName, Plan, PlanRaw string
 	// IdentityKey, ExternalAccountID and OrganizationID are what the refresh response says the
 	// account is. The compare-and-swap ignores them; the refresh coordinator uses them to
-	// rewrite a `legacy:` placeholder identity (design §3.3).
+	// rewrite a placeholder identity (design §3.3).
 	IdentityKey, ExternalAccountID, OrganizationID string
 }
 
@@ -232,32 +234,20 @@ type ProviderAccountStore interface {
 	RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error)
 }
 
-// LegacyCredential is a credential still held in a legacy token table, read during the
-// expand release only.
-type LegacyCredential struct {
-	Source      string // legacy table
-	IdentityKey string // identity derived from the legacy row
-	Secrets     AccountSecrets
-	ExpiresAt   time.Time
-	UpdatedAt   time.Time
-}
-
-// LegacyCredentialSource reads the legacy row an account mirrors, so a failed refresh can adopt
-// a newer lineage the previous release wrote (design §1.4). Deleted with the legacy tables.
-type LegacyCredentialSource interface {
-	// ReadLegacyCredential returns (nil, nil) when the account mirrors no legacy row or the row is gone.
-	ReadLegacyCredential(ctx context.Context, userID, accountID string) (*LegacyCredential, error)
-}
-
 // ManagedIdentityKey is the identity of the managed Reliant key; at most one per user.
 const ManagedIdentityKey = "managed"
 
-// LegacyIdentityKey is the placeholder identity of a credential whose upstream identity is not
-// yet known; the first refresh response rewrites it (AccountUpsert.ReplaceIdentityOf).
-func LegacyIdentityKey(legacyRowID string) string { return "legacy:" + legacyRowID }
+// placeholderIdentityPrefix is stored in rows, so it stays "legacy:" for the placeholders already
+// written; only the Go names say what it is.
+const placeholderIdentityPrefix = "legacy:"
 
-// IsLegacyIdentityKey reports whether k is a placeholder from LegacyIdentityKey.
-func IsLegacyIdentityKey(k string) bool { return strings.HasPrefix(k, "legacy:") }
+// PlaceholderIdentityKey is the identity of a credential whose upstream identity is not yet
+// known; the first refresh response rewrites it (AccountUpsert.ReplaceIdentityOf). A
+// placeholder is not an identity: it never outranks a real one.
+func PlaceholderIdentityKey(rowID string) string { return placeholderIdentityPrefix + rowID }
+
+// IsPlaceholderIdentityKey reports whether k is a placeholder from PlaceholderIdentityKey.
+func IsPlaceholderIdentityKey(k string) bool { return strings.HasPrefix(k, placeholderIdentityPrefix) }
 
 // ClaudeIdentityKey keys a Claude subscription account. The organization is part of the key
 // because limits and prompt cache are per organization.

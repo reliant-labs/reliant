@@ -13,7 +13,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/reliant-labs/reliant/internal/automationcred"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/stretchr/testify/require"
 )
@@ -39,46 +38,42 @@ func allowLegacyRows(t *testing.T, raw *sql.DB) {
 	require.NoError(t, err)
 }
 
-func TestSetProviderAPIKeyWritesSealedColumn(t *testing.T) {
+func TestSetAutomationTokenWritesSealedColumn(t *testing.T) {
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u1", "anthropic", "sk-plain"))
+	require.NoError(t, repo.SetAutomationToken(ctx, "u1", "anthropic", "sk-plain"))
 
 	var plain string
 	var sealed []byte
 	require.NoError(t, raw.QueryRowContext(ctx,
-		`SELECT api_key, api_key_sealed FROM api_keys WHERE user_id='u1' AND provider='anthropic'`).Scan(&plain, &sealed))
+		`SELECT api_key, api_key_sealed FROM api_keys WHERE user_id='u1' AND provider='reliant-automation:anthropic'`).Scan(&plain, &sealed))
 	require.Equal(t, "", plain, "contract: plaintext column is never written")
 	require.NotEmpty(t, sealed, "sealed column must be written")
 	require.NotContains(t, string(sealed), "sk-plain")
 }
 
-func TestGetProviderAPIKeyIgnoresPlaintextColumn(t *testing.T) {
+func TestGetAutomationTokenIgnoresPlaintextColumn(t *testing.T) {
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u1", "anthropic", "sk-real"))
+	require.NoError(t, repo.SetAutomationToken(ctx, "u1", "anthropic", "sk-real"))
 	_, err := raw.ExecContext(ctx, `UPDATE api_keys SET api_key='TAMPERED' WHERE user_id='u1'`)
 	require.NoError(t, err)
 
-	got, err := repo.GetProviderAPIKey(ctx, "u1", "anthropic")
+	got, err := repo.GetAutomationToken(ctx, "u1", "anthropic")
 	require.NoError(t, err)
 	require.Equal(t, "sk-real", got)
-
-	all, err := repo.GetProviderAPIKeys(ctx, "u1")
-	require.NoError(t, err)
-	require.Equal(t, map[string]string{"anthropic": "sk-real"}, all)
 }
 
 func TestSealedAPIKeyDoesNotOpenWhenTransplanted(t *testing.T) {
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u1", "anthropic", "sk-u1"))
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u2", "anthropic", "sk-u2"))
+	require.NoError(t, repo.SetAutomationToken(ctx, "u1", "anthropic", "sk-u1"))
+	require.NoError(t, repo.SetAutomationToken(ctx, "u2", "anthropic", "sk-u2"))
 	// Copy u1's ciphertext over u2's row.
 	_, err := raw.ExecContext(ctx, `UPDATE api_keys SET api_key_sealed=(SELECT api_key_sealed FROM api_keys WHERE user_id='u1')
 		WHERE user_id='u2'`)
 	require.NoError(t, err)
-	_, err = repo.GetProviderAPIKey(ctx, "u2", "anthropic")
+	_, err = repo.GetAutomationToken(ctx, "u2", "anthropic")
 	require.Error(t, err, "a transplanted ciphertext must not open")
 }
 
@@ -86,7 +81,7 @@ func TestBackfillSealsLegacyRowsAndIsIdempotent(t *testing.T) {
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
 	allowLegacyRows(t, raw)
-	for i, p := range []string{"openai", "anthropic", "google"} {
+	for i, p := range []string{"reliant-automation:openai", "reliant-automation:anthropic", "reliant-automation:google"} {
 		_, err := raw.ExecContext(ctx,
 			`INSERT INTO api_keys (id, user_id, provider, api_key) VALUES ($1, $2, $3, $4)`,
 			"legacy-"+p, "u"+string(rune('1'+i%2)), p, "legacy-"+p)
@@ -105,58 +100,56 @@ func TestBackfillSealsLegacyRowsAndIsIdempotent(t *testing.T) {
 	require.EqualValues(t, 0, n, "count(api_key_sealed IS NULL) must reach zero")
 
 	var before []byte
-	require.NoError(t, raw.QueryRowContext(ctx, `SELECT api_key_sealed FROM api_keys WHERE id='legacy-openai'`).Scan(&before))
+	require.NoError(t, raw.QueryRowContext(ctx, `SELECT api_key_sealed FROM api_keys WHERE id='legacy-reliant-automation:openai'`).Scan(&before))
 
 	sealed, err = repo.BackfillAPIKeys(ctx, 2)
 	require.NoError(t, err)
 	require.Equal(t, 0, sealed, "second run is a no-op")
 	var after []byte
-	require.NoError(t, raw.QueryRowContext(ctx, `SELECT api_key_sealed FROM api_keys WHERE id='legacy-openai'`).Scan(&after))
+	require.NoError(t, raw.QueryRowContext(ctx, `SELECT api_key_sealed FROM api_keys WHERE id='legacy-reliant-automation:openai'`).Scan(&after))
 	require.Equal(t, before, after, "idempotent: existing ciphertext is not re-sealed")
 
 	_, err = raw.ExecContext(ctx, `UPDATE api_keys SET api_key='TAMPERED'`)
 	require.NoError(t, err)
-	got, err := repo.GetProviderAPIKey(ctx, "u1", "openai")
+	got, err := repo.GetAutomationToken(ctx, "u1", "openai")
 	require.NoError(t, err)
-	require.Equal(t, "legacy-openai", got, "backfilled value is served from the sealed column")
+	require.Equal(t, "legacy-reliant-automation:openai", got, "backfilled value is served from the sealed column")
 }
 
 func TestUnsealedRowDoesNotFallBackToPlaintext(t *testing.T) {
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
 	allowLegacyRows(t, raw)
-	_, err := raw.ExecContext(ctx, `INSERT INTO api_keys (id, user_id, provider, api_key) VALUES ('l1','u1','openai','legacy')`)
+	_, err := raw.ExecContext(ctx, `INSERT INTO api_keys (id, user_id, provider, api_key) VALUES ('l1','u1','reliant-automation:openai','legacy')`)
 	require.NoError(t, err)
-	_, err = repo.GetProviderAPIKey(ctx, "u1", "openai")
+	_, err = repo.GetAutomationToken(ctx, "u1", "openai")
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "legacy")
-	_, err = repo.GetProviderAPIKeys(ctx, "u1")
-	require.Error(t, err)
 }
 
 func TestClearedSealedColumnErrorsInsteadOfFallingBack(t *testing.T) {
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u1", "anthropic", "sk-real"))
+	require.NoError(t, repo.SetAutomationToken(ctx, "u1", "anthropic", "sk-real"))
 	_, err := raw.ExecContext(ctx, `UPDATE api_keys SET api_key='sk-plain-decoy', api_key_sealed=NULL WHERE user_id='u1'`)
 	// The contract CHECK may reject the NULL; either way no fallback is possible.
 	if err == nil {
-		_, err = repo.GetProviderAPIKey(ctx, "u1", "anthropic")
+		_, err = repo.GetAutomationToken(ctx, "u1", "anthropic")
 		require.Error(t, err)
 		return
 	}
 	_, err = raw.ExecContext(ctx, `UPDATE api_keys SET api_key='sk-plain-decoy', api_key_sealed='\x'::bytea WHERE user_id='u1'`)
 	require.NoError(t, err)
-	_, err = repo.GetProviderAPIKey(ctx, "u1", "anthropic")
+	_, err = repo.GetAutomationToken(ctx, "u1", "anthropic")
 	require.Error(t, err)
 }
 
-func TestSetProviderAPIKeyRequiresVault(t *testing.T) {
+func TestSetAutomationTokenRequiresVault(t *testing.T) {
 	_, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	bare := NewRepoWithDriver(raw, DriverPostgres)
-	require.Error(t, bare.SetProviderAPIKey(context.Background(), "u1", "openai", "sk"))
-	_, err := bare.GetProviderAPIKey(context.Background(), "u1", "openai")
+	require.Error(t, bare.SetAutomationToken(context.Background(), "u1", "openai", "sk"))
+	_, err := bare.GetAutomationToken(context.Background(), "u1", "openai")
 	require.Error(t, err)
 }
 
@@ -190,7 +183,7 @@ func TestBootRefusesWhenUnsealedRowRemainsAfterBackfill(t *testing.T) {
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
 	real := vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})
-	_, err = raw.ExecContext(ctx, `INSERT INTO api_keys (id, user_id, provider, api_key) VALUES ('l1','u1','openai','legacy')`)
+	_, err = raw.ExecContext(ctx, `INSERT INTO api_keys (id, user_id, provider, api_key) VALUES ('l1','u1','reliant-automation:openai','legacy')`)
 	require.NoError(t, err)
 
 	err = sealAPIKeys(ctx, repo, racingSealer{CredentialSealerForTest: real, raw: raw})
@@ -201,7 +194,7 @@ func TestBootRefusesWhenUnsealedRowRemainsAfterBackfill(t *testing.T) {
 	_, err = raw.ExecContext(ctx, `ALTER TABLE api_keys ADD CONSTRAINT api_keys_sealed_not_null CHECK (api_key_sealed IS NOT NULL) NOT VALID`)
 	require.NoError(t, err)
 	require.NoError(t, sealAPIKeys(ctx, repo, real))
-	got, err := repo.GetProviderAPIKey(ctx, "u1", "openai")
+	got, err := repo.GetAutomationToken(ctx, "u1", "openai")
 	require.NoError(t, err)
 	require.Equal(t, "legacyx", got)
 }
@@ -220,9 +213,9 @@ func TestContractMigrationToleratesLegacyNullRow(t *testing.T) {
 	// Rewind to the pre-contract state: no constraint, one unsealed and one sealed row.
 	_, err := raw.Exec(`ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS api_keys_sealed_not_null`)
 	require.NoError(t, err)
-	_, err = raw.Exec(`INSERT INTO api_keys (id, user_id, provider, api_key) VALUES ('legacy','u1','openai','plain-legacy')`)
+	_, err = raw.Exec(`INSERT INTO api_keys (id, user_id, provider, api_key) VALUES ('legacy','u1','reliant-automation:openai','plain-legacy')`)
 	require.NoError(t, err)
-	_, err = raw.Exec(`INSERT INTO api_keys (id, user_id, provider, api_key, api_key_sealed) VALUES ('done','u1','google','plain-done','\x01')`)
+	_, err = raw.Exec(`INSERT INTO api_keys (id, user_id, provider, api_key, api_key_sealed) VALUES ('done','u1','reliant-automation:google','plain-done','\x01')`)
 	require.NoError(t, err)
 
 	runContractMigration(t, raw)
@@ -241,7 +234,7 @@ func TestContractMigrationToleratesLegacyNullRow(t *testing.T) {
 func TestContractMigrationOnCleanDB(t *testing.T) {
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u1", "anthropic", "sk"))
+	require.NoError(t, repo.SetAutomationToken(ctx, "u1", "anthropic", "sk"))
 	_, err := raw.Exec(`UPDATE api_keys SET api_key='leftover'`)
 	require.NoError(t, err)
 	runContractMigration(t, raw)
@@ -251,22 +244,11 @@ func TestContractMigrationOnCleanDB(t *testing.T) {
 	require.NoError(t, repo.ValidateAPIKeysSealedConstraint(ctx))
 }
 
-func TestSealedKeysStillHideAutomationPrefix(t *testing.T) {
-	repo, _ := sealedRepo(t)
-	ctx := context.Background()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u1", "anthropic", "sk-real"))
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "u1", core.AutomationProviderPrefix+"daemon-1", "rlat_secret"))
-
-	all, err := repo.GetProviderAPIKeys(ctx, "u1")
-	require.NoError(t, err)
-	require.Equal(t, map[string]string{"anthropic": "sk-real"}, all)
-}
-
 func TestAutomationCredResolverEndToEndOverSealedStore(t *testing.T) {
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
 	const user, daemon = "u1", "daemon-1"
-	require.NoError(t, repo.SetProviderAPIKey(ctx, user, automationcred.Provider(daemon), "rlat_secret"))
+	require.NoError(t, repo.SetAutomationToken(ctx, user, daemon, "rlat_secret"))
 
 	var plain string
 	var sealed []byte

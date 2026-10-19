@@ -3,7 +3,6 @@ package drivers
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -16,14 +15,15 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // reliantKeyStore is the slice of the repository the healer needs.
 type reliantKeyStore interface {
-	GetProviderAPIKey(ctx context.Context, userID, provider string) (string, error)
-	SetProviderAPIKey(ctx context.Context, userID, provider, apiKey string) error
-	ListUserIDsWithProviderKey(ctx context.Context, provider string) ([]string, error)
+	ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error)
+	UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error)
+	ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error)
 	LockProviderKey(ctx context.Context, userID, provider string) (release func(), err error)
 }
 
@@ -88,7 +88,10 @@ func (h *ReliantKeyHealer) Heal(ctx context.Context, userID string) (key string,
 	if !IsReliantLLMKey(fresh) {
 		return "", false, errors.New("control-plane returned a malformed replacement key")
 	}
-	if err := h.store.SetProviderAPIKey(ctx, userID, "reliant", fresh); err != nil {
+	if _, _, err := h.store.UpsertProviderAccount(ctx, core.AccountUpsert{
+		UserID: userID, Provider: "reliant", AuthKind: core.AuthKindManaged, IdentityKey: core.ManagedIdentityKey,
+		KeyHint: core.KeyHint(fresh), Secrets: core.AccountSecrets{Secret: fresh},
+	}); err != nil {
 		return "", false, fmt.Errorf("could not store the replacement key: %w", err)
 	}
 	logging.Info("Healed legacy reliant provider key", "user_id", userID)
@@ -96,14 +99,16 @@ func (h *ReliantKeyHealer) Heal(ctx context.Context, userID string) (key string,
 }
 
 func (h *ReliantKeyHealer) readKey(ctx context.Context, userID string) (string, error) {
-	key, err := h.store.GetProviderAPIKey(ctx, userID, "reliant")
+	accounts, err := h.store.ListProviderAccountsWithSecrets(ctx, userID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", nil
-		}
 		return "", fmt.Errorf("could not read the stored key: %w", err)
 	}
-	return strings.TrimSpace(key), nil
+	for _, a := range accounts {
+		if a.Provider == "reliant" {
+			return strings.TrimSpace(a.Secrets.Secret), nil
+		}
+	}
+	return "", nil
 }
 
 func isLegacyReliantKey(key string) bool {
@@ -113,7 +118,7 @@ func isLegacyReliantKey(key string) bool {
 // Sweep heals every user still holding a legacy key. A failure for one user
 // never stops the rest; it returns how many were healed and how many failed.
 func (h *ReliantKeyHealer) Sweep(ctx context.Context) (healed, failed int, err error) {
-	ids, err := h.store.ListUserIDsWithProviderKey(ctx, "reliant")
+	ids, err := h.store.ListUserIDsWithProviderAccount(ctx, "reliant")
 	if err != nil {
 		return 0, 0, fmt.Errorf("listing users with a reliant key: %w", err)
 	}

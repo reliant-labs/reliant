@@ -213,10 +213,6 @@ func TestCompleteClaudeOAuth_ConnectIsSeenByTheDriversThroughAccounts(t *testing
 	assert.Equal(t, "access-alice-org1", all[0].Secrets.Secret)
 	assert.Equal(t, "refresh-alice", all[0].Secrets.Refresh)
 	assert.Equal(t, "access-bob-org1", all[1].Secrets.Secret)
-
-	// A boot copy changes nothing: connect never wrote a legacy row for it to adopt.
-	_, err = repo.CopyLegacyCredentials(ctx)
-	require.NoError(t, err)
 	assert.Len(t, accountsOfProvider(t, ctx, repo, user, "claude"), 2)
 }
 

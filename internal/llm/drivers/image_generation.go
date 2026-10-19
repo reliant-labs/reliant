@@ -247,8 +247,8 @@ func antigravityImageBaseURL(configured string) string {
 // access token alone is not sufficient: the backend also needs to know which
 // ChatGPT account to bill and which client is asking.
 func codexImageHeaders(driverConfig models.DriverConfig) (map[string]string, error) {
-	// BuildAvailableDrivers loads the account id from codex_auth_tokens into
-	// AccountUUID, but that column is nullable and rows written before the id
+	// BuildAvailableDrivers loads the account id from the account into
+	// AccountUUID, but it is nullable and accounts written before the id
 	// was extracted have it empty. The id is a claim inside the access token
 	// itself, so fall back to reading it there rather than failing a request
 	// that has everything it needs.

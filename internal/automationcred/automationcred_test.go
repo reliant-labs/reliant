@@ -14,8 +14,8 @@ import (
 
 type memKeys map[string]string
 
-func (m memKeys) GetProviderAPIKey(_ context.Context, user, provider string) (string, error) {
-	if v, ok := m[user+"|"+provider]; ok {
+func (m memKeys) GetAutomationToken(_ context.Context, user, daemonID string) (string, error) {
+	if v, ok := m[user+"|"+daemonID]; ok {
 		return v, nil
 	}
 	return "", sql.ErrNoRows
@@ -23,7 +23,7 @@ func (m memKeys) GetProviderAPIKey(_ context.Context, user, provider string) (st
 
 func TestBearerForOrder(t *testing.T) {
 	const user = "u-order"
-	keys := memKeys{user + "|" + Provider("d1"): "rlat_d1"}
+	keys := memKeys{user + "|d1": "rlat_d1"}
 	r := New(Deps{Keys: keys})
 	trigger := Allow(context.Background())
 

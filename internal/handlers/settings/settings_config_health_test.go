@@ -39,7 +39,7 @@ func TestGetConfigHealth_ReportsStaleReliantKey(t *testing.T) {
 
 	assert.Nil(t, find(), "no key stored: nothing to report")
 
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "test-user", "reliant", "rlnt_abcdef0123456789"))
+	db.SeedProviderAccount(t, repo, "test-user", "reliant", "rlnt_abcdef0123456789")
 	got := find()
 	require.NotNil(t, got, "legacy key must be reported")
 	assert.Contains(t, got.Message, "Reconnect")
@@ -73,7 +73,7 @@ func TestGetConfigHealth_HealsLegacyKeyAndReportsOnlyOnFailure(t *testing.T) {
 		}
 		return nil
 	}
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "test-user", "reliant", "rlnt_abcdef0123456789"))
+	db.SeedProviderAccount(t, repo, "test-user", "reliant", "rlnt_abcdef0123456789")
 
 	drivers.SetReliantKeyHealer(drivers.NewReliantKeyHealer(repo, stubMinter{err: errors.New("control-plane 503")}))
 	got := reliantError()
@@ -83,7 +83,8 @@ func TestGetConfigHealth_HealsLegacyKeyAndReportsOnlyOnFailure(t *testing.T) {
 	validKey := accesstoken.Prefix + strings.Repeat("a", accesstoken.TokenLen-len(accesstoken.Prefix))
 	drivers.SetReliantKeyHealer(drivers.NewReliantKeyHealer(repo, stubMinter{key: validKey}))
 	assert.Nil(t, reliantError(), "healed: no message")
-	stored, err := repo.GetProviderAPIKey(ctx, "test-user", "reliant")
+	accounts, err := repo.ListProviderAccountsWithSecrets(ctx, "test-user")
 	require.NoError(t, err)
-	assert.Equal(t, validKey, stored)
+	require.Len(t, accounts, 1)
+	assert.Equal(t, validKey, accounts[0].Secrets.Secret)
 }

@@ -15,7 +15,7 @@ import (
 // BootVault resolves the vault key per the boot policy (hosted: required;
 // self-hosted: generated and persisted), enables credential sealing (api_keys
 // and the provider sign-in token tables), seals any legacy plaintext
-// api_keys rows, and mirrors the legacy credential tables into provider_accounts. Both composition roots call it right after the
+// api_keys rows, and copies the legacy credential tables into provider_accounts once. Both composition roots call it right after the
 // repo is built, so a missing or malformed key stops startup.
 func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir string) (vault.Service, error) {
 	v, err := vault.Boot(ctx, vault.BootOptions{
@@ -29,9 +29,9 @@ func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir string) (va
 	if err := sealAPIKeys(ctx, repo, v); err != nil {
 		return nil, err
 	}
-	// Mirror the legacy credential tables into provider_accounts. Main still reads the legacy
-	// tables, so a failure here costs nothing today and must never stop the server.
-	if _, err := repo.CopyLegacyCredentials(ctx); err != nil {
+	// Copy the legacy credential tables into provider_accounts, once. A failure must never stop
+	// the server, and the marker is only written on success, so the next boot retries.
+	if _, _, err := repo.MigrateLegacyCredentials(ctx); err != nil {
 		slog.Warn("copying legacy credentials into provider accounts failed; will retry next boot", "error", err)
 	}
 	return v, nil

@@ -186,12 +186,6 @@ type ClaudeAccountProfile struct {
 	Plan string
 }
 
-// IdentityKey is the account's dedupe key (ClaudeIdentityKey), "" when the
-// profile carries no account or organization uuid.
-func (p ClaudeAccountProfile) IdentityKey() string {
-	return ClaudeIdentityKey(p.AccountUUID, p.OrganizationUUID)
-}
-
 // ClaudeProfileRaw performs GET /api/oauth/profile and returns the body.
 func ClaudeProfileRaw(ctx context.Context, d Doer, accessToken string) ([]byte, error) {
 	if strings.TrimSpace(accessToken) == "" {

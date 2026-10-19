@@ -40,12 +40,11 @@ func availableFor(t *testing.T, repo *db.Repo, user string) models.AvailableDriv
 func TestAvailableDrivers_TwoClaudeAccountsAndAnAnthropicKey(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	ctx := context.Background()
 	const user = "multi"
 
 	first := addClaude(t, repo, user, "alice")
 	second := addClaude(t, repo, user, "bob")
-	require.NoError(t, repo.SetProviderAPIKey(ctx, user, "anthropic", "sk-ant-api03-k"))
+	db.SeedProviderAccount(t, repo, user, "anthropic", "sk-ant-api03-k")
 
 	available := availableFor(t, repo, user)
 
@@ -220,185 +219,23 @@ func TestGetDriverForAccount_UsesTheGivenAccountsCredential(t *testing.T) {
 	}
 }
 
-// ---- The legacy expand period: the connect/disconnect RPCs still write only the legacy tables. ----
-
-// A connect that lands only in the legacy tables takes effect immediately, without a restart.
-func TestExpand_ALegacyOnlyConnectTakesEffect(t *testing.T) {
+// A refresh the provider rejects marks the account needs-sign-in and removes it from Accounts,
+// against the real stores; the user's other providers are untouched.
+func TestDeadLineageMarksNeedsSignInAndLeavesAccounts(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	const user = "expand-connect"
+	const user = "dead-lineage"
 
-	_, err := repo.CopyLegacyCredentials(ctx) // boot copy ran before the user connected
+	a, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+		UserID: user, Provider: "claude", AuthKind: core.AuthKindOAuth,
+		IdentityKey: core.ClaudeIdentityKey("acct", "org"), Secrets: core.AccountSecrets{Secret: "a1", Refresh: "r1"},
+		ExpiresAt: time.Now().Add(-time.Hour),
+	})
 	require.NoError(t, err)
-
-	require.NoError(t, repo.SetProviderAPIKey(ctx, user, "claude", db.ProviderOAuthMarker))
-	require.NoError(t, repo.SetClaudeAuthTokens(ctx, user, db.ClaudeAuthTokens{
-		AccessToken: "legacy-access", RefreshToken: "legacy-refresh", ExpiresAt: time.Now().Add(time.Hour), AccountUUID: "acct", OrganizationUUID: "org"}))
-	require.NoError(t, repo.SetProviderAPIKey(ctx, user, "openai", "sk-legacy"))
-
-	available := availableFor(t, repo, user)
-	require.Contains(t, available.Drivers, models.DriverID("claude"))
-	assert.Equal(t, "legacy-access", available.Drivers["claude"].APIKey)
-	assert.Equal(t, "sk-legacy", available.Drivers["openai"].APIKey)
-}
-
-// A token rotation the previous release wrote to the legacy table takes effect, so a user never
-// runs on a spent single-use refresh token.
-func TestExpand_ALegacyOnlyRotationTakesEffect(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-	ctx := context.Background()
-	const user = "expand-rotate"
-
-	require.NoError(t, repo.SetClaudeAuthTokens(ctx, user, db.ClaudeAuthTokens{
-		AccessToken: "a1", RefreshToken: "r1", ExpiresAt: time.Now().Add(time.Hour), AccountUUID: "acct", OrganizationUUID: "org"}))
-	_, err := repo.CopyLegacyCredentials(ctx)
-	require.NoError(t, err)
-	before := availableFor(t, repo, user)
-	require.Equal(t, "r1", before.Drivers["claude"].RefreshToken)
-
-	time.Sleep(10 * time.Millisecond)
-	require.NoError(t, repo.SetClaudeAuthTokens(ctx, user, db.ClaudeAuthTokens{
-		AccessToken: "a2", RefreshToken: "r2", ExpiresAt: time.Now().Add(2 * time.Hour), AccountUUID: "acct", OrganizationUUID: "org"}))
-
-	after := availableFor(t, repo, user)
-	assert.Equal(t, "a2", after.Drivers["claude"].APIKey)
-	assert.Equal(t, "r2", after.Drivers["claude"].RefreshToken)
-	assert.Equal(t, before.Drivers["claude"].AccountID, after.Drivers["claude"].AccountID, "the same account, rotated in place")
-}
-
-// A disconnect still removes the account: between boots, the stale mirror must not keep serving.
-func TestExpand_ALegacyOnlyDisconnectRemovesTheAccount(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-	ctx := context.Background()
-	const user = "expand-disconnect"
-
-	require.NoError(t, repo.SetProviderAPIKey(ctx, user, "claude", db.ProviderOAuthMarker))
-	require.NoError(t, repo.SetClaudeAuthTokens(ctx, user, db.ClaudeAuthTokens{
-		AccessToken: "a1", RefreshToken: "r1", ExpiresAt: time.Now().Add(time.Hour), AccountUUID: "acct", OrganizationUUID: "org"}))
-	require.NoError(t, repo.SetProviderAPIKey(ctx, user, "openai", "sk-1"))
-	require.NoError(t, repo.SetProviderAPIKey(ctx, user, "anthropic", "sk-2"))
-	_, err := repo.CopyLegacyCredentials(ctx)
-	require.NoError(t, err)
-	require.Contains(t, availableFor(t, repo, user).Drivers, models.DriverID("claude"))
-
-	// The disconnect RPC, exactly as it runs today.
-	require.NoError(t, repo.DeleteClaudeAuthTokens(ctx, user))
-	require.NoError(t, repo.DeleteProviderAPIKey(ctx, user, "claude"))
-	require.NoError(t, repo.DeleteProviderAPIKey(ctx, user, "openai"))
-
-	available := availableFor(t, repo, user)
-	assert.NotContains(t, available.Drivers, models.DriverID("claude"))
-	assert.NotContains(t, available.Accounts, models.DriverID("claude"))
-	assert.NotContains(t, available.Drivers, models.DriverID("openai"))
-	assert.Contains(t, available.Drivers, models.DriverID("anthropic"), "no unrelated connection is lost")
-}
-
-// No user loses a working connection: an OAuth marker alone (no tokens) is not a credential and
-// does not create one, while a real credential survives an arbitrary number of syncs.
-func TestExpand_WorkingConnectionsSurviveRepeatedReads(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-	ctx := context.Background()
-	const user = "expand-stable"
-
-	require.NoError(t, repo.SetProviderAPIKey(ctx, user, "claude", db.ProviderOAuthMarker))
-	require.NoError(t, repo.SetClaudeAuthTokens(ctx, user, db.ClaudeAuthTokens{
-		AccessToken: "a1", RefreshToken: "r1", ExpiresAt: time.Now().Add(time.Hour), AccountUUID: "acct", OrganizationUUID: "org"}))
-	require.NoError(t, repo.SetProviderAPIKey(ctx, user, "copilot", db.ProviderOAuthMarker)) // marker only: not connected
-	require.NoError(t, repo.SetProviderAPIKey(ctx, user, "openai", "sk-1"))
-
-	var firstID string
-	for i := range 5 {
-		available := availableFor(t, repo, user)
-		require.Contains(t, available.Drivers, models.DriverID("claude"), "read %d", i)
-		require.Contains(t, available.Drivers, models.DriverID("openai"), "read %d", i)
-		assert.NotContains(t, available.Drivers, models.DriverID("copilot"), "a marker is not a connection")
-		if i == 0 {
-			firstID = available.Drivers["claude"].AccountID
-		}
-		assert.Equal(t, firstID, available.Drivers["claude"].AccountID, "no churn across reads")
-	}
-}
-
-// Rotating through the coordinator keeps the previous release's row in step, so a rolling deploy
-// never leaves it holding a spent token, and the next read does not mistake our write-through for
-// a newer legacy credential.
-func TestExpand_CoordinatorRotationReachesTheLegacyRow(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-	ctx := context.Background()
-	const user = "expand-coordinator"
-
-	require.NoError(t, repo.SetClaudeAuthTokens(ctx, user, db.ClaudeAuthTokens{
-		AccessToken: "a1", RefreshToken: "r1", ExpiresAt: time.Now().Add(-time.Hour), AccountUUID: "acct", OrganizationUUID: "org"}))
-	_, err := repo.CopyLegacyCredentials(ctx)
-	require.NoError(t, err)
+	db.SeedProviderAccount(t, repo, user, "anthropic", "sk-1")
 	cfg := availableFor(t, repo, user).Drivers["claude"]
-
-	got, err := CoordinatedAccountRefresh(ctx, repo, user, cfg.AccountID,
-		llm.OAuthTokens{AccessToken: cfg.APIKey, RefreshToken: cfg.RefreshToken, ExpiresAt: cfg.TokenExpiresAt}, rotateTo("a2", "r2"))
-	require.NoError(t, err)
-	assert.Equal(t, "a2", got.AccessToken)
-
-	legacy, err := repo.GetClaudeAuthTokens(ctx, user)
-	require.NoError(t, err)
-	assert.Equal(t, "r2", legacy.RefreshToken)
-
-	again := availableFor(t, repo, user).Drivers["claude"]
-	assert.Equal(t, "a2", again.APIKey)
-	assert.Equal(t, cfg.AccountID, again.AccountID)
-}
-
-// invalid_grant while the previous release holds a newer lineage in the legacy table: the
-// coordinator adopts it from the real stores instead of signing the user out.
-func TestExpand_RefreshFailureAdoptsALegacyRotationFromTheRealStore(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-	ctx := context.Background()
-	const user = "expand-adopt"
-
-	require.NoError(t, repo.SetClaudeAuthTokens(ctx, user, db.ClaudeAuthTokens{
-		AccessToken: "a1", RefreshToken: "r1", ExpiresAt: time.Now().Add(-time.Hour), AccountUUID: "acct", OrganizationUUID: "org"}))
-	_, err := repo.CopyLegacyCredentials(ctx)
-	require.NoError(t, err)
-	cfg := availableFor(t, repo, user).Drivers["claude"]
-	held := llm.OAuthTokens{AccessToken: cfg.APIKey, RefreshToken: cfg.RefreshToken, ExpiresAt: cfg.TokenExpiresAt}
-
-	// The old release rotates the legacy row while our exchange is in flight, and our exchange
-	// loses the single-use race.
-	time.Sleep(10 * time.Millisecond)
-	refresh := func(string) (core.AccountTokens, error) {
-		require.NoError(t, repo.SetClaudeAuthTokens(ctx, user, db.ClaudeAuthTokens{
-			AccessToken: "legacy-a", RefreshToken: "legacy-r", ExpiresAt: time.Now().Add(2 * time.Hour), AccountUUID: "acct", OrganizationUUID: "org"}))
-		return core.AccountTokens{}, &llm.RefreshRejectedError{Message: "claude session expired: please reconnect Claude"}
-	}
-	got, err := CoordinatedAccountRefresh(ctx, repo, user, cfg.AccountID, held, refresh)
-	require.NoError(t, err)
-	assert.Equal(t, "legacy-a", got.AccessToken)
-
-	acct, err := repo.GetProviderAccountWithSecrets(ctx, user, cfg.AccountID)
-	require.NoError(t, err)
-	assert.Nil(t, acct.NeedsReauthAt, "a working account is not signed out")
-	assert.Equal(t, "legacy-r", acct.Secrets.Refresh)
-}
-
-// invalid_grant with the legacy row on the same spent lineage: the account needs sign-in and
-// leaves Accounts, against the real stores.
-func TestExpand_DeadLineageMarksNeedsSignInAndLeavesAccounts(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-	ctx := context.Background()
-	const user = "expand-dead"
-
-	require.NoError(t, repo.SetClaudeAuthTokens(ctx, user, db.ClaudeAuthTokens{
-		AccessToken: "a1", RefreshToken: "r1", ExpiresAt: time.Now().Add(-time.Hour), AccountUUID: "acct", OrganizationUUID: "org"}))
-	require.NoError(t, repo.SetProviderAPIKey(ctx, user, "anthropic", "sk-1"))
-	_, err := repo.CopyLegacyCredentials(ctx)
-	require.NoError(t, err)
-	cfg := availableFor(t, repo, user).Drivers["claude"]
+	require.Equal(t, a.ID, cfg.AccountID)
 
 	_, err = CoordinatedAccountRefresh(ctx, repo, user, cfg.AccountID,
 		llm.OAuthTokens{AccessToken: cfg.APIKey, RefreshToken: cfg.RefreshToken, ExpiresAt: cfg.TokenExpiresAt},
@@ -418,11 +255,62 @@ func TestHasStaleReliantKey_ReadsTheAccount(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "stale-user", "reliant", "rlnt_abcdef0123456789"))
+	db.SeedProviderAccount(t, repo, "stale-user", "reliant", "rlnt_abcdef0123456789")
 	stale, err := HasStaleReliantKey(ctx, repo, "stale-user")
 	require.NoError(t, err)
 	assert.True(t, stale)
 	stale, err = HasStaleReliantKey(ctx, repo, "nobody")
 	require.NoError(t, err)
 	assert.False(t, stale)
+}
+
+// S9 (the integration review's scenario): a copied Claude row with no account uuid carries a
+// placeholder identity. The user then adds the SAME upstream account through "Add another
+// account", which stores it under its real identity and gives it a pause, a bench and a poll
+// schedule. When the placeholder's next refresh learns the real identity, the two merge, and the
+// account the user configured must survive, with every one of those.
+func TestRefreshMergeKeepsTheAccountWithTheRealIdentity(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	const user = "s9-user"
+
+	real := addClaude(t, repo, user, "alice")
+	label := "work"
+	_, err := repo.PatchProviderAccount(ctx, user, real.ID, core.AccountPatch{Label: &label})
+	require.NoError(t, err)
+	require.NoError(t, repo.BenchAccount(ctx, user, real.ID, time.Now().Add(time.Hour), "five_hour", false))
+	require.NoError(t, repo.ScheduleUsagePoll(ctx, real.ID, time.Now().Add(time.Minute), 0, ""))
+
+	time.Sleep(10 * time.Millisecond)
+	placeholder, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+		UserID: user, Provider: "claude", AuthKind: core.AuthKindOAuth,
+		IdentityKey: core.PlaceholderIdentityKey("copied-row"), Secrets: core.AccountSecrets{Secret: "old-access", Refresh: "old-refresh"},
+		ExpiresAt: time.Now().Add(-time.Hour),
+	})
+	require.NoError(t, err)
+
+	_, err = CoordinatedAccountRefresh(ctx, repo, user, placeholder.ID,
+		llm.OAuthTokens{AccessToken: "old-access", RefreshToken: "old-refresh"},
+		func(string) (core.AccountTokens, error) {
+			return core.AccountTokens{
+				Secret: "new-access", Refresh: "new-refresh", ExpiresAt: time.Now().Add(time.Hour),
+				IdentityKey: core.ClaudeIdentityKey("alice", "org-alice"), ExternalAccountID: "alice", OrganizationID: "org-alice",
+			}, nil
+		})
+	require.NoError(t, err)
+
+	all, err := repo.ListProviderAccounts(ctx, user)
+	require.NoError(t, err)
+	require.Len(t, all, 1, "merged into one account")
+	assert.Equal(t, real.ID, all[0].ID, "the account the user configured survives, not the placeholder")
+	assert.Equal(t, "work", all[0].Label)
+	limits, err := repo.GetAccountLimits(ctx, real.ID)
+	require.NoError(t, err)
+	require.NotNil(t, limits)
+	assert.NotNil(t, limits.LimitedUntil, "its bench survives")
+	assert.NotNil(t, limits.UsageAPINextAt, "its poll schedule survives")
+	got, err := repo.GetProviderAccountWithSecrets(ctx, user, real.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "new-refresh", got.Secrets.Refresh, "and it carries the fresh lineage")
 }

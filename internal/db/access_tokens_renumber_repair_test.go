@@ -259,3 +259,26 @@ func TestPayloadBlobsRestoreIsANoOpOnAHealthyDatabase(t *testing.T) {
 		WHERE tablename = 'temporal_payload_blobs' AND indexname = 'idx_temporal_payload_blobs_last_ref'`).Scan(&indexes))
 	assert.Equal(t, 1, indexes)
 }
+
+// unsealProviderTokenTables undoes the OBJECTS of the sealing migration on an
+// empty, migrated database: the sealed columns go and the plaintext columns
+// come back, which is the shape every database had before it. Any test that
+// rewinds past sealProviderTokensVersion and replays it needs this, because
+// the migration's DROP COLUMN fails against a table that no longer has the
+// column.
+func unsealProviderTokenTables(t *testing.T, raw *sql.DB) {
+	t.Helper()
+	for _, stmt := range []string{
+		`ALTER TABLE claude_auth_tokens DROP COLUMN access_token_sealed, DROP COLUMN refresh_token_sealed,
+			ADD COLUMN access_token TEXT NOT NULL, ADD COLUMN refresh_token TEXT`,
+		`ALTER TABLE codex_auth_tokens DROP COLUMN access_token_sealed, DROP COLUMN refresh_token_sealed, DROP COLUMN id_token_sealed,
+			ADD COLUMN access_token TEXT NOT NULL, ADD COLUMN refresh_token TEXT, ADD COLUMN id_token TEXT`,
+		`ALTER TABLE copilot_auth_tokens DROP COLUMN github_access_token_sealed, DROP COLUMN github_refresh_token_sealed,
+			ADD COLUMN github_access_token TEXT NOT NULL, ADD COLUMN github_refresh_token TEXT`,
+		`ALTER TABLE antigravity_auth_tokens DROP COLUMN access_token_sealed, DROP COLUMN refresh_token_sealed, DROP COLUMN id_token_sealed,
+			ADD COLUMN access_token TEXT NOT NULL, ADD COLUMN refresh_token TEXT, ADD COLUMN id_token TEXT`,
+	} {
+		_, err := raw.Exec(stmt)
+		require.NoError(t, err, stmt)
+	}
+}

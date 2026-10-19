@@ -2639,196 +2639,25 @@ func (r *Repo) upsertSetting(ctx context.Context, userID string, projectID *stri
 	return r.UpdateSetting(ctx, setting)
 }
 
-func (r *Repo) GetProviderAPIKey(ctx context.Context, userID string, provider string) (string, error) {
-	if userID == "" {
-		return "", fmt.Errorf("user_id cannot be empty")
+func (r *Repo) GetAutomationToken(ctx context.Context, userID, daemonID string) (string, error) {
+	if userID == "" || daemonID == "" {
+		return "", fmt.Errorf("user_id and daemon_id cannot be empty")
 	}
-	if provider == "" {
-		return "", fmt.Errorf("provider cannot be empty")
-	}
-
-	return r.settings.GetProviderAPIKey(ctx, userID, provider)
+	return r.settings.GetAutomationToken(ctx, userID, daemonID)
 }
 
-func (r *Repo) SetProviderAPIKey(ctx context.Context, userID string, provider, apiKey string) error {
-	if userID == "" {
-		return fmt.Errorf("user_id cannot be empty")
+func (r *Repo) SetAutomationToken(ctx context.Context, userID, daemonID, token string) error {
+	if userID == "" || daemonID == "" {
+		return fmt.Errorf("user_id and daemon_id cannot be empty")
 	}
-	if provider == "" {
-		return fmt.Errorf("provider cannot be empty")
-	}
-
-	return r.settings.SetProviderAPIKey(ctx, userID, provider, apiKey)
+	return r.settings.SetAutomationToken(ctx, userID, daemonID, token)
 }
 
-func (r *Repo) DeleteProviderAPIKey(ctx context.Context, userID string, provider string) error {
-	if userID == "" {
-		return fmt.Errorf("user_id cannot be empty")
+func (r *Repo) DeleteAutomationToken(ctx context.Context, userID, daemonID string) error {
+	if userID == "" || daemonID == "" {
+		return fmt.Errorf("user_id and daemon_id cannot be empty")
 	}
-	if provider == "" {
-		return fmt.Errorf("provider cannot be empty")
-	}
-
-	return r.settings.DeleteProviderAPIKey(ctx, userID, provider)
-}
-
-func (r *Repo) GetProviderAPIKeys(ctx context.Context, userID string) (map[string]string, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user_id cannot be empty")
-	}
-
-	return r.settings.GetProviderAPIKeys(ctx, userID)
-}
-
-func (r *Repo) GetCodexAuthTokens(ctx context.Context, userID string) (*CodexAuthTokens, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user_id cannot be empty")
-	}
-
-	return r.settings.GetCodexAuthTokens(ctx, userID)
-}
-
-func (r *Repo) SetCodexAuthTokens(ctx context.Context, userID string, tokens CodexAuthTokens) error {
-	if userID == "" {
-		return fmt.Errorf("user_id cannot be empty")
-	}
-	if strings.TrimSpace(tokens.AccessToken) == "" {
-		return fmt.Errorf("access token cannot be empty")
-	}
-
-	return r.settings.SetCodexAuthTokens(ctx, userID, tokens)
-}
-
-// CompareAndSwapCodexAuthTokens persists refreshed tokens only when the
-// stored refresh token still equals expectedRefreshToken (i.e. no concurrent
-// rotation was persisted in between). Returns true when the write happened.
-func (r *Repo) CompareAndSwapCodexAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens CodexAuthTokens) (bool, error) {
-	if userID == "" {
-		return false, fmt.Errorf("user_id cannot be empty")
-	}
-	if strings.TrimSpace(tokens.AccessToken) == "" {
-		return false, fmt.Errorf("access token cannot be empty")
-	}
-
-	return r.settings.CompareAndSwapCodexAuthTokens(ctx, userID, expectedRefreshToken, tokens)
-}
-
-func (r *Repo) DeleteCodexAuthTokens(ctx context.Context, userID string) error {
-	if userID == "" {
-		return fmt.Errorf("user_id cannot be empty")
-	}
-
-	return r.settings.DeleteCodexAuthTokens(ctx, userID)
-}
-
-func (r *Repo) GetAntigravityAuthTokens(ctx context.Context, userID string) (*AntigravityAuthTokens, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user_id cannot be empty")
-	}
-
-	return r.settings.GetAntigravityAuthTokens(ctx, userID)
-}
-
-func (r *Repo) SetAntigravityAuthTokens(ctx context.Context, userID string, tokens AntigravityAuthTokens) error {
-	if userID == "" {
-		return fmt.Errorf("user_id cannot be empty")
-	}
-	if strings.TrimSpace(tokens.AccessToken) == "" {
-		return fmt.Errorf("access token cannot be empty")
-	}
-
-	return r.settings.SetAntigravityAuthTokens(ctx, userID, tokens)
-}
-
-// CompareAndSwapAntigravityAuthTokens persists refreshed tokens only when the
-// stored refresh token still equals expectedRefreshToken (i.e. no new sign-in
-// or disconnect replaced the row in between). Returns true when the write
-// happened.
-func (r *Repo) CompareAndSwapAntigravityAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens AntigravityAuthTokens) (bool, error) {
-	if userID == "" {
-		return false, fmt.Errorf("user_id cannot be empty")
-	}
-	if strings.TrimSpace(tokens.AccessToken) == "" {
-		return false, fmt.Errorf("access token cannot be empty")
-	}
-
-	return r.settings.CompareAndSwapAntigravityAuthTokens(ctx, userID, expectedRefreshToken, tokens)
-}
-
-func (r *Repo) DeleteAntigravityAuthTokens(ctx context.Context, userID string) error {
-	if userID == "" {
-		return fmt.Errorf("user_id cannot be empty")
-	}
-
-	return r.settings.DeleteAntigravityAuthTokens(ctx, userID)
-}
-
-func (r *Repo) GetCopilotAuthTokens(ctx context.Context, userID string) (*CopilotAuthTokens, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user_id cannot be empty")
-	}
-
-	return r.settings.GetCopilotAuthTokens(ctx, userID)
-}
-
-func (r *Repo) SetCopilotAuthTokens(ctx context.Context, userID string, tokens CopilotAuthTokens) error {
-	if userID == "" {
-		return fmt.Errorf("user_id cannot be empty")
-	}
-	if strings.TrimSpace(tokens.GitHubAccessToken) == "" {
-		return fmt.Errorf("github access token cannot be empty")
-	}
-
-	return r.settings.SetCopilotAuthTokens(ctx, userID, tokens)
-}
-
-func (r *Repo) DeleteCopilotAuthTokens(ctx context.Context, userID string) error {
-	if userID == "" {
-		return fmt.Errorf("user_id cannot be empty")
-	}
-
-	return r.settings.DeleteCopilotAuthTokens(ctx, userID)
-}
-
-func (r *Repo) GetClaudeAuthTokens(ctx context.Context, userID string) (*ClaudeAuthTokens, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user_id cannot be empty")
-	}
-
-	return r.settings.GetClaudeAuthTokens(ctx, userID)
-}
-
-func (r *Repo) SetClaudeAuthTokens(ctx context.Context, userID string, tokens ClaudeAuthTokens) error {
-	if userID == "" {
-		return fmt.Errorf("user_id cannot be empty")
-	}
-	if strings.TrimSpace(tokens.AccessToken) == "" {
-		return fmt.Errorf("access token cannot be empty")
-	}
-
-	return r.settings.SetClaudeAuthTokens(ctx, userID, tokens)
-}
-
-// CompareAndSwapClaudeAuthTokens persists refreshed tokens only when the
-// stored refresh token still equals expectedRefreshToken (i.e. no concurrent
-// rotation was persisted in between). Returns true when the write happened.
-func (r *Repo) CompareAndSwapClaudeAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens ClaudeAuthTokens) (bool, error) {
-	if userID == "" {
-		return false, fmt.Errorf("user_id cannot be empty")
-	}
-	if strings.TrimSpace(tokens.AccessToken) == "" {
-		return false, fmt.Errorf("access token cannot be empty")
-	}
-
-	return r.settings.CompareAndSwapClaudeAuthTokens(ctx, userID, expectedRefreshToken, tokens)
-}
-
-func (r *Repo) DeleteClaudeAuthTokens(ctx context.Context, userID string) error {
-	if userID == "" {
-		return fmt.Errorf("user_id cannot be empty")
-	}
-
-	return r.settings.DeleteClaudeAuthTokens(ctx, userID)
+	return r.settings.DeleteAutomationToken(ctx, userID, daemonID)
 }
 
 // ==================== Visibility Methods ====================
@@ -5248,10 +5077,10 @@ func (r *Repo) ValidateAPIKeysSealedConstraint(ctx context.Context) error {
 	return s.ValidateAPIKeysSealedConstraint(ctx)
 }
 
-// ListUserIDsWithProviderKey returns every user holding a stored key for
-// provider, without opening (decrypting) any of them.
-func (r *Repo) ListUserIDsWithProviderKey(ctx context.Context, provider string) ([]string, error) {
-	rows, err := r.DB.QueryContext(ctx, "SELECT user_id FROM api_keys WHERE provider = $1 ORDER BY user_id", provider)
+// ListUserIDsWithProviderAccount returns every user holding an account for provider, without
+// opening (decrypting) any of them.
+func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
+	rows, err := r.DB.QueryContext(ctx, "SELECT DISTINCT user_id FROM provider_accounts WHERE provider = $1 ORDER BY user_id", provider)
 	if err != nil {
 		return nil, err
 	}

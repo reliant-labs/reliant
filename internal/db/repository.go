@@ -323,31 +323,11 @@ type Repository interface {
 	SetBool(ctx context.Context, userID string, projectID *string, key string, value bool) error
 	SetInt(ctx context.Context, userID string, projectID *string, key string, value int) error
 	SetFloat(ctx context.Context, userID string, projectID *string, key string, value float64) error
-	GetProviderAPIKey(ctx context.Context, userID string, provider string) (string, error)
-	SetProviderAPIKey(ctx context.Context, userID string, provider, apiKey string) error
-	DeleteProviderAPIKey(ctx context.Context, userID string, provider string) error
-	GetProviderAPIKeys(ctx context.Context, userID string) (map[string]string, error)
-	ListUserIDsWithProviderKey(ctx context.Context, provider string) ([]string, error)
+	GetAutomationToken(ctx context.Context, userID, daemonID string) (string, error)
+	SetAutomationToken(ctx context.Context, userID, daemonID, token string) error
+	DeleteAutomationToken(ctx context.Context, userID, daemonID string) error
+	ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error)
 	LockProviderKey(ctx context.Context, userID, provider string) (func(), error)
-
-	GetCodexAuthTokens(ctx context.Context, userID string) (*core.CodexAuthTokens, error)
-	SetCodexAuthTokens(ctx context.Context, userID string, tokens core.CodexAuthTokens) error
-	CompareAndSwapCodexAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.CodexAuthTokens) (bool, error)
-	DeleteCodexAuthTokens(ctx context.Context, userID string) error
-
-	GetCopilotAuthTokens(ctx context.Context, userID string) (*core.CopilotAuthTokens, error)
-	SetCopilotAuthTokens(ctx context.Context, userID string, tokens core.CopilotAuthTokens) error
-	DeleteCopilotAuthTokens(ctx context.Context, userID string) error
-
-	GetAntigravityAuthTokens(ctx context.Context, userID string) (*core.AntigravityAuthTokens, error)
-	SetAntigravityAuthTokens(ctx context.Context, userID string, tokens core.AntigravityAuthTokens) error
-	CompareAndSwapAntigravityAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.AntigravityAuthTokens) (bool, error)
-	DeleteAntigravityAuthTokens(ctx context.Context, userID string) error
-
-	GetClaudeAuthTokens(ctx context.Context, userID string) (*core.ClaudeAuthTokens, error)
-	SetClaudeAuthTokens(ctx context.Context, userID string, tokens core.ClaudeAuthTokens) error
-	CompareAndSwapClaudeAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.ClaudeAuthTokens) (bool, error)
-	DeleteClaudeAuthTokens(ctx context.Context, userID string) error
 
 	// Provider accounts: one row per connected LLM credential, with its limit state and the
 	// sticky thread assignments (core.ProviderAccountStore).

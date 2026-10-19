@@ -456,6 +456,14 @@ type ItemDefault struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 }
 
+type LegacyCredentialCopy struct {
+	ID          int32        `json:"id"`
+	CompletedAt sql.NullTime `json:"completed_at"`
+	Created     int32        `json:"created"`
+	Skipped     int32        `json:"skipped"`
+	Failed      int32        `json:"failed"`
+}
+
 type Message struct {
 	ID                string          `json:"id"`
 	ChatID            string          `json:"chat_id"`

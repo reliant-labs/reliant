@@ -34,7 +34,7 @@ func mintCodexJWT(t *testing.T, accountID string, expiry time.Time) string {
 }
 
 // fakeAccountStore is an in-memory AccountTokenStore with hooks to simulate another process
-// mutating the account between reads. It optionally plays the legacy tables too.
+// mutating the account between reads.
 type fakeAccountStore struct {
 	mu       sync.Mutex
 	accounts map[string]*core.AccountWithSecrets
@@ -44,10 +44,6 @@ type fakeAccountStore struct {
 	upserts  []core.AccountUpsert
 	// onGet runs (with the 1-based read count) before each read.
 	onGet func(callNum int, s *fakeAccountStore)
-
-	legacy       *core.LegacyCredential
-	legacySynced int
-	syncApplies  func(s *fakeAccountStore)
 }
 
 func newFakeStore(accts ...*core.AccountWithSecrets) *fakeAccountStore {
@@ -116,22 +112,6 @@ func (s *fakeAccountStore) UpsertProviderAccount(_ context.Context, u core.Accou
 		}
 	}
 	return core.ProviderAccount{}, false, nil
-}
-
-func (s *fakeAccountStore) ReadLegacyCredential(context.Context, string, string) (*core.LegacyCredential, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.legacy, nil
-}
-
-func (s *fakeAccountStore) SyncLegacyCredentials(context.Context, string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.legacySynced++
-	if s.syncApplies != nil {
-		s.syncApplies(s)
-	}
-	return nil
 }
 
 func (s *fakeAccountStore) set(id string, f func(a *core.AccountWithSecrets)) {
@@ -373,44 +353,11 @@ func TestAccountRefresh_DoesNotResurrectARemovedAccount(t *testing.T) {
 	assert.False(t, exists)
 }
 
-// Expand period: the previous release rotated the LEGACY row while our exchange failed. Adopt
-// that lineage instead of marking a working account needing sign-in.
-func TestAccountRefresh_ExpandPeriodAdoptsLegacyRotationOnFailure(t *testing.T) {
-	acct := claudeAcct("a1", "stale", "rt-1", expired())
-	store := newFakeStore(acct)
-	store.legacy = &core.LegacyCredential{Source: "claude_auth_tokens", Secrets: core.AccountSecrets{Secret: "legacy-fresh", Refresh: "rt-LEGACY"}, ExpiresAt: live()}
-	store.syncApplies = func(s *fakeAccountStore) { // the sync copies the legacy row into the account
-		a := s.accounts["a1"]
-		a.Secrets = core.AccountSecrets{Secret: "legacy-fresh", Refresh: "rt-LEGACY"}
-		a.ExpiresAt = live()
-	}
-	got, err := CoordinatedAccountRefresh(context.Background(), store, "u1", "a1", held(acct), func(string) (core.AccountTokens, error) {
-		return core.AccountTokens{}, &llm.RefreshRejectedError{Message: "claude session expired: please reconnect Claude"}
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "legacy-fresh", got.AccessToken)
-	assert.Equal(t, 1, store.legacySynced)
-	assert.Empty(t, store.patched, "the legacy lineage is live, so the account is not signed out")
-}
-
-// A legacy row that holds the SAME (spent) refresh token is no rescue: the account is signed out.
-func TestAccountRefresh_ExpandPeriodSameLegacyLineageStillNeedsSignIn(t *testing.T) {
-	acct := claudeAcct("a1", "stale", "rt-1", expired())
-	store := newFakeStore(acct)
-	store.legacy = &core.LegacyCredential{Source: "claude_auth_tokens", Secrets: core.AccountSecrets{Secret: "stale", Refresh: "rt-1"}}
-	_, err := CoordinatedAccountRefresh(context.Background(), store, "u1", "a1", held(acct), func(string) (core.AccountTokens, error) {
-		return core.AccountTokens{}, &llm.RefreshRejectedError{Message: "claude session expired: please reconnect Claude"}
-	})
-	require.Error(t, err)
-	assert.NotEmpty(t, store.patched["a1"])
-	assert.Zero(t, store.legacySynced)
-}
-
-// The first refresh response states the account's real identity: a `legacy:` placeholder is
+// The first refresh response states the account's real identity: a placeholder is
 // rewritten in place (design §3.3).
 func TestAccountRefresh_RewritesPlaceholderIdentity(t *testing.T) {
 	acct := claudeAcct("a1", "stale", "rt-1", expired())
-	acct.IdentityKey = core.LegacyIdentityKey("row-1")
+	acct.IdentityKey = core.PlaceholderIdentityKey("row-1")
 	store := newFakeStore(acct)
 	_, err := CoordinatedAccountRefresh(context.Background(), store, "u1", "a1", held(acct), func(string) (core.AccountTokens, error) {
 		return core.AccountTokens{Secret: "n", Refresh: "rt-2", ExpiresAt: live(),
@@ -418,7 +365,7 @@ func TestAccountRefresh_RewritesPlaceholderIdentity(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, store.upserts, 1)
-	assert.Equal(t, core.LegacyIdentityKey("row-1"), store.upserts[0].ReplaceIdentityOf)
+	assert.Equal(t, core.PlaceholderIdentityKey("row-1"), store.upserts[0].ReplaceIdentityOf)
 	assert.Equal(t, core.ClaudeIdentityKey("real", "org"), store.upserts[0].IdentityKey)
 	assert.Equal(t, core.ClaudeIdentityKey("real", "org"), store.accounts["a1"].IdentityKey)
 }

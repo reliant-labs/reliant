@@ -257,6 +257,10 @@ var purgeSteps = []step{
 	// tokens and provider API keys; if any earlier step fails and the
 	// transaction rolls back, the user keeps working with their credentials
 	// intact rather than being left authenticated to nothing.
+	// The four *_auth_tokens tables and the LLM rows of api_keys are no longer read or written, but
+	// they still hold the credentials of every user who connected before the one-time copy, until
+	// the migration that drops them. An account deletion must keep wiping them; delete these steps
+	// together with that migration.
 	{"claude_auth_tokens", `DELETE FROM claude_auth_tokens WHERE user_id = $1`},
 	{"codex_auth_tokens", `DELETE FROM codex_auth_tokens WHERE user_id = $1`},
 	{"copilot_auth_tokens", `DELETE FROM copilot_auth_tokens WHERE user_id = $1`},

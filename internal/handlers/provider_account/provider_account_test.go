@@ -153,11 +153,9 @@ func TestDeleteProviderAccountReDensifies(t *testing.T) {
 	assert.Equal(t, "sk-c-3333", withSecrets[0].Secrets.Secret)
 	assert.EqualValues(t, 0, withSecrets[0].Priority)
 
-	// Deleting the last one disconnects the provider; syncing with the legacy tables (which
-	// never held these accounts) brings nothing back.
+	// Deleting the last one disconnects the provider.
 	_, err = e.svc.DeleteProviderAccount(as(user), connect.NewRequest(&pb.DeleteProviderAccountRequest{AccountId: c.Id}))
 	require.NoError(t, err)
-	require.NoError(t, e.repo.SyncLegacyCredentials(as(user), user))
 	assert.Empty(t, e.list(user))
 }
 

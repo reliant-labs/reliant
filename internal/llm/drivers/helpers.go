@@ -64,28 +64,6 @@ func usableAPIKey(key string) bool {
 	return key != "" && key != "dummy" && key != db.ProviderOAuthMarker
 }
 
-// legacySyncer is the expand-period bridge to the legacy credential tables (db.Repo).
-type legacySyncer interface {
-	SyncLegacyCredentials(ctx context.Context, userID string) error
-}
-
-// syncLegacyAccounts levels the user's provider accounts with the legacy credential tables.
-//
-// During the expand release the connect and disconnect RPCs still write only those tables and
-// the previous release may still rotate tokens in them, so reading provider_accounts alone
-// would miss a connect, resurrect a disconnect, or run on a spent refresh token until the next
-// boot copy. A failure is logged and never fails the read: the accounts are served as they are.
-func syncLegacyAccounts(ctx context.Context, repo db.Repository, userID string) {
-	syncer, ok := repo.(legacySyncer)
-	if !ok {
-		return
-	}
-	if err := syncer.SyncLegacyCredentials(ctx, userID); err != nil {
-		logging.Warn("Could not level provider accounts with the legacy credential tables; using them as they are",
-			"user_id", userID, "error", err)
-	}
-}
-
 // configuredAccounts loads every usable account of every provider the user has connected, in
 // priority order. Paused accounts and accounts needing sign-in are left out; limited ones are
 // in (being limited is the account router's business, not resolution's). unavailable names the
@@ -95,8 +73,6 @@ func configuredAccounts(ctx context.Context, repo db.Repository, userID string) 
 		// Per reliant.md: no fallback paths, error out when things aren't set properly
 		return nil, nil, fmt.Errorf("userID is required to fetch provider accounts from database")
 	}
-	syncLegacyAccounts(ctx, repo, userID)
-
 	stored, err := repo.ListProviderAccountsWithSecrets(ctx, userID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get provider API keys and sign-ins: %w", err)
@@ -399,12 +375,6 @@ func HasStaleReliantKey(ctx context.Context, repo db.Repository, userID string) 
 func managedReliantKey(ctx context.Context, repo interface {
 	ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error)
 }, userID string) (string, error) {
-	if s, ok := repo.(legacySyncer); ok {
-		if err := s.SyncLegacyCredentials(ctx, userID); err != nil {
-			logging.Warn("Could not level provider accounts with the legacy credential tables; using them as they are",
-				"user_id", userID, "error", err)
-		}
-	}
 	accounts, err := repo.ListProviderAccountsWithSecrets(ctx, userID)
 	if err != nil {
 		return "", err

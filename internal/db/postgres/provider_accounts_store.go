@@ -33,14 +33,15 @@ func ProviderAccountAAD(accountID, column string) []byte {
 }
 
 // LegacyAPIKeyAAD and LegacyOAuthTokenAAD are the AADs the legacy api_keys and *_auth_tokens
-// tables sealed under. They bind the table name, so the boot copy must open and re-seal.
+// tables sealed under. They bind the table name, so the one-time copy must open and re-seal.
 func LegacyAPIKeyAAD(userID, provider string) []byte { return apiKeyAAD(userID, provider) }
 
 func LegacyOAuthTokenAAD(table, userID, column string) []byte {
 	return oauthTokenAAD(table, userID, column)
 }
 
-// Legacy sources: the tables the boot copy mirrors into provider_accounts.legacy_source.
+// Legacy sources: the tables the one-time copy reads, recorded in provider_accounts.legacy_source
+// on the accounts it creates so a re-run can tell an account it already made from a native one.
 const (
 	LegacySourceClaude      = "claude_auth_tokens"
 	LegacySourceCodex       = "codex_auth_tokens"
@@ -287,8 +288,8 @@ func (s *AccountStore) GetProviderAccountWithSecrets(ctx context.Context, userID
 	return &core.AccountWithSecrets{ProviderAccount: a, Secrets: sec}, nil
 }
 
-// importMeta marks a write as the boot copy of a legacy row: it stamps the legacy timestamps and
-// source, and only overwrites a row that is still a mirror of an older legacy value.
+// importMeta marks a write as the one-time copy of a legacy row: it stamps the legacy timestamps
+// and source.
 type importMeta struct {
 	source    string
 	createdAt time.Time
@@ -305,7 +306,7 @@ func (s *AccountStore) UpsertProviderAccount(ctx context.Context, u core.Account
 	)
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
 		var err error
-		acct, created, _, err = s.upsertTx(ctx, tx, u, nil)
+		acct, created, err = s.upsertTx(ctx, tx, u)
 		return err
 	})
 	if err != nil {
@@ -358,56 +359,35 @@ func selectAccountByID(ctx context.Context, tx *sql.Tx, userID, accountID string
 	return &a, nil
 }
 
-// upsertTx is the one write path for connecting an account: a fresh sign-in, a rewrite of a
-// placeholder identity, and the boot copy of a legacy row. applied is false only for an import
-// that was not newer than what the account already holds.
-func (s *AccountStore) upsertTx(ctx context.Context, tx *sql.Tx, u core.AccountUpsert, imp *importMeta) (acct core.ProviderAccount, created, applied bool, err error) {
+// upsertTx is the one write path for connecting an account: a fresh sign-in and the rewrite of a
+// placeholder identity after a refresh.
+func (s *AccountStore) upsertTx(ctx context.Context, tx *sql.Tx, u core.AccountUpsert) (acct core.ProviderAccount, created bool, err error) {
 	if err := lockProvider(ctx, tx, u.UserID, u.Provider); err != nil {
-		return core.ProviderAccount{}, false, false, err
+		return core.ProviderAccount{}, false, err
 	}
 
-	if u.ReplaceIdentityOf != "" && u.ReplaceIdentityOf != u.IdentityKey {
+	// Only a placeholder is ever rewritten: a real identity is who the account IS.
+	if u.ReplaceIdentityOf != "" && u.ReplaceIdentityOf != u.IdentityKey && core.IsPlaceholderIdentityKey(u.ReplaceIdentityOf) {
 		old, err := selectAccountByIdentity(ctx, tx, u.UserID, u.Provider, u.ReplaceIdentityOf)
 		if err != nil {
-			return core.ProviderAccount{}, false, false, err
+			return core.ProviderAccount{}, false, err
 		}
 		if old != nil {
-			acct, applied, err := s.renameTx(ctx, tx, *old, u, imp)
-			return acct, false, applied, err
+			acct, err := s.renameTx(ctx, tx, *old, u)
+			return acct, false, err
 		}
 	}
 
 	existing, err := selectAccountByIdentity(ctx, tx, u.UserID, u.Provider, u.IdentityKey)
 	if err != nil {
-		return core.ProviderAccount{}, false, false, err
-	}
-	if existing == nil && imp != nil {
-		// The legacy table holds one row per user and provider, so an account that already mirrors
-		// it is that row under an identity it has since changed: a placeholder the first refresh
-		// rewrote, or an API key the previous release rotated.
-		if existing, err = selectMirror(ctx, tx, u.UserID, u.Provider, imp.source); err != nil {
-			return core.ProviderAccount{}, false, false, err
-		}
+		return core.ProviderAccount{}, false, err
 	}
 	if existing == nil {
-		acct, err := s.insertTx(ctx, tx, u, imp)
-		return acct, true, true, err
-	}
-	if imp != nil {
-		mirrors, err := s.mirrorsOlderLegacy(ctx, tx, *existing, imp)
-		if err != nil || !mirrors {
-			return *existing, false, false, err
-		}
-		identity := u.IdentityKey
-		if core.IsLegacyIdentityKey(identity) && !core.IsLegacyIdentityKey(existing.IdentityKey) {
-			// The first refresh already learned the real identity; the legacy row has not.
-			identity = existing.IdentityKey
-		}
-		acct, err = s.updateTx(ctx, tx, *existing, u, identity, imp)
-		return acct, false, err == nil, err
+		acct, err := s.insertTx(ctx, tx, u, nil)
+		return acct, true, err
 	}
 	acct, err = s.updateTx(ctx, tx, *existing, u, u.IdentityKey, nil)
-	return acct, false, err == nil, err
+	return acct, false, err
 }
 
 func selectMirror(ctx context.Context, tx *sql.Tx, userID, provider, source string) (*core.ProviderAccount, error) {
@@ -423,15 +403,48 @@ func selectMirror(ctx context.Context, tx *sql.Tx, userID, provider, source stri
 	return &a, nil
 }
 
-// mirrorsOlderLegacy is the boot copy's overwrite rule (design §1.4): only an account that still
-// mirrors a legacy row (legacy_source set) is overwritten, and only by a strictly newer legacy
-// write. Credential writes by new code stamp updated_at = now, so they are never clobbered.
-func (s *AccountStore) mirrorsOlderLegacy(ctx context.Context, tx *sql.Tx, a core.ProviderAccount, imp *importMeta) (bool, error) {
-	var src sql.NullString
-	if err := tx.QueryRowContext(ctx, `SELECT legacy_source FROM provider_accounts WHERE id = $1`, a.ID).Scan(&src); err != nil {
-		return false, err
+// importTx copies one legacy row. It never merges and never deletes: an account that already
+// holds the row's identity is left alone, and a row whose provider already has an account this
+// copy made from the same table (an earlier run, or an earlier release's mirror, whose identity
+// a refresh has since rewritten) is that account, not a new one. Only such a mirror is ever
+// overwritten, and only by a strictly newer legacy write: an account the user connected through
+// the new code has no legacy_source and is untouchable. A row that cannot be matched becomes a
+// new account, because a duplicate is harmless (the next refresh merges it into the real
+// identity) and a missing one is a user signed out.
+func (s *AccountStore) importTx(ctx context.Context, tx *sql.Tx, u core.AccountUpsert, imp importMeta) (created, applied bool, err error) {
+	if err := lockProvider(ctx, tx, u.UserID, u.Provider); err != nil {
+		return false, false, err
 	}
-	return src.Valid && a.UpdatedAt.Before(imp.updatedAt), nil
+	existing, err := selectAccountByIdentity(ctx, tx, u.UserID, u.Provider, u.IdentityKey)
+	if err != nil {
+		return false, false, err
+	}
+	if existing == nil {
+		if existing, err = selectMirror(ctx, tx, u.UserID, u.Provider, imp.source); err != nil {
+			return false, false, err
+		}
+	}
+	if existing == nil {
+		if _, err := s.insertTx(ctx, tx, u, &imp); err != nil {
+			return false, false, err
+		}
+		return true, true, nil
+	}
+	var src sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT legacy_source FROM provider_accounts WHERE id = $1`, existing.ID).Scan(&src); err != nil {
+		return false, false, err
+	}
+	if !src.Valid || !existing.UpdatedAt.Before(imp.updatedAt) {
+		return false, false, nil
+	}
+	identity := u.IdentityKey
+	if core.IsPlaceholderIdentityKey(identity) {
+		identity = existing.IdentityKey // a refresh already learned the real identity; the legacy row has not
+	}
+	if _, err := s.updateTx(ctx, tx, *existing, u, identity, &imp); err != nil {
+		return false, false, err
+	}
+	return false, true, nil
 }
 
 func (s *AccountStore) insertTx(ctx context.Context, tx *sql.Tx, u core.AccountUpsert, imp *importMeta) (core.ProviderAccount, error) {
@@ -506,67 +519,63 @@ func (s *AccountStore) updateTx(ctx context.Context, tx *sql.Tx, cur core.Provid
 	return scanAccount(row)
 }
 
-// renameTx rewrites a placeholder identity (old) to u.IdentityKey. If another account already owns
-// that identity the two are the same upstream account and merge into one (design §3.3).
-func (s *AccountStore) renameTx(ctx context.Context, tx *sql.Tx, old core.ProviderAccount, u core.AccountUpsert, imp *importMeta) (core.ProviderAccount, bool, error) {
-	if imp != nil {
-		mirrors, err := s.mirrorsOlderLegacy(ctx, tx, old, imp)
-		if err != nil || !mirrors {
-			return old, false, err
-		}
-	}
+// renameTx teaches a placeholder account (old) its real identity, u.IdentityKey.
+//
+// If no other account owns that identity the placeholder row is rewritten in place. If one does,
+// the two are the same upstream account and they merge, and the merge ALWAYS keeps the account
+// that already held the real identity (target) and deletes the placeholder. That account is the
+// one with a distinct, known identity, so it is the one the user's label, pause, limit state,
+// poll schedule and thread assignments may already belong to; deleting it (as a newest-wins rule
+// once did) lost all of that. What carries over from the placeholder is only what the target
+// lacks: the smaller priority, a label, a pause, its thread assignments. The tokens written are
+// u's, the refresh response that taught us the identity, which are newer than either row.
+func (s *AccountStore) renameTx(ctx context.Context, tx *sql.Tx, old core.ProviderAccount, u core.AccountUpsert) (core.ProviderAccount, error) {
 	target, err := selectAccountByIdentity(ctx, tx, u.UserID, u.Provider, u.IdentityKey)
 	if err != nil {
-		return core.ProviderAccount{}, false, err
+		return core.ProviderAccount{}, err
 	}
 	if target == nil {
-		acct, err := s.updateTx(ctx, tx, old, u, u.IdentityKey, imp)
-		return acct, err == nil, err
+		return s.updateTx(ctx, tx, old, u, u.IdentityKey, nil)
+	}
+	if target.ID == old.ID {
+		return s.updateTx(ctx, tx, old, u, u.IdentityKey, nil)
+	}
+	if core.IsPlaceholderIdentityKey(target.IdentityKey) {
+		return core.ProviderAccount{}, fmt.Errorf("refusing to merge into placeholder identity %q", target.IdentityKey)
 	}
 
-	// Merge: the row with the newer updated_at survives and keeps its own tokens.
-	survivor, loser := *target, old
-	survivorIsOld := old.UpdatedAt.After(target.UpdatedAt)
-	if survivorIsOld {
-		survivor, loser = old, *target
-	}
 	if _, err := tx.ExecContext(ctx, `UPDATE thread_provider_accounts t SET account_id = $1
 		WHERE t.account_id = $2 AND NOT EXISTS (
 			SELECT 1 FROM thread_provider_accounts o
-			WHERE o.thread_id = t.thread_id AND o.provider = t.provider AND o.account_id = $1)`, survivor.ID, loser.ID); err != nil {
-		return core.ProviderAccount{}, false, err
+			WHERE o.thread_id = t.thread_id AND o.provider = t.provider AND o.account_id = $1)`, target.ID, old.ID); err != nil {
+		return core.ProviderAccount{}, err
 	}
-	priority := min(survivor.Priority, loser.Priority)
-	label := survivor.Label
+	priority := min(target.Priority, old.Priority)
+	label := target.Label
 	if label == "" {
-		label = loser.Label
+		label = old.Label
 	}
-	// Free the identity before the survivor can take it.
-	if _, err := tx.ExecContext(ctx, `DELETE FROM provider_accounts WHERE id = $1`, loser.ID); err != nil {
-		return core.ProviderAccount{}, false, err
+	paused := target.PausedAt
+	if paused == nil {
+		paused = old.PausedAt
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE provider_accounts SET priority = $2, label = $3 WHERE id = $1`, survivor.ID, priority, label); err != nil {
-		return core.ProviderAccount{}, false, err
+	// Free the identity bookkeeping before the target takes the smaller priority.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM provider_accounts WHERE id = $1`, old.ID); err != nil {
+		return core.ProviderAccount{}, err
 	}
-	survivor.Priority, survivor.Label = priority, label
-	if survivorIsOld {
-		acct, err := s.updateTx(ctx, tx, survivor, u, u.IdentityKey, imp)
-		if err != nil {
-			return core.ProviderAccount{}, false, err
-		}
-		if err := densifyTx(ctx, tx, u.UserID, u.Provider); err != nil {
-			return core.ProviderAccount{}, false, err
-		}
-		return acct, true, nil
+	if _, err := tx.ExecContext(ctx, `UPDATE provider_accounts SET priority = $2, label = $3, paused_at = $4 WHERE id = $1`,
+		target.ID, priority, label, ptrTime(paused)); err != nil {
+		return core.ProviderAccount{}, err
+	}
+	target.Priority, target.Label, target.PausedAt = priority, label, paused
+	acct, err := s.updateTx(ctx, tx, *target, u, u.IdentityKey, nil)
+	if err != nil {
+		return core.ProviderAccount{}, err
 	}
 	if err := densifyTx(ctx, tx, u.UserID, u.Provider); err != nil {
-		return core.ProviderAccount{}, false, err
+		return core.ProviderAccount{}, err
 	}
-	acct, err := selectAccountByID(ctx, tx, survivor.UserID, survivor.ID)
-	if err != nil {
-		return core.ProviderAccount{}, false, err
-	}
-	return *acct, false, nil
+	return acct, nil
 }
 
 // densifyTx renumbers a provider's priorities to 0..n-1, keeping their order. The unique
@@ -729,12 +738,9 @@ func (s *AccountStore) ReorderProviderAccounts(ctx context.Context, userID, prov
 	})
 }
 
-// DeleteProviderAccount also removes the legacy row the account mirrors. During the expand release
-// the boot copy would otherwise resurrect a deleted account from it on the next start.
 func (s *AccountStore) DeleteProviderAccount(ctx context.Context, userID, accountID string) error {
 	var provider string
-	var legacy sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT provider, legacy_source FROM provider_accounts WHERE id = $1 AND user_id = $2`, accountID, userID).Scan(&provider, &legacy)
+	err := s.db.QueryRowContext(ctx, `SELECT provider FROM provider_accounts WHERE id = $1 AND user_id = $2`, accountID, userID).Scan(&provider)
 	if errors.Is(err, sql.ErrNoRows) {
 		return core.ErrProviderAccountNotFound
 	}
@@ -752,28 +758,8 @@ func (s *AccountStore) DeleteProviderAccount(ctx context.Context, userID, accoun
 		if n, _ := res.RowsAffected(); n == 0 {
 			return core.ErrProviderAccountNotFound
 		}
-		if legacy.Valid {
-			if err := deleteLegacyRow(ctx, tx, legacy.String, userID, provider); err != nil {
-				return err
-			}
-		}
 		return densifyTx(ctx, tx, userID, provider)
 	})
-}
-
-func deleteLegacyRow(ctx context.Context, tx *sql.Tx, source, userID, provider string) error {
-	var query string
-	var args []any
-	switch source {
-	case LegacySourceAPIKeys:
-		query, args = `DELETE FROM api_keys WHERE user_id = $1 AND provider = $2`, []any{userID, provider}
-	case LegacySourceClaude, LegacySourceCodex, LegacySourceCopilot, LegacySourceAntigravity:
-		query, args = `DELETE FROM `+source+` WHERE user_id = $1`, []any{userID}
-	default:
-		return nil
-	}
-	_, err := tx.ExecContext(ctx, query, args...)
-	return err
 }
 
 // ---- limit state ----
@@ -1108,7 +1094,7 @@ func (s *AccountStore) RecentAssignmentCounts(ctx context.Context, accountIDs []
 	return out, rows.Err()
 }
 
-// LegacyImport is one credential read from a legacy table, ready to mirror.
+// LegacyImport is one credential read from a legacy table, ready to copy.
 type LegacyImport struct {
 	Upsert    core.AccountUpsert
 	Source    string // a LegacySource* constant
@@ -1116,25 +1102,39 @@ type LegacyImport struct {
 	UpdatedAt time.Time
 }
 
-// ImportResult counts what one ImportLegacy run did.
+// ImportResult counts what the one-time legacy copy did.
 type ImportResult struct{ Created, Updated, Unchanged, Failed int }
 
 const legacyCopyLockName = "provider_accounts_legacy_copy"
 
-// ImportLegacy mirrors legacy credentials into provider_accounts, idempotently, in one
-// transaction under a global advisory lock so concurrent boots (API server, worker, replicas)
-// serialize. An account is written only when it does not exist yet, or still mirrors a legacy row
-// that is strictly older than the one offered. A row that fails to write is rolled back to a
-// savepoint, counted and logged: one bad credential never blocks the rest or the boot.
-func (s *AccountStore) ImportLegacy(ctx context.Context, imports []LegacyImport) (ImportResult, error) {
-	var res ImportResult
-	if len(imports) == 0 {
-		return res, nil
-	}
-	err := s.inTx(ctx, func(tx *sql.Tx) error {
+// LegacyCopyDone reports whether the one-time copy has completed. A cheap read, so a boot that
+// has nothing to do opens no secret.
+func (s *AccountStore) LegacyCopyDone(ctx context.Context) (bool, error) {
+	var done bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM legacy_credential_copy)`).Scan(&done)
+	return done, err
+}
+
+// ImportLegacy copies the legacy credentials into provider_accounts ONCE and records that it did.
+// It runs in one transaction under a global advisory lock, and re-checks the completion marker
+// under that lock, so boots racing each other (API server, worker, replicas) import exactly once:
+// the losers find the marker and return ran=false. The marker commits with the accounts, so a
+// crash leaves neither. A row that fails to write is rolled back to a savepoint, counted and
+// logged: one bad credential never blocks the rest or the boot, and the count is kept in the
+// marker so whoever drops the legacy tables can see whether anything was left behind.
+func (s *AccountStore) ImportLegacy(ctx context.Context, imports []LegacyImport, skipped int) (res ImportResult, ran bool, err error) {
+	err = s.inTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, legacyCopyLockName); err != nil {
 			return fmt.Errorf("lock legacy credential copy: %w", err)
 		}
+		var done bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM legacy_credential_copy)`).Scan(&done); err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+		res = ImportResult{Failed: skipped}
 		for _, in := range imports {
 			if err := validateUpsert(in.Upsert); err != nil {
 				slog.Warn("legacy credential skipped: invalid", "source", in.Source, "user_id", in.Upsert.UserID, "provider", in.Upsert.Provider, "error", err)
@@ -1144,8 +1144,7 @@ func (s *AccountStore) ImportLegacy(ctx context.Context, imports []LegacyImport)
 			if _, err := tx.ExecContext(ctx, `SAVEPOINT legacy_import`); err != nil {
 				return err
 			}
-			meta := &importMeta{source: in.Source, createdAt: in.CreatedAt, updatedAt: in.UpdatedAt}
-			_, created, applied, err := s.upsertTx(ctx, tx, in.Upsert, meta)
+			created, applied, err := s.importTx(ctx, tx, in.Upsert, importMeta{source: in.Source, createdAt: in.CreatedAt, updatedAt: in.UpdatedAt})
 			if err != nil {
 				if _, rbErr := tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT legacy_import`); rbErr != nil {
 					return rbErr
@@ -1166,19 +1165,17 @@ func (s *AccountStore) ImportLegacy(ctx context.Context, imports []LegacyImport)
 				res.Unchanged++
 			}
 		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO legacy_credential_copy (id, completed_at, created, skipped, failed)
+			VALUES (1, $1, $2, $3, $4)`, s.now(), res.Created+res.Updated, res.Unchanged, res.Failed); err != nil {
+			return err
+		}
+		ran = true
 		return nil
 	})
-	return res, err
-}
-
-// LegacyInfo returns an account's provider and the legacy table it mirrors ("" if none).
-func (s *AccountStore) LegacyInfo(ctx context.Context, userID, accountID string) (provider, source string, err error) {
-	var src sql.NullString
-	err = s.db.QueryRowContext(ctx, `SELECT provider, legacy_source FROM provider_accounts WHERE id = $1 AND user_id = $2`, accountID, userID).Scan(&provider, &src)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", core.ErrProviderAccountNotFound
+	if err != nil {
+		return ImportResult{}, false, err
 	}
-	return provider, src.String, err
+	return res, ran, nil
 }
 
 // OpenLegacy opens a value sealed by a legacy table under its old AAD.
@@ -1195,78 +1192,4 @@ func (s *AccountStore) OpenLegacy(ctx context.Context, userID string, aad, seale
 	}
 	defer clear(pt)
 	return string(pt), nil
-}
-
-// LegacyMirror is one account that mirrors a legacy row.
-type LegacyMirror struct {
-	Source, Provider string
-	UpdatedAt        time.Time
-}
-
-// LegacyMirrors lists the user's accounts that still mirror a legacy row.
-func (s *AccountStore) LegacyMirrors(ctx context.Context, userID string) ([]LegacyMirror, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT legacy_source, provider, updated_at FROM provider_accounts
-		WHERE user_id = $1 AND legacy_source IS NOT NULL`, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []LegacyMirror
-	for rows.Next() {
-		var m LegacyMirror
-		if err := rows.Scan(&m.Source, &m.Provider, &m.UpdatedAt); err != nil {
-			return nil, err
-		}
-		out = append(out, m)
-	}
-	return out, rows.Err()
-}
-
-// PruneLegacyMirrors deletes accounts that mirror a legacy row which no longer exists (the
-// previous release disconnected it), and re-densifies the affected providers. exists is a
-// correlated predicate over alias `a` (the account) that holds while the legacy row does.
-// userID limits the prune to one user; "" prunes everyone (the boot copy).
-func (s *AccountStore) PruneLegacyMirrors(ctx context.Context, userID, source, legacyExists string) (int, error) {
-	pruned := 0
-	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, legacyCopyLockName); err != nil {
-			return fmt.Errorf("lock legacy credential copy: %w", err)
-		}
-		//nolint:gosec // G202: legacyExists is a package constant predicate, never input.
-		rows, err := tx.QueryContext(ctx, `DELETE FROM provider_accounts a WHERE a.legacy_source = $1 AND ($2 = '' OR a.user_id = $2)
-			AND NOT EXISTS (`+legacyExists+`) RETURNING a.user_id, a.provider`, source, userID)
-		if err != nil {
-			return err
-		}
-		type up struct{ user, provider string }
-		seen := map[up]bool{}
-		for rows.Next() {
-			var k up
-			if err := rows.Scan(&k.user, &k.provider); err != nil {
-				_ = rows.Close()
-				return err
-			}
-			seen[k] = true
-			pruned++
-		}
-		if err := rows.Err(); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		_ = rows.Close()
-		for k := range seen {
-			if err := densifyTx(ctx, tx, k.user, k.provider); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	return pruned, err
-}
-
-// StampMirror sets the account's updated_at, so a mirror that was just written through to its
-// legacy row is not seen as older than it.
-func (s *AccountStore) StampMirror(ctx context.Context, accountID string, at time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE provider_accounts SET updated_at = $2 WHERE id = $1 AND legacy_source IS NOT NULL`, accountID, at.UTC())
-	return err
 }
