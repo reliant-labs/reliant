@@ -27,7 +27,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Cpu, Wallet } from "lucide-react";
-import { remainingHeadline, sizeFacts } from "@/components/Billing/daemonUsage";
+import { includedHoursSentence, remainingHeadline, sizeFacts } from "@/components/Billing/daemonUsage";
 import {
   useComputeSubscription,
   useComputeUsage,
@@ -233,8 +233,9 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
             monthlyPriceCents: d.monthlyPriceCents,
             includedMinutes: d.includedMinutes,
             overageCentsPerMinute: d.overageCentsPerMinute,
-            includedSmallDaemonHours: Number(plan.structuredLimits?.includedSmallDaemonHours ?? 0),
-            facts: sizeFacts(plansQ.data?.daemonPricing, d.allowedSizes.at(-1) ?? "small") ?? undefined,
+            includedSmallDaemonHours: plan.structuredLimits?.includedSmallDaemonHours === undefined ? undefined : Number(plan.structuredLimits.includedSmallDaemonHours),
+            allowedSizes: d.allowedSizes,
+            facts: sizeFacts(plansQ.data?.daemonPricing, d.allowedSizes.at(-1) ?? "", plan.structuredLimits?.includedSmallDaemonHours === undefined ? undefined : Number(plan.structuredLimits.includedSmallDaemonHours)) ?? undefined,
           },
         ];
       }),
@@ -407,10 +408,11 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                   {purchasablePlans.map((plan) => {
                     const d = derivePlanDisplay(plan);
                     const isCurrent = subscription?.plan?.id === plan.id;
-                    const hours =
-                      d.includedMinutes < 0
-                        ? "unlimited hours"
-                        : `${Math.round(d.includedMinutes / 60)} h/mo`;
+                    const hours = includedHoursSentence(
+                      plan.structuredLimits?.includedSmallDaemonHours === undefined ? undefined : Number(plan.structuredLimits.includedSmallDaemonHours),
+                      plansQ.data?.daemonPricing,
+                      d.allowedSizes,
+                    );
                     return (
                       <button
                         key={plan.id}

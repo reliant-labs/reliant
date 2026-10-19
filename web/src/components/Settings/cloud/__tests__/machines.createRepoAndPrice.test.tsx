@@ -67,6 +67,7 @@ const mocks = vi.hoisted(() => ({
 
 // ListPlans: the per-size price list the cards read.
 vi.mock("@/hooks/useCloudBillingQueries", () => ({
+  useComputeUsage: () => ({ data: { includedSmallDaemonSeconds: 576000n, remainingSmallDaemonSeconds: 3600n } }),
   usePlans: () => ({
     data: { plans: [], daemonPricing: mocks.daemonPricing },
     isLoading: false,
@@ -334,7 +335,10 @@ describe("create-machine size prices", () => {
     expect(within(small).getByTestId("size-price-small")).toHaveTextContent("$0.17/hr");
     expect(within(medium).getByTestId("size-price-medium")).toHaveTextContent("$0.41/hr");
     // The burn rate the price is paired with, from the same row.
-    expect(medium).toHaveTextContent(/uses included hours 2× as fast/i);
+    expect(small).toHaveTextContent('160 Small hours/month included');
+    expect(medium).toHaveTextContent('80 Medium hours/month included');
+    expect(medium).toHaveTextContent('$0.41/hr after included hours');
+    expect(modal).not.toHaveTextContent(/×|uses included hours|burn/i);
     expect(small).toHaveTextContent('25 GiB disk · $6.25/mo while suspended');
     expect(medium).toHaveTextContent('50 GiB disk · $12.50/mo while suspended');
     expect(within(modal).getByTestId('size-pricing-note')).toHaveTextContent('billed until deleted');
@@ -369,6 +373,7 @@ describe("create-machine size prices", () => {
     const modal = await openCreateModal(user);
 
     expect(within(modal).getByTestId("size-price-small")).toHaveTextContent("$0.13/hr");
-    expect(within(modal).queryByTestId("size-price-medium")).not.toBeInTheDocument();
+    expect(within(modal).getByTestId("size-price-medium")).toHaveTextContent("Hourly price unavailable");
+    expect(within(modal).getByRole("radio", { name: "Medium" })).toHaveTextContent("Included runtime unavailable");
   });
 });

@@ -44,6 +44,7 @@ vi.mock('@/services/controlPlane/billing', () => ({
 }))
 
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
+  useComputeUsage: () => ({ data: undefined }),
   usePlans: () => ({
     data: {
       plans: [],

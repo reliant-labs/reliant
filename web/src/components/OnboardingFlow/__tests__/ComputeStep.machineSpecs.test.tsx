@@ -329,7 +329,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     for (const size of ["Small", "Medium", "Large", "XL"]) {
       const row = screen.getByRole("button", { name: new RegExp(`^${size} `) });
       expect(row).not.toHaveTextContent(/hours/i);
-      expect(row).not.toHaveTextContent(/included/i);
+      expect(row).toHaveTextContent(/Included runtime, hourly price and disk cost unavailable/i);
     }
   });
 
@@ -348,7 +348,8 @@ describe("ComputeStep — every size says what it gives you", () => {
 
     const note = screen.getByTestId("compute-step-hours-note");
     // 1020 min = 17 h, from the fixture's own catalog — not a constant.
-    expect(note).toHaveTextContent(/17 small-daemon-hours each month/i);
+    expect(note).toHaveTextContent(/Included runtime unavailable/i);
+    expect(note).toHaveTextContent(/shared across your machines/i);
     expect(note).not.toHaveTextContent(/every size/i);
     expect(screen.getAllByTestId("compute-step-hours-note")).toHaveLength(1);
   });

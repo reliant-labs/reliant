@@ -182,8 +182,8 @@ describe("Plan rows — cost breakdown only on the selected row", () => {
     // this asserts the prop wiring through PlanTileRow directly.
     const { PlanTileRow } = await import("@/components/Billing/PlanTiles");
     const facts = {
-      burnRateLabel: "uses included hours 4× as fast",
-      hourlyPriceLabel: "$0.52/h past your included hours",
+      includedRuntimeLabel: "40 Large hours/month included",
+      hourlyPriceLabel: "$0.52/h after included hours, with overage enabled",
       diskLabel: "100 GiB disk",
       suspendedFeeLabel: "$25.00/mo",
     };

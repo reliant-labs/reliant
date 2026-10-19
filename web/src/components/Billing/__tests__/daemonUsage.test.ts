@@ -69,7 +69,7 @@ describe("burn line", () => {
       runningMultiplier: 4n,
       bySize: [{ size: "large", multiplier: 4n, runningSeconds: 100n, overageSeconds: 0n }],
     });
-    expect(burnLabel(u)).toBe("≈ 10.4 h on your Large (4×)");
+    expect(burnLabel(u)).toBe("≈ 10.4 h left on your Large");
   });
 
   it("does not guess a size when two are running", () => {
@@ -81,7 +81,7 @@ describe("burn line", () => {
         { size: "large", multiplier: 4n, runningSeconds: 10n, overageSeconds: 0n },
       ],
     });
-    expect(burnLabel(u)).toBe("≈ 2.0 h at the current rate (5×)");
+    expect(burnLabel(u)).toBe("≈ 2.0 h left with your running machines");
   });
 
   it("is absent when nothing is running", () => {
@@ -108,14 +108,19 @@ describe("runs out / as of", () => {
 });
 
 describe("machine picker facts", () => {
-  it("shows price, burn rate, disk and the suspended fee for a size", () => {
-    expect(sizeFacts(pricing, "large")).toEqual({
-      hourlyPriceLabel: "$0.52/h past your included hours",
-      burnRateLabel: "uses included hours 4× as fast",
+  it("shows concrete runtime, qualified overage, disk and suspended fee", () => {
+    expect(sizeFacts(pricing, "large", 160)).toEqual({
+      hourlyPriceLabel: "$0.52/h after included hours, with overage enabled",
+      includedRuntimeLabel: "40 Large hours/month included",
       diskLabel: "100 GiB disk",
       suspendedFeeLabel: "$25.00/mo",
     });
-    expect(sizeFacts(pricing, "small")?.burnRateLabel).toBe("uses included hours 1× (1 hour per hour)");
+    for (const [size, runtime] of [["small", 160], ["medium", 80], ["large", 40], ["xl", 20], ["2xl", 10]] as const) {
+      expect(sizeFacts(pricing, size, 160)?.includedRuntimeLabel).toMatch(new RegExp(`^${runtime} `));
+    }
+    expect(sizeFacts(pricing, "small")?.includedRuntimeLabel).toBe("Included runtime unavailable");
+    expect(sizeFacts(pricing, "small", 0)?.includedRuntimeLabel).toBe("0 Small hours/month included");
+    expect(sizeFacts({ ...pricing, sizes: [{ ...pricing.sizes[0], multiplier: 3 }] }, "small", 150)?.includedRuntimeLabel).toBe("50 Small hours/month included");
     expect(sizeFacts(undefined, "large")).toBeNull();
   });
 
@@ -129,11 +134,9 @@ describe("plan tile sentence", () => {
   // FAILS ON main: PlanTiles said "… machine hours are included each month,
   // on every size", which stopped being true once sizes burn at different rates.
   it("no longer says 'on every size' and states each multiplier from the server", () => {
-    const sentence = includedHoursSentence(320, pricing);
-    expect(sentence).not.toMatch(/on every size/);
-    expect(sentence).toBe(
-      "320 small-daemon-hours each month. Medium uses them 2× as fast, Large 4×, XL 8×, 2XL 16×. " +
-        "Suspended machines: $0.25 per GiB-month.",
-    );
+    const sentence = includedHoursSentence(160, pricing, ["small", "medium"]);
+    expect(sentence).not.toMatch(/×|burn|small-daemon|Large|XL/);
+    expect(sentence).toBe("Each month: 160 Small hours or 80 Medium hours. Shared across your machines, not a separate allowance for each size.");
+    expect(includedHoursSentence(undefined, pricing, ["small"])).toContain("unavailable");
   });
 });

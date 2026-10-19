@@ -261,6 +261,35 @@ test.describe('Onboarding Flow', () => {
     await loginWithApiKey(page);
   });
 
+  test('pricing shows concrete included runtime and storage at every size', async ({ page }, testInfo) => {
+    page.on('pageerror', error => console.error(error));
+    const sizes = ['small', 'medium', 'large', 'xl'];
+    await page.route('**/controlplane.v1.BillingService/ListPlans', route => route.fulfill({
+      json: {
+        plans: sizes.map((size, index) => ({
+          id: `compute_${size}`, kind: 'compute', name: `Compute ${size}`, priceCents: String(1900 * (index + 1)), displayOrder: index,
+          structuredLimits: { allowedDaemonSizes: sizes.slice(0, index + 1), daemonComputeIncludedMinutes: 9600, includedSmallDaemonHours: '160' },
+        })),
+        daemonPricing: {
+          sizes: sizes.map((size, index) => ({ size, multiplier: String(2 ** index), hourlyPriceCents: String(13 * 2 ** index), storageGib: String([120, 140, 180, 260][index]) })),
+          suspendedDiskCentsPerGibMonth: '25', placeholder: false,
+        },
+      },
+    }));
+    await gotoOnboarding(page);
+    for (const runtime of ['160 Small', '80 Medium', '40 Large', '20 XL']) {
+      await expect(page.getByText(`${runtime} hours/month included`, { exact: true })).toBeVisible();
+    }
+    for (const disk of ['120 GiB disk', '140 GiB disk', '180 GiB disk', '260 GiB disk']) {
+      await expect(page.getByText(disk, { exact: false }).first()).toBeVisible();
+    }
+    await expect(page.getByText('$30.00/mo while suspended', { exact: false }).first()).toBeVisible();
+    await expect(page.getByText('after included hours, with overage enabled', { exact: false }).first()).toBeVisible();
+    await expect(page.getByText('shared across your machines', { exact: false }).first()).toBeVisible();
+    await expect(page.getByText(/uses included hours|as fast|hour per hour|small-daemon-hours/)).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('machine-pricing-160h.png'), fullPage: true });
+  });
+
   test('shows onboarding for a new (not-yet-onboarded) user at /onboarding', async ({ page }) => {
     await gotoOnboarding(page);
 
