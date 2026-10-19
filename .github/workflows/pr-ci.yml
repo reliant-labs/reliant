@@ -963,39 +963,13 @@ jobs:
       # be keyed on it. go.mod stays the single source of truth — @latest
       # silently switched forge mid-release once, and a hardcoded version is a
       # second place to remember to bump.
-      #
-      # golangci-lint is forge's own pin (GolangciLintVersion in the pinned
-      # forge's internal/templates/toolversions.go), read from the module so a
-      # forge bump moves it too: a second hardcoded version would drift.
       - name: Resolve forge version
         id: forge-version
-        env:
-          GOPRIVATE: github.com/reliant-labs/*
-          GONOSUMDB: github.com/reliant-labs/*
         run: |
           set -euo pipefail
           FORGE_VERSION="$(go list -m -f '{{.Version}}' github.com/reliant-labs/forge)"
           echo "version=$FORGE_VERSION" >> "$GITHUB_OUTPUT"
           echo "forge $FORGE_VERSION"
-          go mod download github.com/reliant-labs/forge
-          forge_dir="$(go list -m -f '{{.Dir}}' github.com/reliant-labs/forge)"
-          GOLANGCI_VERSION="$(sed -n 's/^const GolangciLintVersion = "\(v[^"]*\)"$/\1/p' "$forge_dir/internal/templates/toolversions.go")"
-          if [ -z "$GOLANGCI_VERSION" ]; then
-            echo "::error::cannot read GolangciLintVersion from forge $FORGE_VERSION (internal/templates/toolversions.go moved?); pin golangci-lint here by hand"
-            exit 1
-          fi
-          echo "golangci=$GOLANGCI_VERSION" >> "$GITHUB_OUTPUT"
-          echo "golangci-lint $GOLANGCI_VERSION"
-
-      # forge lint SKIPS its golangci-lint lane, and still passes, when the
-      # binary is not on PATH: until this step existed, every CI run of this
-      # job had silently never run golangci-lint at all. Install only: forge
-      # runs it.
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: ${{ steps.forge-version.outputs.golangci }}
-          install-only: true
 
       # Cache the BUILT binary keyed on the exact version, so the ~52s
       # `go install` from source happens once per forge bump instead of once
@@ -1041,12 +1015,42 @@ jobs:
           path: ~/go/bin/forge
           key: ${{ steps.forge-cache.outputs.cache-primary-key }}
 
+      # golangci-lint is forge's own pin, and forge lint builds it itself —
+      # that pin, with the Go this module selects — when it is not installed,
+      # failing the lane rather than skipping it if it cannot (forge#906).
+      # Cache that build under forge's tools cache, keyed on the pin the forge
+      # binary reports and the Go that builds it, so the one-time build is
+      # paid once per forge or Go bump rather than on every run. Saved on
+      # main only, like every cache (see the backend job).
+      - name: Resolve golangci-lint pin
+        id: golangci
+        run: |
+          set -euo pipefail
+          GOLANGCI_VERSION="$(forge tools pins golangci-lint)"
+          echo "version=$GOLANGCI_VERSION" >> "$GITHUB_OUTPUT"
+          echo "golangci-lint $GOLANGCI_VERSION"
+
+      - name: Restore forge's golangci-lint build
+        id: golangci-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/forge/tools
+          key: forge-tools-${{ runner.os }}-golangci-lint-${{ steps.golangci.outputs.version }}-go${{ steps.setup-go.outputs.go-version }}
+
       # Includes the migration-safety lane, which enforces forge.yaml's
       # database.migration_safety.require_compat_declaration: every migration
       # after the baseline says whether the previous release keeps working on
       # the schema it leaves (internal/db/SCHEMA.md).
       - name: Lint (forge)
         run: forge lint --no-fix
+
+      # After the lint, and whatever it found: the build it made is good.
+      - name: Save forge's golangci-lint build (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.golangci-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/forge/tools
+          key: ${{ steps.golangci-cache.outputs.cache-primary-key }}
 
   e2e-backend:
     name: E2E Backend (Go)
