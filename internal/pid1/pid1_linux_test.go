@@ -42,6 +42,11 @@ const (
 	// liveOrphans is how many orphans the program leaves running when it
 	// reports ready, so the test can see they were reparented to the init.
 	liveOrphans = 5
+	// liveOrphanCmd leaves one. The sleep outlives any test: the test kills
+	// it once it has seen it, so a loaded machine cannot let it exit (and be
+	// reaped) before it is counted.
+	liveOrphanCmd  = "sleep " + liveOrphanSecs + " & exit 0"
+	liveOrphanSecs = "300"
 )
 
 func TestMain(m *testing.M) {
@@ -94,17 +99,18 @@ func runProgram() {
 			os.Exit(3)
 		}
 	}
+	if os.Getenv(dieEnv) == "1" {
+		// No live orphans: nothing would kill them once the init is gone.
+		fmt.Println("ready")
+		_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+	}
 	for i := 0; i < liveOrphans; i++ {
-		if err := exec.Command("sh", "-c", "sleep 0.5 & exit 0").Run(); err != nil {
+		if err := exec.Command("sh", "-c", liveOrphanCmd).Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "orphaning sleep: %v\n", err)
 			os.Exit(3)
 		}
 	}
 	fmt.Println("ready")
-
-	if os.Getenv(dieEnv) == "1" {
-		_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
-	}
 	<-sigs
 	os.Exit(termExitCode)
 }
@@ -270,13 +276,28 @@ func assertSupervises(t *testing.T, cmd *exec.Cmd, lines <-chan string) {
 	awaitReady(t, lines)
 
 	// Not vacuous: the orphans exist, and the kernel handed them to the init.
-	if n := countChildren(t, initPid, func(p proc) bool { return p.comm == "sleep" }); n < liveOrphans {
-		t.Fatalf("init (pid %d) has %d sleep children right after ready, want >= %d orphans reparented to it", initPid, n, liveOrphans)
+	// Each is the init's child by the time the program reports ready (the
+	// kernel reparents it before the shell's Wait returns), but it may still
+	// be the shell's fork on its way to exec'ing sleep, so wait until each
+	// one is. They live until killed below, so none can exit, be reaped and
+	// go uncounted. Matched by command line: a short-lived sleep from the
+	// program's earlier rounds may still be about.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		n := countChildren(t, initPid, isLiveOrphan)
+		if n >= liveOrphans {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("init (pid %d) has %d live orphan children after ready, want %d reparented to it", initPid, n, liveOrphans)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
-	// They exit within ~0.5s. Whatever is left after that is a zombie nobody
-	// will ever wait for.
-	deadline := time.Now().Add(5 * time.Second)
+	// End them. Whatever is left after that is a zombie nobody will ever
+	// wait for.
+	killChildren(t, initPid, isLiveOrphan)
+	deadline = time.Now().Add(5 * time.Second)
 	for {
 		zombies := countChildren(t, initPid, func(p proc) bool { return p.state == "Z" })
 		alive := countChildren(t, initPid, func(p proc) bool { return p.comm == "sleep" && p.state != "Z" })
@@ -397,6 +418,31 @@ func countChildren(t *testing.T, parent int, match func(proc) bool) int {
 		}
 	}
 	return n
+}
+
+// isLiveOrphan reports whether p is a running sleep from liveOrphanCmd.
+func isLiveOrphan(p proc) bool {
+	if p.state == "Z" {
+		return false
+	}
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(p.pid) + "/cmdline")
+	return err == nil && string(raw) == "sleep\x00"+liveOrphanSecs+"\x00"
+}
+
+// killChildren SIGKILLs parent's children that match.
+func killChildren(t *testing.T, parent int, match func(proc) bool) {
+	t.Helper()
+	ps, err := processes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range ps {
+		if p.ppid == parent && match(p) {
+			if err := syscall.Kill(p.pid, syscall.SIGKILL); err != nil {
+				t.Fatalf("kill orphan %d: %v", p.pid, err)
+			}
+		}
+	}
 }
 
 func processes() ([]proc, error) {
