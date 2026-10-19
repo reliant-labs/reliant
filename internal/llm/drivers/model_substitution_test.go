@@ -3,11 +3,11 @@ package drivers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
@@ -160,20 +161,24 @@ type providerKeysRepo struct {
 	keys map[string]string
 }
 
-func (r providerKeysRepo) GetProviderAPIKeys(context.Context, string) (map[string]string, error) {
-	masked := make(map[string]string, len(r.keys))
+func (r providerKeysRepo) ListProviderAccountsWithSecrets(context.Context, string) ([]core.AccountWithSecrets, error) {
+	providers := make([]string, 0, len(r.keys))
 	for provider := range r.keys {
-		masked[provider] = "****"
+		providers = append(providers, provider)
 	}
-	return masked, nil
+	sort.Strings(providers)
+	out := make([]core.AccountWithSecrets, 0, len(providers))
+	for i, provider := range providers {
+		out = append(out, core.AccountWithSecrets{
+			ProviderAccount: core.ProviderAccount{ID: "acct-" + provider, UserID: "u", Provider: provider, AuthKind: core.AuthKindAPIKey, Priority: i},
+			Secrets:         core.AccountSecrets{Secret: r.keys[provider]},
+		})
+	}
+	return out, nil
 }
 
-func (r providerKeysRepo) GetProviderAPIKey(_ context.Context, _ string, provider string) (string, error) {
-	key, ok := r.keys[provider]
-	if !ok {
-		return "", errors.New("no key for " + provider)
-	}
-	return key, nil
+func (providerKeysRepo) ListAccountLimits(context.Context, string) (map[string]core.LimitState, error) {
+	return nil, nil
 }
 
 // useProviderKeys installs a user whose only credentials are API keys, and
@@ -224,13 +229,13 @@ func TestWithAccountAvailability_RejectedProviderRecoversWhenAccepted(t *testing
 	codexReport := &fakeReporter{err: fmt.Errorf("codex models request: %w", registry.RejectedCredential(401, "token expired"))}
 	build := reporters(map[models.DriverID]*fakeReporter{"codex": codexReport})
 
-	rejected := withAccountAvailability(context.Background(), configured(), build)
+	rejected := withAccountAvailability(context.Background(), onePerDriver(configured()), build)
 	require.NotContains(t, rejected.Drivers, models.DriverID("codex"))
 	require.Contains(t, rejected.Unavailable, models.DriverID("codex"))
 
 	codexReport.err = nil
 	codexReport.report = codexServes(codexAPIModel(t, "gpt-5.6-sol"))
-	recovered := withAccountAvailability(context.Background(), configured(), build)
+	recovered := withAccountAvailability(context.Background(), onePerDriver(configured()), build)
 	assert.Contains(t, recovered.Drivers, models.DriverID("codex"))
 	assert.Empty(t, recovered.Unavailable)
 	reg := models.MustGetRegistry().WithAvailability(recovered.Availability)

@@ -122,7 +122,7 @@ func clientForDriver(ctx context.Context, driverID models.DriverID, cfg models.D
 		OrganizationUUID: cfg.OrganizationUUID,
 	}
 	if cfg.RefreshToken != "" && cfg.UserID != "" {
-		refresher, reloader := tokenRefresherForDriver(ctx, driverID, cfg.UserID)
+		refresher, reloader := tokenRefresherForAccount(ctx, driverID, cfg.UserID, cfg.AccountID)
 		if refresher != nil {
 			llm.WithTokenRefresher(refresher, reloader, cfg.RefreshToken, cfg.TokenExpiresAt)(opts)
 		}

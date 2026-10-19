@@ -20,7 +20,7 @@ import (
 // The failure it guards against is not a compile error and not a test failure
 // elsewhere — it is a provider that connects cleanly, serves requests for an
 // hour, and then dies calling the wrong vendor's token endpoint. Before
-// oauthRefresherBuilders existed this was a switch with a `default` arm that
+// providerRefreshers existed this was a switch with a `default` arm that
 // built Claude's refresher, so a missing case was silently wrong rather than
 // visibly missing.
 //
@@ -33,7 +33,18 @@ import (
 
 func refresherIdentityError(t *testing.T, driverID models.DriverID) string {
 	t.Helper()
-	refresher, reloader := tokenRefresherForDriver(context.Background(), driverID, "user-under-test")
+	// The guard under test is the "not initialized" one: never let an earlier test's provider
+	// turn this into a real call to a vendor's token endpoint.
+	providerMu.Lock()
+	previous := globalAPIKeyProvider
+	globalAPIKeyProvider = nil
+	providerMu.Unlock()
+	t.Cleanup(func() {
+		providerMu.Lock()
+		globalAPIKeyProvider = previous
+		providerMu.Unlock()
+	})
+	refresher, reloader := tokenRefresherForAccount(context.Background(), driverID, "user-under-test", "acct-under-test")
 	require.NotNil(t, refresher, "driver %q has no registered refresher", driverID)
 	require.NotNil(t, reloader, "driver %q has no registered reloader", driverID)
 
@@ -67,7 +78,7 @@ func TestTokenRefresherForDriver_ExistingProvidersUnchanged(t *testing.T) {
 	// ("anthropic") has no OAuth refresher.
 	assert.Contains(t, refresherIdentityError(t, models.DriverID("claude")),
 		"claude token refresh failed")
-	refresher, reloader := tokenRefresherForDriver(context.Background(), models.DriverID("anthropic"), "user")
+	refresher, reloader := tokenRefresherForAccount(context.Background(), models.DriverID("anthropic"), "user", "acct")
 	assert.Nil(t, refresher)
 	assert.Nil(t, reloader)
 }
@@ -77,7 +88,7 @@ func TestTokenRefresherForDriver_ExistingProvidersUnchanged(t *testing.T) {
 // refresher. Silently handing it some other provider's is the behaviour this
 // whole file exists to prevent.
 func TestTokenRefresherForDriver_UnknownDriverGetsNothing(t *testing.T) {
-	refresher, reloader := tokenRefresherForDriver(context.Background(), models.DriverID("not-a-real-provider"), "user")
+	refresher, reloader := tokenRefresherForAccount(context.Background(), models.DriverID("not-a-real-provider"), "user", "acct")
 	assert.Nil(t, refresher, "an unregistered driver must not inherit another provider's refresher")
 	assert.Nil(t, reloader)
 }
@@ -88,6 +99,6 @@ func TestTokenRefresherForDriver_UnknownDriverGetsNothing(t *testing.T) {
 // resolves a driver.
 func TestDriverID_IsStableSpelling(t *testing.T) {
 	assert.Equal(t, "antigravity", antigravity.DriverID)
-	_, ok := oauthRefresherBuilders[models.DriverID(antigravity.DriverID)]
+	_, ok := providerRefreshers[models.DriverID(antigravity.DriverID)]
 	assert.True(t, ok, "antigravity must be registered under its own DriverID constant")
 }

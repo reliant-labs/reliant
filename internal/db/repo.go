@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -126,6 +127,7 @@ type Repo struct {
 	repos           core.RepoStore
 	settings        core.SettingStore
 	accounts        *postgresstore.AccountStore
+	legacyBackoff   sync.Map // user id -> time.Time before which SyncLegacyCredentials leaves the user alone
 	attachments     core.AttachmentStore
 	workflows       core.WorkflowStore
 	threads         core.ThreadStore

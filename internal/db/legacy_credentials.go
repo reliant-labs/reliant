@@ -211,10 +211,20 @@ type CopyResult struct {
 // that credential. Mirrors whose legacy row has since been removed by the previous release are
 // pruned, so a disconnect there is not undone here.
 func (r *Repo) CopyLegacyCredentials(ctx context.Context) (CopyResult, error) {
+	res, err := r.copyLegacy(ctx, "")
+	if err == nil && res.Created+res.Updated+res.Pruned+res.Failed > 0 {
+		slog.Info("provider accounts mirrored from legacy credentials",
+			"created", res.Created, "updated", res.Updated, "unchanged", res.Unchanged, "failed", res.Failed, "pruned", res.Pruned)
+	}
+	return res, err
+}
+
+// copyLegacy mirrors the legacy rows of one user, or of everyone when userID is "".
+func (r *Repo) copyLegacy(ctx context.Context, userID string) (CopyResult, error) {
 	var res CopyResult
 	sqlDB := r.DB.SQLDB()
 	for _, t := range legacyTables {
-		rows, err := t.read(ctx, sqlDB, "", "")
+		rows, err := t.read(ctx, sqlDB, userID, "")
 		if err != nil {
 			return res, fmt.Errorf("reading %s: %w", t.source, err)
 		}
@@ -239,17 +249,109 @@ func (r *Repo) CopyLegacyCredentials(ctx context.Context) (CopyResult, error) {
 		res.Unchanged += imported.Unchanged
 		res.Failed += imported.Failed
 
-		pruned, err := r.accounts.PruneLegacyMirrors(ctx, t.source, t.exists)
+		pruned, err := r.accounts.PruneLegacyMirrors(ctx, userID, t.source, t.exists)
 		if err != nil {
 			return res, fmt.Errorf("pruning mirrors of %s: %w", t.source, err)
 		}
 		res.Pruned += pruned
 	}
-	if res.Created+res.Updated+res.Pruned+res.Failed > 0 {
-		slog.Info("provider accounts mirrored from legacy credentials",
-			"created", res.Created, "updated", res.Updated, "unchanged", res.Unchanged, "failed", res.Failed, "pruned", res.Pruned)
-	}
 	return res, nil
+}
+
+// legacyBackoff is how long a user whose legacy rows cannot all be mirrored is left alone
+// before the next attempt, so one unreadable credential does not cost a re-open per request.
+const legacyBackoff = time.Minute
+
+// legacyDriftSQL lists the user's legacy rows by (source, provider) with their write time,
+// without opening any secret. The OAuth providers' api_keys rows are connection markers, never
+// credentials, so they are not accounts and not drift.
+const legacyDriftSQL = `SELECT source, provider, updated_at FROM (
+		SELECT '` + postgresstore.LegacySourceClaude + `' AS source, 'claude' AS provider, updated_at FROM claude_auth_tokens WHERE user_id = $1
+		UNION ALL SELECT '` + postgresstore.LegacySourceCodex + `', 'codex', updated_at FROM codex_auth_tokens WHERE user_id = $1
+		UNION ALL SELECT '` + postgresstore.LegacySourceCopilot + `', 'copilot', updated_at FROM copilot_auth_tokens WHERE user_id = $1
+		UNION ALL SELECT '` + postgresstore.LegacySourceAntigravity + `', 'antigravity', updated_at FROM antigravity_auth_tokens WHERE user_id = $1
+		UNION ALL SELECT '` + postgresstore.LegacySourceAPIKeys + `', provider, updated_at FROM api_keys
+			WHERE user_id = $1 AND api_key_sealed IS NOT NULL AND provider NOT LIKE '` + core.AutomationProviderPrefix + `%'
+			AND provider NOT IN ('claude', 'codex', 'copilot', 'antigravity')
+	) legacy`
+
+// SyncLegacyCredentials brings one user's accounts level with the legacy credential tables.
+//
+// During the expand release the connect and disconnect RPCs still write only the legacy tables,
+// and the previous release may still be rotating tokens there. The boot copy alone would miss
+// all of that until the next restart, so the driver layer calls this before it reads the user's
+// accounts. It first compares write times without opening a secret and returns at once when the
+// accounts are already level, which is the steady state. A drift runs the same copy the boot
+// does, scoped to the user: a connect or a newer rotation is adopted, and a disconnect removes
+// the mirror. It never writes a legacy table and never fails the caller's read: an error is
+// logged and the accounts are served as they stand.
+func (r *Repo) SyncLegacyCredentials(ctx context.Context, userID string) error {
+	if userID == "" {
+		return nil
+	}
+	if until, ok := r.legacyBackoff.Load(userID); ok && time.Now().Before(until.(time.Time)) {
+		return nil
+	}
+	drift, err := r.legacyDrift(ctx, userID)
+	if err != nil || !drift {
+		return err
+	}
+	res, err := r.copyLegacy(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if res.Failed > 0 {
+		r.legacyBackoff.Store(userID, time.Now().Add(legacyBackoff))
+	} else {
+		r.legacyBackoff.Delete(userID)
+	}
+	if res.Created+res.Updated+res.Pruned > 0 {
+		slog.Info("provider accounts synced from legacy credentials", "user_id", userID,
+			"created", res.Created, "updated", res.Updated, "pruned", res.Pruned, "failed", res.Failed)
+	}
+	return nil
+}
+
+type legacyKey struct{ source, provider string }
+
+// legacyDrift reports whether the user's legacy rows and their mirrors disagree.
+func (r *Repo) legacyDrift(ctx context.Context, userID string) (bool, error) {
+	rows, err := r.DB.SQLDB().QueryContext(ctx, legacyDriftSQL, userID)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	legacy := map[legacyKey]time.Time{}
+	for rows.Next() {
+		var k legacyKey
+		var at time.Time
+		if err := rows.Scan(&k.source, &k.provider, &at); err != nil {
+			return false, err
+		}
+		legacy[k] = at
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	mirrors, err := r.accounts.LegacyMirrors(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	seen := map[legacyKey]bool{}
+	for _, m := range mirrors {
+		k := legacyKey{m.Source, m.Provider}
+		at, ok := legacy[k]
+		if !ok || at.After(m.UpdatedAt) {
+			return true, nil // the legacy row was removed, or written after the mirror
+		}
+		seen[k] = true
+	}
+	for k := range legacy {
+		if !seen[k] {
+			return true, nil // connected in the legacy tables only
+		}
+	}
+	return false, nil
 }
 
 // ReadLegacyCredential implements core.LegacyCredentialSource: the legacy row accountID mirrors,

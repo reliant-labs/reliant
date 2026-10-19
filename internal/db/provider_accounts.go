@@ -4,9 +4,11 @@ package db
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 )
 
 // Provider account persistence (design §1.5). The store owns its SQL and its own transactions.
@@ -29,8 +31,72 @@ func (r *Repo) UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) 
 	return r.accounts.UpsertProviderAccount(ctx, u)
 }
 
+// CompareAndSwapAccountTokens rotates an account's tokens. An account that still mirrors an
+// OAuth legacy row also has the rotation written through to that row: refresh tokens are
+// single-use, and the previous release (live during a rolling deploy) reads only the legacy
+// table, so leaving the spent token there would sign its user out.
 func (r *Repo) CompareAndSwapAccountTokens(ctx context.Context, userID, accountID, expectedRefresh string, next core.AccountTokens) (bool, error) {
-	return r.accounts.CompareAndSwapAccountTokens(ctx, userID, accountID, expectedRefresh, next)
+	swapped, err := r.accounts.CompareAndSwapAccountTokens(ctx, userID, accountID, expectedRefresh, next)
+	if err != nil || !swapped {
+		return swapped, err
+	}
+	if err := r.writeThroughRotation(ctx, userID, accountID, expectedRefresh, next); err != nil {
+		slog.Warn("rotated account tokens were not written through to the legacy table", "account_id", accountID, "error", err)
+	}
+	return true, nil
+}
+
+// writeThroughRotation mirrors a rotation into the legacy row it was copied from, guarded by the
+// refresh token that was consumed: if the previous release already rotated that row, or the user
+// disconnected in it, the legacy row is left exactly as it is (the sync adopts or prunes it).
+func (r *Repo) writeThroughRotation(ctx context.Context, userID, accountID, consumedRefresh string, next core.AccountTokens) error {
+	provider, source, err := r.accounts.LegacyInfo(ctx, userID, accountID)
+	if err != nil || source == "" {
+		return err
+	}
+	acct, err := r.accounts.GetProviderAccountWithSecrets(ctx, userID, accountID)
+	if err != nil {
+		return err
+	}
+	refresh := acct.Secrets.Refresh
+	if refresh == "" {
+		refresh = consumedRefresh
+	}
+	var swapped bool
+	switch source {
+	case postgresstore.LegacySourceClaude:
+		swapped, err = r.settings.CompareAndSwapClaudeAuthTokens(ctx, userID, consumedRefresh, core.ClaudeAuthTokens{
+			AccessToken: acct.Secrets.Secret, RefreshToken: refresh, ExpiresAt: acct.ExpiresAt,
+			AccountUUID: acct.ExternalAccountID, AccountEmail: acct.Email,
+			OrganizationUUID: acct.OrganizationID, OrganizationName: acct.OrganizationName, Scope: acct.Scope,
+		})
+	case postgresstore.LegacySourceCodex:
+		swapped, err = r.settings.CompareAndSwapCodexAuthTokens(ctx, userID, consumedRefresh, core.CodexAuthTokens{
+			AccessToken: acct.Secrets.Secret, RefreshToken: refresh, IDToken: acct.Secrets.IDToken, AccountID: acct.ExternalAccountID,
+		})
+	case postgresstore.LegacySourceAntigravity:
+		swapped, err = r.settings.CompareAndSwapAntigravityAuthTokens(ctx, userID, consumedRefresh, core.AntigravityAuthTokens{
+			AccessToken: acct.Secrets.Secret, RefreshToken: refresh, ExpiresAt: acct.ExpiresAt, IDToken: acct.Secrets.IDToken, Scope: acct.Scope,
+		})
+	default:
+		return nil // API keys and device tokens never rotate
+	}
+	if err != nil || !swapped {
+		return err
+	}
+	// The legacy write stamped its own updated_at; level the mirror with it so the sync does
+	// not read our own write-through as a newer legacy credential.
+	for _, t := range legacyTables {
+		if t.source != source {
+			continue
+		}
+		rows, err := t.read(ctx, r.DB.SQLDB(), userID, provider)
+		if err != nil || len(rows) == 0 {
+			return err
+		}
+		return r.accounts.StampMirror(ctx, accountID, rows[0].updatedAt)
+	}
+	return nil
 }
 
 func (r *Repo) PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {

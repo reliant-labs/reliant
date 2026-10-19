@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/anthropic"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
@@ -21,21 +22,22 @@ type subscriptionAndKeyRepo struct {
 	db.Repository
 }
 
-func (subscriptionAndKeyRepo) GetProviderAPIKeys(context.Context, string) (map[string]string, error) {
-	return map[string]string{"claude": "oauth", "anthropic": "****"}, nil
-}
-
-func (subscriptionAndKeyRepo) GetProviderAPIKey(_ context.Context, _, provider string) (string, error) {
-	return map[string]string{"anthropic": "sk-ant-api03-key"}[provider], nil
-}
-
-func (subscriptionAndKeyRepo) GetClaudeAuthTokens(context.Context, string) (*db.ClaudeAuthTokens, error) {
-	return &db.ClaudeAuthTokens{
-		AccessToken:  "sk-ant-oat01-sub",
-		RefreshToken: "refresh",
-		ExpiresAt:    time.Now().Add(time.Hour),
-		AccountUUID:  "acct-1",
+func (subscriptionAndKeyRepo) ListProviderAccountsWithSecrets(context.Context, string) ([]core.AccountWithSecrets, error) {
+	return []core.AccountWithSecrets{
+		{
+			ProviderAccount: core.ProviderAccount{ID: "sub-1", UserID: "user-1", Provider: "claude", AuthKind: core.AuthKindOAuth,
+				ExpiresAt: time.Now().Add(time.Hour), ExternalAccountID: "acct-1"},
+			Secrets: core.AccountSecrets{Secret: "sk-ant-oat01-sub", Refresh: "refresh"},
+		},
+		{
+			ProviderAccount: core.ProviderAccount{ID: "key-1", UserID: "user-1", Provider: "anthropic", AuthKind: core.AuthKindAPIKey},
+			Secrets:         core.AccountSecrets{Secret: "sk-ant-api03-key"},
+		},
 	}, nil
+}
+
+func (subscriptionAndKeyRepo) ListAccountLimits(context.Context, string) (map[string]core.LimitState, error) {
+	return nil, nil
 }
 
 func bothConnected(t *testing.T) models.AvailableDrivers {

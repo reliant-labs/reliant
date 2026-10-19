@@ -3,7 +3,6 @@ package launch
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -12,6 +11,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
@@ -21,15 +21,15 @@ import (
 // BuildAvailableDrivers registers under the same anthropic driver.
 type claudeOnlyRepo struct{ db.Repository }
 
-func (claudeOnlyRepo) GetProviderAPIKeys(context.Context, string) (map[string]string, error) {
-	return map[string]string{"anthropic": "****"}, nil
+func (claudeOnlyRepo) ListProviderAccountsWithSecrets(context.Context, string) ([]core.AccountWithSecrets, error) {
+	return []core.AccountWithSecrets{{
+		ProviderAccount: core.ProviderAccount{ID: "key-1", UserID: "user-1", Provider: "anthropic", AuthKind: core.AuthKindAPIKey},
+		Secrets:         core.AccountSecrets{Secret: "sk-ant-api03-test"},
+	}}, nil
 }
 
-func (claudeOnlyRepo) GetProviderAPIKey(_ context.Context, _ string, provider string) (string, error) {
-	if provider != "anthropic" {
-		return "", errors.New("no key for " + provider)
-	}
-	return "sk-ant-api03-test", nil
+func (claudeOnlyRepo) ListAccountLimits(context.Context, string) (map[string]core.LimitState, error) {
+	return nil, nil
 }
 
 // THE REGRESSION (prod chat 66a045ce, 2026-10-10T14:41:32Z): "continue" was

@@ -142,6 +142,10 @@ type AccountTokens struct {
 	Secret, Refresh, IDToken               string
 	ExpiresAt                              time.Time
 	Email, OrganizationName, Plan, PlanRaw string
+	// IdentityKey, ExternalAccountID and OrganizationID are what the refresh response says the
+	// account is. The compare-and-swap ignores them; the refresh coordinator uses them to
+	// rewrite a `legacy:` placeholder identity (design §3.3).
+	IdentityKey, ExternalAccountID, OrganizationID string
 }
 
 // LimitWindow is one rate-limit window of an account, as persisted.

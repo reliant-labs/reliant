@@ -250,7 +250,7 @@ func mapTokenExchangeError(grantType string, statusCode int, body []byte) error 
 			if grantType == "authorization_code" {
 				return fmt.Errorf("authorization code is invalid or expired")
 			}
-			return fmt.Errorf("codex session expired: please reconnect Codex")
+			return &llm.RefreshRejectedError{Message: "codex session expired: please reconnect Codex"}
 		case "invalid_request":
 			if errDesc == "" {
 				return fmt.Errorf("token exchange failed: invalid request")

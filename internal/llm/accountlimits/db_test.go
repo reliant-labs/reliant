@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 )
 
@@ -327,4 +328,57 @@ func TestDBRefreshUsageEndToEnd(t *testing.T) {
 
 	_, err = f.RefreshUsage(ctx, "u2", a.ID)
 	assert.ErrorIs(t, err, core.ErrProviderAccountNotFound)
+}
+
+// The poller runs on the per-account refresh coordinator: for an account whose access token has
+// expired it gets a refreshed token (and the rotation is persisted), where StoredTokens would
+// have given up and left the account without polled numbers.
+func TestDBPollerGetsARefreshedTokenForAnExpiredAccount(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	a, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+		UserID: "u1", Provider: "claude", AuthKind: core.AuthKindOAuth,
+		IdentityKey: core.ClaudeIdentityKey("alice", "org"), Email: "alice@example.com", ExternalAccountID: "alice",
+		Secrets: core.AccountSecrets{Secret: "expired-access", Refresh: "refresh-1"}, ExpiresAt: now.Add(-time.Hour),
+	})
+	require.NoError(t, err)
+	require.NoError(t, repo.ScheduleUsagePoll(ctx, a.ID, now.Add(-time.Second), 0, ""))
+
+	var exchanged atomic.Int32
+	tokens := drivers.RefreshingTokens{Store: repo, Exchange: func(string) drivers.ProviderRefresh {
+		return func(rt string) (core.AccountTokens, error) {
+			exchanged.Add(1)
+			assert.Equal(t, "refresh-1", rt)
+			return core.AccountTokens{Secret: "refreshed-access", Refresh: "refresh-2", ExpiresAt: now.Add(8 * time.Hour)}, nil
+		}
+	}}
+
+	var bearer atomic.Value
+	doer := doerFunc(func(r *http.Request) (*http.Response, error) {
+		bearer.Store(r.Header.Get("Authorization"))
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: readCloser(fmt.Sprintf(
+			`{"five_hour":{"utilization":10,"resets_at":%q},"seven_day":{"utilization":20,"resets_at":%q}}`,
+			now.Add(2*time.Hour).Format(time.RFC3339), now.Add(48*time.Hour).Format(time.RFC3339)))}, nil
+	})
+	p := &accountlimits.Poller{Store: repo, Fetcher: &accountlimits.Fetcher{Store: repo, Doer: doer, Tokens: tokens}}
+
+	require.Equal(t, 1, p.Tick(ctx))
+
+	assert.Equal(t, "Bearer refreshed-access", bearer.Load(), "the usage API is called with the refreshed token")
+	assert.EqualValues(t, 1, exchanged.Load())
+	stored, err := repo.GetProviderAccountWithSecrets(ctx, "u1", a.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "refresh-2", stored.Secrets.Refresh, "the rotation went through the coordinator and is persisted")
+	limits, err := repo.ListAccountLimits(ctx, "u1")
+	require.NoError(t, err)
+	assert.Equal(t, accountlimits.SourceUsageAPI, limits[a.ID].Source)
+
+	// A live token is used as it is: no second exchange.
+	require.NoError(t, repo.ScheduleUsagePoll(ctx, a.ID, time.Now().Add(-time.Second), 0, ""))
+	_, err = (&accountlimits.Fetcher{Store: repo, Doer: doer, Tokens: tokens}).RefreshUsage(ctx, "u1", a.ID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, exchanged.Load())
 }

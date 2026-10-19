@@ -110,7 +110,7 @@ func TestWithAccountAvailability_RejectedCredentialNeverServes(t *testing.T) {
 		"codex":   {report: codexServes(codexAPIModel(t, "gpt-5.6-sol"), codexAPIModel(t, "gpt-5.5"))},
 	})
 
-	available := withAccountAvailability(context.Background(), drivers, build)
+	available := withAccountAvailability(context.Background(), onePerDriver(drivers), build)
 
 	assert.NotContains(t, available.Drivers, models.DriverID("copilot"),
 		"a provider that rejected the credential must not be a configured driver")
@@ -136,7 +136,7 @@ func TestWithAccountAvailability_AuthStatusesAreVerdicts(t *testing.T) {
 			build := reporters(map[models.DriverID]*fakeReporter{
 				"copilot": {err: fmt.Errorf("copilot models request: %w", registry.RejectedCredential(status, "nope"))},
 			})
-			available := withAccountAvailability(context.Background(), drivers, build)
+			available := withAccountAvailability(context.Background(), onePerDriver(drivers), build)
 			assert.NotContains(t, available.Drivers, models.DriverID("copilot"))
 			assert.Contains(t, available.Unavailable, models.DriverID("copilot"))
 		})
@@ -157,7 +157,7 @@ func TestWithAccountAvailability_OutageFailsOpen(t *testing.T) {
 			t.Parallel()
 			drivers := map[models.DriverID]models.DriverConfig{"copilot": cfgFor("copilot")}
 			build := reporters(map[models.DriverID]*fakeReporter{"copilot": {err: err}})
-			available := withAccountAvailability(context.Background(), drivers, build)
+			available := withAccountAvailability(context.Background(), onePerDriver(drivers), build)
 			assert.Contains(t, available.Drivers, models.DriverID("copilot"), "an outage must fail open")
 			assert.Empty(t, available.Unavailable)
 		})
@@ -187,7 +187,7 @@ func TestWithAccountAvailability_PinnedToRejectedProviderIsNoServableProvider(t 
 		"codex":   cfgFor("codex"),
 	}
 	build := reporters(map[models.DriverID]*fakeReporter{"copilot": {err: errCopilotBadlyFormatted}})
-	available := withAccountAvailability(context.Background(), drivers, build)
+	available := withAccountAvailability(context.Background(), onePerDriver(drivers), build)
 
 	reg := models.MustGetRegistry().WithAvailability(available.Availability)
 	_, err := reg.Resolve(models.ModelSelector{ID: "claude-5.5-sonnet@copilot"}, []string{"codex"})
@@ -196,4 +196,13 @@ func TestWithAccountAvailability_PinnedToRejectedProviderIsNoServableProvider(t 
 	var pinned *models.ProviderUnavailableError
 	require.ErrorAs(t, err, &pinned)
 	assert.Contains(t, pinned.Explain(available.Unavailable), "GitHub Copilot rejected the saved credential")
+}
+
+// onePerDriver is the account map of a user with exactly one account per provider.
+func onePerDriver(m map[models.DriverID]models.DriverConfig) map[models.DriverID][]models.AccountConfig {
+	out := make(map[models.DriverID][]models.AccountConfig, len(m))
+	for id, cfg := range m {
+		out[id] = []models.AccountConfig{{DriverConfig: cfg}}
+	}
+	return out
 }

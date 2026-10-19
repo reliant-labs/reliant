@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/replay"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -19,7 +18,6 @@ import (
 
 	// Import drivers to trigger their init() functions for registry registration
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/anthropic"
-	_ "github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/codex"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/gemini"
@@ -192,38 +190,17 @@ func ParseModelIDWithDriver(modelID string) (string, string) {
 	return modelID, ""
 }
 
-// oauthRefresherBuilders maps a driver id to the refresher/reloader pair that
-// knows that provider's token endpoint, persistence row and rotation lineage.
-//
-// This is a REGISTRY rather than a switch on purpose. It previously was a
-// switch whose `default` arm built Claude's refresher, which meant a new OAuth
-// provider that set RefreshToken without adding an arm silently got Claude's
-// token endpoint — and failed at the first refresh, roughly an hour after
-// sign-in appeared to work, nowhere near the code that was actually wrong. A
-// map has no default: an unregistered driver id returns nothing and the caller
-// installs no refresher, which fails visibly and immediately instead.
-var oauthRefresherBuilders = map[models.DriverID]func(ctx context.Context, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)){
-	models.DriverID("claude"): func(ctx context.Context, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {
-		return BuildClaudeTokenRefresher(ctx, userID), BuildClaudeTokenReloader(ctx, userID)
-	},
-	models.DriverID("codex"): func(ctx context.Context, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {
-		return BuildCodexTokenRefresher(ctx, userID), BuildCodexTokenReloader(ctx, userID)
-	},
-	models.DriverID(antigravity.DriverID): func(ctx context.Context, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {
-		return BuildAntigravityTokenRefresher(ctx, userID), BuildAntigravityTokenReloader(ctx, userID)
-	},
-}
-
-// tokenRefresherForDriver returns the refresher/reloader pair for driverID, or
-// (nil, nil) when the provider has no OAuth refresh path registered.
-func tokenRefresherForDriver(ctx context.Context, driverID models.DriverID, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {
-	build, ok := oauthRefresherBuilders[driverID]
+// tokenRefresherForAccount returns the refresher/reloader pair for one account of driverID, or
+// (nil, nil) when the provider has no OAuth refresh path registered (providerRefreshers has no
+// default arm on purpose: see there).
+func tokenRefresherForAccount(ctx context.Context, driverID models.DriverID, userID, accountID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {
+	refresh, ok := providerRefreshers[driverID]
 	if !ok {
 		logging.Warn("OAuth driver has a refresh token but no registered refresher; token will not be refreshed",
 			"driver_id", driverID, "user_id", userID)
 		return nil, nil
 	}
-	return build(ctx, userID)
+	return buildAccountRefresher(ctx, driverID, userID, accountID, refresh)
 }
 
 // defaultGetDriver tries to get a driver using the provided model preferences
@@ -304,33 +281,7 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		if pref.TokenBudget != nil {
 			maxTokens = *pref.TokenBudget
 		}
-
-		// Build driver options with the API key from the selected driver
-		driverOpts := []llm.DriverOption{
-			llm.WithAPIKey(driverConfig.APIKey),
-			llm.WithModel(model),
-			llm.WithMaxTokens(maxTokens),
-		}
-
-		// Add base URL if specified for this driver
-		if driverConfig.BaseURL != "" {
-			driverOpts = append(driverOpts, llm.WithBaseURL(driverConfig.BaseURL))
-		}
-		if len(driverConfig.ExtraHeaders) > 0 {
-			driverOpts = append(driverOpts, llm.WithExtraHeaders(driverConfig.ExtraHeaders))
-		}
-
-		// Always pass the Reliant user id (and any upstream account metadata) so
-		// drivers can derive STABLE per-user, per-account identity fingerprints
-		// (device_id / installation_id / machine_id). Keying on userID + account
-		// means multiple upstream accounts for one user get distinct fingerprints.
-		// Previously this was gated on AccountUUID != "", so codex/copilot never
-		// received UserID and their derivations fell back to random values.
-		driverOpts = append(driverOpts, llm.WithAccountMetadata(userID, driverConfig.AccountUUID, driverConfig.AccountEmail, driverConfig.OrganizationUUID))
-		if driverConfig.RefreshToken != "" {
-			refresher, reloader := tokenRefresherForDriver(ctx, driverConfig.DriverID, userID)
-			driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, reloader, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
-		}
+		driverOpts := []llm.DriverOption{llm.WithMaxTokens(maxTokens)}
 
 		// Add temperature if specified in preference AND supported by the model.
 		// Some models only support their default temperature and will hard-error if we send a value.
@@ -344,19 +295,13 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 				// Unknown mode: fail safe by omitting temperature
 			}
 		}
-
-		// Add disable cache if specified
 		if pref.DisableCache {
 			driverOpts = append(driverOpts, llm.WithDisableCache())
 		}
-
-		// Handle thinking mode configuration
 		driverOpts = append(driverOpts, llm.WithReasoningEffort(pref.ThinkingMode))
-
-		// Merge with any additional options passed in
 		driverOpts = append(driverOpts, opts...)
 
-		agentProvider, err := GetDriverForModel(model, models.Family(driverConfig.DriverID), driverOpts...)
+		agentProvider, err := GetDriverForAccount(ctx, userID, driverConfig, model, driverOpts...)
 		logging.Debug("provider, err", "provider", agentProvider, "err", err)
 		if err != nil {
 			lastErr = fmt.Errorf("model %q@%s: %w", modelID, driverConfig.DriverID, err)
@@ -371,4 +316,37 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		return nil, fmt.Errorf("failed to get driver for preferences (tried %d): %w", len(preferences), lastErr)
 	}
 	return nil, fmt.Errorf("failed to get driver for preferences: no suitable models available: %v", preferences[0])
+}
+
+// GetDriverForAccount builds the driver for one explicit account: its credential, base URL,
+// headers, identity fingerprints and token refresher come from driverConfig, whichever account
+// of the driver that is. defaultGetDriver uses it for the default (priority-0) account; the
+// account router's callers pass the account they assigned. opts are applied after the account's
+// own options, so a caller's explicit option wins. model is the model as this provider serves
+// it (window and output already adjusted).
+func GetDriverForAccount(ctx context.Context, userID string, driverConfig models.DriverConfig, model models.Model, opts ...llm.DriverOption) (llm.Driver, error) {
+	driverOpts := []llm.DriverOption{
+		llm.WithAPIKey(driverConfig.APIKey),
+		llm.WithModel(model),
+	}
+	if driverConfig.BaseURL != "" {
+		driverOpts = append(driverOpts, llm.WithBaseURL(driverConfig.BaseURL))
+	}
+	if len(driverConfig.ExtraHeaders) > 0 {
+		driverOpts = append(driverOpts, llm.WithExtraHeaders(driverConfig.ExtraHeaders))
+	}
+
+	// Always pass the Reliant user id (and any upstream account metadata) so drivers can derive
+	// STABLE per-user, per-account identity fingerprints (device_id / installation_id /
+	// machine_id). Keying on userID + account means multiple upstream accounts for one user get
+	// distinct fingerprints.
+	driverOpts = append(driverOpts, llm.WithAccountMetadata(userID, driverConfig.AccountUUID, driverConfig.AccountEmail, driverConfig.OrganizationUUID))
+	if driverConfig.RefreshToken != "" {
+		refresher, reloader := tokenRefresherForAccount(ctx, driverConfig.DriverID, userID, driverConfig.AccountID)
+		if refresher != nil {
+			driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, reloader, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
+		}
+	}
+	driverOpts = append(driverOpts, opts...)
+	return GetDriverForModel(model, models.Family(driverConfig.DriverID), driverOpts...)
 }

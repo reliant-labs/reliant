@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/imagegen"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -62,39 +63,41 @@ type probeOutcome struct {
 	CacheRead      int64          `json:"cache_read_tokens,omitempty"`
 }
 
-// envOverlayRepo adds credentials that exist only as environment variables to
-// the repo's provider keys, without changing production code.
+// envOverlayRepo adds credentials that exist only as environment variables to the repo's
+// provider accounts, without changing production code. They appear as API-key accounts of lowest
+// priority; a provider the database already has an account for is left alone.
 type envOverlayRepo struct {
 	db.Repository
 	extra map[string]string
 }
 
-func (r envOverlayRepo) GetProviderAPIKeys(ctx context.Context, userID string) (map[string]string, error) {
-	keys, err := r.Repository.GetProviderAPIKeys(ctx, userID)
+func (r envOverlayRepo) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
+	accounts, err := r.Repository.ListProviderAccountsWithSecrets(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]string, len(keys)+len(r.extra))
-	for k, v := range keys {
-		out[k] = v
+	have := map[string]bool{}
+	for _, a := range accounts {
+		have[a.Provider] = true
 	}
-	for k, v := range r.extra {
-		if _, ok := out[k]; !ok {
-			out[k] = v
+	providers := make([]string, 0, len(r.extra))
+	for provider := range r.extra {
+		providers = append(providers, provider)
+	}
+	sort.Strings(providers)
+	for _, provider := range providers {
+		if have[provider] {
+			continue
 		}
+		accounts = append(accounts, core.AccountWithSecrets{
+			ProviderAccount: core.ProviderAccount{
+				ID: "env-" + provider, UserID: userID, Provider: provider, AuthKind: core.AuthKindAPIKey,
+				IdentityKey: core.APIKeyIdentityKey(userID, provider, r.extra[provider]),
+			},
+			Secrets: core.AccountSecrets{Secret: r.extra[provider]},
+		})
 	}
-	return out, nil
-}
-
-func (r envOverlayRepo) GetProviderAPIKey(ctx context.Context, userID, provider string) (string, error) {
-	key, err := r.Repository.GetProviderAPIKey(ctx, userID, provider)
-	if err == nil && strings.TrimSpace(key) != "" {
-		return key, nil
-	}
-	if v, ok := r.extra[provider]; ok {
-		return v, nil
-	}
-	return key, err
+	return accounts, nil
 }
 
 // envProviderKeys reads credentials that exist only in the environment.

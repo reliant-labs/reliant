@@ -247,7 +247,7 @@ func mapClaudeTokenExchangeError(grantType string, statusCode int, body []byte) 
 			if grantType == "authorization_code" {
 				return fmt.Errorf("authorization code is invalid or expired")
 			}
-			return fmt.Errorf("claude session expired: please reconnect Claude")
+			return &llm.RefreshRejectedError{Message: "claude session expired: please reconnect Claude"}
 		case "invalid_request":
 			if errDesc == "" {
 				return fmt.Errorf("token exchange failed: invalid request")

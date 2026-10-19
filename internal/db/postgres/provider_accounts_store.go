@@ -1163,18 +1163,44 @@ func (s *AccountStore) OpenLegacy(ctx context.Context, userID string, aad, seale
 	return string(pt), nil
 }
 
+// LegacyMirror is one account that mirrors a legacy row.
+type LegacyMirror struct {
+	Source, Provider string
+	UpdatedAt        time.Time
+}
+
+// LegacyMirrors lists the user's accounts that still mirror a legacy row.
+func (s *AccountStore) LegacyMirrors(ctx context.Context, userID string) ([]LegacyMirror, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT legacy_source, provider, updated_at FROM provider_accounts
+		WHERE user_id = $1 AND legacy_source IS NOT NULL`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LegacyMirror
+	for rows.Next() {
+		var m LegacyMirror
+		if err := rows.Scan(&m.Source, &m.Provider, &m.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 // PruneLegacyMirrors deletes accounts that mirror a legacy row which no longer exists (the
 // previous release disconnected it), and re-densifies the affected providers. exists is a
 // correlated predicate over alias `a` (the account) that holds while the legacy row does.
-func (s *AccountStore) PruneLegacyMirrors(ctx context.Context, source, legacyExists string) (int, error) {
+// userID limits the prune to one user; "" prunes everyone (the boot copy).
+func (s *AccountStore) PruneLegacyMirrors(ctx context.Context, userID, source, legacyExists string) (int, error) {
 	pruned := 0
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, legacyCopyLockName); err != nil {
 			return fmt.Errorf("lock legacy credential copy: %w", err)
 		}
 		//nolint:gosec // G202: legacyExists is a package constant predicate, never input.
-		rows, err := tx.QueryContext(ctx, `DELETE FROM provider_accounts a WHERE a.legacy_source = $1 AND NOT EXISTS (`+legacyExists+`)
-			RETURNING a.user_id, a.provider`, source)
+		rows, err := tx.QueryContext(ctx, `DELETE FROM provider_accounts a WHERE a.legacy_source = $1 AND ($2 = '' OR a.user_id = $2)
+			AND NOT EXISTS (`+legacyExists+`) RETURNING a.user_id, a.provider`, source, userID)
 		if err != nil {
 			return err
 		}
@@ -1202,4 +1228,11 @@ func (s *AccountStore) PruneLegacyMirrors(ctx context.Context, source, legacyExi
 		return nil
 	})
 	return pruned, err
+}
+
+// StampMirror sets the account's updated_at, so a mirror that was just written through to its
+// legacy row is not seen as older than it.
+func (s *AccountStore) StampMirror(ctx context.Context, accountID string, at time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE provider_accounts SET updated_at = $2 WHERE id = $1 AND legacy_source IS NOT NULL`, accountID, at.UTC())
+	return err
 }

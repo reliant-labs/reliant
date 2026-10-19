@@ -470,13 +470,14 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Account usage: persist the rate-limit headers every LLM response carries, and poll the
 	// providers' usage APIs for accounts those headers do not cover. Every worker runs a
-	// poller; accounts are leased with SKIP LOCKED, so they share the queue. The access token
-	// is the stored one until the per-account refresh coordinator lands (see accountlimits).
+	// poller; accounts are leased with SKIP LOCKED, so they share the queue. An expired access
+	// token is refreshed through the same per-account coordinator the LLM drivers use, so a
+	// poll never consumes a refresh token a live request is about to consume.
 	go (&accountlimits.Poller{
 		Store: repo,
 		Fetcher: &accountlimits.Fetcher{
 			Store:  repo,
-			Tokens: accountlimits.StoredTokens{Store: repo},
+			Tokens: drivers.RefreshingTokens{Store: repo},
 		},
 	}).Run(relayCtx)
 
