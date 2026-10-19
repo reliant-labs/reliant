@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -93,4 +94,32 @@ func TestHandleCheckGit(t *testing.T) {
 			t.Error("expected false for a nonexistent path")
 		}
 	})
+}
+
+// project.git_info reports the origin the checkout has on disk. A checkout an
+// older release made carries the user's token there; the report never does,
+// because the server returns it to the web and stores it.
+func TestHandleGitInfo_RemoteURLNeverCarriesACredential(t *testing.T) {
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"remote", "add", "origin", "https://x-access-token:" + testSecretToken + "@github.com/acme/app.git"},
+	} {
+		gitOut(t, append([]string{"-C", dir}, args...)...)
+	}
+
+	out, err := handleGitInfo(context.Background(), []byte(`{"path":`+jsonString(t, dir)+`}`))
+	if err != nil {
+		t.Fatalf("git_info: %v", err)
+	}
+	var resp gitInfoResponse
+	if err := json.Unmarshal(out, &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.RemoteURL != "https://github.com/acme/app.git" {
+		t.Fatalf("RemoteURL = %q", resp.RemoteURL)
+	}
+	if strings.Contains(string(out), testSecretToken) {
+		t.Fatal("the token is in the git_info payload")
+	}
 }

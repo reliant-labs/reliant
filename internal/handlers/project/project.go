@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitref"
+	"github.com/reliant-labs/reliant/internal/gitremote"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
@@ -1028,7 +1029,7 @@ func (s *Service) GetProjectGitInfo(
 		UntrackedFiles: gitInfo.UntrackedFiles,
 		Ahead:          gitInfo.Ahead,
 		Behind:         gitInfo.Behind,
-		RemoteUrl:      gitInfo.RemoteURL,
+		RemoteUrl:      gitremote.StripCredentials(gitInfo.RemoteURL),
 	}), nil
 }
 

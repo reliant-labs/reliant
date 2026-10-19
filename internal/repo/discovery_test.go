@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -176,4 +177,28 @@ func TestDiscover_NestedLinkedWorktree(t *testing.T) {
 	found, err := Discover(context.Background(), root, 2)
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{filepath.Join("grp", "main"): true}, names(found))
+}
+
+// A checkout made by an older release has the user's token in
+// remote.origin.url. Discovery feeds that value to the server, which stores
+// it, so it is cleaned where it is read.
+func TestDiscover_RemoteURLNeverCarriesACredential(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"remote", "add", "origin", "https://x-access-token:ghs_FIXTURE0TOKEN@github.com/acme/app.git"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+
+	found, err := Discover(context.Background(), dir, 0)
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	require.Equal(t, "https://github.com/acme/app.git", found[0].RemoteURL)
 }

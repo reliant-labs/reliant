@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
+	"github.com/reliant-labs/reliant/internal/gitremote"
 )
 
 type projectStore struct{ q pgdb.Querier }
@@ -27,7 +28,7 @@ func (s *projectStore) CreateProject(ctx context.Context, project *core.Project)
 		Description:      ptrToNullString(project.Description),
 		IsGitRepo:        project.IsGitRepo,
 		DefaultBranch:    ptrToNullString(project.DefaultBranch),
-		RemoteUrl:        ptrToNullString(project.RemoteURL),
+		RemoteUrl:        ptrToNullString(gitremote.StripCredentialsPtr(project.RemoteURL)),
 		IsForge:          project.IsForge,
 		ForgeProjectName: ptrToNullString(project.ForgeProjectName),
 		CreatedAt:        project.CreatedAt,
@@ -71,7 +72,7 @@ func (s *projectStore) GetProjectByPathAndUser(ctx context.Context, path, userID
 
 func (s *projectStore) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*core.Project, error) {
 	row, err := s.q.GetProjectByRemoteURLAndUser(ctx, pgdb.GetProjectByRemoteURLAndUserParams{
-		RemoteUrl: sql.NullString{String: remoteURL, Valid: remoteURL != ""},
+		RemoteUrl: sql.NullString{String: gitremote.StripCredentials(remoteURL), Valid: remoteURL != ""},
 		UserID:    userID,
 	})
 	if err != nil {
@@ -114,7 +115,7 @@ func (s *projectStore) UpdateProject(ctx context.Context, project *core.Project,
 		Description:      ptrToNullString(project.Description),
 		IsGitRepo:        project.IsGitRepo,
 		DefaultBranch:    ptrToNullString(project.DefaultBranch),
-		RemoteUrl:        ptrToNullString(project.RemoteURL),
+		RemoteUrl:        ptrToNullString(gitremote.StripCredentialsPtr(project.RemoteURL)),
 		IsForge:          project.IsForge,
 		ForgeProjectName: ptrToNullString(project.ForgeProjectName),
 		LastActive:       project.LastActive,
@@ -486,7 +487,7 @@ func projectFromPG(row pgdb.Project) *core.Project {
 		Description:      nullStringToPtr(row.Description),
 		IsGitRepo:        row.IsGitRepo,
 		DefaultBranch:    nullStringToPtr(row.DefaultBranch),
-		RemoteURL:        nullStringToPtr(row.RemoteUrl),
+		RemoteURL:        gitremote.StripCredentialsPtr(nullStringToPtr(row.RemoteUrl)),
 		IsForge:          row.IsForge,
 		ForgeProjectName: nullStringToPtr(row.ForgeProjectName),
 		CreatedAt:        row.CreatedAt,

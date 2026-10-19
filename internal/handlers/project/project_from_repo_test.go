@@ -243,6 +243,34 @@ func TestCreateProjectFromRepo_DerivesNameAndPathFromTheCloneURL(t *testing.T) {
 	assert.Equal(t, "/home/workspace/projects/"+name, cp.lastReq.Path)
 }
 
+// A clone URL that carries a token (pasted by a user, or built by a client)
+// is cleaned before it goes anywhere: the control plane clones the clean URL
+// and authenticates through the credential helper, and the project stores the
+// clean URL rather than a token at rest.
+func TestCreateProjectFromRepo_NeverForwardsOrStoresACredentialURL(t *testing.T) {
+	cp := &cloneStubControlPlane{result: controlplane.CloneRepoResult{Queued: true}}
+	svc, repo, cleanup := newFromRepoService(t, cp)
+	defer cleanup()
+
+	userID := "user-from-repo-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	name := "widgets-" + uuid.NewString()
+
+	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+		CloneUrl: "https://x-access-token:ghs_FIXTURE0TOKEN@github.com/acme/" + name + ".git",
+		DaemonId: "daemon-abc",
+	}))
+	require.NoError(t, err)
+
+	want := "https://github.com/acme/" + name + ".git"
+	assert.Equal(t, want, cp.lastReq.CloneURL, "the control plane is handed the clean URL")
+	assert.Equal(t, want, resp.Msg.GetProject().GetRemoteUrl(), "the response carries the clean URL")
+	stored, err := repo.GetProject(ctx, resp.Msg.GetProject().GetId())
+	require.NoError(t, err)
+	require.NotNil(t, stored.RemoteURL)
+	assert.Equal(t, want, *stored.RemoteURL, "the stored remote is the clean URL")
+}
+
 // TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed is the whole round
 // trip of a queued clone that fails. The daemon's DaemonCommandFailed echoes
 // the request id the queued command carried, and that is the ONLY key the

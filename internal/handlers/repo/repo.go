@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/gitremote"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -328,6 +329,6 @@ func (s *Service) GetRepoGitInfo(
 		UntrackedFiles: gitInfo.UntrackedFiles,
 		Ahead:          gitInfo.Ahead,
 		Behind:         gitInfo.Behind,
-		RemoteUrl:      gitInfo.RemoteURL,
+		RemoteUrl:      gitremote.StripCredentials(gitInfo.RemoteURL),
 	}), nil
 }

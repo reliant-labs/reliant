@@ -8,6 +8,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
+	"github.com/reliant-labs/reliant/internal/gitremote"
 )
 
 type repoStore struct{ q pgdb.Querier }
@@ -22,7 +23,7 @@ func (s *repoStore) CreateRepo(ctx context.Context, repo *core.Repo) error {
 		ProjectID:    repo.ProjectID,
 		Name:         repo.Name,
 		RelativePath: repo.RelativePath,
-		RemoteUrl:    ptrToNullString(repo.RemoteURL),
+		RemoteUrl:    ptrToNullString(gitremote.StripCredentialsPtr(repo.RemoteURL)),
 		CreatedAt:    repo.CreatedAt,
 		UpdatedAt:    repo.UpdatedAt,
 	})
@@ -69,7 +70,7 @@ func (s *repoStore) UpdateRepo(ctx context.Context, repo *core.Repo) error {
 	return s.q.UpdateRepo(ctx, pgdb.UpdateRepoParams{
 		ID:        repo.ID,
 		Name:      repo.Name,
-		RemoteUrl: ptrToNullString(repo.RemoteURL),
+		RemoteUrl: ptrToNullString(gitremote.StripCredentialsPtr(repo.RemoteURL)),
 	})
 }
 
@@ -83,7 +84,7 @@ func repoFromPG(r pgdb.Repo) *core.Repo {
 		ProjectID:    r.ProjectID,
 		Name:         r.Name,
 		RelativePath: r.RelativePath,
-		RemoteURL:    nullStringToPtr(r.RemoteUrl),
+		RemoteURL:    gitremote.StripCredentialsPtr(nullStringToPtr(r.RemoteUrl)),
 		CreatedAt:    r.CreatedAt,
 		UpdatedAt:    r.UpdatedAt,
 	}

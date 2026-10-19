@@ -53,7 +53,10 @@ func (s *Service) CreateProjectFromRepo(
 ) (*connect.Response[reliantv1.CreateProjectFromRepoResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	cloneURL := strings.TrimSpace(req.Msg.GetCloneUrl())
+	// Git authenticates through the credential helper, never the URL: a token
+	// in the URL would be stored as the project's remote and written into the
+	// checkout's .git/config.
+	cloneURL := gitremote.StripCredentials(strings.TrimSpace(req.Msg.GetCloneUrl()))
 	daemonID := strings.TrimSpace(req.Msg.GetDaemonId())
 	if cloneURL == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("clone_url is required"))

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/gitremote"
 	"github.com/reliant-labs/reliant/internal/gitutil"
 	"github.com/reliant-labs/reliant/internal/repo"
 )
@@ -172,7 +173,7 @@ func handleGitInfo(ctx context.Context, payload []byte) ([]byte, error) {
 	remoteCmd := exec.CommandContext(ctx, "git", "config", "--get", "remote.origin.url")
 	remoteCmd.Dir = req.Path
 	if out, err := remoteCmd.Output(); err == nil {
-		resp.RemoteURL = strings.TrimSpace(string(out))
+		resp.RemoteURL = gitremote.StripCredentials(strings.TrimSpace(string(out)))
 	}
 
 	// Git status

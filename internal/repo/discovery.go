@@ -13,6 +13,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/reliant-labs/reliant/internal/gitremote"
 )
 
 // DefaultMaxDepth is the default depth at which Discover scans for nested
@@ -174,7 +176,7 @@ func readRemoteURL(ctx context.Context, repoPath string) string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	return gitremote.StripCredentials(strings.TrimSpace(string(out)))
 }
 
 // checkoutIdent identifies the repository a checkout belongs to.
