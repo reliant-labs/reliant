@@ -8,8 +8,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runenv"
+	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -89,6 +91,18 @@ func loadRootConfig(cmd *cobra.Command) (*config.ReliantConfig, error) {
 // internal/logging takes.
 func logSettings(cfg *config.ReliantConfig) logging.Settings {
 	return logging.Settings{Level: cfg.GetLog().GetLevel(), Format: cfg.GetLog().GetFormat()}
+}
+
+// storageReaperConfig is the root config's schedule for the daemon's storage
+// reaper (internal/diskwatch/reaper.go). A value it cannot use is named in a
+// warning and replaced by its default; it never stops the daemon.
+func storageReaperConfig(cfg *config.ReliantConfig) diskwatch.ReaperConfig {
+	sr := cfg.GetStorageReaper()
+	out, warnings := diskwatch.ParseReaperConfig(sr.GetMode(), sr.GetInterval(), sr.GetPressureInterval(), sr.GetPolicyPath(), daemonruntime.IsManagedEnvironment())
+	for _, w := range warnings {
+		logging.Warn("Storage reaper config: " + w)
+	}
+	return out
 }
 
 // envOrDefault returns the environment variable value or the default.

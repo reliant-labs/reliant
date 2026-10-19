@@ -56,6 +56,7 @@ message ReliantConfig {
 
   LogConfig log = 1;
   RuntimeConfig runtime = 2;
+  StorageReaperConfig storage_reaper = 3;
 }
 
 // RuntimeConfig is where the process is running. The entrypoint hands it to
@@ -93,5 +94,50 @@ message LogConfig {
     env_var: "LOG_FORMAT"
     flag: "log-format"
     description: "Log line format: text or json (default text; json for a hosted daemon)"
+  }];
+}
+
+// StorageReaperConfig is how the daemon schedules forge's storage reaper
+// (`forge storage auto-gc`) on its own machine. A daemon has no systemd timer
+// or cron to run `forge storage install`'s schedule, and the pass that
+// `forge env up` starts in the background is rate-limited to once a day and
+// only fires after an `up`; the Go build cache grows far faster than that
+// (internal/diskwatch/reaper.go has the design). The reaper's own budgets
+// (go_cache_gib, build_cache_gib, ...) live in forge's storage policy, not
+// here: this block only decides WHEN the daemon runs it.
+message StorageReaperConfig {
+  // auto runs it on managed daemons (workspace pods and cloud machines, where
+  // agents' builds fill the shared disk) and leaves a person's own machine
+  // alone; on forces it everywhere; off never runs it on a schedule. A
+  // confirmed "clear caches" from the UI runs it in every mode.
+  string mode = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_STORAGE_REAPER"
+    default_value: "auto"
+    allowed_values: ["auto", "on", "off"]
+    description: "Run forge's storage reaper on a schedule: auto (managed daemons only), on, or off"
+  }];
+
+  // How often the budget pass runs regardless of disk pressure. A Go duration;
+  // below 5m is raised to 5m, and an unparsable value is ignored with a warning.
+  string interval = 2 [(forge.v1.config) = {
+    env_var: "RELIANT_STORAGE_REAPER_INTERVAL"
+    default_value: "1h"
+    description: "Interval of the scheduled storage reaper pass (Go duration, minimum 5m)"
+  }];
+
+  // How soon the reaper may run again while a watched volume is under disk
+  // pressure. A Go duration; below 1m is raised to 1m.
+  string pressure_interval = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL"
+    default_value: "10m"
+    description: "Minimum gap between storage reaper passes while a volume is under pressure (Go duration, minimum 1m)"
+  }];
+
+  // Forge's machine storage policy, the file `forge storage` reads. FORGE_STORAGE_POLICY
+  // is forge's own variable, so the daemon and the passes it starts agree on the
+  // file. Unset: forge's default, <user config dir>/forge/storage.json.
+  string policy_path = 4 [(forge.v1.config) = {
+    env_var: "FORGE_STORAGE_POLICY"
+    description: "Forge machine storage policy file (default: <user config dir>/forge/storage.json)"
   }];
 }

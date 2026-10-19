@@ -35200,6 +35200,21 @@
           "Category": "",
           "MessageType": "RuntimeConfig",
           "ProtoFile": "config/v1/config.proto"
+        },
+        {
+          "Name": "storage_reaper",
+          "GoName": "StorageReaper",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "StorageReaperConfig",
+          "ProtoFile": "config/v1/config.proto"
         }
       ],
       "Binary": "reliant",
@@ -35230,7 +35245,7 @@
         }
       ],
       "ProtoFile": "config/v1/config.proto",
-      "Line": 63
+      "Line": 64
     },
     {
       "Name": "LogConfig",
@@ -35265,7 +35280,70 @@
         }
       ],
       "ProtoFile": "config/v1/config.proto",
-      "Line": 81
+      "Line": 82
+    },
+    {
+      "Name": "StorageReaperConfig",
+      "Fields": [
+        {
+          "Name": "mode",
+          "GoName": "Mode",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_STORAGE_REAPER",
+          "Flag": "",
+          "DefaultValue": "auto",
+          "Required": false,
+          "Description": "Run forge's storage reaper on a schedule: auto (managed daemons only), on, or off",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/config.proto"
+        },
+        {
+          "Name": "interval",
+          "GoName": "Interval",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_STORAGE_REAPER_INTERVAL",
+          "Flag": "",
+          "DefaultValue": "1h",
+          "Required": false,
+          "Description": "Interval of the scheduled storage reaper pass (Go duration, minimum 5m)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/config.proto"
+        },
+        {
+          "Name": "pressure_interval",
+          "GoName": "PressureInterval",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL",
+          "Flag": "",
+          "DefaultValue": "10m",
+          "Required": false,
+          "Description": "Minimum gap between storage reaper passes while a volume is under pressure (Go duration, minimum 1m)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/config.proto"
+        },
+        {
+          "Name": "policy_path",
+          "GoName": "PolicyPath",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "FORGE_STORAGE_POLICY",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Forge machine storage policy file (default: \u003cuser config dir\u003e/forge/storage.json)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/config.proto",
+      "Line": 108
     },
     {
       "Name": "GatewayConfig",
@@ -35322,5 +35400,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "36a9b06a61a5343b8ff7f8d106f65dc291d08b728740af7874e586252e75fe10"
+  "source_hash": "e6078e19ef3761d4dd4c4632a13e9e71ab13ccafffdaddaa20231f27260f8ad2"
 }

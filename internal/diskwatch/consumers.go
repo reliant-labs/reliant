@@ -28,10 +28,11 @@ const (
 	dirMaxEntries      = 1_000_000
 	// maxConsumers caps what a volume reports, biggest first.
 	maxConsumers = 12
-	// GoCacheTrimAge is the youngest Go-format cache entry a clean-up may
-	// remove. Go bumps an entry's mtime on use once it is an hour stale, so
-	// an entry untouched for two hours is not in use by a live build — the
-	// floor forge's own storage GC uses, for the same reason.
+	// GoCacheTrimAge is the age past which a Go-format cache entry counts as
+	// reclaimable in the breakdown (an estimate; forge's reaper decides what it
+	// actually removes, reaper.go). Go bumps an entry's mtime on use once it
+	// is an hour stale, so an entry untouched for two hours is not in use by a
+	// live build — the floor forge's own storage GC uses, for the same reason.
 	GoCacheTrimAge = 2 * time.Hour
 )
 

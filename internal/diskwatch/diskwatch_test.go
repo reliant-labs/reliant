@@ -181,7 +181,11 @@ func TestDiscoverTargets_LaptopDefaultsNestCachesUnderHome(t *testing.T) {
 // are real temp dirs (so consumer measurement walks real files).
 func watcherOn(t *testing.T, fs *fakeFS, env Environment, now *time.Time) *Watcher {
 	t.Helper()
-	return New(Options{Env: env, Now: func() time.Time { return *now }, stat: fs.stat, noDocker: true, mounts: func() []overlayMount { return nil }})
+	w := New(Options{Env: env, Now: func() time.Time { return *now }, stat: fs.stat, noDocker: true, mounts: func() []overlayMount { return nil },
+		reaper: func(context.Context, string) (reaperRun, error) { return reaperRun{}, nil }})
+	// A policy location of its own, so a clean-up never reads the machine's.
+	w.ConfigureReaper(ReaperConfig{PolicyPath: filepath.Join(t.TempDir(), "storage.json")})
+	return w
 }
 
 func writeFile(t *testing.T, path string, size int, mtime time.Time) {
@@ -352,30 +356,6 @@ func TestNoSpacePaths(t *testing.T) {
 	got := noSpacePaths("npm ERR! ENOSPC: no space left on device, open '/var/cache/workspace/npm/_cacache/tmp/x'\nok /other/path")
 	if len(got) != 1 || got[0] != "/var/cache/workspace/npm/_cacache/tmp/x" {
 		t.Fatalf("got %v", got)
-	}
-}
-
-func TestTrimGoCache_RemovesOnlyStaleShardEntries(t *testing.T) {
-	root := t.TempDir()
-	old := time.Now().Add(-3 * time.Hour)
-	writeFile(t, filepath.Join(root, "README"), 10, old)
-	writeFile(t, filepath.Join(root, "trim.txt"), 10, old)
-	writeFile(t, filepath.Join(root, "0a", "stale-a"), 4096, old)
-	writeFile(t, filepath.Join(root, "0a", "stale-d"), 4096, old)
-	writeFile(t, filepath.Join(root, "0a", "fresh-d"), 4096, time.Now())
-	writeFile(t, filepath.Join(root, "notashard", "x"), 4096, old)
-
-	_, removed, err := trimGoCache(context.Background(), root, time.Now().Add(-GoCacheTrimAge))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if removed != 2 {
-		t.Fatalf("removed %d, want the 2 stale shard entries", removed)
-	}
-	for _, keep := range []string{"README", "trim.txt", "0a/fresh-d", "notashard/x"} {
-		if _, err := os.Stat(filepath.Join(root, keep)); err != nil {
-			t.Errorf("%s must be kept: %v", keep, err)
-		}
 	}
 }
 

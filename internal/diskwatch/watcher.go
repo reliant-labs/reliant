@@ -29,6 +29,7 @@ type Options struct {
 	docker   dockerAPI
 	mounts   func() []overlayMount
 	noDocker bool
+	reaper   reaperRunner
 }
 
 // Watcher samples the watched volumes, keeps a pressure bit per volume,
@@ -54,6 +55,9 @@ type Watcher struct {
 	scanning  bool
 	noSpaceAt map[uint64]int64
 	clearing  map[string]bool
+
+	// reaper is the scheduled storage-reaper routine (reaper.go).
+	reaper reaperState
 
 	// changed receives one token when something a heartbeat should carry at
 	// once changed: a pressure flip, a finished scan, a no-space failure, a
@@ -82,7 +86,11 @@ func New(opts Options) *Watcher {
 	if opts.mounts == nil && opts.Env.GOOS == "linux" {
 		opts.mounts = procOverlayMounts
 	}
+	if opts.reaper == nil {
+		opts.reaper = execReaper
+	}
 	return &Watcher{
+		reaper:    reaperState{sem: make(chan struct{}, 1), run: opts.reaper},
 		env:       opts.Env,
 		interval:  opts.Interval,
 		now:       opts.Now,

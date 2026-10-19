@@ -185,6 +185,9 @@ func (d *daemonClient) projectSnapshot(projectPath string) (*reliantv1.ProjectCo
 
 type StartOptions struct {
 	BootstrapConfig bootstrap.DaemonBootstrapConfig
+	// StorageReaper schedules forge's storage reaper on this machine; the zero
+	// value leaves it off (diskwatch.ReaperConfig).
+	StorageReaper diskwatch.ReaperConfig
 }
 
 func Start(ctx context.Context, opts StartOptions) error {
@@ -258,6 +261,10 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// 10s, plus a bounded "what is using it" scan only while a volume is
 	// under pressure.
 	go client.diskWatcher.Run(ctx)
+	// And the reaper that keeps the build caches inside their budget: forge's
+	// storage pass, on a schedule and under pressure, when opts enables it.
+	client.diskWatcher.ConfigureReaper(opts.StorageReaper)
+	go client.diskWatcher.RunReaper(ctx)
 
 	// Managed daemons: route github.com auth through the credential helper and
 	// scrub any token an older release left on disk. Local daemons are left
