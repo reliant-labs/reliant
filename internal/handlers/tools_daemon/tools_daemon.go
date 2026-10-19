@@ -17,6 +17,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -24,7 +25,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
-	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
@@ -225,11 +225,11 @@ type daemonConnection struct {
 // finishes on its own, so the gateway burned its entire shutdown budget and
 // then exited, cutting every daemon's TCP connection with no status at all.
 //
-// It matches drain.ErrServerDraining, which the server's logging interceptor
-// declares an expected outcome: every held stream ends this way on every
-// rollout, and logging each one as a failed stream at ERROR paged on a
-// rollout that went exactly as designed.
-var errGatewayDraining = connect.NewError(connect.CodeUnavailable, drain.DrainingError(
+// It matches svcerr.ErrServerDraining, which forge's logging treats as an
+// expected outcome: every held stream ends this way on every rollout, and
+// logging each one as a failed stream at ERROR paged on a rollout that went
+// exactly as designed.
+var errGatewayDraining = connect.NewError(connect.CodeUnavailable, svcerr.Draining(
 	"gateway draining: this daemon-gateway replica is shutting down; reconnect to reach a live replica"))
 
 // Close ends every daemon stream this service is holding, with a status the
@@ -887,6 +887,12 @@ func (s *Service) ConnectDaemon(
 	ctx context.Context,
 	stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage],
 ) error {
+	// This stream says its own goodbye — BeginDrain tells the daemon to move
+	// (GatewayDrain) — so it claims the server drain's soft phase: the drain
+	// leaves it open for the replies still in flight on it, and ends it only
+	// at the drain's hard deadline (see grpc.DaemonServer.Stop).
+	_ = serverkit.Draining(ctx)
+
 	// A draining replica takes no new daemon: one moving off it, or one the
 	// load balancer has not stopped sending yet, redials and lands on a
 	// replica that is still serving. Unavailable keeps it on that path.

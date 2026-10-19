@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
 	"github.com/reliant-labs/reliant/internal/controlplane"
@@ -60,6 +61,37 @@ func serverEnvOrDefaultBool(key string, defaultVal bool) bool {
 	return defaultVal
 }
 
+// drainBudgetFromEnv reads the rollout drain budget control-plane sets on
+// every server workload — PRE_STOP_DELAY and SHUTDOWN_TIMEOUT, from which
+// forge derives the pod's terminationGracePeriodSeconds, so a process that
+// ignores them cannot stay inside the grace period it was given — in the
+// terms serverkit.Drainer takes them.
+//
+// Unset, unparseable or negative is zero, serverkit's default (5s / 30s): a
+// malformed duration must not stop a server from booting, nor make its
+// shutdown instantaneous. An explicit zero pre-stop delay means no pause,
+// which serverkit spells as a negative delay.
+func drainBudgetFromEnv() (preStopDelay, shutdownTimeout time.Duration) {
+	if d, ok := serverEnvDuration("PRE_STOP_DELAY"); ok {
+		preStopDelay = d
+		if d == 0 {
+			preStopDelay = -1
+		}
+	}
+	shutdownTimeout, _ = serverEnvDuration("SHUTDOWN_TIMEOUT")
+	return preStopDelay, shutdownTimeout
+}
+
+// serverEnvDuration returns the environment variable as a non-negative
+// duration, reporting false when it is unset or not one.
+func serverEnvDuration(key string) (time.Duration, bool) {
+	d, err := time.ParseDuration(strings.TrimSpace(os.Getenv(key)))
+	if err != nil || d < 0 {
+		return 0, false
+	}
+	return d, true
+}
+
 func newServerAPICmd() *cobra.Command {
 	opts := serverapi.Options{}
 
@@ -75,6 +107,7 @@ Designed to run as N replicas behind a load balancer.`,
 			if err := loadServerAPIConfig(cmd, &opts); err != nil {
 				return err
 			}
+			opts.PreStopDelay, opts.ShutdownTimeout = drainBudgetFromEnv()
 
 			// Parse CORS origins: "*" → wildcard, otherwise comma-separated
 			corsRaw, _ := cmd.Flags().GetString("cors-origins")
@@ -204,6 +237,7 @@ Designed to run as N replicas for horizontal scaling.`,
 			if err := loadServerWorkerConfig(cmd, &opts); err != nil {
 				return err
 			}
+			opts.PreStopDelay, opts.ShutdownTimeout = drainBudgetFromEnv()
 			return serverworker.Run(cmd.Context(), opts)
 		},
 	}
@@ -248,6 +282,7 @@ Designed to run as few stateful replicas.`,
 			if err := loadServerGatewayConfig(cmd, &opts); err != nil {
 				return err
 			}
+			opts.PreStopDelay, opts.ShutdownTimeout = drainBudgetFromEnv()
 			return servergateway.Run(cmd.Context(), opts)
 		},
 	}

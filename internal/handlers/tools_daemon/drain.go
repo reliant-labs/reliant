@@ -26,16 +26,14 @@ import (
 //     sends each daemon GatewayDrain. The daemon opens a stream to another
 //     replica and moves its work there, keeping this one open for replies to
 //     what is in flight on it.
-//  2. AwaitDrained waits, up to the drain deadline, for the daemons to close
-//     their old streams, which each does once it is registered elsewhere and
-//     has nothing in flight here.
-//  3. Close ends what is left. A waiter cut off there answers "interrupted",
-//     which no longer fails the call: the worker waits for the daemon to
-//     deliver the result through another replica (routeToolResponse, and
-//     internal/toolexec/tool_result_redelivery.go).
-
-// drainPollInterval is how often AwaitDrained looks for streams still open.
-const drainPollInterval = 100 * time.Millisecond
+//  2. The server's drain (serverkit, see grpc.DaemonServer.Stop) waits, up
+//     to the drain deadline, for the daemons to close their old streams,
+//     which each does once it is registered elsewhere and has nothing in
+//     flight here: ConnectDaemon claims the drain's soft phase for that.
+//  3. The drain ends what is left with Unavailable. A waiter cut off there
+//     answers "interrupted", which no longer fails the call: the worker waits
+//     for the daemon to deliver the result through another replica
+//     (routeToolResponse, and internal/toolexec/tool_result_redelivery.go).
 
 // resultPublishTimeout bounds publishing one result that had no waiter here.
 const resultPublishTimeout = 10 * time.Second
@@ -43,7 +41,7 @@ const resultPublishTimeout = 10 * time.Second
 // BeginDrain starts this replica's drain. From now on it refuses new daemon
 // streams, and every daemon it holds is told to move: drain listeners first
 // stop routing the daemon's new requests here, then the daemon is sent
-// GatewayDrain carrying deadline — when Close will end its stream. The streams
+// GatewayDrain carrying deadline — when the drain will end its stream. The streams
 // stay open; replies to requests in flight on them are still delivered.
 //
 // A daemon that does not act on the notice (an older build, or one the
@@ -90,23 +88,6 @@ func (s *Service) BeginDrain(deadline time.Time) int {
 		}
 	}
 	return len(conns)
-}
-
-// AwaitDrained waits until every daemon stream this replica holds has ended,
-// or ctx ends. It reports whether they all did.
-func (s *Service) AwaitDrained(ctx context.Context) bool {
-	ticker := time.NewTicker(drainPollInterval)
-	defer ticker.Stop()
-	for {
-		if s.GetActiveConnections() == 0 {
-			return true
-		}
-		select {
-		case <-ctx.Done():
-			return s.GetActiveConnections() == 0
-		case <-ticker.C:
-		}
-	}
 }
 
 // notifyDraining tells every listener that cares that daemonID's stream here

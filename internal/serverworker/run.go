@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/agentruns"
@@ -26,7 +27,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
-	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
@@ -76,6 +76,12 @@ type Options struct {
 	// Health check
 	HealthPort int
 
+	// PreStopDelay and ShutdownTimeout are the rollout drain budget
+	// (PRE_STOP_DELAY / SHUTDOWN_TIMEOUT) as serverkit.Drainer takes it: zero
+	// is serverkit's default (5s / 30s), a negative PreStopDelay no pause.
+	PreStopDelay    time.Duration
+	ShutdownTimeout time.Duration
+
 	// PprofPort is the localhost-only diagnostics port (see debugserver).
 	PprofPort int
 
@@ -102,12 +108,11 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("NATS_URL is required (tool routing and streaming go through NATS)")
 	}
 
-	// Rollout drain budget from PRE_STOP_DELAY / SHUTDOWN_TIMEOUT. The
-	// worker serves no inbound traffic, so its readiness flip matters less
-	// than the api-server's — but the same budget is what bounds
-	// Worker.Stop, and that is the part that has to fit inside the pod's
-	// grace period.
-	drainer := drain.New()
+	// The readiness gate and rollout drain budget. The worker serves no
+	// inbound traffic, so its readiness flip matters less than the
+	// api-server's — but the same budget is what bounds Worker.Stop, and that
+	// is the part that has to fit inside the pod's grace period.
+	drainer := serverkit.NewDrainer(serverkit.Config{PreStopDelay: opts.PreStopDelay, ShutdownTimeout: opts.ShutdownTimeout})
 
 	// -----------------------------------------------------------------
 	// 2. Logging
@@ -472,25 +477,27 @@ func Run(ctx context.Context, opts Options) error {
 		_, _ = w.Write([]byte(`{"status":"ok","service":"temporal-worker"}`))
 	})
 	healthMux.Handle("/metrics", observability.MetricsHandler())
-	healthMux.HandleFunc("/ready", drainer.ReadinessHandler("temporal-worker",
-		drain.ReadinessCheck{Name: "db", Check: repo.Ping},
-		drain.ReadinessCheck{Name: "temporal", Check: func(ctx context.Context) error {
+	healthMux.HandleFunc("/ready", drainer.ReadinessHandler([]serverkit.ReadyCheck{
+		{Name: "db", Check: repo.Ping},
+		{Name: "temporal", Check: func(ctx context.Context) error {
 			_, err := temporalClient.CheckHealth(ctx, &client.CheckHealthRequest{})
 			return err
 		}},
-		drain.ReadinessCheck{Name: "nats", Check: func(context.Context) error {
+		{Name: "nats", Check: func(context.Context) error {
 			if natsChecker != nil && !natsChecker() {
 				return fmt.Errorf("disconnected")
 			}
 			return nil
 		}},
-		drain.ReadinessCheck{Name: "nats-streaming", Check: func(context.Context) error {
+		{Name: "nats-streaming", Check: func(context.Context) error {
 			if !streamingHub.IsConnected() {
 				return fmt.Errorf("disconnected")
 			}
 			return nil
 		}},
-	))
+	}, 0, slog.Default()))
+	// The Temporal worker is running: /ready now answers from its checks.
+	drainer.MarkReady()
 
 	healthServer := &http.Server{
 		Addr:              fmt.Sprintf(":%d", opts.HealthPort),
@@ -536,8 +543,8 @@ func Run(ctx context.Context, opts Options) error {
 	// across the three mains is what makes the grace-period arithmetic
 	// checkable from the deployment alone.
 	logging.Info("Draining temporal-worker",
-		"pre_stop_delay", drainer.PreStopDelay(),
-		"shutdown_timeout", drainer.ShutdownTimeout())
+		"pre_stop_delay", drainer.PreStopDelay,
+		"shutdown_timeout", drainer.ShutdownTimeout)
 	drainer.Begin()
 
 	shutdownCtx, cancel := drainer.ShutdownContext()
@@ -553,11 +560,14 @@ func Run(ctx context.Context, opts Options) error {
 		logging.Info("Worker stopped successfully")
 	case <-shutdownCtx.Done():
 		logging.Warn("Worker did not stop within the shutdown budget",
-			"shutdown_timeout", drainer.ShutdownTimeout())
+			"shutdown_timeout", drainer.ShutdownTimeout)
 	}
 
-	// Health server LAST.
-	if err := drain.ShutdownHealthServer(healthServer); err != nil {
+	// Health server LAST, on its own short budget: the shutdown context may
+	// be spent by now.
+	healthCtx, cancelHealth := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelHealth()
+	if err := healthServer.Shutdown(healthCtx); err != nil {
 		logging.Error("Health server shutdown error", "error", err)
 	}
 

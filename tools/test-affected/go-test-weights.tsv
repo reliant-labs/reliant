@@ -95,7 +95,6 @@
 0.4	github.com/reliant-labs/reliant/internal/workersetup
 0.4	github.com/reliant-labs/reliant/internal/serverworker
 0.4	github.com/reliant-labs/reliant/internal/handlers/terminal
-0.3	github.com/reliant-labs/reliant/internal/drain
 0.2	github.com/reliant-labs/reliant/internal/workflow/reconciliation
 0.2	github.com/reliant-labs/reliant/internal/llm/models
 0.2	github.com/reliant-labs/reliant/internal/llm/drivers/codex

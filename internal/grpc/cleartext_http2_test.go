@@ -11,24 +11,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 )
 
-// serveCleartext starts an http.Server on a loopback port using the same
-// protocol configuration NewServer/NewDaemonServer use for their no-TLS path,
-// and returns its base URL.
+// serveCleartext starts a server on a loopback port with the same listener
+// configuration NewServer/NewDaemonServer use for their no-TLS path, and
+// returns its base URL.
 func serveCleartext(t *testing.T, handler http.Handler) string {
 	t.Helper()
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
-	srv := &http.Server{
-		Handler:           handler,
-		Protocols:         cleartextHTTP2Protocols(),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
+	srv := serverkit.NewHTTPServer(listenerConfig("127.0.0.1", 0), handler, serverkit.NewStreams())
 
 	serveDone := make(chan struct{})
 	go func() {
@@ -60,7 +57,7 @@ func priorKnowledgeClient() *http.Client {
 }
 
 // TestCleartextHTTP2ServesPriorKnowledgeClients pins the h2c replacement: a
-// server configured with cleartextHTTP2Protocols must answer a prior-knowledge
+// server configured with listenerConfig must answer a prior-knowledge
 // HTTP/2 client over HTTP/2, not downgrade it to HTTP/1.1.
 func TestCleartextHTTP2ServesPriorKnowledgeClients(t *testing.T) {
 	mux := http.NewServeMux()

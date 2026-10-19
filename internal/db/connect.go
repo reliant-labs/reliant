@@ -158,39 +158,36 @@ func ConnectWithConfig(cfg DatabaseConfig) (*sql.DB, error) {
 func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 	logging.Info("Opening Postgres database")
 
-	// cfg.URL is PgBouncer in a deployment: openPostgres retries what a
-	// draining pooler refused instead of failing the caller.
-	db, err := openPostgres(cfg.URL)
+	// serverkit.OpenDB opens the pgx pool so that it rides through a pooler's
+	// rollout — cfg.URL is PgBouncer in a deployment: a statement a draining
+	// PgBouncer refused ("FATAL: server shutting down", 08P01) runs again on
+	// another connection instead of failing the caller, and closing a
+	// connection the pooler already dropped is not reported as an error. It
+	// retries the first ping with capped backoff: a database that comes up
+	// seconds after its clients is a wait, not a crash loop.
+	//
+	// Pool settings: defaults are 25 open / 10 idle, but both are
+	// env-overridable so dev can cap them low: the dev Postgres is SHARED by
+	// N parallel stacks (one per git worktree), and reliant's api + worker
+	// pools count against the same instance's max_connections alongside
+	// control-plane's services. Dev sets RELIANT_DB_MAX_OPEN_CONNS=8 /
+	// RELIANT_DB_MAX_IDLE_CONNS=2 (see control-plane deploy/kcl/dev/main.k
+	// _reliant_host_env). Prod/anything that sets neither keeps 25/10.
+	db, err := serverkit.OpenDB(context.Background(), "pgx", cfg.URL,
+		serverkit.DBPoolTuning{
+			MaxOpenConns:    envInt("RELIANT_DB_MAX_OPEN_CONNS", 25),
+			MaxIdleConns:    envInt("RELIANT_DB_MAX_IDLE_CONNS", 10),
+			ConnMaxLifetime: 30 * time.Minute,
+		},
+		serverkit.ConnectPolicy{Timeout: cfg.ConnectTimeout, Logger: slog.Default()})
 	if err != nil {
-		return nil, fmt.Errorf("failed to open postgres database: %w", err)
+		return nil, fmt.Errorf("failed to connect to postgres database: %w", err)
 	}
 
 	// Register OTel for DB stats metrics
 	if _, regErr := otelsql.RegisterDBStatsMetrics(db, otelsql.WithAttributes(attribute.String("db.system", "postgresql"))); regErr != nil {
 		logging.Warn("Failed to register DB stats metrics", "error", regErr)
 	}
-
-	// Retry with capped backoff: a database that comes up seconds after its
-	// clients is a wait, not a crash loop.
-	if err := serverkit.RetryConnect(context.Background(),
-		serverkit.ConnectPolicy{Timeout: cfg.ConnectTimeout, Logger: slog.Default()},
-		db.PingContext); err != nil {
-		if closeErr := db.Close(); closeErr != nil {
-			logging.Error("Failed to close postgres database after ping failure", "error", closeErr)
-		}
-		return nil, fmt.Errorf("failed to connect to postgres database: %w", err)
-	}
-
-	// Postgres connection pool settings. Defaults are 25 open / 10 idle, but
-	// both are env-overridable so dev can cap them low: the dev Postgres is
-	// SHARED by N parallel stacks (one per git worktree), and reliant's api +
-	// worker pools count against the same instance's max_connections alongside
-	// control-plane's services. Dev sets RELIANT_DB_MAX_OPEN_CONNS=8 /
-	// RELIANT_DB_MAX_IDLE_CONNS=2 (see control-plane deploy/kcl/dev/main.k
-	// _reliant_host_env). Prod/anything that sets neither keeps 25/10.
-	db.SetMaxOpenConns(envInt("RELIANT_DB_MAX_OPEN_CONNS", 25))
-	db.SetMaxIdleConns(envInt("RELIANT_DB_MAX_IDLE_CONNS", 10))
-	db.SetConnMaxLifetime(30 * time.Minute)
 
 	switch cfg.Migrate {
 	case MigrateWait:

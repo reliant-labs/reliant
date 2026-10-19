@@ -21,6 +21,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/serverkit"
+
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 
 	"github.com/reliant-labs/reliant/internal/analytics"
@@ -30,7 +32,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
-	"github.com/reliant-labs/reliant/internal/drain"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
@@ -79,6 +80,12 @@ type Options struct {
 
 	// Health check
 	HealthPort int
+
+	// PreStopDelay and ShutdownTimeout are the rollout drain budget
+	// (PRE_STOP_DELAY / SHUTDOWN_TIMEOUT) as serverkit.Drainer takes it: zero
+	// is serverkit's default (5s / 30s), a negative PreStopDelay no pause.
+	PreStopDelay    time.Duration
+	ShutdownTimeout time.Duration
 
 	// CORS
 	CORSAllowedOrigins []string
@@ -151,10 +158,9 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	startTime := time.Now()
 
-	// Rollout drain budget, read from the PRE_STOP_DELAY / SHUTDOWN_TIMEOUT
-	// env vars the deployment already sets. Built before anything else so
-	// the readiness handler below can close over it.
-	drainer := drain.New()
+	// The readiness gate and rollout drain budget. Built before anything
+	// else so the readiness handler below can close over it.
+	drainer := serverkit.NewDrainer(serverkit.Config{PreStopDelay: opts.PreStopDelay, ShutdownTimeout: opts.ShutdownTimeout})
 
 	logLevel := logging.GetLogLevel(opts.Log)
 	logging.SetupWithRotation(opts.Log, logLevel, false, &logging.RotationConfig{
@@ -459,6 +465,8 @@ func Run(ctx context.Context, opts Options) error {
 	if err := grpcSrv.Start(); err != nil {
 		return fmt.Errorf("failed to start gRPC server: %w", err)
 	}
+	// The listener is bound: /ready now answers from its dependency checks.
+	drainer.MarkReady()
 	logging.Info("gRPC/Connect server started", "port", opts.GRPCPort)
 
 	// Subscribe to daemon.v1.events.connected on the DAEMON_EVENTS
@@ -536,21 +544,21 @@ func Run(ctx context.Context, opts Options) error {
 			"auth_mode": auth.GetAuthMode(),
 		})
 	})
-	healthMux.HandleFunc("/ready", drainer.ReadinessHandler("api-server",
-		drain.ReadinessCheck{Name: "db", Check: repo.Ping},
-		drain.ReadinessCheck{Name: "nats", Check: func(context.Context) error {
+	healthMux.HandleFunc("/ready", drainer.ReadinessHandler([]serverkit.ReadyCheck{
+		{Name: "db", Check: repo.Ping},
+		{Name: "nats", Check: func(context.Context) error {
 			if natsChecker != nil && !natsChecker() {
 				return fmt.Errorf("disconnected")
 			}
 			return nil
 		}},
-		drain.ReadinessCheck{Name: "nats-streaming", Check: func(context.Context) error {
+		{Name: "nats-streaming", Check: func(context.Context) error {
 			if !streamingHub.IsConnected() {
 				return fmt.Errorf("disconnected")
 			}
 			return nil
 		}},
-	))
+	}, 0, slog.Default()))
 
 	healthAddr := fmt.Sprintf("%s:%d", opts.BindAddress, opts.HealthPort)
 	healthServer := &http.Server{
@@ -598,8 +606,8 @@ func Run(ctx context.Context, opts Options) error {
 	// last, below, so the probe gets a real 503 rather than a refused
 	// connection kubelet only notices at its next period.
 	logging.Info("Draining: readiness flipped to not-ready",
-		"pre_stop_delay", drainer.PreStopDelay(),
-		"shutdown_timeout", drainer.ShutdownTimeout())
+		"pre_stop_delay", drainer.PreStopDelay,
+		"shutdown_timeout", drainer.ShutdownTimeout)
 	drainer.Begin()
 
 	shutdownCtx, cancel := drainer.ShutdownContext()
@@ -634,8 +642,13 @@ func Run(ctx context.Context, opts Options) error {
 	// whole window above, which is the only thing that tells kubelet and the
 	// LB to stop routing here. Shutting it down first would have replaced
 	// that answer with connection-refused.
+	// Its own short budget: the shutdown context is usually spent by now, and
+	// an expired one would skip the graceful close of a server whose only
+	// clients are probes that take microseconds.
 	logging.Info("Stopping health endpoint")
-	if err := drain.ShutdownHealthServer(healthServer); err != nil {
+	healthCtx, cancelHealth := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelHealth()
+	if err := healthServer.Shutdown(healthCtx); err != nil {
 		logging.Error("Error stopping health endpoint", "error", err)
 	}
 

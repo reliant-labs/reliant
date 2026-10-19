@@ -302,11 +302,12 @@ func TestRolloutLetsACallFinishOnItsOwnStreamDuringTheDrain(t *testing.T) {
 	ackOn(t, streamA, req.RequestId)
 
 	// With nothing left in flight the daemon retires the old stream, and
-	// the replica's drain completes without waiting out its deadline.
+	// the replica's drain completes without waiting out its deadline: what
+	// the server's drain waits for (grpc.DaemonServer.Stop) is this replica
+	// holding no stream.
 	streamA.hangUp()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	require.True(t, podA.AwaitDrained(ctx))
+	require.Eventually(t, func() bool { return podA.GetActiveConnections() == 0 },
+		5*time.Second, 10*time.Millisecond, "the daemon retired its stream, so the replica holds none")
 }
 
 // A daemon that restarted mid-call has nothing to deliver: everything it was

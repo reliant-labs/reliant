@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/controlplane"
@@ -31,7 +32,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonquery"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/drain"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -50,6 +50,11 @@ type Options struct {
 	ToolsDaemonPort int
 	// HealthPort is the port for the health/readiness HTTP endpoint.
 	HealthPort int
+	// PreStopDelay and ShutdownTimeout are the rollout drain budget
+	// (PRE_STOP_DELAY / SHUTDOWN_TIMEOUT) as serverkit.Drainer takes it: zero
+	// is serverkit's default (5s / 30s), a negative PreStopDelay no pause.
+	PreStopDelay    time.Duration
+	ShutdownTimeout time.Duration
 	// BindAddress is the network interface to bind to (e.g. "0.0.0.0").
 	BindAddress string
 
@@ -101,8 +106,8 @@ func Run(ctx context.Context, opts Options) error {
 	// -------------------------------------------------------------------------
 	startTime := time.Now()
 
-	// Rollout drain budget from PRE_STOP_DELAY / SHUTDOWN_TIMEOUT.
-	drainer := drain.New()
+	// The readiness gate and rollout drain budget.
+	drainer := serverkit.NewDrainer(serverkit.Config{PreStopDelay: opts.PreStopDelay, ShutdownTimeout: opts.ShutdownTimeout})
 
 	logLevel := logging.GetLogLevel(opts.Log)
 	logging.SetupWithRotation(opts.Log, logLevel, false, &logging.RotationConfig{
@@ -369,6 +374,8 @@ func Run(ctx context.Context, opts Options) error {
 	if err := daemonSrv.Start(); err != nil {
 		return fmt.Errorf("failed to start daemon gRPC server: %w", err)
 	}
+	// The listener is bound: /ready now answers from its dependency checks.
+	drainer.MarkReady()
 	logging.Info("Daemon gRPC server started", "port", opts.ToolsDaemonPort)
 
 	// Outbound daemon connector: dial engine driven by ManagedDaemonReconciler.
@@ -395,15 +402,15 @@ func Run(ctx context.Context, opts Options) error {
 		_, _ = w.Write([]byte(`{"status":"ok","service":"daemon-gateway"}`))
 	})
 	healthMux.Handle("/metrics", observability.MetricsHandler())
-	healthMux.HandleFunc("/ready", drainer.ReadinessHandler("daemon-gateway",
-		drain.ReadinessCheck{Name: "db", Check: repo.Ping},
-		drain.ReadinessCheck{Name: "nats", Check: func(context.Context) error {
+	healthMux.HandleFunc("/ready", drainer.ReadinessHandler([]serverkit.ReadyCheck{
+		{Name: "db", Check: repo.Ping},
+		{Name: "nats", Check: func(context.Context) error {
 			if !nc.IsConnected() {
 				return fmt.Errorf("disconnected")
 			}
 			return nil
 		}},
-	))
+	}, 0, slog.Default()))
 	// /flow-health: the APP-FLOW assertion (daemon-connected invariant). The
 	// gateway OWNS the attachment registry, so it asserts internally and
 	// exposes a STATUS-ONLY 200/503 — no per-daemon detail — that `forge
@@ -452,8 +459,8 @@ func Run(ctx context.Context, opts Options) error {
 	// leaves EndpointSlices before anything stops accepting. The health
 	// server stays up through the whole drain and is stopped last.
 	logging.Info("Draining: readiness flipped to not-ready",
-		"pre_stop_delay", drainer.PreStopDelay(),
-		"shutdown_timeout", drainer.ShutdownTimeout())
+		"pre_stop_delay", drainer.PreStopDelay,
+		"shutdown_timeout", drainer.ShutdownTimeout)
 	drainer.Begin()
 
 	shutdownCtx, cancel := drainer.ShutdownContext()
@@ -467,12 +474,12 @@ func Run(ctx context.Context, opts Options) error {
 	// to move (GatewayDrain) and opens a stream to a replica that is already
 	// serving — this one stopped being ready a pre-stop pause ago — while
 	// its stream here stays open for the replies to what is in flight on it.
-	// Streams still open when the drain window closes are ended with
-	// Unavailable("gateway draining"), and only then does
-	// http.Server.Shutdown run: alone, it waits for active requests to
-	// finish, and a bidi stream never finishes on its own. A tool call cut
-	// off at the deadline is not lost; its result arrives through the
-	// replica the daemon moved to. See grpcserver.DaemonServer.Stop.
+	// The listener's drain waits for those streams and ends the ones still
+	// open at its deadline with Unavailable, the daemon's redial signal:
+	// http.Server.Shutdown alone waits for active requests to finish, and a
+	// bidi stream never finishes on its own. A tool call cut off at the
+	// deadline is not lost; its result arrives through the replica the
+	// daemon moved to. See grpcserver.DaemonServer.Stop.
 	logging.Info("Stopping daemon gRPC server")
 	if err := daemonSrv.Stop(shutdownCtx); err != nil {
 		logging.Error("Error stopping daemon gRPC server", "error", err)
@@ -480,8 +487,11 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Health endpoint LAST — it is what answered 503 "draining" for the
 	// whole window above.
+	// Its own short budget: the shutdown context is usually spent by now.
 	logging.Info("Stopping health endpoint")
-	if err := drain.ShutdownHealthServer(healthServer); err != nil {
+	healthCtx, cancelHealth := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelHealth()
+	if err := healthServer.Shutdown(healthCtx); err != nil {
 		logging.Error("Error stopping health endpoint", "error", err)
 	}
 

@@ -7,11 +7,10 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/emptypb"
-
-	"github.com/reliant-labs/reliant/internal/drain"
 )
 
 // The daemon-gateway ends every daemon stream it holds with
@@ -24,7 +23,7 @@ import (
 // written, at INFO, with expected=true — and never reported.
 func TestDrainingStreamIsAnExpectedOutcomeNotAFailure(t *testing.T) {
 	recorder, lines := installProcessReporting(t)
-	draining := connect.NewError(connect.CodeUnavailable, drain.DrainingError(
+	draining := connect.NewError(connect.CodeUnavailable, svcerr.Draining(
 		"gateway draining: this daemon-gateway replica is shutting down; reconnect to reach a live replica"))
 	api := newFailingAPI(t, map[string]error{
 		watchFilesProcedure:  draining,

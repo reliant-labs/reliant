@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/daemonactivity"
-	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -77,13 +77,13 @@ func TestDrainingErrorIsRecoverableForDaemons(t *testing.T) {
 		"Aborted is the supersede signal and is terminal — a draining gateway must not use it")
 }
 
-// The gateway's drain status is the shared drain sentinel, which the server's
-// logging interceptor declares expected (internal/grpc newInterceptors). Every
+// The gateway's drain status is the shared drain sentinel, which forge's
+// logging interceptor treats as expected (svcerr.ErrServerDraining). Every
 // held daemon stream ends with it on every rollout; matched by anything else,
 // each one was a "stream failed" record at ERROR and a Sentry event.
 func TestDrainingErrorIsTheServerDrainingSentinel(t *testing.T) {
-	require.True(t, drain.IsServerDraining(errGatewayDraining),
-		"errGatewayDraining must match drain.ErrServerDraining, or every rollout pages once per connected daemon")
+	require.True(t, svcerr.IsServerDraining(errGatewayDraining),
+		"errGatewayDraining must match svcerr.ErrServerDraining, or every rollout pages once per connected daemon")
 	require.Contains(t, errGatewayDraining.Error(), "gateway draining",
 		"the daemon prints this message; it must still say what happened")
 }
@@ -198,7 +198,7 @@ func TestDrainingReplicaRefusesNewDaemonStreams(t *testing.T) {
 
 	err := svc.ConnectDaemon(context.Background(), nil)
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "Unavailable keeps the daemon on its reconnect path")
-	require.True(t, drain.IsServerDraining(err))
+	require.True(t, svcerr.IsServerDraining(err))
 
 	_, err = svc.RegisterOutboundConnection(context.Background(), "user-1", "daemon-1", "10.0.0.1", 9190, &reliantv1.DaemonRegister{}, nil)
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
@@ -218,33 +218,10 @@ func TestStreamTheDaemonClosesAfterTheDrainNoticeEndsAsADrain(t *testing.T) {
 
 	select {
 	case err := <-errCh:
-		require.True(t, drain.IsServerDraining(err), "got %v", err)
+		require.True(t, svcerr.IsServerDraining(err), "got %v", err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("handleIncoming did not return when the daemon closed its stream")
 	}
-}
-
-// AwaitDrained returns as soon as the daemons have moved, and reports a
-// window that closed with streams still open.
-func TestAwaitDrainedWaitsForTheDaemonsToMove(t *testing.T) {
-	svc := newTestService(nil)
-	conn := newTestConn("user-1", "daemon-1", newParkedStream())
-	svc.mu.Lock()
-	registerTestConn(svc, conn)
-	svc.mu.Unlock()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-	require.False(t, svc.AwaitDrained(ctx), "the stream is still open")
-
-	done := make(chan bool, 1)
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		done <- svc.AwaitDrained(ctx)
-	}()
-	svc.teardownConnection(conn, "daemon moved")
-	require.True(t, <-done)
 }
 
 // fakeResultPublisher records the results a gateway publishes for waiters

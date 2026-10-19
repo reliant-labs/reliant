@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -18,7 +19,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -196,23 +196,22 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		ctx, cancel := context.WithCancel(r.Context())
 		defer cancel()
 
-		// The server is shutting down (r's context is bound to its
-		// drain.Streams): close with 1012, service restart, which the browser
-		// reconnects on — not 1000, which it reads as "the shell exited". The
-		// alternative was the process exit dropping the TCP connection, with
+		// The server is draining (the route is serverkit.LongLived): close
+		// with 1012, service restart, which the browser reconnects on — not
+		// 1000, which it reads as "the shell exited". The alternative was the
+		// process exit dropping the TCP connection, with
 		// closeDaemonTerminalSession below never running and the daemon's PTY
 		// leaked. The read deadline bounds the wait for the browser's
-		// answering close frame, which is what returns the input pump's read.
-		go func() {
-			<-ctx.Done()
-			if !drain.Ended(ctx) {
-				return
-			}
+		// answering close frame, which is what returns the input pump's read;
+		// the drain waits for this handler to return, with ctx still live for
+		// the session close.
+		stopDrainClose := serverkit.AfterDrain(r.Context(), func() {
 			deadline := time.Now().Add(wsDrainCloseGrace)
 			_ = conn.WriteControl(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseServiceRestart, "server restarting"), deadline)
 			_ = conn.SetReadDeadline(deadline)
-		}()
+		})
+		defer stopDrainClose()
 
 		// --- Create terminal session via daemon ---
 		createReq := map[string]any{
