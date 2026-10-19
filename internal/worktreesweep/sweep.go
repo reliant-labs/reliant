@@ -20,9 +20,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -56,6 +58,20 @@ const (
 	// A locked live worktree is re-checked once a day.
 	lockRecheck = 24 * time.Hour
 
+	// A pass that neither removed nor held a worktree (it was touched
+	// recently, its claim went stale, the daemon timed out on it) is not asked
+	// again for transientBackoffMin, doubling per repeat up to
+	// transientBackoffMax. Without this the row stays "due" and is retried at
+	// the front of every pass.
+	transientBackoffMin = 15 * time.Minute
+	transientBackoffMax = 6 * time.Hour
+	// A worktree the daemon could not settle this many times in a row is held
+	// as ReasonError, which the Inbox shows.
+	transientToError = 3
+	// maxFailedSends bounds the requests a group may fail (a batch and its
+	// bisected halves) before the daemon is left alone until the next pass.
+	maxFailedSends = 8
+
 	sweepLockKey int64 = 0x7265_6c69_616e_7401 // "reliant\x01"
 )
 
@@ -83,13 +99,58 @@ type Sender interface {
 	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 }
 
+// AutoArchiveMode says what the sweep does with an active worktree its daemon
+// reports finished (clean, merged or pushed, idle, not in use).
+type AutoArchiveMode string
+
+const (
+	// AutoArchiveOff never asks the daemon and never archives.
+	AutoArchiveOff AutoArchiveMode = "off"
+	// AutoArchiveDryRun asks and logs the candidates, and archives nothing.
+	AutoArchiveDryRun AutoArchiveMode = "dry-run"
+	// AutoArchiveOn archives them; the ordinary two-phase removal follows.
+	AutoArchiveOn AutoArchiveMode = "on"
+)
+
+// ParseAutoArchiveMode reads the config value; empty means the default, on.
+// An unrecognized value is off: a typo must not start archiving.
+func ParseAutoArchiveMode(v string) AutoArchiveMode {
+	switch AutoArchiveMode(strings.ToLower(strings.TrimSpace(v))) {
+	case "", AutoArchiveOn, "true", "1":
+		return AutoArchiveOn
+	case AutoArchiveDryRun, "dryrun", "dry_run":
+		return AutoArchiveDryRun
+	}
+	return AutoArchiveOff
+}
+
+// AutoArchiveStore is what archiving a finished worktree needs.
+type AutoArchiveStore interface {
+	ListChats(ctx context.Context, filters core.ChatFilters) ([]*core.Chat, error)
+	ArchiveWorktree(ctx context.Context, id string) error
+}
+
+// liveChatScan bounds the chats read to see whether any still uses a
+// worktree. A project at the bound is unknown, and unknown is not archived.
+const liveChatScan = 1000
+
+type autoArchive struct {
+	mode   AutoArchiveMode
+	store  AutoArchiveStore
+	notify func(ctx context.Context, userID, projectID, worktreeID string)
+}
+
 // Sweeper settles worktree directories through their daemons.
 type Sweeper struct {
 	store  Store
 	sender Sender
 	keep   KeepFilesSetting
-	now    func() time.Time
-	slots  chan struct{}
+	auto   *autoArchive
+	// candidates and archived count this pass's finished active worktrees.
+	candidates atomic.Int64
+	archived   atomic.Int64
+	now        func() time.Time
+	slots      chan struct{}
 	// owner names this process in a clean-up's metadata, so a flag left by a
 	// process that died is recognizable as not ours and expires on its own.
 	owner string
@@ -103,6 +164,18 @@ func New(store Store, sender Sender) *Sweeper {
 // WithKeepFiles makes the sweep honor the user's "Keep everything" setting.
 func (s *Sweeper) WithKeepFiles(k KeepFilesSetting) *Sweeper {
 	s.keep = k
+	return s
+}
+
+// WithAutoArchive makes the sweep archive finished active worktrees, so the
+// removal path (which only ever handled archived rows) reaches them. notify
+// tells the user's clients the list changed; it may be nil.
+func (s *Sweeper) WithAutoArchive(mode AutoArchiveMode, store AutoArchiveStore, notify func(ctx context.Context, userID, projectID, worktreeID string)) *Sweeper {
+	if mode == AutoArchiveOff || store == nil {
+		s.auto = nil
+		return s
+	}
+	s.auto = &autoArchive{mode: mode, store: store, notify: notify}
 	return s
 }
 
@@ -154,6 +227,8 @@ type target struct{ userID, daemonID string }
 // Sweep reconciles every reclaim candidate against the daemon that owns it,
 // with at most sweepWorkers daemons in flight.
 func (s *Sweeper) Sweep(ctx context.Context) error {
+	s.candidates.Store(0)
+	s.archived.Store(0)
 	cands, err := s.store.ListWorktreesForReclaim(ctx)
 	if err != nil {
 		return err
@@ -202,6 +277,7 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 	sem := make(chan struct{}, sweepWorkers)
 	var wg sync.WaitGroup
 	for t, group := range groups {
+		sortForFairness(group)
 		sem <- struct{}{}
 		wg.Add(1)
 		go func() {
@@ -210,7 +286,30 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 		}()
 	}
 	wg.Wait()
+	if s.auto != nil {
+		logging.Info("[WorktreeSweep] auto-archive", "mode", string(s.auto.mode), "finished", s.candidates.Load(), "archived", s.archived.Load())
+	}
 	return nil
+}
+
+// sortForFairness orders one daemon's queue: archived rows (the ones holding
+// disk that is owed back) before live ones, then the row asked about longest
+// ago first. The store lists by last_active, so without this a few rows at the
+// front were asked about first every pass and the rest were never reached.
+func sortForFairness(group []*core.ReclaimCandidate) {
+	checked := func(c *core.ReclaimCandidate) time.Time {
+		if m := c.Worktree.CleanupMetadata; m != nil && m.CheckedAt != nil {
+			return *m.CheckedAt
+		}
+		return time.Time{}
+	}
+	sort.SliceStable(group, func(i, j int) bool {
+		ai, aj := group[i].Worktree.DeletedAt != nil, group[j].Worktree.DeletedAt != nil
+		if ai != aj {
+			return ai
+		}
+		return checked(group[i]).Before(checked(group[j]))
+	})
 }
 
 // due says whether a row is worth asking its daemon about now. A row that was
@@ -222,6 +321,9 @@ func (s *Sweeper) due(wt *core.Worktree) bool {
 		return true // a pending retirement is delivered at once
 	}
 	age := s.now().Sub(*meta.CheckedAt)
+	if meta.Transient != "" && age < transientBackoff(meta) {
+		return false
+	}
 	if wt.DeletedAt == nil {
 		return meta.LockedAt == nil || s.now().Sub(*meta.LockedAt) >= lockRecheck
 	}
@@ -241,15 +343,76 @@ func holdBackoff(meta *core.CleanupMetadata) time.Duration {
 	return min(d, holdBackoffMax)
 }
 
+// transientBackoff grows with how many times in a row the last non-answer
+// repeated.
+func transientBackoff(meta *core.CleanupMetadata) time.Duration {
+	d := transientBackoffMin
+	for i := 0; i < meta.Rechecks && d < transientBackoffMax; i++ {
+		d *= 2
+	}
+	return min(d, transientBackoffMax)
+}
+
 func (s *Sweeper) reconcileGroup(ctx context.Context, t target, group []*core.ReclaimCandidate, live []core.WorktreePath) {
 	keep := s.keep != nil && s.keep.KeepFiles(ctx, t.userID)
+	failedSends := 0
+	// run settles a batch. When the request fails (the daemon's command
+	// timeout, a dropped connection) it is split and the halves retried, so one
+	// slow worktree costs its own row and not the nine behind it; a single
+	// worktree that still fails is recorded so it backs off. false means stop
+	// asking this daemon this pass.
+	var run func(batch []*core.ReclaimCandidate) bool
+	run = func(batch []*core.ReclaimCandidate) bool {
+		if s.settleBatch(ctx, t, batch, live, keep) {
+			return true
+		}
+		failedSends++
+		if ctx.Err() != nil || failedSends >= maxFailedSends {
+			return false
+		}
+		if len(batch) == 1 {
+			s.recordFailure(ctx, batch[0].Worktree, "the machine did not answer in time")
+			return true
+		}
+		mid := len(batch) / 2
+		return run(batch[:mid]) && run(batch[mid:])
+	}
 	for start := 0; start < len(group); start += batchSize {
 		end := min(start+batchSize, len(group))
-		batch := group[start:end]
-		if !s.settleBatch(ctx, t, batch, live, keep) {
+		if !run(group[start:end]) {
 			return
 		}
 	}
+}
+
+// recordFailure notes that the daemon could not settle a worktree this pass, so
+// the row waits instead of being retried at the front of the next one. The
+// third failure in a row becomes a visible hold.
+func (s *Sweeper) recordFailure(ctx context.Context, seen *core.Worktree, detail string) {
+	s.recordTransient(ctx, seen, "error", func(m *core.CleanupMetadata, archived bool) {
+		if archived && m.Rechecks >= transientToError {
+			m.HeldReason, m.HeldDetail = string(worktreereclaim.ReasonError), detail+" ("+strconv.Itoa(m.Rechecks+1)+" attempts)"
+		}
+	})
+}
+
+// recordTransient stores an outcome that is neither a removal nor a hold. It
+// sets CheckedAt, which orders the queue, and Transient, which makes due() wait.
+func (s *Sweeper) recordTransient(ctx context.Context, seen *core.Worktree, kind string, extra func(m *core.CleanupMetadata, archived bool)) {
+	s.mergeMetaIf(ctx, seen, func(m *core.CleanupMetadata, archived bool) bool {
+		if m.Transient == kind {
+			m.Rechecks++
+		} else {
+			m.Rechecks = 0
+		}
+		m.Transient = kind
+		now := s.now().UTC()
+		m.CheckedAt = &now
+		if extra != nil {
+			extra(m, archived)
+		}
+		return true
+	})
 }
 
 // settleBatch runs the two phases for one batch. It reports false when the
@@ -369,6 +532,8 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 			// An unarchive that could not reach the machine left a fence to retire.
 			w.Retire = wt.CleanupMetadata.RetireFence
 		}
+		// A user who chose "Keep everything" keeps their workspaces visible too.
+		w.ProbeIdle = state == worktreereclaim.StateActive && s.auto != nil && w.Retire == "" && !keep && wt.DeletedAt == nil
 		repos, ok := repoCache[wt.ProjectID]
 		if !ok {
 			var err error
@@ -426,13 +591,27 @@ func (s *Sweeper) send(ctx context.Context, t target, cmd string, timeoutMs int3
 // and never records an outcome against a row that is no longer archived.
 func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core.Worktree, projectPath string, r worktreereclaim.Result, forced bool) {
 	switch r.Outcome {
-	case worktreereclaim.OutcomeForeign, worktreereclaim.OutcomeDeferred:
+	case worktreereclaim.OutcomeForeign:
+		return
+	case worktreereclaim.OutcomeDeferred:
+		// Never reached: ask again next pass. Reached and stopped by the
+		// daemon's deadline: back off like any other non-answer, so one tree
+		// that is too slow to check does not take the front of every pass.
+		if r.Detail == worktreereclaim.DetailTimedOut {
+			s.recordTransient(ctx, seen, "timeout", nil)
+		}
 		return
 	case worktreereclaim.OutcomeError:
 		if r.Error != "" {
 			logging.Warn("[WorktreeSweep] daemon could not settle worktree", "worktreeID", seen.ID, "error", r.Error)
 		}
-		return
+		// Recorded as a hold, so the Inbox shows it and it backs off; it used to
+		// be dropped, which left the row due at the front of every pass.
+		r = worktreereclaim.Result{ID: r.ID, Outcome: worktreereclaim.OutcomeHeld, Reason: worktreereclaim.ReasonError, Detail: r.Error, SnapshotRefs: r.SnapshotRefs}
+		if seen.DeletedAt == nil {
+			s.recordTransient(ctx, seen, "error", nil)
+			return
+		}
 	}
 	wt, err := s.store.GetWorktree(ctx, seen.ID)
 	if err != nil || wt == nil {
@@ -448,11 +627,15 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 		}
 	}
 	if wt.DeletedAt == nil {
-		if r.Outcome == worktreereclaim.OutcomeLocked {
+		if r.Outcome == worktreereclaim.OutcomeLocked || r.Outcome == worktreereclaim.OutcomeIdleDone {
 			s.mergeMeta(ctx, wt, func(m *core.CleanupMetadata) {
 				now := s.now().UTC()
 				m.LockedAt, m.CheckedAt, m.RetireFence = &now, &now, ""
+				m.Transient, m.Rechecks = "", 0
 			})
+		}
+		if r.Outcome == worktreereclaim.OutcomeIdleDone {
+			s.archiveFinished(ctx, userID, wt)
 		}
 		return // an unarchived row never records a removal
 	}
@@ -467,14 +650,17 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 			}
 			m.DirectoryDeleted = true
 			m.Cleaning, m.CleaningBy, m.CleaningUntil = false, "", nil
-			m.HeldReason, m.HeldDetail, m.SizeBytes, m.Rechecks = "", "", 0, 0
+			m.HeldReason, m.HeldDetail, m.SizeBytes, m.Rechecks, m.Transient = "", "", 0, 0, ""
 			m.SnapshotRefs = union(m.SnapshotRefs, r.SnapshotRefs)
 			return true
 		})
 		s.deleteBranchIfAsked(ctx, userID, daemonID, wt, projectPath)
 	case worktreereclaim.OutcomeHeld:
 		if r.Reason == worktreereclaim.ReasonRecentlyActive || r.Reason == worktreereclaim.ReasonStale {
-			return // transient: not a held worktree, ask again next pass
+			// Not a held worktree, so nothing for the Inbox, but the row waits
+			// before it is asked again rather than staying due.
+			s.recordTransient(ctx, wt, string(r.Reason), nil)
+			return
 		}
 		s.mergeMetaIf(ctx, wt, func(m *core.CleanupMetadata, archived bool) bool {
 			if !archived {
@@ -485,7 +671,7 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 			} else {
 				m.Rechecks = 0
 			}
-			m.HeldReason, m.HeldDetail = string(r.Reason), r.Detail
+			m.HeldReason, m.HeldDetail, m.Transient = string(r.Reason), r.Detail, ""
 			m.Cleaning, m.CleaningBy, m.CleaningUntil = false, "", nil
 			if r.SizeBytes > 0 {
 				m.SizeBytes = r.SizeBytes
@@ -495,6 +681,40 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 			m.CheckedAt = &now
 			return true
 		})
+	}
+}
+
+// archiveFinished archives an active worktree its daemon reports finished, so
+// the same fenced two-phase removal that handles every archived row reaches
+// it. The daemon has already checked the files; the server checks that no
+// chat still uses it. In dry-run mode it only counts and logs.
+func (s *Sweeper) archiveFinished(ctx context.Context, userID string, wt *core.Worktree) {
+	a := s.auto
+	if a == nil || wt.IsMain || wt.DeletedAt != nil || (s.keep != nil && s.keep.KeepFiles(ctx, userID)) {
+		return
+	}
+	chats, err := a.store.ListChats(ctx, core.ChatFilters{UserID: userID, ProjectID: &wt.ProjectID, ExcludeArchived: true, Limit: liveChatScan})
+	if err != nil || len(chats) >= liveChatScan {
+		return
+	}
+	for _, c := range chats {
+		if c.WorktreeID != nil && *c.WorktreeID == wt.ID {
+			return
+		}
+	}
+	s.candidates.Add(1)
+	if a.mode != AutoArchiveOn {
+		logging.Info("[WorktreeSweep] would auto-archive finished worktree", "worktreeID", wt.ID, "name", wt.Name, "path", wt.Path)
+		return
+	}
+	if err := a.store.ArchiveWorktree(ctx, wt.ID); err != nil {
+		logging.Warn("[WorktreeSweep] could not auto-archive worktree", "worktreeID", wt.ID, "error", err)
+		return
+	}
+	s.archived.Add(1)
+	logging.Info("[WorktreeSweep] auto-archived finished worktree", "worktreeID", wt.ID, "name", wt.Name)
+	if a.notify != nil {
+		a.notify(ctx, userID, wt.ProjectID, wt.ID)
 	}
 }
 

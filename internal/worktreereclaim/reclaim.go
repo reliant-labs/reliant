@@ -25,6 +25,9 @@ const (
 	// DefaultIdleFloor is how long an archived worktree must be untouched before
 	// it is removed automatically. A confirmed clean-up has no floor.
 	DefaultIdleFloor = time.Hour
+	// DefaultActiveIdleFloor is how long an ACTIVE worktree must be untouched
+	// before it may be reported finished (OutcomeIdleDone).
+	DefaultActiveIdleFloor = 24 * time.Hour
 	// DefaultBudget stays under the server's command timeout so the reply
 	// always arrives.
 	DefaultBudget = 90 * time.Second
@@ -45,6 +48,9 @@ type Reclaimer struct {
 	Cwds CwdSnapshot
 	// IdleFloor applies to automatic removal only.
 	IdleFloor time.Duration
+	// ActiveIdleFloor is the quiet time before an active worktree is reported
+	// finished; zero means DefaultActiveIdleFloor.
+	ActiveIdleFloor time.Duration
 	// Budget bounds one request: worktrees not reached when it is spent come
 	// back OutcomeDeferred, untouched, so a machine with many large archived
 	// worktrees makes progress each pass instead of timing out every one.
@@ -58,6 +64,7 @@ type Reclaimer struct {
 	FetchBase func(ctx context.Context, checkout, base string)
 
 	mu       sync.Mutex
+	netCache map[string]netEntry
 	sizes    map[string]cachedSize
 	paths    map[string]*sync.Mutex
 	cwdCache []string
@@ -84,8 +91,71 @@ func DefaultRoot() (string, error) {
 	return filepath.Join(home, ".reliant", "worktrees"), nil
 }
 
+// netEntry is one remembered answer from the network checks.
+type netEntry struct {
+	at  time.Time
+	yes bool
+}
+
+// netTTL is how long a network answer is reused. A sweep asks about every
+// checkout of every worktree; the three repos of a workspace share one origin,
+// and most worktrees share a base branch, so without this a pass paid for the
+// same `git fetch` and `gh pr list` dozens of times (up to 45s each).
+const netTTL = 10 * time.Minute
+
+// probe returns the network checks, memoized: a fetch of one origin's base
+// branch runs once per netTTL however many checkouts ask, and a merged-PR
+// answer is kept for the same (branch, head). A "merged" answer can never
+// become false for the same head, so it is kept for good.
 func (r *Reclaimer) probe() mergeProbe {
-	return mergeProbe{prMerged: r.PRMerged, fetchBase: r.FetchBase}
+	p := mergeProbe{}
+	if r.PRMerged != nil {
+		p.prMerged = func(ctx context.Context, checkout, branch, head string) bool {
+			key := "pr\x00" + commonDirKey(ctx, checkout) + "\x00" + branch + "\x00" + head
+			if e, ok := r.netGet(key); ok && (e.yes || r.now().Sub(e.at) < netTTL) {
+				return e.yes
+			}
+			yes := r.PRMerged(ctx, checkout, branch, head)
+			r.netPut(key, yes)
+			return yes
+		}
+	}
+	if r.FetchBase != nil {
+		p.fetchBase = func(ctx context.Context, checkout, base string) {
+			key := "fetch\x00" + commonDirKey(ctx, checkout) + "\x00" + base
+			if e, ok := r.netGet(key); ok && r.now().Sub(e.at) < netTTL {
+				return
+			}
+			r.FetchBase(ctx, checkout, base)
+			r.netPut(key, true)
+		}
+	}
+	return p
+}
+
+func (r *Reclaimer) netGet(key string) (netEntry, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e, ok := r.netCache[key]
+	return e, ok
+}
+
+func (r *Reclaimer) netPut(key string, yes bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.netCache == nil {
+		r.netCache = map[string]netEntry{}
+	}
+	r.netCache[key] = netEntry{at: r.now(), yes: yes}
+}
+
+// commonDirKey names the repository a checkout belongs to, so every worktree of
+// one clone shares a cache entry. Falls back to the checkout itself.
+func commonDirKey(ctx context.Context, checkout string) string {
+	if d, err := commonDir(ctx, checkout); err == nil && d != "" {
+		return d
+	}
+	return checkout
 }
 
 func (r *Reclaimer) now() time.Time {
@@ -116,16 +186,63 @@ func (r *Reclaimer) pathLock(path string) *sync.Mutex {
 // removed, when the request is the second phase) and otherwise reported held.
 // It never snapshots.
 func (r *Reclaimer) Reconcile(ctx context.Context, req Request) Response {
-	resp := Response{}
+	results := make([]Result, len(req.Worktrees))
 	deadline := r.deadline()
-	for _, w := range req.Worktrees {
-		if !deadline.IsZero() && time.Now().After(deadline) {
-			resp.Results = append(resp.Results, Result{ID: w.ID, Outcome: OutcomeDeferred, Detail: "out of time this pass"})
-			continue
-		}
-		resp.Results = append(resp.Results, r.settle(ctx, w, false))
+	sctx := ctx
+	if !deadline.IsZero() {
+		var cancel context.CancelFunc
+		sctx, cancel = context.WithDeadline(ctx, deadline)
+		defer cancel()
 	}
-	return resp
+	// Worktrees settle concurrently: each is dominated by git and filesystem
+	// waits, and run one after another a single slow one (a big tree, a stalled
+	// network probe) used up the budget that the nine behind it needed. Every
+	// per-path and per-row lock still serializes work on the same worktree.
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for range min(reconcileWorkers, max(len(req.Worktrees), 1)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				results[i] = r.settleWithin(sctx, req.Worktrees[i], deadline)
+			}
+		}()
+	}
+	for i := range req.Worktrees {
+		jobs <- i
+	}
+	close(jobs)
+	wg.Wait()
+	return Response{Results: results}
+}
+
+// DetailTimedOut marks a deferred result whose work was started and then
+// stopped by the request's deadline, as opposed to never started.
+const DetailTimedOut = "out of time while checking it"
+
+// reconcileWorkers bounds how many worktrees one request settles at once.
+const reconcileWorkers = 4
+
+// settleWithin settles one worktree under the request's deadline. A worktree
+// not reached by then is deferred untouched. One that is stopped part-way
+// reports what it had finished only when that is final (removed, claimed,
+// locked, gone); anything else is deferred as timed out, because a check
+// cancelled by the deadline failed for want of time, not because the worktree
+// is unsafe.
+func (r *Reclaimer) settleWithin(ctx context.Context, w Worktree, deadline time.Time) Result {
+	if !deadline.IsZero() && time.Now().After(deadline) {
+		return Result{ID: w.ID, Outcome: OutcomeDeferred, Detail: "out of time this pass"}
+	}
+	res := r.settle(ctx, w, false)
+	if ctx.Err() != nil {
+		switch res.Outcome {
+		case OutcomeRemoved, OutcomeClaimed, OutcomeLocked, OutcomeGone, OutcomeIdleDone, OutcomeForeign:
+		default:
+			return Result{ID: w.ID, Outcome: OutcomeDeferred, Detail: DetailTimedOut}
+		}
+	}
+	return res
 }
 
 // SnapshotRemove is the user-confirmed path for worktrees Reconcile held. In
@@ -434,12 +551,25 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 	return r.removeWorkspace(ctx, w, checkouts, false)
 }
 
+// classifyAll classifies every checkout of a workspace, concurrently: each is
+// a handful of independent git commands, and the checkouts of one workspace
+// are separate repositories, so a slow one no longer queues the others behind
+// it. The worst verdict wins, and ties keep checkout order.
 func classifyAll(ctx context.Context, w Worktree, checkouts []string, probe mergeProbe) verdict {
+	verdicts := make([]verdict, len(checkouts))
+	var wg sync.WaitGroup
+	for i, c := range checkouts {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			verdicts[i] = classifyCheckout(ctx, c, baseFor(w, c), nestedOf(c, checkouts), w.ID, probe)
+		}()
+	}
+	wg.Wait()
 	worst := verdict{}
-	for _, c := range checkouts {
-		v := classifyCheckout(ctx, c, baseFor(w, c), nestedOf(c, checkouts), w.ID, probe)
+	for i, v := range verdicts {
 		if !v.safe() {
-			worst = worse(worst, verdict{v.Reason, relDetail(w.Path, c, v.Detail)})
+			worst = worse(worst, verdict{v.Reason, relDetail(w.Path, checkouts[i], v.Detail)})
 		}
 	}
 	return worst
@@ -790,7 +920,32 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 			res.Outcome, res.Error = OutcomeError, relDetail(w.Path, c, err.Error())
 		}
 	}
+	if res.Outcome == OutcomeLocked && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 && r.finished(ctx, w) {
+		res.Outcome = OutcomeIdleDone
+	}
 	return res
+}
+
+// finished reports whether an active worktree is done with: every check the
+// automatic removal makes (structure, data, quiet time, no process, clean and
+// merged or pushed) passes, with the longer ActiveIdleFloor. Read-only; it
+// takes no claim and removes nothing, and any doubt is false.
+func (r *Reclaimer) finished(ctx context.Context, w Worktree) bool {
+	checkouts, hold := r.structure(ctx, w, false)
+	if hold != nil || len(checkouts) == 0 {
+		return false
+	}
+	floor := r.ActiveIdleFloor
+	if floor <= 0 {
+		floor = DefaultActiveIdleFloor
+	}
+	if r.now().Sub(idleSince(w.Path, checkouts)) < floor {
+		return false
+	}
+	if r.inUse(ctx, w, true) != nil {
+		return false
+	}
+	return classifyAll(ctx, w, checkouts, r.probe()).safe()
 }
 
 func (r *Reclaimer) measure(ctx context.Context, res *Result, path string) {

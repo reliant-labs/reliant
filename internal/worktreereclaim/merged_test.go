@@ -207,6 +207,7 @@ func TestMerged_AMergedPullRequestForExactlyThisHeadFreesTheWorktree(t *testing.
 	if got := f.one(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed {
 		t.Fatalf("a merged PR with another head must not free it: %+v", got)
 	}
+	f.r.netCache = nil // the first answer was a (cached) no for this head
 	f.r.PRMerged = func(_ context.Context, _, branch, sha string) bool {
 		asked++
 		return branch == "feat/pr" && sha == head

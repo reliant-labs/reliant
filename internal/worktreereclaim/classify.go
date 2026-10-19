@@ -23,22 +23,24 @@ func (v verdict) safe() bool { return v.Reason == "" }
 func reasonRank(r HeldReason) int {
 	switch r {
 	case ReasonUnmanaged:
-		return 9
+		return 10
 	case ReasonNestedRepo:
-		return 8
+		return 9
 	case ReasonInUse:
-		return 7
+		return 8
 	case ReasonOutsideFiles:
-		return 6
+		return 7
 	case ReasonData:
-		return 5
+		return 6
 	case ReasonUnverified:
-		return 4
+		return 5
 	case ReasonTooLarge:
-		return 3
+		return 4
 	case ReasonDirty:
-		return 2
+		return 3
 	case ReasonUnpushed:
+		return 2
+	case ReasonUnreachable:
 		return 1
 	}
 	return 0
@@ -152,10 +154,36 @@ func classifyCheckout(ctx context.Context, checkout, baseBranch string, nested [
 	if err != nil {
 		return verdict{ReasonUnverified, err.Error()}
 	}
+	tips, err = tipsNotOnBase(ctx, checkout, baseBranch, tips)
+	if err != nil {
+		return verdict{ReasonUnverified, err.Error()}
+	}
 	if len(tips) > 0 {
 		return verdict{ReasonUnreachable, fmt.Sprintf("its own history reaches %d commit tip(s) on no branch, remote or tag (reflog, detached HEAD or per-worktree refs)", len(tips))}
 	}
 	return verdict{}
+}
+
+// tipsNotOnBase drops the orphan tips whose work is already in the base branch
+// (an ancestor of it, or equal by patch). They are what a rebase, amend or
+// squash leaves in the reflog: removing the worktree loses a name for a commit
+// whose change lives on, so holding for it kept nearly every rebased worktree
+// forever. A tip with a change the base lacks, or one the comparison cannot
+// vouch for (a binary file, a merge commit), stays: that is the history a
+// confirmed clean-up saves to a ref. Nothing is saved to a ref here, because
+// nothing prunes refs/reliant/wip and each one would pin its objects forever.
+func tipsNotOnBase(ctx context.Context, checkout, baseBranch string, tips []string) ([]string, error) {
+	var lost []string
+	for _, tip := range tips {
+		merged, err := inBase(ctx, checkout, tip, baseBranch)
+		if err != nil {
+			return nil, err
+		}
+		if !merged {
+			lost = append(lost, tip)
+		}
+	}
+	return lost, nil
 }
 
 // mergeProbe is the part of "is this work preserved" that needs the network. A

@@ -56,17 +56,20 @@ const (
 	ReasonQuarantined HeldReason = "quarantined"
 	// ReasonKept: safe to remove, but the user's setting is "keep everything".
 	ReasonKept HeldReason = "kept"
-	// ReasonRecentlyActive: touched within the idle floor. Not recorded as held.
+	// ReasonRecentlyActive: touched within the idle floor.
 	ReasonRecentlyActive HeldReason = "recently_active"
-	// ReasonStale: the request's fence no longer matches the lock. Not recorded.
+	// ReasonStale: the request's fence no longer matches the lock.
 	ReasonStale HeldReason = "stale"
+	// ReasonError: the pass failed (a timeout, a git failure). Recorded so the
+	// row backs off instead of being retried at the front of every pass.
+	ReasonError HeldReason = "error"
 )
 
 // Removable reports whether the confirmed Clean up can ever remove a worktree
 // held for this reason.
 func (r HeldReason) Removable() bool {
 	switch r {
-	case ReasonDirty, ReasonUnpushed, ReasonInUse, ReasonUnverified, ReasonTooLarge, ReasonUnreachable, ReasonKept:
+	case ReasonDirty, ReasonUnpushed, ReasonInUse, ReasonUnverified, ReasonTooLarge, ReasonUnreachable, ReasonKept, ReasonError:
 		return true
 	}
 	return false
@@ -97,6 +100,12 @@ const (
 	// the server re-reads the row, so an unarchive in between (which re-locks as
 	// active) invalidates it.
 	OutcomeClaimed Outcome = "claimed"
+	// OutcomeIdleDone: an ACTIVE worktree that is finished: it was asked about
+	// with ProbeIdle, it is locked as usual, and every checkout is clean, its
+	// work is merged or pushed, nothing uses it and it has been untouched for
+	// the idle floor. The server decides whether to archive it; the daemon
+	// never removes an active worktree.
+	OutcomeIdleDone Outcome = "idle_done"
 	// OutcomeKept: safe to remove, but the user's setting says keep files.
 	OutcomeKept Outcome = "kept"
 	// OutcomeDeferred: the daemon ran out of its per-request time budget before
@@ -151,7 +160,10 @@ type Worktree struct {
 	Trees map[string]string `json:"trees,omitempty"`
 	// KeepFiles: the user's setting is "keep everything". Nothing is removed
 	// automatically; held worktrees are still reported.
-	KeepFiles  bool       `json:"keep_files,omitempty"`
+	KeepFiles bool `json:"keep_files,omitempty"`
+	// ProbeIdle (ACTIVE requests only) asks whether the worktree is finished
+	// with, in addition to locking it; see OutcomeIdleDone.
+	ProbeIdle  bool       `json:"probe_idle,omitempty"`
 	BaseBranch string     `json:"base_branch,omitempty"`
 	Checkouts  []Checkout `json:"checkouts,omitempty"`
 }

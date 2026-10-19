@@ -117,6 +117,11 @@ type CleanupMetadata struct {
 	// Rechecks counts consecutive checks that found the same hold; the sweep
 	// backs off exponentially on it.
 	Rechecks int `json:"rechecks,omitempty"`
+	// Transient is the last outcome that was neither a removal nor a hold
+	// (recently_active, stale): not shown to the user, but it makes the sweep
+	// wait before asking again, and CheckedAt orders the queue so a row that
+	// was just asked about goes behind the ones that were not.
+	Transient string `json:"transient,omitempty"`
 	// LockedAt is when the daemon last confirmed it holds the reliant lock on a
 	// live worktree, so the sweep need not ask again for a day.
 	LockedAt *time.Time `json:"locked_at,omitempty"`
