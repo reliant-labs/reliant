@@ -91,7 +91,11 @@ func start(t *testing.T, g *Gate, line string, declared bool) *started {
 	}
 	s := &started{cmd: c, out: &syncBuf{}, done: make(chan struct{}), cancel: cancel}
 	c.Stdout, c.Stderr = s.out, s.out
-	s.heavy = g.Prepare(c, Job{Command: line, Declared: declared})
+	heavy, err := g.Prepare(c, Job{Command: line, Declared: declared})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.heavy = heavy
 	if err := c.Start(); err != nil {
 		t.Fatal(err)
 	}

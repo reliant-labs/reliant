@@ -519,3 +519,31 @@ func TestReaperPolicyPathDefaultsToForgesOwn(t *testing.T) {
 		t.Fatalf("explicit policy = %q", got)
 	}
 }
+
+// Reclaim is the disk guard's built-in reclaimer: one reaper pass at once,
+// whatever the schedule says, reporting the space it measured freed.
+func TestReclaim_RunsOneReaperPassAndSaysWhatItFreed(t *testing.T) {
+	h := newReaperHarness(t, 0)
+	h.writeForgeRecord(autoGCRecord{At: h.now, OK: true}) // the schedule would wait an hour
+	h.run = func(context.Context, string) (reaperRun, error) {
+		m := h.fs.mounts[h.cache]
+		m.Bfree, m.Bavail = plentyOfSpace, plentyOfSpace
+		h.fs.mounts[h.cache] = m
+		return reaperRun{}, nil
+	}
+	freed, summary, err := h.w.Reclaim(context.Background())
+	if err != nil || h.runs() != 1 {
+		t.Fatalf("Reclaim: err %v, runs %d; want one pass", err, h.runs())
+	}
+	if freed == 0 || !strings.HasPrefix(summary, "build caches and docker ") {
+		t.Fatalf("Reclaim = %d, %q; want the freed space measured and named", freed, summary)
+	}
+	if rep, ok := h.w.Report(); !ok || len(UnderPressure(rep)) > 0 {
+		t.Fatalf("the report was not re-measured after the pass: %v", rep)
+	}
+
+	h.run = func(context.Context, string) (reaperRun, error) { return reaperRun{}, errors.New("no forge") }
+	if _, _, err := h.w.Reclaim(context.Background()); err == nil {
+		t.Fatal("a pass that could not run must say so")
+	}
+}

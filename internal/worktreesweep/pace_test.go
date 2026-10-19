@@ -25,6 +25,8 @@ type fakeStore struct {
 	chats    []*core.Chat
 	archived []string
 	daemon   string
+	// disk is each daemon's stored disk report (diskwatch.Encode).
+	disk map[string]string
 }
 
 func newFakeStore(daemon string) *fakeStore {
@@ -86,6 +88,11 @@ func (f *fakeStore) UpdateWorktreeCleanupMetadata(context.Context, string, *core
 func (f *fakeStore) AdoptWorktreeDaemon(context.Context, string, string) error { return nil }
 func (f *fakeStore) ListAttachedDaemonIDsForUser(context.Context, string, time.Duration) ([]string, error) {
 	return []string{f.daemon}, nil
+}
+func (f *fakeStore) ListDaemonStorageState(context.Context, string) (map[string]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.disk, nil
 }
 func (f *fakeStore) TryAdvisoryLock(context.Context, int64) (func(), bool, error) {
 	return func() {}, true, nil
@@ -222,7 +229,7 @@ func TestSweep_TransientOutcomesAreRecordedNotDropped(t *testing.T) {
 			assert.Equal(t, string(reason), meta.Transient)
 			assert.NotNil(t, meta.CheckedAt)
 			assert.Empty(t, meta.HeldReason, "and it is not a hold the user should see")
-			assert.False(t, s.due(store.rows["w"].Worktree))
+			assert.False(t, s.due(store.rows["w"].Worktree, time.Time{}))
 		})
 	}
 }

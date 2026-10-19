@@ -15,7 +15,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
 
 import { DaemonInfoSchema, DaemonStatus, type DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
-import { DiskReportSchema } from "@/gen/reliant/v1/tools_daemon_pb";
+import { DiskGuardState, DiskReportSchema } from "@/gen/reliant/v1/tools_daemon_pb";
 
 const state = vi.hoisted(() => ({ daemons: [] as unknown[], activeId: "" }));
 
@@ -32,7 +32,9 @@ vi.mock("@/api/grpc-client", () => ({
 
 import { DiskPressureBanner } from "../DiskPressureBanner";
 
-function machine(over: { lastNoSpaceAtMs?: bigint; pressure?: boolean; freeBytes?: bigint } = {}): DaemonInfo {
+function machine(
+  over: { lastNoSpaceAtMs?: bigint; pressure?: boolean; freeBytes?: bigint; guard?: DiskGuardState; reclaimed?: string[] } = {},
+): DaemonInfo {
   return create(DaemonInfoSchema, {
     daemonId: "d-1",
     name: "default",
@@ -48,6 +50,10 @@ function machine(over: { lastNoSpaceAtMs?: bigint; pressure?: boolean; freeBytes
           freeBytes: over.freeBytes ?? 2_000_000_000n,
           pressure: over.pressure ?? true,
           lastNoSpaceAtMs: over.lastNoSpaceAtMs ?? 0n,
+          guard: over.guard ?? DiskGuardState.UNSPECIFIED,
+          reclaimedAtMs: over.reclaimed ? BigInt(Date.now()) : 0n,
+          reclaimedBytes: over.reclaimed ? 3_200_000_000n : 0n,
+          reclaimed: over.reclaimed ?? [],
           consumers: [
             { kind: "docker_images", label: "Docker images", category: "docker", bytes: 18_000_000_000n },
             { kind: "go_build_cache", label: "Go build cache", category: "caches", bytes: 9_000_000_000n, reclaimableBytes: 4_000_000_000n, clearable: true },
@@ -76,6 +82,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("DiskPressureBanner", () => {
+  it("says builds are paused, and what the machine already freed, when the disk guard refuses heavy commands", () => {
+    state.daemons = [machine({ guard: DiskGuardState.REFUSING_HEAVY, reclaimed: ["Go build cache 3.2 GB"] })];
+    mount("d-1");
+    const banner = screen.getByTestId("disk-pressure-banner");
+    expect(banner).toHaveAttribute("data-tone", "error");
+    expect(within(banner).getByText("Builds are paused: your machine's disk is almost full")).toBeInTheDocument();
+    const note = within(banner).getByTestId("disk-guard-note");
+    expect(note).toHaveTextContent("New builds, test runs and codegen are paused");
+    expect(note).toHaveTextContent("Freed 3.2 GB automatically (Go build cache 3.2 GB).");
+  });
+
   it("names the full volume — not the home volume — and what is using it", () => {
     state.daemons = [machine()];
     mount("d-1");

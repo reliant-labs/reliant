@@ -802,8 +802,13 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	}
 
 	// A heavy command runs under the slot wrapper, waiting for one of the
-	// machine's heavy slots first; its timeout counts the wait.
-	heavy := c.heavy.Prepare(cmd, heavyjob.Job{Command: req.Command, Declared: req.Heavy})
+	// machine's heavy slots first; its timeout counts the wait. On a nearly
+	// full disk a heavy command is refused instead.
+	heavy, err := c.heavy.Prepare(cmd, heavyjob.Job{Command: req.Command, Declared: req.Heavy})
+	if err != nil {
+		// Refused (a nearly full disk): it never starts, and says why.
+		return &CommandResult{ExitCode: heavyjob.RefusedExitCode, Stderr: err.Error(), Combined: err.Error()}, nil
+	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf

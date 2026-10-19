@@ -300,6 +300,29 @@ message DiskReport {
   // spell of low disk is one episode (and one storage inbox item). 0 while no
   // volume is under pressure.
   int64 pressure_since_ms = 3;
+  // When the machine's current disk-guard episode began (unix ms): the first
+  // stored report of the unbroken run in which some volume's guard is not
+  // DISK_GUARD_STATE_UNSPECIFIED. Gateway-stamped and carried forward like
+  // pressure_since_ms; 0 while every volume is below its reclaim threshold.
+  // The worktree sweep re-checks a machine's kept workspaces once per episode
+  // instead of waiting out their back-off.
+  int64 guard_since_ms = 4;
+}
+
+// DiskGuardState is what the daemon's disk guard (internal/diskguard) is doing
+// about one volume, by how full it is.
+enum DiskGuardState {
+  // Below the reclaim threshold: nothing.
+  DISK_GUARD_STATE_UNSPECIFIED = 0;
+  // Past the reclaim threshold (default 90% used): the daemon reclaims what is
+  // safe to reclaim (stale build-cache entries, docker build cache) and the
+  // server re-checks the machine's archived workspaces at once.
+  DISK_GUARD_STATE_RECLAIMING = 1;
+  // Past the refuse threshold (default 95% used, under 20 GiB free): new heavy
+  // commands — builds, test suites, codegen — are refused with what is using
+  // the space and how to free it, instead of failing mid-write with "no space
+  // left on device". Light commands and work already running continue.
+  DISK_GUARD_STATE_REFUSING_HEAVY = 2;
 }
 
 // DiskVolume is one filesystem and what is using it.
@@ -329,6 +352,19 @@ message DiskVolume {
   // "no space left on device" attributed to this volume (unix ms); 0 when
   // none since the daemon started.
   int64 last_no_space_at_ms = 10;
+  // What the daemon's disk guard is doing about this volume.
+  DiskGuardState guard = 11;
+  // The guard's last automatic reclaim pass started for this volume (unix ms,
+  // the daemon's clock); 0 when none since the daemon started.
+  int64 reclaimed_at_ms = 12;
+  // What that pass freed, in total and by what, for people ("Go build cache
+  // 3.1 GiB"). A pass that found nothing safe to free leaves both empty.
+  uint64 reclaimed_bytes = 13;
+  repeated string reclaimed = 14;
+  // What df reports as Used: every block not free, including the blocks
+  // reserved for root (statfs f_blocks - f_bfree), so used / (used + free) is
+  // df's Use%. total - free overstates it by the reserve.
+  uint64 used_bytes = 15;
 }
 
 // DiskConsumer is one thing taking space on a volume.

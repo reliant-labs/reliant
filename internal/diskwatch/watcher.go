@@ -259,6 +259,7 @@ func (w *Watcher) volumeProtoLocked(v *volume) *reliantv1.DiskVolume {
 		Paths:           v.paths(),
 		TotalBytes:      u.TotalBytes,
 		FreeBytes:       u.FreeBytes,
+		UsedBytes:       u.UsedBytes,
 		Pressure:        w.pressure[v.key],
 		FilesTotal:      u.FilesTotal,
 		FilesFree:       u.FilesFree,

@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
+	"github.com/reliant-labs/reliant/internal/diskguard"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/instanceid"
@@ -128,6 +129,11 @@ type daemonClient struct {
 	// DiskReport, and explains ENOSPC failures in tool results. The
 	// process-wide diskwatch.Default(), shared with the exec paths.
 	diskWatcher *diskwatch.Watcher
+
+	// diskGuard acts on the volumes diskWatcher reports: it reclaims past
+	// one threshold and refuses new heavy commands past another
+	// (internal/diskguard). Its state rides on the heartbeat's disk report.
+	diskGuard *diskguard.Guard
 
 	// portWatcher scans /proc/net/tcp{,6} for loopback/wildcard LISTEN
 	// sockets so heartbeats can carry the detected ports (the preview
@@ -266,6 +272,13 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// storage pass, on a schedule and under pressure, when opts enables it.
 	client.diskWatcher.ConfigureReaper(opts.StorageReaper)
 	go client.diskWatcher.RunReaper(ctx)
+	// The disk guard reclaims with the same pass, at once, when a volume
+	// crosses its reclaim threshold — where the routine runs at all: a
+	// person's own machine is left alone unless they enabled it.
+	if opts.StorageReaper.Enabled {
+		client.diskGuard.Register(client.diskWatcher)
+	}
+	go client.diskGuard.Run(ctx)
 
 	// Managed daemons: route github.com auth through the credential helper and
 	// scrub any token an older release left on disk. Local daemons are left
@@ -406,14 +419,31 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)
 	sort.Strings(caps)
 
+	// The disk guard acts on a filling disk: past its reclaim threshold it
+	// runs the reclaimers and the heartbeat asks the server to re-check this
+	// machine's kept workspaces; past its refuse threshold it refuses new
+	// heavy commands. A threshold it cannot read keeps its default.
+	diskWatcher := diskwatch.Default()
+	guardCfg, err := diskguard.ConfigFromEnv(os.Environ())
+	if err != nil {
+		logging.Warn(logPrefix+" Disk guard keeps its default thresholds", "error", err)
+	}
+	// Its reclaimers — what frees space safely beside running builds — are
+	// registered in Start: forge's storage reaper, where the reaper routine
+	// is enabled.
+	diskGuard := diskguard.New(guardCfg, diskWatcher)
+
 	// Every agent on this machine runs its commands through this daemon, so
 	// this is where their heavy ones (builds, test suites, codegen) are held
-	// to the machine's heavy slots — the pool forge's own lanes draw from. A
-	// gate that cannot be built (slots switched off, own binary not found)
-	// runs every command unqueued: a broken limiter must never stop work.
-	heavyGate, err := heavyjob.New(heavyjob.ConfigFromEnv(os.Environ()))
+	// to the machine's heavy slots — the pool forge's own lanes draw from —
+	// and refused on a nearly full disk. A gate that cannot queue (slots
+	// switched off, own binary not found) runs them unqueued: a broken
+	// limiter must never stop work.
+	heavyCfg := heavyjob.ConfigFromEnv(os.Environ())
+	heavyCfg.Admission = diskGuard
+	heavyGate, err := heavyjob.New(heavyCfg)
 	if err != nil {
-		logging.Warn(logPrefix+" Heavy commands run unqueued", "reason", err)
+		logging.Warn(logPrefix+" Heavy commands run unqueued and unguarded", "error", err)
 	} else {
 		logging.Info(logPrefix + " " + heavyGate.String())
 	}
@@ -484,7 +514,8 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		terminalPumps:     newTerminalPumpTracker(),
 		processOutputSubs: newProcessOutputSubTracker(),
 		memWatcher:        cgroupmem.NewWatcher(memReader, cgroupmem.DefaultPollInterval),
-		diskWatcher:       diskwatch.Default(),
+		diskWatcher:       diskWatcher,
+		diskGuard:         diskGuard,
 	}, nil
 }
 
@@ -1604,6 +1635,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 		// Piggyback the disk report (every daemon that can statfs; ok stays
 		// false until the first sample).
 		if rep, ok := d.diskWatcher.Report(); ok {
+			d.diskGuard.Annotate(rep)
 			hb.Disk = rep
 		}
 		hb.ToolCallsInFlight = uint32(d.results.runningCount())
@@ -1639,6 +1671,13 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 			// finished — the UI should know now, not up to 15s later.
 			if err := sendHeartbeat(time.Now()); err != nil {
 				logSendFailure(logPrefix+" Failed to send disk heartbeat", err)
+				return
+			}
+		case <-d.diskGuard.Changed():
+			// The disk guard started or stopped reclaiming or refusing heavy
+			// commands, or finished a reclaim pass.
+			if err := sendHeartbeat(time.Now()); err != nil {
+				logSendFailure(logPrefix+" Failed to send disk-guard heartbeat", err)
 				return
 			}
 		case <-d.portWatcher.Changed():

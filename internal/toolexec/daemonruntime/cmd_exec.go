@@ -119,8 +119,13 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	cmd.Env = daemonpolicy.ChildEnv(ctx, req.Env, credentials)
 
 	// A heavy command runs under the slot wrapper, waiting for one of the
-	// machine's heavy slots first; its timeout counts the wait.
-	heavy := heavyGateRef.Load().Prepare(cmd, heavyjob.Job{Command: req.Command, Argv: req.Argv, Declared: req.Heavy})
+	// machine's heavy slots first; its timeout counts the wait. On a nearly
+	// full disk a heavy command is refused instead.
+	heavy, err := heavyGateRef.Load().Prepare(cmd, heavyjob.Job{Command: req.Command, Argv: req.Argv, Declared: req.Heavy})
+	if err != nil {
+		// Refused (a nearly full disk): it never starts, and says why.
+		return json.Marshal(daemon.CommandResult{ExitCode: heavyjob.RefusedExitCode, Stderr: err.Error(), Combined: err.Error()})
+	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf

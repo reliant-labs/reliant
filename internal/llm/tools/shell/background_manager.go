@@ -343,7 +343,8 @@ type StartProcessOptions struct {
 	Argv []string
 	// HeavyGate queues a heavy command behind the machine's heavy slots:
 	// the process starts at once, prints that it is waiting, and runs its
-	// command when a slot frees. Nil queues nothing.
+	// command when a slot frees. On a nearly full disk it refuses the
+	// command instead, and StartProcess returns the reason. Nil does neither.
 	HeavyGate *heavyjob.Gate
 	// Heavy declares the command heavy whatever its words are (see
 	// daemon.RunCommandRequest.Heavy).
@@ -406,7 +407,11 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		env[key] = value
 	}
 	cmd.Env = daemonpolicy.ChildEnv(ctx, env, opts.Credentials)
-	opts.HeavyGate.Prepare(cmd, heavyjob.Job{Command: opts.Command, Argv: opts.Argv, Declared: opts.Heavy})
+	if _, err := opts.HeavyGate.Prepare(cmd, heavyjob.Job{Command: opts.Command, Argv: opts.Argv, Declared: opts.Heavy}); err != nil {
+		// Refused (a nearly full disk): it never starts, and says why.
+		cancel()
+		return nil, err
+	}
 
 	// Create buffers for output
 	stdout := &bytes.Buffer{}

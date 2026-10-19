@@ -2,8 +2,10 @@
 package heavyjob
 
 import (
+	"errors"
 	"os/exec"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -100,10 +102,48 @@ func TestConfigFromEnvReplacesTheCommandList(t *testing.T) {
 	}
 }
 
-func TestNewIsOffWhenTheLimitIsOff(t *testing.T) {
+func TestSlotsOffRunsHeavyCommandsUnqueued(t *testing.T) {
 	g, err := New(Config{Env: []string{"FORGE_HEAVY_SLOTS=off"}})
-	if g != nil || err == nil {
-		t.Fatalf("FORGE_HEAVY_SLOTS=off: got gate %v, err %v; want nil and a reason", g, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(g.String(), "unqueued") {
+		t.Fatalf("String() = %q, want it to say heavy commands run unqueued", g)
+	}
+	cmd := exec.Command("sh", "-c", "go test ./...")
+	heavy, err := g.Prepare(cmd, Job{Command: "go test ./..."})
+	if !heavy || err != nil || cmd.Args[0] != "sh" {
+		t.Fatalf("Prepare = %v, %v, args %q; want heavy, unrewritten", heavy, err, cmd.Args)
+	}
+}
+
+type refuseAll string
+
+func (r refuseAll) HeavyRefusal() string { return string(r) }
+
+func TestAdmissionRefusesHeavyCommandsOnly(t *testing.T) {
+	for _, env := range [][]string{{"FORGE_HEAVY_SLOTS=2"}, {"FORGE_HEAVY_SLOTS=off"}} {
+		g, err := New(Config{Env: env, Self: testSelf(t), Admission: refuseAll("the disk is full")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		heavy := exec.Command("sh", "-c", "go build ./...")
+		isHeavy, err := g.Prepare(heavy, Job{Command: "go build ./..."})
+		var refused *RefusedError
+		if !isHeavy || !errors.As(err, &refused) {
+			t.Fatalf("%v: Prepare = %v, %v; want a refusal", env, isHeavy, err)
+		}
+		if msg := err.Error(); !strings.Contains(msg, "`go build ./...` was not started") || !strings.Contains(msg, "the disk is full") {
+			t.Fatalf("%v: refusal %q", env, msg)
+		}
+		if heavy.Args[0] != "sh" {
+			t.Fatalf("%v: a refused command was rewritten: %q", env, heavy.Args)
+		}
+
+		light := exec.Command("sh", "-c", "ls")
+		if isHeavy, err := g.Prepare(light, Job{Command: "ls"}); isHeavy || err != nil {
+			t.Fatalf("%v: light command: %v, %v", env, isHeavy, err)
+		}
 	}
 }
 
@@ -115,7 +155,7 @@ func TestPrepareRewritesOnlyHeavyCommands(t *testing.T) {
 	}
 
 	light := exec.Command("sh", "-c", "ls")
-	if g.Prepare(light, Job{Command: "ls"}) {
+	if heavy, _ := g.Prepare(light, Job{Command: "ls"}); heavy {
 		t.Fatal("a light command was rewritten")
 	}
 	if light.Args[0] != "sh" {
@@ -124,8 +164,8 @@ func TestPrepareRewritesOnlyHeavyCommands(t *testing.T) {
 
 	heavy := exec.Command("sh", "-c", "go test ./...")
 	origPath := heavy.Path
-	if !g.Prepare(heavy, Job{Command: "go test ./..."}) {
-		t.Fatal("a heavy command was not rewritten")
+	if ok, err := g.Prepare(heavy, Job{Command: "go test ./..."}); !ok || err != nil {
+		t.Fatalf("a heavy command was not rewritten: %v", err)
 	}
 	want := []string{testSelf(t)[0], WrapperArg, "--dir", dir, "--label", "go test ./...", "--slots", "3", "--", origPath, "-c", "go test ./..."}
 	if heavy.Path != testSelf(t)[0] || !slices.Equal(heavy.Args, want) {

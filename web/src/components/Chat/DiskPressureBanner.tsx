@@ -18,8 +18,9 @@
  * heartbeats at once), because then the user's work is failing now.
  *
  * A sibling of OomKillBanner and placed beside it. Dismissal is keyed on the
- * machine, the volume, how full it is (each halving of free space) and whether
- * commands are failing, in sessionStorage, so a worse state comes back.
+ * machine, the volume, how full it is (each halving of free space), whether
+ * commands are failing and whether builds are paused (the daemon's disk guard
+ * refusing heavy commands), in sessionStorage, so a worse state comes back.
  */
 import { useCallback, useMemo, useState } from "react";
 import { HardDrive, X } from "lucide-react";
@@ -27,7 +28,7 @@ import { HardDrive, X } from "lucide-react";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
-import { diskNotice, failingRecently, pressuredVolume } from "@/lib/machineDisk";
+import { diskNotice, failingRecently, heavyRefused, pressuredVolume } from "@/lib/machineDisk";
 import { cn } from "@/lib/utils";
 import { FreeDiskSpaceDialog } from "../MachineDisk/FreeDiskSpaceDialog";
 
@@ -72,7 +73,7 @@ export function DiskPressureBanner({ daemonId }: { daemonId?: string | null }) {
   const volume = pressuredVolume(daemon?.disk);
   const now = Date.now();
   const sig = daemon && volume
-    ? `${daemon.daemonId}:${volume.label}:${freeBand(volume.freeBytes, volume.totalBytes)}:${failingRecently(volume, now)}`
+    ? `${daemon.daemonId}:${volume.label}:${freeBand(volume.freeBytes, volume.totalBytes)}:${failingRecently(volume, now)}:${heavyRefused(volume)}`
     : "";
 
   const dismiss = useCallback(() => {
@@ -108,6 +109,11 @@ export function DiskPressureBanner({ daemonId }: { daemonId?: string | null }) {
               {notice.usage}
               {notice.using ? ` — ${notice.using}` : ""}
             </p>
+            {(notice.paused || notice.reclaimed) && (
+              <p className="text-xs text-foreground/80" data-testid="disk-guard-note">
+                {[notice.paused, notice.reclaimed && `${notice.reclaimed}.`].filter(Boolean).join(" ")}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">

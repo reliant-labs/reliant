@@ -3,14 +3,16 @@
 import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 
-import { DiskReportSchema, DiskVolumeSchema } from "@/gen/reliant/v1/tools_daemon_pb";
+import { DiskGuardState, DiskReportSchema, DiskVolumeSchema } from "@/gen/reliant/v1/tools_daemon_pb";
 import {
   clearableConsumers,
   consumerSummary,
   diskNotice,
   failingRecently,
+  HEAVY_PAUSED,
   pressuredVolume,
   RECENT_NO_SPACE_MS,
+  reclaimSummary,
   volumesFullestFirst,
 } from "../machineDisk";
 
@@ -48,6 +50,30 @@ describe("machineDisk", () => {
     expect(failingRecently(failing, now)).toBe(true);
     expect(diskNotice(failing, now)).toMatchObject({ tone: "error", title: "Commands are failing: your machine's disk is full" });
     expect(failingRecently(failing, now + RECENT_NO_SPACE_MS)).toBe(false);
+  });
+
+  it("says when the machine paused builds and what it freed by itself", () => {
+    const now = Date.now();
+    // Refusing heavy commands is worth a notice even without the pressure bit.
+    const paused = create(DiskVolumeSchema, {
+      ...cache,
+      pressure: false,
+      guard: DiskGuardState.REFUSING_HEAVY,
+      reclaimedAtMs: BigInt(now - 60_000),
+      reclaimedBytes: 3_200_000_000n,
+      reclaimed: ["Go build cache 3.2 GB"],
+    });
+    expect(pressuredVolume(create(DiskReportSchema, { volumes: [home, paused] }))?.label).toBe("build caches & docker");
+    expect(diskNotice(paused, now)).toMatchObject({
+      tone: "error",
+      title: "Builds are paused: your machine's disk is almost full",
+      paused: HEAVY_PAUSED,
+      reclaimed: "Freed 3.2 GB automatically (Go build cache 3.2 GB)",
+    });
+    // Reclaiming alone pauses nothing, and a pass that freed nothing says nothing.
+    const reclaiming = create(DiskVolumeSchema, { ...cache, guard: DiskGuardState.RECLAIMING });
+    expect(diskNotice(reclaiming, now)).toMatchObject({ tone: "warning", paused: "", reclaimed: "" });
+    expect(reclaimSummary(create(DiskVolumeSchema, { ...cache, reclaimedAtMs: 1n, reclaimedBytes: 0n }))).toBe("");
   });
 
   it("offers only clearable consumers that are not already being cleared", () => {

@@ -508,3 +508,36 @@ func TestExplainNoSpace_VolumeThatRecoveredIsNotCalledFull(t *testing.T) {
 		t.Fatalf("a recovered volume must not be reported as full now:\n%s", msg)
 	}
 }
+
+func TestStamp_CarriesTheGuardEpisode(t *testing.T) {
+	vol := func(g reliantv1.DiskGuardState) *reliantv1.DiskReport {
+		return &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{{Label: "home", TotalBytes: 400 * GiB, FreeBytes: 30 * GiB, Guard: g}}}
+	}
+	t0 := time.UnixMilli(1760000000000)
+	first := Stamp(vol(reliantv1.DiskGuardState_DISK_GUARD_STATE_RECLAIMING), nil, t0)
+	if first.GuardSinceMs != t0.UnixMilli() {
+		t.Fatalf("a guard acting with nothing stored starts an episode now: %d", first.GuardSinceMs)
+	}
+	// Climbing to refusal is the same episode.
+	later := Stamp(vol(reliantv1.DiskGuardState_DISK_GUARD_STATE_REFUSING_HEAVY), first, t0.Add(time.Hour))
+	if later.GuardSinceMs != t0.UnixMilli() {
+		t.Fatalf("a running episode keeps its start: %d", later.GuardSinceMs)
+	}
+	if ended := Stamp(vol(reliantv1.DiskGuardState_DISK_GUARD_STATE_UNSPECIFIED), later, t0.Add(2*time.Hour)); ended.GuardSinceMs != 0 {
+		t.Fatalf("a report with the guard idle ends the episode: %d", ended.GuardSinceMs)
+	}
+}
+
+func TestSeverityOf_RefusingHeavyCommandsIsCritical(t *testing.T) {
+	// Refusing without the pressure bit (thresholds configured below
+	// diskwatch's) is still critical: builds are not running.
+	rep := &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{{Label: "home", TotalBytes: 400 * GiB, FreeBytes: 30 * GiB,
+		Guard: reliantv1.DiskGuardState_DISK_GUARD_STATE_REFUSING_HEAVY}}}
+	if got := SeverityOf(rep); got != SeverityCritical {
+		t.Fatalf("SeverityOf = %v, want critical", got)
+	}
+	rep.Volumes[0].Guard = reliantv1.DiskGuardState_DISK_GUARD_STATE_RECLAIMING
+	if got := SeverityOf(rep); got != SeverityNone {
+		t.Fatalf("reclaiming alone raises nothing: %v", got)
+	}
+}

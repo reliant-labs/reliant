@@ -30,6 +30,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
@@ -92,6 +93,9 @@ type Store interface {
 	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
 	TryAdvisoryLock(ctx context.Context, key int64) (release func(), ok bool, err error)
+	// ListDaemonStorageState is each of a user's daemons' stored disk
+	// report (diskwatch), read for its disk-guard episode.
+	ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error)
 }
 
 // Sender runs a command on ONE named daemon of a user.
@@ -241,6 +245,7 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 	}
 	groups := map[target][]*core.ReclaimCandidate{}
 	liveByUser := map[string][]core.WorktreePath{}
+	guardSince := map[string]time.Time{}
 	for userID, userCands := range byUser {
 		live, err := s.store.ListLiveWorktreePathsForUser(ctx, userID)
 		if err != nil {
@@ -257,8 +262,25 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 		for _, id := range connected {
 			isUp[id] = true
 		}
+		// A machine whose disk guard is acting (its volume past the reclaim
+		// threshold) has its kept workspaces re-checked now, once per
+		// episode, instead of after their back-off: space is needed, and a
+		// workspace held as in use or recently active may be free by now.
+		if states, err := s.store.ListDaemonStorageState(ctx, userID); err != nil {
+			logging.Warn("[WorktreeSweep] could not read disk reports", "userID", userID, "error", err)
+		} else {
+			for id, raw := range states {
+				if ms := diskwatch.Decode(raw).GetGuardSinceMs(); ms > 0 {
+					guardSince[id] = time.UnixMilli(ms)
+				}
+			}
+		}
 		for _, c := range userCands {
-			if !s.due(c.Worktree) {
+			var since time.Time
+			if c.Worktree.DaemonID != nil {
+				since = guardSince[*c.Worktree.DaemonID]
+			}
+			if !s.due(c.Worktree, since) {
 				continue
 			}
 			if c.Worktree.DaemonID != nil && *c.Worktree.DaemonID != "" {
@@ -317,7 +339,9 @@ func sortForFairness(group []*core.ReclaimCandidate) {
 // due says whether a row is worth asking its daemon about now. A row that was
 // locked recently, or held and re-checked recently, is skipped: its state has
 // not changed, and every check costs the daemon a git status and a tree walk.
-func (s *Sweeper) due(wt *core.Worktree) bool {
+// guardSince, when set, is when its machine's disk-guard episode began: a held
+// row last checked before it is due at once, whatever its back-off.
+func (s *Sweeper) due(wt *core.Worktree, guardSince time.Time) bool {
 	meta := wt.CleanupMetadata
 	if meta == nil || meta.CheckedAt == nil || meta.RetireFence != "" {
 		return true // a pending retirement is delivered at once
@@ -330,6 +354,9 @@ func (s *Sweeper) due(wt *core.Worktree) bool {
 		return meta.LockedAt == nil || s.now().Sub(*meta.LockedAt) >= lockRecheck
 	}
 	if meta.HeldReason == "" {
+		return true
+	}
+	if !guardSince.IsZero() && meta.CheckedAt.Before(guardSince) {
 		return true
 	}
 	return age >= holdBackoff(meta)

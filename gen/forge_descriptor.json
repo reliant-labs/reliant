@@ -8474,6 +8474,10 @@
           {
             "name": "pressure_since_ms",
             "kind": "int64"
+          },
+          {
+            "name": "guard_since_ms",
+            "kind": "int64"
           }
         ],
         "reliant.v1.DiskVolume": [
@@ -8519,6 +8523,28 @@
           {
             "name": "last_no_space_at_ms",
             "kind": "int64"
+          },
+          {
+            "name": "guard",
+            "kind": "enum",
+            "type_name": "reliant.v1.DiskGuardState"
+          },
+          {
+            "name": "reclaimed_at_ms",
+            "kind": "int64"
+          },
+          {
+            "name": "reclaimed_bytes",
+            "kind": "uint64"
+          },
+          {
+            "name": "reclaimed",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "used_bytes",
+            "kind": "uint64"
           }
         ],
         "reliant.v1.FileSystemChanged": [
@@ -9432,6 +9458,11 @@
         "reliant.v1.WhoAmIResponse": "reliant/v1/tools_daemon.proto"
       },
       "Enums": {
+        "reliant.v1.DiskGuardState": [
+          "DISK_GUARD_STATE_UNSPECIFIED",
+          "DISK_GUARD_STATE_RECLAIMING",
+          "DISK_GUARD_STATE_REFUSING_HEAVY"
+        ],
         "reliant.v1.FileChangeType": [
           "FILE_CHANGE_TYPE_UNSPECIFIED",
           "FILE_CHANGE_TYPE_CREATED",
@@ -9446,6 +9477,11 @@
         ]
       },
       "EnumNumbers": {
+        "reliant.v1.DiskGuardState": [
+          0,
+          1,
+          2
+        ],
         "reliant.v1.FileChangeType": [
           0,
           1,
@@ -9460,6 +9496,10 @@
         ]
       },
       "EnumGoRefs": {
+        "reliant.v1.DiskGuardState": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "DiskGuardState"
+        },
         "reliant.v1.FileChangeType": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "FileChangeType"
@@ -9918,6 +9958,10 @@
           {
             "name": "pressure_since_ms",
             "kind": "int64"
+          },
+          {
+            "name": "guard_since_ms",
+            "kind": "int64"
           }
         ],
         "reliant.v1.DiskVolume": [
@@ -9963,6 +10007,28 @@
           {
             "name": "last_no_space_at_ms",
             "kind": "int64"
+          },
+          {
+            "name": "guard",
+            "kind": "enum",
+            "type_name": "reliant.v1.DiskGuardState"
+          },
+          {
+            "name": "reclaimed_at_ms",
+            "kind": "int64"
+          },
+          {
+            "name": "reclaimed_bytes",
+            "kind": "uint64"
+          },
+          {
+            "name": "reclaimed",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "used_bytes",
+            "kind": "uint64"
           }
         ],
         "reliant.v1.GetDaemonRequest": [
@@ -10183,6 +10249,11 @@
           "DAEMON_STATUS_PENDING",
           "DAEMON_STATUS_SUSPENDED",
           "DAEMON_STATUS_FAILED"
+        ],
+        "reliant.v1.DiskGuardState": [
+          "DISK_GUARD_STATE_UNSPECIFIED",
+          "DISK_GUARD_STATE_RECLAIMING",
+          "DISK_GUARD_STATE_REFUSING_HEAVY"
         ]
       },
       "EnumNumbers": {
@@ -10203,6 +10274,11 @@
           4,
           5,
           6
+        ],
+        "reliant.v1.DiskGuardState": [
+          0,
+          1,
+          2
         ]
       },
       "EnumGoRefs": {
@@ -10213,6 +10289,10 @@
         "reliant.v1.DaemonStatus": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "DaemonStatus"
+        },
+        "reliant.v1.DiskGuardState": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "DiskGuardState"
         }
       }
     },
@@ -15405,6 +15485,28 @@
           {
             "name": "last_no_space_at_ms",
             "kind": "int64"
+          },
+          {
+            "name": "guard",
+            "kind": "enum",
+            "type_name": "reliant.v1.DiskGuardState"
+          },
+          {
+            "name": "reclaimed_at_ms",
+            "kind": "int64"
+          },
+          {
+            "name": "reclaimed_bytes",
+            "kind": "uint64"
+          },
+          {
+            "name": "reclaimed",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "used_bytes",
+            "kind": "uint64"
           }
         ],
         "reliant.v1.DismissInboxItemRequest": [
@@ -15744,6 +15846,11 @@
           "CLEANUP_STORAGE_OUTCOME_ACCEPTED",
           "CLEANUP_STORAGE_OUTCOME_SKIPPED"
         ],
+        "reliant.v1.DiskGuardState": [
+          "DISK_GUARD_STATE_UNSPECIFIED",
+          "DISK_GUARD_STATE_RECLAIMING",
+          "DISK_GUARD_STATE_REFUSING_HEAVY"
+        ],
         "reliant.v1.InboxItemKind": [
           "INBOX_ITEM_KIND_UNSPECIFIED",
           "INBOX_ITEM_KIND_APPROVAL",
@@ -15769,6 +15876,11 @@
           2
         ],
         "reliant.v1.CleanupStorageOutcome": [
+          0,
+          1,
+          2
+        ],
+        "reliant.v1.DiskGuardState": [
           0,
           1,
           2
@@ -15800,6 +15912,10 @@
         "reliant.v1.CleanupStorageOutcome": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "CleanupStorageOutcome"
+        },
+        "reliant.v1.DiskGuardState": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "DiskGuardState"
         },
         "reliant.v1.InboxItemKind": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -35455,5 +35571,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "261c23ceb1032c540d2b48e5422e68c6b3fa460f9065098079c52feb402fe32a"
+  "source_hash": "2a2ac03c2ecfb475d02449bee8da236434770863fbe51b36788d6bf60d4a9ada"
 }

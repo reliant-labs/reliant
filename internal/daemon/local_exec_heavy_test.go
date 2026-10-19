@@ -197,3 +197,55 @@ func TestStartBackground_HeavyCommandQueuesWithoutBlocking(t *testing.T) {
 	release()
 	waitFor(t, "the background command to run", func() bool { return strings.Contains(output(), "RAN-2") })
 }
+
+// refuser is an Admission that refuses every heavy command, as the disk guard
+// does on a nearly full disk.
+type refuser struct{ why string }
+
+func (r *refuser) HeavyRefusal() string { return r.why }
+
+func TestRunCommand_RefusedHeavyCommandNeverStartsAndSaysWhy(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	adm := &refuser{why: `Refused: this machine's "home" volume is 97% full.`}
+	g, err := heavyjob.New(heavyjob.Config{
+		Env:       []string{"FORGE_SLOTS_DIR=" + t.TempDir(), "FORGE_HEAVY_SLOTS=1"},
+		Self:      []string{exe, heavyjob.WrapperArg},
+		Admission: adm,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := NewLocalClient().WithHeavyGate(g)
+	marker := filepath.Join(t.TempDir(), "ran")
+
+	res, err := c.RunCommand(context.Background(), &RunCommandRequest{Command: "touch " + marker, Heavy: true, TimeoutMs: 10_000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ExitCode != heavyjob.RefusedExitCode || !strings.Contains(res.Stderr, "97% full") || !strings.Contains(res.Stderr, "was not started") {
+		t.Fatalf("refused command result: %+v", res)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("a refused heavy command ran")
+	}
+
+	if _, err := c.StartBackground(context.Background(), &RunCommandRequest{Command: "touch " + marker, Heavy: true}); err == nil || !strings.Contains(err.Error(), "97% full") {
+		t.Fatalf("refused background command: err %v", err)
+	}
+
+	// Light commands are never refused.
+	res, err = c.RunCommand(context.Background(), &RunCommandRequest{Command: "touch " + marker, TimeoutMs: 10_000})
+	if err != nil || res.ExitCode != 0 {
+		t.Fatalf("light command: err %v, result %+v", err, res)
+	}
+
+	// Space returned: the same heavy command runs.
+	adm.why = ""
+	res, err = c.RunCommand(context.Background(), &RunCommandRequest{Command: "echo RAN-$((1+1))", Heavy: true, TimeoutMs: 10_000})
+	if err != nil || res.ExitCode != 0 || !strings.Contains(res.Stdout, "RAN-2") {
+		t.Fatalf("heavy command after recovery: err %v, result %+v", err, res)
+	}
+}

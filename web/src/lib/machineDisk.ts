@@ -11,7 +11,7 @@
  * label the daemon gave it, and never about "the disk".
  */
 
-import type { DiskConsumer, DiskReport, DiskVolume } from "@/gen/reliant/v1/tools_daemon_pb";
+import { DiskGuardState, type DiskConsumer, type DiskReport, type DiskVolume } from "@/gen/reliant/v1/tools_daemon_pb";
 import { formatBytes } from "@/lib/formatBytes";
 
 /** A command failing with "no space left on device" this recently turns the
@@ -44,9 +44,24 @@ export function volumesFullestFirst(report: HasVolumes | undefined): DiskVolume[
   return [...(report?.volumes ?? [])].sort((a, b) => usedFraction(b) - usedFraction(a));
 }
 
-/** The volume to warn about: the fullest one under pressure, if any. */
+/** The machine refuses new heavy commands (builds, test suites, codegen)
+ *  because this volume is nearly full (the daemon's disk guard). */
+export function heavyRefused(v: DiskVolume): boolean {
+  return v.guard === DiskGuardState.REFUSING_HEAVY;
+}
+
+/** The volume to warn about: the fullest one under pressure or refusing
+ *  heavy commands, if any. */
 export function pressuredVolume(report: HasVolumes | undefined): DiskVolume | undefined {
-  return volumesFullestFirst(report).find((v) => v.pressure);
+  return volumesFullestFirst(report).find((v) => v.pressure || heavyRefused(v));
+}
+
+/** "Freed 3.2 GB automatically (Go build cache 3.1 GB)", or "" when the
+ *  daemon's disk guard has not reclaimed anything for this volume. */
+export function reclaimSummary(v: DiskVolume): string {
+  if (v.reclaimedAtMs <= 0n || v.reclaimedBytes <= 0n) return "";
+  const what = v.reclaimed.length > 0 ? ` (${v.reclaimed.join(", ")})` : "";
+  return `Freed ${formatBytes(v.reclaimedBytes)} automatically${what}`;
 }
 
 export interface ConsumerGroup {
@@ -92,21 +107,34 @@ export interface DiskNotice {
   usage: string;
   /** "Docker 18 GB · Build caches 15 GB", or "" before it was measured. */
   using: string;
+  /** Why new builds are not starting, or "" while they are. */
+  paused: string;
+  /** What the machine already freed by itself (reclaimSummary), or "". */
+  reclaimed: string;
 }
+
+/** What a refused heavy command is told, in the user's words. */
+export const HEAVY_PAUSED =
+  "New builds, test runs and codegen are paused until space is freed, so they do not fail half-way; everything else keeps running.";
 
 /** What to tell the user about a volume under pressure. */
 export function diskNotice(v: DiskVolume, now: number): DiskNotice {
   const failing = failingRecently(v, now);
+  const paused = heavyRefused(v);
   const full = failing || v.freeBytes * 100n < v.totalBytes; // under 1% left
   return {
-    tone: failing ? "error" : "warning",
+    tone: failing || paused ? "error" : "warning",
     title: failing
       ? "Commands are failing: your machine's disk is full"
-      : full
-        ? "Your machine's disk is full"
-        : "Your machine's disk is almost full",
+      : paused
+        ? "Builds are paused: your machine's disk is almost full"
+        : full
+          ? "Your machine's disk is full"
+          : "Your machine's disk is almost full",
     usage: volumeUsage(v),
     using: consumerSummary(v),
+    paused: paused ? HEAVY_PAUSED : "",
+    reclaimed: reclaimSummary(v),
   };
 }
 

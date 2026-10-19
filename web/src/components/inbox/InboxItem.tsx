@@ -45,7 +45,7 @@ import { ApprovalActions } from "../Chat/ApprovalActions";
 import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
 import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
-import { consumerSummary, pressuredVolume, volumeUsage } from "@/lib/machineDisk";
+import { consumerSummary, heavyRefused, pressuredVolume, reclaimSummary, volumeUsage } from "@/lib/machineDisk";
 import { StorageAction, totalHeldBytes } from "./StorageAction";
 
 /** How long "Already handled" shows before the row leaves. */
@@ -293,7 +293,8 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
 
 /**
  * "build caches & docker: 38 of 40 GB used — Docker 18 GB · Build caches 15 GB
- * · 3 workspaces kept (8.4 GB)". Names the volume that is full: on a cloud
+ * · builds paused · freed 3.2 GB automatically (Go build cache 3.2 GB) · 3
+ * workspaces kept (8.4 GB)". Names the volume that is full: on a cloud
  * machine it is not the home volume, and "12 GB free of 157 GB" there said
  * nothing about why every build was failing.
  */
@@ -303,6 +304,9 @@ export function storageDetail(storage: InboxStorageData): string {
   if (full) {
     const using = consumerSummary(full, 2);
     parts.push(using ? `${volumeUsage(full)} — ${using}` : volumeUsage(full));
+    if (heavyRefused(full)) parts.push("builds paused");
+    const reclaimed = reclaimSummary(full);
+    if (reclaimed) parts.push(reclaimed.charAt(0).toLowerCase() + reclaimed.slice(1));
   }
   if (storage.held.length > 0) {
     const size = totalHeldBytes(storage.held);

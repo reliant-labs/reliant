@@ -36,7 +36,29 @@ func Stamp(rep, prev *reliantv1.DiskReport, now time.Time) *reliantv1.DiskReport
 	default:
 		cp.PressureSinceMs = cp.ReportedAtMs
 	}
+	// The disk guard's episode is carried the same way: the worktree sweep
+	// re-checks a machine's kept workspaces once per episode, so a reconnect
+	// mid-episode must not start a new one.
+	switch {
+	case !Guarding(cp):
+		cp.GuardSinceMs = 0
+	case prev.GetGuardSinceMs() > 0:
+		cp.GuardSinceMs = prev.GetGuardSinceMs()
+	default:
+		cp.GuardSinceMs = cp.ReportedAtMs
+	}
 	return cp
+}
+
+// Guarding reports whether the daemon's disk guard is acting on any volume:
+// reclaiming, or refusing heavy commands.
+func Guarding(rep *reliantv1.DiskReport) bool {
+	for _, v := range rep.GetVolumes() {
+		if v.Guard != reliantv1.DiskGuardState_DISK_GUARD_STATE_UNSPECIFIED {
+			return true
+		}
+	}
+	return false
 }
 
 // Encode serializes a Stamped report for storage.
@@ -98,6 +120,13 @@ func SeverityOf(rep *reliantv1.DiskReport) Severity {
 		}
 		worst = max(worst, s)
 	}
+	// Heavy commands refused for want of space is critical on its own: the
+	// user's builds are not running, whatever the pressure bit says.
+	for _, v := range rep.GetVolumes() {
+		if v.Guard == reliantv1.DiskGuardState_DISK_GUARD_STATE_REFUSING_HEAVY {
+			worst = max(worst, SeverityCritical)
+		}
+	}
 	return worst
 }
 
@@ -140,7 +169,8 @@ func Signature(rep *reliantv1.DiskReport) string {
 
 // UrgentSignature changes only when the UI should hear about it now — a
 // pressure flip, new consumers, a no-space failure, a clean-up starting or
-// ending — as opposed to free space drifting.
+// ending, the disk guard changing state or reclaiming — as opposed to free
+// space drifting.
 func UrgentSignature(rep *reliantv1.DiskReport) string {
 	if rep == nil {
 		return ""
@@ -162,7 +192,7 @@ func UrgentVolumeSignature(v *reliantv1.DiskVolume) string {
 		}
 	}
 	sort.Strings(clearing)
-	return fmt.Sprintf("%s|%t|%d|%d|%s", v.Label, v.Pressure, v.ConsumersMeasuredAtMs, v.LastNoSpaceAtMs, strings.Join(clearing, ","))
+	return fmt.Sprintf("%s|%t|%d|%d|%s|%d|%d", v.Label, v.Pressure, v.ConsumersMeasuredAtMs, v.LastNoSpaceAtMs, strings.Join(clearing, ","), v.Guard, v.ReclaimedAtMs)
 }
 
 // UnderPressure returns the report's volumes under pressure, fullest first.

@@ -108,6 +108,32 @@ type Config struct {
 	// WrapperArg. Nil resolves os.Executable(). Tests point it at their own
 	// test binary.
 	Self []string
+	// Admission, when set, may refuse a heavy command before it starts
+	// (internal/diskguard refuses them on a nearly full disk). It is asked
+	// whether or not the slots are on.
+	Admission Admission
+}
+
+// Admission decides whether a heavy command may start now.
+type Admission interface {
+	// HeavyRefusal is why a heavy command may not start now, or "" when it
+	// may.
+	HeavyRefusal() string
+}
+
+// RefusedExitCode is the exit status a refused heavy command reports:
+// EX_TEMPFAIL, "try again later" — the command never ran.
+const RefusedExitCode = 75
+
+// RefusedError is a heavy command an Admission refused. Its message is what
+// the caller tells the agent.
+type RefusedError struct {
+	Command string
+	Reason  string
+}
+
+func (e *RefusedError) Error() string {
+	return fmt.Sprintf("reliant: `%s` was not started. %s", e.Command, e.Reason)
 }
 
 // ConfigFromEnv builds the daemon's Config from its environment.
@@ -124,11 +150,16 @@ func ConfigFromEnv(env []string) Config {
 	return cfg
 }
 
-// Gate queues heavy commands behind the machine's heavy slots. A nil *Gate
-// queues nothing, so callers outside a daemon need no special case.
+// Gate queues heavy commands behind the machine's heavy slots, and asks its
+// Admission before any starts. A nil *Gate does neither, so callers outside a
+// daemon need no special case.
 type Gate struct {
-	patterns []pattern
+	patterns  []pattern
+	admission Admission
+	// self is the wrapper command; nil when heavy commands run unqueued
+	// (unqueued says why).
 	self     []string
+	unqueued string
 	dir      string
 	// slots is the capacity passed to the wrapper when it came from the
 	// environment ("" when it is the machine's default, which the wrapper
@@ -137,46 +168,52 @@ type Gate struct {
 	capacity hostslot.Capacity
 }
 
-// New builds a Gate. It returns nil, and an error saying why, when commands
-// cannot be queued here: the limit is switched off, or this binary cannot be
-// found to run the wrapper. A daemon logs that and runs every command
-// unqueued — a broken limiter must never stop work.
+// New builds a Gate. When heavy commands cannot be queued here — the limit is
+// switched off, or this binary cannot be found to run the wrapper — the gate
+// still classifies them and asks its Admission, and runs them unqueued (see
+// String): a broken limiter must never stop work. The error is only for a
+// configuration it cannot read.
 func New(cfg Config) (*Gate, error) {
 	capy, err := hostslot.CapacityFor(hostslot.Heavy, cfg.Env)
 	if err != nil {
 		return nil, err
-	}
-	if capy.Unlimited {
-		return nil, fmt.Errorf("heavy slots are off (%s)", capy.Source)
-	}
-	self := cfg.Self
-	if len(self) == 0 {
-		exe, err := os.Executable()
-		if err != nil {
-			return nil, fmt.Errorf("resolve own executable for the heavy-slot wrapper: %w", err)
-		}
-		self = []string{exe, WrapperArg}
 	}
 	commands := cfg.Commands
 	if commands == nil {
 		commands = DefaultCommands
 	}
 	g := &Gate{
-		patterns: parsePatterns(commands),
-		self:     self,
-		dir:      hostslot.Options{Env: cfg.Env}.BaseDir(),
-		capacity: capy,
+		patterns:  parsePatterns(commands),
+		admission: cfg.Admission,
+		dir:       hostslot.Options{Env: cfg.Env}.BaseDir(),
+		capacity:  capy,
 	}
 	if _, ok := lookup(cfg.Env, hostslot.SlotsEnv(hostslot.Heavy)); ok {
 		g.slots = strconv.Itoa(capy.Slots)
+	}
+	switch self := cfg.Self; {
+	case capy.Unlimited:
+		g.unqueued = fmt.Sprintf("heavy slots are off (%s)", capy.Source)
+	case len(self) > 0:
+		g.self = self
+	default:
+		exe, err := os.Executable()
+		if err != nil {
+			g.unqueued = fmt.Sprintf("own executable for the heavy-slot wrapper not found: %v", err)
+		} else {
+			g.self = []string{exe, WrapperArg}
+		}
 	}
 	return g, nil
 }
 
 // String describes the gate for a startup log line.
 func (g *Gate) String() string {
-	if g == nil {
+	switch {
+	case g == nil:
 		return "heavy commands run unqueued"
+	case g.self == nil:
+		return "heavy commands run unqueued: " + g.unqueued
 	}
 	return fmt.Sprintf("heavy commands queue for %s (%s)", g.capacity, g.dir)
 }
@@ -223,18 +260,28 @@ func (g *Gate) Heavy(job Job) bool {
 	return classify(g.patterns, job.Command)
 }
 
-// Prepare rewrites cmd, which must not have been started, to run under the
-// slot wrapper when job is heavy, and reports whether it did. cmd keeps its
-// directory, environment, I/O and process attributes; only what it execs
-// changes, so callers set those up exactly as for a light command.
-func (g *Gate) Prepare(cmd *exec.Cmd, job Job) bool {
-	if !g.Heavy(job) || cmd == nil || cmd.Process != nil || cmd.Err != nil || len(cmd.Args) == 0 {
-		return false
+// Prepare readies cmd, which must not have been started, for job. A light
+// job is left alone: (false, nil). A heavy one is first put to the Admission
+// — a refusal is (true, *RefusedError), and cmd must not be started — and
+// then rewritten to run under the slot wrapper. cmd keeps its directory,
+// environment, I/O and process attributes; only what it execs changes, so
+// callers set those up exactly as for a light command.
+func (g *Gate) Prepare(cmd *exec.Cmd, job Job) (heavy bool, err error) {
+	if !g.Heavy(job) {
+		return false, nil
+	}
+	if g.admission != nil {
+		if why := g.admission.HeavyRefusal(); why != "" {
+			return true, &RefusedError{Command: job.label(), Reason: why}
+		}
+	}
+	if g.self == nil || cmd == nil || cmd.Process != nil || cmd.Err != nil || len(cmd.Args) == 0 {
+		return true, nil
 	}
 	// A daemon whose binary was removed under it (an upgrade in progress)
 	// runs the command unqueued rather than failing it.
 	if _, err := os.Stat(g.self[0]); err != nil {
-		return false
+		return true, nil
 	}
 	args := append([]string{}, g.self[1:]...)
 	args = append(args, "--dir", g.dir, "--label", job.label())
@@ -245,7 +292,7 @@ func (g *Gate) Prepare(cmd *exec.Cmd, job Job) bool {
 	args = append(args, cmd.Args[1:]...)
 	cmd.Path = g.self[0]
 	cmd.Args = append([]string{g.self[0]}, args...)
-	return true
+	return true, nil
 }
 
 // TimeoutNote is appended to a heavy command's output when its timeout fired
