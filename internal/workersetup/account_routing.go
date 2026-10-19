@@ -61,13 +61,13 @@ func (s accountRouterStore) RecentAssignmentCounts(ctx context.Context, accountI
 // activities share. It is inactive until a per-account driver builder is wired
 // (see handlers.AccountRouting.DriverFor): accounts are never assigned that
 // cannot then be used.
-func accountRouting(repo db.Repository) *handlers.AccountRouting {
+func accountRouting(repo db.Repository, recorder handlers.AccountLimitRecorder) *handlers.AccountRouting {
 	store := accountRouterStore{repo: repo}
 	return &handlers.AccountRouting{
 		Router:    accountrouter.New(accountrouter.Deps{Store: store}),
 		Store:     store,
 		Settings:  repo,
 		DriverFor: accountDriverFor,
-		Recorder:  accountRecorder(repo),
+		Recorder:  recorder,
 	}
 }

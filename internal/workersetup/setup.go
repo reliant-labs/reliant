@@ -97,6 +97,11 @@ type Config struct {
 	// event they cause can be attributed. nil records nothing.
 	WriteLedger writeledger.Service
 
+	// AccountLimits records the rate-limit state of the accounts that serve
+	// requests and benches one the provider refused. Optional: nil records
+	// nothing and a refused account is waited out, not switched away from.
+	AccountLimits handlers.AccountLimitRecorder
+
 	// Optional overrides (for testing)
 	RunExecutorOverride handlers.RunExecutor
 	DriverResolver      drivers.DriverResolver // Custom LLM driver resolver (nil = production default)
@@ -159,7 +164,7 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 	activityDeps.Connections = cfg.IntegrationCredentials
 	activityDeps.ControlPlaneURL = cfg.ControlPlaneURL
 	activityDeps.WriteLedger = cfg.WriteLedger
-	activityDeps.AccountRouting = accountRouting(cfg.Database)
+	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits)
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)

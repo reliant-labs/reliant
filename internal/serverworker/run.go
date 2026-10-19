@@ -441,7 +441,13 @@ func Run(ctx context.Context, opts Options) error {
 	// schedule path.
 	triggerLauncher := runLauncher
 
+	// One recorder per worker: it folds every response's rate-limit headers into
+	// the account that served it, and benches an account the provider refused.
+	accountRecorder := accountlimits.NewRecorder(repo, nil)
+	defer accountRecorder.Close()
+
 	handle, _, err := workersetup.StartWorker(&workersetup.Config{
+		AccountLimits:          accountRecorder,
 		TemporalClient:         temporalClient,
 		Database:               repo,
 		StreamingHub:           streamingHub,
