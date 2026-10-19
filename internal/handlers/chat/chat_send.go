@@ -429,7 +429,7 @@ func (s *Service) resurrectGhostWorkflow(
 	}
 	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
-	s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
+	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
 	// Step 4: Build execution context - inheriting existing thread
 	// We use ThreadModeInherit because we're continuing an existing conversation
@@ -798,7 +798,7 @@ func (s *Service) SendMessage(
 				// Told only now: the run that has the moved models is awake.
 				// A fresh run (above) makes and announces its own.
 				s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
-				s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
+				_, _ = s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
 
 				// The run is awake. Correct the DB status now that the
 				// authoritative step has succeeded. Best-effort on purpose: if
@@ -922,7 +922,7 @@ func (s *Service) SendMessage(
 					modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
 						return s.checkParamsActuallyChanged(ctx, workflowID, runID, map[string]interface{}{input: stateUpdate[input]})
 					})
-					s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, stateUpdate, modelMoves, 0)
+					_, _ = s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, stateUpdate, modelMoves, 0)
 
 					// Only add "params changed" message if params actually changed from current workflow state
 					if s.checkParamsActuallyChanged(ctx, workflowID, runID, stateUpdate) {
@@ -1059,7 +1059,7 @@ func (s *Service) SendMessage(
 					resp, resumed, presavedID := s.resumeFailedQuestionWorkflow(ctx, req, chat, existingWorkflow, pendingQuestion, targetThread, userID, userContent, systemMessages, inputUpdate)
 					if resumed {
 						s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
-						s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
+						_, _ = s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
 						return resp, nil
 					}
 					// Guard-exhausted / not reset-resumable: the question is already
@@ -1104,7 +1104,7 @@ func (s *Service) SendMessage(
 					}
 					if outcome.Kind == runs.OutcomeResumed {
 						s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
-						s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
+						_, _ = s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
 						workflowStatus := fmt.Sprintf("%d", db.Active())
 						go s.trackMessageSent(ctx, userID, chat, presavedID, targetThread, userContent, len(req.Msg.Attachments))
 						return connect.NewResponse(&reliantv1.SendMessageResponse{
@@ -1272,7 +1272,7 @@ func (s *Service) SendMessage(
 	// so a composer still sending the original pin does not repeat the notice.
 	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
-	s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
+	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
 	// Inject session daemon if set on chat
 	launch.InjectSessionDaemonID(initialData, chat)

@@ -28,8 +28,14 @@ lint:
     # ConnectDaemon and ConnectGateway are the SAME bidi stream in opposite
     # dial directions (daemon dials gateway / gateway dials daemon), so they
     # carry the same DaemonMessage / ServerMessage frames by design.
+    #
+    # StartDeployPlan and StartDeploy both start a detached forge job and
+    # answer with the same handle GetDeployStatus polls, so they share
+    # StartForgeDeployResponse by design: one client result type
+    # (web/src/api/forge-grpc.ts StartDeployResult) reads either.
     RPC_REQUEST_RESPONSE_UNIQUE:
       - proto/reliant/v1/tools_daemon.proto
+      - proto/reliant/v1/forge.proto
 # Breaking change detection (disabled for now during initial development)
 breaking:
   use:

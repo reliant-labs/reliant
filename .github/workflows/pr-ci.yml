@@ -903,14 +903,13 @@ jobs:
   #   golangci-lint is lower than the targeted Go version (1.26.2)
   # That is exactly the maintenance forge exists to absorb.
   #
-  # The whole-repo lint is NON-BLOCKING FOR NOW (`continue-on-error`).
-  # `forge lint` has no only-new-issues mode, and this repo carries
-  # PRE-EXISTING findings (gosec taint analysis, staticcheck SA4006, errcheck,
-  # goimports). Gating on them would fail every PR from day one, which is how a
-  # lint gate gets disabled wholesale instead of fixed. The findings are
-  # REPORTED on every PR so they stay visible and the backlog shrinks. Flip it
-  # to a hard gate (drop continue-on-error) once it reaches zero. The
-  # migration-safety lane below IS a hard gate, so this job can go red.
+  # It is a HARD GATE: every gating lane (golangci-lint, the contract linter,
+  # buf lint, migration safety, the forge convention and drift lanes) must
+  # pass. It was report-only while the backlog of pre-existing findings was
+  # fixed; a finding now is one the PR introduced, so the PR fixes it, or
+  # states why it is a false positive with a scoped //nolint (or a buf.yaml /
+  # .golangci.yml exclusion) and its reason. Warning-only lanes (the
+  # typed-config guardrail, handler size, config deps) still only report.
   lint:
     name: Lint (forge)
     runs-on: ubuntu-latest
@@ -964,13 +963,39 @@ jobs:
       # be keyed on it. go.mod stays the single source of truth — @latest
       # silently switched forge mid-release once, and a hardcoded version is a
       # second place to remember to bump.
+      #
+      # golangci-lint is forge's own pin (GolangciLintVersion in the pinned
+      # forge's internal/templates/toolversions.go), read from the module so a
+      # forge bump moves it too: a second hardcoded version would drift.
       - name: Resolve forge version
         id: forge-version
+        env:
+          GOPRIVATE: github.com/reliant-labs/*
+          GONOSUMDB: github.com/reliant-labs/*
         run: |
           set -euo pipefail
           FORGE_VERSION="$(go list -m -f '{{.Version}}' github.com/reliant-labs/forge)"
           echo "version=$FORGE_VERSION" >> "$GITHUB_OUTPUT"
           echo "forge $FORGE_VERSION"
+          go mod download github.com/reliant-labs/forge
+          forge_dir="$(go list -m -f '{{.Dir}}' github.com/reliant-labs/forge)"
+          GOLANGCI_VERSION="$(sed -n 's/^const GolangciLintVersion = "\(v[^"]*\)"$/\1/p' "$forge_dir/internal/templates/toolversions.go")"
+          if [ -z "$GOLANGCI_VERSION" ]; then
+            echo "::error::cannot read GolangciLintVersion from forge $FORGE_VERSION (internal/templates/toolversions.go moved?); pin golangci-lint here by hand"
+            exit 1
+          fi
+          echo "golangci=$GOLANGCI_VERSION" >> "$GITHUB_OUTPUT"
+          echo "golangci-lint $GOLANGCI_VERSION"
+
+      # forge lint SKIPS its golangci-lint lane, and still passes, when the
+      # binary is not on PATH: until this step existed, every CI run of this
+      # job had silently never run golangci-lint at all. Install only: forge
+      # runs it.
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ steps.forge-version.outputs.golangci }}
+          install-only: true
 
       # Cache the BUILT binary keyed on the exact version, so the ~52s
       # `go install` from source happens once per forge bump instead of once
@@ -1016,18 +1041,11 @@ jobs:
           path: ~/go/bin/forge
           key: ${{ steps.forge-cache.outputs.cache-primary-key }}
 
-      # The migration-safety lane alone IS a hard gate. It is clean, and it is
-      # what enforces forge.yaml's
+      # Includes the migration-safety lane, which enforces forge.yaml's
       # database.migration_safety.require_compat_declaration: every migration
       # after the baseline says whether the previous release keeps working on
-      # the schema it leaves (internal/db/SCHEMA.md). It replaced a Go test,
-      # so leaving it inside the non-blocking step below would have turned a
-      # failing check into a warning.
-      - name: Lint migrations (forge)
-        run: forge lint --migration-safety
-
+      # the schema it leaves (internal/db/SCHEMA.md).
       - name: Lint (forge)
-        continue-on-error: true
         run: forge lint --no-fix
 
   e2e-backend:

@@ -119,7 +119,6 @@ func pubRunGit(ctx context.Context, dir string, env []string, stdin string, inde
 	case err == nil:
 	case errors.As(err, &ee):
 		res.exit = ee.ExitCode()
-		err = nil
 	default:
 		return res, err
 	}

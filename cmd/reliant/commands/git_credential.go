@@ -59,7 +59,7 @@ func pinGitCredentialHelper(server, account string) {
 // session found by pin.
 type gitTokenFetcher func(ctx context.Context, cmd *cobra.Command, pin forgecred.Pin, provider string) (string, error)
 
-var errGitProviderNotConnected = errors.New("Reliant has no usable GitHub connection for you: reconnect GitHub in Reliant settings")
+var errGitProviderNotConnected = errors.New("Reliant has no usable GitHub connection for you: reconnect GitHub in Reliant settings") //nolint:staticcheck // ST1005: shown to the user verbatim, as a sentence.
 
 func fetchGitToken(ctx context.Context, cmd *cobra.Command, pin forgecred.Pin, provider string) (string, error) {
 	preferred := ""

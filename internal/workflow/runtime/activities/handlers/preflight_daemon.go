@@ -199,7 +199,7 @@ func (a *PreflightDaemonCheckActivity) sliceEnd(ctx, exitCtx context.Context, ro
 		return PreflightDaemonCheckOutput{Waiting: true}, nil
 	}
 	return a.terminal(exitCtx, input.ChatID, attended,
-		fmt.Errorf("Your machine didn't come online %s. Check that it is running (or start it from the machines page)", waitBudgetPhrase(input.WaitBudgetSeconds)))
+		fmt.Errorf("Your machine didn't come online %s. Check that it is running (or start it from the machines page)", waitBudgetPhrase(input.WaitBudgetSeconds))) //nolint:staticcheck // ST1005: shown to the user verbatim, as a sentence.
 }
 
 // terminal ends the run's wait for its machine with cause, the text the
@@ -264,12 +264,12 @@ func machineNotComing(ctx context.Context, router toolexec.DaemonRouter, userID 
 	}
 	switch {
 	case !state.Exists:
-		return errors.New("This chat's machine was removed")
+		return errors.New("This chat's machine was removed") //nolint:staticcheck // ST1005: shown to the user verbatim, as a sentence.
 	case state.Failed:
 		if reason := strings.TrimSpace(state.StatusMessage); reason != "" {
-			return fmt.Errorf("Your machine failed to start: %s", strings.TrimRight(reason, ". "))
+			return fmt.Errorf("Your machine failed to start: %s", strings.TrimRight(reason, ". ")) //nolint:staticcheck // ST1005: shown to the user verbatim, as a sentence.
 		}
-		return errors.New("Your machine failed to start")
+		return errors.New("Your machine failed to start") //nolint:staticcheck // ST1005: shown to the user verbatim, as a sentence.
 	default:
 		return nil
 	}

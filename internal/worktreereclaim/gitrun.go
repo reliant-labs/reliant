@@ -91,5 +91,3 @@ func within(root, path string) bool {
 	}
 	return true
 }
-
-func parentDir(p string) string { return filepath.Dir(p) }

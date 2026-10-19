@@ -154,7 +154,7 @@ func (w *templateSyntaxWalker) messageFields(m protoreflect.Message, path []stri
 		}
 		fieldPath := path
 		// The args oneof is not a name a workflow author writes.
-		if !(md.FullName() == nodeType && fd.ContainingOneof() != nil && fd.ContainingOneof().Name() == "args") {
+		if md.FullName() != nodeType || fd.ContainingOneof() == nil || fd.ContainingOneof().Name() != "args" {
 			fieldPath = appendPath(path, name)
 		}
 		switch {

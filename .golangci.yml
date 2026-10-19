@@ -127,6 +127,7 @@ linters:
         - fmt.Fprint
         # OS operations - often best-effort cleanup
         - os.Remove
+        - os.RemoveAll
         - os.Setenv
         - (*os.Process).Kill
     
@@ -207,5 +208,7 @@ output:
       print-linter-name: true
 
 issues:
-  max-issues-per-linter: 50
-  max-same-issues: 10
+  # Report every finding: `forge lint` gates PR CI on this config, and a
+  # finding hidden behind a cap is one nobody is asked to fix.
+  max-issues-per-linter: 0
+  max-same-issues: 0

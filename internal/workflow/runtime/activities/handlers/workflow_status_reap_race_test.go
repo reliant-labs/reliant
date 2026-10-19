@@ -31,7 +31,7 @@ type reapingRepo struct {
 }
 
 func (r *reapingRepo) reconcilerPass() {
-	reaped, err := r.Repository.ReapOrphanedThreads(context.Background())
+	reaped, err := r.ReapOrphanedThreads(context.Background())
 	require.NoError(r.t, err)
 	r.reaped = append(r.reaped, reaped...)
 }

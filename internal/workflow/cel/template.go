@@ -94,17 +94,17 @@ func scanHole(input string, start int) (int, error) {
 	depth := 0 // open { and [ and ( do not matter; only map-literal braces can hide a }}
 	for j := start + 2; j < len(input); {
 		c := input[j]
-		switch {
-		case c == '\'' || c == '"' || c == '`':
+		switch c {
+		case '\'', '"', '`':
 			next, err := skipQuoted(input, j, rawPrefixAt(input, j, start+2))
 			if err != nil {
 				return 0, err
 			}
 			j = next
 			continue
-		case c == '{':
+		case '{':
 			depth++
-		case c == '}':
+		case '}':
 			if depth > 0 {
 				depth--
 			} else if j+1 < len(input) && input[j+1] == '}' {
@@ -131,7 +131,7 @@ func rawPrefixAt(input string, j, floor int) bool {
 	if k > floor && isIdentByte(input[k-1]) {
 		// `bar'x'` is not a raw literal; only a lone r/R (optionally with b) is.
 		prev := input[k-1]
-		if !(prev == 'b' || prev == 'B') || (k-2 >= floor && isIdentByte(input[k-2])) {
+		if (prev != 'b' && prev != 'B') || (k-2 >= floor && isIdentByte(input[k-2])) {
 			return false
 		}
 	}

@@ -229,12 +229,12 @@ func TestStreamTransitionsAreLoggedOnceWithDurations(t *testing.T) {
 	st := &streamTransitions{now: clock.now}
 
 	// Connecting is DEBUG: it is only the start of a dial.
-	level, attrs, ok := st.transition(daemonstate.StreamConnecting, "")
+	level, _, ok := st.transition(daemonstate.StreamConnecting, "")
 	require.True(t, ok)
 	assert.Equal(t, slog.LevelDebug, level)
 
 	clock.advance(400 * time.Millisecond)
-	level, attrs, ok = st.transition(daemonstate.StreamConnected, "")
+	level, attrs, ok := st.transition(daemonstate.StreamConnected, "")
 	require.True(t, ok)
 	assert.Equal(t, slog.LevelInfo, level)
 	assert.Contains(t, attrs, "connected")

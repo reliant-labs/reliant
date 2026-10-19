@@ -125,7 +125,7 @@ func (r *Recorder) BeginPush(ctx context.Context, p Push) (*PushIntent, error) {
 			(&PushIntent{rec: r, rows: rows[:i]}).Settle(ctx, PushOutcome{Error: "intent could not be recorded"})
 			slog.Warn("integration write ledger: could not record a push intent; the push was not made",
 				"repo", repo, "branch", p.Branch, "run_id", p.RunID, "error", err)
-			return nil, fmt.Errorf("Reliant could not record this push before making it, so nothing was pushed: %w", err)
+			return nil, fmt.Errorf("Reliant could not record this push before making it, so nothing was pushed: %w", err) //nolint:staticcheck // ST1005: shown to the user verbatim, as a sentence.
 		}
 	}
 	return &PushIntent{rec: r, rows: rows}, nil

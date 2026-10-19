@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats-server/v2/server"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +20,7 @@ func onlineTestNATS(t *testing.T) *nats.Conn {
 	t.Helper()
 	opts := natstest.DefaultTestOptions
 	opts.Port = -1
-	var srv *server.Server = natstest.RunServer(&opts)
+	srv := natstest.RunServer(&opts)
 	t.Cleanup(srv.Shutdown)
 	require.True(t, srv.ReadyForConnections(2*time.Second))
 	nc, err := nats.Connect(srv.ClientURL())

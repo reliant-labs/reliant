@@ -196,7 +196,6 @@ func (a *GitPublishActivity) Execute(ctx context.Context, input ActivityInput) (
 		Worktree: worktree, RemoteURL: gitpublish.RemoteURL(repo), Branch: decision.Branch,
 		ExpectSHA: prep.HeadSHA, Token: token,
 	})
-	token = ""
 	if err != nil {
 		// The machine may have pushed before it went away: ambiguous.
 		intent.Settle(ctx, writeledger.PushOutcome{Ambiguous: true, Error: err.Error()})

@@ -39,14 +39,14 @@ import (
 
 const projectWorkingDir = "/home/workspace/projects/forge"
 
-// missingWorkingDirTransportError is terminal.create's failure for a missing
+// errMissingWorkingDirTransport is terminal.create's failure for a missing
 // directory as the api-server receives it: the daemon's error message,
 // flattened to a string by the NATS router (daemon_router_nats.go).
 //
 // Spelled out rather than built from terminal.ErrWorkingDirUnavailable on
 // purpose. Daemons in the field send this text; if the sentinel's wording
 // changes, the server stops recognising them, and this test is what says so.
-var missingWorkingDirTransportError = errors.New(`daemon command "terminal.create" failed: create session: ` +
+var errMissingWorkingDirTransport = errors.New(`daemon command "terminal.create" failed: create session: ` +
 	`terminal working directory unavailable: ` + projectWorkingDir + ` does not exist`)
 
 // terminalCreateRouter answers terminal.create with a fixed response or
@@ -163,7 +163,7 @@ func TestTerminalWS_SessionCreatedLogsRequestedAndEffectiveWorkingDir(t *testing
 
 func TestTerminalWS_MissingWorkingDirIsReportedAsWorkingDirUnavailable(t *testing.T) {
 	logs := captureLogs(t)
-	router := &terminalCreateRouter{createErr: missingWorkingDirTransportError}
+	router := &terminalCreateRouter{createErr: errMissingWorkingDirTransport}
 
 	first := dialTerminalWSAt(t, router, projectWorkingDir)
 
@@ -206,7 +206,7 @@ func openStreamTerminalAt(t *testing.T, router toolexec.DaemonRouter, workingDir
 }
 
 func TestStreamTerminal_MissingWorkingDirIsFailedPrecondition(t *testing.T) {
-	router := &terminalCreateRouter{createErr: missingWorkingDirTransportError}
+	router := &terminalCreateRouter{createErr: errMissingWorkingDirTransport}
 
 	_, err := openStreamTerminalAt(t, router, projectWorkingDir)
 
@@ -343,7 +343,7 @@ func TestTerminalWS_MissingDirClassification(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.worktreeID, func(t *testing.T) {
-			router := &terminalCreateRouter{createErr: missingWorkingDirTransportError}
+			router := &terminalCreateRouter{createErr: errMissingWorkingDirTransport}
 			first := dialTerminalWSFor(t, router, checkouts, projectWorkingDir, tc.worktreeID)
 			require.Equal(t, "error", first["type"])
 			require.Equal(t, tc.wantCode, first["code"])

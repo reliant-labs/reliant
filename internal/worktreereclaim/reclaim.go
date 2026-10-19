@@ -875,7 +875,7 @@ func (r *Reclaimer) removeOne(ctx context.Context, w Worktree, c string, remaini
 		}
 	}
 	if !force {
-		if v := classifyCheckout(ctx, q, baseFor(w, c), qNested, w.ID, r.probe()); !v.safe() && !(confirmed && v.Reason == ReasonUnreachable) {
+		if v := classifyCheckout(ctx, q, baseFor(w, c), qNested, w.ID, r.probe()); !v.safe() && (!confirmed || v.Reason != ReasonUnreachable) {
 			return putBack(v.Reason, "changed since it was checked: "+v.Detail)
 		}
 	}
@@ -1049,7 +1049,8 @@ func (r *Reclaimer) recoverLocked(ctx context.Context, rowID string) (restored, 
 				continue
 			}
 		}
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err == nil {
+		err = os.MkdirAll(filepath.Dir(dest), 0o755)
+		if err == nil {
 			_, err = git(ctx, "", nil, "--git-dir="+info.CommonDir, "worktree", "move", q, dest)
 		}
 		if back, berr := inspectLock(ctx, dest); err != nil || berr != nil || !back.Registered {

@@ -135,7 +135,8 @@ cannot see).
   others: `gh run view <run-id> --log | go run ./tools/test-affected weights >
   tools/test-affected/go-test-weights.tsv`.
 - **Other jobs** run identically on every event: `Lint (forge)` (in parallel;
-  `--migration-safety` blocks, the full lint reports), web lint/typecheck/build,
+  `forge lint --no-fix` at the pinned forge, with forge's pinned golangci-lint,
+  blocks; run it locally before pushing a Go or proto change), web lint/typecheck/build,
   vitest in two shards (`Web (vitest 1/2)`, `2/2`), Playwright, the e2e
   stories, generated-code drift, and `forge generate is a no-op` (the
   forge-generate lane above).

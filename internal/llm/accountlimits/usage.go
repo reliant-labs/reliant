@@ -24,10 +24,6 @@ type TokenSource interface {
 	AccessToken(ctx context.Context, userID, accountID string) (string, error)
 }
 
-// ErrTokenExpired is what StoredTokens answers for an expired access token: it
-// cannot refresh one.
-var ErrTokenExpired = errors.New("accountlimits: stored access token has expired")
-
 // usageStore is the slice of the account store a usage poll reads and writes.
 type usageStore interface {
 	GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error)
@@ -36,33 +32,6 @@ type usageStore interface {
 	ScheduleUsagePoll(ctx context.Context, accountID string, next time.Time, failures int, errText string) error
 	UpsertAccountLimitSnapshot(ctx context.Context, s core.LimitState) error
 	BenchAccount(ctx context.Context, userID, accountID string, until time.Time, window string, probe bool) error
-}
-
-// StoredTokens is the TokenSource that reads the stored access token and never
-// refreshes it. It is the fallback until the per-account refresh coordinator is
-// wired: an expired token costs the account its polled numbers (it keeps
-// running on response headers) until a request refreshes it.
-type StoredTokens struct {
-	Store interface {
-		GetProviderAccountWithSecrets(ctx context.Context, userID, accountID string) (*core.AccountWithSecrets, error)
-	}
-	Now func() time.Time
-}
-
-// AccessToken returns the stored access token while it is still valid.
-func (s StoredTokens) AccessToken(ctx context.Context, userID, accountID string) (string, error) {
-	acct, err := s.Store.GetProviderAccountWithSecrets(ctx, userID, accountID)
-	if err != nil {
-		return "", err
-	}
-	now := time.Now
-	if s.Now != nil {
-		now = s.Now
-	}
-	if !acct.ExpiresAt.IsZero() && !acct.ExpiresAt.After(now().Add(30*time.Second)) {
-		return "", ErrTokenExpired
-	}
-	return acct.Secrets.Secret, nil
 }
 
 // FetchUsage reads the usage windows of one subscription credential from its

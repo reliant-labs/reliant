@@ -64,6 +64,8 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
 
 // shellCredentialsParamDoc is the schema description for ShellParams.Credentials.
 // It is prose with commas and apostrophes, which a struct tag would have to escape.
+//
+//nolint:gosec // G101: a parameter description that names credentials, not a credential.
 const shellCredentialsParamDoc = "Set to 'none' to run this command with no GitHub, git, ssh or cloud credentials in its environment (git push, gh and kubectl then fail to authenticate, without prompting). Not a sandbox: files the daemon's user can read stay readable."
 
 // JSONSchemaExtend attaches the multi-line description doc after the reflector

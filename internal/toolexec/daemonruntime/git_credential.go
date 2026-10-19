@@ -32,7 +32,7 @@ import (
 
 // gitCredentialURL is the URL scope the helper is bound to. Never a catch-all
 // credential.helper: a user's other hosts are not ours to answer.
-const gitCredentialURL = "https://github.com"
+const gitCredentialURL = "https://github.com" //nolint:gosec // G101: a host URL, not a credential.
 
 // managedProjectsDir is a variable only so the package tests can point it away
 // from a real workspace's repositories.

@@ -260,7 +260,7 @@ func TestReasonRank_EveryReasonIsRanked(t *testing.T) {
 			t.Errorf("%s has no rank, so a multi-repo worktree could report it as safe", r)
 		}
 	}
-	if !(reasonRank(ReasonDirty) > reasonRank(ReasonUnpushed) && reasonRank(ReasonUnpushed) > reasonRank(ReasonUnreachable)) {
+	if reasonRank(ReasonDirty) <= reasonRank(ReasonUnpushed) || reasonRank(ReasonUnpushed) <= reasonRank(ReasonUnreachable) {
 		t.Error("dirty must outrank unpushed must outrank unreachable_history")
 	}
 }

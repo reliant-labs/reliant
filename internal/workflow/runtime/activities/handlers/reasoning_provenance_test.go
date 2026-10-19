@@ -2,9 +2,9 @@
 package handlers
 
 import (
-	"github.com/reliant-labs/reliant/internal/llm/models"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

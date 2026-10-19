@@ -1,4 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
+//
+//forge:exclude-contract: Temporal activity payload types and their JSON codecs; no I/O or state
 package types
 
 import (

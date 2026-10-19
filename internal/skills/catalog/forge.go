@@ -102,9 +102,7 @@ func forgeSkillsForInput(input DiscoverInput) []Definition {
 		_, yamlErr := os.Stat(filepath.Join(baseDir, "forge.yaml"))
 		defs := discoverForgeSkillsFiltered(baseDir, canonical, input.LoadFullDefinitions, yamlErr == nil, true,
 			func(s forgecli.Skill) bool { return s.Scope == string(projectSkillScope) })
-		for _, def := range defs {
-			out = append(out, def)
-		}
+		out = append(out, defs...)
 	}
 	return out
 }
