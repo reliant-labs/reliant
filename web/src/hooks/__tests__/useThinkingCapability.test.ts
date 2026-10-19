@@ -31,8 +31,8 @@ describe("resolveThinkingCapabilityForSelector", () => {
     expect(capability.modelId).toBe("claude-5.5-opus@anthropic");
     expect(capability.levels).toEqual(["xhigh", "high", "medium", "low"]);
     expect(capability.tag).toBe("flagship");
-    expect(capability.tierLevel).toBe("xhigh");
-    expect(autoThinkingLabel(capability)).toBe("Auto (xhigh)");
+    expect(capability.tierLevel).toBe("high");
+    expect(autoThinkingLabel(capability)).toBe("Auto (high)");
   });
 
   it("falls back to the first catalog model with the tag when tiers are absent", () => {
