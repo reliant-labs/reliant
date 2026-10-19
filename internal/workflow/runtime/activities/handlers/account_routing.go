@@ -28,9 +28,22 @@ import (
 // store or the recorder never fails a turn, it just routes (or waits) as it did
 // before accounts existed.
 
-// getAvailableDrivers is drivers.GetAvailableDrivers; a variable so the routing
-// tests supply accounts without a database.
-var getAvailableDrivers = drivers.GetAvailableDrivers
+// lookupAvailableDrivers is drivers.LookupAvailableDrivers; a variable so the routing
+// tests supply accounts without a database. Its error (wrapping
+// drivers.ErrDriverLookupFailed) is a failed READ of the user's providers, which
+// is not the same as a user who has none.
+var lookupAvailableDrivers = drivers.LookupAvailableDrivers
+
+// getAvailableDrivers is lookupAvailableDrivers for best-effort callers: a failed
+// read is logged and reads as no providers.
+func getAvailableDrivers(ctx context.Context, userID string) models.AvailableDrivers {
+	avail, err := lookupAvailableDrivers(ctx, userID)
+	if err != nil {
+		logging.Error("Failed to build available drivers from settings", "error", err, "userID", userID)
+		return models.AvailableDrivers{Drivers: make(map[models.DriverID]models.DriverConfig)}
+	}
+	return avail
+}
 
 // DriverForAccountFunc builds a driver that talks as one specific account
 // (drivers.GetDriverForAccount).
@@ -67,6 +80,9 @@ type AccountRouting struct {
 	DriverFor DriverForAccountFunc
 	// Settings supplies the routing mode (provider.routing.<driver>).
 	Settings routingSettings
+	// Credentials takes an account whose API key the provider rejected out of
+	// rotation. Optional: without it a rejected key fails the turn as before.
+	Credentials CredentialMarker
 }
 
 func (r *AccountRouting) active() bool {
@@ -300,7 +316,12 @@ func (r *AccountRouting) fallbackModel(ctx context.Context, uc usageLimitContext
 		return ""
 	}
 	fd := models.DriverID(driverID)
-	avail := getAvailableDrivers(ctx, uc.UserID)
+	avail, err := lookupAvailableDrivers(ctx, uc.UserID)
+	if err != nil {
+		logging.Warn("[Failover] Could not read the user's providers; offering no fallback",
+			"userID", uc.UserID, "error", err)
+		return ""
+	}
 	cfg, ok := avail.Drivers[fd]
 	if !ok || !cfg.IsConfigured() || !models.CanDriverUseModel(models.Family(driverID), models.ModelID(modelID)) {
 		return ""

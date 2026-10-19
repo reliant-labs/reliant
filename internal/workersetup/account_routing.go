@@ -64,10 +64,20 @@ func (s accountRouterStore) RecentAssignmentCounts(ctx context.Context, accountI
 func accountRouting(repo db.Repository, recorder handlers.AccountLimitRecorder) *handlers.AccountRouting {
 	store := accountRouterStore{repo: repo}
 	return &handlers.AccountRouting{
-		Router:    accountrouter.New(accountrouter.Deps{Store: store}),
-		Store:     store,
-		Settings:  repo,
-		DriverFor: accountDriverFor,
-		Recorder:  recorder,
+		Router:      accountrouter.New(accountrouter.Deps{Store: store}),
+		Store:       store,
+		Settings:    repo,
+		DriverFor:   accountDriverFor,
+		Recorder:    recorder,
+		Credentials: credentialMarker{repo: repo},
 	}
+}
+
+// credentialMarker retires an account whose API key the provider rejected, the
+// way the token refresh coordinator retires one whose refresh token it did.
+type credentialMarker struct{ repo core.ProviderAccountStore }
+
+func (m credentialMarker) MarkNeedsSignIn(ctx context.Context, userID, accountID, reason string) error {
+	_, err := m.repo.PatchProviderAccount(ctx, userID, accountID, core.AccountPatch{NeedsReauth: &reason})
+	return err
 }

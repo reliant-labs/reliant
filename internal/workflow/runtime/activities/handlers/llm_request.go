@@ -225,7 +225,12 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 	} else {
 		// Resolve model using the registry against the providers the user has
 		// configured.
-		availableDrivers := getAvailableDrivers(ctx, spec.UserID)
+		// A store failure says nothing about what the user has connected, so it
+		// must not read as "connect a provider", which is terminal.
+		availableDrivers, lerr := lookupAvailableDriversWithRetry(ctx, spec.UserID)
+		if lerr != nil {
+			return nil, lerr
+		}
 		routingDrivers = availableDrivers
 		availableProviders := configuredProviderIDs(availableDrivers)
 

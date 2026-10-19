@@ -56,9 +56,9 @@ func driversWith(accts ...models.AccountConfig) models.AvailableDrivers {
 
 func withAvailableDrivers(t *testing.T, avail models.AvailableDrivers) {
 	t.Helper()
-	orig := getAvailableDrivers
-	getAvailableDrivers = func(context.Context, string) models.AvailableDrivers { return avail }
-	t.Cleanup(func() { getAvailableDrivers = orig })
+	orig := lookupAvailableDrivers
+	lookupAvailableDrivers = func(context.Context, string) (models.AvailableDrivers, error) { return avail, nil }
+	t.Cleanup(func() { lookupAvailableDrivers = orig })
 }
 
 // routerFake is an in-memory accountrouter.Store the real router runs over.
