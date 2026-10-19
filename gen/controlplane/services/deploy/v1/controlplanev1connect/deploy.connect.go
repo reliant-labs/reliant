@@ -37,6 +37,9 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// DeployServiceGetCapabilitiesProcedure is the fully-qualified name of the DeployService's
+	// GetCapabilities RPC.
+	DeployServiceGetCapabilitiesProcedure = "/controlplane.v1.DeployService/GetCapabilities"
 	// DeployServiceGetTenantProcedure is the fully-qualified name of the DeployService's GetTenant RPC.
 	DeployServiceGetTenantProcedure = "/controlplane.v1.DeployService/GetTenant"
 	// DeployServiceCreateTenantProcedure is the fully-qualified name of the DeployService's
@@ -146,6 +149,8 @@ const (
 
 // DeployServiceClient is a client for the controlplane.v1.DeployService service.
 type DeployServiceClient interface {
+	// Feature negotiation is mandatory before sending immutable snapshot documents.
+	GetCapabilities(context.Context, *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error)
 	// GetTenant returns the caller's organization as a deploy tenant. There is
 	// no enrollment: the deploy product is open to every org, so every live org
 	// is a tenant (slug and namespace prefix = the org id).
@@ -445,6 +450,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	deployServiceMethods := v1.File_services_deploy_v1_deploy_proto.Services().ByName("DeployService").Methods()
 	return &deployServiceClient{
+		getCapabilities: connect.NewClient[v1.GetDeployCapabilitiesRequest, v1.GetDeployCapabilitiesResponse](
+			httpClient,
+			baseURL+DeployServiceGetCapabilitiesProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetCapabilities")),
+			connect.WithClientOptions(opts...),
+		),
 		getTenant: connect.NewClient[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse](
 			httpClient,
 			baseURL+DeployServiceGetTenantProcedure,
@@ -678,6 +689,7 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // deployServiceClient implements DeployServiceClient.
 type deployServiceClient struct {
+	getCapabilities        *connect.Client[v1.GetDeployCapabilitiesRequest, v1.GetDeployCapabilitiesResponse]
 	getTenant              *connect.Client[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse]
 	createTenant           *connect.Client[v1.CreateDeployTenantRequest, v1.CreateDeployTenantResponse]
 	createEnvironment      *connect.Client[v1.CreateDeployEnvironmentRequest, v1.CreateDeployEnvironmentResponse]
@@ -716,6 +728,11 @@ type deployServiceClient struct {
 	reportLocalSession     *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
 	importLedger           *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
 	getDrift               *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
+}
+
+// GetCapabilities calls controlplane.v1.DeployService.GetCapabilities.
+func (c *deployServiceClient) GetCapabilities(ctx context.Context, req *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error) {
+	return c.getCapabilities.CallUnary(ctx, req)
 }
 
 // GetTenant calls controlplane.v1.DeployService.GetTenant.
@@ -910,6 +927,8 @@ func (c *deployServiceClient) GetDrift(ctx context.Context, req *connect.Request
 
 // DeployServiceHandler is an implementation of the controlplane.v1.DeployService service.
 type DeployServiceHandler interface {
+	// Feature negotiation is mandatory before sending immutable snapshot documents.
+	GetCapabilities(context.Context, *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error)
 	// GetTenant returns the caller's organization as a deploy tenant. There is
 	// no enrollment: the deploy product is open to every org, so every live org
 	// is a tenant (slug and namespace prefix = the org id).
@@ -1205,6 +1224,12 @@ type DeployServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	deployServiceMethods := v1.File_services_deploy_v1_deploy_proto.Services().ByName("DeployService").Methods()
+	deployServiceGetCapabilitiesHandler := connect.NewUnaryHandler(
+		DeployServiceGetCapabilitiesProcedure,
+		svc.GetCapabilities,
+		connect.WithSchema(deployServiceMethods.ByName("GetCapabilities")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceGetTenantHandler := connect.NewUnaryHandler(
 		DeployServiceGetTenantProcedure,
 		svc.GetTenant,
@@ -1435,6 +1460,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 	)
 	return "/controlplane.v1.DeployService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case DeployServiceGetCapabilitiesProcedure:
+			deployServiceGetCapabilitiesHandler.ServeHTTP(w, r)
 		case DeployServiceGetTenantProcedure:
 			deployServiceGetTenantHandler.ServeHTTP(w, r)
 		case DeployServiceCreateTenantProcedure:
@@ -1519,6 +1546,10 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 
 // UnimplementedDeployServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDeployServiceHandler struct{}
+
+func (UnimplementedDeployServiceHandler) GetCapabilities(context.Context, *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetCapabilities is not implemented"))
+}
 
 func (UnimplementedDeployServiceHandler) GetTenant(context.Context, *connect.Request[v1.GetDeployTenantRequest]) (*connect.Response[v1.GetDeployTenantResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetTenant is not implemented"))

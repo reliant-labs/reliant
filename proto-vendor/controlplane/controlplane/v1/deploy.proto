@@ -997,6 +997,9 @@ message DeployRelease {
   // carry "" and are resolved by falling back to it, so a project's lookup
   // finds its own row first and the pre-project history second.
   string project = 12;
+  // Complete immutable forge release document, including catalog and snapshot intent.
+  // Absent on historical cuts that predate snapshots.
+  google.protobuf.Struct snapshot_release = 13;
 }
 
 // DeployGate is one check's result, recorded against a promotion.
@@ -1439,6 +1442,11 @@ message DeployPromotion {
   // leaves no trace is indistinguishable afterwards from one nobody was ever
   // warned about.
   repeated string acknowledged_findings = 25;
+  // Frozen at promotion, never resolved from a later bundle association.
+  string snapshot_digest = 26;
+  string bundle_id = 27;
+  string bundle_digest = 28;
+  google.protobuf.Struct snapshot = 29;
 }
 
 // === Source of truth: provenance, bundles, applies, plans ===
@@ -1585,6 +1593,9 @@ message DeployBundle {
   // Set by the SERVER from the caller's credential.
   string created_by = 11;
   google.protobuf.Timestamp created_at = 12;
+  string snapshot_digest = 13;
+  // Exact forge Snapshot semantic document; resource specs retain original bytes.
+  google.protobuf.Struct snapshot = 14;
 }
 
 // DeployConvergence is the control plane's own OBSERVATION that an environment

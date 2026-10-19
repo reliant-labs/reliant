@@ -63,6 +63,11 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/deploy/v
 // and `approved_by` are set by the server from the caller's credential on
 // every one of these paths, including the two exceptions.
 service DeployService {
+  // Feature negotiation is mandatory before sending immutable snapshot documents.
+  rpc GetCapabilities(GetDeployCapabilitiesRequest) returns (GetDeployCapabilitiesResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
   // --- Tenant ---------------------------------------------------------
 
   // GetTenant returns the caller's organization as a deploy tenant. There is
@@ -531,6 +536,14 @@ service DeployService {
 }
 
 // === Tenant ===
+
+message GetDeployCapabilitiesRequest {}
+
+message GetDeployCapabilitiesResponse {
+  repeated string snapshot_schema_versions = 1;
+  bool immutable_snapshot_seals = 2;
+  bool frozen_promotion_bundles = 3;
+}
 
 message GetDeployTenantRequest {}
 
@@ -1021,6 +1034,9 @@ message CutReleaseRequest {
   // pre-project namespace, which is where every release cut before this field
   // existed lives.
   string project = 8;
+  // Strict forge release.Release JSON. Exclusive with legacy artifact, git,
+  // provenance and run fields; version/project must match this envelope.
+  google.protobuf.Struct snapshot_release = 9;
 }
 
 message CutReleaseResponse {
@@ -1207,6 +1223,9 @@ message RecordDeployBundleRequest {
   bytes config = 4;
   // The CI run that produced this render.
   DeployRun run = 5;
+  // Compressed OCI manifests layer. Required for snapshot seals; capped at
+  // 8 MiB, descriptor digest/size and exact snapshot inventory verified server-side.
+  bytes manifests_layer = 6;
 }
 
 message RecordDeployBundleResponse {
@@ -1280,6 +1299,9 @@ message PlanDeployRequest {
 
 message PlanDeployResponse {
   DeployPlan plan = 1;
+  // Candidate bundle's exact composition identity; GetBundle supplies the
+  // selected/build/carry decisions and independent consumer bindings for review.
+  string snapshot_digest = 2;
 }
 
 // === Capacity pre-flight ===
