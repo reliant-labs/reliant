@@ -94,6 +94,7 @@ interface WorkflowTagInfo {
 const EMPTY_WORKFLOW_TAG_INFO: WorkflowTagInfo = { groupTags: {}, groupUIs: {} };
 import { findPinnedModel } from "../../lib/modelId";
 import { ComposerModelName } from "./ComposerModelName";
+import { AccountUsageChip } from "./AccountUsageChip";
 import {
   beginQueuedSend,
   endQueuedSend,
@@ -1935,6 +1936,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           </div>
                         );
                       })()}
+
+                      <AccountUsageChip chatId={chatId} />
 
                       {/* Settings Button - opens settings popover */}
                       {(hasConfigurableParams || isViewingThreadParams) && (

@@ -238,14 +238,15 @@ export function useChat(chatId?: string) {
  *
  * Always revalidated on mount: the cache is kept current by this device's own
  * writes and by the update stream, but a stream that was down missed nothing
- * the GetChat behind this will not repair.
+ * the GetChat behind this will not repair. A read-only observer that only
+ * wants what the composer already loaded passes a long `staleTime`.
  */
-export function useChatSelection(chatId?: string) {
+export function useChatSelection(chatId?: string, options?: { staleTime?: number }) {
   return useQuery({
     queryKey: chatKeys.selection(chatId),
     queryFn: async () => (await api.chatsV2.get(chatId!)).selection ?? null,
     enabled: !!chatId,
-    staleTime: 0,
+    staleTime: options?.staleTime ?? 0,
   });
 }
 

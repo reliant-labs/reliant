@@ -17,11 +17,22 @@ import { ChatPresenter } from "../ChatPresenter";
 
 const state = vi.hoisted(() => ({
   chat: undefined as Record<string, unknown> | undefined,
-  retry: vi.fn(async (_chatId: string) => true),
+  retry: vi.fn(async (_chatId: string, _useModel?: string) => true),
+  selection: null as Record<string, unknown> | null,
+  models: [] as Array<Record<string, unknown>>,
+  tiers: {} as Record<string, unknown>,
+  accounts: [] as unknown[],
 }));
 
 vi.mock("../../../hooks/chat-queries", () => ({
   useChat: () => ({ data: state.chat }),
+  useChatSelection: () => ({ data: state.selection }),
+}));
+vi.mock("../../../store/globalDataStore", () => ({
+  useModels: () => ({ models: state.models, tiers: state.tiers, loading: false, error: null }),
+}));
+vi.mock("../../../hooks/provider-account-queries", () => ({
+  useProviderAccounts: () => ({ data: { kind: "ready", accounts: state.accounts } }),
 }));
 vi.mock("../../../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../api/client")>();
@@ -85,6 +96,10 @@ function renderPresenter() {
 beforeEach(() => {
   state.retry.mockClear();
   onStop.mockClear();
+  state.selection = null;
+  state.models = [];
+  state.tiers = {};
+  state.accounts = [];
   state.chat = {
     id: "chat-1",
     workflowId: "chat-1",
@@ -110,6 +125,42 @@ describe("ChatPresenter: a run held for a usage limit", () => {
     renderPresenter();
     fireEvent.click(screen.getByRole("button", { name: "Retry now" }));
     await waitFor(() => expect(state.retry).toHaveBeenCalledWith("chat-1"));
+  });
+
+  it("offers no model switch when nothing else can serve", () => {
+    renderPresenter();
+    expect(screen.queryByRole("button", { name: /^Use .* now$/ })).toBeNull();
+  });
+
+  describe("with another provider connected", () => {
+    beforeEach(() => {
+      state.selection = { params: { model: { id: "claude-5.5-opus@claude" } }, providerPolicy: {} };
+      state.models = [
+        { id: "claude-5.5-opus@claude", name: "Claude 5.5 Opus", provider: "Claude subscription", driverId: "claude", tags: ["flagship"] },
+        { id: "gpt-5.6-sol@codex", name: "GPT-5.6 Sol", provider: "Codex", driverId: "codex", tags: ["flagship"] },
+      ];
+    });
+
+    it("\"Use <model> now\" sends use_model, not a plain retry", async () => {
+      renderPresenter();
+      fireEvent.click(screen.getByRole("button", { name: "Use GPT-5.6 Sol · Codex now" }));
+      await waitFor(() => expect(state.retry).toHaveBeenCalledWith("chat-1", "gpt-5.6-sol@codex"));
+    });
+
+    it("Retry now stays a plain retry beside it", async () => {
+      renderPresenter();
+      fireEvent.click(screen.getByRole("button", { name: "Retry now" }));
+      await waitFor(() => expect(state.retry).toHaveBeenCalledWith("chat-1"));
+      expect(state.retry).not.toHaveBeenCalledWith("chat-1", expect.anything());
+    });
+
+    it("names the account of the limited provider that returns first", () => {
+      const at = (min: number) => new Date(Date.now() + min * 60_000).toISOString();
+      const acct = (id: string, until: string) => ({ id, provider: "claude", label: `${id}@acme.com`, status: "limited", limitedUntil: until });
+      state.accounts = [acct("alice", at(90)), acct("bob", at(30))];
+      renderPresenter();
+      expect(screen.getByTestId("usage-limit-earliest-account")).toHaveTextContent("bob@acme.com is back");
+    });
   });
 
   it("Stop is the run's ordinary stop", () => {

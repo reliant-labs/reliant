@@ -345,8 +345,8 @@ export const api = {
       return chatGrpc.pause(chatId);
     },
 
-    retryUsageLimitWait: async (chatId: string) => {
-      return chatGrpc.retryUsageLimitWait(chatId);
+    retryUsageLimitWait: async (chatId: string, useModel?: string) => {
+      return chatGrpc.retryUsageLimitWait(chatId, useModel);
     },
     resume: async (chatId: string) => {
       return chatGrpc.resume(chatId);

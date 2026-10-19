@@ -643,10 +643,11 @@ export const chatGrpc = {
   },
 
   // "Retry now" on a run held until a provider's usage limit resets. Resolves to
-  // whether a waiting run was woken.
-  async retryUsageLimitWait(chatId: string): Promise<boolean> {
+  // whether a waiting run was woken. `useModel` ("<model>@<driver>") answers the
+  // wait with a cross-provider fallback instead, until the original reset.
+  async retryUsageLimitWait(chatId: string, useModel?: string): Promise<boolean> {
     const client = grpcClient.chat();
-    const response = await client.retryUsageLimitWait(create(RetryUsageLimitWaitRequestSchema, { chatId }));
+    const response = await client.retryUsageLimitWait(create(RetryUsageLimitWaitRequestSchema, { chatId, useModel }));
     return response.woken;
   },
 

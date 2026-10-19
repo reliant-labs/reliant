@@ -1,7 +1,8 @@
 import { cn } from '../../lib/utils';
-import { Info, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Info, AlertTriangle, ArrowLeftRight, CheckCircle, Undo2 } from 'lucide-react';
 import type { Message } from '../../api/client';
 import { ContentBlockType, DisplayStyle } from '../../gen/reliant/v1/chat_pb';
+import { boldSegments, providerNoticeKind } from '../../lib/providerNotice';
 
 interface SystemNotificationMessageProps {
   message: Message;
@@ -29,8 +30,24 @@ export function SystemNotificationMessage({ message }: SystemNotificationMessage
     }
   };
 
+  // Get the text content from contentBlocks
+  const content =
+    (message.contentBlocks || []).find(
+      (b) => b.type === ContentBlockType.TEXT,
+    )?.content ||
+    '';
+
+  // Account-switch notices mark the account and model names in **bold**.
+  const noticeKind = displayStyle === DisplayStyle.WARNING ? providerNoticeKind(content) : undefined;
+
   // Get icon based on displayStyle
   const getIcon = () => {
+    if (noticeKind === 'return') {
+      return <Undo2 className="w-3.5 h-3.5 text-warning flex-shrink-0" />;
+    }
+    if (noticeKind) {
+      return <ArrowLeftRight className="w-3.5 h-3.5 text-warning flex-shrink-0" />;
+    }
     switch (displayStyle) {
       case DisplayStyle.WARNING:
         return <AlertTriangle className="w-3.5 h-3.5 text-warning flex-shrink-0" />;
@@ -55,24 +72,28 @@ export function SystemNotificationMessage({ message }: SystemNotificationMessage
     }
   };
 
-  // Get the text content from contentBlocks
-  const content =
-    (message.contentBlocks || []).find(
-      (b) => b.type === ContentBlockType.TEXT,
-    )?.content ||
-    '';
-
   return (
-    <div className={cn(
-      "rounded-md border overflow-hidden my-0.5 px-2 py-1",
-      getColorClasses()
-    )}>
+    <div
+      data-notice-kind={noticeKind}
+      className={cn(
+        "rounded-md border overflow-hidden my-0.5 px-2 py-1",
+        getColorClasses()
+      )}
+    >
       <div className="flex items-center gap-1.5">
         {getIcon()}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs leading-tight text-foreground">
-              {content}
+              {noticeKind
+                ? boldSegments(content).map((seg, i) =>
+                    seg.bold ? (
+                      <strong key={i} className="font-semibold">{seg.text}</strong>
+                    ) : (
+                      <span key={i}>{seg.text}</span>
+                    ),
+                  )
+                : content}
             </div>
             <div className="text-2xs leading-tight text-muted-foreground flex-shrink-0">
               {formatTimestamp(message.createdAt || '')}
