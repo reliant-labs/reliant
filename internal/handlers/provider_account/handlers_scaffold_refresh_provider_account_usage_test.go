@@ -38,7 +38,10 @@
 package provider_account_test
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -46,27 +49,94 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	provider_account "github.com/reliant-labs/reliant/internal/handlers/provider_account"
+	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 )
 
-// TestRefreshProviderAccountUsage_Generated runs the canonical scaffold rows for RefreshProviderAccountUsage.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
+type fakeRefresher struct {
+	res  accountlimits.RefreshResult
+	err  error
+	user string
+	id   string
+}
+
+func (f *fakeRefresher) RefreshUsage(_ context.Context, userID, accountID string) (accountlimits.RefreshResult, error) {
+	f.user, f.id = userID, accountID
+	return f.res, f.err
+}
+
 func TestRefreshProviderAccountUsage_Generated(t *testing.T) {
 	t.Parallel()
 
-	// provider_account.NewTestProviderAccount (helpers_gen_test.go) returns the
-	// provider_account *Service wired with stubbed dependencies. Override one
-	// with provider_account.WithProviderAccountDeps(...), or per-row via Case.Setup.
-	svc := provider_account.NewTestProviderAccount(t)
+	used := 0.42
+	until := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	ok := &fakeRefresher{res: accountlimits.RefreshResult{
+		Account: core.ProviderAccount{ID: "acct-1", Provider: "claude", AuthKind: core.AuthKindOAuth, Email: "alice@example.com", Plan: "max_20x"},
+		Limits: &core.LimitState{AccountID: "acct-1", Source: accountlimits.SourceUsageAPI, ObservedAt: time.Now(),
+			Windows: []core.LimitWindow{{Name: "5h", UsedFraction: &used, ResetsAt: until, LengthS: 5 * 3600}}},
+	}}
+	throttled := &fakeRefresher{res: accountlimits.RefreshResult{
+		Account: core.ProviderAccount{ID: "acct-1", Provider: "claude", AuthKind: core.AuthKindOAuth}, Throttled: true,
+	}}
+	missing := &fakeRefresher{err: core.ErrProviderAccountNotFound}
+	broken := &fakeRefresher{err: errors.New("database unreachable")}
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RefreshProviderAccountUsageRequest, pb.RefreshProviderAccountUsageResponse]{
-		{
-			Name: "unimplemented_scaffold", // delete this row once you implement RefreshProviderAccountUsage; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.RefreshProviderAccountUsageRequest{}),
-			Ctx:  provider_account.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.RefreshProviderAccountUsageResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+	svc := func(r accountlimits.Refresher) *provider_account.Service {
+		return provider_account.NewTestProviderAccount(t, provider_account.WithProviderAccountDeps(provider_account.Deps{UsageRefresher: r}))
+	}
+	req := func(id string) *connect.Request[pb.RefreshProviderAccountUsageRequest] {
+		return connect.NewRequest(&pb.RefreshProviderAccountUsageRequest{AccountId: id})
+	}
+	run := func(s *provider_account.Service, name string, c tdd.RPCCase[pb.RefreshProviderAccountUsageRequest, pb.RefreshProviderAccountUsageResponse]) {
+		t.Run(name, func(t *testing.T) {
+			c.Name = name
+			tdd.RunRPCCases(t, []tdd.RPCCase[pb.RefreshProviderAccountUsageRequest, pb.RefreshProviderAccountUsageResponse]{c}, s.RefreshProviderAccountUsage)
+		})
+	}
+
+	run(svc(ok), "returns the refreshed account scoped to the caller", tdd.RPCCase[pb.RefreshProviderAccountUsageRequest, pb.RefreshProviderAccountUsageResponse]{
+		Req: req("acct-1"), Ctx: provider_account.AuthedContext(t),
+		Check: func(t *testing.T, resp *connect.Response[pb.RefreshProviderAccountUsageResponse]) {
+			if ok.user != "test-user" || ok.id != "acct-1" {
+				t.Errorf("refresher got user=%q account=%q", ok.user, ok.id)
+			}
+			if resp.Msg.GetThrottled() {
+				t.Error("throttled should be false")
+			}
+			a := resp.Msg.GetAccount()
+			if a.GetId() != "acct-1" || a.GetPlanDisplay() != "Max 20×" || len(a.GetWindows()) != 1 {
+				t.Fatalf("unexpected account: %v", a)
+			}
+			if w := a.GetWindows()[0]; w.GetLabel() != "5-hour" || w.GetUsedFraction() != 0.42 || w.GetResetsAt() != until.Format(time.RFC3339) {
+				t.Errorf("unexpected window: %v", w)
+			}
+			if a.GetUsageSource() != pb.UsageSource_USAGE_SOURCE_USAGE_API {
+				t.Errorf("usage source = %v", a.GetUsageSource())
+			}
 		},
-	}, svc.RefreshProviderAccountUsage)
+	})
+	run(svc(throttled), "within the floor the stored state comes back throttled", tdd.RPCCase[pb.RefreshProviderAccountUsageRequest, pb.RefreshProviderAccountUsageResponse]{
+		Req: req("acct-1"), Ctx: provider_account.AuthedContext(t),
+		Check: func(t *testing.T, resp *connect.Response[pb.RefreshProviderAccountUsageResponse]) {
+			if !resp.Msg.GetThrottled() || resp.Msg.GetAccount().GetId() != "acct-1" {
+				t.Errorf("unexpected response: %v", resp.Msg)
+			}
+		},
+	})
+	run(svc(ok), "an empty account id is invalid", tdd.RPCCase[pb.RefreshProviderAccountUsageRequest, pb.RefreshProviderAccountUsageResponse]{
+		Req: req(""), Ctx: provider_account.AuthedContext(t), WantErr: connect.CodeInvalidArgument,
+	})
+	run(svc(missing), "another user's or an unknown account is NotFound, never PermissionDenied", tdd.RPCCase[pb.RefreshProviderAccountUsageRequest, pb.RefreshProviderAccountUsageResponse]{
+		Req: req("someone-elses"), Ctx: provider_account.AuthedContext(t), WantErr: connect.CodeNotFound,
+	})
+	run(svc(broken), "a store failure is internal", tdd.RPCCase[pb.RefreshProviderAccountUsageRequest, pb.RefreshProviderAccountUsageResponse]{
+		Req: req("acct-1"), Ctx: provider_account.AuthedContext(t), WantErr: connect.CodeInternal,
+	})
+	run(svc(nil), "a server without the account store is unavailable", tdd.RPCCase[pb.RefreshProviderAccountUsageRequest, pb.RefreshProviderAccountUsageResponse]{
+		Req: req("acct-1"), Ctx: provider_account.AuthedContext(t), WantErr: connect.CodeUnavailable,
+	})
+	run(svc(ok), "anonymous callers are refused", tdd.RPCCase[pb.RefreshProviderAccountUsageRequest, pb.RefreshProviderAccountUsageResponse]{
+		Req: req("acct-1"), Ctx: context.Background(), WantErr: connect.CodeUnauthenticated,
+	})
 }

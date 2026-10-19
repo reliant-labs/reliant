@@ -790,7 +790,7 @@ func encodeWindows(ws []core.LimitWindow) ([]byte, error) {
 
 func (s *AccountStore) ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT account_id, user_id, status, windows, representative_window, source, observed_at,
-			limited_until, limited_window, limited_probes, usage_api_next_at, usage_api_failures, usage_api_error
+			limited_until, limited_window, limited_probes, usage_api_next_at, usage_api_failures, usage_api_error, last_traffic_at
 		FROM provider_account_limits WHERE user_id = $1`, userID)
 	if err != nil {
 		return nil, err
@@ -798,34 +798,96 @@ func (s *AccountStore) ListAccountLimits(ctx context.Context, userID string) (ma
 	defer rows.Close()
 	out := map[string]core.LimitState{}
 	for rows.Next() {
-		var (
-			l                                core.LimitState
-			windows                          []byte
-			repr, limitedWindow, usageAPIErr sql.NullString
-			limitedUntil, nextAt             sql.NullTime
-		)
-		if err := rows.Scan(&l.AccountID, &l.UserID, &l.Status, &windows, &repr, &l.Source, &l.ObservedAt,
-			&limitedUntil, &limitedWindow, &l.LimitedProbes, &nextAt, &l.UsageAPIFailures, &usageAPIErr); err != nil {
+		l, err := scanLimitState(rows)
+		if err != nil {
 			return nil, err
-		}
-		if err := json.Unmarshal(windows, &l.Windows); err != nil {
-			return nil, fmt.Errorf("decoding limit windows of account %s: %w", l.AccountID, err)
-		}
-		l.RepresentativeWindow, l.LimitedWindow, l.UsageAPIError = repr.String, limitedWindow.String, usageAPIErr.String
-		if limitedUntil.Valid {
-			t := limitedUntil.Time
-			l.LimitedUntil = &t
-		}
-		if nextAt.Valid {
-			t := nextAt.Time
-			l.UsageAPINextAt = &t
-		}
-		if !l.ObservedAt.After(epoch) {
-			l.ObservedAt = time.Time{}
 		}
 		out[l.AccountID] = l
 	}
 	return out, rows.Err()
+}
+
+// scanLimitState reads one provider_account_limits row in limitColumns order.
+func scanLimitState(r accountRow) (core.LimitState, error) {
+	var (
+		l                                core.LimitState
+		windows                          []byte
+		repr, limitedWindow, usageAPIErr sql.NullString
+		limitedUntil, nextAt, traffic    sql.NullTime
+	)
+	if err := r.Scan(&l.AccountID, &l.UserID, &l.Status, &windows, &repr, &l.Source, &l.ObservedAt,
+		&limitedUntil, &limitedWindow, &l.LimitedProbes, &nextAt, &l.UsageAPIFailures, &usageAPIErr, &traffic); err != nil {
+		return core.LimitState{}, err
+	}
+	if err := json.Unmarshal(windows, &l.Windows); err != nil {
+		return core.LimitState{}, fmt.Errorf("decoding limit windows of account %s: %w", l.AccountID, err)
+	}
+	l.RepresentativeWindow, l.LimitedWindow, l.UsageAPIError = repr.String, limitedWindow.String, usageAPIErr.String
+	if limitedUntil.Valid {
+		t := limitedUntil.Time
+		l.LimitedUntil = &t
+	}
+	if nextAt.Valid {
+		t := nextAt.Time
+		l.UsageAPINextAt = &t
+	}
+	if traffic.Valid {
+		l.LastTrafficAt = traffic.Time
+	}
+	if !l.ObservedAt.After(epoch) {
+		l.ObservedAt = time.Time{}
+	}
+	return l, nil
+}
+
+// GetAccountLimits returns one account's limit state, or (nil, nil) when it has none. Unlike
+// ListAccountLimits it is not scoped to a user: the usage poller leases bare account ids.
+func (s *AccountStore) GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error) {
+	l, err := scanLimitState(s.db.QueryRowContext(ctx, `SELECT account_id, user_id, status, windows, representative_window, source, observed_at,
+			limited_until, limited_window, limited_probes, usage_api_next_at, usage_api_failures, usage_api_error, last_traffic_at
+		FROM provider_account_limits WHERE account_id = $1`, accountID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &l, nil
+}
+
+// EnsureUsagePollScheduled schedules a usage poll for the account only when none is scheduled and
+// its provider is one of providers. It never moves an existing schedule, so a poll that is backing
+// off stays backed off while traffic keeps arriving, and it keeps the failure count (unlike
+// ScheduleUsagePoll). An absent account, or one whose limits row does not exist yet, is a no-op.
+func (s *AccountStore) EnsureUsagePollScheduled(ctx context.Context, accountID string, next time.Time, providers []string) error {
+	if next.IsZero() {
+		return errors.New("a poll time is required")
+	}
+	if len(providers) == 0 {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE provider_account_limits l SET usage_api_next_at = $2, updated_at = $4
+		FROM provider_accounts a
+		WHERE l.account_id = $1 AND a.id = l.account_id AND a.provider = ANY($3::text[]) AND l.usage_api_next_at IS NULL`,
+		accountID, next.UTC(), pq.Array(providers), s.now())
+	return err
+}
+
+// ClaimUsageFetch records that the caller is about to call the account's usage API and reports
+// whether it may: false when another caller claimed it within the last floor. The claim is one
+// atomic statement, so replicas share the floor. An absent account claims nothing.
+func (s *AccountStore) ClaimUsageFetch(ctx context.Context, accountID string, now time.Time, floor time.Duration) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `INSERT INTO provider_account_limits
+			(account_id, user_id, status, windows, source, observed_at, usage_polled_at, updated_at)
+		SELECT id, user_id, 'unknown', '[]'::jsonb, 'usage_api', $2, $3, $3 FROM provider_accounts WHERE id = $1
+		ON CONFLICT (account_id) DO UPDATE SET usage_polled_at = EXCLUDED.usage_polled_at, updated_at = EXCLUDED.updated_at
+		WHERE provider_account_limits.usage_polled_at IS NULL OR provider_account_limits.usage_polled_at <= $4`,
+		accountID, epoch, now.UTC(), now.Add(-floor).UTC())
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }
 
 func (s *AccountStore) UpsertAccountLimitSnapshot(ctx context.Context, snap core.LimitState) error {
@@ -851,9 +913,11 @@ func (s *AccountStore) UpsertAccountLimitSnapshot(ctx context.Context, snap core
 	// than the stored state means the provider is serving again: it lifts the bench early. It
 	// never touches the poll schedule. A snapshot for a deleted account inserts nothing.
 	_, err = s.db.ExecContext(ctx, `INSERT INTO provider_account_limits
-			(account_id, user_id, status, windows, representative_window, source, observed_at, updated_at)
-		SELECT id, user_id, $3, $4::jsonb, $5, $6, $7, $8 FROM provider_accounts WHERE id = $1 AND user_id = $2
+			(account_id, user_id, status, windows, representative_window, source, observed_at, last_traffic_at, updated_at)
+		SELECT id, user_id, $3, $4::jsonb, $5, $6::text, $7, CASE WHEN $6::text = 'headers' THEN $7::timestamptz END, $8
+		FROM provider_accounts WHERE id = $1 AND user_id = $2
 		ON CONFLICT (account_id) DO UPDATE SET
+			last_traffic_at = CASE WHEN EXCLUDED.source = 'headers' THEN EXCLUDED.observed_at ELSE provider_account_limits.last_traffic_at END,
 			status = EXCLUDED.status,
 			windows = EXCLUDED.windows,
 			representative_window = EXCLUDED.representative_window,

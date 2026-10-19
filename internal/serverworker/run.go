@@ -33,6 +33,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -461,6 +462,18 @@ func Run(ctx context.Context, opts Options) error {
 	relayCtx, stopRelay := context.WithCancel(ctx)
 	defer stopRelay()
 	go workflowevent.NewRelay(repo, temporalClient, v2workflow.SharedTaskQueue).Run(relayCtx)
+
+	// Account usage: persist the rate-limit headers every LLM response carries, and poll the
+	// providers' usage APIs for accounts those headers do not cover. Every worker runs a
+	// poller; accounts are leased with SKIP LOCKED, so they share the queue. The access token
+	// is the stored one until the per-account refresh coordinator lands (see accountlimits).
+	go (&accountlimits.Poller{
+		Store: repo,
+		Fetcher: &accountlimits.Fetcher{
+			Store:  repo,
+			Tokens: accountlimits.StoredTokens{Store: repo},
+		},
+	}).Run(relayCtx)
 
 	// -----------------------------------------------------------------
 	// 12. Health endpoint

@@ -654,6 +654,8 @@ type ProviderAccountLimit struct {
 	UsageApiFailures     int32           `json:"usage_api_failures"`
 	UsageApiError        sql.NullString  `json:"usage_api_error"`
 	UpdatedAt            time.Time       `json:"updated_at"`
+	LastTrafficAt        sql.NullTime    `json:"last_traffic_at"`
+	UsagePolledAt        sql.NullTime    `json:"usage_polled_at"`
 }
 
 type ProviderBackoff struct {

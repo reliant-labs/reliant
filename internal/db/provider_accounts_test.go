@@ -827,3 +827,36 @@ func TestDisplayLabel(t *testing.T) {
 	assert.Equal(t, "Openai key …1234", core.ProviderAccount{Provider: "openai", KeyHint: "1234"}.DisplayLabel())
 	assert.Equal(t, "Claude account", core.ProviderAccount{Provider: "claude"}.DisplayLabel())
 }
+
+func TestGetAccountLimitsAndLastTraffic(t *testing.T) {
+	repo, cleanup := SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	a := mustUpsert(t, repo, claudeUpsert("u1", "alice", "o", "t", "r"))
+
+	got, err := repo.GetAccountLimits(ctx, a.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got, "an account nothing has observed has no limit row")
+
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	hdr := core.LimitState{AccountID: a.ID, UserID: "u1", Status: "allowed", Source: "headers", ObservedAt: now}
+	require.NoError(t, repo.UpsertAccountLimitSnapshot(ctx, hdr))
+	got, err = repo.GetAccountLimits(ctx, a.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.True(t, got.LastTrafficAt.Equal(now), "a header snapshot is traffic")
+
+	// A usage-API reading is not traffic: it moves observed_at but not last_traffic_at.
+	api := core.LimitState{AccountID: a.ID, UserID: "u1", Status: "allowed", Source: "usage_api", ObservedAt: now.Add(time.Minute)}
+	require.NoError(t, repo.UpsertAccountLimitSnapshot(ctx, api))
+	got, err = repo.GetAccountLimits(ctx, a.ID)
+	require.NoError(t, err)
+	assert.True(t, got.ObservedAt.Equal(now.Add(time.Minute)))
+	assert.True(t, got.LastTrafficAt.Equal(now))
+	assert.Equal(t, "usage_api", got.Source)
+
+	// The same value comes back through ListAccountLimits.
+	m, err := repo.ListAccountLimits(ctx, "u1")
+	require.NoError(t, err)
+	assert.True(t, m[a.ID].LastTrafficAt.Equal(now))
+}

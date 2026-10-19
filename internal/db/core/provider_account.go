@@ -169,6 +169,10 @@ type LimitState struct {
 	UsageAPINextAt       *time.Time
 	UsageAPIFailures     int
 	UsageAPIError        string
+	// LastTrafficAt is when a response served by the account last carried rate-limit headers.
+	// Zero when none has. Unlike ObservedAt, a usage-API poll never moves it, which is what
+	// lets the poller tell an account in use from one it merely polled.
+	LastTrafficAt time.Time
 }
 
 // Assignment is a thread's sticky account for one provider.

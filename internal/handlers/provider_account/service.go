@@ -9,6 +9,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -19,6 +20,11 @@ import (
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
+	// UsageRefresher reads an account's usage on demand
+	// (RefreshProviderAccountUsage). A server that cannot reach the account
+	// store leaves it nil and the rpc answers Unavailable.
+	// forge:optional-dep
+	UsageRefresher accountlimits.Refresher
 	// Add your dependencies here (e.g. Repo Repository). Required ones get
 	// a validateDeps() check below. Tag intentionally-optional fields with
 	// the `forge:optional-dep` directive directly above the field.

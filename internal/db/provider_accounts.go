@@ -81,3 +81,21 @@ func (r *Repo) RecentAssignmentCounts(ctx context.Context, accountIDs []string, 
 func IsProviderAccountNotFound(err error) bool {
 	return errors.Is(err, core.ErrProviderAccountNotFound)
 }
+
+// GetAccountLimits returns one account's limit state, or (nil, nil) when it has none. Not part of
+// core.ProviderAccountStore: only the usage poller reads limits by bare account id.
+func (r *Repo) GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error) {
+	return r.accounts.GetAccountLimits(ctx, accountID)
+}
+
+// EnsureUsagePollScheduled schedules a usage poll only when none is scheduled and the account's
+// provider is one of providers.
+func (r *Repo) EnsureUsagePollScheduled(ctx context.Context, accountID string, next time.Time, providers []string) error {
+	return r.accounts.EnsureUsagePollScheduled(ctx, accountID, next, providers)
+}
+
+// ClaimUsageFetch reports whether the caller may call the account's usage API now: false when
+// another caller claimed it within the last floor.
+func (r *Repo) ClaimUsageFetch(ctx context.Context, accountID string, now time.Time, floor time.Duration) (bool, error) {
+	return r.accounts.ClaimUsageFetch(ctx, accountID, now, floor)
+}
