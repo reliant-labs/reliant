@@ -546,7 +546,7 @@ export function useForgeEnvironments(projectId: string | null | undefined): Forg
 export function useForgeRoster(projectId: string | null | undefined, forgeProject?: string | null) {
   const persistedName = useProjectStore((state) => persistedForgeProjectName(state, projectId));
   const topology = useForgeTopology(projectId);
-  // A forge project the URL names directly (see components/Forge/forgeScope)
+  // A forge project the URL names directly (see components/Forge/Console/consoleContext)
   // is the control plane's own key: nothing to resolve, and no daemon to ask
   // (the caller passes no project id then).
   const projectName: ForgeProjectName = forgeProject

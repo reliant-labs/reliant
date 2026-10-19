@@ -10,7 +10,7 @@
  * WHY A SIDEBAR. The sections used to be tab links squeezed into the title
  * bar beside "Close", where they read as window chrome rather than as the
  * area's navigation. A labelled vertical nav is the app's standard for a
- * full-page area — Settings and Deployments (ForgeShell) both use one — so
+ * full-page area — Settings and Deployments (Forge/Console/ConsoleShell) both use one — so
  * the three full-page areas now share a shape, and the title bar is left to
  * what Deployments uses it for: the scope (project) and the way out.
  *
