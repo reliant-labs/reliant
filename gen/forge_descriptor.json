@@ -8235,6 +8235,14 @@
           {
             "name": "tool_calls_in_flight",
             "kind": "uint32"
+          },
+          {
+            "name": "oom_kills",
+            "kind": "uint64"
+          },
+          {
+            "name": "last_oom_kill_at_ms",
+            "kind": "int64"
           }
         ],
         "reliant.v1.DaemonKillProcessRequest": [
@@ -35314,5 +35322,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "f17d40881d4fec5d07cba79ed678dbafbba230047eff2329d53ed2c9f225eba1"
+  "source_hash": "36a9b06a61a5343b8ff7f8d106f65dc291d08b728740af7874e586252e75fe10"
 }
