@@ -13,9 +13,39 @@ const (
 	laneGo       lane = "go"
 	laneWeb      lane = "web"
 	laneElectron lane = "electron"
+	// laneForgeGen is not a test runner: it runs the pinned `forge generate`
+	// and fails if that changes anything (make forge-generate-check).
+	laneForgeGen lane = "forge-generate"
 )
 
-var allLanes = []lane{laneGo, laneWeb, laneElectron}
+var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen}
+
+// forgeInputs are the paths `forge generate` reads (protos, migrations,
+// contract.go interfaces, package directives in doc.go, handler packages, the
+// pins and the sqlc hook's inputs) or writes (gen/, *_gen.go, the handler
+// mocks and harnesses, deploy/observability, .forge's records). A change to
+// one runs the forge-generate lane: a hand edit of an output is drift too.
+//
+// They are deliberately not rules: a rule claims a path for the test lanes,
+// and these claim nothing there, so a path only they name still fails safe.
+// The blind spot is a `//forge:` directive in a Go file that is not doc.go;
+// CI's "forge generate is a no-op" job checks the whole tree regardless.
+var forgeInputs = []string{
+	"forge.yaml", "go.mod", "go.sum", "buf.yaml", "buf.gen.yaml", "sqlc.yaml",
+	"proto/**", "db/**", "internal/db/postgres/queries/**", "internal/db/postgres/generated/**",
+	"**/contract.go", "**/doc.go", "**/*_gen.go", "internal/handlers/**",
+	"gen/**", "pkg/config/**", "deploy/**",
+	".forge/hashes.json", ".forge/scaffolded.json", ".forge/disowned.json",
+}
+
+func isForgeInput(p string) bool {
+	for _, pat := range forgeInputs {
+		if matchGlob(pat, p) {
+			return true
+		}
+	}
+	return false
+}
 
 // rule claims paths and says what a change to them selects. A path claimed by
 // no rule and by no Go package forces the full run: that is the fail-safe.

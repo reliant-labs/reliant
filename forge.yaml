@@ -18,9 +18,10 @@
 # stays the entrypoint: CI's "Generated code is up to date" job runs
 # `make generate-all`, and `forge generate` leaves that output byte-identical.
 # After changing a proto service or a contract.go interface, run
-# `forge generate` at the version go.mod pins and commit what it writes: the
-# generated mocks assert their interface at compile time, and
-# gen/forge_descriptor.json mirrors the protos.
+# `make forge-generate-check` (forge generate at forge_version below, which
+# must equal go.mod's) and commit what it writes: the generated mocks assert
+# their interface at compile time, and gen/forge_descriptor.json mirrors the
+# protos. CI's "forge generate is a no-op" job fails a change that skipped it.
 
 name: reliant
 module_path: github.com/reliant-labs/reliant

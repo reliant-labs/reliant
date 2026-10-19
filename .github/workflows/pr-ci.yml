@@ -532,6 +532,133 @@ jobs:
           fi
           echo "Generated code matches the committed output."
 
+  # The other half of the generated-code contract: what FORGE projects.
+  #
+  # `make generate-all` (generate-drift, above) does not run forge, so a PR that
+  # changed a proto, a contract.go interface or a migration without running the
+  # pinned `forge generate` merged green and left main's mocks, descriptor,
+  # harnesses or observability files stale — repeatedly. This job runs that
+  # forge (forge.yaml's forge_version, which must equal go.mod's) and fails,
+  # naming every file, if it changes anything.
+  #
+  # The logic is `make forge-generate-check` (scripts/check-forge-generate.sh),
+  # the same command `make test-affected` runs locally when a diff touches a
+  # forge input; this job only prepares the tools. It is its own job, beside
+  # generate-drift rather than inside it, so the two failures are attributed
+  # separately and both report on one run; it runs in parallel with the test
+  # shards and is shorter than them. Like generate-drift it is not gated on
+  # `changes`: a forge bump "only" touches go.mod and changes forge's output.
+  forge-generate:
+    name: forge generate is a no-op
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      # The Makefile pins GOTOOLCHAIN to go.mod's version for generation.
+      # `cache: false`: see "CACHES ARE SAVED ON MAIN ONLY" on the backend job.
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore Go module cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-mod-${{ runner.os }}-
+
+      # forge generate compiles the protoc plugins (`go tool`), tidies and
+      # validates the build, so it reads a backend shard's build cache, exactly
+      # as the lint job does. Restore only: this job never saves one.
+      - name: Restore Go build cache (a backend shard's)
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-build-backend-forge-generate-${{ github.sha }}
+          restore-keys: |
+            go-build-backend-
+
+      # protoc-gen-es is a node script, pinned by tools/protoc-gen-es's
+      # lockfile; `make` runs `npm ci` there itself.
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: tools/protoc-gen-es/package-lock.json
+
+      # forge runs `buf` from PATH; the Makefile hands it its pinned build.
+      # The forge pin is read from forge.yaml, which the check itself compares
+      # with go.mod, so this cache key equals the lint job's.
+      - name: Read pinned generator versions
+        id: pins
+        run: |
+          set -euo pipefail
+          echo "buf=$(sed -n 's/^BUF_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
+          echo "sqlc=$(sed -n 's/^SQLC_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
+          echo "forge=$(sed -n 's/^forge_version:[[:space:]]*//p' forge.yaml)" >> "$GITHUB_OUTPUT"
+
+      # Saved by generate-drift on main: the same key and paths.
+      - name: Restore pinned buf and sqlc
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/go/bin/buf-${{ steps.pins.outputs.buf }}
+            ~/go/bin/sqlc-${{ steps.pins.outputs.sqlc }}
+          key: gen-bins-${{ runner.os }}-${{ runner.arch }}-buf-${{ steps.pins.outputs.buf }}-sqlc-${{ steps.pins.outputs.sqlc }}
+
+      # Shared with the lint job: the same key, saved by whichever runs first
+      # on main.
+      - name: Restore forge binary
+        id: forge-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/bin/forge
+          key: forge-${{ runner.os }}-${{ steps.pins.outputs.forge }}
+
+      - name: Install forge
+        if: steps.forge-cache.outputs.cache-hit != 'true'
+        # GOPRIVATE: see the lint job's Install forge step.
+        env:
+          GOPRIVATE: github.com/reliant-labs/*
+          GONOSUMDB: github.com/reliant-labs/*
+          GONOSUMCHECK: "1"
+        run: go install "github.com/reliant-labs/forge/cmd/forge@${{ steps.pins.outputs.forge }}"
+
+      - name: Save forge binary (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.forge-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/go/bin/forge
+          key: ${{ steps.forge-cache.outputs.cache-primary-key }}
+
+      # generate starts an ephemeral Postgres to read the applied schema; its
+      # binaries come from Maven Central unless this cache holds them. forge's
+      # embedded-postgres pin fixes the archive, so the forge version keys it.
+      - name: Restore embedded Postgres binaries
+        id: pg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/forge/embedded-postgres
+          key: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.forge }}
+
+      # FORGE: the cached binary; the check refuses it unless it reports the
+      # pinned version.
+      - name: Run forge generate and require it to change nothing
+        run: FORGE="$HOME/go/bin/forge" make forge-generate-check FORGE_CHECK_FLAGS=--github
+
+      # A drift failure on main still keeps the binaries.
+      - name: Save embedded Postgres binaries (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.pg-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/forge/embedded-postgres
+          key: ${{ steps.pg-cache.outputs.cache-primary-key }}
+
   # ── Go unit tests, in two tiers ───────────────────────────────────────────
   #
   # The event picks the tier (see the header):

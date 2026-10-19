@@ -54,6 +54,12 @@ type ElectronPlan struct {
 	LaneFull
 }
 
+// ForgeGenPlan is the forge-generate lane (all or nothing): the pinned
+// `forge generate` must leave the tree as it found it.
+type ForgeGenPlan struct {
+	LaneFull
+}
+
 // Plan is the whole decision.
 type Plan struct {
 	Base     string       `json:"base"`
@@ -62,6 +68,7 @@ type Plan struct {
 	Go       GoPlan       `json:"go"`
 	Web      WebPlan      `json:"web"`
 	Electron ElectronPlan `json:"electron"`
+	ForgeGen ForgeGenPlan `json:"forge_generate"`
 }
 
 type reasons struct {
@@ -126,6 +133,7 @@ func Classify(changes []Change, g *Graph) *Plan {
 	c.selectGo()
 	c.selectWeb()
 	c.selectElectron()
+	c.pl.ForgeGen.LaneFull = laneFull(c.full[laneForgeGen])
 	return c.pl
 }
 
@@ -157,6 +165,10 @@ func (c *classifier) attribute(ch Change) {
 		}
 	}
 	c.attributeToReaders(ch)
+	if isForgeInput(ch.Path) {
+		rep.Rules = append(rep.Rules, "forge-input")
+		c.full[laneForgeGen] = append(c.full[laneForgeGen], ch.Path+": forge generate reads or writes it")
+	}
 	if len(matched) == 0 && !owned {
 		why := fmt.Sprintf("%s: claimed by no rule and no Go package (fail-safe)", ch.Path)
 		for _, l := range allLanes {

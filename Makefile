@@ -64,7 +64,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-short test-affected test-affected-plan test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
+.PHONY: all build build-all clean test test-short test-affected test-affected-plan test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry forge-generate-check release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
 
 # Default target
 all: deps fmt vet test build
@@ -458,6 +458,16 @@ db-regenerate: sqlc
 ## generate-all: Run every code generator (protobuf, sqlc, docs) — what CI's "Generated code is up to date" job runs
 generate-all: proto-generate generate
 	@echo "$(GREEN)✅ All code generation complete$(NC)"
+
+## forge-generate-check: Run forge.yaml's pinned `forge generate` and fail if it changes anything (CI's "forge generate is a no-op" job)
+# generate-all does not run forge: this is the check for what forge projects
+# (mocks, gen/forge_descriptor.json, harnesses, ...). It judges only what
+# generate changes, so it runs on a tree with uncommitted edits too.
+# `make test-affected` runs it when the diff touches a forge input.
+forge-generate-check: export GOWORK := off
+forge-generate-check: export GOTOOLCHAIN := $(GEN_GOTOOLCHAIN)
+forge-generate-check: $(BUF_BIN) $(PROTOC_GEN_ES)
+	@BUF="$(BUF_BIN)" ./scripts/check-forge-generate.sh $(FORGE_CHECK_FLAGS)
 
 ## generate-go: Run Go code generators only (protobuf Go + sqlc + Go reference files)
 generate-go: proto-generate-go generate-yaml-bindings generate-tool-catalog sqlc generate-schema generate-refcheck generate-cel-reference generate-nodes

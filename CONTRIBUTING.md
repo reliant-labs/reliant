@@ -62,6 +62,19 @@ make generate          # everything except the reliant TypeScript protobufs
 make help              # every individual generate-* target
 ```
 
+`make generate-all` does not run forge. What forge projects — the generated
+mocks, `gen/forge_descriptor.json`, the per-service test harnesses,
+`deploy/observability/` — is checked by CI's **forge generate is a no-op** job:
+after changing a `.proto`, a `contract.go` interface, a migration or the forge
+pin, run
+
+```bash
+make forge-generate-check  # forge.yaml's pinned `forge generate`; fails, naming each file, if it changed any
+```
+
+and commit what it wrote. `make test-affected` runs it for you when your diff
+touches a forge input.
+
 Regenerating an unchanged tree is a no-op on every machine, because nothing a
 generator runs comes from the machine:
 

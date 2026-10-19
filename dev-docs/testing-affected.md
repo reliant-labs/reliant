@@ -20,6 +20,13 @@ It is the first thing to run before pushing. It does not replace the full lane
 | Go | `go test -short -timeout 60s <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
 | web | `npx vitest run <files>` in `web/` | every vitest file that imports a changed module, transitively |
 | electron | `npm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
+| forge-generate | `make forge-generate-check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, the sqlc queries, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml`/`sqlc.yaml` (`forgeInputs` in `rules.go`) |
+
+The forge-generate lane is CI's **forge generate is a no-op** job, run locally.
+It leaves what it regenerated in your tree, so the fix is to commit those
+files. It judges only what generate changes, not whether the tree is clean, so
+your uncommitted edits are fine; do not edit files while it runs. Its blind
+spot is a `//forge:` directive in a Go file other than `doc.go`.
 
 Knobs (environment): `TEST_BASE=<rev>` moves the diff base (a stacked branch),
 `TEST_FULL=1` runs every lane in full, `LANES=go,web` picks lanes. For other
@@ -130,7 +137,8 @@ cannot see).
 - **Other jobs** run identically on every event: `Lint (forge)` (in parallel;
   `--migration-safety` blocks, the full lint reports), web lint/typecheck/build,
   vitest in two shards (`Web (vitest 1/2)`, `2/2`), Playwright, the e2e
-  stories, generated-code drift.
+  stories, generated-code drift, and `forge generate is a no-op` (the
+  forge-generate lane above).
 - **Caches are saved only on main.** A PR restores main's caches and never
   saves its own: a PR-scoped cache is unreachable from any other ref.
 

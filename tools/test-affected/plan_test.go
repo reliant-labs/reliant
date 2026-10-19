@@ -191,15 +191,15 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 		path  string
 		lanes []lane
 	}{
-		{"go.mod", []lane{laneGo}},
-		{"go.sum", []lane{laneGo}},
+		{"go.mod", []lane{laneGo, laneForgeGen}},
+		{"go.sum", []lane{laneGo, laneForgeGen}},
 		{"Makefile", allLanes},
 		{"forge.yaml", allLanes},
 		{"web/package.json", []lane{laneWeb}},
 		{"web/vite.config.ts", []lane{laneWeb}},
 		{"web/src/test/setup.ts", []lane{laneWeb}},
 		{"package-lock.json", []lane{laneWeb, laneElectron}},
-		{"proto/buf.yaml", []lane{laneGo, laneWeb}},
+		{"proto/buf.yaml", []lane{laneGo, laneWeb, laneForgeGen}},
 	}
 	for _, tc := range cases {
 		pl := classify(tc.path)
@@ -213,6 +213,8 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 				got = pl.Web.Full
 			case laneElectron:
 				got = pl.Electron.Full
+			case laneForgeGen:
+				got = pl.ForgeGen.Full
 			}
 			if got != want {
 				t.Errorf("%s: lane %s full = %v, want %v", tc.path, l, got, want)
@@ -223,8 +225,8 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 
 func TestUnclaimedPathFailsSafe(t *testing.T) {
 	pl := classify("some-new-top-level-thing/x.dat")
-	if !pl.Go.Full || !pl.Web.Full || !pl.Electron.Full {
-		t.Fatalf("a path nothing claims must run everything: go=%v web=%v electron=%v", pl.Go.Full, pl.Web.Full, pl.Electron.Full)
+	if !pl.Go.Full || !pl.Web.Full || !pl.Electron.Full || !pl.ForgeGen.Full {
+		t.Fatalf("a path nothing claims must run everything: go=%v web=%v electron=%v forge-generate=%v", pl.Go.Full, pl.Web.Full, pl.Electron.Full, pl.ForgeGen.Full)
 	}
 	if !strings.Contains(strings.Join(pl.Go.Reasons, " "), "some-new-top-level-thing/x.dat") {
 		t.Fatalf("the reason must name the path: %v", pl.Go.Reasons)
@@ -237,6 +239,37 @@ func TestInertPathsSelectNothing(t *testing.T) {
 		if pl.Go.Full || pl.Web.Full || len(pl.Go.Packages) != 0 || len(pl.Web.Tests) != 0 {
 			t.Errorf("%s selected something: go=%v/%v web=%v/%v", p, pl.Go.Full, pl.Go.Packages, pl.Web.Full, pl.Web.Tests)
 		}
+	}
+}
+
+func TestForgeInputsRunForgeGenerate(t *testing.T) {
+	for _, p := range []string{
+		"proto/reliant/v1/chat.proto", "db/migrations/20261101000000_x.up.sql", "internal/vault/contract.go",
+		"internal/vault/doc.go", "internal/handlers/chat/rpc_send.go", "internal/vault/mock_gen.go",
+		"gen/forge_descriptor.json", "deploy/observability/x.json", ".forge/hashes.json",
+		"internal/db/postgres/queries/chats.sql", "forge.yaml", "go.mod",
+	} {
+		pl := classify(p)
+		if !pl.ForgeGen.Full {
+			t.Errorf("%s is a forge generate input or output: the forge-generate lane must run", p)
+		}
+		if !strings.Contains(strings.Join(pl.ForgeGen.Reasons, " "), p) {
+			t.Errorf("%s: the reason must name the path: %v", p, pl.ForgeGen.Reasons)
+		}
+	}
+	for _, p := range []string{"internal/leaf/leaf.go", "web/src/lib/leaf.ts", "electron/src/menu-shortcuts.js", "docs/x.md", ".github/workflows/pr-ci.yml"} {
+		if pl := classify(p); pl.ForgeGen.Full {
+			t.Errorf("%s is not a forge input: forge-generate must not run (%v)", p, pl.ForgeGen.Reasons)
+		}
+	}
+}
+
+func TestForgeInputClaimsNothingForTheTestLanes(t *testing.T) {
+	// deploy/observability is claimed by the data rule: being a forge output
+	// must not change what the test lanes select for it.
+	pl := classify("deploy/observability/x.json")
+	if pl.Go.Full || pl.Web.Full || pl.Electron.Full {
+		t.Fatalf("a forge input must not widen the test lanes: go=%v web=%v electron=%v", pl.Go.Full, pl.Web.Full, pl.Electron.Full)
 	}
 }
 
@@ -464,9 +497,22 @@ func TestRunnerFullLanesRunEverything(t *testing.T) {
 	}
 }
 
+func TestRunnerRunsTheForgeGenerateCheckFirst(t *testing.T) {
+	pl := classify("internal/vault/contract.go")
+	steps := (&runner{root: "/repo"}).steps(pl, laneSet("go,web,electron,forge-generate"))
+	if len(steps) == 0 || strings.Join(steps[0].argv, " ") != "make --no-print-directory forge-generate-check" || steps[0].dir != "/repo" {
+		t.Fatalf("the forge-generate check must run first, from the repo root: %+v", steps)
+	}
+	for _, s := range (&runner{root: "/repo"}).steps(pl, laneSet("go")) {
+		if strings.Contains(strings.Join(s.argv, " "), "forge-generate-check") {
+			t.Fatal("-lanes go must not run the forge-generate check")
+		}
+	}
+}
+
 func TestNothingToRunRunsNothing(t *testing.T) {
 	pl := classify("docs/x.md")
-	if steps := (&runner{root: "/repo"}).steps(pl, laneSet("go,web,electron")); len(steps) != 0 {
+	if steps := (&runner{root: "/repo"}).steps(pl, laneSet("go,web,electron,forge-generate")); len(steps) != 0 {
 		t.Fatalf("an inert diff runs nothing, got %v", steps)
 	}
 }
