@@ -66,6 +66,7 @@ vi.mock("../../lib/daemon-wait", async (importOriginal) => ({
 import { canRetryFailedSend, useChatStore } from "../chatStore";
 import { useActivityStore, ChatActivity } from "../activityStore";
 import { useProjectStore } from "../projectStore";
+import { useChatParamsStore } from "../chatParamsStore";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import {
   clearAllMessagesCache,
@@ -253,6 +254,51 @@ describe("a send that fails for good", () => {
     expect(transcriptIds()).toEqual([`optimistic-user-${failedId}`]);
     expect(canRetryFailedSend(failedId)).toBe(false);
     expect(Math.max(...renders.map((r) => r.transcript.length + r.strip.length))).toBe(1);
+  });
+
+  it("is retried on the model selected now, not the one from the first attempt", async () => {
+    const first = { model: { tags: ["flagship"] } };
+    const now = { model: { id: "claude-5-sonnet" } };
+    useChatParamsStore.getState().setChatParams(CHAT, first);
+    sendMessageMock.mockRejectedValueOnce(refused());
+    await act(async () => {
+      await expect(
+        useChatStore.getState().sendMessage(CHAT, TEXT, undefined, { workflowParams: first }),
+      ).rejects.toThrow();
+    });
+    await settle();
+    const failedId = clientIdOf(failedEntry()!);
+
+    useChatParamsStore.getState().setChatParams(CHAT, now);
+    sendMessageMock.mockResolvedValueOnce(saved());
+    await act(async () => {
+      await useChatStore.getState().retryFailedSend(CHAT, failedId);
+    });
+    await settle();
+
+    expect(sendMessageMock.mock.calls[0][3].workflow_params).toEqual(first);
+    expect(sendMessageMock.mock.calls[1][3].workflow_params).toEqual(now);
+  });
+
+  it("is retried with the first attempt's params when the chat has none stored", async () => {
+    const first = { model: { tags: ["flagship"] } };
+    useChatParamsStore.getState().removeChatParams(CHAT);
+    sendMessageMock.mockRejectedValueOnce(refused());
+    await act(async () => {
+      await expect(
+        useChatStore.getState().sendMessage(CHAT, TEXT, undefined, { workflowParams: first }),
+      ).rejects.toThrow();
+    });
+    await settle();
+    const failedId = clientIdOf(failedEntry()!);
+
+    sendMessageMock.mockResolvedValueOnce(saved());
+    await act(async () => {
+      await useChatStore.getState().retryFailedSend(CHAT, failedId);
+    });
+    await settle();
+
+    expect(sendMessageMock.mock.calls[1][3].workflow_params).toEqual(first);
   });
 
   it("is sent again under the same id however many times it fails", async () => {

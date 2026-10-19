@@ -209,3 +209,83 @@ export function formatValueForDisplay(value: unknown): string {
   }
   return String(value);
 }
+
+/** The workflow-level preset target. The settings popover used to call it "default". */
+const LEGACY_WORKFLOW_PRESET_TARGET = "default";
+
+/**
+ * Repair workflow params stored by older builds so a send is not refused.
+ *
+ *   - `thinking_level` at the top level (the Cmd+K H shortcut wrote it there)
+ *     is not a workflow input; effort lives in `model.thinking_level`. It moves
+ *     there when the model is already a selector without one, else is dropped.
+ *   - `default.<param>` keys (the popover's preset picker wrote them under the
+ *     wrong target) are workflow-level params. They fill `<param>` only when it
+ *     is unset: the plain key is what the pill and the run were using.
+ *
+ * Group params ("Agent A.model") are left alone. Returns the input object
+ * itself when nothing needed repair.
+ */
+export function repairLegacyWorkflowParams(
+  params: Record<string, unknown>
+): Record<string, unknown> {
+  const legacyPrefix = `${LEGACY_WORKFLOW_PRESET_TARGET}.`;
+  const needsRepair = Object.keys(params).some(
+    (key) => key === "thinking_level" || key.startsWith(legacyPrefix)
+  );
+  if (!needsRepair) return params;
+
+  const repaired: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (key === "thinking_level" || key.startsWith(legacyPrefix)) continue;
+    repaired[key] = value;
+  }
+  for (const [key, value] of Object.entries(params)) {
+    if (!key.startsWith(legacyPrefix)) continue;
+    const name = key.slice(legacyPrefix.length);
+    if (name && repaired[name] === undefined) repaired[name] = value;
+  }
+
+  const level = params.thinking_level;
+  const model = repaired.model;
+  if (typeof level === "string" && level && isPlainObject(model) && !model.thinking_level) {
+    repaired.model = { ...model, thinking_level: level };
+  }
+  return repaired;
+}
+
+/** Preset selections stored under the legacy "default" target belong to the workflow ("" target). */
+export function repairLegacyPresetSelections<T>(
+  selections: Record<string, T>
+): Record<string, T> {
+  if (!(LEGACY_WORKFLOW_PRESET_TARGET in selections)) return selections;
+  const { [LEGACY_WORKFLOW_PRESET_TARGET]: legacy, ...rest } = selections;
+  return "" in rest ? rest : { ...rest, "": legacy };
+}
+
+/**
+ * Set the reasoning effort on the params' model selector — the one place a
+ * send accepts it. A bare-string model becomes `{id}`; with no model set there
+ * is no selector to carry the effort, so the params come back unchanged.
+ */
+export function withThinkingLevel(
+  params: Record<string, unknown>,
+  level: string
+): Record<string, unknown> {
+  const model = params.model;
+  if (typeof model === "string" && model) {
+    return { ...params, model: { id: model, thinking_level: level } };
+  }
+  if (isPlainObject(model)) {
+    return { ...params, model: { ...model, thinking_level: level } };
+  }
+  return params;
+}
+
+/** The effort currently set on the params' model selector, if any. */
+export function currentThinkingLevel(params: Record<string, unknown>): string | undefined {
+  const model = params.model;
+  if (!isPlainObject(model)) return undefined;
+  const level = model.thinking_level;
+  return typeof level === "string" && level ? level : undefined;
+}

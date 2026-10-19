@@ -1954,6 +1954,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // server answers with the message it already has, and starts nothing.
     get().discardFailedSend(chatId, clientMessageId);
     const retryId = clientMessageId;
+    // The params captured at the first attempt carry that attempt's model. The
+    // composer persists every change to the chat's params, so what is stored
+    // now is what the pill shows; the captured ones are only the fallback.
+    const currentParams = useChatParamsStore.getState().getChatParams(chatId);
+    const workflowParams =
+      Object.keys(currentParams).length > 0 ? currentParams : payload.options.workflowParams;
     try {
       // The same path the composer takes (ChatContainer): routed for a chat
       // that still needs starting, and retried while its machine comes up.
@@ -1966,6 +1972,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             payload.attachmentIds,
             {
               ...payload.options,
+              workflowParams,
               workflow: payload.options.workflow ?? null,
               clientMessageId: retryId,
             },

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Loader2, ChevronDown, ChevronRight } from "lucide-react";
-import { useModels } from "../../store/globalDataStore";
+import { useGlobalDataStore, useModels } from "../../store/globalDataStore";
 import {
   readSetting,
   upsertStringSetting,
@@ -128,6 +128,11 @@ export async function saveTagConfig(tag: string, config: TagModelConfig) {
     // preferences panel touches several tags at once.
     await upsertStringSetting(key, JSON.stringify(config));
   }
+
+  // The composer's tier pills and the By Tag rows read the server's tier
+  // table, which a preference changes; without this they name the old model
+  // until the next reload.
+  await useGlobalDataStore.getState().refetchModels();
 }
 
 // ---------------------------------------------------------------------------

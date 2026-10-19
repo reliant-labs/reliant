@@ -63,6 +63,18 @@ describe('chat-grpc workflow_params payload contracts', () => {
     expect(modelFields.id).toMatchObject({ kind: { case: 'stringValue', value: 'claude-3-7-sonnet' } });
   });
 
+  it('buildWorkflowParamsPayload repairs params stored by older builds instead of refusing the send', () => {
+    const payload = buildWorkflowParamsPayload({
+      model: { tags: ['flagship'] },
+      thinking_level: 'high',
+      'default.mode': 'plan',
+    });
+
+    expect(Object.keys(payload).sort()).toEqual(['mode', 'model']);
+    const model = payload.model.kind.case === 'structValue' ? payload.model.kind.value.fields : {};
+    expect(model.thinking_level).toMatchObject({ kind: { case: 'stringValue', value: 'high' } });
+  });
+
   it('buildWorkflowParamsPayload rejects dotted keys', () => {
     expect(() =>
       buildWorkflowParamsPayload({

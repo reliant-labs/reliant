@@ -7,8 +7,12 @@ import {
   isModelInputRequired,
   nestedToFlatParams,
   paramValuesEqual,
+  currentThinkingLevel,
   reconcileParamsWithServer,
+  repairLegacyPresetSelections,
+  repairLegacyWorkflowParams,
   threadParamsAcceptChanges,
+  withThinkingLevel,
 } from "../paramUtils";
 import { buildWorkflowInputsFromProto } from "../../components/Chat/ChatInput";
 
@@ -360,5 +364,85 @@ describe("threadParamsAcceptChanges", () => {
   it("refuses edits for a finished thread, and when nothing is known yet", () => {
     expect(threadParamsAcceptChanges({ isRunning: false, resumable: false })).toBe(false);
     expect(threadParamsAcceptChanges(null)).toBe(false);
+  });
+});
+
+describe("thinking level lives on the model selector (Cmd+K H)", () => {
+  it("withThinkingLevel writes model.thinking_level and never a top-level key", () => {
+    const next = withThinkingLevel({ mode: "auto", model: { tags: ["flagship"] } }, "high");
+    expect(next).toEqual({ mode: "auto", model: { tags: ["flagship"], thinking_level: "high" } });
+    expect(next).not.toHaveProperty("thinking_level");
+  });
+
+  it("promotes a bare-string model to a selector", () => {
+    expect(withThinkingLevel({ model: "gpt-5" }, "low")).toEqual({
+      model: { id: "gpt-5", thinking_level: "low" },
+    });
+  });
+
+  it("leaves params without a model alone rather than inventing a top-level key", () => {
+    const params = { mode: "auto" };
+    expect(withThinkingLevel(params, "high")).toBe(params);
+  });
+
+  it("currentThinkingLevel reads it back from the selector", () => {
+    expect(currentThinkingLevel({ model: { id: "m", thinking_level: "medium" } })).toBe("medium");
+    expect(currentThinkingLevel({ thinking_level: "medium" })).toBeUndefined();
+    expect(currentThinkingLevel({})).toBeUndefined();
+  });
+});
+
+describe("repairLegacyWorkflowParams", () => {
+  it("returns the same object when nothing needs repair", () => {
+    const params = { mode: "auto", model: { id: "m" }, "Agent A.model": { id: "x" } };
+    expect(repairLegacyWorkflowParams(params)).toBe(params);
+  });
+
+  it("moves a stored top-level thinking_level onto the model selector", () => {
+    expect(
+      repairLegacyWorkflowParams({ model: { tags: ["fast"] }, thinking_level: "high" })
+    ).toEqual({ model: { tags: ["fast"], thinking_level: "high" } });
+  });
+
+  it("keeps a thinking_level already on the selector and drops the stale one", () => {
+    expect(
+      repairLegacyWorkflowParams({ model: { id: "m", thinking_level: "low" }, thinking_level: "high" })
+    ).toEqual({ model: { id: "m", thinking_level: "low" } });
+  });
+
+  it("drops a stored thinking_level when there is no selector to carry it", () => {
+    expect(repairLegacyWorkflowParams({ mode: "auto", thinking_level: "high" })).toEqual({ mode: "auto" });
+  });
+
+  it("rewrites default.* keys to workflow-level keys without clobbering a set value", () => {
+    expect(
+      repairLegacyWorkflowParams({ "default.model": { id: "preset-model" }, "default.tools": ["a"], mode: "plan" })
+    ).toEqual({ model: { id: "preset-model" }, tools: ["a"], mode: "plan" });
+    expect(
+      repairLegacyWorkflowParams({ model: { id: "current" }, "default.model": { id: "stale" } })
+    ).toEqual({ model: { id: "current" } });
+  });
+
+  it("leaves real group keys alone", () => {
+    const params = { "Agent A.model": { id: "x" }, "default.mode": "plan" };
+    expect(repairLegacyWorkflowParams(params)).toEqual({ "Agent A.model": { id: "x" }, mode: "plan" });
+  });
+});
+
+describe("repairLegacyPresetSelections", () => {
+  it("moves the legacy default target to the workflow target", () => {
+    expect(repairLegacyPresetSelections({ default: "fast-preset" })).toEqual({ "": "fast-preset" });
+  });
+
+  it("keeps an existing workflow-level selection", () => {
+    expect(repairLegacyPresetSelections({ default: "old", "": "new", Agent: "a" })).toEqual({
+      "": "new",
+      Agent: "a",
+    });
+  });
+
+  it("returns the same object when there is no legacy target", () => {
+    const selections = { "": "p" };
+    expect(repairLegacyPresetSelections(selections)).toBe(selections);
   });
 });

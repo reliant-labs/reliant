@@ -2,6 +2,7 @@
 
 import { grpcClient } from "./grpc-client";
 import { singleflight } from "../lib/singleflight";
+import { repairLegacyWorkflowParams } from "../lib/paramUtils";
 import { create } from "@bufbuild/protobuf";
 import { jsToProtoValue, protoValueToJs, type ProtoValue } from "./proto-utils";
 import {
@@ -231,11 +232,16 @@ function hasDottedWorkflowParamKey(workflowParams: Record<string, unknown>): boo
 }
 
 export function buildWorkflowParamsPayload(
-  workflowParams?: Record<string, unknown>,
+  rawWorkflowParams?: Record<string, unknown>,
 ): Record<string, ProtoValue> {
-  if (!workflowParams) {
+  if (!rawWorkflowParams) {
     return {};
   }
+
+  // Params persisted by older builds (a top-level thinking_level, "default."
+  // preset keys) would be refused; repair them here so a stored value never
+  // blocks a send.
+  const workflowParams = repairLegacyWorkflowParams(rawWorkflowParams);
 
   if (hasDottedWorkflowParamKey(workflowParams)) {
     throw new Error(

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { logger } from '../lib/logger';
+import { repairLegacyPresetSelections, repairLegacyWorkflowParams } from '../lib/paramUtils';
 
 /**
  * Persisted store for per-chat workflow params and preset selections.
@@ -48,6 +49,21 @@ interface ChatParamsStore {
   setTempNewChatPresets: (presets: PresetSelections) => void;
   transferTempToChat: (chatId: string) => void;
   clearTempNewChatParams: () => void;
+}
+
+function repairLegacyState(state: {
+  chatParams?: Record<string, WorkflowParams>;
+  chatPresets?: Record<string, PresetSelections>;
+}) {
+  const chatParams: Record<string, WorkflowParams> = {};
+  for (const [id, params] of Object.entries(state.chatParams ?? {})) {
+    chatParams[id] = repairLegacyWorkflowParams(params);
+  }
+  const chatPresets: Record<string, PresetSelections> = {};
+  for (const [id, presets] of Object.entries(state.chatPresets ?? {})) {
+    chatPresets[id] = repairLegacyPresetSelections(presets);
+  }
+  return { chatParams, chatPresets };
 }
 
 export const useChatParamsStore = create<ChatParamsStore>()(
@@ -149,7 +165,7 @@ export const useChatParamsStore = create<ChatParamsStore>()(
     }),
     {
       name: 'reliant-chat-params',
-      version: 6,
+      version: 7,
       partialize: (state) => ({
         chatParams: state.chatParams,
         chatPresets: state.chatPresets,
@@ -202,7 +218,15 @@ export const useChatParamsStore = create<ChatParamsStore>()(
               chatPresets[id] = presets as PresetSelections;
             }
           }
-          return { chatParams: cleanParams, chatPresets };
+          return repairLegacyState({ chatParams: cleanParams, chatPresets });
+        }
+        // v6 → v7: the Cmd+K H shortcut stored a top-level `thinking_level` and
+        // the popover's preset picker stored `default.*` keys; both make every
+        // send fail. Repair them in place.
+        if (version === 6) {
+          return repairLegacyState(
+            persistedState as { chatParams?: Record<string, WorkflowParams>; chatPresets?: Record<string, PresetSelections> }
+          );
         }
         return persistedState;
       },

@@ -55,10 +55,12 @@ import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from
 import { useActiveThreads } from "../../store/threadActivityStore";
 import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
 import {
+  currentThinkingLevel,
   nestedToFlatParams,
   paramValuesEqual,
   reconcileParamsWithServer,
   threadParamsAcceptChanges,
+  withThinkingLevel,
 } from "../../lib/paramUtils";
 import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
@@ -1443,11 +1445,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           return;
         }
 
-        const current = workflowParams.thinking_level as string | undefined;
+        const current = currentThinkingLevel(workflowParams);
         const index = current ? levels.indexOf(current) : -1;
         const next = levels[(index + 1) % levels.length];
 
-        handleWorkflowParamsChange({ ...workflowParams, thinking_level: next });
+        handleWorkflowParamsChange(withThinkingLevel(workflowParams, next));
         toast.info(`Thinking level: ${next}`);
       };
 
@@ -1636,8 +1638,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           values={popoverValues}
           onChange={popoverOnChange}
           presets={presets}
-          selectedPreset={selectedPresets?.["default"] ?? null}
-          onPresetChange={(preset) => handlePresetChange("default", preset)}
+          selectedPreset={selectedPresets?.[""] ?? null}
+          onPresetChange={(preset) => handlePresetChange("", preset)}
           workflowTag={workflowTagInfo?.workflowTag}
           groupTags={workflowTagInfo?.groupTags}
         />
