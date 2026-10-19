@@ -464,3 +464,66 @@ func TestUnarchive_OfAParkedRow(t *testing.T) {
 		assert.True(t, exists(q), "the parked copy is untouched")
 	})
 }
+
+// Commits only the workspace held are saved under a ref and the directory is
+// removed; recreating it brings the branch back and keeps the saved ref listed,
+// because a saved commit is never applied as a snapshot.
+func TestRecreate_KeepsSavedCommitRefsListed(t *testing.T) {
+	e := newReclaimEnv(t)
+	wt, path := e.worktree(t, "saved")
+	require.NoError(t, os.WriteFile(filepath.Join(path, "b.txt"), []byte("local\n"), 0o644))
+	gitIn(t, path, "add", ".")
+	gitIn(t, path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "never pushed")
+	sha := gitIn(t, path, "rev-parse", "HEAD")
+	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
+	age(t, path)
+	require.NoError(t, e.sweeper.Sweep(e.ctx))
+	require.False(t, exists(path), "unpushed commits no longer keep the directory")
+	gone, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	require.True(t, gone.CleanupMetadata.DirectoryDeleted)
+	require.Len(t, gone.CleanupMetadata.SnapshotRefs, 1)
+	ref := gone.CleanupMetadata.SnapshotRefs[0]
+	assert.Equal(t, sha, gitIn(t, e.project.Path, "rev-parse", ref))
+
+	_, err := e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
+	require.NoError(t, err)
+	assert.Equal(t, sha, gitIn(t, path, "rev-parse", "HEAD"), "the branch held the commit and is checked out again")
+	after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	require.NotNil(t, after.CleanupMetadata)
+	assert.Equal(t, []string{ref}, after.CleanupMetadata.SnapshotRefs, "the saved commit stays listed")
+}
+
+// A recreate that re-applies the saved snapshot still keeps the refs that hold
+// saved commits on the row: those are never applied, and are the only listing.
+func TestRecreate_AppliedSnapshotKeepsSavedCommitRefs(t *testing.T) {
+	e := newReclaimEnv(t)
+	wt, path := e.worktree(t, "both")
+	require.NoError(t, os.WriteFile(filepath.Join(path, "lost.txt"), []byte("reset away\n"), 0o644))
+	gitIn(t, path, "add", ".")
+	gitIn(t, path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reset away")
+	lost := gitIn(t, path, "rev-parse", "HEAD")
+	gitIn(t, path, "reset", "-q", "--hard", "HEAD~1")
+	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("precious\n"), 0o644))
+	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
+	age(t, path)
+	require.NoError(t, e.sweeper.Sweep(e.ctx)) // dirty: held
+	results, _, err := e.sweeper.Cleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
+	require.NoError(t, err)
+	require.Equal(t, worktreesweep.CleanupRemoved, results[0].Outcome, "%+v", results[0])
+	gone, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	var orphan string
+	for _, ref := range gone.CleanupMetadata.SnapshotRefs {
+		if strings.Contains(ref, "/orphans/") {
+			orphan = ref
+		}
+	}
+	require.NotEmpty(t, orphan, "%v", gone.CleanupMetadata.SnapshotRefs)
+	require.Equal(t, lost, gitIn(t, e.project.Path, "rev-parse", orphan))
+
+	_, err = e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
+	require.NoError(t, err)
+	require.True(t, exists(filepath.Join(path, "wip.txt")), "the snapshot was applied")
+	after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	require.NotNil(t, after.CleanupMetadata)
+	assert.Equal(t, []string{orphan}, after.CleanupMetadata.SnapshotRefs)
+}

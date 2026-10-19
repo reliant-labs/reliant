@@ -28,7 +28,10 @@ const (
 	ReasonDirty HeldReason = "dirty"
 	// ReasonUnpushed: HEAD is on no remote ref, and its work is not in base
 	// either as commits or as an equivalent patch (a squash or rebase merge),
-	// nor the head of a merged pull request.
+	// nor the head of a merged pull request, nor saved under the worktree's
+	// snapshot refs. The automatic path saves such commits (saveCommits) and
+	// removes the worktree, so this holds only under "Keep everything" or when
+	// saving failed.
 	ReasonUnpushed HeldReason = "unpushed"
 	// ReasonUnverified: git could not answer, so safety was not established.
 	ReasonUnverified HeldReason = "unverified"
@@ -48,7 +51,7 @@ const (
 	// ReasonUnreachable: the worktree's own reflog, per-worktree refs
 	// (refs/worktree, refs/bisect), pseudo-refs or detached HEAD reach commits
 	// that are on no branch, remote or tag. Deleting its admin directory would
-	// orphan them.
+	// orphan them. Saved like ReasonUnpushed before an automatic removal.
 	ReasonUnreachable HeldReason = "unreachable_history"
 	// ReasonQuarantined: a checkout is parked under <root>/.reclaim, still locked
 	// with its fence, because it could not be removed or put back. Never deleted

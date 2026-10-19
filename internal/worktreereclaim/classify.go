@@ -146,6 +146,12 @@ func classifyCheckout(ctx context.Context, checkout, baseBranch string, nested [
 	if err != nil {
 		return verdict{ReasonUnverified, err.Error()}
 	}
+	if !pushed && worktreeID != "" {
+		// Saved for this worktree (savedCommits, or a snapshot taken on HEAD).
+		if pushed, err = savedUnder(ctx, checkout, head, SnapshotRefPrefix(worktreeID)); err != nil {
+			return verdict{ReasonUnverified, err.Error()}
+		}
+	}
 	if !pushed {
 		return verdict{ReasonUnpushed, "HEAD is not on any remote branch and its work is not in " + describeBase(baseBranch) + " (neither as commits nor as an equivalent patch)"}
 	}
@@ -169,9 +175,10 @@ func classifyCheckout(ctx context.Context, checkout, baseBranch string, nested [
 // squash leaves in the reflog: removing the worktree loses a name for a commit
 // whose change lives on, so holding for it kept nearly every rebased worktree
 // forever. A tip with a change the base lacks, or one the comparison cannot
-// vouch for (a binary file, a merge commit), stays: that is the history a
-// confirmed clean-up saves to a ref. Nothing is saved to a ref here, because
-// nothing prunes refs/reliant/wip and each one would pin its objects forever.
+// vouch for (a binary file, a merge commit), stays: that is the history the
+// automatic path (saveCommits) and a confirmed clean-up save to a ref. Tips
+// dropped here are never saved: nothing prunes refs/reliant/wip, and a ref
+// pins its objects forever.
 func tipsNotOnBase(ctx context.Context, checkout, baseBranch string, tips []string) ([]string, error) {
 	var lost []string
 	for _, tip := range tips {
@@ -184,6 +191,15 @@ func tipsNotOnBase(ctx context.Context, checkout, baseBranch string, tips []stri
 		}
 	}
 	return lost, nil
+}
+
+// savedUnder reports whether a ref under prefix contains commit.
+func savedUnder(ctx context.Context, checkout, commit, prefix string) (bool, error) {
+	out, err := git(ctx, checkout, nil, "for-each-ref", "--contains", commit, "--count=1", "--format=%(refname)", strings.TrimSuffix(prefix, "/"))
+	if err != nil {
+		return false, err
+	}
+	return out != "", nil
 }
 
 // mergeProbe is the part of "is this work preserved" that needs the network. A

@@ -527,8 +527,22 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 		r.measure(ctx, hold, w.Path)
 		return *hold
 	}
-	if v := classifyAll(ctx, w, checkouts, r.probe()); !v.safe() {
+	v := classifyAll(ctx, w, checkouts, r.probe())
+	// Commits only this worktree holds do not keep it: they are saved under
+	// refs first (unless the user keeps everything, which removes nothing).
+	var saved []string
+	if (v.Reason == ReasonUnpushed || v.Reason == ReasonUnreachable) && !w.KeepFiles {
+		refs, err := saveCommits(ctx, w, checkouts)
+		saved = refs
+		if err != nil {
+			v = verdict{ReasonUnverified, "could not save its local commits, nothing was removed: " + err.Error()}
+		} else {
+			v = classifyAll(ctx, w, checkouts, r.probe())
+		}
+	}
+	if !v.safe() {
 		res := held(w, v.Reason, v.Detail)
+		res.SnapshotRefs = saved
 		r.shed(ctx, w, sc, &res)
 		r.measure(ctx, &res, w.Path)
 		return res
@@ -543,9 +557,10 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 		return res
 	}
 	if res := claim(ctx, w, checkouts); res != nil {
+		res.SnapshotRefs = saved
 		return *res
 	}
-	return Result{ID: w.ID, Outcome: OutcomeClaimed}
+	return Result{ID: w.ID, Outcome: OutcomeClaimed, SnapshotRefs: saved}
 }
 
 func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {

@@ -186,9 +186,14 @@ func TestOrphan_TipWhoseWorkIsOnBaseDoesNotHold(t *testing.T) {
 	if got.Outcome != OutcomeRemoved {
 		t.Fatalf("a reflog tip whose change is on main must not hold the worktree: %+v", got)
 	}
+	if refs := run(t, f.project, "for-each-ref", "refs/reliant/"); refs != "" {
+		t.Fatalf("a tip whose change is on main is not saved (a ref pins it forever):\n%s", refs)
+	}
 }
 
-func TestOrphan_TipWithWorkNotOnBaseStillHolds(t *testing.T) {
+// A tip whose work is nowhere else is reported as unreachable history; the
+// automatic pass saves it under a ref before removing (see backup_test.go).
+func TestOrphan_TipWithWorkNotOnBaseIsSavedBeforeRemoval(t *testing.T) {
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("lost", "feat/lost")
@@ -196,11 +201,18 @@ func TestOrphan_TipWithWorkNotOnBaseStillHolds(t *testing.T) {
 	write(t, filepath.Join(w.Path, "lost.txt"), "only here\n")
 	run(t, w.Path, "add", ".")
 	run(t, w.Path, "commit", "-q", "-m", "detached work")
+	lost := run(t, w.Path, "rev-parse", "HEAD")
 	run(t, w.Path, "checkout", "-q", "feat/lost")
-	got := f.one(w)
+	got := f.verdict(w)
 	if got.Outcome != OutcomeHeld || got.Reason != ReasonUnreachable || !exists(w.Path) {
 		t.Fatalf("work that is nowhere else must still hold: %+v", got)
 	}
+	w.Fence = "100"
+	first, second := f.both(w)
+	if second.Outcome != OutcomeRemoved {
+		t.Fatalf("got %+v then %+v, want saved and removed", first, second)
+	}
+	savedAt(t, f, first.SnapshotRefs, "reflog", lost)
 }
 
 // With three repos per workspace and dozens of workspaces, the same origin was

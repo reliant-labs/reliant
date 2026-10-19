@@ -301,3 +301,23 @@ func TestSweep_RecordsRegenerableFilesShedFromAHeldWorktree(t *testing.T) {
 	assert.Equal(t, []string{"node_modules"}, meta.StrippedPaths)
 	assert.Positive(t, meta.StrippedBytes)
 }
+
+func TestSweep_SavesUnpushedCommitsThenRemovesAndRecordsTheRefs(t *testing.T) {
+	e := newEnv(t)
+	wt, path := e.worktree(t, "unpushed", false)
+	git(t, path, "checkout", "-q", "--detach")
+	require.NoError(t, os.WriteFile(filepath.Join(path, "only-here.txt"), []byte("x\n"), 0o644))
+	git(t, path, "add", ".")
+	git(t, path, "commit", "-q", "-m", "local only")
+	sha := git(t, path, "rev-parse", "HEAD")
+	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
+
+	require.NoError(t, e.sweeper.Sweep(e.ctx))
+	assert.False(t, exists(path), "commits only it held are saved, so it is removed")
+	meta := e.get(t, wt.ID).CleanupMetadata
+	require.NotNil(t, meta)
+	assert.True(t, meta.DirectoryDeleted)
+	require.Len(t, meta.SnapshotRefs, 1, "the saved commit is recorded on the row")
+	assert.Contains(t, meta.SnapshotRefs[0], "refs/reliant/wip/"+wt.ID+"/root/orphans/head-")
+	assert.Equal(t, sha, git(t, e.project.Path, "rev-parse", meta.SnapshotRefs[0]))
+}

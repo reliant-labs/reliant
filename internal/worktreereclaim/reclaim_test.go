@@ -95,6 +95,18 @@ func (f *fixture) one(w Worktree) Result {
 	return f.r.Reconcile(context.Background(), Request{Worktrees: []Worktree{w}}).Results[0]
 }
 
+// verdict is the automatic path's judgement alone: phase one with "Keep
+// everything" set, which saves nothing and removes nothing. A worktree whose
+// work is preserved elsewhere comes back held/kept; any other is held for why.
+func (f *fixture) verdict(w Worktree) Result {
+	f.t.Helper()
+	if w.Fence == "" && w.State == StateArchived {
+		w.Fence = "100"
+	}
+	w.KeepFiles = true
+	return f.r.Reconcile(context.Background(), Request{Worktrees: []Worktree{w}}).Results[0]
+}
+
 // confirmed plays the server for a user-confirmed clean-up (both phases).
 func (f *fixture) confirmed(w Worktree) Result {
 	f.t.Helper()
@@ -236,7 +248,7 @@ func TestReconcile_UnpushedCommitIsHeld_ThenSafeOnceMergedOrPushed(t *testing.T)
 	write(t, filepath.Join(w.Path, "b.txt"), "b\n")
 	run(t, w.Path, "add", ".")
 	run(t, w.Path, "commit", "-q", "-m", "work")
-	if got := f.one(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed {
+	if got := f.verdict(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed {
 		t.Fatalf("got %+v, want held/unpushed", got)
 	}
 	run(t, w.Path, "push", "-q", "origin", "feat/c")

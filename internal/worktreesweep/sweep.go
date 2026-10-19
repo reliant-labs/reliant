@@ -471,6 +471,11 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 			continue
 		}
 		if r.Outcome == worktreereclaim.OutcomeClaimed {
+			// Commits saved before the claim are recorded whatever happens
+			// next: the refs exist either way.
+			if len(r.SnapshotRefs) > 0 {
+				s.mergeMeta(ctx, c.Worktree, func(m *core.CleanupMetadata) { m.SnapshotRefs = union(m.SnapshotRefs, r.SnapshotRefs) })
+			}
 			// Re-read the row NOW. Unarchived or re-archived since the first
 			// request was built, and the claim is stale: do not remove.
 			cur, err := s.store.GetWorktree(ctx, r.ID)

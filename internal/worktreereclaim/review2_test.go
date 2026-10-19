@@ -318,8 +318,9 @@ func TestRelockOfARemovedDirectoryReportsGone(t *testing.T) {
 	}
 }
 
-// R-B1: more orphan shapes, and the confirmed path saving them.
-func TestReconcile_OrphanHistoryHoldsAutoAndIsSavedByConfirmed(t *testing.T) {
+// R-B1: more orphan shapes, and the confirmed path saving them. (The automatic
+// path saves them too, then removes: see backup_test.go.)
+func TestReconcile_OrphanHistoryIsReportedAndIsSavedByConfirmed(t *testing.T) {
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("orph", "feat/orph")
@@ -330,7 +331,7 @@ func TestReconcile_OrphanHistoryHoldsAutoAndIsSavedByConfirmed(t *testing.T) {
 	lost := run(t, w.Path, "rev-parse", "HEAD")
 	run(t, w.Path, "checkout", "-q", "feat/orph")
 
-	got := f.one(w)
+	got := f.verdict(w)
 	if got.Outcome != OutcomeHeld || got.Reason != ReasonUnreachable || !exists(w.Path) {
 		t.Fatalf("auto: got %+v, want held/unreachable_history", got)
 	}

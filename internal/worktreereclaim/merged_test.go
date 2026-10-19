@@ -115,7 +115,7 @@ func TestMerged_AnUnpushedLocalCommitIsStillHeld(t *testing.T) {
 	f.pruned(w)
 	run(t, w.Path, "fetch", "-q", "origin")
 
-	got := f.one(w)
+	got := f.verdict(w)
 	if got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed || !exists(w.Path) {
 		t.Fatalf("got %+v, want held/unpushed: after.txt was never merged or pushed", got)
 	}
@@ -129,7 +129,7 @@ func TestMerged_APurelyLocalBranchNeverPushedIsHeld(t *testing.T) {
 	f.idle()
 	w := f.worktree("lo", "feat/lo")
 	f.commitIn(w, "feat/lo", "only-here.txt", "x\n", false)
-	if got := f.one(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed {
+	if got := f.verdict(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed {
 		t.Fatalf("got %+v, want held/unpushed", got)
 	}
 }
@@ -204,7 +204,7 @@ func TestMerged_AMergedPullRequestForExactlyThisHeadFreesTheWorktree(t *testing.
 		asked++
 		return branch == "feat/pr" && sha == "somebody-elses-head"
 	}
-	if got := f.one(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed {
+	if got := f.verdict(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed {
 		t.Fatalf("a merged PR with another head must not free it: %+v", got)
 	}
 	f.r.netCache = nil // the first answer was a (cached) no for this head
@@ -262,7 +262,7 @@ func TestMerged_ADifferentChangeOnMainDoesNotCountAsMerged(t *testing.T) {
 	run(t, srv, "push", "-q", "origin", "main")
 	run(t, w.Path, "fetch", "-q", "origin")
 
-	if got := f.one(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed {
+	if got := f.verdict(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed {
 		t.Fatalf("got %+v, want held/unpushed: main has a different change to that file", got)
 	}
 }
@@ -289,7 +289,7 @@ func TestMerged_AMultiRepoWorkspaceNeedsEveryCheckoutDone(t *testing.T) {
 	f.commitIn(web, "feat/web", "web.txt", "never pushed\n", false)
 	run(t, api.Path, "fetch", "-q", "origin")
 
-	got := f.one(w)
+	got := f.verdict(w)
 	if got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed || !strings.Contains(got.Detail, "web") || strings.Contains(got.Detail, "api: ") {
 		t.Fatalf("got %+v, want held/unpushed naming web only", got)
 	}
@@ -328,7 +328,7 @@ func TestMerged_ABranchThatTouchesABinaryFileIsNotRecognisedByPatch(t *testing.T
 	run(t, srv, "push", "-q", "origin", "main")
 	run(t, w.Path, "fetch", "-q", "origin")
 
-	if got := f.one(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed {
+	if got := f.verdict(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed {
 		t.Fatalf("got %+v, want held/unpushed", got)
 	}
 }

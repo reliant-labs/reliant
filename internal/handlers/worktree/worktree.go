@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workspacecreate"
 	"github.com/reliant-labs/reliant/internal/worktreepath"
+	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 const worktreeDaemonCommandTimeoutMs int32 = 120_000
@@ -1646,9 +1648,18 @@ func (s *Service) RecreateWorktree(
 	// refs are kept until a snapshot has actually been re-applied: they are the
 	// only copy of that work, and the archived panel lists them.
 	// A failed apply keeps the refs on the row, so the work is never forgotten.
+	// Saved commits (".../orphans/...") are never applied, so they stay listed
+	// whatever the apply did.
 	keep := &db.CleanupMetadata{}
 	if len(savedRefs) > 0 && !recreateResp.SnapshotApplied {
 		keep.SnapshotRefs = savedRefs
+	} else {
+		applicable := worktreereclaim.SnapshotRefsOnRow(savedRefs)
+		for _, ref := range savedRefs {
+			if !slices.Contains(applicable, ref) {
+				keep.SnapshotRefs = append(keep.SnapshotRefs, ref)
+			}
+		}
 	}
 	if len(keep.SnapshotRefs) == 0 {
 		keep = nil
