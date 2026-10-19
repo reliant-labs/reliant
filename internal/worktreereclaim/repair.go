@@ -289,8 +289,7 @@ func verifyObjects(ctx context.Context, commonDir string, removed []string, rep 
 	referenced := map[string]bool{}
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || !(strings.Contains(line, "missing") || strings.Contains(line, "broken") ||
-			strings.HasPrefix(line, "error") || strings.HasPrefix(line, "fatal")) {
+		if !fsckProblem(line) {
 			continue
 		}
 		for _, m := range objectID.FindAllString(line, -1) {
@@ -423,7 +422,7 @@ func repairRegistration(ctx context.Context, adminDir string, opts RepairOptions
 			return
 		}
 		ours := underRoot || ReliantLock(reason)
-		if locked && !(ReliantLock(reason) || (reason == "" && underRoot)) {
+		if locked && !ReliantLock(reason) && (reason != "" || !underRoot) {
 			ours = false
 		}
 		if !ours {
@@ -840,4 +839,10 @@ func (r *Reclaimer) busy(checkout string) bool {
 		m.Unlock()
 	}
 	return false
+}
+
+// fsckProblem reports whether a line of `git fsck` output names a problem.
+func fsckProblem(line string) bool {
+	return strings.Contains(line, "missing") || strings.Contains(line, "broken") ||
+		strings.HasPrefix(line, "error") || strings.HasPrefix(line, "fatal")
 }
