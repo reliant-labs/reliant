@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
-import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type RouteComponent } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
 import { shouldRedirectToMobileNow } from './lib/mobileRedirect'
 import { isForgeUIEnabled } from './lib/forgeFeature'
 import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
+import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
 import {
@@ -17,11 +18,6 @@ import {
   oauthCallbackSearchSchema,
   onboardingSearchSchema,
   proxyAuthSearchSchema,
-  forgeDomainsSearchSchema,
-  forgeEnvPageSearchSchema,
-  forgeObservabilitySearchSchema,
-  forgeLegacySearchSchema,
-  forgeOverviewSearchSchema,
   settingsSearchSchema,
   upgradeSearchSchema,
   workflowSearchSchema,
@@ -146,14 +142,42 @@ const MobileChatWorkflowRoute = lazyRoute(
   () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileChatWorkflowRoute')
 const ForgeLayout = lazyRoute(
   () => import('./components/Forge/ForgeLayout'), 'ForgeLayout')
-const ForgeOverviewPage = lazyRoute(
-  () => import('./components/Forge/Overview/ForgeOverviewPage'), 'ForgeOverviewPage')
+const ConsoleLayout = lazyRoute(
+  () => import('./components/Forge/Console/ConsoleLayout'), 'ConsoleLayout')
+const ForgeConsoleOverviewPage = lazyRoute(
+  () => import('./components/Forge/Console/ConsolePages'), 'OverviewPage')
+const ForgeConsoleReleasesPage = lazyRoute(
+  () => import('./components/Forge/Console/ConsolePages'), 'ReleasesPage')
+const ForgeConsoleDeliveryPage = lazyRoute(
+  () => import('./components/Forge/Console/ConsolePages'), 'DeliveryPage')
+const ForgeConsoleObservabilityPage = lazyRoute(
+  () => import('./components/Forge/Console/ConsolePages'), 'ObservabilityOverviewPage')
+const ForgeConsoleObservabilityViewPage = lazyRoute(
+  () => import('./components/Forge/Console/ConsolePages'), 'ObservabilityViewPage')
+const ForgeConsoleSecretsPage = lazyRoute(
+  () => import('./components/Forge/Console/ConsolePages'), 'SecretsPage')
+const ForgeConsoleMonitoringPage = lazyRoute(
+  () => import('./components/Forge/Console/ConsolePages'), 'MonitoringSettingsPage')
+const ForgeConsoleSettingsPage = lazyRoute(
+  () => import('./components/Forge/Console/ConsolePages'), 'ProjectSettingsPage')
+const ForgeConsoleActivityPage = lazyRoute(
+  () => import('./components/Forge/Console/ConsolePages'), 'ActivityPage')
+const ForgeEnvironmentsPage = lazyRoute(
+  () => import('./components/Forge/Overview/EnvironmentsPage'), 'EnvironmentsPage')
 const ForgeEnvPage = lazyRoute(
   () => import('./components/Forge/EnvPage/ForgeEnvPage'), 'ForgeEnvPage')
 const ForgeDomainsPage = lazyRoute(
   () => import('./components/Forge/Domains/ForgeDomainsPage'), 'ForgeDomainsPage')
-const ForgeObservabilityPage = lazyRoute(
-  () => import('./components/Forge/Observability/ObservabilityPage'), 'ForgeObservabilityPage')
+const ForgeLandingRoute = lazyRoute(
+  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'ForgeLandingRoute')
+const ForgeLegacyEnvRoute = lazyRoute(
+  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyEnvRoute')
+const ForgeLegacyObservabilityRoute = lazyRoute(
+  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyObservabilityRoute')
+const ForgeLegacyDomainsRoute = lazyRoute(
+  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyDomainsRoute')
+const ForgeLegacyCommandRoute = lazyRoute(
+  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyCommandRoute')
 const App = lazyRoute(() => import('./App'), 'default')
 
 // Search schemas live in ./routeSchemas (kept dependency-free so tests can
@@ -586,113 +610,43 @@ function ForgeGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// Pathless layout route owning the forge surface's chrome, tabs and project
-// resolution. See components/Forge/ForgeLayout.tsx for the full reasoning; the
-// short version is that the forge screens sit under `_authenticated`, which
-// renders NO app chrome, so without a layout of their own they had no header,
-// no exit and no way to resolve a project on a cold load. /settings and
-// /workflow each solve the same problem by rendering their own header; forge
-// has more than one screen, so the header belongs on a shared parent.
+// The forge console (research/console-v3/PROPOSAL.md §3.2): /forge/p/$project/…
+// for every page, addressed by the FORGE project name, plus /forge and the
+// retired URLs, which resolve a project and redirect so bookmarks and
+// notification deep links keep working. Defined in forgeConsoleRoutes.tsx so
+// the route tests mount the same definitions.
 //
-// The gate stays on each CHILD rather than moving here, so that every forge
-// route carries it independently — see the ForgeGate comment above.
-const forgeLayoutRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  id: '_forge',
-  component: ForgeLayout,
-})
-
-// ── The two forge screens, organised around ENVIRONMENTS ────────────────────
-//
-// There used to be four — Releases (/forge/topology), Environments, Status and
-// Secrets — one per forge COMMAND (topology, env status, verify, secret list).
-// The user's question is per environment ("what is prod running, is it
-// healthy, what are its secrets"), and three of the four read the same env
-// status for different slices of that one answer. So now:
-//
-//   /forge            Overview: the audit strip and one row per environment.
-//   /forge/env/$env   one environment: workloads, secrets, releases, and —
-//                     local envs only — the dev stack forge env up launched.
-//
-// `project` is a search param on both so a refresh or a pasted link resolves
-// the project without ModernApp, which never mounts here (the old dead-end
-// refresh bug). Both sit under authenticatedLayoutRoute because their RPCs are
-// per-user and resolve the project against the caller's ownership.
-const forgeOverviewRoute = createRoute({
-  getParentRoute: () => forgeLayoutRoute,
-  path: '/forge',
-  validateSearch: forgeOverviewSearchSchema,
-  component: () => <ForgeGate><ForgeOverviewPage /></ForgeGate>,
-})
-
-const forgeEnvRoute = createRoute({
-  getParentRoute: () => forgeLayoutRoute,
-  path: '/forge/env/$env',
-  validateSearch: forgeEnvPageSearchSchema,
-  component: () => <ForgeGate><ForgeEnvPage /></ForgeGate>,
-})
-
-// Domains is the one forge screen that is NOT about an environment, which is
-// why it sits beside the Overview rather than inside an env page. A domain is
-// an ORG resource with no environment of its own — its BINDING has one, and
-// that binding is meant to move. Filing the screen under prod would hide
-// every claimed-but-unbound domain, which is the exact state a tenant is
-// stuck in when they need it. See components/Forge/Domains/ForgeDomainsPage.
-const forgeDomainsRoute = createRoute({
-  getParentRoute: () => forgeLayoutRoute,
-  path: '/forge/domains',
-  validateSearch: forgeDomainsSearchSchema,
-  component: () => <ForgeGate><ForgeDomainsPage /></ForgeGate>,
-})
-
-// Observability, like Domains, is about the PROJECT rather than one
-// environment (owner decision 1: environment is a filter, not a place). Each
-// env page's Observability tab is the same panel pinned to that environment.
-const forgeObservabilityRoute = createRoute({
-  getParentRoute: () => forgeLayoutRoute,
-  path: '/forge/observability',
-  validateSearch: forgeObservabilitySearchSchema,
-  component: () => <ForgeGate><ForgeObservabilityPage /></ForgeGate>,
-})
-
-// The retired per-command screens. Each REDIRECTS rather than 404ing, because
-// they were bookmarked and linked, and it keeps what the old URL said: the
-// project always, and — where the old URL named an environment — that
-// environment's page (with its secret selection, for /forge/secrets). An old
-// URL with no env lands on the Overview, which is where "all environments"
-// now lives. Still gated: a redirect route that skipped the gate would be a
-// way past it.
-function ForgeLegacyRedirect({ search }: { search: { project?: string; env?: string; secret?: string } }) {
-  if (search.env) {
-    return (
-      <Navigate
-        to="/forge/env/$env"
-        params={{ env: search.env }}
-        search={{ project: search.project, secret: search.secret }}
-        replace
-      />
-    )
+// Every route is gated on its own (ForgeGate above), the redirects included —
+// a redirect that skipped the gate would be a way past it. The pathless
+// layout carries the Escape binding and stays ungated: it renders nothing of
+// its own.
+function gated(Component: RouteComponent): RouteComponent {
+  return function Gated() {
+    return <ForgeGate><Component /></ForgeGate>
   }
-  return <Navigate to="/forge" search={{ project: search.project }} replace />
 }
 
-function forgeLegacyRoute(path: '/forge/topology' | '/forge/environments' | '/forge/status' | '/forge/secrets') {
-  const route = createRoute({
-    getParentRoute: () => forgeLayoutRoute,
-    path,
-    validateSearch: forgeLegacySearchSchema,
-    component: function ForgeLegacyRoute() {
-      const search = route.useSearch()
-      return <ForgeGate><ForgeLegacyRedirect search={search} /></ForgeGate>
-    },
-  })
-  return route
-}
-
-const forgeTopologyRedirectRoute = forgeLegacyRoute('/forge/topology')
-const forgeEnvironmentsRedirectRoute = forgeLegacyRoute('/forge/environments')
-const forgeStatusRedirectRoute = forgeLegacyRoute('/forge/status')
-const forgeSecretsRedirectRoute = forgeLegacyRoute('/forge/secrets')
+const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRoute, {
+  layout: ForgeLayout,
+  console: gated(ConsoleLayout),
+  overview: gated(ForgeConsoleOverviewPage),
+  releases: gated(ForgeConsoleReleasesPage),
+  delivery: gated(ForgeConsoleDeliveryPage),
+  observability: gated(ForgeConsoleObservabilityPage),
+  observabilityView: gated(ForgeConsoleObservabilityViewPage),
+  environments: gated(ForgeEnvironmentsPage),
+  environment: gated(ForgeEnvPage),
+  secrets: gated(ForgeConsoleSecretsPage),
+  domains: gated(ForgeDomainsPage),
+  monitoring: gated(ForgeConsoleMonitoringPage),
+  settings: gated(ForgeConsoleSettingsPage),
+  activity: gated(ForgeConsoleActivityPage),
+  landing: gated(ForgeLandingRoute),
+  legacyEnv: gated(ForgeLegacyEnvRoute),
+  legacyObservability: gated(ForgeLegacyObservabilityRoute),
+  legacyDomains: gated(ForgeLegacyDomainsRoute),
+  legacyCommand: gated(ForgeLegacyCommandRoute),
+})
 
 // Onboarding lives at its own URL now. Previously the OnboardingPage was a
 // branch inside ModernApp's render based on currentUser.onboardingCompleted —
@@ -861,16 +815,7 @@ const routeTree = rootRoute.addChildren([
       mobileGitHubRoute,
     ]),
     onboardingRoute,
-    forgeLayoutRoute.addChildren([
-      forgeOverviewRoute,
-      forgeEnvRoute,
-      forgeDomainsRoute,
-      forgeObservabilityRoute,
-      forgeTopologyRedirectRoute,
-      forgeEnvironmentsRedirectRoute,
-      forgeStatusRedirectRoute,
-      forgeSecretsRedirectRoute,
-    ]),
+    forgeConsoleRoutes,
     settingsRoute,
     ...settingsConnectorRoutes,
     ...settingsSectionRoutes,

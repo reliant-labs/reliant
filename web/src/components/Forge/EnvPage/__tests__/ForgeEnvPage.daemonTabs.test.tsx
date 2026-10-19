@@ -47,7 +47,17 @@ const routeState: { tab: string } = { tab: "running" };
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
   useParams: () => ({ env: "dev" }),
-  useSearch: () => ({ project: "proj-1", tab: routeState.tab }),
+  useSearch: () => ({ tab: routeState.tab }),
+}));
+
+// What the console layout says the page is about (Console/consoleContext.ts).
+vi.mock("@/components/Forge/Console/consoleContext", () => ({
+  useForgeConsole: () => ({
+    forgeProject: "hounders",
+    projectId: "proj-1",
+    env: "prod",
+    href: (page: { kind: string }) => `/forge/p/hounders/${page.kind}`,
+  }),
 }));
 
 vi.mock("@/store/projectStore", () => {

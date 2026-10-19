@@ -23,7 +23,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import PageHeader from "@/components/forge-ui/page_header";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
-import { FORGE_OBSERVABILITY_PATH, ForgeShell } from "../../ForgeShell";
+import { ConsolePreviewShell } from "../../Console/ConsolePreviewShell";
 import ObservabilityPanel, { type ObsPlace } from "../ObservabilityPanel";
 import type { ObsNavigate, ObsSearch } from "../obsSearch";
 import { FIXTURE_DECLARED } from "../__fixtures__/fixtureAlerting";
@@ -146,15 +146,10 @@ export default function ObservabilityPreview() {
   }
 
   return (
-    <ForgeShell
-      activePath={placeKind === "project" ? FORGE_OBSERVABILITY_PATH : "/forge/env/prod"}
-      envs={[
-        { name: "dev", lifecycle: "local", source: "backend" },
-        { name: "staging", lifecycle: "deployed", source: "backend" },
-        { name: "prod", lifecycle: "deployed", source: "backend" },
-      ]}
-      headerContent={
-        <div className="flex flex-wrap items-center gap-3 px-4">
+    <ConsolePreviewShell
+      page={placeKind === "project" ? { kind: "observability" } : { kind: "environment", env: "prod" }}
+      controls={
+        <>
           <select
             data-testid="preview-place"
             value={placeKind}
@@ -196,20 +191,12 @@ export default function ObservabilityPreview() {
           >
             {dark ? "Dark" : "Light"}
           </button>
-        </div>
+        </>
       }
     >
-      <div className="h-full space-y-6 overflow-y-auto p-6">
+      <div className="space-y-6">
         {placeKind === "project" && (
-          <PageHeader
-            title="Observability"
-            subtitle={
-              <>
-                Logs, traces, dashboards, workloads, alerts and releases across every environment of <span className="font-mono">{FIXTURE_PROJECT}</span>.
-                Narrow to some, or group by environment to compare them.
-              </>
-            }
-          />
+          <PageHeader title="Observability" meta={<span>{FIXTURE_PROJECT}</span>} className="mb-0" />
         )}
         <QueryClientProvider client={queryClient}>
           <ObservabilityApiProvider api={api}>
@@ -217,6 +204,6 @@ export default function ObservabilityPreview() {
           </ObservabilityApiProvider>
         </QueryClientProvider>
       </div>
-    </ForgeShell>
+    </ConsolePreviewShell>
   );
 }

@@ -1,8 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * DEV-ONLY: the real Forge pane — ForgeLayout, the Overview and the env page —
- * against canned control-plane and daemon answers, with no login.
+ * DEV-ONLY: the real forge console — the same route tree (forgeConsoleRoutes),
+ * layout, nav and pages the product mounts — against canned control-plane and
+ * daemon answers, with no login. Observability reads answer from the
+ * in-memory fixture API the Observability preview uses.
  *
  * WHY THE FAKE IS AT THE NETWORK, NOT IN THE QUERY CACHE. Seeding React
  * Query would bypass the code most worth looking at: the transport, the
@@ -22,7 +24,9 @@
  * `queued` and `queued-member` put the hosted env's newest deploy in the
  * queue on billing, as the viewer who can set it up and as one who cannot.
  *
- *   /forge-pane-preview?scenario=registered|unregistered|daemon-offline|queued|queued-member&path=/forge/env/prod
+ *   /forge-pane-preview?scenario=registered|unregistered|daemon-offline|queued|queued-member&path=/forge/p/control-plane/environments/prod
+ *
+ * `path` is any console URL (or a retired one, to watch it redirect).
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -36,12 +40,34 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
+import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
+import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
+import { ConsoleLayout } from "../Console/ConsoleLayout";
+import {
+  ActivityPage,
+  DeliveryPage,
+  MonitoringSettingsPage,
+  ObservabilityOverviewPage,
+  ObservabilityViewPage,
+  OverviewPage,
+  ProjectSettingsPage,
+  ReleasesPage,
+  SecretsPage,
+} from "../Console/ConsolePages";
+import {
+  ForgeLandingRoute,
+  LegacyCommandRoute,
+  LegacyDomainsRoute,
+  LegacyEnvRoute,
+  LegacyObservabilityRoute,
+} from "../Console/ForgeEntryRoutes";
+import { ForgeDomainsPage } from "../Domains/ForgeDomainsPage";
 import { ForgeEnvPage } from "../EnvPage/ForgeEnvPage";
 import { ForgeLayout } from "../ForgeLayout";
-import { ForgeOverviewPage } from "../Overview/ForgeOverviewPage";
-import { forgeEnvPageSearchSchema, forgeOverviewSearchSchema } from "@/routeSchemas";
+import { createFixtureApi } from "../Observability/__fixtures__/fixtureApi";
+import { EnvironmentsPage } from "../Overview/EnvironmentsPage";
 
 type Scenario = "registered" | "unregistered" | "daemon-offline" | "queued" | "queued-member";
 
@@ -201,6 +227,11 @@ function liveEnvironments(scenario: Scenario) {
       currentRelease: { id: "rel-15", version: "v1.7.15", gitCommit: "47d0d1525ccc", provenance: { commit: "47d0d1525ccc", branch: "main" } },
       phase: "DEPLOY_ROLLOUT_PHASE_SUCCEEDED",
       drift: { state: "in_sync", observedAt: ts("2026-10-04T21:22:10Z") },
+    },
+    {
+      // A pull request's preview: the scope control files it under its menu.
+      environment: { id: "env-pr-1042", name: "pr-1042", project: "control-plane", kind: "DEPLOY_ENVIRONMENT_KIND_PREVIEW", createdAt: ts("2026-10-06T09:00:00Z") },
+      phase: "DEPLOY_ROLLOUT_PHASE_SUCCEEDED",
     },
     {
       // A HOSTED env with forge's long timestamp-plus-sha versions — the
@@ -394,22 +425,30 @@ function installFakeNetwork(scenario: Scenario): () => void {
 function buildRouter(path: string) {
   const root = createRootRoute({ component: () => <Outlet /> });
   const authenticated = createRoute({ getParentRoute: () => root, id: "_authenticated", component: () => <Outlet /> });
-  const forgeLayout = createRoute({ getParentRoute: () => authenticated, id: "_forge", component: ForgeLayout });
-  const overview = createRoute({
-    getParentRoute: () => forgeLayout,
-    path: "/forge",
-    validateSearch: forgeOverviewSearchSchema,
-    component: ForgeOverviewPage,
-  });
-  const env = createRoute({
-    getParentRoute: () => forgeLayout,
-    path: "/forge/env/$env",
-    validateSearch: forgeEnvPageSearchSchema,
-    component: ForgeEnvPage,
+  const forge = createForgeConsoleRoutes(() => authenticated, {
+    layout: ForgeLayout,
+    console: ConsoleLayout,
+    overview: OverviewPage,
+    releases: ReleasesPage,
+    delivery: DeliveryPage,
+    observability: ObservabilityOverviewPage,
+    observabilityView: ObservabilityViewPage,
+    environments: EnvironmentsPage,
+    environment: ForgeEnvPage,
+    secrets: SecretsPage,
+    domains: ForgeDomainsPage,
+    monitoring: MonitoringSettingsPage,
+    settings: ProjectSettingsPage,
+    activity: ActivityPage,
+    landing: ForgeLandingRoute,
+    legacyEnv: LegacyEnvRoute,
+    legacyObservability: LegacyObservabilityRoute,
+    legacyDomains: LegacyDomainsRoute,
+    legacyCommand: LegacyCommandRoute,
   });
   const home = createRoute({ getParentRoute: () => root, path: "/", component: () => <p className="p-6">Closed.</p> });
   return createRouter({
-    routeTree: root.addChildren([authenticated.addChildren([forgeLayout.addChildren([overview, env])]), home]),
+    routeTree: root.addChildren([authenticated.addChildren([forge]), home]),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
 }
@@ -424,7 +463,7 @@ export function ForgePanePreview() {
 function ForgePanePreviewCase() {
   const params = new URLSearchParams(window.location.search);
   const scenario = (params.get("scenario") as Scenario) || "registered";
-  const path = params.get("path") || `/forge?project=${PROJECT.id}`;
+  const path = params.get("path") || "/forge/p/control-plane";
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -436,11 +475,14 @@ function ForgePanePreviewCase() {
 
   const queryClient = useMemo(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }), []);
   const router = useMemo(() => buildRouter(path), [path]);
+  const obsApi = useMemo(() => createFixtureApi(), []);
 
   if (!ready) return null;
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ObservabilityApiProvider api={obsApi}>
+        <RouterProvider router={router} />
+      </ObservabilityApiProvider>
     </QueryClientProvider>
   );
 }

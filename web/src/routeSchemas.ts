@@ -401,52 +401,50 @@ export const mobileNewChatSearchSchema = z.object({
 });
 
 /**
- * Search params for the forge screens.
+ * Search params for the ENTRIES into the forge console — the bare `/forge`
+ * and the retired URLs (Console/ForgeResolve.tsx). The console itself is
+ * addressed by the forge project in its path (Console/paths.ts); these name
+ * a project the old ways, and only redirect:
  *
- * `project` is a project id, and it is what makes a forge URL survive a refresh.
- * The forge routes do not mount ModernApp, which is the only thing that resolves
- * `projectStore.currentProject` on a page load, so before this param existed a
- * reload of /forge/topology had no way to learn which project it was about and
- * dead-ended. ForgeLayout reflects the resolved project into this param and
- * reads it back on the next load. It is a param rather than a path segment to
- * match the existing three forge paths and to keep it optional — absent means
- * "resolve it the normal way", not "no project".
- *
- * `env` is an environment name, on the two routes that have a per-environment
- * view. It moved out of component state so that a topology row can link into a
- * specific environment's status, and so a refresh keeps the selection.
+ * `project` is a Reliant project id — what every forge URL carried before
+ * the console had a path of its own, so bookmarks and old links still carry
+ * it.
  *
  * `forgeProject` is a FORGE project name (forge.yaml `name`) — the only name
  * the control plane knows, so it is what a link the control plane writes
  * carries: a queued deploy's action URL is
- * `/forge/env/<env>?forgeProject=<name>`. ForgeLayout resolves it to the
- * Reliant project that declares that name and replaces it with `project`.
- * When none does — an org admin sent the link who has never opened the
- * project here — it stays, and the forge screens read the control plane by
- * that name alone (see useForgeScope). Every forge route accepts it so the
- * sidebar's links keep it.
+ * `/forge/env/<env>?forgeProject=<name>`. It is the console's own key, so it
+ * redirects without a lookup, and opens even when no Reliant project here
+ * declares it (an org admin a teammate sent the link to).
  */
 const forgeProjectParam = z.string().optional();
 
-export const forgeOverviewSearchSchema = z.object({
+export const forgeResolveSearchSchema = z.object({
   project: z.string().optional(),
   forgeProject: forgeProjectParam,
 });
 
 /**
- * /forge/domains. Carries `project` for the same reason every other forge
- * route does — a refresh must resolve the project without ModernApp.
- *
- * It carries NOTHING ELSE beyond that scope (and `forgeProject`, its
- * control-plane spelling), and in particular no domain selection. The domain
- * list is ORG-scoped, so a link to one domain is not a link to a place in
- * this project; the expanded row is component state deliberately, because a
- * shared URL naming a domain id would open a blank row for a teammate in a
- * different organization.
+ * The console's environment scope (decision D1, Console/envScope.ts): an
+ * environment name or `all`, on every console page. Absent, the console
+ * resolves the remembered scope (default prod) and writes it back.
  */
-export const forgeDomainsSearchSchema = z.object({
-  project: z.string().optional(),
-  forgeProject: forgeProjectParam,
+const envScopeParam = z.string().optional().catch(undefined);
+
+/** Every console page without page state of its own. */
+export const forgeConsoleSearchSchema = z.object({
+  env: envScopeParam,
+});
+
+/**
+ * Secrets: the scope, and the secret open in detail. A NAME, never a value —
+ * the surface cannot hold a value, so nothing here could leak into a URL, a
+ * history entry or a referrer. Linked because a version history is a thing
+ * people send each other ("look at what happened to DATABASE_URL").
+ */
+export const forgeConsoleSecretsSearchSchema = z.object({
+  env: envScopeParam,
+  secret: z.string().optional().catch(undefined),
 });
 
 // ── Observability URL state ────────────────────────────────────────────────
@@ -543,8 +541,19 @@ export type _ObsShapeMatchesSearch = AssertTrue<
 >;
 
 /**
- * /forge/observability: the project's Observability area. Environment is a
- * FILTER here (`envs`, names; absent = all), not the page's subject.
+ * A console page hosting an Observability view (Console/ObservabilityHost):
+ * the panel's keys minus the two the console moved out of the query — the
+ * view is the page's path, and the environment filter is the scope (`env`).
+ */
+const { view: _view, envs: _envs, ...obsConsoleShape } = obsSearchShape;
+export const forgeConsoleObsSearchSchema = z.object({
+  env: envScopeParam,
+  ...obsConsoleShape,
+});
+
+/**
+ * The retired /forge/observability: read only to redirect to the page
+ * hosting `view`, with `envs` turned into the scope (Console/paths.ts).
  */
 export const forgeObservabilitySearchSchema = z.object({
   project: z.string().optional(),
@@ -553,52 +562,55 @@ export const forgeObservabilitySearchSchema = z.object({
 });
 
 /**
- * /forge/env/$env. The environment is a PATH segment — it is the page's
- * subject, not a filter on it.
+ * Which tab of one environment's page is open. In the URL because people link
+ * each other to an answer ("look at prod's releases"), and a refresh should
+ * not throw you back to the default.
+ *
+ * ABSENT means the environment's default tab — `overview` for a deployed env,
+ * `running` for a local one — so a bare link to an environment opens whatever
+ * that environment leads with.
+ *
+ * `live`, `preview`, `changes` and `checks` are retired tab names, still
+ * accepted so old links land on the default tab rather than failing to parse.
  */
-export const forgeEnvPageSearchSchema = z.object({
+const envPageTab = z
+  .enum([
+    "overview",
+    "observability",
+    "identity",
+    "running",
+    "releases",
+    "activity",
+    "secrets",
+    "domains",
+    "changes",
+    "checks",
+    "live",
+    "preview",
+  ])
+  .optional();
+
+/**
+ * /forge/p/$project/environments/$env — one environment, as a configured
+ * object. The environment is a PATH segment: it is the page's subject, so the
+ * top-bar scope (`env`, kept so links out carry it) does not apply to it.
+ * `secret` selects one secret's detail in the Secrets tab (see
+ * forgeConsoleSecretsSearchSchema), and the Observability tab keeps the
+ * panel's own keys.
+ */
+export const forgeConsoleEnvSearchSchema = z.object({
+  env: envScopeParam,
+  secret: z.string().optional(),
+  tab: envPageTab,
+  ...obsSearchShape,
+});
+
+/** The retired /forge/env/$env: read only to redirect (Console/paths.ts legacyEnvTarget). */
+export const forgeLegacyEnvSearchSchema = z.object({
   project: z.string().optional(),
   forgeProject: forgeProjectParam,
-  /**
-   * `secret` selects one secret's detail view in the Secrets section, for the
-   * same reason the env is in the URL rather than state: a version history is
-   * a thing people link each other to ("look at what happened to
-   * DATABASE_URL"), and a refresh while reading one should not throw you back
-   * to the list.
-   *
-   * It is a NAME, never a value — the whole surface is incapable of holding a
-   * value, so there is nothing here that could leak into a URL, a browser
-   * history entry, or a referrer header.
-   */
   secret: z.string().optional(),
-  /**
-   * Which tab is open. In the URL for the same reason `secret` is: people link
-   * each other to an answer ("look at prod's releases"), and a refresh should
-   * not throw you back to the default.
-   *
-   * ABSENT means the environment's default tab — `overview` for a deployed
-   * env, `running` for a local one — so a bare link to an environment opens
-   * whatever that environment leads with.
-   *
-   * `live`, `preview`, `changes` and `checks` are retired tab names, still
-   * accepted so old links land on the default tab rather than failing to parse.
-   */
-  tab: z
-    .enum([
-      "overview",
-      "observability",
-      "identity",
-      "running",
-      "releases",
-      "activity",
-      "secrets",
-      "domains",
-      "changes",
-      "checks",
-      "live",
-      "preview",
-    ])
-    .optional(),
+  tab: z.string().optional(),
   ...obsSearchShape,
 });
 
@@ -610,6 +622,7 @@ export const forgeEnvPageSearchSchema = z.object({
  */
 export const forgeLegacySearchSchema = z.object({
   project: z.string().optional(),
+  forgeProject: forgeProjectParam,
   env: z.string().optional(),
   secret: z.string().optional(),
 });

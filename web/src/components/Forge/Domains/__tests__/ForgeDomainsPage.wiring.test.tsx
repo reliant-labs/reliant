@@ -30,13 +30,9 @@ vi.mock("@/services/controlPlane/config", () => ({
   CONTROL_PLANE_API_URL: "http://127.0.0.1:8090",
 }));
 
-vi.mock("@tanstack/react-router", () => ({
-  useSearch: () => ({ project: "proj-1" }),
-}));
-
-vi.mock("@/store/projectStore", () => ({
-  useProjectStore: (selector: (s: unknown) => unknown) =>
-    selector({ currentProject: { id: "proj-1", name: "shop" } }),
+// What the console layout says the page is about (Console/consoleContext.ts).
+vi.mock("@/components/Forge/Console/consoleContext", () => ({
+  useForgeConsole: () => ({ forgeProject: "shop", projectId: "proj-1", env: "prod" }),
 }));
 
 // By default no daemon and no cloud env list — the page must render the

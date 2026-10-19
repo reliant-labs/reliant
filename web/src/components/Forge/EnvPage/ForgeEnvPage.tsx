@@ -1,7 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Route component for /forge/env/$env — ONE ENVIRONMENT.
+ * Route component for /forge/p/$project/environments/$env — ONE ENVIRONMENT,
+ * as a configured object (Configure › Environments › <env>).
  *
  * ── TABS BY QUESTION, SOURCES BY TAB ────────────────────────────────────────
  *
@@ -54,21 +55,17 @@ import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { isAwakeMachine } from "@/lib/chatMachine";
 import { FORGE_API_DISABLED_COPY } from "@/lib/forgeApiDisabled";
-import {
-  daemonSideForTab,
-  daemonSideOf,
-  resolveForgeProjectName,
-  type ForgeProjectName,
-} from "@/services/forge/environments";
+import { daemonSideForTab, daemonSideOf, type ForgeProjectName } from "@/services/forge/environments";
 import { isPlacedKind } from "@/services/forge/live";
 import { lifecycleOf } from "@/services/forge/roster";
 import { isLocalLifecycle } from "@/services/forge/status";
 import { environments } from "@/services/forge/topology";
-import { useProjectStore, type Project } from "@/store/projectStore";
+import { useProjectStore } from "@/store/projectStore";
 
 import { DeployDialog } from "../Deploy/DeployDialog";
 import { OBS_SEARCH_KEYS, type ObsNavigate, type ObsSearch } from "../Observability/obsSearch";
-import { forgeScopeOf } from "../forgeScope";
+import { useForgeConsole } from "../Console/consoleContext";
+import { pageOfObsView } from "../Console/paths";
 import { PromoteDialog } from "../Promote/PromoteDialog";
 import { CloudNotice } from "../SourceNotices";
 import { EnvLifecycleControls } from "./EnvLifecycleControls";
@@ -89,38 +86,31 @@ import { resolveTab, tabNeedsDaemon, tabParam, tabsFor, type EnvTab } from "./en
 
 export function ForgeEnvPage() {
   const navigate = useNavigate();
-  const { env: envName } = useParams({ from: "/_authenticated/_forge/forge/env/$env" });
+  const { env: envName } = useParams({ from: "/_authenticated/_forge/forge/p/$project/environments/$env" });
   const {
-    project: projectParam,
-    forgeProject: forgeProjectParam,
     secret: secretParam,
     tab: tabSearch,
+    env: _scope,
     ...obsSearch
-  } = useSearch({ from: "/_authenticated/_forge/forge/env/$env" });
+  } = useSearch({ from: "/_authenticated/_forge/forge/p/$project/environments/$env" });
+  // The console says which project this is (consoleContext.ts): the forge
+  // project the URL names, and the Reliant project that declares it — null
+  // when none here does, and then there is no daemon to ask.
+  const { forgeProject, projectId, href } = useForgeConsole();
   const currentProject = useProjectStore((state) => state.currentProject);
-  // A control-plane link can name the FORGE project with no Reliant project
-  // here declaring it; then there is no project id, and so no daemon to ask
-  // (forgeScope.ts).
-  const scope = forgeScopeOf({ project: projectParam, forgeProject: forgeProjectParam }, currentProject?.id);
-  const projectId = scope.projectId;
-  const persistedName = useProjectStore((state) => persistedForgeProjectName(state, projectId));
 
   // ── THE BACKEND: the record of this environment. ──
-  // The join key is the forge project name Reliant persisted on the project
-  // row (or the one the link named), so this needs no daemon.
-  const persistedOnly: ForgeProjectName = scope.forgeProject
-    ? { name: scope.forgeProject, source: "project" }
-    : resolveForgeProjectName(persistedName, undefined);
-  const liveFirst = useLiveView(persistedOnly.name);
-  const liveEnvFromPersisted = useMemo(
-    () => (liveFirst.data?.envs ?? []).find((candidate) => candidate.name === envName) ?? null,
-    [liveFirst.data, envName]
+  // The join key is the forge project name in the URL, so this needs no daemon.
+  const projectName: ForgeProjectName = { name: forgeProject, source: "project" };
+  const live = useLiveView(forgeProject);
+  const liveEnv = useMemo(
+    () => (live.data?.envs ?? []).find((candidate) => candidate.name === envName) ?? null,
+    [live.data, envName]
   );
 
   // ── WHAT THIS ENVIRONMENT IS, when the backend cannot say. ──
-  const backendSettled = !persistedOnly.name || !liveFirst.isLoading;
-  const backendKnowsDeployed =
-    !!liveEnvFromPersisted && liveEnvFromPersisted.kind !== "local" && liveEnvFromPersisted.kind !== "unknown";
+  const backendSettled = !live.isLoading;
+  const backendKnowsDeployed = !!liveEnv && liveEnv.kind !== "local" && liveEnv.kind !== "unknown";
   const askDaemonForIdentity = backendSettled && !backendKnowsDeployed;
 
   // The tab the reader clicked, and the URL it was clicked FROM. A click wins
@@ -154,14 +144,6 @@ export function ForgeEnvPage() {
   // report, not just a machine.
   const machines = useDaemonList({ enabled: tabWantsDaemon });
   const tabDaemon = daemonSideForTab(daemon, (machines.data ?? []).some(isAwakeMachine));
-
-  // A topology report can name the project when nothing was persisted yet.
-  const projectName = scope.forgeProject ? persistedOnly : resolveForgeProjectName(persistedName, topology.data);
-  const live = useLiveView(projectName.name);
-  const liveEnv = useMemo(
-    () => (live.data?.envs ?? []).find((candidate) => candidate.name === envName) ?? null,
-    [live.data, envName]
-  );
 
   // The identity status names owners and sharers by control-plane id.
   const envNameById = useCallback(
@@ -237,14 +219,15 @@ export function ForgeEnvPage() {
   // environment selected to start with.
   const openObservabilityArea = useCallback(
     (search: ObsSearch) => {
-      void navigate({ to: "/forge/observability", search: { ...search, project: projectParam, forgeProject: forgeProjectParam } });
+      const { view, envs: _envs, ...rest } = search;
+      void navigate({ href: href(pageOfObsView(view), { ...rest, env: envName }) });
     },
-    [navigate, projectParam, forgeProjectParam]
+    [navigate, href, envName]
   );
 
   const openDomainsScreen = useCallback(() => {
-    void navigate({ to: "/forge/domains", search: { project: projectId ?? undefined } });
-  }, [navigate, projectId]);
+    void navigate({ href: href({ kind: "domains" }) });
+  }, [navigate, href]);
 
   const selectSecret = useCallback(
     (name: string | null) => {
@@ -308,7 +291,7 @@ export function ForgeEnvPage() {
               environmentId={liveEnv.id}
               envName={envName}
               status={cloudStatus.data}
-              onDeleted={() => void navigate({ to: "/forge" })}
+              onDeleted={() => void navigate({ href: href({ kind: "environments" }) })}
             />
           ) : null
         }
@@ -521,17 +504,4 @@ function TabButton({
       {children}
     </button>
   );
-}
-
-/** The forge project name persisted on `projectId`'s row, from whichever store slot holds it. */
-function persistedForgeProjectName(
-  state: { projects: Project[]; currentProject: Project | null },
-  projectId: string | null | undefined
-): string | null {
-  if (!projectId) return null;
-  const row =
-    state.currentProject?.id === projectId
-      ? state.currentProject
-      : state.projects.find((project) => project.id === projectId);
-  return row?.forge_project_name ?? null;
 }

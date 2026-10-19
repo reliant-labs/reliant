@@ -1,7 +1,15 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Route component for /forge — THE OVERVIEW.
+ * Route component for /forge/p/$project/environments — CONFIGURE ›
+ * ENVIRONMENTS: every environment of the project, as configured objects.
+ * Each row opens that environment's page (lifecycle, register, deploy and
+ * promote, domain bindings, the local dev stack).
+ *
+ * This was the console's Overview while the nav was the environment roster.
+ * Environment is the top bar's scope now (decision D1), so this list is the
+ * one page that does not narrow to it: it is where the scope's choices are
+ * configured.
  *
  * One row per environment Reliant records: where it runs, what it is on,
  * where that came from, and when it last moved. Below it, the environments
@@ -17,91 +25,70 @@
  *
  * ── LOADING IS A SKELETON OF THE TABLE, NOT A SENTENCE ──────────────────────
  *
- * The page used to say "Reading this project's environments…" and then
- * replace the sentence with a table. The skeleton holds the table's shape so
- * nothing jumps when the rows land.
+ * The skeleton holds the table's shape so nothing jumps when the rows land.
  */
 
 import { useCallback, useMemo } from "react";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { CircleDashed, Layers } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import EmptyState from "@/components/forge-ui/empty_state";
 import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
-import { useCloudEnvStatuses, useForgeRoster } from "@/hooks/forge-queries";
-import { isPlacedKind } from "@/services/forge/live";
+import { useCloudEnvStatuses } from "@/hooks/forge-queries";
+import { isPlacedKind, type LiveEnv } from "@/services/forge/live";
 import type { RosterEnv } from "@/services/forge/roster";
-import { useProjectStore } from "@/store/projectStore";
 
-import { forgeScopeOf } from "../forgeScope";
+import { useForgeConsole } from "../Console/consoleContext";
 import { CloudNotice } from "../SourceNotices";
 import { EnvironmentTable, type EnvironmentRow } from "./EnvironmentTable";
 
-export function ForgeOverviewPage() {
-  const navigate = useNavigate();
-  const { project: projectParam, forgeProject: forgeProjectParam } = useSearch({ from: "/_authenticated/_forge/forge" });
-  const currentProject = useProjectStore((state) => state.currentProject);
-  const scope = forgeScopeOf({ project: projectParam, forgeProject: forgeProjectParam }, currentProject?.id);
-  const projectId = scope.projectId;
+/**
+ * The table's rows for `envs`, with the platform's observation for each
+ * PLACED environment. A self-managed env has no server-side observer, so
+ * asking would answer for a cluster the platform has never connected to; its
+ * row shows what the last render declared instead.
+ */
+export function useEnvironmentRows(envs: LiveEnv[]): EnvironmentRow[] {
+  const placedIds = useMemo(() => envs.filter((env) => isPlacedKind(env.kind)).map((env) => env.id), [envs]);
+  const statuses = useCloudEnvStatuses(placedIds);
+  return useMemo(
+    () =>
+      envs.map((env) => {
+        const status = isPlacedKind(env.kind) ? statuses.get(env.id) : undefined;
+        return { env, status: status?.data, statusLoading: !!status?.isLoading };
+      }),
+    [envs, statuses]
+  );
+}
 
-  const roster = useForgeRoster(projectId, scope.forgeProject);
+export function EnvironmentsPage() {
+  const navigate = useNavigate();
+  const { roster, href } = useForgeConsole();
   const backendEnvs = useMemo(
     () => roster.envs.filter((env) => env.source === "backend" && env.live).map((env) => env.live!),
     [roster.envs]
   );
   const checkoutEnvs = useMemo(() => roster.envs.filter((env) => env.source === "checkout"), [roster.envs]);
-
-  // GetStatus per PLACED environment. A self-managed env has no server-side
-  // observer, so asking would answer for a cluster the platform has never
-  // connected to; its row shows what the last render declared instead.
-  const placedIds = useMemo(
-    () => backendEnvs.filter((env) => isPlacedKind(env.kind)).map((env) => env.id),
-    [backendEnvs]
-  );
-  const statuses = useCloudEnvStatuses(placedIds);
-
-  const rows: EnvironmentRow[] = useMemo(
-    () =>
-      backendEnvs.map((env) => {
-        const status = isPlacedKind(env.kind) ? statuses.get(env.id) : undefined;
-        return { env, status: status?.data, statusLoading: !!status?.isLoading };
-      }),
-    [backendEnvs, statuses]
-  );
+  const rows = useEnvironmentRows(backendEnvs);
 
   const openEnv = useCallback(
-    (env: string) => {
-      void navigate({
-        to: "/forge/env/$env",
-        params: { env },
-        search: { project: projectParam ?? projectId ?? undefined, forgeProject: scope.forgeProject ?? undefined },
-      });
-    },
-    [navigate, projectId, projectParam, scope.forgeProject]
+    (env: string) => void navigate({ href: href({ kind: "environment", env }) }),
+    [navigate, href]
   );
 
-  const forgeProject = roster.projectName.name;
   const header = (
     <PageHeader
-      title="Overview"
-      subtitle={
-        forgeProject ? (
-          <>
-            Every environment in <span className="font-mono">{forgeProject}</span>: where it runs,
-            what it is on, and where that came from.
-          </>
-        ) : (
-          "Every environment in this project: where it runs, what it is on, and where that came from."
-        )
-      }
+      title="Environments"
+      meta={<span>Where each one runs, what it is on, and where that came from</span>}
+      className="mb-0"
     />
   );
 
   if (roster.isLoading || roster.resolvingName) {
     return (
-      <div className="space-y-6" data-testid="forge-overview-loading">
+      <div className="space-y-6" data-testid="forge-environments-loading">
         {header}
         <Card padding="none" aria-label="Loading environments" aria-busy="true">
           <SkeletonLoader variant="table-row" count={4} />
@@ -111,13 +98,13 @@ export function ForgeOverviewPage() {
   }
 
   return (
-    <div className="space-y-6" data-testid="forge-overview">
+    <div className="space-y-6" data-testid="forge-environments">
       {header}
 
       <CloudNotice availability={roster.live.data?.availability} detail={roster.live.data?.detail} />
 
       {rows.length === 0 ? (
-        <div data-testid="forge-overview-empty">
+        <div data-testid="forge-environments-empty">
           <EmptyState
             icon={<Layers className="h-6 w-6" aria-hidden="true" />}
             title="No environments recorded yet"
@@ -146,10 +133,12 @@ export function ForgeOverviewPage() {
 function UnregisteredEnvs({ envs, onOpen }: { envs: RosterEnv[]; onOpen: (env: string) => void }) {
   return (
     <Card padding="none" data-testid="forge-overview-unregistered">
-      <CardHeader
-        title="Not registered in Reliant"
-        description="Declared in your checkout. Reliant has no record of these yet, so their history and secrets aren't tracked here. Read from your daemon."
-      />
+      <div className="px-4 pt-3">
+        <CardHeader
+          title="Not registered in Reliant"
+          description="Declared in your checkout. Reliant has no record of these yet, so their history and secrets aren't tracked here. Read from your daemon."
+        />
+      </div>
       <ul className="divide-y divide-border/60">
         {envs.map((env) => (
           <li key={env.name}>

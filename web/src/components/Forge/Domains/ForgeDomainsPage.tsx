@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Route component for /forge/domains — CUSTOM DOMAINS.
+ * Route component for /forge/p/$project/domains — CUSTOM DOMAINS (Configure › Domains).
  *
  * ── WHY THIS IS A TOP-LEVEL TAB AND NOT PART OF AN ENVIRONMENT PAGE ─────────
  *
@@ -31,7 +31,6 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Globe, Plus } from "lucide-react";
-import { useSearch } from "@tanstack/react-router";
 
 import EmptyState from "@/components/forge-ui/empty_state";
 import PageHeader from "@/components/forge-ui/page_header";
@@ -54,8 +53,8 @@ import {
   domainTargetsOf,
   type ForgeDomain,
 } from "@/services/forge/domains";
-import { useProjectStore } from "@/store/projectStore";
 
+import { useForgeConsole } from "../Console/consoleContext";
 import { AddDomainDialog, type DomainTargetEnv } from "./AddDomainDialog";
 import { DomainDetail } from "./DomainDetail";
 import { DomainStateBadge } from "./DomainStateBadge";
@@ -64,9 +63,12 @@ import { DomainStateBadge } from "./DomainStateBadge";
 export const CUSTOM_DOMAINS_DOCS_URL = "https://docs.reliantlabs.io/features/custom-domains";
 
 export function ForgeDomainsPage() {
-  const { project: projectParam } = useSearch({ from: "/_authenticated/_forge/forge/domains" });
-  const currentProject = useProjectStore((state) => state.currentProject);
-  const projectId = projectParam ?? currentProject?.id ?? null;
+  // Domains are the ORGANIZATION's, so the top-bar environment scope does not
+  // narrow this list: filing a domain under the env it is bound to would hide
+  // every claimed-but-unbound domain, the exact state a tenant is stuck in
+  // when they need this page. The project only decides which environments a
+  // domain can be bound into.
+  const { projectId } = useForgeConsole();
 
   const { data, isLoading } = useForgeDomains();
   const { envs } = useForgeEnvironments(projectId);

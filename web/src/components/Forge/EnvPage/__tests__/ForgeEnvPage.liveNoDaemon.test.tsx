@@ -90,20 +90,41 @@ vi.mock("@/api/grpc-client", async (importOriginal) => ({
   createForgeClient: daemonTripwire("createForgeClient"),
 }));
 
-const routeState: { env: string; tab?: string; forgeProject?: string } = { env: "prod" };
+const routeState: { env: string; tab?: string } = { env: "prod" };
 const navigate = vi.fn();
 
-vi.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useNavigate: () => navigate,
   useParams: () => ({ env: routeState.env }),
-  useSearch: () => ({ project: "proj-1", tab: routeState.tab, forgeProject: routeState.forgeProject }),
+  useSearch: () => ({ tab: routeState.tab }),
 }));
+
+// What the console layout says the page is about (Console/consoleContext.ts):
+// the forge project the URL names, and the Reliant project declaring it. The
+// env page reads only that. The Environments list also reads the roster,
+// which in the product is the LAYOUT's read — so its tests render inside
+// WithRoster (below), which provides it from the real hook over the mocked
+// transports, and the env page's zero-call guarantee never counts it.
+const consoleState: { forgeProject: string; projectId: string | null } = { forgeProject: "hounders", projectId: "proj-1" };
+const consoleValue = () => ({
+  ...consoleState,
+  env: "prod",
+  setEnv: vi.fn(),
+  page: { kind: "environment", env: routeState.env },
+  href: (page: { kind: string }) => `/forge/p/${consoleState.forgeProject}/${page.kind}`,
+});
+vi.mock("@/components/Forge/Console/consoleContext", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/components/Forge/Console/consoleContext")>();
+  const { useContext } = await import("react");
+  return { ...real, useForgeConsole: () => useContext(real.ForgeConsoleContext) ?? consoleValue() };
+});
 
 // The Reliant project's display name and forge's name for it DIFFER, as they
 // do for the real Bark Social checkout (forge.yaml `name: hounders`). So the
 // page finding its environment at all proves the join key came from the
-// project row — not from a daemon report, and not guessed from the display
-// name.
+// console's forge project — not from a daemon report, and not guessed from
+// the display name.
 vi.mock("@/store/projectStore", () => {
   const currentProject = {
     id: "proj-1",
@@ -293,7 +314,16 @@ vi.mock("@/services/forge/domains", async (importOriginal) => ({
 }));
 
 import { ForgeEnvPage } from "../ForgeEnvPage";
-import { ForgeOverviewPage } from "../../Overview/ForgeOverviewPage";
+import { EnvironmentsPage } from "../../Overview/EnvironmentsPage";
+import { ForgeConsoleContext, type ForgeConsole } from "../../Console/consoleContext";
+import { useForgeRoster } from "@/hooks/forge-queries";
+
+/** The console layout's half for a page that reads the roster. */
+function WithRoster({ children }: { children: React.ReactNode }) {
+  const roster = useForgeRoster(consoleState.projectId, consoleState.forgeProject);
+  const value = { ...consoleValue(), roster } as unknown as ForgeConsole;
+  return <ForgeConsoleContext.Provider value={value}>{children}</ForgeConsoleContext.Provider>;
+}
 
 function renderWithQuery(ui: React.ReactElement) {
   const client = new QueryClient({
@@ -306,7 +336,8 @@ beforeEach(() => {
   daemonCalls.length = 0;
   routeState.env = "prod";
   routeState.tab = undefined;
-  routeState.forgeProject = undefined;
+  consoleState.forgeProject = "hounders";
+  consoleState.projectId = "proj-1";
   vi.clearAllMocks();
   getLiveView.mockResolvedValue([PROD, STAGING]);
   listEnvironmentConvergences.mockImplementation((id: string) =>
@@ -489,9 +520,9 @@ describe("the Live tab makes zero daemon calls", () => {
  * the checkout's topology, which feeds the separately labelled "not
  * registered" list — and the table must render in full when that throws.
  */
-describe("the Overview table needs no daemon", () => {
+describe("the Environments table needs no daemon", () => {
   it("lists every environment from the control plane, fully rendered", async () => {
-    renderWithQuery(<ForgeOverviewPage />);
+    renderWithQuery(<WithRoster><EnvironmentsPage /></WithRoster>);
 
     await screen.findByTestId("forge-env-table");
 
@@ -513,9 +544,9 @@ describe("the Overview table needs no daemon", () => {
 
   it("shows no environments as a normal state when the project has none", async () => {
     getLiveView.mockResolvedValue([]);
-    renderWithQuery(<ForgeOverviewPage />);
+    renderWithQuery(<WithRoster><EnvironmentsPage /></WithRoster>);
 
-    const empty = await screen.findByTestId("forge-overview-empty", {}, { timeout: 5000 });
+    const empty = await screen.findByTestId("forge-environments-empty", {}, { timeout: 5000 });
     expect(empty).toHaveTextContent(/no environments recorded yet/i);
     expect(empty).toHaveTextContent("forge env build");
 
@@ -676,7 +707,8 @@ describe("a queued deploy", () => {
    */
   it("opens a control-plane link by its forge project name, with no daemon", async () => {
     getLiveView.mockResolvedValue([{ ...QUEUED_PROD, project: "barkshop" }]);
-    routeState.forgeProject = "barkshop";
+    consoleState.forgeProject = "barkshop";
+    consoleState.projectId = null;
     renderWithQuery(<ForgeEnvPage />);
 
     await screen.findByTestId("queued-deploy-banner");

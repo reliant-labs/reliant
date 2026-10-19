@@ -15,7 +15,8 @@ import type { LiveConvergenceState, LiveEnv } from "@/services/forge/live";
 
 const navigate = vi.fn();
 const location = { pathname: "/settings/billing" };
-vi.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useNavigate: () => navigate,
   useLocation: () => location,
 }));
@@ -115,11 +116,7 @@ describe("QueuedDeployNotifier", () => {
     const focus = vi.spyOn(window, "focus").mockImplementation(() => {});
     options.onClick();
     expect(focus).toHaveBeenCalled();
-    expect(navigate).toHaveBeenCalledWith({
-      to: "/forge/env/$env",
-      params: { env: "prod" },
-      search: { forgeProject: "hounders" },
-    });
+    expect(navigate).toHaveBeenCalledWith({ href: "/forge/p/hounders/environments/prod?env=prod" });
   });
 
   it("never notifies for an environment this session did not see queued", () => {
@@ -137,7 +134,7 @@ describe("QueuedDeployNotifier", () => {
   });
 
   it("defers to the notification settings, and knows when the user is looking at the page", () => {
-    location.pathname = "/forge/env/prod";
+    location.pathname = "/forge/p/hounders/environments/prod";
     shouldShowNotificationSync.mockReturnValueOnce(false);
     const { reading } = setup();
     reading(prod({ queued: true }));

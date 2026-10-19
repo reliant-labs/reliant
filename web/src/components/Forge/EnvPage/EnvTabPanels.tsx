@@ -68,8 +68,12 @@ export function Panel({
 }) {
   return (
     <Card padding="none" data-testid={testId}>
-      <CardHeader title={title} description={description} actions={actions} />
-      <div className={flush ? "" : "p-4"}>{children}</div>
+      {/* The header's own padding: forge-ui's CardHeader has none, so in a
+          `padding="none"` card it would sit on the border. */}
+      <div className="px-4 pt-3">
+        <CardHeader title={title} description={description} actions={actions} />
+      </div>
+      <div className={flush ? "" : "px-4 pb-4"}>{children}</div>
     </Card>
   );
 }

@@ -11,7 +11,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-router";
 
-import { forgeEnvPageSearchSchema, forgeObservabilitySearchSchema } from "@/routeSchemas";
+import { forgeConsoleEnvSearchSchema, forgeObservabilitySearchSchema } from "@/routeSchemas";
 import type { Panel } from "@/services/controlPlane/observability/types";
 
 import { MAX_FILTERS, MAX_GROUP_BY, MAX_IN_VALUES } from "../attributes";
@@ -165,7 +165,7 @@ describe("the URL round trip", () => {
 
   it("is the same shape on the env page, so a link moves between the two places", () => {
     const search: ObsSearch = { view: "workloads", workload: "api", container: "api", groupBy: ["service.version"], f: ["status:error"] };
-    expect(throughTheUrl({ tab: "observability", ...search }, forgeEnvPageSearchSchema).parsed).toEqual({ tab: "observability", ...search });
+    expect(throughTheUrl({ tab: "observability", ...search }, forgeConsoleEnvSearchSchema).parsed).toEqual({ tab: "observability", ...search });
   });
 
   it("lists every key the area owns, so leaving the tab clears them all", () => {

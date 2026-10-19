@@ -88,9 +88,17 @@ export interface ObservabilityPanelProps {
   place: ObsPlace;
   search: ObsSearch;
   navigate: ObsNavigate;
+  /**
+   * "tabs" (default): the panel carries its own view tabs and environment
+   * picker. "console": it is one page of the console (Console/
+   * ObservabilityHost) — the nav picks the view and the top bar the
+   * environment scope, so it draws neither (decision D9).
+   */
+  chrome?: "tabs" | "console";
 }
 
-export default function ObservabilityPanel({ place, search, navigate }: ObservabilityPanelProps) {
+export default function ObservabilityPanel({ place, search, navigate, chrome = "tabs" }: ObservabilityPanelProps) {
+  const consoleChrome = chrome === "console";
   const view = viewOf(search.view);
   const range = rangeOf(search.range);
   const queryClient = useQueryClient();
@@ -160,40 +168,42 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
 
   return (
     <div className="space-y-4" data-testid="obs-panel" data-view={view} data-place={place.kind}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div
-          role="tablist"
-          aria-label="Observability views"
-          className="inline-flex flex-wrap rounded-lg border border-border bg-background p-0.5"
-          onKeyDown={(event) => {
-            if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
-            const index = OBS_VIEWS.indexOf(view);
-            const next = OBS_VIEWS[(index + (event.key === "ArrowRight" ? 1 : -1) + OBS_VIEWS.length) % OBS_VIEWS.length];
-            event.preventDefault();
-            selectView(next);
-            document.getElementById(`obs-view-${next}`)?.focus();
-          }}
-        >
-          {OBS_VIEWS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              id={`obs-view-${id}`}
-              aria-selected={id === view}
-              aria-controls="obs-view-panel"
-              tabIndex={id === view ? 0 : -1}
-              onClick={() => selectView(id)}
-              data-testid={`obs-view-${id}`}
-              className={cn(
-                "rounded-md px-3 py-1 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                id === view ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {OBS_VIEW_LABELS[id]}
-            </button>
-          ))}
-        </div>
+      <div className={cn("flex flex-wrap items-center gap-3", consoleChrome ? "justify-end" : "justify-between")}>
+        {!consoleChrome && (
+          <div
+            role="tablist"
+            aria-label="Observability views"
+            className="inline-flex flex-wrap rounded-lg border border-border bg-background p-0.5"
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+              const index = OBS_VIEWS.indexOf(view);
+              const next = OBS_VIEWS[(index + (event.key === "ArrowRight" ? 1 : -1) + OBS_VIEWS.length) % OBS_VIEWS.length];
+              event.preventDefault();
+              selectView(next);
+              document.getElementById(`obs-view-${next}`)?.focus();
+            }}
+          >
+            {OBS_VIEWS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                id={`obs-view-${id}`}
+                aria-selected={id === view}
+                aria-controls="obs-view-panel"
+                tabIndex={id === view ? 0 : -1}
+                onClick={() => selectView(id)}
+                data-testid={`obs-view-${id}`}
+                className={cn(
+                  "rounded-md px-3 py-1 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  id === view ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {OBS_VIEW_LABELS[id]}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           {org.orgId && <AlertNotifications orgId={org.orgId} envName={envName} onOpenAlerts={() => selectView("alerts")} />}
           {/* Delivery has its own windows (days); a comparison its own (around the promotion). */}
@@ -238,7 +248,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
         <ObsScopeBar
           scope={scope}
           range={range}
-          environments={place.kind === "project" ? place.environments : undefined}
+          environments={place.kind === "project" && !consoleChrome ? place.environments : undefined}
           selectedEnvs={search.envs ?? []}
           onEnvsChange={(names) => navigate({ envs: names.length ? names : undefined }, { replace: true })}
           pinnedEnv={place.kind === "env" ? place.env.name : undefined}
@@ -262,7 +272,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
         />
       )}
 
-      <div id="obs-view-panel" role="tabpanel" aria-labelledby={`obs-view-${view}`}>
+      <div id="obs-view-panel" {...(consoleChrome ? {} : { role: "tabpanel", "aria-labelledby": `obs-view-${view}` })}>
         <ObsChartMarkersProvider markers={releases.markers}>
         {!scope ? (
           org.isLoading ? (
