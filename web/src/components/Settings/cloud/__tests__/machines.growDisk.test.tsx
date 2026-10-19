@@ -106,6 +106,8 @@ vi.mock('@/api/grpc-client', () => ({
 import { MachinesSection } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { DaemonDiskState } from '@/gen/controlplane/controlplane/v1/shared_pb'
+import { DiskReportSchema } from '@/gen/reliant/v1/tools_daemon_pb'
+import { create } from '@bufbuild/protobuf'
 
 function machine(over: Record<string, unknown> = {}) {
   return {
@@ -317,13 +319,13 @@ describe('machine detail — grow disk', () => {
   })
 
   it('offers Grow disk beside Free up space on a volume under pressure', async () => {
+    // A real message, as the wire decodes one: every field the card reads is
+    // set, to its default where the test does not care about it.
     const row = machine({
-      disk: {
+      disk: create(DiskReportSchema, {
         reportedAtMs: BigInt(Date.now()),
-        volumes: [
-          { label: 'home', paths: ['/home/workspace'], totalBytes: 100n, freeBytes: 2n, pressure: true, consumers: [] },
-        ],
-      },
+        volumes: [{ label: 'home', paths: ['/home/workspace'], totalBytes: 100n, freeBytes: 2n, pressure: true }],
+      }),
     })
     showMachine(row)
     renderDetail()
