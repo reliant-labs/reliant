@@ -12,7 +12,7 @@ import (
 )
 
 const getMessagesForThread = `-- name: GetMessagesForThread :many
-SELECT m.id, m.chat_id, m.ordinal, m.thread_id, m.context_window_id, m.role, m.display_style, m.model, m.agent, m.token_count, m.cost, m.workflow_id, m.run_id, m.node_id, m.node_path, m.activity_id, m.created_at, m.updated_at, m.seq, cw.sequence as context_sequence
+SELECT m.id, m.chat_id, m.ordinal, m.thread_id, m.context_window_id, m.role, m.display_style, m.model, m.agent, m.token_count, m.cost, m.workflow_id, m.run_id, m.node_id, m.node_path, m.activity_id, m.created_at, m.updated_at, m.seq, m.provider_account_id, cw.sequence as context_sequence
 FROM messages m
 JOIN context_windows cw ON cw.id = m.context_window_id
 WHERE cw.thread_id = $1
@@ -20,26 +20,27 @@ ORDER BY cw.sequence ASC, m.seq ASC
 `
 
 type GetMessagesForThreadRow struct {
-	ID              string          `json:"id"`
-	ChatID          string          `json:"chat_id"`
-	Ordinal         int64           `json:"ordinal"`
-	ThreadID        string          `json:"thread_id"`
-	ContextWindowID string          `json:"context_window_id"`
-	Role            int32           `json:"role"`
-	DisplayStyle    sql.NullInt32   `json:"display_style"`
-	Model           sql.NullString  `json:"model"`
-	Agent           sql.NullString  `json:"agent"`
-	TokenCount      sql.NullInt64   `json:"token_count"`
-	Cost            sql.NullFloat64 `json:"cost"`
-	WorkflowID      sql.NullString  `json:"workflow_id"`
-	RunID           sql.NullString  `json:"run_id"`
-	NodeID          sql.NullString  `json:"node_id"`
-	NodePath        sql.NullString  `json:"node_path"`
-	ActivityID      sql.NullString  `json:"activity_id"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
-	Seq             int64           `json:"seq"`
-	ContextSequence int64           `json:"context_sequence"`
+	ID                string          `json:"id"`
+	ChatID            string          `json:"chat_id"`
+	Ordinal           int64           `json:"ordinal"`
+	ThreadID          string          `json:"thread_id"`
+	ContextWindowID   string          `json:"context_window_id"`
+	Role              int32           `json:"role"`
+	DisplayStyle      sql.NullInt32   `json:"display_style"`
+	Model             sql.NullString  `json:"model"`
+	Agent             sql.NullString  `json:"agent"`
+	TokenCount        sql.NullInt64   `json:"token_count"`
+	Cost              sql.NullFloat64 `json:"cost"`
+	WorkflowID        sql.NullString  `json:"workflow_id"`
+	RunID             sql.NullString  `json:"run_id"`
+	NodeID            sql.NullString  `json:"node_id"`
+	NodePath          sql.NullString  `json:"node_path"`
+	ActivityID        sql.NullString  `json:"activity_id"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+	Seq               int64           `json:"seq"`
+	ProviderAccountID sql.NullString  `json:"provider_account_id"`
+	ContextSequence   int64           `json:"context_sequence"`
 }
 
 // Get all messages for a thread across all context windows
@@ -73,6 +74,7 @@ func (q *Queries) GetMessagesForThread(ctx context.Context, threadID string) ([]
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Seq,
+			&i.ProviderAccountID,
 			&i.ContextSequence,
 		); err != nil {
 			return nil, err
@@ -261,7 +263,7 @@ func (q *Queries) GetNodeContentBlocks(ctx context.Context, contextWindowID stri
 }
 
 const getNodeMessages = `-- name: GetNodeMessages :many
-SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages
+SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq, provider_account_id FROM messages
 WHERE context_window_id = $1
 ORDER BY seq ASC
 `
@@ -297,6 +299,7 @@ func (q *Queries) GetNodeMessages(ctx context.Context, contextWindowID string) (
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Seq,
+			&i.ProviderAccountID,
 		); err != nil {
 			return nil, err
 		}

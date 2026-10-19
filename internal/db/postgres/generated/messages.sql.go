@@ -286,7 +286,7 @@ func (q *Queries) GetLatestContextSequenceByThread(ctx context.Context, threadID
 }
 
 const getLatestMessageByContextWindow = `-- name: GetLatestMessageByContextWindow :one
-SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages
+SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq, provider_account_id FROM messages
 WHERE context_window_id = $1
 ORDER BY seq DESC
 LIMIT 1
@@ -316,12 +316,13 @@ func (q *Queries) GetLatestMessageByContextWindow(ctx context.Context, contextWi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Seq,
+		&i.ProviderAccountID,
 	)
 	return i, err
 }
 
 const getLatestMessageByThread = `-- name: GetLatestMessageByThread :one
-SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages
+SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq, provider_account_id FROM messages
 WHERE thread_id = $1
 ORDER BY seq DESC
 LIMIT 1
@@ -351,12 +352,13 @@ func (q *Queries) GetLatestMessageByThread(ctx context.Context, threadID string)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Seq,
+		&i.ProviderAccountID,
 	)
 	return i, err
 }
 
 const getLatestMessageWithTokensByThread = `-- name: GetLatestMessageWithTokensByThread :one
-SELECT m.id, m.chat_id, m.ordinal, m.thread_id, m.context_window_id, m.role, m.display_style, m.model, m.agent, m.token_count, m.cost, m.workflow_id, m.run_id, m.node_id, m.node_path, m.activity_id, m.created_at, m.updated_at, m.seq FROM messages m
+SELECT m.id, m.chat_id, m.ordinal, m.thread_id, m.context_window_id, m.role, m.display_style, m.model, m.agent, m.token_count, m.cost, m.workflow_id, m.run_id, m.node_id, m.node_path, m.activity_id, m.created_at, m.updated_at, m.seq, m.provider_account_id FROM messages m
 JOIN context_windows cw ON cw.id = m.context_window_id
 WHERE cw.thread_id = $1
   AND cw.sequence = $2
@@ -394,6 +396,7 @@ func (q *Queries) GetLatestMessageWithTokensByThread(ctx context.Context, arg Ge
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Seq,
+		&i.ProviderAccountID,
 	)
 	return i, err
 }
@@ -417,7 +420,7 @@ func (q *Queries) GetLatestTurnRoleByThread(ctx context.Context, threadID string
 }
 
 const getMessage = `-- name: GetMessage :one
-SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages WHERE id = $1
+SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq, provider_account_id FROM messages WHERE id = $1
 `
 
 func (q *Queries) GetMessage(ctx context.Context, id string) (Message, error) {
@@ -443,12 +446,13 @@ func (q *Queries) GetMessage(ctx context.Context, id string) (Message, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Seq,
+		&i.ProviderAccountID,
 	)
 	return i, err
 }
 
 const getMessageByActivityID = `-- name: GetMessageByActivityID :one
-SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages
+SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq, provider_account_id FROM messages
 WHERE chat_id = $1 AND activity_id = $2
 LIMIT 1
 `
@@ -481,12 +485,13 @@ func (q *Queries) GetMessageByActivityID(ctx context.Context, arg GetMessageByAc
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Seq,
+		&i.ProviderAccountID,
 	)
 	return i, err
 }
 
 const getMessagesByContextWindow = `-- name: GetMessagesByContextWindow :many
-SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages
+SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq, provider_account_id FROM messages
 WHERE context_window_id = $1
 ORDER BY seq ASC
 `
@@ -521,6 +526,7 @@ func (q *Queries) GetMessagesByContextWindow(ctx context.Context, contextWindowI
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Seq,
+			&i.ProviderAccountID,
 		); err != nil {
 			return nil, err
 		}
@@ -536,7 +542,7 @@ func (q *Queries) GetMessagesByContextWindow(ctx context.Context, contextWindowI
 }
 
 const getMessagesByThreadAndSequence = `-- name: GetMessagesByThreadAndSequence :many
-SELECT m.id, m.chat_id, m.ordinal, m.thread_id, m.context_window_id, m.role, m.display_style, m.model, m.agent, m.token_count, m.cost, m.workflow_id, m.run_id, m.node_id, m.node_path, m.activity_id, m.created_at, m.updated_at, m.seq FROM messages m
+SELECT m.id, m.chat_id, m.ordinal, m.thread_id, m.context_window_id, m.role, m.display_style, m.model, m.agent, m.token_count, m.cost, m.workflow_id, m.run_id, m.node_id, m.node_path, m.activity_id, m.created_at, m.updated_at, m.seq, m.provider_account_id FROM messages m
 JOIN context_windows cw ON cw.id = m.context_window_id
 WHERE cw.thread_id = $1
   AND cw.sequence = $2
@@ -578,6 +584,7 @@ func (q *Queries) GetMessagesByThreadAndSequence(ctx context.Context, arg GetMes
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Seq,
+			&i.ProviderAccountID,
 		); err != nil {
 			return nil, err
 		}
@@ -712,7 +719,7 @@ func (q *Queries) HasMessagesBeforeInContextWindow(ctx context.Context, arg HasM
 }
 
 const listMessages = `-- name: ListMessages :many
-SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages
+SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq, provider_account_id FROM messages
 WHERE chat_id = $1
 ORDER BY seq ASC
 `
@@ -746,6 +753,7 @@ func (q *Queries) ListMessages(ctx context.Context, chatID string) ([]Message, e
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Seq,
+			&i.ProviderAccountID,
 		); err != nil {
 			return nil, err
 		}
@@ -761,7 +769,7 @@ func (q *Queries) ListMessages(ctx context.Context, chatID string) ([]Message, e
 }
 
 const listMessagesInContextWindowRange = `-- name: ListMessagesInContextWindowRange :many
-SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages
+SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq, provider_account_id FROM messages
 WHERE context_window_id = $1
   AND seq >= $2
   AND ($3::bigint IS NULL OR seq < $3)
@@ -809,6 +817,7 @@ func (q *Queries) ListMessagesInContextWindowRange(ctx context.Context, arg List
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Seq,
+			&i.ProviderAccountID,
 		); err != nil {
 			return nil, err
 		}
@@ -824,7 +833,7 @@ func (q *Queries) ListMessagesInContextWindowRange(ctx context.Context, arg List
 }
 
 const listRecentMessagesByThread = `-- name: ListRecentMessagesByThread :many
-SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages
+SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq, provider_account_id FROM messages
 WHERE thread_id = $1
 ORDER BY seq DESC
 LIMIT $2
@@ -866,6 +875,7 @@ func (q *Queries) ListRecentMessagesByThread(ctx context.Context, arg ListRecent
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Seq,
+			&i.ProviderAccountID,
 		); err != nil {
 			return nil, err
 		}
@@ -881,7 +891,7 @@ func (q *Queries) ListRecentMessagesByThread(ctx context.Context, arg ListRecent
 }
 
 const listRecentMessagesInContextWindowBeforeSeq = `-- name: ListRecentMessagesInContextWindowBeforeSeq :many
-SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages
+SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq, provider_account_id FROM messages
 WHERE context_window_id = $1
   AND ($2::bigint = 0 OR seq < $2::bigint)
 ORDER BY seq DESC
@@ -928,6 +938,7 @@ func (q *Queries) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Seq,
+			&i.ProviderAccountID,
 		); err != nil {
 			return nil, err
 		}
@@ -943,7 +954,7 @@ func (q *Queries) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context
 }
 
 const listRecentTranscriptSiblingMessages = `-- name: ListRecentTranscriptSiblingMessages :many
-SELECT m.id, m.chat_id, m.ordinal, m.thread_id, m.context_window_id, m.role, m.display_style, m.model, m.agent, m.token_count, m.cost, m.workflow_id, m.run_id, m.node_id, m.node_path, m.activity_id, m.created_at, m.updated_at, m.seq FROM messages m
+SELECT m.id, m.chat_id, m.ordinal, m.thread_id, m.context_window_id, m.role, m.display_style, m.model, m.agent, m.token_count, m.cost, m.workflow_id, m.run_id, m.node_id, m.node_path, m.activity_id, m.created_at, m.updated_at, m.seq, m.provider_account_id FROM messages m
 WHERE m.chat_id = $1
   AND m.thread_id <> $2
   AND m.seq >= $3
@@ -1011,6 +1022,7 @@ func (q *Queries) ListRecentTranscriptSiblingMessages(ctx context.Context, arg L
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Seq,
+			&i.ProviderAccountID,
 		); err != nil {
 			return nil, err
 		}

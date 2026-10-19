@@ -104,6 +104,14 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 	exec(`INSERT INTO antigravity_auth_tokens (id, user_id, access_token_sealed, refresh_token_sealed, id_token_sealed, expires_at, created_at, updated_at)
 	      VALUES ($1,$2,'\x00'::bytea,'\x00'::bytea,'\x00'::bytea,$3,$3,$3)`, id("agytok"), userID, now)
 
+	// The unified account table, with the rows that cascade from it: limit state, and a thread's
+	// sticky assignment (which also references the seeded thread).
+	exec(`INSERT INTO provider_accounts (id, user_id, provider, auth_kind, identity_key, priority, secret_sealed)
+	      VALUES ($1,$2,'claude','oauth','acct:a/org:o',0,'\x00'::bytea)`, id("pacct"), userID)
+	exec(`INSERT INTO provider_account_limits (account_id, user_id, observed_at) VALUES ($1,$2,$3)`, id("pacct"), userID, now)
+	exec(`INSERT INTO thread_provider_accounts (thread_id, provider, account_id, assigned_at, reason)
+	      VALUES ($1,'claude',$2,$3,'initial')`, id("thread"), id("pacct"), now)
+
 	exec(`INSERT INTO settings (id, user_id, key, value, value_type, created_at, updated_at)
 	      VALUES ($1,$2,'theme','dark','string',$3,$3)`, id("set"), userID, now)
 }
@@ -120,6 +128,10 @@ var ownershipCount = map[string]string{
 	"codex_auth_tokens":       `SELECT COUNT(*) FROM codex_auth_tokens WHERE user_id = $1`,
 	"copilot_auth_tokens":     `SELECT COUNT(*) FROM copilot_auth_tokens WHERE user_id = $1`,
 	"antigravity_auth_tokens": `SELECT COUNT(*) FROM antigravity_auth_tokens WHERE user_id = $1`,
+	"provider_accounts":       `SELECT COUNT(*) FROM provider_accounts WHERE user_id = $1`,
+	"provider_account_limits": `SELECT COUNT(*) FROM provider_account_limits WHERE user_id = $1`,
+	"thread_provider_accounts": `SELECT COUNT(*) FROM thread_provider_accounts t
+	                               JOIN provider_accounts a ON a.id = t.account_id WHERE a.user_id = $1`,
 	"worktrees": `SELECT COUNT(*) FROM worktrees w
 	                JOIN projects p ON p.id = w.project_id WHERE p.user_id = $1`,
 	"messages": `SELECT COUNT(*) FROM messages m
@@ -168,6 +180,7 @@ func TestPurge_RemovesEverythingForUser(t *testing.T) {
 	for _, table := range append([]string{
 		"projects", "chats", "worktrees", "settings",
 		"messages", "threads", "tool_calls",
+		"provider_account_limits", "thread_provider_accounts",
 	}, credentialTables...) {
 		if n := countRows(t, rawDB, table, userID); n != 0 {
 			t.Errorf("%s: %d rows survived the purge, want 0", table, n)
@@ -184,6 +197,7 @@ var credentialTables = []string{
 	"codex_auth_tokens",
 	"copilot_auth_tokens",
 	"antigravity_auth_tokens",
+	"provider_accounts",
 }
 
 // TestPurge_RemovesEveryProviderCredential is the regression test for the

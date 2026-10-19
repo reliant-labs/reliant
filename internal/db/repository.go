@@ -348,6 +348,10 @@ type Repository interface {
 	CompareAndSwapClaudeAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.ClaudeAuthTokens) (bool, error)
 	DeleteClaudeAuthTokens(ctx context.Context, userID string) error
 
+	// Provider accounts: one row per connected LLM credential, with its limit state and the
+	// sticky thread assignments (core.ProviderAccountStore).
+	core.ProviderAccountStore
+
 	// Privacy Settings
 	GetAnalyticsEnabled(ctx context.Context, userID string) (bool, error)
 	SetAnalyticsEnabled(ctx context.Context, userID string, enabled bool) error

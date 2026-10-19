@@ -105,6 +105,7 @@ func Preview(ctx context.Context, db *sql.DB, userID string) (Counts, error) {
 			 OR EXISTS (SELECT 1 FROM copilot_auth_tokens     WHERE user_id = $1)
 			 OR EXISTS (SELECT 1 FROM antigravity_auth_tokens WHERE user_id = $1)
 			 OR EXISTS (SELECT 1 FROM api_keys                WHERE user_id = $1)
+			 OR EXISTS (SELECT 1 FROM provider_accounts       WHERE user_id = $1)
 			 OR EXISTS (SELECT 1 FROM connections             WHERE user_id = $1 AND deleted_at IS NULL))`,
 		userID)
 	if err := row.Scan(&c.Projects, &c.Chats, &c.Worktrees, &c.Messages, &c.HasProviderCredentials); err != nil {
@@ -261,6 +262,8 @@ var purgeSteps = []step{
 	{"copilot_auth_tokens", `DELETE FROM copilot_auth_tokens WHERE user_id = $1`},
 	{"antigravity_auth_tokens", `DELETE FROM antigravity_auth_tokens WHERE user_id = $1`},
 	{"api_keys", `DELETE FROM api_keys WHERE user_id = $1`},
+	// provider_account_limits and thread_provider_accounts cascade from provider_accounts.
+	{"provider_accounts", `DELETE FROM provider_accounts WHERE user_id = $1`},
 
 	// Connections (credential vault). connection_secrets cascades from
 	// connections. The audit rows go too: they are the user's data, and a

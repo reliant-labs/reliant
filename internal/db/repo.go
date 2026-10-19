@@ -125,6 +125,7 @@ type Repo struct {
 	worktrees       core.WorktreeStore
 	repos           core.RepoStore
 	settings        core.SettingStore
+	accounts        *postgresstore.AccountStore
 	attachments     core.AttachmentStore
 	workflows       core.WorkflowStore
 	threads         core.ThreadStore
@@ -178,6 +179,7 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 	return &Repo{
 		DB:            q,
 		driver:        driver,
+		accounts:      postgresstore.NewProviderAccountStore(db),
 		planTasks:     postgresstore.NewPlanTaskStore(pgQueries),
 		chats:         postgresstore.NewChatStore(pgQueries, q),
 		runs:          postgresstore.NewRunStore(pgQueries),

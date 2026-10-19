@@ -447,25 +447,26 @@ type ItemDefault struct {
 }
 
 type Message struct {
-	ID              string          `json:"id"`
-	ChatID          string          `json:"chat_id"`
-	Ordinal         int64           `json:"ordinal"`
-	ThreadID        string          `json:"thread_id"`
-	ContextWindowID string          `json:"context_window_id"`
-	Role            int32           `json:"role"`
-	DisplayStyle    sql.NullInt32   `json:"display_style"`
-	Model           sql.NullString  `json:"model"`
-	Agent           sql.NullString  `json:"agent"`
-	TokenCount      sql.NullInt64   `json:"token_count"`
-	Cost            sql.NullFloat64 `json:"cost"`
-	WorkflowID      sql.NullString  `json:"workflow_id"`
-	RunID           sql.NullString  `json:"run_id"`
-	NodeID          sql.NullString  `json:"node_id"`
-	NodePath        sql.NullString  `json:"node_path"`
-	ActivityID      sql.NullString  `json:"activity_id"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
-	Seq             int64           `json:"seq"`
+	ID                string          `json:"id"`
+	ChatID            string          `json:"chat_id"`
+	Ordinal           int64           `json:"ordinal"`
+	ThreadID          string          `json:"thread_id"`
+	ContextWindowID   string          `json:"context_window_id"`
+	Role              int32           `json:"role"`
+	DisplayStyle      sql.NullInt32   `json:"display_style"`
+	Model             sql.NullString  `json:"model"`
+	Agent             sql.NullString  `json:"agent"`
+	TokenCount        sql.NullInt64   `json:"token_count"`
+	Cost              sql.NullFloat64 `json:"cost"`
+	WorkflowID        sql.NullString  `json:"workflow_id"`
+	RunID             sql.NullString  `json:"run_id"`
+	NodeID            sql.NullString  `json:"node_id"`
+	NodePath          sql.NullString  `json:"node_path"`
+	ActivityID        sql.NullString  `json:"activity_id"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+	Seq               int64           `json:"seq"`
+	ProviderAccountID sql.NullString  `json:"provider_account_id"`
 }
 
 type MessageContentBlock struct {
@@ -600,6 +601,51 @@ type ProjectDaemon struct {
 	InstallRequestID string         `json:"install_request_id"`
 }
 
+type ProviderAccount struct {
+	ID                string         `json:"id"`
+	UserID            string         `json:"user_id"`
+	Provider          string         `json:"provider"`
+	AuthKind          string         `json:"auth_kind"`
+	IdentityKey       string         `json:"identity_key"`
+	Label             string         `json:"label"`
+	Email             sql.NullString `json:"email"`
+	ExternalAccountID sql.NullString `json:"external_account_id"`
+	OrganizationID    sql.NullString `json:"organization_id"`
+	OrganizationName  sql.NullString `json:"organization_name"`
+	Plan              sql.NullString `json:"plan"`
+	PlanRaw           sql.NullString `json:"plan_raw"`
+	KeyHint           sql.NullString `json:"key_hint"`
+	Priority          int32          `json:"priority"`
+	PausedAt          sql.NullTime   `json:"paused_at"`
+	NeedsReauthAt     sql.NullTime   `json:"needs_reauth_at"`
+	NeedsReauthReason sql.NullString `json:"needs_reauth_reason"`
+	SecretSealed      []byte         `json:"secret_sealed"`
+	RefreshSealed     []byte         `json:"refresh_sealed"`
+	IDTokenSealed     []byte         `json:"id_token_sealed"`
+	ExpiresAt         sql.NullTime   `json:"expires_at"`
+	Scope             sql.NullString `json:"scope"`
+	LegacySource      sql.NullString `json:"legacy_source"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+}
+
+type ProviderAccountLimit struct {
+	AccountID            string          `json:"account_id"`
+	UserID               string          `json:"user_id"`
+	Status               string          `json:"status"`
+	Windows              json.RawMessage `json:"windows"`
+	RepresentativeWindow sql.NullString  `json:"representative_window"`
+	Source               string          `json:"source"`
+	ObservedAt           time.Time       `json:"observed_at"`
+	LimitedUntil         sql.NullTime    `json:"limited_until"`
+	LimitedWindow        sql.NullString  `json:"limited_window"`
+	LimitedProbes        int32           `json:"limited_probes"`
+	UsageApiNextAt       sql.NullTime    `json:"usage_api_next_at"`
+	UsageApiFailures     int32           `json:"usage_api_failures"`
+	UsageApiError        sql.NullString  `json:"usage_api_error"`
+	UpdatedAt            time.Time       `json:"updated_at"`
+}
+
 type ProviderBackoff struct {
 	ThreadID     string       `json:"thread_id"`
 	ChatID       string       `json:"chat_id"`
@@ -730,6 +776,14 @@ type Thread struct {
 	CompletedAt     sql.NullTime   `json:"completed_at"`
 	ForkAtMessageID sql.NullString `json:"fork_at_message_id"`
 	WorktreeID      sql.NullString `json:"worktree_id"`
+}
+
+type ThreadProviderAccount struct {
+	ThreadID   string    `json:"thread_id"`
+	Provider   string    `json:"provider"`
+	AccountID  string    `json:"account_id"`
+	AssignedAt time.Time `json:"assigned_at"`
+	Reason     string    `json:"reason"`
 }
 
 type ToolCall struct {
