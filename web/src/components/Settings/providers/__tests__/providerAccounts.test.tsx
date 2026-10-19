@@ -49,6 +49,7 @@ vi.mock("../../../../lib/settingsPersistence", () => ({
 
 vi.mock("../../../../store/globalDataStore", () => ({
   useGlobalDataStore: { getState: () => ({ refetchModels: mocks.refetchModels }) },
+  useModels: () => ({ models: [], tiers: {}, loading: false, error: null }),
 }));
 
 vi.mock("../../../../lib/events", () => ({ getEventBus: () => ({ emit: vi.fn() }) }));

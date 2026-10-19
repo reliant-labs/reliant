@@ -7,10 +7,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/preset"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -242,5 +244,83 @@ func TestParseSpawnToolInput_Providers(t *testing.T) {
 	} {
 		_, err := parseSpawnToolInput(in)
 		assert.Error(t, err, name)
+	}
+}
+
+type ProviderPolicySuite struct {
+	suite.Suite
+	temporaltest.WorkflowTestSuite
+}
+
+func TestProviderPolicyWorkflow(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(ProviderPolicySuite))
+}
+
+// runSpawning runs an agent that spawns one sub-agent (with spawnArgs added to
+// the call) and returns the Failover policy each call_llm turn was handed,
+// root and child.
+func (s *ProviderPolicySuite) runSpawning(chatID string, inputs, spawnArgs map[string]interface{}) (root, sub []types.FailoverPolicy) {
+	env := s.NewTestWorkflowEnvironment()
+	call := spawnToolCall("tc1", "scan the repo")
+	if spawnArgs != nil {
+		in := map[string]interface{}{"preset": "general", "prompt": "scan the repo"}
+		for k, v := range spawnArgs {
+			in[k] = v
+		}
+		data, _ := json.Marshal(in)
+		call["input"] = string(data)
+	}
+	e := newSpawnE2EEnv(s.T(), env, []scriptedToolCallsResponse{{toolCalls: []map[string]interface{}{call}}})
+	input := spawnE2EWorkflowInput(chatID)
+	input.Inputs = inputs
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+	s.Require().True(env.IsWorkflowCompleted())
+	s.Require().NoError(env.GetWorkflowError())
+
+	rootThread := "thread-" + chatID
+	for _, rtx := range e.callLLMRuntimes {
+		if rtx.Thread == rootThread {
+			root = append(root, rtx.Failover)
+		} else {
+			sub = append(sub, rtx.Failover)
+		}
+	}
+	s.Require().NotEmpty(root)
+	s.Require().NotEmpty(sub, "the sub-agent must have taken a turn")
+	return root, sub
+}
+
+// The chat opted in to a fallback; the sub-agent it spawns follows the same
+// policy, with no YAML forwarding it.
+func (s *ProviderPolicySuite) TestSubAgentInheritsTheChatsPolicy() {
+	root, sub := s.runSpawning("chat-policy", map[string]interface{}{
+		"model":                "claude-5.5-opus@claude",
+		InputKeyProviderPolicy: policyOf("fallback", "gpt-5.6-sol@codex"),
+	}, nil)
+	for _, p := range append(root, sub...) {
+		s.Equal(types.FailoverPolicy{FallbackModel: "gpt-5.6-sol@codex"}, p)
+	}
+}
+
+// A spawn call's providers beats what the chat set, for that sub-agent alone.
+func (s *ProviderPolicySuite) TestSpawnProvidersBeatTheChatsPolicy() {
+	root, sub := s.runSpawning("chat-spawn-override", map[string]interface{}{
+		"model":                "claude-5.5-opus@claude",
+		InputKeyProviderPolicy: policyOf("fallback", "gpt-5.6-sol@codex"),
+	}, map[string]interface{}{"providers": map[string]interface{}{"on_limit": "wait"}})
+	for _, p := range root {
+		s.Equal("gpt-5.6-sol@codex", p.FallbackModel, "the root keeps the chat's policy")
+	}
+	for _, p := range sub {
+		s.Equal(types.FailoverPolicy{}, p, "the sub-agent was told to wait")
+	}
+}
+
+// A chat with no policy keeps no policy anywhere: nothing is invented.
+func (s *ProviderPolicySuite) TestNoPolicyStaysNone() {
+	root, sub := s.runSpawning("chat-nopolicy", map[string]interface{}{"model": "claude-5.5-opus@claude"}, nil)
+	for _, p := range append(root, sub...) {
+		s.Equal(types.FailoverPolicy{}, p)
 	}
 }

@@ -10,6 +10,7 @@ import { mcpGrpc } from "./mcp-grpc";
 import { toolCallGrpc } from "./tool-call-grpc";
 import { logger } from "../lib/logger";
 import { HiddenItemType } from "../gen/reliant/v1/settings_pb";
+import type { ProviderPolicy_OnLimit } from "../gen/reliant/v1/chat_pb";
 import type {
   StartChatRequest,
   UpdateChatRequest,
@@ -389,6 +390,14 @@ export const api = {
       expectedVersion?: bigint,
     ) => {
       return chatGrpc.updateWorkflowParams(chatId, params, threadId, expectedVersion);
+    },
+
+    updateProviderPolicy: async (
+      chatId: string,
+      providerPolicy: { onLimit: ProviderPolicy_OnLimit; fallbackModel?: string },
+      expectedVersion?: bigint,
+    ) => {
+      return chatGrpc.updateProviderPolicy(chatId, providerPolicy, expectedVersion);
     },
 
     sendMessage: async (

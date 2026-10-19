@@ -64,7 +64,11 @@ func EffectiveProviderPolicy(
 			policy.OnLimit, policy.FallbackModel = string(def.OnLimit), def.FallbackModel
 		}
 	}
-	return types.RunProviderPolicyFromValue(policy)
+	policy = types.RunProviderPolicyFromValue(policy)
+	if policy.OnLimit == types.OnLimitFallback && primaryDriver != "" && v2.FallbackDriver(policy.FallbackModel) == primaryDriver {
+		policy.OnLimit, policy.FallbackModel = types.OnLimitWait, ""
+	}
+	return policy
 }
 
 // injectProviderPolicy writes the chat's effective provider policy into a run's

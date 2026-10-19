@@ -1702,6 +1702,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           onPresetChange={(preset) => handlePresetChange("", preset)}
           workflowTag={workflowTagInfo?.workflowTag}
           groupTags={workflowTagInfo?.groupTags}
+          chatId={isViewingThreadParams ? undefined : chatId}
         />
       );
     };

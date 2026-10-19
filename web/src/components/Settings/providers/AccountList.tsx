@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import type { ProviderAccount } from "../../../api/provider-account-grpc";
+import { OnLimitDefault } from "./OnLimitDefault";
 import {
   useProviderAccountActions,
   useProviderAccountsView,
@@ -179,6 +180,10 @@ function ProviderCard({ provider, displayName, accounts, variant, now }: Provide
           </p>
         </div>
         {accounts.length > 1 && <RoutingModeSelect provider={provider} variant={variant} />}
+      </div>
+
+      <div className="mb-3">
+        <OnLimitDefault provider={provider} displayName={displayName} variant={variant} />
       </div>
 
       {error && (
