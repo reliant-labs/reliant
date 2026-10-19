@@ -118,7 +118,7 @@ const OVERLAY_ROWS: Record<RunStatusOverlayKey, RunStatusDisplay> = {
   waiting_for_usage_limit: {
     key: "waiting_for_usage_limit",
     label: "Waiting for usage limit",
-    dotVariant: "pending",
+    dotVariant: "neutral",
     badgeVariant: "warning",
     pulse: false,
   },

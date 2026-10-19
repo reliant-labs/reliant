@@ -13,7 +13,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import StatusDot from "../forge-ui/status_dot";
+import Status from "../forge-ui/status";
 import { api } from "@/api/client";
 import {
   usageLimitHeadline,
@@ -49,7 +49,7 @@ export function UsageLimitWaitNote({ chatId, wait, onStop }: UsageLimitWaitNoteP
       data-testid="usage-limit-wait-note"
       className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
     >
-      <StatusDot variant="pending" pulse size="sm" />
+      <Status tone="neutral" pulse size="sm" />
       <span className="text-foreground">{usageLimitHeadline(wait)}</span>
       <span className="text-xs tabular-nums text-muted-foreground" data-testid="usage-limit-resume-line">
         · {usageLimitResumeLine(wait, now)}

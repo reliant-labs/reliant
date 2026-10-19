@@ -240,7 +240,7 @@ describe("waiting for a machine overrides the lifecycle row (G7)", () => {
       stopReason: WorkflowStopReason.UNSPECIFIED,
       activity: ChatActivity.WAITING_FOR_USAGE_LIMIT,
     });
-    expect(status).toMatchObject({ label: "Waiting for usage limit", dotVariant: "pending", badgeVariant: "warning", pulse: false });
+    expect(status).toMatchObject({ label: "Waiting for usage limit", dotVariant: "neutral", badgeVariant: "warning", pulse: false });
   });
 
   it("the sidebar's activity view says the same", () => {
