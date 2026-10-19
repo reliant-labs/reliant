@@ -256,12 +256,13 @@ func schemaFingerprint(t *testing.T, db *sql.DB) string {
 	return fp
 }
 
-// schemaRelations lists every relation schemaFingerprint covers as "oid/name".
+// schemaRelations lists the tables, indexes and sequences in public as "oid/name". Views are left
+// out: a post-baseline migration may legitimately recreate one.
 func schemaRelations(t *testing.T, db *sql.DB) []string {
 	t.Helper()
 	rows, err := db.Query(`SELECT c.oid::text || '/' || c.relname
 		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE n.nspname = 'public' AND c.relname NOT LIKE 'schema_migrations%' ORDER BY c.oid`)
+		WHERE n.nspname = 'public' AND c.relname NOT LIKE 'schema_migrations%' AND c.relkind IN ('r', 'i', 'S') ORDER BY c.oid`)
 	require.NoError(t, err)
 	defer rows.Close()
 	var out []string
