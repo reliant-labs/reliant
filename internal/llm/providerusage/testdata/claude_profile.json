@@ -1,0 +1,18 @@
+{
+  "account": {
+    "uuid": "00000000-aaaa-4000-8000-000000000001",
+    "full_name": "Test User",
+    "display_name": "Test",
+    "email": "test.user@example.invalid",
+    "has_claude_max": true,
+    "has_claude_pro": false
+  },
+  "organization": {
+    "uuid": "00000000-bbbb-4000-8000-000000000002",
+    "name": "Test User's Organization",
+    "organization_type": "claude_max",
+    "rate_limit_tier": "default_claude_max_20x",
+    "subscription_status": "active"
+  },
+  "application": {"uuid": "00000000-cccc-4000-8000-000000000003", "name": "Claude Code", "slug": "claude-code"}
+}
