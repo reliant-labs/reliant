@@ -986,13 +986,13 @@ type DaemonInfo struct {
 	// daemons in a cgroup-limited pod). Stored on the daemon's attachment
 	// (liveness) record, so it is only present while the daemon is attached.
 	// memory_limit_bytes == 0 means "not reported" (local daemons, no cgroup).
-	// memory_used_bytes is the cgroup working set (memory.current minus
-	// reclaimable page cache and slab), not raw memory.current: compare it to
-	// memory_limit_bytes, never to a cache-inclusive figure.
+	// memory_used_bytes is the cgroup's unreclaimable memory (memory.current
+	// minus the file cache and reclaimable slab), not raw memory.current:
+	// compare it to memory_limit_bytes, never to a cache-inclusive figure.
 	MemoryUsedBytes  uint64 `protobuf:"varint,10,opt,name=memory_used_bytes,json=memoryUsedBytes,proto3" json:"memory_used_bytes,omitempty"`
 	MemoryLimitBytes uint64 `protobuf:"varint,11,opt,name=memory_limit_bytes,json=memoryLimitBytes,proto3" json:"memory_limit_bytes,omitempty"`
-	// Hysteresis-smoothed pressure bit on the working set: asserts at >= 85%
-	// of the limit, clears below 75%.
+	// Hysteresis-smoothed pressure bit: asserts when memory_used_bytes reaches
+	// 85% of the limit or tasks stall on memory (PSI), clears below 75%.
 	MemoryPressure bool `protobuf:"varint,12,opt,name=memory_pressure,json=memoryPressure,proto3" json:"memory_pressure,omitempty"`
 	// TCP ports detected listening on loopback/wildcard inside the workspace
 	// (from the daemon heartbeat, stored on the attachment record like the

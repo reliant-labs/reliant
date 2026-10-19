@@ -3,6 +3,9 @@ package cgroupmem
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,23 +17,36 @@ const (
 	// Reading two small kernfs files is effectively free.
 	DefaultPollInterval = 5 * time.Second
 
-	// PressureHighWatermark is the working-set/limit fraction at which memory
-	// pressure is asserted (early warning before the OOM killer fires).
+	// PressureHighWatermark is the unreclaimable/limit fraction at which
+	// memory pressure is asserted (early warning before the OOM killer fires).
 	PressureHighWatermark = 0.85
 
-	// PressureClearWatermark is the working-set/limit fraction below which an
-	// asserted pressure state clears. The 10-point gap (hysteresis) prevents
+	// PressureClearWatermark is the unreclaimable/limit fraction below which
+	// an asserted pressure state clears. The 10-point gap (hysteresis) prevents
 	// flapping when usage hovers around a single threshold.
 	PressureClearWatermark = 0.75
+
+	// PSIFullHighPercent asserts pressure on stalls alone: every non-idle task
+	// in the cgroup waited on memory for at least this share of the last 10s.
+	// That is thrashing — the case an occupancy figure that leaves out the
+	// file cache cannot see — and it is never caused by idle cache.
+	PSIFullHighPercent = 10.0
+	// PSIFullClearPercent is the stall share below which a PSI-asserted
+	// pressure state may clear (with the byte figure below its own clear mark).
+	PSIFullClearPercent = 2.0
+	// PSISomeWarnPercent is the "some" stall share at which growth in the
+	// high/max counters is worth a WARN. Below it the kernel reclaimed cache at
+	// a limit without anyone waiting long — routine on a busy machine.
+	PSISomeWarnPercent = 10.0
 )
 
 // Sample is the watcher's latest memory observation, shaped for the
 // daemon->gateway heartbeat (used_bytes, limit_bytes, pressure).
 type Sample struct {
-	// WorkingSetBytes is Stats.WorkingSetBytes: what pressure is judged on and
-	// what the heartbeat reports as memory used. Compare it only to
+	// UnreclaimableBytes is Stats.UnreclaimableBytes: what pressure is judged
+	// on and what the heartbeat reports as memory used. Compare it only to
 	// LimitBytes, never to the cache-inclusive CurrentBytes.
-	WorkingSetBytes uint64
+	UnreclaimableBytes uint64
 	// CurrentBytes is memory.current (reclaimable cache included), for
 	// diagnostics only.
 	CurrentBytes uint64
@@ -62,6 +78,8 @@ type Watcher struct {
 	events      Events
 	eventsSeen  bool
 	lastSqueeze time.Time
+	// children is the previous ChildEvents reading, for attributing growth.
+	children map[string]Events
 
 	// oomKills / lastOOMKillAt accumulate OOM kills seen since the baseline,
 	// carried into every Sample.
@@ -141,13 +159,15 @@ func (w *Watcher) poll() {
 		return
 	}
 
-	newKill := w.logEvents(stats)
-
 	w.mu.Lock()
 	prev := w.latest.Pressure
-	next := nextPressure(prev, stats.WorkingSetBytes, stats.LimitBytes)
+	w.mu.Unlock()
+	next := nextPressure(prev, stats)
+	newKill := w.logEvents(stats, next)
+
+	w.mu.Lock()
 	w.latest = Sample{
-		WorkingSetBytes: stats.WorkingSetBytes, CurrentBytes: stats.CurrentBytes,
+		UnreclaimableBytes: stats.UnreclaimableBytes, CurrentBytes: stats.CurrentBytes,
 		LimitBytes: stats.LimitBytes, Pressure: next,
 		OOMKills: w.oomKills, LastOOMKillAt: w.lastOOMKillAt,
 	}
@@ -157,14 +177,11 @@ func (w *Watcher) poll() {
 	if next != prev {
 		if next {
 			logging.Warn("[cgroupmem] Workspace memory pressure",
-				"working_set", FormatBytes(stats.WorkingSetBytes), "limit", FormatBytes(stats.LimitBytes),
-				"memory_working_set_bytes", stats.WorkingSetBytes, "memory_current_bytes", stats.CurrentBytes,
-				"memory_inactive_file_bytes", stats.InactiveFileBytes,
-				"memory_slab_reclaimable_bytes", stats.SlabReclaimableBytes,
-				"memory_limit_bytes", stats.LimitBytes)
+				append([]any{"unreclaimable", FormatBytes(stats.UnreclaimableBytes), "limit", FormatBytes(stats.LimitBytes)},
+					memoryAttrs(stats)...)...)
 		} else {
 			logging.Info("[cgroupmem] Workspace memory pressure cleared",
-				"working_set", FormatBytes(stats.WorkingSetBytes), "limit", FormatBytes(stats.LimitBytes))
+				"unreclaimable", FormatBytes(stats.UnreclaimableBytes), "limit", FormatBytes(stats.LimitBytes))
 		}
 	}
 	// A new OOM kill is news as much as a pressure flip: the user should hear
@@ -182,12 +199,80 @@ func (w *Watcher) poll() {
 // transition line already says it started.
 const squeezeLogEvery = time.Minute
 
+// memoryAttrs are the structured fields every memory log line carries: the
+// figure pressure is judged on, what it was derived from, and the stall share.
+func memoryAttrs(stats Stats) []any {
+	attrs := []any{
+		"memory_unreclaimable_bytes", stats.UnreclaimableBytes,
+		"memory_current_bytes", stats.CurrentBytes,
+		"memory_active_file_bytes", stats.ActiveFileBytes,
+		"memory_inactive_file_bytes", stats.InactiveFileBytes,
+		"memory_slab_reclaimable_bytes", stats.SlabReclaimableBytes,
+		"memory_limit_bytes", stats.LimitBytes,
+	}
+	if stats.PSI.Valid {
+		attrs = append(attrs, "memory_psi_some_avg10", stats.PSI.SomeAvg10, "memory_psi_full_avg10", stats.PSI.FullAvg10)
+	}
+	return attrs
+}
+
+// squeezeAlarming reports whether growth in the high/max counters means the
+// workspace is short of memory, rather than that the kernel dropped cache at a
+// limit — which on a machine that reads a lot of files happens continuously
+// and costs nothing. It is alarming when the pressure bit is set, when PSI
+// shows tasks stalling, or (no PSI to ask) when the unreclaimable share is
+// already past the clear watermark.
+func squeezeAlarming(stats Stats, pressure bool) bool {
+	if pressure {
+		return true
+	}
+	if stats.PSI.Valid {
+		return stats.PSI.SomeAvg10 >= PSISomeWarnPercent
+	}
+	return stats.LimitBytes > 0 && float64(stats.UnreclaimableBytes)/float64(stats.LimitBytes) >= PressureClearWatermark
+}
+
+// childGrowth names the child cgroups whose high/max counters grew since the
+// previous reading, e.g. "dockerd: max +12". It updates the stored reading.
+func (w *Watcher) childGrowth() string {
+	cur := w.reader.ChildEvents()
+	w.mu.Lock()
+	prev := w.children
+	w.children = cur
+	w.mu.Unlock()
+	if prev == nil {
+		return ""
+	}
+	names := make([]string, 0, len(cur))
+	for name := range cur {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var parts []string
+	for _, name := range names {
+		c, p := cur[name], prev[name]
+		var grew []string
+		if c.Max > p.Max {
+			grew = append(grew, fmt.Sprintf("max +%d", c.Max-p.Max))
+		}
+		if c.High > p.High {
+			grew = append(grew, fmt.Sprintf("high +%d", c.High-p.High))
+		}
+		if len(grew) > 0 {
+			parts = append(parts, name+": "+strings.Join(grew, " "))
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
 // logEvents reports growth in memory.events since the previous poll: an OOM
 // kill is an ERROR the moment it is seen (the exec path only names kills it
-// can attribute to one of its own commands), and growth in high/max is a WARN,
-// at most once a minute, carrying the counts since the last line. It reports
+// can attribute to one of its own commands), and growth in high/max is logged
+// at most once a minute, carrying the counts since the last line and the child
+// cgroups they came from. That line is a WARN only when squeezeAlarming says
+// the squeeze cost something; reclaiming cache at a limit is DEBUG. It reports
 // whether it saw a new OOM kill.
-func (w *Watcher) logEvents(stats Stats) (newKill bool) {
+func (w *Watcher) logEvents(stats Stats, pressure bool) (newKill bool) {
 	ev, ok := w.reader.Events()
 	if !ok {
 		return false
@@ -196,7 +281,8 @@ func (w *Watcher) logEvents(stats Stats) (newKill bool) {
 	prev, seen := w.events, w.eventsSeen
 	w.events, w.eventsSeen = ev, true
 	logSqueeze := false
-	if seen && (ev.High > prev.High || ev.Max > prev.Max) && time.Since(w.lastSqueeze) >= squeezeLogEvery {
+	grew := seen && (ev.High > prev.High || ev.Max > prev.Max)
+	if grew && time.Since(w.lastSqueeze) >= squeezeLogEvery {
 		logSqueeze = true
 		w.lastSqueeze = time.Now()
 	}
@@ -207,39 +293,57 @@ func (w *Watcher) logEvents(stats Stats) (newKill bool) {
 	}
 	w.mu.Unlock()
 	if !seen {
+		_ = w.childGrowth() // the children's baseline
 		return false
 	}
 
 	if newKill {
 		logging.Error("[cgroupmem] Workspace cgroup OOM kill",
-			"oom_kills", ev.OOMKill-prev.OOMKill,
-			"oom_kills_total", ev.OOMKill,
-			"memory_limit_bytes", stats.LimitBytes,
-			"memory_working_set_bytes", stats.WorkingSetBytes,
-			"memory_current_bytes", stats.CurrentBytes,
-			"memory_peak_bytes", stats.PeakBytes)
+			append([]any{"oom_kills", ev.OOMKill - prev.OOMKill, "oom_kills_total", ev.OOMKill,
+				"memory_peak_bytes", stats.PeakBytes}, memoryAttrs(stats)...)...)
 	}
 	if logSqueeze {
-		logging.Warn("[cgroupmem] Workspace cgroup under memory pressure",
-			"high_events", ev.High-prev.High,
-			"max_events", ev.Max-prev.Max,
-			"memory_limit_bytes", stats.LimitBytes,
-			"memory_working_set_bytes", stats.WorkingSetBytes,
-			"memory_current_bytes", stats.CurrentBytes)
+		attrs := []any{"high_events", ev.High - prev.High, "max_events", ev.Max - prev.Max}
+		if by := w.childGrowth(); by != "" {
+			attrs = append(attrs, "by_child", by)
+		}
+		attrs = append(attrs, memoryAttrs(stats)...)
+		if squeezeAlarming(stats, pressure) {
+			logging.Warn("[cgroupmem] Workspace cgroup under memory pressure", attrs...)
+		} else {
+			logging.Debug("[cgroupmem] Cgroup reclaimed cache at a memory limit without stalling", attrs...)
+		}
+	} else if w.childrenUnread() {
+		// The first reading is the baseline: the next logged line attributes
+		// what grew since then, and each later line what grew since the last.
+		_ = w.childGrowth()
 	}
 	return newKill
 }
 
-// nextPressure is the pure hysteresis transition on the working set: assert
-// at >= 85% of the limit, clear only below 75%. A cgroup without a limit is never under
-// pressure.
-func nextPressure(current bool, workingSet, limit uint64) bool {
-	if limit == 0 {
-		return false
+// childrenUnread reports whether no child baseline has been taken yet.
+func (w *Watcher) childrenUnread() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.children == nil
+}
+
+// nextPressure is the pure hysteresis transition. Pressure asserts when the
+// unreclaimable memory reaches 85% of the limit OR every task has been
+// stalled on memory for 10% of the last 10s (PSI full); it clears only when
+// the unreclaimable share is below 75% AND the stall share below 2%. Page
+// cache moves neither signal. Without a limit only PSI can assert.
+func nextPressure(current bool, stats Stats) bool {
+	frac := 0.0
+	if stats.LimitBytes > 0 {
+		frac = float64(stats.UnreclaimableBytes) / float64(stats.LimitBytes)
 	}
-	frac := float64(workingSet) / float64(limit)
+	stall := 0.0
+	if stats.PSI.Valid {
+		stall = stats.PSI.FullAvg10
+	}
 	if current {
-		return frac >= PressureClearWatermark
+		return (stats.LimitBytes > 0 && frac >= PressureClearWatermark) || stall >= PSIFullClearPercent
 	}
-	return frac >= PressureHighWatermark
+	return (stats.LimitBytes > 0 && frac >= PressureHighWatermark) || stall >= PSIFullHighPercent
 }

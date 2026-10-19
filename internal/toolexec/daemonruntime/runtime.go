@@ -1619,7 +1619,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 		// in a cgroup-limited pod). Fields stay zero on hosts without cgroup
 		// accounting — the gateway treats limit==0 as "not reported".
 		if sample, ok := d.memWatcher.Latest(); ok {
-			hb.MemoryUsedBytes = sample.WorkingSetBytes
+			hb.MemoryUsedBytes = sample.UnreclaimableBytes
 			hb.MemoryLimitBytes = sample.LimitBytes
 			hb.MemoryPressure = sample.Pressure
 			hb.OomKills = sample.OOMKills

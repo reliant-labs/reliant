@@ -54,8 +54,8 @@ func TestReaderStats(t *testing.T) {
 		t.Errorf("CurrentBytes = %d, want %d", stats.CurrentBytes, 1<<30)
 	}
 	// No memory.stat in this fixture: nothing is provably reclaimable.
-	if stats.WorkingSetBytes != 1<<30 {
-		t.Errorf("WorkingSetBytes = %d, want %d (memory.current when memory.stat is absent)", stats.WorkingSetBytes, 1<<30)
+	if stats.UnreclaimableBytes != 1<<30 {
+		t.Errorf("UnreclaimableBytes = %d, want %d (memory.current when memory.stat is absent)", stats.UnreclaimableBytes, 1<<30)
 	}
 	if stats.LimitBytes != 4<<30 {
 		t.Errorf("LimitBytes = %d, want %d", stats.LimitBytes, uint64(4<<30))

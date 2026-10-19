@@ -83,7 +83,8 @@ func TestWatcherLogsOOMKillAsErrorWithMemoryFigures(t *testing.T) {
 
 func TestWatcherLogsMemoryEventGrowthAtWarnAndThrottles(t *testing.T) {
 	out := captureLogs(t)
-	dir := writeCgroupFixture(t, "100\n", "1000\n", "", eventsFixture)
+	// 80% unreclaimable (no memory.stat, no PSI): a squeeze that matters.
+	dir := writeCgroupFixture(t, "800\n", "1000\n", "", eventsFixture)
 	w := NewWatcher(NewReader(dir), time.Hour)
 	w.poll() // baseline
 
@@ -105,5 +106,60 @@ func TestWatcherLogsMemoryEventGrowthAtWarnAndThrottles(t *testing.T) {
 	w.poll()
 	if strings.Count(out.String(), "under memory pressure") != 1 {
 		t.Fatalf("no growth must log nothing:\n%s", out.String())
+	}
+}
+
+// TestWatcherSqueezeOnCacheIsNotAWarning is the regression test for the 1426
+// "under memory pressure" WARNs: the high/max counters climb whenever the
+// kernel drops cache at a limit, which on a machine with 10% of its memory
+// unreclaimable and nothing stalling is routine, not a warning.
+func TestWatcherSqueezeOnCacheIsNotAWarning(t *testing.T) {
+	out := captureLogs(t)
+	dir := writeCgroupFixture(t, "100\n", "1000\n", "", eventsFixture)
+	writePSI(t, dir, psiFixture("0.40", "0.00"))
+	w := NewWatcher(NewReader(dir), time.Hour)
+	w.poll() // baseline
+
+	writeEvents(t, dir, 50, 20, 3)
+	w.poll()
+
+	if strings.Contains(out.String(), "level=WARN") || strings.Contains(out.String(), "under memory pressure") {
+		t.Fatalf("cache reclaim at a limit logged as pressure:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "without stalling") || !strings.Contains(out.String(), "max_events=8") {
+		t.Fatalf("want the DEBUG line with its counts:\n%s", out.String())
+	}
+
+	// Tasks stalling: the same growth is a WARN.
+	writePSI(t, dir, psiFixture("25.00", "1.00"))
+	w.lastSqueeze = time.Time{}
+	writeEvents(t, dir, 60, 30, 3)
+	w.poll()
+	if !strings.Contains(out.String(), "level=WARN") || !strings.Contains(out.String(), "under memory pressure") {
+		t.Fatalf("stalling squeeze must WARN:\n%s", out.String())
+	}
+}
+
+// TestWatcherAttributesSqueezeToChildCgroup: memory.events is hierarchical,
+// so dockerd hitting its own container cap shows up in the workspace's
+// counters. The line must say where it came from.
+func TestWatcherAttributesSqueezeToChildCgroup(t *testing.T) {
+	out := captureLogs(t)
+	dir := writeCgroupFixture(t, "900\n", "1000\n", "", eventsFixture)
+	for _, child := range []string{"dockerd", "daemon"} {
+		if err := os.Mkdir(filepath.Join(dir, child), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeEvents(t, filepath.Join(dir, child), 0, 0, 0)
+	}
+	w := NewWatcher(NewReader(dir), time.Hour)
+	w.poll() // baseline, children included
+
+	writeEvents(t, filepath.Join(dir, "dockerd"), 0, 7, 0)
+	writeEvents(t, dir, 42, 19, 3)
+	w.poll()
+
+	if !strings.Contains(out.String(), `by_child="dockerd: max +7"`) {
+		t.Fatalf("squeeze not attributed to dockerd:\n%s", out.String())
 	}
 }

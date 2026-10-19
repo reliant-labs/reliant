@@ -50,7 +50,7 @@ func writeStat(t *testing.T, dir, content string) {
 	}
 }
 
-func TestWorkingSet(t *testing.T) {
+func TestUnreclaimable(t *testing.T) {
 	tests := []struct {
 		name    string
 		current uint64
@@ -58,13 +58,13 @@ func TestWorkingSet(t *testing.T) {
 		want    uint64
 	}{
 		{
-			name:    "measured machine: cache and reclaimable slab are not working set",
+			name:    "measured machine: file cache and reclaimable slab are reclaimable",
 			current: 639 * gb / 10,
 			stat:    measuredMachineStat(),
-			want:    639*gb/10 - 112*gb/10 - 185*gb/10,
+			want:    639*gb/10 - 112*gb/10 - 295*gb/10 - 185*gb/10,
 		},
 		{
-			name:    "anon heavy: nearly everything is working set",
+			name:    "anon heavy: nearly everything is unreclaimable",
 			current: 62 * gb,
 			stat: memoryStatFixture(
 				[2]string{"anon", u(60 * gb)},
@@ -74,14 +74,35 @@ func TestWorkingSet(t *testing.T) {
 			want: 62*gb - 500_000_000 - 100_000_000,
 		},
 		{
-			name:    "active_file stays in the working set",
+			name:    "active_file is reclaimable cache too",
 			current: 10 * gb,
 			stat: memoryStatFixture(
-				[2]string{"active_file", u(9 * gb)},
-				[2]string{"inactive_file", u(gb)},
+				[2]string{"anon", u(gb)},
+				[2]string{"active_file", u(8 * gb)},
+				[2]string{"inactive_file", u(gb / 2)},
 				[2]string{"slab_reclaimable", u(0)},
 			),
-			want: 9 * gb,
+			want: 10*gb - 8*gb - gb/2,
+		},
+		{
+			// shmem/tmpfs is charged to "file" but sits on the anon LRU, so it
+			// is in neither file list and stays unreclaimable.
+			name:    "shmem counted in file but not in the file LRU stays in",
+			current: 10 * gb,
+			stat: memoryStatFixture(
+				[2]string{"anon", u(gb)},
+				[2]string{"file", u(7 * gb)},
+				[2]string{"shmem", u(4 * gb)},
+				[2]string{"active_file", u(2 * gb)},
+				[2]string{"inactive_file", u(gb)},
+			),
+			want: 7 * gb,
+		},
+		{
+			name:    "only active_file present",
+			current: 10 * gb,
+			stat:    memoryStatFixture([2]string{"active_file", u(4 * gb)}),
+			want:    6 * gb,
 		},
 		{
 			name:    "only inactive_file present",
@@ -96,7 +117,7 @@ func TestWorkingSet(t *testing.T) {
 			want:    7 * gb,
 		},
 		{
-			name:    "neither key: falls back to memory.current",
+			name:    "no key: falls back to memory.current",
 			current: 10 * gb,
 			stat:    memoryStatFixture([2]string{"anon", u(gb)}),
 			want:    10 * gb,
@@ -132,7 +153,7 @@ func TestWorkingSet(t *testing.T) {
 			want:    0,
 		},
 		{
-			name:    "sum of the two keys overflowing uint64 clamps to zero",
+			name:    "sum of the keys overflowing uint64 clamps to zero",
 			current: 10 * gb,
 			stat: memoryStatFixture(
 				[2]string{"inactive_file", u(^uint64(0))},
@@ -149,16 +170,16 @@ func TestWorkingSet(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := workingSet(tt.current, parseMemoryStat([]byte(tt.stat)))
+			got := unreclaimable(tt.current, parseMemoryStat([]byte(tt.stat)))
 			if got != tt.want {
-				t.Errorf("workingSet = %d, want %d", got, tt.want)
+				t.Errorf("unreclaimable = %d, want %d", got, tt.want)
 			}
 		})
 	}
 }
 
-// TestReaderStatsWorkingSet drives the whole path from files on disk.
-func TestReaderStatsWorkingSet(t *testing.T) {
+// TestReaderStatsUnreclaimable drives the whole path from files on disk.
+func TestReaderStatsUnreclaimable(t *testing.T) {
 	dir := writeCgroupFixture(t, u(639*gb/10)+"\n", u(64*gib)+"\n", "", eventsFixture)
 	writeStat(t, dir, measuredMachineStat())
 
@@ -169,11 +190,14 @@ func TestReaderStatsWorkingSet(t *testing.T) {
 	if stats.CurrentBytes != 639*gb/10 {
 		t.Errorf("CurrentBytes = %d, want memory.current verbatim", stats.CurrentBytes)
 	}
-	if want := 639*gb/10 - 112*gb/10 - 185*gb/10; stats.WorkingSetBytes != want {
-		t.Errorf("WorkingSetBytes = %d, want %d", stats.WorkingSetBytes, want)
+	if want := 639*gb/10 - 112*gb/10 - 295*gb/10 - 185*gb/10; stats.UnreclaimableBytes != want {
+		t.Errorf("UnreclaimableBytes = %d, want %d", stats.UnreclaimableBytes, want)
 	}
-	if stats.InactiveFileBytes != 112*gb/10 || stats.SlabReclaimableBytes != 185*gb/10 {
-		t.Errorf("diagnostics = inactive_file %d slab_reclaimable %d", stats.InactiveFileBytes, stats.SlabReclaimableBytes)
+	if stats.ActiveFileBytes != 295*gb/10 || stats.InactiveFileBytes != 112*gb/10 || stats.SlabReclaimableBytes != 185*gb/10 {
+		t.Errorf("diagnostics = active_file %d inactive_file %d slab_reclaimable %d", stats.ActiveFileBytes, stats.InactiveFileBytes, stats.SlabReclaimableBytes)
+	}
+	if stats.PSI.Valid {
+		t.Errorf("PSI = %+v without a memory.pressure file, want invalid", stats.PSI)
 	}
 	if stats.LimitBytes != 64*gib {
 		t.Errorf("LimitBytes = %d", stats.LimitBytes)
@@ -187,8 +211,8 @@ func TestReaderStatsUnreadableMemoryStat(t *testing.T) {
 		t.Fatal(err)
 	}
 	stats, ok := NewReader(dir).Stats()
-	if !ok || stats.WorkingSetBytes != 5*gb || stats.CurrentBytes != 5*gb {
-		t.Errorf("Stats = %+v ok=%v, want working set = memory.current", stats, ok)
+	if !ok || stats.UnreclaimableBytes != 5*gb || stats.CurrentBytes != 5*gb {
+		t.Errorf("Stats = %+v ok=%v, want unreclaimable = memory.current", stats, ok)
 	}
 }
 
@@ -209,9 +233,9 @@ func pressureAfterPoll(t *testing.T, current, limit uint64, stat string) Sample 
 	return sample
 }
 
-// TestWatcherPressureUsesWorkingSet is the regression test for the false
+// TestWatcherPressureUsesUnreclaimable is the regression test for the false
 // alarm: memory.current at 93% of the limit, almost all of it page cache.
-func TestWatcherPressureUsesWorkingSet(t *testing.T) {
+func TestWatcherPressureUsesUnreclaimable(t *testing.T) {
 	const limit = 64 * gib // 68.7 GB
 
 	t.Run("measured machine at 93 percent of memory.current has no pressure", func(t *testing.T) {
@@ -222,12 +246,33 @@ func TestWatcherPressureUsesWorkingSet(t *testing.T) {
 		if s.Pressure {
 			t.Errorf("pressure asserted on a healthy machine: %+v", s)
 		}
-		if s.WorkingSetBytes >= s.CurrentBytes || s.CurrentBytes != 639*gb/10 {
-			t.Errorf("sample = %+v, want working set below memory.current, current kept", s)
+		if s.UnreclaimableBytes >= s.CurrentBytes || s.CurrentBytes != 639*gb/10 {
+			t.Errorf("sample = %+v, want unreclaimable below memory.current, current kept", s)
 		}
 	})
 
-	t.Run("without slab_reclaimable the inactive_file subtraction alone is enough", func(t *testing.T) {
+	// A build machine: anon 2.3 GB, the rest file cache — almost all of it
+	// ACTIVE because builds reread the same Go cache all day — and inode
+	// cache. Counting active_file as used put this at 86% of the limit.
+	t.Run("hot file cache with little anon has no pressure", func(t *testing.T) {
+		stat := memoryStatFixture(
+			[2]string{"anon", u(23 * gb / 10)},
+			[2]string{"file", u(58 * gb)},
+			[2]string{"active_file", u(56 * gb)},
+			[2]string{"inactive_file", u(2 * gb)},
+			[2]string{"slab_reclaimable", u(7 * gb)},
+			[2]string{"slab_unreclaimable", u(gb / 2)},
+		)
+		s := pressureAfterPoll(t, 68*gb, limit, stat)
+		if s.Pressure {
+			t.Errorf("pressure asserted on hot page cache: %+v", s)
+		}
+		if s.UnreclaimableBytes != 3*gb {
+			t.Errorf("UnreclaimableBytes = %d, want 3 GB (68 - 56 - 2 - 7)", s.UnreclaimableBytes)
+		}
+	})
+
+	t.Run("without slab_reclaimable the file subtraction alone is enough", func(t *testing.T) {
 		stat := memoryStatFixture(
 			[2]string{"anon", u(17 * gb / 10)},
 			[2]string{"inactive_file", u(112 * gb / 10)},
@@ -254,29 +299,29 @@ func TestWatcherPressureUsesWorkingSet(t *testing.T) {
 
 	t.Run("memory.stat missing keeps the old conservative behaviour", func(t *testing.T) {
 		if s := pressureAfterPoll(t, 639*gb/10, limit, ""); !s.Pressure {
-			t.Errorf("no memory.stat: working set is memory.current, 93%% must assert: %+v", s)
+			t.Errorf("no memory.stat: unreclaimable is memory.current, 93%% must assert: %+v", s)
 		}
 	})
 
 	t.Run("inactive_file larger than current does not assert or underflow", func(t *testing.T) {
 		stat := memoryStatFixture([2]string{"inactive_file", u(100 * gb)})
 		s := pressureAfterPoll(t, 639*gb/10, limit, stat)
-		if s.Pressure || s.WorkingSetBytes != 0 {
-			t.Errorf("sample = %+v, want zero working set and no pressure", s)
+		if s.Pressure || s.UnreclaimableBytes != 0 {
+			t.Errorf("sample = %+v, want zero unreclaimable and no pressure", s)
 		}
 	})
 
 	t.Run("garbled memory.stat degrades to memory.current", func(t *testing.T) {
 		s := pressureAfterPoll(t, 639*gb/10, limit, "\x00\x01 garbage\ninactive_file NaN\n")
-		if !s.Pressure || s.WorkingSetBytes != 639*gb/10 {
-			t.Errorf("sample = %+v, want working set = memory.current", s)
+		if !s.Pressure || s.UnreclaimableBytes != 639*gb/10 {
+			t.Errorf("sample = %+v, want unreclaimable = memory.current", s)
 		}
 	})
 }
 
-// TestWatcherOOMKillIndependentOfWorkingSet pins that OOM-kill detection reads
+// TestWatcherOOMKillIndependentOfUnreclaimable pins that OOM-kill detection reads
 // memory.events only, whatever memory.stat says.
-func TestWatcherOOMKillIndependentOfWorkingSet(t *testing.T) {
+func TestWatcherOOMKillIndependentOfUnreclaimable(t *testing.T) {
 	dir := writeCgroupFixture(t, u(5*gb)+"\n", u(64*gib)+"\n", "", eventsFixture)
 	writeStat(t, dir, memoryStatFixture([2]string{"inactive_file", u(100 * gb)}))
 	r := NewReader(dir)
@@ -294,5 +339,84 @@ func TestWatcherOOMKillIndependentOfWorkingSet(t *testing.T) {
 func TestMeasuredMachineIsNotUnderPressure(t *testing.T) {
 	if s := pressureAfterPoll(t, 639*gb/10, 64*gib, measuredMachineStat()); s.Pressure {
 		t.Error("healthy machine (anon 1.7 GB of 68.7 GB, rest reclaimable cache) reported memory pressure")
+	}
+}
+
+func writePSI(t *testing.T, dir, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "memory.pressure"), []byte(content), 0o644); err != nil {
+		t.Fatalf("writing memory.pressure: %v", err)
+	}
+}
+
+func psiFixture(some, full string) string {
+	return "some avg10=" + some + " avg60=0.00 avg300=0.00 total=1234\n" +
+		"full avg10=" + full + " avg60=0.00 avg300=0.00 total=567\n"
+}
+
+func TestParsePSI(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		data string
+		want PSI
+	}{
+		{"both lines", psiFixture("12.50", "3.25"), PSI{SomeAvg10: 12.5, FullAvg10: 3.25, Valid: true}},
+		{"some only", "some avg10=4.00 avg60=1.00 avg300=0.10 total=9\n", PSI{SomeAvg10: 4, Valid: true}},
+		{"empty", "", PSI{}},
+		{"garbage", "some avg10=lots\nfull avg10=-1\n", PSI{}},
+		{"out of range ignored", "some avg10=250.0\n", PSI{}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := parsePSI([]byte(tt.data)); got != tt.want {
+				t.Errorf("parsePSI = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestWatcherPressureFromPSI: stalls are pressure whatever the byte figure
+// says — a working set thrashing through hot file cache shows nowhere else —
+// and clearing needs both signals back down.
+func TestWatcherPressureFromPSI(t *testing.T) {
+	const limit = 64 * gib
+	cache := measuredMachineStat() // ~4.7 GB unreclaimable of 68.7 GB
+
+	dir := writeCgroupFixture(t, u(639*gb/10)+"\n", u(limit)+"\n", "", eventsFixture)
+	writeStat(t, dir, cache)
+	writePSI(t, dir, psiFixture("40.00", "15.00"))
+	w := NewWatcher(NewReader(dir), time.Hour)
+	w.poll()
+	if s, _ := w.Latest(); !s.Pressure {
+		t.Fatalf("PSI full 15%% must assert pressure: %+v", s)
+	}
+
+	writePSI(t, dir, psiFixture("8.00", "3.00")) // easing, still above the clear mark
+	w.poll()
+	if s, _ := w.Latest(); !s.Pressure {
+		t.Fatal("PSI full 3% must hold an asserted state (clear mark 2%)")
+	}
+
+	writePSI(t, dir, psiFixture("0.50", "0.00"))
+	w.poll()
+	if s, _ := w.Latest(); s.Pressure {
+		t.Fatal("no stalls and little unreclaimable memory must clear")
+	}
+
+	// Some tasks waiting on reclaim (some) without the whole cgroup stalling
+	// (full) is ordinary cache turnover, not pressure.
+	writePSI(t, dir, psiFixture("30.00", "1.00"))
+	w.poll()
+	if s, _ := w.Latest(); s.Pressure {
+		t.Fatal("PSI some alone must not assert pressure")
+	}
+}
+
+// TestNextPressureWithoutLimit: an unlimited cgroup can still stall.
+func TestNextPressureWithoutLimit(t *testing.T) {
+	if nextPressure(false, Stats{UnreclaimableBytes: 1 << 40}) {
+		t.Error("bytes without a limit must not assert")
+	}
+	if !nextPressure(false, Stats{PSI: PSI{FullAvg10: 20, Valid: true}}) {
+		t.Error("PSI full 20% must assert without a limit")
 	}
 }

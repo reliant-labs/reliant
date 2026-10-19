@@ -31,7 +31,7 @@ func TestNextPressureHysteresis(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := nextPressure(tt.current, tt.used, tt.limit); got != tt.want {
+			if got := nextPressure(tt.current, Stats{UnreclaimableBytes: tt.used, LimitBytes: tt.limit}); got != tt.want {
 				t.Errorf("nextPressure(%v, %d, %d) = %v, want %v", tt.current, tt.used, tt.limit, got, tt.want)
 			}
 		})
@@ -47,7 +47,7 @@ func TestNextPressureNoFlapping(t *testing.T) {
 	state := false
 	transitions := 0
 	for _, used := range curve {
-		next := nextPressure(state, used, limit)
+		next := nextPressure(state, Stats{UnreclaimableBytes: used, LimitBytes: limit})
 		if next != state {
 			transitions++
 		}
@@ -80,7 +80,7 @@ func TestWatcherPollAndChanged(t *testing.T) {
 	if sample.Pressure {
 		t.Error("10% usage must not be pressure")
 	}
-	if sample.WorkingSetBytes != 100 || sample.LimitBytes != 1000 {
+	if sample.UnreclaimableBytes != 100 || sample.LimitBytes != 1000 {
 		t.Errorf("sample = %+v, want used=100 limit=1000", sample)
 	}
 

@@ -334,7 +334,7 @@ func logExecFinished(outcome daemon.ExecOutcome, duration time.Duration) {
 	if outcome.OOMKilled {
 		if stats, ok := memReader.Stats(); ok {
 			attrs = append(attrs, "memory_limit_bytes", stats.LimitBytes,
-				"memory_working_set_bytes", stats.WorkingSetBytes,
+				"memory_unreclaimable_bytes", stats.UnreclaimableBytes,
 				"memory_current_bytes", stats.CurrentBytes, "memory_peak_bytes", stats.PeakBytes)
 		}
 	}

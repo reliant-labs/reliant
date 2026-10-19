@@ -11,12 +11,19 @@
 //
 //	/sys/fs/cgroup/memory.current — bytes currently charged to the cgroup
 //	                                (page cache and kernel slab included)
-//	/sys/fs/cgroup/memory.stat    — breakdown of memory.current; inactive_file
-//	                                and slab_reclaimable are what the kernel
-//	                                frees before it considers an OOM kill
+//	/sys/fs/cgroup/memory.stat    — breakdown of memory.current; the file LRU
+//	                                (active_file, inactive_file) and
+//	                                slab_reclaimable are what the kernel frees
+//	                                before it considers an OOM kill
+//	/sys/fs/cgroup/memory.pressure — PSI: share of time tasks stalled on memory
+//	                                (optional; needs CONFIG_PSI)
 //	/sys/fs/cgroup/memory.max     — limit in bytes, or "max" (unlimited)
 //	/sys/fs/cgroup/memory.peak    — high-watermark (kernel >= 5.19; optional)
-//	/sys/fs/cgroup/memory.events  — flat keyed counters, incl. "oom_kill"
+//	/sys/fs/cgroup/memory.events  — flat keyed counters, incl. "oom_kill";
+//	                                hierarchical, so a child cgroup hitting
+//	                                its OWN limit (dockerd's) counts here too
+//	/sys/fs/cgroup/memory.events.local — the same counters for this cgroup's
+//	                                own limit only
 //
 // Everything degrades gracefully when those files are absent (macOS, local
 // Linux daemons outside a limited cgroup): readers report not-available and
@@ -43,22 +50,27 @@ const DefaultRoot = "/sys/fs/cgroup"
 
 // Stats is a point-in-time reading of the cgroup's memory accounting.
 //
-// memory.current is not a measure of memory in use: it also charges
-// reclaimable page cache and kernel slab, which grow to fill whatever the
-// cgroup allows and are freed on demand. A healthy machine that has read a
-// lot of files sits at 90%+ of its limit on memory.current alone. Decisions
-// about pressure therefore use WorkingSetBytes; CurrentBytes is kept only for
-// diagnostics and for comparison against PeakBytes, which has the same basis.
+// memory.current is not a measure of memory in use: it also charges page
+// cache and kernel slab, which grow to fill whatever the cgroup allows and are
+// freed on demand. A healthy build machine that has read a lot of files sits at
+// 90%+ of its limit on memory.current alone, most of it file cache the kernel
+// drops the moment anything needs the room. Decisions about pressure therefore
+// use UnreclaimableBytes, corroborated by the kernel's own stall accounting
+// (PSI) where it exists; CurrentBytes is kept only for diagnostics and for
+// comparison against PeakBytes, which has the same basis.
 type Stats struct {
-	// WorkingSetBytes is memory.current minus the memory the kernel reclaims
-	// before anything is killed: inactive_file and slab_reclaimable (see
-	// workingSet). Compare it to LimitBytes for pressure; never negative.
-	WorkingSetBytes uint64
+	// UnreclaimableBytes is memory.current minus everything the kernel can
+	// free without killing a process: the file LRU (active_file +
+	// inactive_file) and slab_reclaimable (see unreclaimable). What is left
+	// is anonymous memory, shmem/tmpfs, unreclaimable slab, page tables and
+	// kernel stacks. Compare it to LimitBytes for pressure; never negative.
+	UnreclaimableBytes uint64
 	// CurrentBytes is memory.current verbatim, reclaimable cache included.
 	CurrentBytes uint64
-	// InactiveFileBytes and SlabReclaimableBytes are the memory.stat values
-	// subtracted from CurrentBytes to get WorkingSetBytes; 0 when memory.stat
-	// is absent or lacks the key.
+	// ActiveFileBytes, InactiveFileBytes and SlabReclaimableBytes are the
+	// memory.stat values subtracted from CurrentBytes to get
+	// UnreclaimableBytes; 0 when memory.stat is absent or lacks the key.
+	ActiveFileBytes      uint64
 	InactiveFileBytes    uint64
 	SlabReclaimableBytes uint64
 	// LimitBytes is memory.max; 0 means unlimited or unknown.
@@ -68,13 +80,65 @@ type Stats struct {
 	// kill memory.current has already dropped, so the peak is the honest "how
 	// high did it get" number for error messages.
 	PeakBytes uint64
+	// PSI is memory.pressure: how much of the time tasks in the cgroup were
+	// stalled waiting for memory. PSI.Valid is false when the kernel does not
+	// expose it (CONFIG_PSI off, psi=0, or an older kernel).
+	PSI PSI
 }
 
-// MemoryStat holds the memory.stat counters the working set is built from.
-// A Has* flag is false when the key was absent or its value unparsable.
+// PSI is the kernel's memory pressure-stall information for the cgroup: the
+// share of wall time, in percent averaged over the last 10 seconds, in which
+// SOME task (Some) or ALL non-idle tasks (Full) were stalled on memory —
+// reclaim, refaulting evicted pages, swap-in. Unlike any byte count it
+// measures cost, not occupancy: page cache that sits in memory unused costs
+// nothing and does not move it, while a working set thrashing through a
+// too-small cache does, whichever kind of page is being thrashed.
+type PSI struct {
+	SomeAvg10, FullAvg10 float64
+	Valid                bool
+}
+
+// parsePSI reads the "some" and "full" lines of a cgroup's memory.pressure:
+//
+//	some avg10=0.12 avg60=0.05 avg300=0.01 total=123456
+//	full avg10=0.00 avg60=0.00 avg300=0.00 total=6543
+//
+// Valid is set only when the "some" line's avg10 parsed; a kernel without
+// "full" for the cgroup reports it as 0.
+func parsePSI(data []byte) PSI {
+	var p PSI
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		var avg10 float64
+		ok := false
+		for _, f := range fields[1:] {
+			if v, found := strings.CutPrefix(f, "avg10="); found {
+				if n, err := strconv.ParseFloat(v, 64); err == nil && n >= 0 && n <= 100 {
+					avg10, ok = n, true
+				}
+			}
+		}
+		if !ok {
+			continue
+		}
+		switch fields[0] {
+		case "some":
+			p.SomeAvg10, p.Valid = avg10, true
+		case "full":
+			p.FullAvg10 = avg10
+		}
+	}
+	return p
+}
+
+// MemoryStat holds the memory.stat counters the unreclaimable figure is built
+// from. A Has* flag is false when the key was absent or its value unparsable.
 type MemoryStat struct {
-	InactiveFile, SlabReclaimable       uint64
-	HasInactiveFile, HasSlabReclaimable bool
+	ActiveFile, InactiveFile, SlabReclaimable          uint64
+	HasActiveFile, HasInactiveFile, HasSlabReclaimable bool
 }
 
 // parseMemoryStat reads the keys it knows from the flat "<key> <value>" format
@@ -88,7 +152,7 @@ func parseMemoryStat(data []byte) MemoryStat {
 			continue
 		}
 		switch fields[0] {
-		case "inactive_file", "slab_reclaimable":
+		case "active_file", "inactive_file", "slab_reclaimable":
 		default:
 			continue
 		}
@@ -96,38 +160,54 @@ func parseMemoryStat(data []byte) MemoryStat {
 		if err != nil {
 			continue
 		}
-		if fields[0] == "inactive_file" {
+		switch fields[0] {
+		case "active_file":
+			st.ActiveFile, st.HasActiveFile = v, true
+		case "inactive_file":
 			st.InactiveFile, st.HasInactiveFile = v, true
-		} else {
+		default:
 			st.SlabReclaimable, st.HasSlabReclaimable = v, true
 		}
 	}
 	return st
 }
 
-// workingSet is memory.current less the reclaimable memory memory.stat
-// reports: inactive_file (the cadvisor / kubelet working-set definition) and
-// slab_reclaimable.
+// unreclaimable is memory.current less everything memory.stat reports as
+// reclaimable: the whole file LRU (active_file + inactive_file) and
+// slab_reclaimable — the same memory Linux counts as available in
+// MemAvailable.
 //
-// slab_reclaimable is excluded as well because it is the same kind of memory:
-// dentry and inode caches that the kernel's shrinkers free under pressure
-// before it invokes the OOM killer, and that Linux itself counts as available
-// in MemAvailable. Docker and build workloads inflate it by tens of GB. It is
-// not guaranteed reclaimable (pinned dentries), but the pressure signal is an
-// early warning of imminent OOM, which pinned slab alone does not cause.
-// active_file stays in: the kernel demotes it only when reclaim is already
-// under way, and evicting hot pages thrashes, so it is genuinely working set.
+// active_file is excluded too. It is clean (or writeback-able) file cache the
+// kernel demotes to the inactive list and drops as soon as anything needs the
+// room; on a build machine that rereads the same caches all day it is tens of
+// GB, and counting it made "memory used" read 50–90% of the limit with 2 GB
+// of anonymous memory. The one way hot file pages hurt is thrashing, when the
+// working set no longer fits and evicted pages are faulted straight back in —
+// and that is a stall, which PSI measures directly, not an occupancy any byte
+// count can see. So pressure is judged on this figure AND PSI (nextPressure).
+//
+// shmem/tmpfs stays in: it is charged to "file" but lives on the anon LRU
+// (it is not in active_file/inactive_file) and cannot be dropped without swap.
+// slab_reclaimable is dentry and inode cache the shrinkers free before the
+// OOM killer runs; docker and node_modules tree walks inflate it by tens of GB.
 //
 // The result is clamped at 0 (memory.current and memory.stat are separate
-// reads, so the stat can be newer than the current). With neither key present
-// nothing can be proven reclaimable and it falls back to memory.current, the
-// conservative answer.
-func workingSet(current uint64, st MemoryStat) uint64 {
-	if !st.HasInactiveFile && !st.HasSlabReclaimable {
+// reads, so the stat can be newer than the current). With none of the keys
+// present nothing can be proven reclaimable and it falls back to
+// memory.current, the conservative answer.
+func unreclaimable(current uint64, st MemoryStat) uint64 {
+	if !st.HasActiveFile && !st.HasInactiveFile && !st.HasSlabReclaimable {
 		return current
 	}
-	reclaimable := st.InactiveFile + st.SlabReclaimable
-	if reclaimable < st.InactiveFile || reclaimable >= current {
+	var reclaimable uint64
+	for _, v := range []uint64{st.ActiveFile, st.InactiveFile, st.SlabReclaimable} {
+		sum := reclaimable + v
+		if sum < reclaimable { // overflow: garbage counters, nothing is provable
+			return 0
+		}
+		reclaimable = sum
+	}
+	if reclaimable >= current {
 		return 0
 	}
 	return current - reclaimable
@@ -167,13 +247,16 @@ func (r *Reader) Stats() (stats Stats, ok bool) {
 	}
 	stats.CurrentBytes = used
 	var st MemoryStat
-	// memory.stat is how the reclaimable share is known; without it the
-	// working set is memory.current.
+	// memory.stat is how the reclaimable share is known; without it nothing
+	// is provably reclaimable and the figure is memory.current.
 	if data, err := os.ReadFile(filepath.Join(r.root, "memory.stat")); err == nil {
 		st = parseMemoryStat(data)
 	}
-	stats.WorkingSetBytes = workingSet(used, st)
-	stats.InactiveFileBytes, stats.SlabReclaimableBytes = st.InactiveFile, st.SlabReclaimable
+	stats.UnreclaimableBytes = unreclaimable(used, st)
+	stats.ActiveFileBytes, stats.InactiveFileBytes, stats.SlabReclaimableBytes = st.ActiveFile, st.InactiveFile, st.SlabReclaimable
+	if data, err := os.ReadFile(filepath.Join(r.root, "memory.pressure")); err == nil {
+		stats.PSI = parsePSI(data)
+	}
 	// "max" (unlimited) parses to 0 — LimitBytes==0 means no limit.
 	if limit, err := readLimit(filepath.Join(r.root, "memory.max")); err == nil {
 		stats.LimitBytes = limit
@@ -251,6 +334,36 @@ func (r *Reader) Events() (Events, bool) {
 		return Events{}, false
 	}
 	return parseMemoryEvents(data)
+}
+
+// ChildEvents returns the memory.events counters of each direct child cgroup
+// (dockerd/, daemon/ on a cloud machine), keyed by directory name. The parent's
+// memory.events is hierarchical, so this is how growth there is attributed:
+// a child that hit its OWN memory.max (dockerd's container cap) shows up in
+// the parent's "max" counter although the parent's limit was never reached.
+// Children without a readable memory.events are omitted.
+func (r *Reader) ChildEvents() map[string]Events {
+	if r == nil || r.root == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(r.root)
+	if err != nil {
+		return nil
+	}
+	out := map[string]Events{}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(r.root, e.Name(), "memory.events"))
+		if err != nil {
+			continue
+		}
+		if ev, ok := parseMemoryEvents(data); ok {
+			out[e.Name()] = ev
+		}
+	}
+	return out
 }
 
 // OOMSnapshot captures the oom_kill counter before running a command so an
