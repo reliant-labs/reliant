@@ -43,6 +43,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
 | [`reliant forge api curl`](#reliant-forge-api-curl) | Print a copy-pasteable curl command for a Connect RPC method |
 | [`reliant forge build`](#reliant-forge-build) | Compile the project's binaries and frontends locally (never publishes) |
+| [`reliant forge build receipt`](#reliant-forge-build-receipt) | Emit a typed receipt for actual exported build inputs |
 | [`reliant forge ci`](#reliant-forge-ci) | CI helper commands — verify, scan, and validate in CI pipelines |
 | [`reliant forge ci gate`](#reliant-forge-ci-gate) | Run the local CI gate: every check, one summary table, non-zero if any failed or was skipped |
 | [`reliant forge ci migration-safety`](#reliant-forge-ci-migration-safety) | Run SQL migration safety checks based on forge.yaml config |
@@ -53,6 +54,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ci verify-test-run`](#reliant-forge-ci-verify-test-run) | Verify a `go test -json` run actually ran its tests (reads output; runs nothing) |
 | [`reliant forge ci vuln-scan`](#reliant-forge-ci-vuln-scan) | Run vulnerability scanners based on forge.yaml config |
 | [`reliant forge cloud`](#reliant-forge-cloud) | Talk to the hosted control plane an environment declares |
+| [`reliant forge cloud identity`](#reliant-forge-cloud-identity) | Inspect managed identity and invite users to an environment |
+| [`reliant forge cloud identity invite`](#reliant-forge-cloud-identity-invite) | Email an invitation and grant console-managed roles (org admin) |
+| [`reliant forge cloud identity status`](#reliant-forge-cloud-identity-status) | Show managed-identity state, issuer and delivery metadata |
+| [`reliant forge cloud identity users`](#reliant-forge-cloud-identity-users) | List one page of users and declared roles (no credentials) |
 | [`reliant forge cloud releases`](#reliant-forge-cloud-releases) | List releases from the hosted control plane |
 | [`reliant forge cloud status`](#reliant-forge-cloud-status) | Show the endpoint and credential source for an environment |
 | [`reliant forge cloud token`](#reliant-forge-cloud-token) | Mint, list and revoke ORG automation tokens (the CI deploy credential) |
@@ -66,6 +71,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge cluster info`](#reliant-forge-cluster-info) | Print static dev-loop config (cluster name, expected context, declared ports) |
 | [`reliant forge cluster instances`](#reliant-forge-cluster-instances) | List every forge dev namespace on every reachable cluster |
 | [`reliant forge cluster logs`](#reliant-forge-cluster-logs) | Stream kubectl logs for one or all services in the dev namespace |
+| [`reliant forge cluster recover-chart-lock`](#reliant-forge-cluster-recover-chart-lock) | Explicitly recover an inspected chart lock after terminating its writer |
 | [`reliant forge cluster reload`](#reliant-forge-cluster-reload) | Re-render deploy/kcl/dev + kubectl apply + wait rollout |
 | [`reliant forge cluster reset`](#reliant-forge-cluster-reset) | Delete then recreate the cluster |
 | [`reliant forge cluster status`](#reliant-forge-cluster-status) | Print dynamic dev-loop state (cluster up/down, pods, ingress URLs) |
@@ -129,6 +135,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env devstack release`](#reliant-forge-env-devstack-release) | Reclaim one named port block that you know is no longer in use |
 | [`reliant forge env diff`](#reliant-forge-env-diff) | Render this checkout and diff each environment against what is deployed |
 | [`reliant forge env down`](#reliant-forge-env-down) | Stop Forge host processes for an environment (or --all: across projects) |
+| [`reliant forge env exec`](#reliant-forge-env-exec) | Run a local command with a workload's resolved configuration |
 | [`reliant forge env list`](#reliant-forge-env-list) | List the environments declared in deploy/kcl/ |
 | [`reliant forge env new`](#reliant-forge-env-new) | Scaffold a new deploy environment from an existing one |
 | [`reliant forge env options`](#reliant-forge-env-options) | List the render options an environment's KCL declares |
@@ -964,6 +971,12 @@ mirror config inside k3d resolves that reference at pull time).
 reliant forge build [environment] [flags]
 ```
 
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`receipt`](#reliant-forge-build-receipt) | Emit a typed receipt for actual exported build inputs |
+
 **Flags:**
 
 | Flag | Type | Default | Description |
@@ -980,6 +993,23 @@ reliant forge build [environment] [flags]
 | `--tag` | `string` | - | Override the image tag of every image this build writes (default: the tag a workload's image pins, else the env's image_tag, else git describe --tags --always --dirty). Refused when it differs from the tag a selected workload's image pins — the deploy pulls the pin. Recorded in .forge/state so forge env deploy uses the same value. |
 | `--target`, `-t` | `string` | `all` | Build target (all | external | a specific service/frontend name). `external` builds only the KCL services declaring build_cmd; requires the environment argument. |
 | `--target-arch` | `string` | - | Override target GOARCH for cross-compilation (default: forge.yaml deploy.target_arch, then amd64 for docker builds) |
+
+---
+
+#### reliant forge build receipt
+
+Emit a typed receipt for actual exported build inputs
+
+```
+reliant forge build receipt [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--inputs` | `string` | - | Typed BuildInputs JSON from the actual builder's exported source/recipe/tools (no secrets) |
+| `--output` | `stringArray` | `[]` | Resolved output NAME=sha256:DIGEST (repeatable; exactly covers inputs.outputs) |
 
 ---
 
@@ -1337,9 +1367,101 @@ reliant forge cloud
 
 | Command | Description |
 |---------|-------------|
+| [`identity`](#reliant-forge-cloud-identity) | Inspect managed identity and invite users to an environment |
 | [`releases`](#reliant-forge-cloud-releases) | List releases from the hosted control plane |
 | [`status`](#reliant-forge-cloud-status) | Show the endpoint and credential source for an environment |
 | [`token`](#reliant-forge-cloud-token) | Mint, list and revoke ORG automation tokens (the CI deploy credential) |
+
+---
+
+#### reliant forge cloud identity
+
+Inspect managed identity and invite users to an environment
+
+Manage the identity an environment declares in KCL, using its control plane.
+
+Requires a human session (Reliant's session helper or forge login); machine
+credentials are refused by the server. Members may read; invitations require
+an org admin. The organization is resolved from the authenticated server, not
+a token claim or a flag. The environment must already exist in this project.
+
+Inviting sends an email link for the recipient to set their own credential.
+There is no password option, seed account or implicit recipient. Roles managed
+in deploy/kcl/identity.k (members_from = "declared") are read-only here.
+
+```
+reliant forge cloud identity
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`invite`](#reliant-forge-cloud-identity-invite) | Email an invitation and grant console-managed roles (org admin) |
+| [`status`](#reliant-forge-cloud-identity-status) | Show managed-identity state, issuer and delivery metadata |
+| [`users`](#reliant-forge-cloud-identity-users) | List one page of users and declared roles (no credentials) |
+
+---
+
+#### reliant forge cloud identity invite
+
+Email an invitation and grant console-managed roles (org admin)
+
+Invite this explicit email address; repeat --role for multiple roles.
+The recipient sets their own credential using the invitation email. An existing
+account receives the requested roles (created=false). The server refuses unknown
+or declared/read-only roles, machine credentials and an identity that is not
+ready. Such a refusal is an error, never a fallback to a seeded password.
+
+```
+reliant forge cloud identity invite <env> --email <address> --role <role> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--email` | `string` | - | Explicit recipient email address (required; never inferred) |
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--role` | `stringArray` | `[]` | Console-managed role to grant (required; repeat for multiple roles) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+
+---
+
+#### reliant forge cloud identity status
+
+Show managed-identity state, issuer and delivery metadata
+
+```
+reliant forge cloud identity status <env> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+
+---
+
+#### reliant forge cloud identity users
+
+List one page of users and declared roles (no credentials)
+
+```
+reliant forge cloud identity users <env> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--page-size` | `int` | `20` | Maximum users in this page (0 uses server default, max 100) |
+| `--page-token` | `string` | - | Continuation from the preceding response |
+| `--query` | `string` | - | Case-insensitive email substring (max 200 characters) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
 
 ---
 
@@ -1515,6 +1637,7 @@ reliant forge cluster
 | [`info`](#reliant-forge-cluster-info) | Print static dev-loop config (cluster name, expected context, declared ports) |
 | [`instances`](#reliant-forge-cluster-instances) | List every forge dev namespace on every reachable cluster |
 | [`logs`](#reliant-forge-cluster-logs) | Stream kubectl logs for one or all services in the dev namespace |
+| [`recover-chart-lock`](#reliant-forge-cluster-recover-chart-lock) | Explicitly recover an inspected chart lock after terminating its writer |
 | [`reload`](#reliant-forge-cluster-reload) | Re-render deploy/kcl/dev + kubectl apply + wait rollout |
 | [`reset`](#reliant-forge-cluster-reset) | Delete then recreate the cluster |
 | [`status`](#reliant-forge-cluster-status) | Print dynamic dev-loop state (cluster up/down, pods, ingress URLs) |
@@ -1759,6 +1882,37 @@ reliant forge cluster logs [flags]
 | `--follow` | `bool` | `true` | Stream new logs (kubectl logs -f) |
 | `--service` | `string` | - | Scope to one service deployment |
 | `--tail` | `int` | `100` | Lines of recent log file to display (-1 = all) |
+
+---
+
+#### reliant forge cluster recover-chart-lock
+
+Explicitly recover an inspected chart lock after terminating its writer
+
+A chart lock never expires. Before recovery, terminate/fence the holder's
+forge process AND its kubectl children on every host; ensure outstanding API
+writes have completed or their credentials have been revoked. A suspended writer
+must never resume after recovery. Do not recover a merely slow writer.
+
+Inspect the ConfigMap named in the deploy error in kube-system. This command
+requires its owner, chart, UID, resourceVersion and literal terminated:`<holder>`
+confirmation. It conditionally deletes ONLY that lock, never the inventory.
+There is no --force, timeout-based takeover, or automatic unlock on failure.
+
+```
+reliant forge cluster recover-chart-lock [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--chart` | `string` | - | Inspected chart name |
+| `--confirm-terminated` | `string` | - | Explicit terminated:`<holder>` attestation after fencing the old writer |
+| `--context` | `string` | - | Explicit kubectl context |
+| `--owner` | `string` | - | Inspected forge project.env owner |
+| `--resource-version` | `string` | - | Inspected lock metadata.resourceVersion |
+| `--uid` | `string` | - | Inspected lock metadata.uid |
 
 ---
 
@@ -3265,6 +3419,7 @@ reliant forge env
 | [`devstack`](#reliant-forge-env-devstack) | Parallel-dev-stack host helpers (worktree key + port allocation) |
 | [`diff`](#reliant-forge-env-diff) | Render this checkout and diff each environment against what is deployed |
 | [`down`](#reliant-forge-env-down) | Stop Forge host processes for an environment (or --all: across projects) |
+| [`exec`](#reliant-forge-env-exec) | Run a local command with a workload's resolved configuration |
 | [`list`](#reliant-forge-env-list) | List the environments declared in deploy/kcl/ |
 | [`new`](#reliant-forge-env-new) | Scaffold a new deploy environment from an existing one |
 | [`options`](#reliant-forge-env-options) | List the render options an environment's KCL declares |
@@ -3345,10 +3500,12 @@ reliant forge env build <environment> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--base-promotion` | `string` | - | Compose from this exact desired promotion (or resolve current once before builds) |
 | `--bundle-envs` | `string` | - | Write a bundle for each of these envs (comma-separated) from this one build, instead of only for the env argument. A release is env-agnostic and a bundle is not, so this is how one cut produces the manifests for every env it will ship to — each pinned to the same release and the same source. Each env is rendered; each bundle is pushed beside its images for a control-plane env, or written to this machine's ledger otherwise. |
 | `--debug` | `bool` | - | Build with debug symbols for Delve |
 | `--docker` | `bool` | - | Build Docker images for all services (implied by --push and --release) |
 | `--gate-json` | `string` | - | Also write this build's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the build log and the exit code are unchanged. |
+| `--json` | `bool` | - | With --plan and snapshot composition: emit a machine-readable pending pre-build plan |
 | `--no-build` | `bool` | - | With --release: record the release over the digests an earlier --push already captured in .forge/state, without rebuilding. This is the cut-only half of a pipeline whose build and release are separate jobs. |
 | `--no-generate` | `bool` | - | Skip the pre-build code-generation check. By default this runs forge generate when gen/ is missing or proto sources are newer than the generated tree. |
 | `--no-run` | `bool` | - | Record no run, even inside CI |
@@ -3360,8 +3517,9 @@ reliant forge env build <environment> [flags]
 | `--release` | `string` | - | Record an immutable release with this version label (e.g. v1.4.0). IMPLIES --push. The release's artifact SET (project images plus per-env external build_cmd images) is discovered from deploy/kcl/`<env>`/main.k; the built images stay env-agnostic, so promote the release to every env with 'forge env deploy `<env>` `<version>`'. Captures each artifact's digest into a release ledger, which every later deploy pins. |
 | `--run-id` | `string` | - | CI run this write belongs to (default: detected from the CI environment, e.g. github:`<repo>`/`<run>`/`<attempt>`) |
 | `--run-url` | `string` | - | Link to the CI run, for a human reading the ledger (default: detected from the CI environment) |
+| `--snapshot-bootstrap` | `bool` | - | Build a complete sealed snapshot selecting all consumers; never use legacy state as a partial base |
 | `--tag` | `string` | - | Override the image tag of every image this build writes (default: the tag a workload's image pins, else the env's image_tag, else git describe --tags --always --dirty). Refused when it differs from the tag a selected workload's image pins, or when it conflicts with --release. Recorded in .forge/state so 'forge env deploy' uses the same value. |
-| `--target`, `-t` | `string` | `all` | Build target (all | external | a specific service/frontend name). `external` builds only the KCL services declaring build_cmd. |
+| `--target`, `-t` | `stringArray` | `[]` | Build target; repeatable for snapshot composition (default all) |
 | `--target-arch` | `string` | - | Override target GOARCH for cross-compilation (default: forge.yaml deploy.target_arch, then amd64 for docker builds) |
 
 ---
@@ -4082,9 +4240,11 @@ Everything else is stopped as usual, and the command still succeeds. The
 per-environment form also leaves that environment's host infrastructure up,
 because the server it backs is still running. To stop such a stack, run the
 command from a shell outside it.
-Docker Compose containers, Kubernetes workloads/clusters, and Docker Desktop
-are not stopped by this command. The per-environment form also stops declared
-host infrastructure servers while preserving their data.
+The per-environment form removes only its recorded, ownership-verified Docker
+Compose containers, preserving all volumes. Shared compose infrastructure is
+left running. Kubernetes workloads/clusters and Docker Desktop are not stopped.
+The per-environment form also stops declared host infrastructure servers while
+preserving their data.
 
 This command never touches a HOSTED environment (one the control plane runs):
 suspend/resume it with `forge env stop` / `forge env start`, tear it down with
@@ -4109,6 +4269,45 @@ reliant forge env down [environment] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--all` | `bool` | - | Stop every forge stack running on this machine, across all projects (the only way to reach a stack whose project directory is gone) |
+
+---
+
+#### reliant forge env exec
+
+Run a local command with a workload's resolved configuration
+
+Run a command on THIS host, with inherited stdio and working directory.
+The default workload is exactly "api" (the scaffold's _api.name), never the
+first service. Renamed/multiple APIs require --workload. Flags after -- belong
+to the child and are passed literally, without a shell. To use shell syntax,
+explicitly request a shell yourself.
+
+Only OnHost and OnCompose workloads are allowed. Hosted, cluster and build-only
+workloads are refused before reading secret stores. No deploy or startup runs.
+
+Configuration shares env config's resolver (including launched coordinates),
+and env up's local configuration layers. Declared values override the inherited
+environment; OnHost honors FORGE_ENV_OVERRIDE except declared bind ports.
+OnCompose uses the HOST-side Compose launcher env (secrets \< env_file \< runtime
+env), not a container's environment or docker compose exec. Use host-reachable
+published mappings in your local declaration, not container DNS. Forge does not
+scrape or rewrite DSNs, inspect containers, or infer arbitrary URL semantics.
+
+Normal child exit codes pass through unchanged; signals are forwarded, and a
+signal-terminated child returns 128 + signal number. No resolved values or child
+arguments are logged by Forge.
+
+  cli forge env exec dev --workload api -- go run ./cmd/myapp apikey create
+
+```
+reliant forge env exec <env> [--workload <name>] -- <command> [args...] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--workload` | `string` | `api` | Workload name (default: exactly api, the scaffold's _api.name) |
 
 ---
 
@@ -6558,7 +6757,9 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--link-forge` | `bool` | - | Bridge the project to the forge checkout this binary was built from (gitignored go.work 'use' + .forge-link/ for the web runtime). Off by default; required for a service scaffold from an unreleased forge build (also: FORGE_LINK_FORGE=1) |
 | `--mod` | `string` | - | Go module path (e.g., github.com/example/my-project). Defaults to example.com/`<name>`, so a first project needs no flag; set it to the path you will publish under |
 | `--name` | `string` | - | Project name. Same as the positional arg, and the way to name an --in-place project whose directory (a worktree, a branch checkout) is not the product name; defaults to the directory name |
+| `--output` | `string` | - | Output for every --frontend: static (default), standalone, or server |
 | `--path`, `-p` | `string` | `.` | Path where to create the project |
+| `--routes` | `stringSlice` | `[]` | CRUD route allowlist for every --frontend; none generates no CRUD pages |
 | `--service` | `stringSlice` | `[]` | Name(s) of initial Go services (repeatable or comma-separated). Name services after domain entities (item, order), not the binary. Omit to scaffold zero services and add them later via 'forge scaffold service `<entity>`' |
 | `--skip-tools` | `bool` | - | Skip auto-installing protoc-gen-go / protoc-gen-connect-go (run 'forge tools install' later) |
 | `--verbose`, `-v` | `bool` | - | Print the raw output behind a step forge summarizes in one line (e.g. git's explanation when the initial commit is skipped for want of a git identity) |
@@ -6714,6 +6915,10 @@ gained, how far behind you are in lines, and how many lines in your copy no
 template accounts for. Adopt one by naming it:
 'forge project upgrade --force `<path>`'. Bare --force does not reach them.
 
+Upgrade synchronizes every project module that requires Forge using
+GOWORK=off go get and go mod tidy, preserving module replacements and go.work.
+If either command fails, its module-file changes are rolled back and upgrade
+stops before changing templates or forge.yaml, with exact recovery commands.
 After a successful upgrade the project's forge_version field in forge.yaml
 is bumped to the current binary version (or to --to when provided). Migrations
 whose declared version range AND detection script both match this project are
