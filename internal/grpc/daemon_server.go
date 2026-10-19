@@ -12,7 +12,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/serverkit"
@@ -99,21 +98,20 @@ func (s *DaemonServer) IsTLS() bool {
 
 // Stop gracefully stops the daemon server, make-before-break:
 //
-//  1. ToolsDaemonService.BeginDrain refuses new streams, stops routing each
-//     held daemon's new requests here, and tells each daemon to move
-//     (GatewayDrain), naming the moment its stream here will be ended. The
-//     daemon opens a stream to another replica and keeps this one open for
-//     the replies to what is in flight on it.
-//  2. serverkit.DrainHTTP stops accepting and drains the listener. Every
-//     ConnectDaemon stream claimed the drain's soft phase (it says goodbye
-//     with GatewayDrain), so the drain waits for the daemons to close their
-//     old streams — each does once it is registered elsewhere and has nothing
-//     left in flight here — until ctx's deadline less the drain reserve, then
-//     ends the streams still open with Unavailable, the daemon's redial
-//     signal. A call cut off there is not lost: its daemon delivers the
-//     result through the replica it moved to (see
-//     internal/toolexec/tool_result_redelivery.go).
-//  3. ToolsDaemonService.Close ends anything the service still holds that is
+//  1. serverkit.DrainHTTP stops accepting and drains the listener. Every
+//     ConnectDaemon stream claimed the drain's soft phase, so when it begins
+//     each stream hands its daemon over (tools_daemon's handOverOnDrain): it
+//     stops routing the daemon's new requests here and tells the daemon to
+//     move (GatewayDrain), naming the drain's hard deadline
+//     (serverkit.DrainDeadline). The daemon opens a stream to another replica
+//     and keeps this one open for the replies to what is in flight on it.
+//     The drain waits for the daemons to close their old streams — each does
+//     once it is registered elsewhere and has nothing left in flight here —
+//     until that deadline, then ends the streams still open with
+//     Unavailable, the daemon's redial signal. A call cut off there is not
+//     lost: its daemon delivers the result through the replica it moved to
+//     (see internal/toolexec/tool_result_redelivery.go).
+//  2. ToolsDaemonService.Close ends anything the service still holds that is
 //     not an inbound stream (an outbound gateway→daemon connection).
 //
 // ORDER IS LOAD-BEARING. http.Server.Shutdown alone cannot end a daemon
@@ -126,23 +124,9 @@ func (s *DaemonServer) IsTLS() bool {
 // that is already serving rather than this one.
 func (s *DaemonServer) Stop(ctx context.Context) error {
 	logging.Info("Stopping dedicated daemon Connect/gRPC server", "streams_open", s.streams.Active())
-	// The drain ends the streams still open at ctx's deadline less the drain
-	// reserve (less, when the budget is under twice the reserve), so this is
-	// the latest moment a daemon can rely on. No deadline: the drain waits
-	// for every stream, and the notice names none.
-	var hardEnd time.Time
-	if deadline, ok := ctx.Deadline(); ok {
-		hardEnd = deadline.Add(-serverkit.DefaultDrainReserve)
-	}
-	start := time.Now()
-	moved := s.toolsDaemonService.BeginDrain(hardEnd)
+	// DrainHTTP writes the listener's phase line ("drain: listener drained",
+	// with what the drain did to the daemon streams).
 	err := serverkit.DrainHTTP(ctx, s.server, s.streams)
-	if moved > 0 {
-		logging.Info("Daemon streams drained",
-			"streams", moved, "still_open", s.toolsDaemonService.GetActiveConnections(),
-			"waited", time.Since(start).Round(time.Millisecond))
-	}
-	logDrainReport("Dedicated daemon Connect/gRPC server drained", s.streams.Report())
 	s.toolsDaemonService.Close()
 	return err
 }

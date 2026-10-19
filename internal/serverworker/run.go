@@ -562,10 +562,7 @@ func Run(ctx context.Context, opts Options) error {
 	// nothing directly (nothing routes to it), but keeping one drain shape
 	// across the three mains is what makes the grace-period arithmetic
 	// checkable from the deployment alone.
-	logging.Info("Draining temporal-worker",
-		"pre_stop_delay", drainer.PreStopDelay,
-		"shutdown_timeout", drainer.ShutdownTimeout)
-	drainer.Begin()
+	drainer.Begin() // logs the flip and the pause ("drain: …" phase lines)
 
 	shutdownCtx, cancel := drainer.ShutdownContext()
 	defer cancel()
@@ -590,6 +587,9 @@ func Run(ctx context.Context, opts Options) error {
 	if err := healthServer.Shutdown(healthCtx); err != nil {
 		logging.Error("Health server shutdown error", "error", err)
 	}
+	// The shutdown's total ("drain: complete"), before telemetry is flushed
+	// so the point is exported.
+	drainer.Complete()
 
 	analytics.Shutdown()
 

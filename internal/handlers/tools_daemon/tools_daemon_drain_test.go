@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
@@ -134,11 +135,32 @@ func (r *drainRecorder) OnDaemonDraining(userID, daemonID string) {
 	r.noticeSent = append(r.noticeSent, len(r.conn.sendCh) > 0)
 }
 
-// BeginDrain stops this replica being chosen for the daemon's new requests
+// drainReplica is the listener's drain reaching every stream the replica
+// holds at once: what each ConnectDaemon stream's handOverOnDrain does when
+// the soft phase begins, for a test that holds its connections without a
+// listener. It reports how many daemons were told to move.
+func drainReplica(svc *Service, deadline time.Time) int {
+	svc.draining.Store(true)
+	svc.mu.RLock()
+	conns := make([]*daemonConnection, 0, len(svc.connections))
+	for _, conn := range svc.connections {
+		conns = append(conns, conn)
+	}
+	svc.mu.RUnlock()
+	moved := 0
+	for _, conn := range conns {
+		if svc.handOver(conn, deadline) {
+			moved++
+		}
+	}
+	return moved
+}
+
+// The hand-over stops this replica being chosen for the daemon's new requests
 // BEFORE it tells the daemon to move: told first, the daemon could register
 // on another replica while this one still took its requests, and one request
 // would reach it twice.
-func TestBeginDrainStopsRoutingBeforeTellingTheDaemonToMove(t *testing.T) {
+func TestHandOverStopsRoutingBeforeTellingTheDaemonToMove(t *testing.T) {
 	svc := newTestService(nil)
 	conn := newTestConn("user-1", "daemon-1", newParkedStream())
 	conn.movesOnDrain = true
@@ -149,7 +171,7 @@ func TestBeginDrainStopsRoutingBeforeTellingTheDaemonToMove(t *testing.T) {
 	svc.mu.Unlock()
 
 	deadline := time.Now().Add(20 * time.Second)
-	require.Equal(t, 1, svc.BeginDrain(deadline))
+	require.Equal(t, 1, drainReplica(svc, deadline))
 
 	require.Equal(t, []string{"user-1/daemon-1"}, rec.drained)
 	require.Equal(t, []bool{false}, rec.noticeSent, "listeners must hear the drain before the daemon is told to move")
@@ -169,7 +191,7 @@ func TestBeginDrainStopsRoutingBeforeTellingTheDaemonToMove(t *testing.T) {
 // A daemon that cannot move — an older build, or one the gateway dialed — is
 // ended at once, as before: kept open it would only be unreachable until the
 // deadline, because this replica no longer routes its requests.
-func TestBeginDrainEndsAtOnceTheStreamsOfDaemonsThatCannotMove(t *testing.T) {
+func TestHandOverEndsAtOnceTheStreamsOfDaemonsThatCannotMove(t *testing.T) {
 	svc := newTestService(nil)
 	old := newTestConn("user-1", "daemon-old", newParkedStream())
 	current := newTestConn("user-1", "daemon-new", newParkedStream())
@@ -179,7 +201,7 @@ func TestBeginDrainEndsAtOnceTheStreamsOfDaemonsThatCannotMove(t *testing.T) {
 	registerTestConn(svc, current)
 	svc.mu.Unlock()
 
-	require.Equal(t, 1, svc.BeginDrain(time.Now().Add(20*time.Second)), "only the daemon that can move is told to")
+	require.Equal(t, 1, drainReplica(svc, time.Now().Add(20*time.Second)), "only the daemon that can move is told to")
 	select {
 	case <-old.done:
 		require.Equal(t, connect.CodeUnavailable, connect.CodeOf(old.closedReason()))
@@ -190,11 +212,64 @@ func TestBeginDrainEndsAtOnceTheStreamsOfDaemonsThatCannotMove(t *testing.T) {
 	require.NotNil(t, (<-current.sendCh).GetDrain())
 }
 
+// The listener's drain is what hands a daemon over: the stream's soft phase
+// fires handOverOnDrain, and the notice names the moment that drain will end
+// the stream — the registry's own hard deadline (serverkit.DrainDeadline),
+// not a re-derivation of it.
+func TestListenerDrainHandsTheDaemonOverWithTheDrainsDeadline(t *testing.T) {
+	svc := newTestService(nil)
+	conn := newTestConn("user-1", "daemon-1", newParkedStream())
+	conn.movesOnDrain = true
+
+	streams := serverkit.NewStreams()
+	ctx, release := streams.Bind(context.Background())
+	defer release()
+	_ = serverkit.Draining(ctx) // ConnectDaemon claims the soft phase first
+	stop := svc.handOverOnDrain(ctx, conn)
+	defer stop()
+
+	budget, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	drained := make(chan error, 1)
+	go func() { drained <- streams.Drain(budget) }()
+
+	var notice *reliantv1.GatewayDrain
+	select {
+	case msg := <-conn.sendCh:
+		notice = msg.GetDrain()
+	case <-time.After(2 * time.Second):
+		t.Fatal("the listener's drain never told the daemon to move")
+	}
+	require.NotNil(t, notice)
+	hard, ok := serverkit.DrainDeadline(ctx)
+	require.True(t, ok)
+	require.Equal(t, hard.UnixMilli(), notice.GetDeadlineUnixMs(), "the notice names the drain's own hard deadline")
+	require.True(t, svc.draining.Load(), "a replica that has begun handing daemons over refuses new ones")
+
+	// The daemon moved and retired its stream: the drain is done.
+	release()
+	require.NoError(t, <-drained)
+}
+
+// A stream that arrives once the listener has begun draining is refused at
+// once, before it is registered.
+func TestStreamArrivingDuringTheListenerDrainIsRefused(t *testing.T) {
+	svc := newTestService(nil)
+	streams := serverkit.NewStreams()
+	streams.BeginDrain()
+	ctx, release := streams.Bind(context.Background())
+	defer release()
+
+	err := svc.ConnectDaemon(ctx, nil)
+	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	require.True(t, svcerr.IsServerDraining(err))
+}
+
 // A draining replica takes no new daemon, in either direction: the daemon
 // must land on a replica that will still be serving it a minute from now.
 func TestDrainingReplicaRefusesNewDaemonStreams(t *testing.T) {
 	svc := newTestService(nil)
-	svc.BeginDrain(time.Now().Add(time.Second))
+	drainReplica(svc, time.Now().Add(time.Second))
 
 	err := svc.ConnectDaemon(context.Background(), nil)
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "Unavailable keeps the daemon on its reconnect path")

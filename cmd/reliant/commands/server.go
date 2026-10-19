@@ -67,29 +67,28 @@ func serverEnvOrDefaultBool(key string, defaultVal bool) bool {
 // ignores them cannot stay inside the grace period it was given — in the
 // terms serverkit.Drainer takes them.
 //
-// Unset, unparseable or negative is zero, serverkit's default (5s / 30s): a
+// It reads them exactly as forge's grace-period arithmetic does
+// (pkg/deploy's drainSeconds), so the two can never disagree about the
+// budget: a Go duration ("30s", "1m30s") or a bare count of seconds, passed
+// through under serverkit's one rule for both — zero (or unset) is the
+// default, 5s / 30s, and negative is none. Anything else takes the default: a
 // malformed duration must not stop a server from booting, nor make its
-// shutdown instantaneous. An explicit zero pre-stop delay means no pause,
-// which serverkit spells as a negative delay.
+// shutdown instantaneous.
 func drainBudgetFromEnv() (preStopDelay, shutdownTimeout time.Duration) {
-	if d, ok := serverEnvDuration("PRE_STOP_DELAY"); ok {
-		preStopDelay = d
-		if d == 0 {
-			preStopDelay = -1
-		}
-	}
-	shutdownTimeout, _ = serverEnvDuration("SHUTDOWN_TIMEOUT")
-	return preStopDelay, shutdownTimeout
+	return serverEnvDuration("PRE_STOP_DELAY"), serverEnvDuration("SHUTDOWN_TIMEOUT")
 }
 
-// serverEnvDuration returns the environment variable as a non-negative
-// duration, reporting false when it is unset or not one.
-func serverEnvDuration(key string) (time.Duration, bool) {
-	d, err := time.ParseDuration(strings.TrimSpace(os.Getenv(key)))
-	if err != nil || d < 0 {
-		return 0, false
+// serverEnvDuration returns the environment variable as a duration — a Go
+// duration or a bare count of seconds — and zero when it is unset or neither.
+func serverEnvDuration(key string) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if d, err := time.ParseDuration(raw); err == nil {
+		return d
 	}
-	return d, true
+	if n, err := strconv.ParseInt(raw, 10, 64); err == nil {
+		return time.Duration(n) * time.Second
+	}
+	return 0
 }
 
 func newServerAPICmd() *cobra.Command {

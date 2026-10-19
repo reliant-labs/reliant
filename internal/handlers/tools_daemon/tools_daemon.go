@@ -153,7 +153,7 @@ type daemonConnection struct {
 	// registration.
 	movesOnDrain bool
 	// drainNoticeSent is set once this replica has told the daemon it is
-	// draining (BeginDrain). From then on the daemon may end the stream
+	// draining (handOver). From then on the daemon may end the stream
 	// itself once it has moved, which is the drain working, not a fault.
 	drainNoticeSent atomic.Bool
 	// daemonToolCallsInFlight is the daemon's own count of executing tool
@@ -893,15 +893,20 @@ func (s *Service) ConnectDaemon(
 	ctx context.Context,
 	stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage],
 ) error {
-	// This stream says its own goodbye — BeginDrain tells the daemon to move
-	// (GatewayDrain) — so it claims the server drain's soft phase: the drain
-	// leaves it open for the replies still in flight on it, and ends it only
-	// at the drain's hard deadline (see grpc.DaemonServer.Stop).
-	_ = serverkit.Draining(ctx)
+	// This stream says its own goodbye — its hand-over tells the daemon to
+	// move (GatewayDrain, handOverOnDrain below) — so it claims the listener
+	// drain's soft phase: the drain leaves it open for the replies still in
+	// flight on it, and ends it only at the drain's hard deadline.
+	listenerDraining := serverkit.Draining(ctx)
 
 	// A draining replica takes no new daemon: one moving off it, or one the
 	// load balancer has not stopped sending yet, redials and lands on a
 	// replica that is still serving. Unavailable keeps it on that path.
+	select {
+	case <-listenerDraining:
+		return errGatewayDraining
+	default:
+	}
 	if s.draining.Load() {
 		return errGatewayDraining
 	}
@@ -1094,6 +1099,9 @@ func (s *Service) ConnectDaemon(
 		s.teardownConnection(conn, "inbound stream ended")
 		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Daemon disconnected", "userID", userID, "daemonID", daemonID)
 	}()
+
+	// When the listener drains, tell this daemon to move.
+	defer s.handOverOnDrain(ctx, conn)()
 
 	// Handle incoming messages (blocking)
 	return s.handleIncoming(ctx, conn)

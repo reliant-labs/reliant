@@ -245,8 +245,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge storage register`](#reliant-forge-storage-register) | Register local cluster contexts, declared repositories or release pins |
 | [`reliant forge storage status`](#reliant-forge-storage-status) | Report physical host capacity, Docker usage and node cleanup settings |
 | [`reliant forge storage worktrees`](#reliant-forge-storage-worktrees) | Preview idle, clean, pushed worktrees of a repo; --apply removes them |
-| [`reliant forge tools`](#reliant-forge-tools) | Manage developer tooling forge depends on (proto plugins, etc.) |
-| [`reliant forge tools install`](#reliant-forge-tools-install) | Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports) |
+| [`reliant forge tools`](#reliant-forge-tools) | Manage developer tooling forge depends on (proto plugins, linters, etc.) |
+| [`reliant forge tools install`](#reliant-forge-tools-install) | Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports), or the named tools (golangci-lint, buf) |
+| [`reliant forge tools pins`](#reliant-forge-tools-pins) | Print the tool versions this forge pins (golangci-lint, buf, …), for CI to read |
 | [`reliant forge version`](#reliant-forge-version) | Print the forge version and build identity |
 | [`reliant open`](#reliant-open) | Open a project in Reliant |
 | [`reliant preview-url`](#reliant-preview-url) | Print the shareable preview URL for a local port |
@@ -860,7 +861,7 @@ reliant forge
 | [`slot`](#reliant-forge-slot) | Queue heavy work behind host-wide slots: at most N heavy jobs at once on this machine |
 | [`start`](#reliant-forge-start) | Print the greenfield brief: empty directory to authored protos, in one call |
 | [`storage`](#reliant-forge-storage) | Inspect and bound local caches; preserve persistent application data |
-| [`tools`](#reliant-forge-tools) | Manage developer tooling forge depends on (proto plugins, etc.) |
+| [`tools`](#reliant-forge-tools) | Manage developer tooling forge depends on (proto plugins, linters, etc.) |
 | [`version`](#reliant-forge-version) | Print the forge version and build identity |
 
 **Flags:**
@@ -8599,7 +8600,7 @@ reliant forge storage worktrees [flags]
 
 ### reliant forge tools
 
-Manage developer tooling forge depends on (proto plugins, etc.)
+Manage developer tooling forge depends on (proto plugins, linters, etc.)
 
 Manage developer tooling that forge expects on PATH but does not ship.
 
@@ -8607,7 +8608,10 @@ Subcommands:
   install   Install the codegen tools forge runs (protoc-gen-go,
             protoc-gen-connect-go, goimports) via 'go install', at the
             versions this project's go.mod resolves, and check that every
-            frontend declares its TypeScript plugin.
+            frontend declares its TypeScript plugin. Name a tool to install
+            just it — including the lint tools 'forge lint' gates with
+            (golangci-lint, buf), at forge's pins.
+  pins      Print the tool versions this forge pins, for CI to read.
 
 Forge scaffolds buf.gen.yaml with 'local:' plugins by default so that
 'forge generate' works without any BSR (buf.build) authentication.
@@ -8621,42 +8625,53 @@ reliant forge tools
 
 | Command | Description |
 |---------|-------------|
-| [`install`](#reliant-forge-tools-install) | Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports) |
+| [`install`](#reliant-forge-tools-install) | Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports), or the named tools (golangci-lint, buf) |
+| [`pins`](#reliant-forge-tools-pins) | Print the tool versions this forge pins (golangci-lint, buf, …), for CI to read |
 
 ---
 
 #### reliant forge tools install
 
-Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports)
+Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports), or the named tools (golangci-lint, buf)
 
 Install the codegen tools forge needs on PATH for the default
 local:-plugin buf.gen.yaml workflow, plus goimports, which formats every Go
-file forge generates.
+file forge generates. Name tools to install just those, including the lint
+tools 'forge lint' gates with: golangci-lint and buf.
 
-Each tool is installed at the version this project's go.mod resolves for it
-(google.golang.org/protobuf, connectrpc.com/connect, golang.org/x/tools) —
-the version the committed generated code was produced with — falling back to
-@latest when go.mod does not contain the module. --version overrides that for
-every tool.
+Each codegen tool is installed at the version this project's go.mod resolves
+for it (google.golang.org/protobuf, connectrpc.com/connect,
+golang.org/x/tools) — the version the committed generated code was produced
+with — falling back to @latest when go.mod does not contain the module.
+--version overrides that for every codegen tool.
 
-By default, tools already present on PATH are skipped. Use --force to
-re-install them.
+The lint tools install at forge's pins ('forge tools pins'), never at
+--version. golangci-lint is built with the Go toolchain this module compiles
+with: one built with an older Go cannot analyze it. 'forge lint' builds that
+same golangci-lint into its own cache when PATH has none, so installing it
+only saves that one-time build — a CI job needs no install step for it.
+
+By default, tools already present on PATH are skipped — golangci-lint only
+when it is forge's pin built with a new-enough Go. Use --force to re-install
+them.
 
 The TypeScript plugin, @bufbuild/protoc-gen-es, is not installed here. It
 is an ordinary devDependency of each frontend, so the frontend's own
-'npm ci' installs it at the version its lockfile pins. This command only
-checks that every frontend whose buf.gen.yaml runs it declares it, and
-fails with the edit to make when one does not. It never runs npm and never
-writes a frontend's package.json or package-lock.json — with or without
---force.
+'npm ci' installs it at the version its lockfile pins. With no tool named,
+this command checks that every frontend whose buf.gen.yaml runs it declares
+it, and fails with the edit to make when one does not. It never runs npm and
+never writes a frontend's package.json or package-lock.json — with or
+without --force.
 
 Examples:
   forge tools install
   forge tools install --version v1.34.2
   forge tools install --force
+  forge tools install golangci-lint
+  forge tools install golangci-lint buf
 
 ```
-reliant forge tools install [flags]
+reliant forge tools install [tool...] [flags]
 ```
 
 **Flags:**
@@ -8664,7 +8679,39 @@ reliant forge tools install [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--force` | `bool` | - | Reinstall the Go tools even when already on PATH (never touches a frontend's npm dependencies) |
-| `--version` | `string` | - | Version passed to 'go install' for every tool (e.g. latest, v1.34.2); default: the version go.mod resolves, else latest |
+| `--version` | `string` | - | Version passed to 'go install' for every codegen tool (e.g. latest, v1.34.2); default: the version go.mod resolves, else latest. The lint tools always install at forge's pins |
+
+---
+
+#### reliant forge tools pins
+
+Print the tool versions this forge pins (golangci-lint, buf, …), for CI to read
+
+Print the tool versions this forge pins: the golangci-lint and buf that
+'forge lint' gates with, and the other tools forge installs or renders into
+scaffolded CI.
+
+With a tool name, print only its version — the form a CI step reads:
+
+  GOLANGCI_LINT_VERSION="$(forge tools pins golangci-lint)"
+
+The versions are this forge binary's, so a workflow that runs the forge its
+go.mod pins reads the matching tool pins with no second place to bump.
+
+Examples:
+  forge tools pins
+  forge tools pins golangci-lint
+  forge tools pins --json
+
+```
+reliant forge tools pins [tool] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print a JSON object of tool → version |
 
 ---
 

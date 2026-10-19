@@ -605,10 +605,7 @@ func Run(ctx context.Context, opts Options) error {
 	// server deliberately stays up through all of this — it is shut down
 	// last, below, so the probe gets a real 503 rather than a refused
 	// connection kubelet only notices at its next period.
-	logging.Info("Draining: readiness flipped to not-ready",
-		"pre_stop_delay", drainer.PreStopDelay,
-		"shutdown_timeout", drainer.ShutdownTimeout)
-	drainer.Begin()
+	drainer.Begin() // logs the flip and the pause ("drain: …" phase lines)
 
 	shutdownCtx, cancel := drainer.ShutdownContext()
 	defer cancel()
@@ -651,6 +648,9 @@ func Run(ctx context.Context, opts Options) error {
 	if err := healthServer.Shutdown(healthCtx); err != nil {
 		logging.Error("Error stopping health endpoint", "error", err)
 	}
+	// The shutdown's total ("drain: complete"), before telemetry is flushed
+	// so the point is exported.
+	drainer.Complete()
 
 	// Flush analytics
 	logging.Info("[Analytics] Shutting down analytics")

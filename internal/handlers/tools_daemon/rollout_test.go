@@ -240,7 +240,7 @@ func TestRolloutDeliversTheResultOfACallThatOutlivesItsStream(t *testing.T) {
 
 	// SIGTERM on A: it stops taking the daemon's requests and tells it to
 	// move. The daemon opens a stream to B, which is serving.
-	podA.BeginDrain(time.Now().Add(time.Second))
+	drainReplica(podA, time.Now().Add(time.Second))
 	drainNoticeOn(t, streamA)
 	streamB, ok := attach(t, podB, userID, daemonID)
 	require.True(t, ok)
@@ -290,7 +290,7 @@ func TestRolloutLetsACallFinishOnItsOwnStreamDuringTheDrain(t *testing.T) {
 	results := call(router, userID)
 	req := toolRequestOn(t, streamA)
 
-	podA.BeginDrain(time.Now().Add(20 * time.Second))
+	drainReplica(podA, time.Now().Add(20*time.Second))
 	drainNoticeOn(t, streamA)
 	_, ok := attach(t, podB, userID, daemonID)
 	require.True(t, ok)
@@ -354,8 +354,8 @@ func TestRolloutWithTwoReplicasDrainingAtOnce(t *testing.T) {
 	results := call(router, userID)
 	req := toolRequestOn(t, streamA)
 
-	podA.BeginDrain(time.Now().Add(time.Second))
-	podB.BeginDrain(time.Now().Add(time.Second))
+	drainReplica(podA, time.Now().Add(time.Second))
+	drainReplica(podB, time.Now().Add(time.Second))
 	drainNoticeOn(t, streamA)
 	_, ok := attach(t, podB, userID, daemonID)
 	require.False(t, ok, "a draining replica must refuse the daemon")
@@ -386,7 +386,7 @@ func TestRolloutToleratesDuplicateDelivery(t *testing.T) {
 	streamA, _ := attach(t, podA, userID, daemonID)
 	results := call(router, userID)
 	req := toolRequestOn(t, streamA)
-	podA.BeginDrain(time.Now().Add(20 * time.Second))
+	drainReplica(podA, time.Now().Add(20*time.Second))
 	streamB, _ := attach(t, podB, userID, daemonID)
 
 	// The daemon resends a held result on registration, and again when

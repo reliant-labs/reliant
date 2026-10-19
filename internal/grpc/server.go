@@ -1046,9 +1046,9 @@ func (s *Server) IsTLS() bool {
 // is still serving rather than this one.
 func (s *Server) Stop(ctx context.Context) error {
 	logging.Info("Stopping Connect/gRPC server", "streams_open", s.streams.Active())
-	err := serverkit.DrainHTTP(ctx, s.server, s.streams)
-	logDrainReport("Connect/gRPC server drained", s.streams.Report())
-	return err
+	// DrainHTTP writes the listener's phase line ("drain: listener drained",
+	// with what the drain did to the long-lived streams).
+	return serverkit.DrainHTTP(ctx, s.server, s.streams)
 }
 
 // Mux returns the HTTP mux for mounting additional handlers
@@ -1346,14 +1346,6 @@ func listenAndServe(srv *http.Server, certFile, keyFile, name string) error {
 		}
 	}()
 	return nil
-}
-
-// logDrainReport writes one line saying what a listener's drain did to its
-// long-lived streams.
-func logDrainReport(msg string, r serverkit.DrainReport) {
-	logging.Info(msg,
-		"streams_ended", r.Ended, "streams_claimed", r.Claimed, "streams_hard_ended", r.HardEnded,
-		"hijacked_conns_closed", r.ConnsClosed, "streams_still_running", r.StillRunning)
 }
 
 // securityHeaders adds security-related HTTP headers to responses

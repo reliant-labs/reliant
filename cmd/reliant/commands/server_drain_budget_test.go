@@ -34,25 +34,53 @@ func TestDrainBudgetDefaultsToServerkits(t *testing.T) {
 }
 
 // A malformed duration must not stop the process from booting, and must not
-// produce a zero budget (which would make shutdown instantaneous).
+// produce a zero-length budget (which would make shutdown instantaneous).
 func TestMalformedDrainBudgetFallsBackToDefault(t *testing.T) {
 	t.Setenv("PRE_STOP_DELAY", "not-a-duration")
-	t.Setenv("SHUTDOWN_TIMEOUT", "-1s")
+	t.Setenv("SHUTDOWN_TIMEOUT", "${SHUTDOWN_TIMEOUT}")
 
 	requireServerkitDefaults(t)
 }
 
-// An explicit zero pre-stop delay is no pause at all, not the default one.
-func TestZeroPreStopDelayMeansNoPause(t *testing.T) {
+// An explicit zero is the default, as it is everywhere a drain duration is
+// read: forge sizes the pod's grace period for 5s / 30s when it sees "0s",
+// so the server must spend the same.
+func TestZeroDrainBudgetIsTheDefault(t *testing.T) {
 	t.Setenv("PRE_STOP_DELAY", "0s")
-	t.Setenv("SHUTDOWN_TIMEOUT", "")
+	t.Setenv("SHUTDOWN_TIMEOUT", "0")
+
+	requireServerkitDefaults(t)
+}
+
+// Negative is none: no pre-stop pause, and a shutdown window that is over as
+// it opens — which is what forge's grace period then leaves room for.
+func TestNegativeDrainBudgetIsNone(t *testing.T) {
+	t.Setenv("PRE_STOP_DELAY", "-1s")
+	t.Setenv("SHUTDOWN_TIMEOUT", "-1s")
 
 	preStop, shutdown := drainBudgetFromEnv()
 	d := &serverkit.Drainer{PreStopDelay: preStop, ShutdownTimeout: shutdown}
 	start := time.Now()
 	d.Begin()
 	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Errorf("Begin paused %s for PRE_STOP_DELAY=0s", elapsed)
+		t.Errorf("Begin paused %s for PRE_STOP_DELAY=-1s", elapsed)
+	}
+	ctx, cancel := d.ShutdownContext()
+	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok || time.Until(deadline) > 0 {
+		t.Errorf("SHUTDOWN_TIMEOUT=-1s left a shutdown window open")
+	}
+}
+
+// A bare number is seconds, as forge's grace-period arithmetic reads it.
+func TestBareDrainBudgetIsSeconds(t *testing.T) {
+	t.Setenv("PRE_STOP_DELAY", "7")
+	t.Setenv("SHUTDOWN_TIMEOUT", "45")
+
+	preStop, shutdown := drainBudgetFromEnv()
+	if preStop != 7*time.Second || shutdown != 45*time.Second {
+		t.Errorf("budget = %s / %s, want 7s / 45s", preStop, shutdown)
 	}
 }
 

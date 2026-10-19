@@ -458,10 +458,7 @@ func Run(ctx context.Context, opts Options) error {
 	// Flip /ready to 503 and keep serving for PRE_STOP_DELAY so this replica
 	// leaves EndpointSlices before anything stops accepting. The health
 	// server stays up through the whole drain and is stopped last.
-	logging.Info("Draining: readiness flipped to not-ready",
-		"pre_stop_delay", drainer.PreStopDelay,
-		"shutdown_timeout", drainer.ShutdownTimeout)
-	drainer.Begin()
+	drainer.Begin() // logs the flip and the pause ("drain: …" phase lines)
 
 	shutdownCtx, cancel := drainer.ShutdownContext()
 	defer cancel()
@@ -470,8 +467,9 @@ func Run(ctx context.Context, opts Options) error {
 	// the connector does not redial a daemon this process is about to drop.
 	connector.CloseAll()
 
-	// Stop the daemon server, make-before-break: every held daemon is told
-	// to move (GatewayDrain) and opens a stream to a replica that is already
+	// Stop the daemon server, make-before-break: as the listener's drain
+	// begins every held daemon is told to move (GatewayDrain, naming the
+	// drain's hard deadline) and opens a stream to a replica that is already
 	// serving — this one stopped being ready a pre-stop pause ago — while
 	// its stream here stays open for the replies to what is in flight on it.
 	// The listener's drain waits for those streams and ends the ones still
@@ -494,6 +492,9 @@ func Run(ctx context.Context, opts Options) error {
 	if err := healthServer.Shutdown(healthCtx); err != nil {
 		logging.Error("Error stopping health endpoint", "error", err)
 	}
+	// The shutdown's total ("drain: complete"), before telemetry is flushed
+	// (deferred above) so the point is exported.
+	drainer.Complete()
 
 	// Note: database is closed via defer above
 

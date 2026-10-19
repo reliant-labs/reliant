@@ -119,8 +119,8 @@ type Service struct {
 	// jump the clock without sleeping.
 	now func() time.Time
 
-	// draining is set once BeginDrain has run: this replica is shutting
-	// down and refuses new daemon streams, so a daemon moving off it (or one
+	// draining is set once the first hand-over has run (handOver): this
+	// replica is shutting down and refuses new daemon streams, so a daemon moving off it (or one
 	// the load balancer has not yet stopped sending) goes to a live replica.
 	draining atomic.Bool
 }

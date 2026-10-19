@@ -5,6 +5,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/serverkit"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -21,15 +23,18 @@ import (
 //
 // Now the drain is make-before-break, and results are not tied to a stream:
 //
-//  1. BeginDrain refuses new streams, stops routing each held daemon's new
-//     requests here (DaemonDrainListener: the NATS bridge unsubscribes), and
-//     sends each daemon GatewayDrain. The daemon opens a stream to another
+//  1. The listener's drain begins (serverkit: the soft phase of its Streams
+//     registry). Every ConnectDaemon stream claimed that phase, so none is
+//     ended yet; each one's hand-over runs instead (handOver): this replica
+//     refuses new streams, stops routing the daemon's new requests here
+//     (DaemonDrainListener: the NATS bridge unsubscribes), and sends the
+//     daemon GatewayDrain naming the drain's hard deadline
+//     (serverkit.DrainDeadline). The daemon opens a stream to another
 //     replica and moves its work there, keeping this one open for replies to
 //     what is in flight on it.
-//  2. The server's drain (serverkit, see grpc.DaemonServer.Stop) waits, up
-//     to the drain deadline, for the daemons to close their old streams,
-//     which each does once it is registered elsewhere and has nothing in
-//     flight here: ConnectDaemon claims the drain's soft phase for that.
+//  2. The listener's drain waits, up to that deadline, for the daemons to
+//     close their old streams, which each does once it is registered
+//     elsewhere and has nothing in flight here.
 //  3. The drain ends what is left with Unavailable. A waiter cut off there
 //     answers "interrupted", which no longer fails the call: the worker waits
 //     for the daemon to deliver the result through another replica
@@ -38,56 +43,66 @@ import (
 // resultPublishTimeout bounds publishing one result that had no waiter here.
 const resultPublishTimeout = 10 * time.Second
 
-// BeginDrain starts this replica's drain. From now on it refuses new daemon
-// streams, and every daemon it holds is told to move: drain listeners first
-// stop routing the daemon's new requests here, then the daemon is sent
-// GatewayDrain carrying deadline — when the drain will end its stream. The streams
-// stay open; replies to requests in flight on them are still delivered.
+// handOverOnDrain arranges for conn's hand-over (handOver) to run when the
+// drain of the listener serving ctx begins, with the deadline that drain
+// ends the stream at. It is ConnectDaemon's half of the drain; call the
+// returned stop when the stream ends. ctx must already have claimed the
+// drain's soft phase (serverkit.Draining), or the drain ends the stream
+// before the daemon hears why.
+func (s *Service) handOverOnDrain(ctx context.Context, conn *daemonConnection) (stop func() bool) {
+	return serverkit.AfterDrain(ctx, func() {
+		// No deadline (a drain with no budget) is a notice naming none,
+		// which the daemon reads as "move, with no deadline".
+		var deadline time.Time
+		if d, ok := serverkit.DrainDeadline(ctx); ok {
+			deadline = d
+		}
+		s.handOver(conn, deadline)
+	})
+}
+
+// handOver moves one daemon off this draining replica. From the first call
+// on, the replica refuses new daemon streams. Then drain listeners stop
+// routing the daemon's new requests here, and the daemon is sent GatewayDrain
+// carrying deadline — when the drain will end its stream; a zero deadline
+// names none. The stream stays open; replies to requests in flight on it are
+// still delivered.
 //
 // A daemon that does not act on the notice (an older build, or one the
 // gateway dialed, which has no way to move) is ended at once instead, as every
 // daemon was before: left open it would only be unreachable until the
 // deadline, since this replica no longer routes its requests.
 //
-// Returns how many streams were told to move.
-func (s *Service) BeginDrain(deadline time.Time) int {
+// Idempotent per connection. Reports whether this call told the daemon to
+// move.
+func (s *Service) handOver(conn *daemonConnection, deadline time.Time) bool {
 	s.draining.Store(true)
-
-	s.mu.RLock()
-	conns := make([]*daemonConnection, 0, len(s.connections))
-	var unmovable []*daemonConnection
-	for _, conn := range s.connections {
-		if conn.movesOnDrain {
-			conns = append(conns, conn)
-		} else {
-			unmovable = append(unmovable, conn)
-		}
-	}
-	s.mu.RUnlock()
-	for _, conn := range unmovable {
+	if !conn.movesOnDrain {
 		conn.closeWith(errGatewayDraining)
+		return false
 	}
-	if len(conns) == 0 {
-		return 0
+	if !conn.drainNoticeSent.CompareAndSwap(false, true) {
+		return false
 	}
-
-	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Draining: moving every daemon stream to another replica",
-		"connections", len(conns), "ended_at_once", len(unmovable), "deadline", deadline)
+	// Listeners first: by the time the daemon can register anywhere else,
+	// nothing here may still take its requests, or one request would reach
+	// it twice.
+	s.notifyDraining(conn.userID, conn.daemonID)
+	var deadlineMs int64
+	if !deadline.IsZero() {
+		deadlineMs = deadline.UnixMilli()
+	}
 	notice := &reliantv1.ServerMessage{Message: &reliantv1.ServerMessage_Drain{
-		Drain: &reliantv1.GatewayDrain{DeadlineUnixMs: deadline.UnixMilli()},
+		Drain: &reliantv1.GatewayDrain{DeadlineUnixMs: deadlineMs},
 	}}
-	for _, conn := range conns {
-		// Listeners first: by the time the daemon can register anywhere
-		// else, nothing here may still take its requests, or one request
-		// would reach it twice.
-		s.notifyDraining(conn.userID, conn.daemonID)
-		conn.drainNoticeSent.Store(true)
-		if err := s.sendToConn(conn, notice); err != nil {
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Could not tell a daemon this replica is draining; its stream ends at the deadline",
-				"daemonID", conn.daemonID, "userID", conn.userID, "error", err)
-		}
+	if err := s.sendToConn(conn, notice); err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Could not tell a daemon this replica is draining; its stream ends at the deadline",
+			"daemonID", conn.daemonID, "userID", conn.userID, "error", err)
+		return true
 	}
-	return len(conns)
+	logging.Debug(LOG_PREFIX_TOOLS_DAEMON+" Draining: told the daemon to move to another replica",
+		"daemonID", conn.daemonID, "userID", conn.userID, "deadline", deadline)
+	return true
 }
 
 // notifyDraining tells every listener that cares that daemonID's stream here
