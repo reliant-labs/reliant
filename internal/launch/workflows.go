@@ -142,8 +142,10 @@ func (l *Launcher) buildChatWorkflowInputs(
 	selectedPresets map[string]string,
 	send map[string]interface{},
 ) map[string]interface{} {
-	return l.buildWorkflowInputs(ctx, userID, l.GetEffectiveCheckout(ctx, chat), chat.ProjectID, workflowName,
+	inputs := l.buildWorkflowInputs(ctx, userID, l.GetEffectiveCheckout(ctx, chat), chat.ProjectID, workflowName,
 		selectedPresets, l.ChatSelectionParams(ctx, chat.ID, workflowName), send)
+	l.injectProviderPolicy(ctx, userID, chat.ID, inputs)
+	return inputs
 }
 
 // ChatSelectionParams is the chat's stored selection params for workflowName,

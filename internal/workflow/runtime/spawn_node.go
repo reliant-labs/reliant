@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -64,7 +65,10 @@ type spawnToolInput struct {
 	agentID  string
 	title    string
 	worktree string
-	rawInput string
+	// providers is the spawn call's own provider policy (`providers`), which
+	// beats its preset's and what the child would inherit. Nil when absent.
+	providers *preset.ProviderRouting
+	rawInput  string
 }
 
 // parseSpawnToolInput decodes a spawn tool call's input JSON.
@@ -99,6 +103,12 @@ func parseSpawnToolInput(input string) (spawnToolInput, error) {
 	parsed.title, _ = toolInput["title"].(string)
 	worktree, _ := toolInput["worktree"].(string)
 	parsed.worktree = strings.TrimSpace(worktree)
+
+	routing, err := preset.ParseProviderRouting(toolInput["providers"])
+	if err != nil {
+		return parsed, err
+	}
+	parsed.providers = routing
 
 	// Prompt is always required, including for resumptions.
 	if parsed.prompt == "" {

@@ -2477,7 +2477,8 @@ Parameters:
 - prompt: REQUIRED - Detailed task description for the spawned workflow
 - title: Optional - Human-readable title for the spawned thread (defaults to preset name)
 - agent_id: Optional - Agent ID to resume existing conversation
-- worktree: Optional - name of a worktree created with the worktree tool; the sub-agent works in that workspace (its own branch) instead of yours`, presetList)
+- worktree: Optional - name of a worktree created with the worktree tool; the sub-agent works in that workspace (its own branch) instead of yours
+- providers: Optional - which providers the sub-agent runs on and what it does when they are rate-limited: {"prefer": ["codex", "claude:work@acme.com"], "on_limit": "wait" | "fallback", "fallback": "<model>@<driver>"}. Omit it and the sub-agent follows the chat's own provider policy (a chat pinned to one provider keeps its sub-agents on it, and waits out a limit unless the user chose to fall back). Use it only when this one task should run elsewhere`, presetList)
 
 	return tools.NewSchemaOnlyTool(
 		"spawn",
@@ -2505,6 +2506,27 @@ Parameters:
 				"worktree": map[string]interface{}{
 					"type":        "string",
 					"description": "Optional - name of a worktree created with the worktree tool; the sub-agent works in that workspace (its own branch) instead of yours",
+				},
+				"providers": map[string]interface{}{
+					"type":        "object",
+					"description": "Optional - provider policy for this sub-agent only; overrides its preset's and the chat's",
+					"properties": map[string]interface{}{
+						"prefer": map[string]interface{}{
+							"type":        "array",
+							"items":       map[string]interface{}{"type": "string"},
+							"description": "Ordered providers, \"<driver>\" or \"<driver>:<account email or label>\", e.g. [\"codex\", \"claude:work@acme.com\"]",
+						},
+						"on_limit": map[string]interface{}{
+							"type":        "string",
+							"enum":        []string{"wait", "fallback"},
+							"description": "What to do when the provider is rate-limited: wait for the reset (default), or continue on the fallback model until it resets",
+						},
+						"fallback": map[string]interface{}{
+							"type":        "string",
+							"description": "Model to continue on with on_limit \"fallback\", \"<model>@<driver>\"",
+						},
+					},
+					"additionalProperties": false,
 				},
 			},
 			"required": []string{"preset", "prompt"},

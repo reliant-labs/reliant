@@ -109,6 +109,10 @@ var RuntimeInjectedInputs = map[string]bool{
 	// The provider(s) the user chose for the run, carried to every child
 	// (runtime.InputKeyProviderPreference). Injected by the runtime only.
 	"__provider_preference": true,
+	// What the run does when its provider is rate-limited
+	// (runtime.InputKeyProviderPolicy). Injected by the launcher, a preset or a
+	// spawn call's `providers:`, never taken from a client.
+	"__provider_policy": true,
 	// Who the run's integration writes speak as, and which automation it is
 	// (runtime.InputKeyActingIdentity / InputKeyAutomation). Injected by the
 	// launcher only; a reply's run never carries them.

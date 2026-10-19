@@ -59,7 +59,7 @@ func (a *LoadPresetParamsActivity) Execute(ctx context.Context, input LoadPreset
 						logger.Info("[LoadPresetParams] Loaded preset from stored config",
 							"preset", input.PresetName,
 							"param_count", len(p.Params))
-						return p.Params, nil
+						return p.InputParams(), nil
 					}
 				}
 			}
@@ -75,7 +75,7 @@ func (a *LoadPresetParamsActivity) Execute(ctx context.Context, input LoadPreset
 			logger.Info("[LoadPresetParams] Loaded builtin preset",
 				"preset", input.PresetName,
 				"param_count", len(p.Params))
-			return p.Params, nil
+			return p.InputParams(), nil
 		}
 	}
 

@@ -290,6 +290,7 @@ func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *
 		// The closed run's own inputs say what it ran on; the chat's selection
 		// says what it is set to now, which may be a later pick.
 		inputs = s.overSelection(ctx, chat.ID, workflowName, inputs)
+		s.refreshProviderPolicy(ctx, chat, inputs)
 	}
 	// This run answers a person, not whatever launched the chat.
 	delete(inputs, v2.InputKeyLaunchRun)

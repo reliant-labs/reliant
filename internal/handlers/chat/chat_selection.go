@@ -237,8 +237,9 @@ func versionConflictError() error {
 }
 
 // UpdateChatProviderPolicy stores what the chat does when its provider is
-// rate-limited. It stores and returns the policy; acting on it is the provider
-// routing work.
+// rate-limited, and hands it to the chat's live root run (see
+// signalProviderPolicy), so the next limit the run meets follows it. The run's
+// sub-agents inherit it the next time they are spawned.
 func (s *Service) UpdateChatProviderPolicy(
 	ctx context.Context,
 	req *connect.Request[reliantv1.UpdateChatProviderPolicyRequest],
@@ -270,6 +271,7 @@ func (s *Service) UpdateChatProviderPolicy(
 	}
 	if sel != nil && (before == nil || before.Version != sel.Version) {
 		s.announceSelection(ctx, userID, chat, sel)
+		s.signalProviderPolicy(ctx, userID, chat)
 	}
 	return connect.NewResponse(&reliantv1.UpdateChatProviderPolicyResponse{Selection: selectionToProto(sel)}), nil
 }

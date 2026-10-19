@@ -44,10 +44,10 @@ func TestPropagateProviderPreference(t *testing.T) {
 		propagateProviderPreference(map[string]interface{}{"model": "gpt-5.6-sol@codex"}, child)
 		assert.Equal(t, []string{"codex"}, child[InputKeyProviderPreference])
 	})
-	t.Run("a child cannot forge the preference through its args", func(t *testing.T) {
-		child := map[string]interface{}{InputKeyProviderPreference: []string{"anthropic"}}
+	t.Run("a child's own preference (preset or spawn args) beats the inherited one", func(t *testing.T) {
+		child := map[string]interface{}{InputKeyProviderPreference: []interface{}{"anthropic"}}
 		propagateProviderPreference(map[string]interface{}{"model": "gpt-5.6-sol@codex"}, child)
-		assert.Equal(t, []string{"codex"}, child[InputKeyProviderPreference])
+		assert.Equal(t, []string{"anthropic"}, child[InputKeyProviderPreference])
 	})
 	t.Run("a parent with no preference adds nothing", func(t *testing.T) {
 		child := map[string]interface{}{}
@@ -65,10 +65,15 @@ func TestProviderPreferenceIsRuntimeInjected(t *testing.T) {
 		"a client must not be able to set the run's provider preference")
 }
 
-func TestBuildSpawnChildInputsPropagatesProviderPreference(t *testing.T) {
+// The inheritance of a spawned child happens where its preset and args are
+// already in place (the inline executor), so buildSpawnChildInputs must not
+// pre-fill it: an inherited value in the child's node args would shadow the
+// child's preset `providers:`.
+func TestBuildSpawnChildInputsLeavesProviderInheritanceToTheExecutor(t *testing.T) {
 	t.Parallel()
 	child := buildSpawnChildInputs(map[string]interface{}{"mode": "auto", "model": "gpt-5.6-sol@codex"})
-	assert.Equal(t, []string{"codex"}, child[InputKeyProviderPreference])
+	assert.NotContains(t, child, InputKeyProviderPreference)
+	assert.NotContains(t, child, InputKeyProviderPolicy)
 	assert.NotContains(t, child, "model", "the child's model still comes from its preset, never the parent's")
 }
 

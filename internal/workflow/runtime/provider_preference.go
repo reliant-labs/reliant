@@ -4,6 +4,8 @@ package runtime
 import (
 	"slices"
 	"strings"
+
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // The provider a person chose for a run applies to the whole run.
@@ -32,6 +34,13 @@ const (
 	// child. Never client-settable: it is in workflow.RuntimeInjectedInputs.
 	InputKeyProviderPreference = "__provider_preference"
 
+	// InputKeyProviderPolicy is the runtime-injected input that carries what the
+	// run does when its provider is rate-limited (types.RunProviderPolicy) to
+	// every child. Written by the launcher from the chat's policy and the
+	// Settings default, and by a preset's or a spawn call's `providers:`. Never
+	// client-settable: it is in workflow.RuntimeInjectedInputs.
+	InputKeyProviderPolicy = "__provider_policy"
+
 	// providerPreferenceModelInput is the input whose value is the agent's own
 	// model: the composer's model pill and every builtin agent workflow use
 	// this name.
@@ -52,18 +61,91 @@ func ProviderPreference(inputs map[string]interface{}) []string {
 	return registryProviders(stringList(inputs[InputKeyProviderPreference]))
 }
 
-// propagateProviderPreference carries the parent's provider preference onto a
-// child input map. Call it LAST in child-input assembly, beside
-// propagateUnattended: the child's own model (from its preset, args or
-// defaults) is already in place, and a child that pins its own provider
-// replaces the inherited preference when its own children are built.
+// propagateProviderPreference carries the parent's provider preference and
+// provider policy onto a child input map. Call it LAST in child-input
+// assembly, beside propagateUnattended: the child's own model, preset and
+// spawn args are already in place.
+//
+// What the child set for itself wins, inherited fills the rest. That is the
+// precedence spawn args > preset > inherited: a preset's `providers:` and a
+// spawn call's `providers` are written into the child before this runs, and a
+// child that pins its own provider (its model) hands that on when its own
+// children are built.
 func propagateProviderPreference(parent, child map[string]interface{}) {
 	if child == nil {
 		return
 	}
-	if preferred := ProviderPreference(parent); len(preferred) > 0 {
+	if own := registryProviders(stringList(child[InputKeyProviderPreference])); len(own) > 0 {
+		child[InputKeyProviderPreference] = own
+	} else if preferred := ProviderPreference(parent); len(preferred) > 0 {
 		child[InputKeyProviderPreference] = preferred
+	} else {
+		delete(child, InputKeyProviderPreference)
 	}
+
+	inherited := readProviderPolicy(parent)
+	own := readProviderPolicy(child)
+	merged := mergeProviderPolicy(inherited, own)
+	if merged.IsZero() {
+		delete(child, InputKeyProviderPolicy)
+		return
+	}
+	child[InputKeyProviderPolicy] = merged.Value()
+}
+
+// ProviderPolicy is what a run with these inputs does when its provider is
+// rate-limited: the policy the launcher resolved for the chat, a preset's or a
+// spawn call's `providers:` for this run alone, or what it inherited from its
+// parent — they all arrive in the one input, already merged by
+// propagateProviderPreference.
+//
+// A fallback on the provider the run is already on is ignored (falling back to
+// the limited provider is waiting), so the policy is read with the run's own
+// primary provider (ProviderPreference(inputs)[0]) in mind.
+func ProviderPolicy(inputs map[string]interface{}) types.RunProviderPolicy {
+	policy := readProviderPolicy(inputs)
+	if policy.OnLimit != types.OnLimitFallback {
+		return policy
+	}
+	if primary := ProviderPreference(inputs); len(primary) > 0 && FallbackDriver(policy.FallbackModel) == primary[0] {
+		policy.OnLimit, policy.FallbackModel = types.OnLimitWait, ""
+	}
+	return policy
+}
+
+// FallbackDriver is the driver of a "<model>@<driver>" fallback model.
+func FallbackDriver(fallbackModel string) string {
+	if driver := pinnedDriver(fallbackModel); len(driver) > 0 {
+		return driver[0]
+	}
+	return ""
+}
+
+func readProviderPolicy(inputs map[string]interface{}) types.RunProviderPolicy {
+	if inputs == nil {
+		return types.RunProviderPolicy{}
+	}
+	return types.RunProviderPolicyFromValue(inputs[InputKeyProviderPolicy])
+}
+
+// mergeProviderPolicy lays own over inherited: own's on-limit choice (with its
+// fallback model) when it made one, own's preferred account per driver.
+func mergeProviderPolicy(inherited, own types.RunProviderPolicy) types.RunProviderPolicy {
+	out := inherited
+	if own.OnLimit != "" {
+		out.OnLimit, out.FallbackModel = own.OnLimit, own.FallbackModel
+	}
+	if len(own.PreferredAccount) > 0 {
+		accounts := make(map[string]string, len(inherited.PreferredAccount)+len(own.PreferredAccount))
+		for driver, account := range inherited.PreferredAccount {
+			accounts[driver] = account
+		}
+		for driver, account := range own.PreferredAccount {
+			accounts[driver] = account
+		}
+		out.PreferredAccount = accounts
+	}
+	return out
 }
 
 // explicitModelProviders returns the providers a model input value names: the

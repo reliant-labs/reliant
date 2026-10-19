@@ -67,6 +67,13 @@ type Preset struct {
 	// so a child spawned from a chat no longer inherits the parent chat's skills.
 	Params map[string]interface{} `yaml:"params" json:"params"`
 
+	// Providers is the preset's provider policy: which providers/accounts the
+	// run prefers and what it does when they are rate-limited. It becomes the
+	// runtime inputs __provider_preference and __provider_policy, never a
+	// workflow param, so it is validated here and not against a workflow's
+	// inputs. See ProviderRouting.
+	Providers *ProviderRouting `yaml:"providers,omitempty" json:"providers,omitempty"`
+
 	// Source indicates where the preset came from (builtin or project)
 	Source string `yaml:"-" json:"source,omitempty"`
 }
@@ -375,6 +382,10 @@ func ParsePreset(data []byte, name string) (*Preset, error) {
 		return nil, err
 	}
 
+	if err := preset.Providers.Validate(); err != nil {
+		return nil, fmt.Errorf("preset %q: %w", preset.Name, err)
+	}
+
 	return &preset, nil
 }
 
@@ -657,6 +668,12 @@ func ApplyToInputs(preset *Preset, inputs map[string]interface{}, groupName stri
 
 	// Copy existing inputs
 	for k, v := range inputs {
+		result[k] = v
+	}
+
+	// The preset's provider policy is a fact about the run, not a param of a
+	// group: it always lands at the top level.
+	for k, v := range preset.Providers.Inputs() {
 		result[k] = v
 	}
 

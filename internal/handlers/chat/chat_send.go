@@ -756,6 +756,7 @@ func (s *Service) SendMessage(
 				runInputs := s.runInputsForSend(ctx, workflowID, runID)
 				inputUpdate, modelNotices, modelMoves := s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID,
 					s.underSelection(ctx, chat.ID, existingWorkflow.WorkflowName, stateUpdate), runInputs)
+				inputUpdate = s.withProviderPolicy(ctx, userID, chat, runInputs, inputUpdate)
 
 				// Only add "params changed" message if params actually changed from current workflow state
 				if len(inputUpdate) > 0 && (runInputs == nil || inputsDiffer(runInputs, inputUpdate)) {
@@ -1035,8 +1036,10 @@ func (s *Service) SendMessage(
 				var inputUpdate map[string]interface{}
 				var modelNotices, modelMoves []launch.ModelSubstitution
 				if inspection.Recoverable {
+					recorded := s.runInputsForSend(ctx, workflowID, "")
 					inputUpdate, modelNotices, modelMoves = s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID,
-						s.underSelection(ctx, chat.ID, activeWorkflowNameForResume(chat, existingWorkflow), stateUpdate), s.runInputsForSend(ctx, workflowID, ""))
+						s.underSelection(ctx, chat.ID, activeWorkflowNameForResume(chat, existingWorkflow), stateUpdate), recorded)
+					inputUpdate = s.withProviderPolicy(ctx, userID, chat, recorded, inputUpdate)
 				}
 
 				// A run that died parked on an unanswered ask_question wakes on
@@ -1698,6 +1701,7 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 	delete(inputs, v2.InputKeyLaunchRun)
 	v2.DropActingIdentity(inputs)
 	inputs = s.overSelection(ctx, chat.ID, *chat.WorkflowName, inputs)
+	s.refreshProviderPolicy(ctx, chat, inputs)
 	launch.InjectSessionDaemonID(inputs, chat)
 
 	if _, err := s.deps.Repo.ReviveThread(ctx, threadID); err != nil {

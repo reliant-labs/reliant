@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	workflow_constants "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
@@ -3051,10 +3052,11 @@ func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]int
 	propagateUnattended(workflowInputs, childInputs)
 	propagateActingIdentity(workflowInputs, childInputs)
 	propagateTrigger(workflowInputs, childInputs)
-	// The child's model comes from its preset, which names a tier; the
-	// parent's provider choice is what makes that tier resolve on the
-	// provider the user picked. See provider_preference.go.
-	propagateProviderPreference(workflowInputs, childInputs)
+	// The parent's provider preference and policy are NOT copied here: these
+	// inputs are the child's node args, which beat its preset, so an inherited
+	// value would shadow the preset's `providers:`. The inline executor that
+	// runs the child applies propagateProviderPreference last, with the child's
+	// own (spawn args > preset) in place. See provider_preference.go.
 
 	// Derive parent_permission so child permission is capped to parent's level.
 	// If the parent already has a parent_permission (chained spawn), propagate the
@@ -3129,6 +3131,9 @@ type spawnChildWorkflowConfig struct {
 	presetName      string // Preset name from spawn tool call
 	title           string // Optional human-readable title for the thread
 	worktree        string // Optional worktree name/id the child works in instead of the chat's
+	// providers is the spawn call's own provider policy; nil when absent. It
+	// beats the preset's and what the child inherits.
+	providers *preset.ProviderRouting
 	// rawInput is the unwrapped spawn tool input JSON, carried so the durable
 	// tool_calls row records what the LLM actually asked for.
 	rawInput string
@@ -3169,6 +3174,7 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 		presetName: presetName,
 		title:      parsed.title, // May be empty - will default to preset name
 		worktree:   parsed.worktree,
+		providers:  parsed.providers,
 		rawInput:   parsed.rawInput,
 	}
 
@@ -3387,6 +3393,9 @@ func prepareSpawnInline(
 
 	// Build child inputs - only pass actual workflow inputs (mode, model)
 	childInputs := buildSpawnChildInputs(workflowInputs)
+	for key, value := range config.providers.Inputs() {
+		childInputs[key] = value
+	}
 
 	// Determine thread title: use explicit title if provided, otherwise preset name
 	threadTitle := config.title
