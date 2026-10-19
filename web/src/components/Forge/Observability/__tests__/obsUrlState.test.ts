@@ -171,19 +171,18 @@ describe("the URL round trip", () => {
   it("lists every key the area owns, so leaving the tab clears them all", () => {
     expect([...OBS_SEARCH_KEYS].sort()).toEqual(
       [
-        "alerts", "cmpWindow", "compare", "container", "dashboard", "doraWindow", "edit", "envs", "errors", "f", "failureHours", "groupBy",
+        "alerts", "cmpWindow", "compare", "container", "dashboard", "edit", "envs", "errors", "f", "groupBy",
         "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view", "workload",
       ].sort()
     );
   });
 
-  it("carries a release comparison and the delivery windows, and drops ones out of bounds", () => {
-    const { parsed } = throughTheUrl({ view: "delivery", compare: "env-prod~1760000000000~promo-031", cmpWindow: "1h", doraWindow: "90d", failureHours: 4 });
-    expect(parsed).toMatchObject({ view: "delivery", compare: "env-prod~1760000000000~promo-031", cmpWindow: "1h", doraWindow: "90d", failureHours: 4 });
-    const bad = throughTheUrl({ cmpWindow: "2y", doraWindow: "1d", failureHours: 500 }).parsed;
-    expect(bad.cmpWindow).toBeUndefined();
-    expect(bad.doraWindow).toBeUndefined();
-    expect(bad.failureHours).toBeUndefined();
+  it("carries a release comparison and its window, and drops one out of bounds", () => {
+    const { parsed } = throughTheUrl({ view: "overview", compare: "env-prod~1760000000000~promo-031", cmpWindow: "1h" });
+    expect(parsed).toMatchObject({ view: "overview", compare: "env-prod~1760000000000~promo-031", cmpWindow: "1h" });
+    expect(throughTheUrl({ cmpWindow: "2y" }).parsed.cmpWindow).toBeUndefined();
+    // Delivery is no view any more (its figures are the Releases page's): an old link opens the overview.
+    expect(throughTheUrl({ view: "delivery" }).parsed.view).toBeUndefined();
   });
 
   it("carries the alerts tab and an open rule, and drops a tab it does not know", () => {

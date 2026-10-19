@@ -65,8 +65,8 @@ describe("buildConsoleNav", () => {
     const prod = buildConsoleNav({ project: "shop", page: { kind: "environment", env: "prod" }, env: "e2e", envs: ENVS });
     expect(prod.items.find((item) => item.label === "Environments")?.children?.[0]?.active).toBe(true);
 
-    const delivery = buildConsoleNav({ project: "shop", page: { kind: "delivery" }, env: "prod", envs: ENVS });
-    expect(delivery.items.find((item) => item.label === "Releases")?.active).toBe(true);
+    const release = buildConsoleNav({ project: "shop", page: { kind: "release", version: "v1.8.2" }, env: "prod", envs: ENVS });
+    expect(release.items.find((item) => item.label === "Releases")?.active).toBe(true);
   });
 });
 

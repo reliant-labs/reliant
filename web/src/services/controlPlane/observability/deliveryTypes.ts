@@ -108,9 +108,6 @@ export interface DoraMetrics {
   alertTimeToRestore: TimeToRestore | null;
 }
 
-/** The bounds GetDoraMetrics accepts for N (`failure_window_hours`); 24 is the server's default. */
-export const FAILURE_WINDOW_HOURS = { min: 1, max: 168, default: 24 } as const;
-
 /** ListReleases' own bounds: the newest `limit` (max 2000) over at most 366 days. */
 export const RELEASES_LIMIT = { default: 500, max: 2000 } as const;
 export const DELIVERY_MAX_RANGE_DAYS = 366;

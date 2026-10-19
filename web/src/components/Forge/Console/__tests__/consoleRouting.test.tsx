@@ -171,7 +171,7 @@ function renderAt(initialEntry: string) {
     console: ConsoleLayout,
     overview: probe("overview"),
     releases: probe("releases"),
-    delivery: probe("delivery"),
+    release: probe("release"),
     observability: probe("observability"),
     observabilityView: probe("observability-view"),
     environments: probe("environments"),

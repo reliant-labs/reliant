@@ -64,8 +64,14 @@ export function projectDeclaring(
 export function switchTarget(project: Project, page: ConsolePage): string {
   const name = (project.forge_project_name ?? "").trim();
   if (!name) return withSearch("/forge", { project: project.id });
-  // An environment's page is about an environment the other project may not have.
-  const same = page.kind === "environment" ? { kind: "environments" as const } : page;
+  // An environment's page is about an environment the other project may not
+  // have, and a release's about a release it cannot have: land on the list.
+  const same =
+    page.kind === "environment"
+      ? { kind: "environments" as const }
+      : page.kind === "release"
+        ? { kind: "releases" as const }
+        : page;
   return consolePath(name, same);
 }
 

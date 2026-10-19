@@ -30,6 +30,12 @@ export interface PromoteDialogProps {
   /** The already-built release to preview binding to. */
   release: string;
   projectName?: string;
+  /**
+   * The dialog's title, naming the environment (decision D1). Defaults to
+   * "Promote <env> to <release>"; the Releases pages say "Roll back prod to
+   * …" for a move to an older release.
+   */
+  title?: string;
 }
 
 export function PromoteDialog({
@@ -39,6 +45,7 @@ export function PromoteDialog({
   env,
   release,
   projectName,
+  title,
 }: PromoteDialogProps) {
   // Only enabled while open, so a closed dialog is not holding a plan — and a
   // reopen recomputes rather than resurrecting one.
@@ -79,7 +86,7 @@ export function PromoteDialog({
       isOpen={isOpen}
       onClose={handleClose}
       size="lg"
-      title={`Promote ${env} to ${release}`}
+      title={title ?? `Promote ${env} to ${release}`}
     >
       <PromoteFlow
         planOutcome={plan.data}

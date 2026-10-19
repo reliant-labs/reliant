@@ -26,8 +26,23 @@ const ENVS = [
   { name: "pr-1042", preview: true },
 ];
 
-export function ConsolePreviewShell({ page, controls, children }: { page: ConsolePage; controls?: ReactNode; children: ReactNode }) {
-  const [env, setEnv] = useState(page.kind === "environment" ? page.env : "prod");
+export function ConsolePreviewShell({
+  page,
+  controls,
+  children,
+  env: controlledEnv,
+  onEnvChange,
+}: {
+  page: ConsolePage;
+  controls?: ReactNode;
+  children: ReactNode;
+  /** The top-bar scope, when the harness's screen reads it (Releases); otherwise the shell keeps its own. */
+  env?: string;
+  onEnvChange?: (env: string) => void;
+}) {
+  const [ownEnv, setOwnEnv] = useState(page.kind === "environment" ? page.env : "prod");
+  const env = controlledEnv ?? ownEnv;
+  const setEnv = onEnvChange ?? setOwnEnv;
   const [collapsed, setCollapsed] = useState(false);
   return (
     <ConsoleShell

@@ -25,7 +25,8 @@ import {
 const PAGES: ConsolePage[] = [
   { kind: "overview" },
   { kind: "releases" },
-  { kind: "delivery" },
+  { kind: "release", version: "20261018.155157-8aecd00c380b" },
+  { kind: "release", version: "v1.8.0+build/7" },
   { kind: "observability" },
   { kind: "obs-view", view: "logs" },
   { kind: "obs-view", view: "metrics" },
@@ -45,7 +46,7 @@ describe("console paths", () => {
     expect(consolePath("control-plane", { kind: "overview" })).toBe("/forge/p/control-plane");
     expect(consolePath("control-plane", { kind: "obs-view", view: "traces" })).toBe("/forge/p/control-plane/observability/traces");
     expect(consolePath("control-plane", { kind: "environment", env: "prod" })).toBe("/forge/p/control-plane/environments/prod");
-    expect(consolePath("control-plane", { kind: "delivery" })).toBe("/forge/p/control-plane/releases/delivery");
+    expect(consolePath("control-plane", { kind: "release", version: "v1.8.2" })).toBe("/forge/p/control-plane/releases/v1.8.2");
   });
 
   it.each(PAGES)("round-trips %o through its path", (page) => {
@@ -72,7 +73,6 @@ describe("Observability views as pages (D9)", () => {
     expect(pageOfObsView(undefined)).toEqual({ kind: "observability" });
     expect(pageOfObsView("logs")).toEqual({ kind: "obs-view", view: "logs" });
     expect(pageOfObsView("workloads")).toEqual({ kind: "overview" });
-    expect(pageOfObsView("delivery")).toEqual({ kind: "delivery" });
     expect(pageOfObsView("usage")).toEqual({ kind: "settings" });
   });
 
@@ -118,7 +118,6 @@ describe("redirects from the retired URLs", () => {
       "/forge/p/shop/observability/logs?env=e2e&q=timeout"
     );
     expect(legacyObservabilityTarget("shop", { view: "workloads", envs: ["prod"] })).toBe("/forge/p/shop?env=prod");
-    expect(legacyObservabilityTarget("shop", { view: "delivery" })).toBe("/forge/p/shop/releases/delivery?env=all");
     expect(legacyObservabilityTarget("shop", { view: "usage" })).toBe("/forge/p/shop/settings?env=all");
   });
 });

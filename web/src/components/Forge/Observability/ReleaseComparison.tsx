@@ -196,13 +196,16 @@ export interface ReleaseComparisonProps {
   subject: string;
   target: CompareRef;
   width: CompareWindow;
-  /** The view the reader came from, for the way back. */
-  backLabel: string;
-  onBack: () => void;
+  /**
+   * The view the reader came from, for the way back. Absent when the
+   * comparison IS the page's content (a release's Health tab): there is no
+   * view underneath to go back to.
+   */
+  back?: { label: string; onBack: () => void };
   navigate: ObsNavigate;
 }
 
-export function ReleaseComparison({ scope, subject, target, width, backLabel, onBack, navigate }: ReleaseComparisonProps) {
+export function ReleaseComparison({ scope, subject, target, width, back: way, navigate }: ReleaseComparisonProps) {
   // One clock per comparison, so the windows do not slide while it is open.
   const [now] = useState(() => Date.now());
   const delivery = useMemo(() => ({ orgId: scope.orgId, projectId: scope.projectId, envIds: [target.envId] }), [scope.orgId, scope.projectId, target.envId]);
@@ -237,9 +240,9 @@ export function ReleaseComparison({ scope, subject, target, width, backLabel, on
   const resBefore = usePanelOver(telemetry, COMPARE_PANELS.resources, "before", ready?.before ?? null);
   const resAfter = usePanelOver(telemetry, COMPARE_PANELS.resources, "after", ready?.after ?? null);
 
-  const back = (
-    <Button variant="ghost" size="sm" leftIcon={<ArrowLeft className="h-3.5 w-3.5" />} onClick={onBack} data-testid="obs-compare-back">
-      Back to {backLabel}
+  const back = way && (
+    <Button variant="ghost" size="sm" leftIcon={<ArrowLeft className="h-3.5 w-3.5" />} onClick={way.onBack} data-testid="obs-compare-back">
+      Back to {way.label}
     </Button>
   );
 

@@ -47,15 +47,14 @@ import { useProjectStore, type Project } from "@/store/projectStore";
 import { ConsoleLayout } from "../Console/ConsoleLayout";
 import {
   ActivityPage,
-  DeliveryPage,
   MonitoringSettingsPage,
   ObservabilityOverviewPage,
   ObservabilityViewPage,
   OverviewPage,
   ProjectSettingsPage,
-  ReleasesPage,
   SecretsPage,
 } from "../Console/ConsolePages";
+import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import {
   ForgeLandingRoute,
   LegacyCommandRoute,
@@ -430,7 +429,7 @@ function buildRouter(path: string) {
     console: ConsoleLayout,
     overview: OverviewPage,
     releases: ReleasesPage,
-    delivery: DeliveryPage,
+    release: ReleasePage,
     observability: ObservabilityOverviewPage,
     observabilityView: ObservabilityViewPage,
     environments: EnvironmentsPage,

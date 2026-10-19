@@ -14,7 +14,8 @@
 import { z } from "zod";
 import { ONBOARDING_STEP_IDS } from "./components/Onboarding/constants";
 import type { LaunchPlan } from "./components/OnboardingFlow/types";
-import { COMPARE_WINDOWS, DORA_WINDOWS } from "./components/Forge/Observability/deliveryScope";
+import { COMPARE_WINDOWS } from "./components/Forge/Observability/deliveryScope";
+import { RELEASE_TABS, STATUS_FILTERS } from "./components/Forge/Releases/releaseModel";
 import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
 import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
 
@@ -437,6 +438,35 @@ export const forgeConsoleSearchSchema = z.object({
 });
 
 /**
+ * Free text the router may have parsed as JSON: a search for "981" or a
+ * version "1.2" arrives as a number, and must stay the text it was.
+ */
+const textParam = z.union([z.string(), z.number().transform(String)]).optional().catch(undefined);
+
+/**
+ * Releases: the scope, and the list's filters — text, author, status, and
+ * whether to show the releases that never ran in the scoped environment.
+ */
+export const forgeConsoleReleasesSearchSchema = z.object({
+  env: envScopeParam,
+  q: textParam,
+  author: textParam,
+  status: z.enum(STATUS_FILTERS).optional().catch(undefined),
+  every: z.boolean().optional().catch(undefined),
+});
+
+/**
+ * One release: the scope, the tab, the release Changes compares with, and the
+ * environment the environment-bound tabs read (`in`, a name).
+ */
+export const forgeConsoleReleaseSearchSchema = z.object({
+  env: envScopeParam,
+  tab: z.enum(RELEASE_TABS).optional().catch(undefined),
+  base: textParam,
+  in: textParam,
+});
+
+/**
  * Secrets: the scope, and the secret open in detail. A NAME, never a value —
  * the surface cannot hold a value, so nothing here could leak into a URL, a
  * history entry or a referrer. Linked because a version history is a thing
@@ -529,8 +559,6 @@ export const obsSearchShape = {
   rule: z.string().optional().catch(undefined),
   compare: z.string().optional().catch(undefined),
   cmpWindow: z.enum(COMPARE_WINDOWS).optional().catch(undefined),
-  doraWindow: z.enum(DORA_WINDOWS).optional().catch(undefined),
-  failureHours: z.number().int().min(1).max(168).optional().catch(undefined),
 };
 
 /** Every ObsSearch key has a schema entry and vice versa (the launchPlan drift guard, for the same reason). */

@@ -35,6 +35,7 @@ import { Activity, Gauge, Globe, Home, KeyRound, Layers, Settings, SlidersHorizo
 import SidebarLayout, { type SidebarNavItem, type SidebarUserInfo } from "@/components/forge-ui/sidebar_layout";
 import Link from "@/components/forge-ui/link";
 
+import { shortVersion } from "../Releases/releaseModel";
 import { EnvScopeControl } from "./EnvScopeControl";
 import type { ScopeOption } from "./envScope";
 import {
@@ -87,8 +88,7 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0 }: 
   return {
     items: [
       row("Overview", { kind: "overview" }, icon(Home)),
-      // Delivery is part of Releases (D9) until the Releases redesign lands.
-      row("Releases", { kind: "releases" }, icon(TagIcon), { active: is("releases") || is("delivery") }),
+      row("Releases", { kind: "releases" }, icon(TagIcon), { active: is("releases") || is("release") }),
       row("Observability", { kind: "observability" }, icon(Gauge), {
         children: OBS_NAV_VIEWS.map((view) => ({
           label: OBS_NAV_LABELS[view],
@@ -138,8 +138,8 @@ export function consoleCrumbs(project: string, page: ConsolePage, env: string): 
       return [{ label: "Overview" }];
     case "releases":
       return [{ label: "Releases" }];
-    case "delivery":
-      return [{ label: "Releases", href: href({ kind: "releases" }) }, { label: "Delivery" }];
+    case "release":
+      return [{ label: "Releases", href: href({ kind: "releases" }) }, { label: shortVersion(page.version) }];
     case "observability":
       return [{ label: "Observability" }];
     case "obs-view":

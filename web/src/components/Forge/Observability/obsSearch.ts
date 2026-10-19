@@ -13,19 +13,19 @@ import type { Panel, Severity } from "@/services/controlPlane/observability/type
 import { SEVERITIES } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 
-import type { CompareWindow, DoraWindow } from "./deliveryScope";
+import type { CompareWindow } from "./deliveryScope";
 
 /**
  * The views, in tab order. A view is one entry in this list (the route schema
- * reads it), one label and one branch in ObservabilityPanel.
+ * reads it), one label and one branch in ObservabilityPanel. Delivery is not
+ * one: releases and their DORA figures are the console's Releases page (D9).
  */
-export const OBS_VIEWS = ["overview", "alerts", "delivery", "logs", "traces", "dashboards", "workloads", "profiles", "usage"] as const;
+export const OBS_VIEWS = ["overview", "alerts", "logs", "traces", "dashboards", "workloads", "profiles", "usage"] as const;
 export type ObsView = (typeof OBS_VIEWS)[number];
 
 export const OBS_VIEW_LABELS: Record<ObsView, string> = {
   overview: "Overview",
   alerts: "Alerts",
-  delivery: "Delivery",
   logs: "Logs",
   traces: "Traces",
   dashboards: "Dashboards",
@@ -99,10 +99,6 @@ export interface ObsSearch {
   compare?: string;
   /** The comparison's window on each side. Absent: 30m. */
   cmpWindow?: CompareWindow;
-  /** Delivery: the DORA window. Absent: the last 30 days. */
-  doraWindow?: DoraWindow;
-  /** Delivery: N in "rolled back within N hours" (1–168). Absent: the server's 24. */
-  failureHours?: number;
 }
 
 export const ALERTS_TABS = ["firing", "history", "silences", "rules", "receivers"] as const;
@@ -136,8 +132,6 @@ export const OBS_SEARCH_KEYS = [
   "rule",
   "compare",
   "cmpWindow",
-  "doraWindow",
-  "failureHours",
 ] as const satisfies readonly (keyof ObsSearch)[];
 
 /**

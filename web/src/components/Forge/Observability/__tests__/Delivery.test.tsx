@@ -1,8 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Release markers, the before/after comparison and the Delivery (DORA) view,
- * against the fixture ledger (fixtureDelivery.ts): prod got v1.8.3 forty
+ * Release markers and the before/after comparison (the DORA figures moved to
+ * the console's Releases page, D9), against the fixture ledger
+ * (fixtureDelivery.ts): prod got v1.8.3 forty
  * minutes ago, staging three hours ago; prod rolled v1.8.1 back to v1.8.0
  * three hours after promoting it nine days ago; nothing records a commit time.
  */
@@ -11,7 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { DEFINITIONS, fixtureLedger } from "../__fixtures__/fixtureDelivery";
+import { fixtureLedger } from "../__fixtures__/fixtureDelivery";
 import { createFixtureApi } from "../__fixtures__/fixtureApi";
 import { compareParam } from "../deliveryScope";
 import { ENV_PLACE, PROJECT_PLACE, renderPanel } from "./obsTestUtils";
@@ -132,131 +133,3 @@ describe("before and after a promotion", () => {
   });
 });
 
-describe("Delivery: DORA from the release ledger", () => {
-  it("shows the four metrics with their definitions, and lead time as unknown with how much is unknown", async () => {
-    const onCall = vi.fn();
-    renderPanel(createFixtureApi({ onCall }), { view: "delivery" }, PROJECT_PLACE);
-    await waitFor(() => expect(screen.getByTestId("obs-delivery")).toHaveAttribute("data-state", "ready"));
-    expect(screen.queryByTestId("obs-range")).not.toBeInTheDocument();
-    const [req] = callsOf(onCall, "GetDoraMetrics");
-    expect(req).toMatchObject({ projectId: "shop", envIds: [], failureWindowHours: 24 });
-    expect(req.window!.endMs - req.window!.startMs).toBe(30 * 86_400_000);
-
-    expect(screen.getByTestId("obs-dora-frequency-value")).toHaveTextContent("1 every 2.3 days");
-    expect(screen.getByTestId("obs-dora-frequency")).toHaveTextContent("13 deployments in 30 days");
-    expect(screen.getByTestId("obs-dora-frequency")).toHaveTextContent("Not counted: 1 rollback, 1 re-apply.");
-
-    const lead = screen.getByTestId("obs-dora-lead-time");
-    expect(lead).toHaveAttribute("data-state", "unknown");
-    expect(screen.getByTestId("obs-dora-lead-time-value")).toHaveTextContent("Unknown");
-    expect(screen.getByTestId("obs-dora-lead-time-value")).not.toHaveTextContent(/\d/);
-    expect(screen.getByTestId("obs-dora-lead-time-unknown")).toHaveTextContent("13 deployments across 5 releases");
-    expect(lead).toHaveTextContent("unknown is not zero");
-
-    expect(screen.getByTestId("obs-dora-failure-rate-value")).toHaveTextContent("7.7%");
-    expect(screen.getByTestId("obs-dora-failure-rate")).toHaveTextContent("1 of 13 deployments rolled back within 24 hours");
-    expect(screen.getByTestId("obs-dora-restore-value")).toHaveTextContent("3h");
-    expect(screen.getByTestId("obs-dora-restore-source")).toHaveTextContent("Measured from rollbacks in the release ledger.");
-    expect(screen.queryByTestId("obs-dora-restore-alerts")).not.toBeInTheDocument();
-
-    // The server's definitions, verbatim.
-    expect(screen.getByTestId("obs-dora-frequency-definition").textContent).toBe(DEFINITIONS.deploymentFrequency);
-    expect(screen.getByTestId("obs-dora-lead-time-definition").textContent).toBe(DEFINITIONS.leadTime);
-    expect(screen.getByTestId("obs-dora-failure-rate-definition").textContent).toBe(DEFINITIONS.changeFailureRate(24));
-    expect(screen.getByTestId("obs-dora-restore-definition").textContent).toBe(DEFINITIONS.timeToRestore(24));
-  });
-
-  it("re-asks with the failure window and the period the reader picks", async () => {
-    const user = userEvent.setup();
-    const onCall = vi.fn();
-    const harness = renderPanel(createFixtureApi({ onCall }), { view: "delivery" }, PROJECT_PLACE);
-    await waitFor(() => expect(screen.getByTestId("obs-delivery")).toHaveAttribute("data-state", "ready"));
-    await user.selectOptions(screen.getByTestId("obs-delivery-failure-hours"), "1");
-    expect(harness.current().failureHours).toBe(1);
-    await waitFor(() => expect(screen.getByTestId("obs-dora-failure-rate-value")).toHaveTextContent("0%"));
-    expect(callsOf(onCall, "GetDoraMetrics").at(-1)!.failureWindowHours).toBe(1);
-    expect(screen.getByTestId("obs-dora-restore-value")).toHaveTextContent("—");
-    expect(screen.getByTestId("obs-dora-failure-rate-definition")).toHaveTextContent("within 1h0m0s");
-
-    await user.selectOptions(screen.getByTestId("obs-delivery-window"), "7d");
-    expect(harness.current().doraWindow).toBe("7d");
-    await waitFor(() => expect(screen.getByTestId("obs-dora-frequency")).toHaveTextContent("7 deployments in 7 days"));
-  });
-
-  it("lists the promotions newest first, each a way into a comparison", async () => {
-    const user = userEvent.setup();
-    const harness = renderPanel(createFixtureApi(), { view: "delivery", doraWindow: "7d" }, PROJECT_PLACE);
-    const list = await screen.findByTestId("obs-delivery-releases");
-    await waitFor(() => expect(within(list).getAllByRole("listitem").length).toBeGreaterThan(3));
-    const [newest] = within(list).getAllByRole("listitem");
-    expect(newest).toHaveTextContent("v1.8.4-rc.1");
-    await user.click(within(newest).getByRole("button", { name: "Compare before / after" }));
-    expect(harness.current().compare).toMatch(/^env-dev~/);
-    expect(await screen.findByTestId("obs-compare-back")).toHaveTextContent("Back to Delivery");
-  });
-
-  it("says nothing was promoted rather than showing zeroes, and offers a wider window", async () => {
-    const user = userEvent.setup();
-    const harness = renderPanel(createFixtureApi({ delivery: "empty" }), { view: "delivery" }, PROJECT_PLACE);
-    const empty = await screen.findByTestId("obs-delivery-empty");
-    expect(empty).toHaveTextContent("Nothing was promoted to shop in the last 30 days");
-    expect(screen.queryByTestId("obs-dora-frequency")).not.toBeInTheDocument();
-    await user.click(screen.getByTestId("obs-delivery-widen"));
-    expect(harness.current().doraWindow).toBe("90d");
-  });
-
-  it("tells a non-member the org is closed to them", async () => {
-    renderPanel(createFixtureApi({ delivery: "not-member" }), { view: "delivery" }, PROJECT_PLACE);
-    expect(await screen.findByTestId("obs-delivery-not-member")).toHaveTextContent("You're not a member of this organization");
-  });
-
-  it("refuses an environment it will not name, and offers every environment instead", async () => {
-    const user = userEvent.setup();
-    const harness = renderPanel(createFixtureApi({ delivery: "env-denied" }), { view: "delivery", envs: ["prod"], f: ["deployment.environment.name:prod", "service.name:api"] }, PROJECT_PLACE);
-    const frame = await screen.findByTestId("obs-delivery-env-unavailable");
-    expect(frame).toHaveTextContent("Reliant doesn't say which");
-    await user.click(within(frame).getByTestId("obs-delivery-show-all-envs"));
-    expect(harness.current().envs).toBeUndefined();
-    expect(harness.current().f).toEqual(["service.name:api"]);
-    await waitFor(() => expect(screen.getByTestId("obs-delivery")).toHaveAttribute("data-state", "ready"));
-  });
-
-  it("on an env page, explains the refusal without a way to widen", async () => {
-    renderPanel(createFixtureApi({ delivery: "env-denied" }), { view: "delivery" }, ENV_PLACE);
-    const frame = await screen.findByTestId("obs-delivery-env-unavailable");
-    expect(within(frame).queryByTestId("obs-delivery-show-all-envs")).not.toBeInTheDocument();
-    expect(frame).toHaveTextContent("If prod was deleted");
-  });
-
-  it("shows a partly known lead time with what it leaves out", async () => {
-    renderPanel(createFixtureApi({ leadTime: "partial" }), { view: "delivery" }, PROJECT_PLACE);
-    await waitFor(() => expect(screen.getByTestId("obs-dora-lead-time")).toHaveAttribute("data-state", "partial"));
-    expect(screen.getByTestId("obs-dora-lead-time")).toHaveTextContent("Median over 2 deployments");
-    expect(screen.getByTestId("obs-dora-lead-time-unknown")).toHaveTextContent("11 more deployments (3 releases) recorded no commit time");
-  });
-
-  it("puts an alert-based time to restore beside the ledger's when the server sends one", async () => {
-    renderPanel(createFixtureApi({ alertMttr: true }), { view: "delivery" }, PROJECT_PLACE);
-    const alerts = await screen.findByTestId("obs-dora-restore-alerts");
-    expect(alerts).toHaveTextContent("From alerts: 38m");
-    expect(alerts).toHaveTextContent("median over 4 resolved incidents");
-    expect(screen.queryByTestId("obs-dora-restore-ongoing")).not.toBeInTheDocument();
-    expect(screen.getByTestId("obs-dora-restore-value")).toHaveTextContent("3h");
-  });
-
-  it("counts ongoing incidents beside the resolved ones, without folding them into the figure", async () => {
-    renderPanel(createFixtureApi({ alertMttr: "ongoing" }), { view: "delivery" }, PROJECT_PLACE);
-    const ongoing = await screen.findByTestId("obs-dora-restore-ongoing");
-    expect(ongoing).toHaveTextContent("2 ongoing incidents");
-    expect(screen.getByTestId("obs-dora-restore-alerts-value")).toHaveTextContent("From alerts: 38m");
-    expect(screen.getByTestId("obs-dora-restore-value")).toHaveTextContent("3h");
-  });
-
-  it("says a quiet alert history is zero incidents, which is not the same as no alert figure", async () => {
-    renderPanel(createFixtureApi({ alertMttr: "quiet" }), { view: "delivery" }, PROJECT_PLACE);
-    await screen.findByTestId("obs-dora-restore-alerts");
-    expect(screen.getByTestId("obs-dora-restore-alerts-value")).toHaveTextContent("From alerts: nothing resolved");
-    expect(screen.getByTestId("obs-dora-restore-alerts-quiet")).toBeInTheDocument();
-    expect(screen.queryByTestId("obs-dora-restore-ongoing")).not.toBeInTheDocument();
-  });
-});

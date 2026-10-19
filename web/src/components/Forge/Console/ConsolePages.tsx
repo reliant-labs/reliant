@@ -5,8 +5,9 @@
  * PageHeader with one meta line, then the body).
  *
  * The BODIES are the components the console already had, mounted unchanged
- * where the new IA puts them — the Overview with workloads, the Releases
- * redesign, Activity and Dashboards get their own designs in later PRs. A
+ * where the new IA puts them — the Overview with workloads, Activity and
+ * Dashboards get their own designs in later PRs (Releases has its own,
+ * ../Releases/ReleasesPages). A
  * page shows a placeholder only where nothing existed (Metrics, Monitoring
  * settings).
  *
@@ -29,7 +30,6 @@ import type { LiveEnv } from "@/services/forge/live";
 import type { RosterEnv } from "@/services/forge/roster";
 
 import { LiveActivity } from "../EnvPage/LiveActivity";
-import { LiveReleases } from "../EnvPage/LiveReleases";
 import { Panel, SecretsTab } from "../EnvPage/EnvTabPanels";
 import { CloudNotice } from "../SourceNotices";
 import { EnvironmentTable } from "../Overview/EnvironmentTable";
@@ -169,38 +169,7 @@ export function OverviewPage() {
   );
 }
 
-// ── Releases ────────────────────────────────────────────────────────────────
-
-export function ReleasesPage() {
-  const { roster, href } = useForgeConsole();
-  const { envs, scoped } = useDeployedInScope();
-  return (
-    <Page testId="console-releases">
-      <Header title="Releases" actions={[{ label: "Delivery metrics", href: href({ kind: "delivery" }) }]} />
-      {roster.isLoading || roster.resolvingName ? (
-        <RosterLoading />
-      ) : (
-        <>
-          <CloudNotice availability={roster.live.data?.availability} detail={roster.live.data?.detail} />
-          <ScopedEnvNote scoped={scoped} what="releases" />
-          {envs.map((candidate) => (
-            <EnvReleases key={candidate.name} env={candidate.live} />
-          ))}
-          {envs.length === 0 && !scoped && <NothingDeployed what="releases" />}
-        </>
-      )}
-    </Page>
-  );
-}
-
-function EnvReleases({ env }: { env: LiveEnv }) {
-  const promotions = useCloudPromotions(env.id);
-  return (
-    <Panel title={env.name} description="Every release promoted here, newest first." testId={`releases-${env.name}`} flush>
-      <LiveReleases env={env} promotions={promotions.data} isLoading={promotions.isLoading} error={promotions.error as Error | null} />
-    </Panel>
-  );
-}
+// Releases and a release are their own pages (../Releases/ReleasesPages).
 
 function NothingDeployed({ what }: { what: string }) {
   return (
@@ -208,16 +177,6 @@ function NothingDeployed({ what }: { what: string }) {
       title="Nothing deployed yet"
       description={`An environment has ${what} once a release is promoted to it. Run forge env deploy <env> to deploy one through Reliant.`}
     />
-  );
-}
-
-/** Delivery (releases and DORA), folded into Releases (D9). */
-export function DeliveryPage() {
-  return (
-    <Page testId="console-delivery">
-      <Header title="Delivery" />
-      <ObservabilityHost view="delivery" />
-    </Page>
   );
 }
 

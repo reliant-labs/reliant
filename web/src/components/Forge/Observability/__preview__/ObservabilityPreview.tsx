@@ -65,15 +65,11 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "alerting-quiet", label: "alerting: nothing firing", options: { alerting: "quiet" } },
   // Dashboards (view=dashboards): a recorded release bundle, with and without the release ledger.
   { id: "dashboards-release", label: "dashboards: from the release", options: { dashboards: "release" } },
-  // Delivery (view=delivery) and release markers: the ledger's answers.
-  { id: "delivery-empty", label: "delivery: nothing promoted", options: { delivery: "empty" } },
-  { id: "delivery-not-member", label: "delivery: not a member", options: { delivery: "not-member" } },
-  { id: "delivery-env-denied", label: "delivery: env from another org", options: { delivery: "env-denied" } },
+  // Release markers: the ledger's answers. (DORA lives on the Releases page: /forge-releases-preview.)
+  { id: "delivery-empty", label: "releases: nothing promoted", options: { delivery: "empty" } },
+  { id: "delivery-not-member", label: "releases: not a member", options: { delivery: "not-member" } },
+  { id: "delivery-env-denied", label: "releases: env from another org", options: { delivery: "env-denied" } },
   { id: "delivery-truncated", label: "releases: truncated (limit 5)", options: { releaseLimit: 5 } },
-  { id: "delivery-lead-partial", label: "delivery: lead time partly known", options: { leadTime: "partial" } },
-  { id: "delivery-alert-mttr", label: "delivery: alert-based MTTR filled", options: { alertMttr: true } },
-  { id: "delivery-alert-mttr-ongoing", label: "delivery: alert-based MTTR with ongoing incidents", options: { alertMttr: "ongoing" } },
-  { id: "delivery-alert-mttr-quiet", label: "delivery: alert history wired, nothing fired", options: { alertMttr: "quiet" } },
 ];
 
 const LIST_KEYS = new Set(["envs", "f", "groupBy"]);

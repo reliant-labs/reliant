@@ -186,27 +186,7 @@ export function changeText(before: number | null, after: number | null, kind: "r
   return `${pct > 0 ? "+" : "−"}${Math.round(Math.abs(pct))}%`;
 }
 
-// ── DORA ─────────────────────────────────────────────────────────────────────
-
-/** The DORA windows offered: a week, a month, a quarter (the server allows up to 366 days). */
-export const DORA_WINDOWS = ["7d", "30d", "90d"] as const;
-export type DoraWindow = (typeof DORA_WINDOWS)[number];
-export const DEFAULT_DORA_WINDOW: DoraWindow = "30d";
-export const DORA_WINDOW_DAYS: Record<DoraWindow, number> = { "7d": 7, "30d": 30, "90d": 90 };
-export const DORA_WINDOW_LABELS: Record<DoraWindow, string> = { "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days" };
-
-export function doraWindowOf(param: string | undefined): DoraWindow {
-  return (DORA_WINDOWS as readonly string[]).includes(param ?? "") ? (param as DoraWindow) : DEFAULT_DORA_WINDOW;
-}
-
-/** The N a reader can pick for "rolled back within N hours", all inside the server's 1–168. */
-export const FAILURE_HOURS_CHOICES = [1, 4, 12, 24, 48, 72, 168] as const;
-
-/** A failure window from the URL, clamped into the server's bounds; absent or invalid is the server's 24. */
-export function failureHoursOf(param: number | undefined): number {
-  if (param === undefined || !Number.isFinite(param)) return 24;
-  return Math.min(168, Math.max(1, Math.round(param)));
-}
+// ── DORA figures, as the Releases page states them ───────────────────────────
 
 /** "3h 12m", "2d 4h", "45m", "30s" — a span a person reads, for lead time and restore time. */
 export function formatSpan(ms: number | null): string {

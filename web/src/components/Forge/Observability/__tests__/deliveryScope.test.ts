@@ -16,7 +16,6 @@ import {
   compareParam,
   comparisonWindows,
   deliveryScopeOf,
-  failureHoursOf,
   formatPerDay,
   formatSpan,
   movement,
@@ -174,12 +173,5 @@ describe("DORA formatting", () => {
     expect(formatPerDay(13 / 30)).toBe("1 every 2.3 days");
     expect(formatPerDay(2.43)).toBe("2.4 a day");
     expect(formatPerDay(0)).toBe("None");
-  });
-
-  it("keeps the failure window inside the server's 1–168 hours", () => {
-    expect(failureHoursOf(undefined)).toBe(24);
-    expect(failureHoursOf(0)).toBe(1);
-    expect(failureHoursOf(500)).toBe(168);
-    expect(failureHoursOf(4)).toBe(4);
   });
 });

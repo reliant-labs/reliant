@@ -51,8 +51,7 @@ import { AlertNotifications } from "./AlertNotifications";
 import { AlertsView } from "./AlertsView";
 import { ObsChartMarkersProvider } from "./charts/UPlotChart";
 import { DashboardsView } from "./DashboardsView";
-import { compareParam, compareWindowOf, doraWindowOf, failureHoursOf, parseCompareParam } from "./deliveryScope";
-import { DeliveryView } from "./DeliveryView";
+import { compareParam, compareWindowOf, parseCompareParam } from "./deliveryScope";
 import { LogsView } from "./LogsView";
 import { filterParam, filterTokensOf, groupByOf, groupByParam, scopeFiltersOf } from "./obsFilters";
 import {
@@ -82,7 +81,6 @@ export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 
 /** The views with time-series charts, where release markers are drawn and listed. */
 const MARKED_VIEWS: readonly ObsView[] = ["overview", "dashboards", "workloads"];
-const ENV_FILTER_KEYS = ["deployment.environment.name", "reliant.env.id"];
 
 export interface ObservabilityPanelProps {
   place: ObsPlace;
@@ -126,15 +124,6 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
   /** A comparison opens over the view (Back returns to it); a push, so the browser's Back closes it too. */
   const openCompare = (promotion: Promotion) => navigate({ compare: compareParam(promotion) });
   const closeCompare = () => navigate({ compare: undefined, cmpWindow: undefined });
-  /** The project area's way out of "an environment in view isn't available": every environment, no environment filter. */
-  const showEveryEnvironment =
-    place.kind === "project"
-      ? () =>
-          navigate(
-            { envs: undefined, f: filterParam(filterTokens.filter((token) => !ENV_FILTER_KEYS.includes(token.key))) },
-            { replace: true }
-          )
-      : undefined;
 
   /**
    * A view switch keeps what a reader carries between views — the window, the
@@ -160,8 +149,6 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
       rule: undefined,
       compare: undefined,
       cmpWindow: undefined,
-      doraWindow: undefined,
-      failureHours: undefined,
     });
   };
   const envName = (id: string) => placeEnvironments(place).find((env) => env.id === id)?.name;
@@ -206,8 +193,8 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
         )}
         <div className="flex items-center gap-2">
           {org.orgId && <AlertNotifications orgId={org.orgId} envName={envName} onOpenAlerts={() => selectView("alerts")} />}
-          {/* Delivery has its own windows (days); a comparison its own (around the promotion). */}
-          {view !== "delivery" && !comparing && (
+          {/* A comparison has its own windows (around the promotion). */}
+          {!comparing && (
             <>
               <label htmlFor="obs-range" className="sr-only">
                 Time range
@@ -243,8 +230,8 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
       </div>
 
       {/* Usage is the org's allowance, not a query over the scope: nothing here would narrow it. */}
-      {/* Alerts and Delivery keep the environment picker; attribute filters and group-by mean nothing there. */}
-      {scope && (!notSetUp || view === "alerts" || view === "delivery") && view !== "usage" && (
+      {/* Alerts keeps the environment picker; attribute filters and group-by mean nothing there. */}
+      {scope && (!notSetUp || view === "alerts") && view !== "usage" && (
         <ObsScopeBar
           scope={scope}
           range={range}
@@ -258,7 +245,7 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
           groupBy={groupBy}
           onGroupByChange={(keys) => navigate({ groupBy: groupByParam(keys) }, { replace: true })}
           groupable={groupable}
-          filterable={view !== "alerts" && view !== "delivery"}
+          filterable={view !== "alerts"}
         />
       )}
 
@@ -307,21 +294,7 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
             subject={subject}
             target={comparing}
             width={compareWindowOf(search.cmpWindow)}
-            backLabel={OBS_VIEW_LABELS[view]}
-            onBack={closeCompare}
-            navigate={navigate}
-          />
-        ) : view === "delivery" ? (
-          // The release ledger is Postgres, not the telemetry store: Delivery
-          // answers before observability is set up, like Usage and Alerts.
-          <DeliveryView
-            scope={scope}
-            environments={environments}
-            subject={subject}
-            window={doraWindowOf(search.doraWindow)}
-            failureHours={failureHoursOf(search.failureHours)}
-            onShowEveryEnvironment={showEveryEnvironment}
-            onCompare={openCompare}
+            back={{ label: OBS_VIEW_LABELS[view], onBack: closeCompare }}
             navigate={navigate}
           />
         ) : notSetUp ? (

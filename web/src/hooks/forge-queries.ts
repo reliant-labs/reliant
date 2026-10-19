@@ -805,6 +805,9 @@ export function useApplyForgePromote(projectId: string | null | undefined) {
       // and the Overview/Environment screens read them from there.
       void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-status"] });
       void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-promotions"] });
+      // The Releases pages: every ledger and rollout, and the live view, moved.
+      void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "releases"] });
+      void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "live-view"] });
     },
   });
 

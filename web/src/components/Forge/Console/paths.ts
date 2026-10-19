@@ -6,7 +6,7 @@
  *
  *   /forge/p/:project                         Overview (project home)
  *   /forge/p/:project/releases                Releases
- *   /forge/p/:project/releases/delivery       Delivery (DORA), linked from Releases
+ *   /forge/p/:project/releases/:version       one release (its DORA strip is on Releases, D9)
  *   /forge/p/:project/observability           Observability overview
  *   /forge/p/:project/observability/:view     logs · traces · metrics · profiles · dashboards · alerts
  *   /forge/p/:project/environments            Environments (Configure)
@@ -60,7 +60,7 @@ export function isObsNavView(value: string | undefined): value is ObsNavView {
 export type ConsolePage =
   | { kind: "overview" }
   | { kind: "releases" }
-  | { kind: "delivery" }
+  | { kind: "release"; version: string }
   | { kind: "observability" }
   | { kind: "obs-view"; view: ObsNavView }
   | { kind: "environments" }
@@ -83,8 +83,8 @@ export function consolePath(project: string, page: ConsolePage): string {
       return base;
     case "releases":
       return `${base}/releases`;
-    case "delivery":
-      return `${base}/releases/delivery`;
+    case "release":
+      return `${base}/releases/${encodeURIComponent(page.version)}`;
     case "observability":
       return `${base}/observability`;
     case "obs-view":
@@ -129,7 +129,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case undefined:
         return { kind: "overview" };
       case "releases":
-        return sub === "delivery" ? { kind: "delivery" } : sub ? null : { kind: "releases" };
+        return sub ? { kind: "release", version: safeDecode(sub) } : { kind: "releases" };
       case "observability":
         if (!sub) return { kind: "observability" };
         return isObsNavView(sub) ? { kind: "obs-view", view: sub } : null;
@@ -172,8 +172,8 @@ export function withSearch(path: string, search: Record<string, unknown> = {}): 
  * (obsSearch.ts) — its links say "open Logs", "open Traces" — and this turns
  * each into the page that hosts it: the nav entries under Observability, the
  * project Overview for Workloads (the overview is the project home merged
- * with workloads), Releases for Delivery and Project settings for Usage
- * (decision D9).
+ * with workloads) and Project settings for Usage (decision D9). Delivery is
+ * no view any more: its DORA figures are the Releases page's strip.
  */
 export function pageOfObsView(view: ObsView | undefined): ConsolePage {
   switch (view) {
@@ -182,8 +182,6 @@ export function pageOfObsView(view: ObsView | undefined): ConsolePage {
       return { kind: "observability" };
     case "workloads":
       return { kind: "overview" };
-    case "delivery":
-      return { kind: "delivery" };
     case "usage":
       return { kind: "settings" };
     default:
@@ -198,8 +196,6 @@ export function obsViewOfPage(page: ConsolePage): ObsView | null {
       return "overview";
     case "overview":
       return "workloads";
-    case "delivery":
-      return "delivery";
     case "settings":
       return "usage";
     case "obs-view":
