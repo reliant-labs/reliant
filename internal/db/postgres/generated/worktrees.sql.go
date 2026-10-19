@@ -303,19 +303,21 @@ func (q *Queries) ListHeldWorktreesForUser(ctx context.Context, userID string) (
 }
 
 const listLiveWorktreePathsForUser = `-- name: ListLiveWorktreePathsForUser :many
-SELECT w.id, w.path FROM worktrees w
+SELECT w.id, w.path, w.project_id FROM worktrees w
 JOIN projects p ON p.id = w.project_id
 WHERE p.user_id = $1 AND w.deleted_at IS NULL AND w.path <> ''
 `
 
 type ListLiveWorktreePathsForUserRow struct {
-	ID   string `json:"id"`
-	Path string `json:"path"`
+	ID        string `json:"id"`
+	Path      string `json:"path"`
+	ProjectID string `json:"project_id"`
 }
 
-// Every path one user's unarchived worktree rows claim. An archived row's
-// directory may only be removed when none of the SAME user's live rows has a
-// path that equals, contains or sits inside it. Scoped by user because another
+// Every path one user's unarchived worktree rows claim, with the project that
+// says where each row's checkouts sit. An archived row's directory may only be
+// removed when none of the SAME user's live rows has its path, or one of its
+// checkouts, at or under that directory. Scoped by user because another
 // tenant's rows say nothing about this user's directories.
 func (q *Queries) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]ListLiveWorktreePathsForUserRow, error) {
 	rows, err := q.db.QueryContext(ctx, listLiveWorktreePathsForUser, userID)
@@ -326,7 +328,7 @@ func (q *Queries) ListLiveWorktreePathsForUser(ctx context.Context, userID strin
 	items := []ListLiveWorktreePathsForUserRow{}
 	for rows.Next() {
 		var i ListLiveWorktreePathsForUserRow
-		if err := rows.Scan(&i.ID, &i.Path); err != nil {
+		if err := rows.Scan(&i.ID, &i.Path, &i.ProjectID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

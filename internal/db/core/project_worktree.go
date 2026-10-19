@@ -148,10 +148,12 @@ type ReclaimCandidate struct {
 	ProjectPath string
 }
 
-// WorktreePath is the id and directory of one worktree row.
+// WorktreePath is the id and directory of one worktree row, and the project
+// whose repos say where its checkouts sit under that directory.
 type WorktreePath struct {
-	ID   string
-	Path string
+	ID        string
+	Path      string
+	ProjectID string
 }
 
 // HeldWorktree is an archived worktree the daemon declined to remove.
@@ -308,8 +310,8 @@ type WorktreeStore interface {
 	// AdoptWorktreeDaemon records daemonID on a row that has none. A no-op when
 	// the row already names a daemon.
 	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error
-	// ListLiveWorktreePathsForUser returns the path of every unarchived row the
-	// user owns.
+	// ListLiveWorktreePathsForUser returns the path and project of every
+	// unarchived row the user owns.
 	ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]WorktreePath, error)
 	// ListHeldWorktreesForUser returns the user's archived workspaces a daemon
 	// has recorded as held (not auto-removed) and not yet deleted.

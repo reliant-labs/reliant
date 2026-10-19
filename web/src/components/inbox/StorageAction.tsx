@@ -41,6 +41,7 @@ const REASON_LABEL: Record<string, string> = {
   data: "Contains data",
   "nested-repository": "Contains another git repository",
   "files-outside-checkout": "Has files outside its repositories",
+  "shared-with-live-workspace": "Used by an open workspace",
   unmanaged: "Not managed by Reliant",
   quarantined: "Parked in quarantine",
 };

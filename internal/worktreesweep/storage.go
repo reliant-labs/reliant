@@ -323,17 +323,25 @@ func (s *Sweeper) cleanBatch(ctx context.Context, t target, batch []*core.Reclai
 		*out = append(*out, CleanupResult{WorktreeID: c.Worktree.ID, Outcome: CleanupFailed, Message: msg})
 		s.mergeMeta(ctx, c.Worktree, func(m *core.CleanupMetadata) { m.Cleaning, m.CleaningBy, m.CleaningUntil = false, "", nil })
 	}
-	req := s.describe(ctx, batch, live, false)
-	resp, err := s.send(ctx, t, cmdSnapshotRemove, snapshotRemoveTimeoutMs, req)
-	if err != nil {
-		for _, c := range batch {
-			fail(c, err.Error())
-		}
-		return 0
-	}
+	req, shared := s.describe(ctx, batch, live, false)
 	byID := map[string]*core.ReclaimCandidate{}
 	for _, c := range batch {
 		byID[c.Worktree.ID] = c
+	}
+	for _, h := range shared {
+		delete(byID, h.cand.Worktree.ID)
+		s.recordHold(ctx, h.cand.Worktree, worktreereclaim.ReasonSharedWithLive, h.detail, 0, nil)
+		*out = append(*out, CleanupResult{WorktreeID: h.cand.Worktree.ID, Outcome: CleanupSkipped, Message: "left in place: " + h.detail})
+	}
+	if len(req.Worktrees) == 0 {
+		return 0
+	}
+	resp, err := s.send(ctx, t, cmdSnapshotRemove, snapshotRemoveTimeoutMs, req)
+	if err != nil {
+		for _, c := range byID {
+			fail(c, err.Error())
+		}
+		return 0
 	}
 	var second []worktreereclaim.Worktree
 	var freed int64

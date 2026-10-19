@@ -1177,7 +1177,9 @@ type HeldWorktree struct {
 	// "too_large" (too big to save), "data" (ignored files that are not
 	// rebuildable: ./data, .env*, *.db, ...), "nested-repository" (another git
 	// repository inside it), "files-outside-checkout" (files in a multi-repo
-	// workspace outside every checkout) or "unmanaged" (not reliant's to remove).
+	// workspace outside every checkout), "shared-with-live-workspace" (an open
+	// workspace's directory or checkout is inside it) or "unmanaged" (not
+	// reliant's to remove).
 	Reason string `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
 	Detail string `protobuf:"bytes,6,opt,name=detail,proto3" json:"detail,omitempty"`
 	// Directory size; a lower bound for very large trees. 0 when unmeasured.

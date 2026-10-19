@@ -448,7 +448,13 @@ func (s *Sweeper) recordTransient(ctx context.Context, seen *core.Worktree, kind
 // daemon could not be reached, so the caller stops asking it this pass.
 func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.ReclaimCandidate, live []core.WorktreePath, keep bool) bool {
 	byID := map[string]*core.ReclaimCandidate{}
-	req := s.describe(ctx, batch, live, keep)
+	req, shared := s.describe(ctx, batch, live, keep)
+	for _, h := range shared {
+		s.recordHold(ctx, h.cand.Worktree, worktreereclaim.ReasonSharedWithLive, h.detail, 0, nil)
+	}
+	if len(req.Worktrees) == 0 {
+		return true
+	}
 	for _, c := range batch {
 		byID[c.Worktree.ID] = c
 	}
@@ -543,17 +549,46 @@ func (s *Sweeper) settleNow(ctx context.Context, userID string, cand *core.Recla
 	s.settleBatch(ctx, target{userID, *cand.Worktree.DaemonID}, []*core.ReclaimCandidate{cand}, live, keep)
 }
 
+// sharedHold is an archived row kept without asking its daemon, because
+// removing its directory would remove a live row's directory or checkout.
+type sharedHold struct {
+	cand   *core.ReclaimCandidate
+	detail string
+}
+
 // describe turns rows into the daemon's description of each workspace. An
-// archived row is described as archived only when no live row's path equals,
-// contains or sits inside its own; otherwise the daemon is told it is active,
-// which locks it and removes nothing.
-func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, live []core.WorktreePath, keep bool) worktreereclaim.Request {
+// archived row is left out, and returned as a hold, when a live row's
+// directory or checkout is at or under its own (see sharedWithLive); every
+// other archived row is described as archived.
+func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, live []core.WorktreePath, keep bool) (worktreereclaim.Request, []sharedHold) {
 	req := worktreereclaim.Request{}
+	var holds []sharedHold
 	repoCache := map[string][]*core.Repo{}
+	repoFailed := map[string]bool{}
+	reposOf := func(projectID string) ([]*core.Repo, bool) {
+		if repos, ok := repoCache[projectID]; ok {
+			return repos, !repoFailed[projectID]
+		}
+		repos, err := s.store.ListReposByProject(ctx, projectID)
+		if err != nil {
+			logging.Warn("[WorktreeSweep] could not list repos", "projectID", projectID, "error", err)
+			repoFailed[projectID] = true
+		}
+		repoCache[projectID] = repos
+		return repos, err == nil
+	}
+	var liveDirs []occupied // built on the first archived row
 	for _, c := range cands {
 		wt := c.Worktree
 		state := worktreereclaim.StateActive
-		if wt.DeletedAt != nil && !sharesPathWithLive(wt, live) {
+		if wt.DeletedAt != nil {
+			if liveDirs == nil {
+				liveDirs = occupiedBy(live, reposOf)
+			}
+			if detail, shared := sharedWithLive(wt, liveDirs); shared {
+				holds = append(holds, sharedHold{cand: c, detail: detail})
+				continue
+			}
 			state = worktreereclaim.StateArchived
 		}
 		w := worktreereclaim.Worktree{ID: wt.ID, Path: wt.Path, State: state, BaseBranch: wt.BaseBranch, Fence: Fence(wt), KeepFiles: keep}
@@ -563,14 +598,7 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		}
 		// A user who chose "Keep everything" keeps their workspaces visible too.
 		w.ProbeIdle = state == worktreereclaim.StateActive && s.auto != nil && w.Retire == "" && !keep && wt.DeletedAt == nil
-		repos, ok := repoCache[wt.ProjectID]
-		if !ok {
-			var err error
-			if repos, err = s.store.ListReposByProject(ctx, wt.ProjectID); err != nil {
-				logging.Warn("[WorktreeSweep] could not list repos", "projectID", wt.ProjectID, "error", err)
-			}
-			repoCache[wt.ProjectID] = repos
-		}
+		repos, _ := reposOf(wt.ProjectID)
 		for _, repo := range repos {
 			w.Checkouts = append(w.Checkouts, worktreereclaim.Checkout{
 				RepoPath:   filepath.Join(c.ProjectPath, repo.RelativePath),
@@ -580,23 +608,71 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		}
 		req.Worktrees = append(req.Worktrees, w)
 	}
-	return req
+	return req, holds
 }
 
-// sharesPathWithLive reports whether any OTHER unarchived row's path equals,
-// contains or is contained by this row's.
-func sharesPathWithLive(wt *core.Worktree, live []core.WorktreePath) bool {
+// occupied is what one unarchived row has on disk: its directory and the
+// checkout its project puts under it for each repo. complete is false when the
+// repos could not be listed, so the checkouts are unknown.
+type occupied struct {
+	id, path string
+	dirs     []string
+	complete bool
+}
+
+func occupiedBy(live []core.WorktreePath, reposOf func(projectID string) ([]*core.Repo, bool)) []occupied {
+	out := make([]occupied, 0, len(live))
+	for _, l := range live {
+		o := occupied{id: l.ID, path: filepath.Clean(l.Path)}
+		o.dirs = append(o.dirs, o.path)
+		repos, ok := reposOf(l.ProjectID)
+		o.complete = ok
+		for _, repo := range repos {
+			if d := filepath.Join(o.path, repo.RelativePath); d != o.path {
+				o.dirs = append(o.dirs, d)
+			}
+		}
+		out = append(out, o)
+	}
+	return out
+}
+
+// sharedWithLive reports whether removing this archived row's directory would
+// remove some OTHER unarchived row's directory or checkout: one of them is at
+// or under it. It says why, in words for the Inbox.
+//
+// A live row whose directory merely CONTAINS this one does not keep it: the
+// archived worktree is its own checkout, and removing it leaves the live row's
+// checkouts alone. (A project rooted at a home directory contains every
+// worktree on the machine; letting it shield them kept every archived
+// directory forever.) Only when a live row's repos could not be listed, so its
+// checkouts are unknown, does containment count, failing closed.
+func sharedWithLive(wt *core.Worktree, live []occupied) (string, bool) {
 	mine := filepath.Clean(wt.Path)
 	for _, l := range live {
-		if l.ID == wt.ID {
+		if l.id == wt.ID {
 			continue
 		}
-		other := filepath.Clean(l.Path)
-		if other == mine || strings.HasPrefix(other, mine+string(filepath.Separator)) || strings.HasPrefix(mine, other+string(filepath.Separator)) {
-			return true
+		for _, d := range l.dirs {
+			switch {
+			case d == mine && d == l.path:
+				return "an open workspace uses the same directory: " + l.path, true
+			case d == mine:
+				return "it is a checkout of the open workspace at " + l.path, true
+			case pathUnder(d, mine):
+				return "the open workspace at " + l.path + " has a checkout inside it: " + d, true
+			}
+		}
+		if !l.complete && pathUnder(mine, l.path) {
+			return "it is inside the open workspace at " + l.path + ", whose checkouts could not be listed", true
 		}
 	}
-	return false
+	return "", false
+}
+
+// pathUnder reports whether p lies strictly beneath dir.
+func pathUnder(p, dir string) bool {
+	return strings.HasPrefix(p, strings.TrimSuffix(dir, string(filepath.Separator))+string(filepath.Separator))
 }
 
 func (s *Sweeper) send(ctx context.Context, t target, cmd string, timeoutMs int32, req worktreereclaim.Request) (*worktreereclaim.Response, error) {
@@ -691,26 +767,32 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 			s.recordTransient(ctx, wt, string(r.Reason), nil)
 			return
 		}
-		s.mergeMetaIf(ctx, wt, func(m *core.CleanupMetadata, archived bool) bool {
-			if !archived {
-				return false
-			}
-			if m.HeldReason == string(r.Reason) && m.HeldDetail == r.Detail {
-				m.Rechecks++
-			} else {
-				m.Rechecks = 0
-			}
-			m.HeldReason, m.HeldDetail, m.Transient = string(r.Reason), r.Detail, ""
-			m.Cleaning, m.CleaningBy, m.CleaningUntil = false, "", nil
-			if r.SizeBytes > 0 {
-				m.SizeBytes = r.SizeBytes
-			}
-			m.SnapshotRefs = union(m.SnapshotRefs, r.SnapshotRefs)
-			now := s.now().UTC()
-			m.CheckedAt = &now
-			return true
-		})
+		s.recordHold(ctx, wt, r.Reason, r.Detail, r.SizeBytes, r.SnapshotRefs)
 	}
+}
+
+// recordHold records why an archived row's directory was kept, and backs off
+// re-checking it while the reason stays the same.
+func (s *Sweeper) recordHold(ctx context.Context, wt *core.Worktree, reason worktreereclaim.HeldReason, detail string, size int64, refs []string) {
+	s.mergeMetaIf(ctx, wt, func(m *core.CleanupMetadata, archived bool) bool {
+		if !archived {
+			return false
+		}
+		if m.HeldReason == string(reason) && m.HeldDetail == detail {
+			m.Rechecks++
+		} else {
+			m.Rechecks = 0
+		}
+		m.HeldReason, m.HeldDetail, m.Transient = string(reason), detail, ""
+		m.Cleaning, m.CleaningBy, m.CleaningUntil = false, "", nil
+		if size > 0 {
+			m.SizeBytes = size
+		}
+		m.SnapshotRefs = union(m.SnapshotRefs, refs)
+		now := s.now().UTC()
+		m.CheckedAt = &now
+		return true
+	})
 }
 
 // archiveFinished archives an active worktree its daemon reports finished, so

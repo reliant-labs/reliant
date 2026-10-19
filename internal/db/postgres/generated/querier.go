@@ -745,9 +745,10 @@ type Querier interface {
 	// partial idx_tool_calls_chat_live (a few dozen rows database-wide) instead of
 	// a scan of the chat's ~25k terminal calls.
 	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]ToolCall, error)
-	// Every path one user's unarchived worktree rows claim. An archived row's
-	// directory may only be removed when none of the SAME user's live rows has a
-	// path that equals, contains or sits inside it. Scoped by user because another
+	// Every path one user's unarchived worktree rows claim, with the project that
+	// says where each row's checkouts sit. An archived row's directory may only be
+	// removed when none of the SAME user's live rows has its path, or one of its
+	// checkouts, at or under that directory. Scoped by user because another
 	// tenant's rows say nothing about this user's directories.
 	ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]ListLiveWorktreePathsForUserRow, error)
 	ListMessages(ctx context.Context, chatID string) ([]Message, error)

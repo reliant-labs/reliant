@@ -449,7 +449,7 @@ func (s *worktreeStore) ListLiveWorktreePathsForUser(ctx context.Context, userID
 	}
 	out := make([]core.WorktreePath, len(rows))
 	for i, r := range rows {
-		out[i] = core.WorktreePath{ID: r.ID, Path: r.Path}
+		out[i] = core.WorktreePath{ID: r.ID, Path: r.Path, ProjectID: r.ProjectID}
 	}
 	return out, nil
 }

@@ -56,6 +56,10 @@ const (
 	ReasonQuarantined HeldReason = "quarantined"
 	// ReasonKept: safe to remove, but the user's setting is "keep everything".
 	ReasonKept HeldReason = "kept"
+	// ReasonSharedWithLive: an unarchived row's directory or checkout is at or
+	// under this archived row's directory, so removing it would remove theirs.
+	// Decided by the server, which never sends such a row to the daemon.
+	ReasonSharedWithLive HeldReason = "shared-with-live-workspace"
 	// ReasonRecentlyActive: touched within the idle floor.
 	ReasonRecentlyActive HeldReason = "recently_active"
 	// ReasonStale: the request's fence no longer matches the lock.

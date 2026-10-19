@@ -559,7 +559,9 @@ export type HeldWorktree = Message<"reliant.v1.HeldWorktree"> & {
    * "too_large" (too big to save), "data" (ignored files that are not
    * rebuildable: ./data, .env*, *.db, ...), "nested-repository" (another git
    * repository inside it), "files-outside-checkout" (files in a multi-repo
-   * workspace outside every checkout) or "unmanaged" (not reliant's to remove).
+   * workspace outside every checkout), "shared-with-live-workspace" (an open
+   * workspace's directory or checkout is inside it) or "unmanaged" (not
+   * reliant's to remove).
    *
    * @generated from field: string reason = 5;
    */

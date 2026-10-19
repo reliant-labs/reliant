@@ -110,11 +110,12 @@ UPDATE worktrees SET daemon_id = $1 WHERE id = $2 AND daemon_id IS NULL;
 
 
 -- name: ListLiveWorktreePathsForUser :many
--- Every path one user's unarchived worktree rows claim. An archived row's
--- directory may only be removed when none of the SAME user's live rows has a
--- path that equals, contains or sits inside it. Scoped by user because another
+-- Every path one user's unarchived worktree rows claim, with the project that
+-- says where each row's checkouts sit. An archived row's directory may only be
+-- removed when none of the SAME user's live rows has its path, or one of its
+-- checkouts, at or under that directory. Scoped by user because another
 -- tenant's rows say nothing about this user's directories.
-SELECT w.id, w.path FROM worktrees w
+SELECT w.id, w.path, w.project_id FROM worktrees w
 JOIN projects p ON p.id = w.project_id
 WHERE p.user_id = $1 AND w.deleted_at IS NULL AND w.path <> '';
 

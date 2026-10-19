@@ -61,7 +61,7 @@ func TestSweep_RelockedAsActiveRefusesAStaleRemoval(t *testing.T) {
 	}
 	require.NotNil(t, cand)
 	live, _ := e.repo.ListLiveWorktreePathsForUser(e.ctx, e.userID)
-	req := e.sweeper.describe(e.ctx, []*core.ReclaimCandidate{cand}, live, false)
+	req, _ := e.sweeper.describe(e.ctx, []*core.ReclaimCandidate{cand}, live, false)
 	_, err = e.sweeper.send(e.ctx, target{e.userID, e.daemon}, cmdReconcile, 60000, req) // phase one: claims
 	require.NoError(t, err)
 	require.NoError(t, worktreereclaim.RestoreCheckout(e.ctx, path, wt.ID, Fence(e.get(t, wt.ID)))) // restore re-locks as active and retires the fence
@@ -72,8 +72,8 @@ func TestSweep_RelockedAsActiveRefusesAStaleRemoval(t *testing.T) {
 	assert.True(t, exists(path))
 }
 
-// S2: another live row at the same path means the archived row is described as
-// active, so nothing is removed.
+// S2: another live row at the same path keeps the archived row: it is never
+// sent to the daemon, and the reason is recorded.
 func TestSweep_SharedPathWithALiveRowIsNeverRemoved(t *testing.T) {
 	e := newEnv(t)
 	arch, path := e.worktree(t, "shared", true)
@@ -83,10 +83,13 @@ func TestSweep_SharedPathWithALiveRowIsNeverRemoved(t *testing.T) {
 	require.NoError(t, e.repo.CreateWorktree(e.ctx, live))
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
 	assert.True(t, exists(path))
-	assert.True(t, sharesPathWithLive(arch, []core.WorktreePath{{ID: live.ID, Path: path}}))
-	assert.True(t, sharesPathWithLive(arch, []core.WorktreePath{{ID: "x", Path: filepath.Dir(path)}}), "a live row containing it")
-	assert.True(t, sharesPathWithLive(arch, []core.WorktreePath{{ID: "x", Path: filepath.Join(path, "sub")}}), "a live row inside it")
-	assert.False(t, sharesPathWithLive(arch, []core.WorktreePath{{ID: "x", Path: path + "-other"}}), "a sibling with a common prefix is not an overlap")
+	meta := e.get(t, arch.ID).CleanupMetadata
+	require.NotNil(t, meta, "a kept archived row records why")
+	assert.Equal(t, string(worktreereclaim.ReasonSharedWithLive), meta.HeldReason)
+	assert.Contains(t, meta.HeldDetail, path)
+	assert.False(t, meta.DirectoryDeleted)
+	assert.Contains(t, git(t, e.project.Path, "worktree", "list", "--porcelain"), "locked reliant: worktree "+arch.ID,
+		"the archived row's lock is left as it was")
 }
 
 // S7: Keep everything removes nothing automatically, yet still reports holds.
@@ -407,7 +410,7 @@ func TestSweep_DeliversAPendingFenceRetirement(t *testing.T) {
 	fence := Fence(archived)
 	// The machine claims it under that fence.
 	live, _ := e.repo.ListLiveWorktreePathsForUser(e.ctx, e.userID)
-	req := e.sweeper.describe(e.ctx, []*core.ReclaimCandidate{{Worktree: archived, OwnerUserID: e.userID, ProjectPath: e.project.Path}}, live, false)
+	req, _ := e.sweeper.describe(e.ctx, []*core.ReclaimCandidate{{Worktree: archived, OwnerUserID: e.userID, ProjectPath: e.project.Path}}, live, false)
 	_, err := e.sweeper.send(e.ctx, target{e.userID, e.daemon}, cmdReconcile, 60000, req)
 	require.NoError(t, err)
 

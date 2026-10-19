@@ -264,9 +264,10 @@ type CleanupMetadata struct {
 	BranchDeleted    bool                   `protobuf:"varint,2,opt,name=branch_deleted,json=branchDeleted,proto3" json:"branch_deleted,omitempty"`
 	// Set while the machine is holding the directory: "dirty", "unpushed",
 	// "in_use", "unverified", "data" (ignored files that are not rebuildable),
-	// "nested-repository", "files-outside-checkout" or "quarantined" (a checkout
-	// parked under the worktree root's .reclaim directory, still locked; the
-	// detail names the path). Cleared once the
+	// "nested-repository", "files-outside-checkout", "shared-with-live-workspace"
+	// (an open workspace's directory or checkout is inside it) or "quarantined"
+	// (a checkout parked under the worktree root's .reclaim directory, still
+	// locked; the detail names the path). Cleared once the
 	// directory is removed.
 	HeldReason string `protobuf:"bytes,3,opt,name=held_reason,json=heldReason,proto3" json:"held_reason,omitempty"`
 	HeldDetail string `protobuf:"bytes,4,opt,name=held_detail,json=heldDetail,proto3" json:"held_detail,omitempty"`

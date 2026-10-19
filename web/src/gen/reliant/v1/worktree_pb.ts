@@ -135,9 +135,10 @@ export type CleanupMetadata = Message<"reliant.v1.CleanupMetadata"> & {
   /**
    * Set while the machine is holding the directory: "dirty", "unpushed",
    * "in_use", "unverified", "data" (ignored files that are not rebuildable),
-   * "nested-repository", "files-outside-checkout" or "quarantined" (a checkout
-   * parked under the worktree root's .reclaim directory, still locked; the
-   * detail names the path). Cleared once the
+   * "nested-repository", "files-outside-checkout", "shared-with-live-workspace"
+   * (an open workspace's directory or checkout is inside it) or "quarantined"
+   * (a checkout parked under the worktree root's .reclaim directory, still
+   * locked; the detail names the path). Cleared once the
    * directory is removed.
    *
    * @generated from field: string held_reason = 3;
