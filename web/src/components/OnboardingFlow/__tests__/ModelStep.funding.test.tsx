@@ -124,7 +124,7 @@ function renderStep(
     />,
     { wrapper },
   );
-  // The step opens with Claude Code pre-selected — the free path, so a user
+  // The step opens with Claude subscription pre-selected — the free path, so a user
   // can finish onboarding without being charged. Every test in this file is
   // about the FUNDING GATE on the Reliant CTA, which is not on screen until
   // Reliant is chosen, so the choice is made here rather than each test

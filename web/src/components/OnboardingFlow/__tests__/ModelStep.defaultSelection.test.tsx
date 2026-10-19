@@ -4,7 +4,7 @@
  * Two rules, and the second is the one that is easy to break while satisfying
  * the first:
  *
- *  1. Claude Code is pre-selected, so a user who accepts the default finishes
+ *  1. Claude subscription is pre-selected, so a user who accepts the default finishes
  *     onboarding without being charged. They bring a Claude subscription they
  *     already pay for.
  *
@@ -55,7 +55,7 @@ describe("ModelStep — default selection", () => {
     });
   });
 
-  it("opens with Claude Code selected, so the free path is the default", () => {
+  it("opens with Claude subscription selected, so the free path is the default", () => {
     render(
       <ModelStep
         plan={{ compute: "cloud_free_trial" } as LaunchPlan}
@@ -69,7 +69,7 @@ describe("ModelStep — default selection", () => {
     // aria-pressed is not set on these tiles, so selection is read the way a
     // user reads it: the selected provider is the one whose panel is showing.
     expect(
-      screen.getByRole("button", { name: /connect claude code/i }),
+      screen.getByRole("button", { name: /connect claude subscription/i }),
     ).toBeInTheDocument();
   });
 

@@ -422,7 +422,7 @@ test.describe('Onboarding Flow', () => {
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible();
 
-    await dialog.getByRole('button', { name: 'Anthropic', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Anthropic API', exact: true }).click();
     await dialog.getByPlaceholder('sk-ant-...').fill('sk-ant-test-key');
     await dialog.getByRole('button', { name: 'Save key and start' }).click();
 
@@ -443,7 +443,7 @@ test.describe('Onboarding Flow', () => {
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible();
 
-    await dialog.getByRole('button', { name: 'Anthropic', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Anthropic API', exact: true }).click();
     await dialog.getByPlaceholder('sk-ant-...').fill('sk-ant-test-key');
     await dialog.getByRole('button', { name: 'Save key and start' }).click();
 
@@ -776,7 +776,7 @@ test.describe('Onboarding – Failure Scenarios', () => {
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible();
 
-    await dialog.getByRole('button', { name: 'Anthropic', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Anthropic API', exact: true }).click();
     await dialog.getByPlaceholder('sk-ant-...').fill('sk-ant-bad-key');
     await dialog.getByRole('button', { name: 'Save key and start' }).click();
 

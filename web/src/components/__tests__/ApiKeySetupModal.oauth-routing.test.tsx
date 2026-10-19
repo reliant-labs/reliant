@@ -54,7 +54,7 @@ import { useClaudeOAuth, useCodexOAuth, useAntigravityOAuth } from '@/hooks'
 
 // Display names as they appear on the provider buttons in the modal.
 const PROVIDER_BUTTON_LABEL: Record<string, string> = {
-  claude: 'Claude Code',
+  claude: 'Claude subscription',
   codex: 'Codex (ChatGPT)',
   antigravity: 'Antigravity',
 }
