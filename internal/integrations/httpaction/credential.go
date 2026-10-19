@@ -91,11 +91,6 @@ const (
 	CodeNotFound           = "not_found"
 	CodeInvalidArgument    = "invalid_argument"
 	CodeInternal           = "internal"
-	// CodeIdentityUnavailable: the identity the run asked to act as cannot be
-	// had on this deployment (no App key to mint a bot token from). Distinct
-	// from a failure: a source may fall back to the owner for it, and only
-	// for it.
-	CodeIdentityUnavailable = "identity_unavailable"
 )
 
 // CredentialError is a typed failure to obtain a credential. Message is safe to

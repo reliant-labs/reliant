@@ -258,13 +258,13 @@ Everything a bot writes ends with a footer naming the automation and its owner, 
 
 > <sub>Posted by Reliant for pr-review, an automation of @alice.</sub>
 
-The bot is not a way around your own permissions. Before it writes, Reliant checks that **your own GitHub account can push to that repository**. The token it uses is scoped to that one repository and to what the action needs (issues, pull requests or contents), and lasts an hour. If you cannot push, if the Reliant GitHub App is not installed on the repository, or if the App has not been granted a permission, the write fails with the reason. It is never made as you instead.
+The bot is not a way around your own permissions. Before it writes, Reliant checks that **your own GitHub account can push to that repository**. The token it uses is scoped to that one repository and to what the action needs (issues, pull requests or contents), and lasts an hour. If you cannot push, if the Reliant GitHub App is not installed on the repository, if the App has not been granted a permission, if Reliant has no App key to mint the token from, or if minting fails for any other reason, the write fails with the reason. It is never made as you instead. The same holds for a `git_publish` push: a bot automation pushes with the bot's token for that one repository, or the push is refused and nothing is pushed.
 
 Three things stay as they are:
 
-- **Reads** use your own access. Only writes carry the bot's name.
+- **Reads** use your own access. Only writes carry the bot's name. A write that names a saved connection (`connection:`) cannot also be made as the bot, so it fails instead of using that connection; a read may still name one.
 - **A person typing in the run's chat acts as themselves.** The bot identity belongs to the automation's own run, not to the chat.
-- **A deployment with no Reliant GitHub App** (self-hosted) acts as the owner. Choosing Reliant bot there is refused when you save, rather than silently doing something else.
+- **A deployment with no Reliant GitHub App** (self-hosted) acts as the owner. Choosing Reliant bot there is refused when you save, rather than silently doing something else. A hosted deployment whose App key is missing refuses each bot write with an error telling an administrator to configure the App, or you to set the automation to write as you.
 
 Comments the bot writes never fire a trigger on `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments cannot start itself. Another bot's comments (Dependabot, a CI app) do reach your filters.
 

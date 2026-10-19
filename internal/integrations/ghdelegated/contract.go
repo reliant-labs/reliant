@@ -63,8 +63,8 @@ type Deps struct {
 	// Tokens fetches the owner's current GitHub App user token.
 	Tokens TokenSource
 	// Installations mints the App's installation tokens. nil makes the broker
-	// owner-only: asked to act as the bot, it answers identity-unavailable and
-	// the caller falls back to the owner (a self-hosted deployment).
+	// owner-only: asked to act as the bot, it fails the write with a
+	// precondition error rather than answer with the owner's credential.
 	Installations InstallationSource
 	// Logger receives transient control-plane failures. nil discards them.
 	Logger *slog.Logger

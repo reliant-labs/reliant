@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
@@ -142,29 +143,95 @@ func TestActingAsApp_RefusalsNeverFallBackToTheOwner(t *testing.T) {
 	}
 }
 
-// The one fallback: a deployment that cannot mint at all (no App key) keeps its
-// pre-existing behaviour and acts as the owner, with a log line.
-func TestActingAsApp_NoAppKeyDegradesToTheOwner(t *testing.T) {
+// A deployment that cannot mint at all (no App key, no installation source)
+// FAILS the write with a precondition error that says what to fix. It never
+// degrades to the owner: choosing the bot is a promise about whose name is on
+// the write.
+func TestActingAsApp_UnavailableIdentityFailsClosed(t *testing.T) {
 	t.Run("control-plane holds no key", func(t *testing.T) {
 		e := newEnv(t)
 		inst := &fakeInstallations{err: gitcredentialclient.ErrAppNotConfigured}
 		cred, err := e.botSource(APIHost, inst).Credential(context.Background(),
 			botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams))
-		require.NoError(t, err, "a dev or e2e stack with no key must keep working")
-		assert.Equal(t, "Bearer ghu_alice_token_9f3c1e", applied(t, cred, "https://api.github.com/repos/acme/widgets/issues/7/comments"))
-		assert.Equal(t, ConnectionID, cred.ConnectionID(), "it is the owner's credential, and says so")
+		require.Error(t, err)
+		assert.Nil(t, cred)
+		var ce *httpaction.CredentialError
+		require.True(t, errors.As(err, &ce), "got %v", err)
+		assert.Equal(t, httpaction.CodeFailedPrecondition, ce.Code)
+		assert.Contains(t, ce.Message, "no GitHub App key")
+		assert.Contains(t, ce.Message, "write as its owner", "the error says how to recover")
+		assert.Len(t, inst.asked, 1, "the mint was attempted")
+		assert.Empty(t, e.cp.asked, "the owner's own token was never looked up")
 	})
 	t.Run("no installation source wired (self-hosted)", func(t *testing.T) {
 		e := newEnv(t)
 		cred, err := e.botSource(APIHost, nil).Credential(context.Background(),
 			botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams))
-		require.NoError(t, err)
-		assert.Equal(t, ConnectionID, cred.ConnectionID())
+		require.Error(t, err)
+		assert.Nil(t, cred)
+		var ce *httpaction.CredentialError
+		require.True(t, errors.As(err, &ce), "got %v", err)
+		assert.Equal(t, httpaction.CodeFailedPrecondition, ce.Code)
+		assert.Contains(t, ce.Message, "no GitHub App")
+		assert.Empty(t, e.cp.asked, "the owner's own token was never looked up")
 	})
 }
 
-// A bot token is for writes. A read authors nothing, and a call that names its
-// own connection chose its credential.
+// A broker with no second identity cannot speak as the bot, and an integration
+// with no delegated broker at all has none either. Both fail the write; neither
+// reaches the owner's saved connection or delegated token.
+func TestActingAsApp_UnsupportedBrokerFailsClosed(t *testing.T) {
+	t.Run("a plain DelegatedBroker", func(t *testing.T) {
+		e := newEnv(t)
+		brokers := connauth.NewBrokers()
+		require.NoError(t, brokers.Register(BrokerID, plainBroker{b: newBroker(e.cp, APIHost, nil)}))
+		src := connauth.New(connauth.Deps{Resolver: e.resolver, Broker: brokers.Get})
+		cred, err := src.Credential(context.Background(), botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams))
+		requireBotRefusal(t, cred, err, httpaction.CodeFailedPrecondition)
+		assert.Empty(t, e.cp.asked, "the owner's own token was never looked up")
+	})
+	t.Run("no broker registered", func(t *testing.T) {
+		e := newEnv(t)
+		src := connauth.New(connauth.Deps{Resolver: e.resolver})
+		cred, err := src.Credential(context.Background(), botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams))
+		requireBotRefusal(t, cred, err, httpaction.CodeFailedPrecondition)
+		assert.Empty(t, e.cp.asked)
+	})
+}
+
+// githubPAT saves a GitHub personal access token for userID: a saved connection
+// that is the owner's own credential.
+func (e *env) githubPAT(userID string) string {
+	e.t.Helper()
+	conn, err := e.svc.CreateAPIKey(context.Background(), connections.CreateAPIKeyParams{
+		UserID: userID, IntegrationID: IntegrationID, Name: "pat", Kind: connections.APIKeyKindAPIKey,
+		Fields: map[string]string{"api_key": "ghp_owner_pat_canary_1a2b"},
+	})
+	require.NoError(e.t, err)
+	return conn.ID
+}
+
+// plainBroker hides ActingCredential: the broker interface and nothing more.
+type plainBroker struct{ b *broker }
+
+func (p plainBroker) Credential(ctx context.Context, owner string) (httpaction.Credential, error) {
+	return p.b.Credential(ctx, owner)
+}
+
+func requireBotRefusal(t *testing.T, cred httpaction.Credential, err error, wantCode string) {
+	t.Helper()
+	require.Error(t, err)
+	assert.Nil(t, cred)
+	var ce *httpaction.CredentialError
+	require.True(t, errors.As(err, &ce), "got %v", err)
+	assert.Equal(t, wantCode, ce.Code)
+}
+
+// A bot token is for writes. A read authors nothing and keeps the owner's own
+// access, including a connection the read names. A WRITE that asked for the bot
+// and also names a saved connection is a contradiction: it fails, and neither
+// the connection nor the owner's delegated token is used, nor is a bot token
+// minted for a call that cannot be made as the bot.
 func TestActingAsApp_AppliesToWritesOnly(t *testing.T) {
 	e := newEnv(t)
 	inst := &fakeInstallations{}
@@ -174,11 +241,67 @@ func TestActingAsApp_AppliesToWritesOnly(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ConnectionID, read.ConnectionID(), "a read uses the owner's access")
 
-	named := botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams)
-	named.ConnectionID = "conn_pat"
-	_, err = src.Credential(context.Background(), named)
-	require.Error(t, err, "an unknown named connection is an error, not the bot")
-	assert.Empty(t, inst.asked, "nothing was minted for either")
+	pat := e.githubPAT("idp|alice")
+	namedRead := botReq(t, e.newRun("idp|alice"), "issue.get", false, repoParams)
+	namedRead.ConnectionID = pat
+	got, err := src.Credential(context.Background(), namedRead)
+	require.NoError(t, err, "a read may name its own connection")
+	assert.Equal(t, pat, got.ConnectionID())
+	assert.Empty(t, inst.asked, "nothing was minted for either read")
+}
+
+func TestActingAsApp_WriteNamingAConnectionFailsClosed(t *testing.T) {
+	for name, connection := range map[string]func(*env) string{
+		"an unknown connection":        func(*env) string { return "conn_pat" },
+		"the owner's saved github PAT": func(e *env) string { return e.githubPAT("idp|alice") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t)
+			inst := &fakeInstallations{}
+			named := botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams)
+			named.ConnectionID = connection(e)
+			cred, err := e.botSource(APIHost, inst).Credential(context.Background(), named)
+			requireBotRefusal(t, cred, err, httpaction.CodeFailedPrecondition)
+			assert.Contains(t, err.Error(), "cannot name a saved connection")
+			assert.Empty(t, inst.asked, "no bot token was minted for a contradictory request")
+			assert.Empty(t, e.cp.asked, "the owner's delegated token was never looked up")
+		})
+	}
+}
+
+// A request that carries an identity the source does not know is refused, never
+// treated as the owner.
+func TestActingAsApp_UnknownIdentityOnAWriteFailsClosed(t *testing.T) {
+	e := newEnv(t)
+	req := botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams)
+	req.ActingIdentity = "admin"
+	cred, err := e.botSource(APIHost, &fakeInstallations{}).Credential(context.Background(), req)
+	requireBotRefusal(t, cred, err, httpaction.CodeInvalidArgument)
+	assert.Empty(t, e.cp.asked)
+}
+
+// A run with no owner record cannot be acted for; the owner lookup failing is
+// not an invitation to try another credential.
+func TestActingAsApp_UnresolvableOwnerFailsClosed(t *testing.T) {
+	e := newEnv(t)
+	inst := &fakeInstallations{}
+	cred, err := e.botSource(APIHost, inst).Credential(context.Background(),
+		botReq(t, "no-such-run", "issue.comment", true, repoParams))
+	require.Error(t, err)
+	assert.Nil(t, cred)
+	assert.Empty(t, inst.asked)
+	assert.Empty(t, e.cp.asked)
+}
+
+// A push is a write too: it asks for contents only, and nothing for the owner.
+func TestActingAsApp_GitPushMintsContentsWrite(t *testing.T) {
+	e := newEnv(t)
+	inst := &fakeInstallations{}
+	_, err := e.botSource(APIHost, inst).Credential(context.Background(),
+		botReq(t, e.newRun("idp|alice"), "git.push", true, map[string]any{"owner": "acme", "repo": "widgets"}))
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"contents": "write"}, inst.asked[0].Permissions)
+	assert.Empty(t, e.cp.asked)
 }
 
 // A call that names no repository has nothing to scope a bot token to. It is

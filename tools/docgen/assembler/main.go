@@ -521,7 +521,7 @@ switch it, and a person typing in the run's chat acts as themselves. It covers e
 ` + bt + `action` + bt + ` node and an agent's integration tools alike, and only the writes: reads use the owner's access. Everything the bot
 authors ends with a footer naming the automation and its owner, so do not write your own signature. The bot only writes to a
 repository the owner can push to, scoped to that one repository; if the owner cannot push, the Reliant GitHub App is not
-installed there, or the App lacks a permission, the write FAILS with the reason (it never falls back to the owner's name),
+installed there, the App lacks a permission, the deployment has no App key, or minting fails, the write FAILS with the reason (it never falls back to the owner's name or to a saved connection; a write that names a saved connection on a bot run fails too, and a git_publish push is refused the same way),
 so a workflow that must keep going should handle the action's error output. When you hand a workflow to the user, say that
 a reviewer or triager can be enabled as the bot so the owner can approve and merge what it opens; otherwise the default is
 fine. A self-hosted deployment has no App and acts as the owner. Comments written by Reliant's own bot never fire

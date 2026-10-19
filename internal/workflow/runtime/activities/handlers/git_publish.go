@@ -55,10 +55,10 @@ type GitPublishActivity struct {
 	github func(site httpaction.CallSite) gitpublish.GitHubReader
 }
 
-// pushTokenSource yields the credential a push to repo is made with, for the
-// run's owner. It is the identity seam: today it is the owner's token through
-// the github integration's delegated broker; an acting_identity of "app" would
-// return an installation token scoped to repo here and report core.IntegrationActorApp.
+// pushTokenSource yields the credential a push to repo is made with, and whose
+// it is (core.IntegrationActorOwner or core.IntegrationActorApp). A run whose
+// activation chose the Reliant bot pushes with an installation token scoped to
+// repo, or not at all: an error here is never answered with the owner's token.
 type pushTokenSource interface {
 	PushToken(ctx context.Context, site httpaction.CallSite, repo gitpublish.Repo) (token string, actor string, err error)
 }
@@ -71,7 +71,7 @@ func NewGitPublishActivity(repo db.Repository, daemonRouter toolexec.DaemonRoute
 	return &GitPublishActivity{
 		repo: repo, daemonRouter: daemonRouter, catalog: cat,
 		runner: httpaction.NewRunner(netguard.New()), credentials: credentials,
-		token: ownerPushToken{credentials: credentials},
+		token: runPushToken{credentials: credentials},
 	}
 }
 
@@ -127,7 +127,8 @@ func (a *GitPublishActivity) Execute(ctx context.Context, input ActivityInput) (
 		return nil, errors.New("daemon router not available; git_publish requires a daemon connection")
 	}
 	site := httpaction.CallSite{RunID: rtx.WorkflowID, NodeID: rtx.StepID,
-		ToolCallID: invokeToolCallID(rtx.WorkflowID, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration)}
+		ToolCallID:     invokeToolCallID(rtx.WorkflowID, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration),
+		ActingIdentity: rtx.ActingIdentity, Automation: rtx.Automation}
 
 	// 1. Policy, on the server, with GitHub's own answers.
 	var gh gitpublish.GitHubReader = &githubReader{catalog: a.catalog, runner: a.runner, credentials: a.credentials, site: site}
@@ -291,12 +292,15 @@ func workflowNameOf(chat *core.Chat) string {
 	return ""
 }
 
-// ownerPushToken is today's identity: the run owner's token, through the
-// github integration's delegated broker (or a saved connection), exactly as an
-// action node authenticates.
-type ownerPushToken struct{ credentials httpaction.CredentialSource }
+// runPushToken is the identity the run was activated with. An owner run uses
+// the owner's token, through the github integration's delegated broker (or a
+// saved connection), exactly as an action node authenticates. A run whose site
+// says httpaction.IdentityApp asks the same source for the bot's installation
+// token as a write to this repository, so it is subject to the same rules as
+// any other write the bot makes: there is no second, looser path to the owner.
+type runPushToken struct{ credentials httpaction.CredentialSource }
 
-func (o ownerPushToken) PushToken(ctx context.Context, site httpaction.CallSite, _ gitpublish.Repo) (string, string, error) {
+func (o runPushToken) PushToken(ctx context.Context, site httpaction.CallSite, repo gitpublish.Repo) (string, string, error) {
 	if o.credentials == nil {
 		return "", "", &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "connections are not available in this process"}
 	}
@@ -304,18 +308,34 @@ func (o ownerPushToken) PushToken(ctx context.Context, site httpaction.CallSite,
 	if err != nil {
 		return "", "", err
 	}
-	cred, err := o.credentials.Credential(ctx, httpaction.CredentialRequest{
+	req := httpaction.CredentialRequest{
 		RunID: site.RunID, NodeID: site.NodeID, ToolCallID: site.ToolCallID,
 		IntegrationID: "github", Connection: m.GetConnection(), ServerPlaced: true,
-	})
+	}
+	actor := core.IntegrationActorOwner
+	switch site.ActingIdentity {
+	case "":
+	case httpaction.IdentityApp:
+		req.ActingIdentity, req.Automation = site.ActingIdentity, site.Automation
+		req.ActionID, req.Mutates = writeledger.GitPushAction, true
+		req.Params = map[string]any{"owner": repo.Owner, "repo": repo.Name}
+		actor = core.IntegrationActorApp
+	default:
+		return "", "", &httpaction.CredentialError{Code: httpaction.CodeInvalidArgument,
+			Message: fmt.Sprintf("unknown acting identity %q: a push is made as the owner or as the Reliant bot", site.ActingIdentity)}
+	}
+	cred, err := o.credentials.Credential(ctx, req)
 	if err != nil {
 		return "", "", err
+	}
+	if cred == nil {
+		return "", "", &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "the connection resolved to no credential"}
 	}
 	token, err := tokenOf(cred)
 	if err != nil {
 		return "", "", err
 	}
-	return token, core.IntegrationActorOwner, nil
+	return token, actor, nil
 }
 
 // beginPush records the push intent. No ledger in this process (self-hosted

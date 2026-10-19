@@ -94,10 +94,9 @@ type Resolver interface {
 type ActingBroker interface {
 	DelegatedBroker
 	// ActingCredential returns the credential for req.ActingIdentity, on
-	// behalf of ownerUserID. Errors are *httpaction.CredentialError; one with
-	// CodeIdentityUnavailable means this deployment cannot provide the
-	// identity at all (not that it failed to), and is the only case a caller
-	// may answer with the owner's own credential.
+	// behalf of ownerUserID. Errors are *httpaction.CredentialError, and every
+	// one is final: a caller never answers a failure, including a deployment
+	// that cannot provide the identity at all, with the owner's credential.
 	ActingCredential(ctx context.Context, ownerUserID string, req httpaction.CredentialRequest) (httpaction.Credential, error)
 }
 

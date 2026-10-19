@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -299,4 +300,128 @@ func TestGitPublishActivity_NoMachineRunIsRefusedAtTheNode(t *testing.T) {
 	require.Error(t, err, "a publish needs a checkout on a machine")
 	assert.Empty(t, f.router.commands())
 	assert.Zero(t, f.tok.calls)
+}
+
+// pushCredSource is a CredentialSource that records every request and answers
+// the owner's and the bot's by what the request says, as connauth does.
+type pushCredSource struct {
+	reqs     []httpaction.CredentialRequest
+	botErr   error
+	ownerErr error
+}
+
+type bearer string
+
+func (b bearer) ConnectionID() string { return "test" }
+func (b bearer) Apply(r *http.Request) error {
+	r.Header.Set("Authorization", "Bearer "+string(b))
+	return nil
+}
+func (b bearer) Scrub(s string) string     { return s }
+func (b bearer) Params() map[string]string { return nil }
+
+func (r *pushCredSource) Credential(_ context.Context, req httpaction.CredentialRequest) (httpaction.Credential, error) {
+	r.reqs = append(r.reqs, req)
+	if req.ActingIdentity == httpaction.IdentityApp {
+		if r.botErr != nil {
+			return nil, r.botErr
+		}
+		return bearer("ghs_bot_push_token"), nil
+	}
+	if r.ownerErr != nil {
+		return nil, r.ownerErr
+	}
+	return bearer("ghu_owner_push_token"), nil
+}
+
+func (r *pushCredSource) ownerAsked() bool {
+	for _, q := range r.reqs {
+		if q.ActingIdentity != httpaction.IdentityApp {
+			return true
+		}
+	}
+	return false
+}
+
+func (f *publishFixture) runAs(t *testing.T, identity string, src httpaction.CredentialSource) (*reliantv1.GitPublishOutput, error) {
+	t.Helper()
+	f.act.token = runPushToken{credentials: src}
+	return f.act.Execute(context.Background(), ActivityInput{
+		Runtime: types.RuntimeContext{ChatID: f.chat, WorkflowID: "run-42", StepID: "publish", ActingIdentity: identity, Automation: "autopilot"},
+		Node:    publishNode("autopilot/issue-12", 0),
+	})
+}
+
+// An app run pushes with the bot's installation token for exactly this
+// repository, and the ledger says the bot made the push.
+func TestGitPublishActivity_AppIdentityPushesWithTheBotToken(t *testing.T) {
+	f := newPublishActivityFixture(t)
+	src := &pushCredSource{}
+	out, err := f.runAs(t, httpaction.IdentityApp, src)
+	require.NoError(t, err)
+	assert.True(t, out.Pushed, out.Refusal)
+
+	require.Len(t, src.reqs, 1)
+	assert.Equal(t, httpaction.IdentityApp, src.reqs[0].ActingIdentity)
+	assert.Equal(t, "autopilot", src.reqs[0].Automation)
+	assert.True(t, src.reqs[0].Mutates, "a push is a write")
+	assert.Equal(t, map[string]any{"owner": "acme", "repo": "app"}, src.reqs[0].Params, "scoped to the one repository")
+	assert.False(t, src.ownerAsked())
+
+	var push gitpublish.PushRequest
+	require.NoError(t, json.Unmarshal(f.router.sent[1].payload, &push))
+	assert.Equal(t, "ghs_bot_push_token", push.Token)
+	require.Len(t, f.ledger.pushes, 1)
+	assert.Equal(t, core.IntegrationActorApp, f.ledger.pushes[0].Actor)
+}
+
+// Whatever stops the bot from minting, the run is refused with the reason: no
+// owner credential is requested, no push command is sent, no ledger row is
+// written, and the node does not crash.
+func TestGitPublishActivity_AppIdentityFailsClosed(t *testing.T) {
+	for name, err := range map[string]error{
+		"no app key":        &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "the control plane has no GitHub App key"},
+		"app not installed": &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "the Reliant GitHub App is not installed on acme/app"},
+		"permissions":       &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "the Reliant GitHub App has not been granted the permissions"},
+		"transient":         &httpaction.CredentialError{Code: httpaction.CodeUnavailable, Message: "could not get a GitHub App token right now; try again"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newPublishActivityFixture(t)
+			src := &pushCredSource{botErr: err}
+			out, runErr := f.runAs(t, httpaction.IdentityApp, src)
+			require.NoError(t, runErr, "a refusal is an output, not a crashed node")
+			assert.True(t, out.Refused)
+			assert.False(t, out.Pushed)
+			assert.Contains(t, out.Refusal, err.(*httpaction.CredentialError).Message)
+			assert.False(t, src.ownerAsked(), "the owner's credential was never requested")
+			assert.NotContains(t, f.router.commands(), gitpublish.CommandPush, "nothing was pushed")
+			assert.Empty(t, f.ledger.pushes)
+		})
+	}
+}
+
+// An unrecognised identity is refused rather than read as the owner.
+func TestGitPublishActivity_UnknownIdentityFailsClosed(t *testing.T) {
+	f := newPublishActivityFixture(t)
+	src := &pushCredSource{}
+	out, err := f.runAs(t, "admin", src)
+	require.NoError(t, err)
+	assert.True(t, out.Refused)
+	assert.Empty(t, src.reqs, "no credential of any identity was requested")
+	assert.NotContains(t, f.router.commands(), gitpublish.CommandPush)
+}
+
+// An owner run is untouched: the owner's token, recorded as the owner's.
+func TestGitPublishActivity_OwnerIdentityStillPushesAsTheOwner(t *testing.T) {
+	f := newPublishActivityFixture(t)
+	src := &pushCredSource{}
+	out, err := f.runAs(t, "", src)
+	require.NoError(t, err)
+	assert.True(t, out.Pushed, out.Refusal)
+	require.Len(t, src.reqs, 1)
+	assert.Empty(t, src.reqs[0].ActingIdentity)
+	var push gitpublish.PushRequest
+	require.NoError(t, json.Unmarshal(f.router.sent[1].payload, &push))
+	assert.Equal(t, "ghu_owner_push_token", push.Token)
+	assert.Equal(t, core.IntegrationActorOwner, f.ledger.pushes[0].Actor)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"regexp"
 	"sync"
@@ -102,10 +101,10 @@ func (s *source) Credential(ctx context.Context, req httpaction.CredentialReques
 	if !req.ServerPlaced {
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: connections.ErrDaemonPlacement.Error(), Err: connections.ErrDaemonPlacement}
 	}
-	// An automation that chose to act as the App's bot writes as the bot, and
-	// is asked before any saved connection: a saved GitHub connection is the
-	// OWNER's, and letting it win would put the owner's own name on a write
-	// the activation said the bot makes.
+	// An automation that chose to act as the App's bot writes as the bot or
+	// not at all, and is asked before any saved connection: a saved GitHub
+	// connection is the OWNER's, and letting it win would put the owner's own
+	// name on a write the activation said the bot makes.
 	if cred, handled, err := s.actingCredential(ctx, req); handled {
 		return cred, err
 	}
@@ -127,27 +126,38 @@ func (s *source) Credential(ctx context.Context, req httpaction.CredentialReques
 }
 
 // actingCredential resolves a call that asked to act as a non-owner identity.
-// handled is false when the call is the owner's (the common case), and when the
-// identity is unavailable on this deployment, in which case the owner's own
-// resolution proceeds: a deployment with no App key keeps working exactly as
-// before, and says so once per call in its log rather than failing a run.
+// handled is false only when the call is the owner's: no acting identity, or a
+// read, which authors nothing and keeps the owner's own access.
 //
-// Anything else is handled, including every failure: a write the activation
-// said the bot makes is never quietly made as the owner because minting failed
-// (the owner cannot push, the App is not installed, GitHub is down).
+// Every write that asked for the bot is handled, and every failure is final. A
+// write the activation said the bot makes is never made as the owner (or with
+// a saved connection of the owner's) because the bot could not be had: the App
+// key is missing, the integration has no bot, the owner cannot push, the App is
+// not installed, minting failed, GitHub is down. The caller gets an error that
+// says what to fix.
 func (s *source) actingCredential(ctx context.Context, req httpaction.CredentialRequest) (cred httpaction.Credential, handled bool, err error) {
-	if req.ActingIdentity != httpaction.IdentityApp || !req.Mutates || req.ConnectionID != "" {
-		// A read authors nothing, and a call that names a connection chose its
-		// own credential: neither is the bot's to make.
+	if req.ActingIdentity == "" || !req.Mutates {
 		return nil, false, nil
+	}
+	if req.ActingIdentity != httpaction.IdentityApp {
+		return nil, true, &httpaction.CredentialError{Code: httpaction.CodeInvalidArgument,
+			Message: fmt.Sprintf("unknown acting identity %q: a write is made as the owner or as the Reliant bot", req.ActingIdentity)}
+	}
+	if req.ConnectionID != "" {
+		// A saved connection is somebody's own credential. Using it would write
+		// as that person, and quietly ignoring it would hide a contradictory
+		// configuration, so the contradiction is the error. Reads may still
+		// name a connection.
+		return nil, true, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
+			Message: "this automation writes as the Reliant bot, so a write cannot name a saved connection: remove the connection from this step, or set the automation to write as its owner"}
 	}
 	broker, ok := s.delegatedBroker(req.Connection)
 	if !ok {
-		return nil, false, nil
+		return nil, true, noBotIdentity(req)
 	}
 	acting, ok := broker.(ActingBroker)
 	if !ok {
-		return nil, false, nil
+		return nil, true, noBotIdentity(req)
 	}
 	owner, err := s.resolver.OwnerOf(ctx, req.RunID)
 	if err != nil {
@@ -159,18 +169,21 @@ func (s *source) actingCredential(ctx context.Context, req httpaction.Credential
 	}
 	cred, err = acting.ActingCredential(ctx, owner, req)
 	if err == nil {
+		if cred == nil {
+			return nil, true, &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "the Reliant bot resolved to no credential"}
+		}
 		return cred, true, nil
 	}
 	var ce *httpaction.CredentialError
 	if errors.As(err, &ce) {
-		if ce.Code == httpaction.CodeIdentityUnavailable {
-			slog.Warn("the automation asked to act as the GitHub App's bot, but this deployment cannot mint its token; acting as the owner instead",
-				"integration", req.IntegrationID, "automation", req.Automation, "reason", ce.Message)
-			return nil, false, nil
-		}
 		return nil, true, err
 	}
 	return nil, true, &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "the delegated authority failed", Err: err}
+}
+
+func noBotIdentity(req httpaction.CredentialRequest) error {
+	return &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
+		Message: fmt.Sprintf("this automation writes as the Reliant bot, which %s does not have: set the automation to write as its owner to use %s", req.IntegrationID, req.IntegrationID)}
 }
 
 // UsableIntegrations implements Service.

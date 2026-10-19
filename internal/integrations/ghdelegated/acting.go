@@ -24,8 +24,8 @@ func (b *broker) ActingCredential(ctx context.Context, ownerUserID string, req h
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "the run has no owner to act for"}
 	}
 	if b.installations == nil {
-		return nil, &httpaction.CredentialError{Code: httpaction.CodeIdentityUnavailable,
-			Message: "this deployment has no GitHub App to act as"}
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
+			Message: "this automation writes as the Reliant bot, but this deployment has no GitHub App to act as: set the automation to write as its owner"}
 	}
 	owner, repo, err := targetRepo(req.Params)
 	if err != nil {
@@ -41,10 +41,10 @@ func (b *broker) ActingCredential(ctx context.Context, ownerUserID string, req h
 	case err == nil:
 	case errors.Is(err, gitcredentialclient.ErrAppNotConfigured):
 		// The control plane holds no App key (a dev or e2e stack, or a deploy
-		// before the key is seeded). The caller falls back to the owner, which
-		// is the pre-existing behaviour, and logs why.
-		return nil, &httpaction.CredentialError{Code: httpaction.CodeIdentityUnavailable,
-			Message: "the control plane holds no GitHub App key", Err: err}
+		// before the key is seeded). The write fails; it is never made as the
+		// owner instead.
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
+			Message: "this automation writes as the Reliant bot, but the control plane has no GitHub App key to mint its token: an administrator must configure the App, or set the automation to write as its owner", Err: err}
 	case errors.Is(err, gitcredentialclient.ErrOwnerCannotPush):
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
 			Message: fmt.Sprintf("this automation acts as the Reliant GitHub App, which writes only where its owner can push, and the owner cannot push to %s/%s", owner, repo), Err: err}
@@ -108,6 +108,8 @@ var actionPermissions = map[string]map[string]string{
 	"pr.review_comment.reply": {"pull_requests": "write"},
 	"pr.update":               {"pull_requests": "write"},
 	"pr.create":               {"pull_requests": "write", "contents": "read"},
+	// git_publish's push (writeledger.GitPushAction): a branch is contents.
+	"git.push": {"contents": "write"},
 }
 
 // permissionsFor looks an action up in actionPermissions.
