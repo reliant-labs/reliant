@@ -3546,6 +3546,12 @@ which variables a project uses, so pick the one you want:
   # connect to whatever this project calls its database
   psql "$(cli forge env config dev --json | jq -r '.workloads[].env.DATABASE_URL // empty' | head -1)"
 
+A declared secret the env's secret store cannot supply is reported, not
+fatal: its variable is left out, it is listed on stderr (and under
+"missing_secrets" in --json), and the command still exits 0. Running a process
+without it is the error, so cli forge env exec and env up refuse. Pass --strict to
+fail here too.
+
 ```
 reliant forge env config <env> [flags]
 ```
@@ -3555,6 +3561,7 @@ reliant forge env config <env> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--json` | `bool` | - | Emit machine-readable JSON |
+| `--strict` | `bool` | - | Fail (exit 1) when a declared secret is missing from the secret store, as env exec does, instead of reporting it |
 | `--workload` | `string` | - | Only this workload (service, job, frontend, operator or cronjob) |
 
 ---
