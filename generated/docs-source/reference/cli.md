@@ -149,6 +149,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env status`](#reliant-forge-env-status) | The one read view of an environment: bound release, rollout, health, verify, gates, ledger |
 | [`reliant forge env stop`](#reliant-forge-env-stop) | Suspend a HOSTED environment's workloads on the control plane (not local processes) |
 | [`reliant forge env up`](#reliant-forge-env-up) | Bring the whole dev loop up on this machine: build + deploy + host + frontend |
+| [`reliant forge frontend`](#reliant-forge-frontend) | Operate on built frontends |
+| [`reliant forge frontend sourcemaps`](#reliant-forge-frontend-sourcemaps) | File a frontend's source maps so its browser errors can be symbolicated |
+| [`reliant forge frontend sourcemaps push`](#reliant-forge-frontend-sourcemaps-push) | File the source maps of a built directory forge did not build |
 | [`reliant forge gate`](#reliant-forge-gate) | Record and read check evidence against a promotion |
 | [`reliant forge gate list`](#reliant-forge-gate-list) | Read every check result attached to a promotion |
 | [`reliant forge gate record`](#reliant-forge-gate-record) | Record one check's result against a promotion |
@@ -838,6 +841,7 @@ reliant forge
 | [`doctor`](#reliant-forge-doctor) | Check that the PROJECT is well-formed (deployability, payload caps, tooling, cluster capability) |
 | [`domain`](#reliant-forge-domain) | Manage custom domains and what they serve |
 | [`env`](#reliant-forge-env) | Manage deploy environments: bring stacks up/down, deploy releases, and inspect |
+| [`frontend`](#reliant-forge-frontend) | Operate on built frontends |
 | [`gate`](#reliant-forge-gate) | Record and read check evidence against a promotion |
 | [`generate`](#reliant-forge-generate) | Generate code from proto files |
 | [`kcl`](#reliant-forge-kcl) | Evaluate this project's KCL directly |
@@ -5026,6 +5030,93 @@ reliant forge env up <environment> [-- <dev-server flags>] [flags]
 | `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with 'forge env options <env>'. |
 | `--target` | `stringArray` | `[]` | Scope the whole run — build, deploy, host and frontend phases — to specific services/operators/frontends by name (repeatable). Targeting only host/frontend apps builds no images. An unknown name is an error listing the env's app names. Default: everything. |
 | `--watch` | `bool` | - | Force the hold-and-teardown lifecycle (block until Ctrl-C, then cascade-stop) even without a TTY. Default without --watch/--background: hold when stdin is a TTY, otherwise return after start (non-TTY agent/CI path). |
+
+---
+
+### reliant forge frontend
+
+Operate on built frontends
+
+```
+reliant forge frontend
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`sourcemaps`](#reliant-forge-frontend-sourcemaps) | File a frontend's source maps so its browser errors can be symbolicated |
+
+---
+
+#### reliant forge frontend sourcemaps
+
+File a frontend's source maps so its browser errors can be symbolicated
+
+```
+reliant forge frontend sourcemaps
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`push`](#reliant-forge-frontend-sourcemaps-push) | File the source maps of a built directory forge did not build |
+
+---
+
+#### reliant forge frontend sourcemaps push
+
+File the source maps of a built directory forge did not build
+
+Extract the source maps from <dist> and file them for a frontend whose build
+forge did not run (the Electron renderer, built by CI). Everything forge does for
+a frontend it builds itself, it does here: the maps are moved out of a COPY of
+<dist> (it is not modified), each bundle's sourceMappingURL trailer is dropped
+from that copy, a manifest.json is written, and the result is pushed. The
+bundle you ship is yours to strip; this command does not touch it.
+
+WHERE THEY GO is decided by --env, as for every command that talks to a control
+plane. When the env's observability is hosted, the maps are pushed to the
+platform registry:
+
+  <registry>/<org>/<project>/<frontend>-sourcemaps:<build id>
+
+and otherwise they are kept in .forge/sourcemaps/<env>/<frontend>/<build id>/
+and nothing is uploaded. The artifact format is documented in
+internal/deploytarget/sourcemaps_oci.go.
+
+THE BUILD ID must be the version the bundle reports to telemetry
+(service.version): pass the same value the build baked into the bundle. Maps
+filed under any other id are never looked up.
+
+--base-path is where <dist> is mounted in the served site. A file's path in the
+manifest is its URL path with the origin removed, so a renderer served from
+/app has /app/ in front of every path.
+
+The credential is the env's control-plane token (its token_env), the same one
+`forge env build --push` uses. Exit code is non-zero if nothing was
+extracted: a build that was meant to emit maps and did not is a failure here,
+not a no-op.
+
+Examples:
+  forge frontend sourcemaps push web/dist --frontend desktop --build-id 3f9c0e1a2b4d --env prod
+  forge frontend sourcemaps push web/dist --frontend desktop --build-id "$VERSION" --env prod --dry-run
+
+```
+reliant forge frontend sourcemaps push <dist> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--base-path` | `string` | - | Where <dist> is mounted in the served site (default: the root) |
+| `--build-id` | `string` | - | The build id the bundle reports as service.version (required) |
+| `--dry-run` | `bool` | - | Extract and report; push and keep nothing |
+| `--env` | `string` | - | The env whose control plane and observability decide where the maps go (required) |
+| `--frontend` | `string` | - | The frontend the maps belong to (required) |
+| `--project` | `string` | - | The forge project the frontend belongs to (default: forge.yaml's name) |
 
 ---
 
