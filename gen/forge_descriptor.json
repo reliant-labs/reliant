@@ -121,6 +121,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.AccountDeletionWalletQuote": [
           {
@@ -449,6 +450,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.Approval": [
           {
@@ -840,6 +842,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.AttachmentInfo": [
           {
@@ -1125,6 +1128,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.BackgroundProcess": [
           {
@@ -1790,6 +1794,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CompleteOAuthRequest": [
           {
@@ -2626,6 +2631,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.AvailableModelInfo": [
           {
@@ -5012,6 +5018,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.AdoptChatRequest": [
           {
@@ -7242,6 +7249,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.AuthorizeClientRequest": [
           {
@@ -7689,6 +7697,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CloseOAuthHelperRequest": [],
         "reliant.v1.CloseOAuthHelperResponse": [
@@ -8097,6 +8106,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.ChangedFile": [
           {
@@ -9700,6 +9710,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.ClearMachineCachesRequest": [
           {
@@ -10878,6 +10889,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CopyFileRequest": [
           {
@@ -12125,6 +12137,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.ForgeDeployRefusal": [
           {
@@ -13057,6 +13070,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CancelRunRequest": [
           {
@@ -14088,6 +14102,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CreateTriggerRequest": [
           {
@@ -15273,6 +15288,7 @@
         ],
         "RestoreInboxItemResponse": null
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CleanupStorageRequest": [
           {
@@ -16228,6 +16244,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.ConfigField": [
           {
@@ -16792,6 +16809,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.Attachment": [
           {
@@ -17279,6 +17297,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CreateModelEndpointRequest": [
           {
@@ -17883,6 +17902,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CommandsByType": [
           {
@@ -18568,6 +18588,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.AddTaskDependencyRequest": [
           {
@@ -19179,6 +19200,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CreatePlanRequest": [
           {
@@ -19948,6 +19970,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CreatePresetRequest": [
           {
@@ -21256,6 +21279,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CreateProjectFromRepoRequest": [
           {
@@ -22355,6 +22379,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.AddProviderAPIKeyRequest": [
           {
@@ -22746,6 +22771,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.GetPendingQuestionRequest": [
           {
@@ -23036,6 +23062,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.AddRepoRequest": [
           {
@@ -23500,6 +23527,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CreateScenarioRequest": [
           {
@@ -25375,6 +25403,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.BatchUpsertSettingsRequest": [
           {
@@ -27097,6 +27126,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.Attachment": [
           {
@@ -28361,6 +28391,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.DevAuthClearRequest": [],
         "reliant.v1.DevAuthClearResponse": [
@@ -28648,6 +28679,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CloseTerminalSessionRequest": [
           {
@@ -29069,6 +29101,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CreateTokenRequest": [
           {
@@ -29388,6 +29421,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.CancelToolCallRequest": [
           {
@@ -30188,6 +30222,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.ActionArgs": [
           {
@@ -34016,6 +34051,7 @@
           }
         ]
       },
+      "Audience": "user",
       "Schemas": {
         "reliant.v1.ArchiveWorktreeRequest": [
           {
