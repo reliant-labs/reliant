@@ -45,9 +45,11 @@ var connectWebProtocolHeaders = []string{"Content-Type", "Connect-Protocol-Versi
 // "<path under web/src>:<expression>".
 var dynamicRequestHeaders = map[string][]string{
 	// tracingInterceptor copies whatever the global OTel propagator injects.
-	// lib/otel.ts installs W3CTraceContextPropagator, which writes exactly
-	// these two; requireOnlyTraceContextPropagator keeps that assumption honest.
-	"api/transport.ts:key": {"traceparent", "tracestate"},
+	// Nothing in web/src installs one, so the HyperDX SDK's provider.register()
+	// leaves the OTel default in place: W3C trace-context plus W3C baggage,
+	// which write exactly these three. requireDefaultPropagator keeps that
+	// assumption honest.
+	"api/transport.ts:key": {"traceparent", "tracestate", "baggage"},
 }
 
 var (
@@ -63,7 +65,7 @@ var (
 
 func TestCORSAllowsEveryWebClientRequestHeader(t *testing.T) {
 	webSrc := webSourceDir(t)
-	requireOnlyTraceContextPropagator(t, webSrc)
+	requireDefaultPropagator(t, webSrc)
 
 	sent := scanWebHeaderNames(t, webSrc, requestHeaderSetRe, dynamicRequestHeaders)
 	// Guard the scanner itself: a regex that silently matches nothing would
@@ -215,20 +217,44 @@ func resolveHeaderName(fileText, expr string) ([]string, bool) {
 	return nil, false
 }
 
-// requireOnlyTraceContextPropagator pins the assumption behind
-// dynamicRequestHeaders["api/transport.ts:key"]: the only propagator is W3C
-// trace-context. A baggage or composite propagator would inject headers this
-// test does not know to check.
-func requireOnlyTraceContextPropagator(t *testing.T, webSrc string) {
+// requireDefaultPropagator pins the assumption behind
+// dynamicRequestHeaders["api/transport.ts:key"]: web/src never installs its own
+// propagator, so the SDK's default (W3C trace-context and baggage) is the one
+// that injects headers. A custom or composite propagator added here would
+// inject headers this test does not know to check.
+func requireDefaultPropagator(t *testing.T, webSrc string) {
 	t.Helper()
-	src, err := os.ReadFile(filepath.Join(webSrc, "lib", "otel.ts"))
+	var installs []string
+	err := filepath.WalkDir(webSrc, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case "gen", "__tests__", "__mocks__", "node_modules":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !isHandWrittenTS(d.Name()) {
+			return nil
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(src), "setGlobalPropagator") {
+			rel, _ := filepath.Rel(webSrc, path)
+			installs = append(installs, filepath.ToSlash(rel))
+		}
+		return nil
+	})
 	if err != nil {
-		t.Fatalf("reading lib/otel.ts: %v", err)
+		t.Fatalf("scanning web/src for propagators: %v", err)
 	}
-	calls := regexp.MustCompile(`setGlobalPropagator\(([^)]*\))\)`).FindAllStringSubmatch(string(src), -1)
-	if len(calls) != 1 || strings.TrimSpace(calls[0][1]) != "new W3CTraceContextPropagator()" {
-		t.Fatalf("lib/otel.ts no longer installs exactly W3CTraceContextPropagator (found %v): "+
-			"update dynamicRequestHeaders[\"api/transport.ts:key\"] with every header the new propagator injects", calls)
+	if len(installs) != 0 {
+		t.Fatalf("%v installs a global propagator; update dynamicRequestHeaders[\"api/transport.ts:key\"] "+
+			"with every header it injects", installs)
 	}
 }
 
