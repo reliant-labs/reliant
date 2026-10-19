@@ -274,7 +274,13 @@ type CleanupMetadata struct {
 	SizeBytes  int64  `protobuf:"varint,5,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	// Local refs holding work saved before the directory was removed. Kept until
 	// a restore has applied them.
-	SnapshotRefs  []string `protobuf:"bytes,6,rep,name=snapshot_refs,json=snapshotRefs,proto3" json:"snapshot_refs,omitempty"`
+	SnapshotRefs []string `protobuf:"bytes,6,rep,name=snapshot_refs,json=snapshotRefs,proto3" json:"snapshot_refs,omitempty"`
+	// Regenerable files (node_modules, build output, tool caches, tmp/) the
+	// machine deleted from a directory it kept for its work, relative to the
+	// workspace root, and at least how many bytes that freed. Restoring the
+	// workspace needs its install/generate step run again.
+	StrippedPaths []string `protobuf:"bytes,7,rep,name=stripped_paths,json=strippedPaths,proto3" json:"stripped_paths,omitempty"`
+	StrippedBytes int64    `protobuf:"varint,8,opt,name=stripped_bytes,json=strippedBytes,proto3" json:"stripped_bytes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -349,6 +355,20 @@ func (x *CleanupMetadata) GetSnapshotRefs() []string {
 		return x.SnapshotRefs
 	}
 	return nil
+}
+
+func (x *CleanupMetadata) GetStrippedPaths() []string {
+	if x != nil {
+		return x.StrippedPaths
+	}
+	return nil
+}
+
+func (x *CleanupMetadata) GetStrippedBytes() int64 {
+	if x != nil {
+		return x.StrippedBytes
+	}
+	return 0
 }
 
 // DiscoveredWorktree is a linked git worktree of one of the project's repos
@@ -3679,7 +3699,7 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\n" +
 	"\b_chat_idB\r\n" +
 	"\v_deleted_atB\x13\n" +
-	"\x11_cleanup_metadata\"\xeb\x01\n" +
+	"\x11_cleanup_metadata\"\xb9\x02\n" +
 	"\x0fCleanupMetadata\x12+\n" +
 	"\x11directory_deleted\x18\x01 \x01(\bR\x10directoryDeleted\x12%\n" +
 	"\x0ebranch_deleted\x18\x02 \x01(\bR\rbranchDeleted\x12\x1f\n" +
@@ -3689,7 +3709,9 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"heldDetail\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x05 \x01(\x03R\tsizeBytes\x12#\n" +
-	"\rsnapshot_refs\x18\x06 \x03(\tR\fsnapshotRefs\"\x97\x02\n" +
+	"\rsnapshot_refs\x18\x06 \x03(\tR\fsnapshotRefs\x12%\n" +
+	"\x0estripped_paths\x18\a \x03(\tR\rstrippedPaths\x12%\n" +
+	"\x0estripped_bytes\x18\b \x01(\x03R\rstrippedBytes\"\x97\x02\n" +
 	"\x12DiscoveredWorktree\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +

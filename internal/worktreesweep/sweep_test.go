@@ -282,3 +282,22 @@ func TestCleanup_NeverActsOnAnotherUsersWorktree(t *testing.T) {
 	}
 	assert.True(t, exists(path))
 }
+
+func TestSweep_RecordsRegenerableFilesShedFromAHeldWorktree(t *testing.T) {
+	e := newEnv(t)
+	wt, path := e.worktree(t, "shed", true)
+	// An untracked .gitignore is both the reason it is held (dirty) and what
+	// makes node_modules ignored, so regenerable.
+	require.NoError(t, os.WriteFile(filepath.Join(path, ".gitignore"), []byte("node_modules/\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(path, "node_modules", "pkg"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(path, "node_modules", "pkg", "index.js"), []byte("module.exports = 1\n"), 0o644))
+	require.NoError(t, e.sweeper.Sweep(e.ctx))
+
+	assert.True(t, exists(filepath.Join(path, ".gitignore")), "the work is kept")
+	assert.False(t, exists(filepath.Join(path, "node_modules")), "regenerable files are shed")
+	meta := e.get(t, wt.ID).CleanupMetadata
+	require.NotNil(t, meta)
+	assert.Equal(t, "dirty", meta.HeldReason)
+	assert.Equal(t, []string{"node_modules"}, meta.StrippedPaths)
+	assert.Positive(t, meta.StrippedBytes)
+}

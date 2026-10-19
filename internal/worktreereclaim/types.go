@@ -185,7 +185,12 @@ type Result struct {
 	SnapshotRefs []string `json:"snapshot_refs,omitempty"`
 	// Trees are the saved trees by checkout Rel (see Worktree.Trees).
 	Trees map[string]string `json:"trees,omitempty"`
-	Error string            `json:"error,omitempty"`
+	// Stripped names the regenerable paths (node_modules, build output, tool
+	// caches) deleted from a worktree that is kept for its work, relative to
+	// the workspace root; StrippedBytes is at least what that freed.
+	Stripped      []string `json:"stripped,omitempty"`
+	StrippedBytes int64    `json:"stripped_bytes,omitempty"`
+	Error         string   `json:"error,omitempty"`
 }
 
 // Request is the payload of worktree.reconcile and worktree.snapshot_remove.

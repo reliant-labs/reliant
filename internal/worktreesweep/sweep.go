@@ -768,6 +768,7 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 			return
 		}
 		s.recordHold(ctx, wt, r.Reason, r.Detail, r.SizeBytes, r.SnapshotRefs)
+		s.recordStripped(ctx, wt, r)
 	}
 }
 
@@ -827,6 +828,27 @@ func (s *Sweeper) archiveFinished(ctx context.Context, userID string, wt *core.W
 	if a.notify != nil {
 		a.notify(ctx, userID, wt.ProjectID, wt.ID)
 	}
+}
+
+// maxStrippedPaths bounds the stripped paths a row remembers.
+const maxStrippedPaths = 20
+
+// recordStripped adds what the daemon shed from a held directory to the row.
+func (s *Sweeper) recordStripped(ctx context.Context, wt *core.Worktree, r worktreereclaim.Result) {
+	if r.StrippedBytes == 0 && len(r.Stripped) == 0 {
+		return
+	}
+	s.mergeMetaIf(ctx, wt, func(m *core.CleanupMetadata, archived bool) bool {
+		if !archived {
+			return false
+		}
+		m.StrippedBytes += r.StrippedBytes
+		m.StrippedPaths = union(m.StrippedPaths, r.Stripped)
+		if len(m.StrippedPaths) > maxStrippedPaths {
+			m.StrippedPaths = m.StrippedPaths[:maxStrippedPaths]
+		}
+		return true
+	})
 }
 
 // deleteBranchIfAsked deletes the worktree's branch once its directory is gone,

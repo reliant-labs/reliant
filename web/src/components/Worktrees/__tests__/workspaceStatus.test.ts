@@ -106,4 +106,22 @@ describe("cleanupSummary", () => {
       ),
     ).toBe("Files removed, branch deleted");
   });
+
+  it("says when rebuildable files were shed from kept files", () => {
+    expect(
+      cleanupSummary(
+        worktree({
+          cleanup_metadata: {
+            directory_deleted: false,
+            branch_deleted: false,
+            held_reason: "dirty",
+            stripped_paths: ["web/node_modules"],
+            stripped_bytes: 1_400_000_000,
+          },
+        }),
+      ),
+    ).toBe(
+      "Files kept (uncommitted changes), 1.4 GB of rebuildable files removed (reinstall after restoring)",
+    );
+  });
 });

@@ -132,6 +132,13 @@ type CleanupMetadata struct {
 	// directory was removed by a confirmed clean-up.
 	SnapshotRefs []string   `json:"snapshot_refs,omitempty"`
 	CheckedAt    *time.Time `json:"checked_at,omitempty"`
+	// StrippedPaths and StrippedBytes record the regenerable files
+	// (node_modules, build output, tool caches) the machine deleted from a
+	// held directory while keeping its work; restoring it needs the install
+	// or generate step run again. StrippedBytes is a lower bound, summed over
+	// every pass.
+	StrippedPaths []string `json:"stripped_paths,omitempty"`
+	StrippedBytes int64    `json:"stripped_bytes,omitempty"`
 }
 
 // CleaningNow reports whether a clean-up is genuinely running: flagged, and its

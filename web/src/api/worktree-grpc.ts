@@ -51,6 +51,13 @@ export interface CleanupMetadata {
   held_detail?: string;
   /** Local git refs holding work saved before the files were removed. */
   snapshot_refs?: string[];
+  /**
+   * Regenerable files (node_modules, build output, tool caches) deleted from
+   * kept files, and at least how many bytes that freed. Restoring the
+   * workspace needs its install/generate step again.
+   */
+  stripped_paths?: string[];
+  stripped_bytes?: number;
 }
 
 export interface Worktree {
@@ -196,6 +203,8 @@ function protoCleanupMetadataToFrontend(proto: ProtoCleanupMetadata): CleanupMet
     held_reason: proto.heldReason || undefined,
     held_detail: proto.heldDetail || undefined,
     snapshot_refs: proto.snapshotRefs.length > 0 ? [...proto.snapshotRefs] : undefined,
+    stripped_paths: proto.strippedPaths.length > 0 ? [...proto.strippedPaths] : undefined,
+    stripped_bytes: proto.strippedBytes > 0n ? Number(proto.strippedBytes) : undefined,
   };
 }
 

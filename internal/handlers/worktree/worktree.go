@@ -243,6 +243,8 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 			HeldDetail:       w.CleanupMetadata.HeldDetail,
 			SizeBytes:        w.CleanupMetadata.SizeBytes,
 			SnapshotRefs:     w.CleanupMetadata.SnapshotRefs,
+			StrippedPaths:    w.CleanupMetadata.StrippedPaths,
+			StrippedBytes:    w.CleanupMetadata.StrippedBytes,
 		}
 	}
 
@@ -1015,8 +1017,12 @@ func (s *Service) UnarchiveWorktree(
 	// Unarchive associated chats
 	s.unarchiveWorktreeChats(ctx, userID, worktree)
 
+	msg := "Worktree and associated chats unarchived successfully"
+	if m := worktree.CleanupMetadata; m != nil && m.StrippedBytes > 0 {
+		msg += "; rebuildable files (node_modules, build output, tool caches) were removed while it was archived, so run its install/generate step before building"
+	}
 	return connect.NewResponse(&reliantv1.UnarchiveWorktreeResponse{
-		Message: "Worktree and associated chats unarchived successfully",
+		Message: msg,
 	}), nil
 }
 

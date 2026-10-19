@@ -34224,6 +34224,15 @@
             "name": "snapshot_refs",
             "kind": "string",
             "repeated": true
+          },
+          {
+            "name": "stripped_paths",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "stripped_bytes",
+            "kind": "int64"
           }
         ],
         "reliant.v1.CommitWorktreeRequest": [
@@ -35571,5 +35580,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "d5435590e31fd1f0cbbb1862b5ca472199675a0cfca3f3f42b8976a286519aff"
+  "source_hash": "f270b063fda74cb9d1b5ec912eda6df64abe456205f2dfd727867a7c76f3e1ab"
 }

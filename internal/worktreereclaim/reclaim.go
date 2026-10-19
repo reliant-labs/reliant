@@ -431,9 +431,15 @@ func adminDir(checkout string) string {
 // structure checks everything that makes a workspace not the daemon's to
 // remove, whatever its git state: another repository inside it, files outside
 // its checkouts, a lock or checkout that is not this row's, ignored data.
-// It returns the checkouts when the workspace is structurally removable.
-func (r *Reclaimer) structure(ctx context.Context, w Worktree, phase2 bool) ([]string, *Result) {
+// It returns the checkouts when the workspace is structurally removable, and
+// the scan either way.
+func (r *Reclaimer) structure(ctx context.Context, w Worktree, phase2 bool) ([]string, scan, *Result) {
 	sc := scanWorkspace(ctx, w.Path)
+	checkouts, hold := structureOf(ctx, w, sc, phase2)
+	return checkouts, sc, hold
+}
+
+func structureOf(ctx context.Context, w Worktree, sc scan, phase2 bool) ([]string, *Result) {
 	if sc.Truncated {
 		res := held(w, ReasonUnverified, "the workspace is too large to inspect completely")
 		return nil, &res
@@ -500,8 +506,9 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 	if w.Remove {
 		return r.autoRemove(ctx, w)
 	}
-	checkouts, hold := r.structure(ctx, w, false)
+	checkouts, sc, hold := r.structure(ctx, w, false)
 	if hold != nil {
+		r.shed(ctx, w, sc, hold)
 		r.measure(ctx, hold, w.Path)
 		return *hold
 	}
@@ -522,6 +529,7 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 	}
 	if v := classifyAll(ctx, w, checkouts, r.probe()); !v.safe() {
 		res := held(w, v.Reason, v.Detail)
+		r.shed(ctx, w, sc, &res)
 		r.measure(ctx, &res, w.Path)
 		return res
 	}
@@ -541,7 +549,7 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 }
 
 func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
-	checkouts, hold := r.structure(ctx, w, true)
+	checkouts, _, hold := r.structure(ctx, w, true)
 	if hold != nil {
 		return *hold
 	}
@@ -615,7 +623,7 @@ func (r *Reclaimer) confirmedPhase(ctx context.Context, w Worktree) Result {
 	if w.Remove {
 		return r.confirmedRemove(ctx, w)
 	}
-	checkouts, hold := r.structure(ctx, w, false)
+	checkouts, _, hold := r.structure(ctx, w, false)
 	if hold != nil {
 		return *hold
 	}
@@ -679,7 +687,7 @@ func (r *Reclaimer) confirmedPhase(ctx context.Context, w Worktree) Result {
 }
 
 func (r *Reclaimer) confirmedRemove(ctx context.Context, w Worktree) Result {
-	checkouts, hold := r.structure(ctx, w, true)
+	checkouts, _, hold := r.structure(ctx, w, true)
 	if hold != nil {
 		return *hold
 	}
@@ -943,7 +951,7 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 // merged or pushed) passes, with the longer ActiveIdleFloor. Read-only; it
 // takes no claim and removes nothing, and any doubt is false.
 func (r *Reclaimer) finished(ctx context.Context, w Worktree) bool {
-	checkouts, hold := r.structure(ctx, w, false)
+	checkouts, _, hold := r.structure(ctx, w, false)
 	if hold != nil || len(checkouts) == 0 {
 		return false
 	}

@@ -3,6 +3,7 @@ import type { WorktreeGitStatus } from "../../api/worktree-grpc";
 import type { Worktree } from "../../store/worktreeStore";
 import type { Chat } from "../../types/chat";
 import type { StatusTone } from "../forge-ui/status";
+import { formatBytes } from "../../lib/formatBytes";
 
 /** forge-ui Status tones. */
 export type StatusVariant = StatusTone;
@@ -180,7 +181,13 @@ export function cleanupSummary(worktree: Worktree): string {
   if (meta.directory_deleted) files = "Files removed";
   else if (meta.held_reason) files = `Files kept (${heldReasonLabel(meta.held_reason)})`;
   const saved = meta.snapshot_refs?.length ? ", unsaved work kept in a git ref" : "";
-  return meta.branch_deleted ? `${files}${saved}, branch deleted` : `${files}${saved}`;
+  // Shed from kept files only; once the directory is gone it says nothing.
+  const shed =
+    !meta.directory_deleted && meta.stripped_bytes
+      ? `, ${formatBytes(meta.stripped_bytes)} of rebuildable files removed (reinstall after restoring)`
+      : "";
+  const kept = `${files}${shed}${saved}`;
+  return meta.branch_deleted ? `${kept}, branch deleted` : kept;
 }
 
 const HELD_LABEL: Record<string, string> = {

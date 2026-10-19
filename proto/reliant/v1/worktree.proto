@@ -124,6 +124,12 @@ message CleanupMetadata {
   // Local refs holding work saved before the directory was removed. Kept until
   // a restore has applied them.
   repeated string snapshot_refs = 6;
+  // Regenerable files (node_modules, build output, tool caches, tmp/) the
+  // machine deleted from a directory it kept for its work, relative to the
+  // workspace root, and at least how many bytes that freed. Restoring the
+  // workspace needs its install/generate step run again.
+  repeated string stripped_paths = 7;
+  int64 stripped_bytes = 8;
 }
 
 // DiscoveredWorktree is a linked git worktree of one of the project's repos
