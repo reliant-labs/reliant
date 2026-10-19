@@ -10,7 +10,7 @@ const toastErrorMock = vi.hoisted(() => vi.fn());
 vi.mock("../../api/worktree-grpc", () => ({
   worktreeGrpc: {
     create: createMock,
-    list: listMock,
+    listAll: async (...args: unknown[]) => (await listMock(...args)).worktrees,
   },
 }));
 

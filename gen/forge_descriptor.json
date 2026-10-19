@@ -33772,6 +33772,11 @@
             "Name": "include_archived",
             "ProtoType": "bool",
             "IsOptional": true
+          },
+          {
+            "Name": "page_token",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "ListWorktreesResponse": [
@@ -33784,6 +33789,11 @@
           {
             "Name": "total",
             "ProtoType": "int32",
+            "IsOptional": false
+          },
+          {
+            "Name": "next_page_token",
+            "ProtoType": "string",
             "IsOptional": false
           }
         ],
@@ -34558,6 +34568,11 @@
             "name": "include_archived",
             "kind": "bool",
             "optional": true
+          },
+          {
+            "name": "page_token",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ListWorktreesResponse": [
@@ -34570,6 +34585,10 @@
           {
             "name": "total",
             "kind": "int32"
+          },
+          {
+            "name": "next_page_token",
+            "kind": "string"
           }
         ],
         "reliant.v1.PruneWorktreesRequest": [
@@ -35400,5 +35419,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "ee43cde269bca945a4675ab614a7ed7f57a87f85f6dd305300b84fbada296db0"
+  "source_hash": "08a492debaedc32a5af6d78a8eb15576cde5ff0b708c911a38fe4090ab5736a5"
 }

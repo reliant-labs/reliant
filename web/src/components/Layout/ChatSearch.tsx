@@ -353,7 +353,7 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
     if (chat) {
       if (currentProject?.id) {
         if (chat.worktreeId) {
-          const targetWorktree = worktrees.find((worktree) => worktree.id === chat.worktreeId) ?? null;
+          const targetWorktree = await useWorktreeStore.getState().resolveWorktree(chat.worktreeId);
           if (targetWorktree) {
             await switchWorktreeContext(currentProject.id, targetWorktree);
           }

@@ -30,7 +30,7 @@
  * at without starting or opening a chat in it.
  */
 
-import { Suspense, lazy, useCallback, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
@@ -372,6 +372,7 @@ export function MobileChatList() {
   const worktrees = useWorktreeStore((s) => s.worktrees);
   const sortOrder = useSortOrder();
   const archiveWorktree = useWorktreeStore((s) => s.archiveWorktree);
+  const ensureWorktrees = useWorktreeStore((s) => s.ensureWorktrees);
   const queryClient = useQueryClient();
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -385,6 +386,13 @@ export function MobileChatList() {
     () => buildGroups(chats ?? [], worktrees, sortOrder),
     [chats, worktrees, sortOrder],
   );
+
+  // The store holds a snapshot of the worktree list; fetch by id any workspace
+  // a chat points at that it lacks, so its group gets a real name.
+  useEffect(() => {
+    const missing = groups.filter((g) => !g.hasWorktree && g.worktreeId !== "unknown").map((g) => g.worktreeId);
+    if (missing.length > 0) void ensureWorktrees(missing);
+  }, [groups, ensureWorktrees]);
 
   const toggleGroup = useCallback((worktreeId: string) => {
     setCollapsed((prev) => ({ ...prev, [worktreeId]: !prev[worktreeId] }));

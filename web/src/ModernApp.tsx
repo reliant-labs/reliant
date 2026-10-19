@@ -1369,7 +1369,7 @@ function App() {
         if (!chat) return;
         if (project?.id) {
           if (chat.worktreeId) {
-            const targetWorktree = worktreeStore.worktrees.find((worktree) => worktree.id === chat.worktreeId) ?? null;
+            const targetWorktree = await worktreeStore.resolveWorktree(chat.worktreeId);
             if (targetWorktree) {
               await worktreeStore.switchWorktreeContext(project.id, targetWorktree);
             }
@@ -1464,7 +1464,7 @@ function App() {
           return;
         }
 
-        const target = worktreeStore.worktrees.find((worktree) => worktree.id === targetId);
+        const target = await worktreeStore.resolveWorktree(targetId);
         if (!target) return;
         await worktreeStore.switchWorktreeContext(project.id, target);
       });

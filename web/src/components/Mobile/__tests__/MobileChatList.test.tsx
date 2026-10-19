@@ -45,6 +45,7 @@ vi.mock("../../../store/projectStore", () => ({
 }));
 
 const archiveWorktree = vi.fn();
+const ensureWorktrees = vi.fn(async () => {});
 let worktreesFixture: Array<{
   id: string;
   name: string;
@@ -55,7 +56,7 @@ let worktreesFixture: Array<{
 
 vi.mock("../../../store/worktreeStore", () => ({
   useWorktreeStore: (selector: (s: unknown) => unknown) =>
-    selector({ worktrees: worktreesFixture, archiveWorktree }),
+    selector({ worktrees: worktreesFixture, archiveWorktree, ensureWorktrees }),
 }));
 
 vi.mock("../../../store/mobileDrawerStore", () => ({

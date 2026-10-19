@@ -230,14 +230,21 @@ message CreateWorktreeResponse {
 message ListWorktreesRequest {
   string project_id = 1 [(buf.validate.field).required = true]; // Required
   optional string chat_id = 2;
+  // Page size; 0 means the server default (100).
   int32 limit = 3;
   optional bool include_archived = 4;
+  // Continues a previous response's next_page_token. Opaque. Pages are ordered
+  // main workspace first, then by last_active descending.
+  optional string page_token = 5;
 }
 
-// ListWorktreesResponse returns a list of worktrees
+// ListWorktreesResponse returns a page of worktrees
 message ListWorktreesResponse {
   repeated Worktree worktrees = 1;
+  // Number of worktrees in this page.
   int32 total = 2;
+  // Set when more worktrees follow; pass it as page_token. Empty on the last page.
+  string next_page_token = 3;
 }
 
 // GetWorktreeRequest retrieves a worktree by ID

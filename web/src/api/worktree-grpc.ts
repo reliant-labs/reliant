@@ -244,6 +244,9 @@ function protoFileChangeToFrontend(proto: ProtoFileChange): WorktreeFileChange {
   };
 }
 
+// Safety bound on pagination: 100 pages of 100 is 10,000 worktrees.
+const MAX_WORKTREE_PAGES = 100;
+
 export const worktreeGrpc = {
   // =============================================================================
   // CRUD Operations
@@ -285,23 +288,50 @@ export const worktreeGrpc = {
     return protoToFrontend(response.worktree);
   },
 
-  // List worktrees for a project
+  // List ONE page of worktrees for a project. Pass the returned nextPageToken
+  // back as pageToken to continue; an empty token means the last page. Callers
+  // that need every worktree use listAll.
   async list(
     projectId: string,
-    options?: { chatId?: string; limit?: number; includeArchived?: boolean }
-  ): Promise<{ worktrees: Worktree[]; total: number }> {
+    options?: { chatId?: string; limit?: number; includeArchived?: boolean; pageToken?: string }
+  ): Promise<{ worktrees: Worktree[]; total: number; nextPageToken: string }> {
     const client = grpcClient.worktree();
     const request = create(ListWorktreesRequestSchema, {
       projectId,
       chatId: options?.chatId,
       limit: options?.limit || 100,
       includeArchived: options?.includeArchived ?? false,
+      pageToken: options?.pageToken || undefined,
     });
     const response = await client.listWorktrees(request);
     return {
       worktrees: response.worktrees.map(protoToFrontend),
       total: response.total,
+      nextPageToken: response.nextPageToken,
     };
+  },
+
+  // List EVERY worktree for a project by following next_page_token. A project
+  // can hold far more worktrees than one page, and callers (the sidebar above
+  // all) treat the result as the complete set.
+  async listAll(
+    projectId: string,
+    options?: { includeArchived?: boolean }
+  ): Promise<Worktree[]> {
+    const all: Worktree[] = [];
+    const seen = new Set<string>();
+    let pageToken: string | undefined;
+    for (let page = 0; page < MAX_WORKTREE_PAGES; page++) {
+      const response = await worktreeGrpc.list(projectId, { ...options, pageToken });
+      for (const w of response.worktrees) {
+        if (seen.has(w.id)) continue;
+        seen.add(w.id);
+        all.push(w);
+      }
+      if (!response.nextPageToken) return all;
+      pageToken = response.nextPageToken;
+    }
+    throw new Error(`worktree list did not finish after ${MAX_WORKTREE_PAGES} pages`);
   },
 
   // Get a worktree by ID

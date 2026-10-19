@@ -882,13 +882,17 @@ func (x *CreateWorktreeResponse) GetWorktree() *Worktree {
 
 // ListWorktreesRequest lists worktrees with filters
 type ListWorktreesRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId       string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required
-	ChatId          *string                `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
-	Limit           int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
-	IncludeArchived *bool                  `protobuf:"varint,4,opt,name=include_archived,json=includeArchived,proto3,oneof" json:"include_archived,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required
+	ChatId    *string                `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	// Page size; 0 means the server default (100).
+	Limit           int32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	IncludeArchived *bool `protobuf:"varint,4,opt,name=include_archived,json=includeArchived,proto3,oneof" json:"include_archived,omitempty"`
+	// Continues a previous response's next_page_token. Opaque. Pages are ordered
+	// main workspace first, then by last_active descending.
+	PageToken     *string `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3,oneof" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListWorktreesRequest) Reset() {
@@ -949,11 +953,21 @@ func (x *ListWorktreesRequest) GetIncludeArchived() bool {
 	return false
 }
 
-// ListWorktreesResponse returns a list of worktrees
+func (x *ListWorktreesRequest) GetPageToken() string {
+	if x != nil && x.PageToken != nil {
+		return *x.PageToken
+	}
+	return ""
+}
+
+// ListWorktreesResponse returns a page of worktrees
 type ListWorktreesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Worktrees     []*Worktree            `protobuf:"bytes,1,rep,name=worktrees,proto3" json:"worktrees,omitempty"`
-	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Worktrees []*Worktree            `protobuf:"bytes,1,rep,name=worktrees,proto3" json:"worktrees,omitempty"`
+	// Number of worktrees in this page.
+	Total int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	// Set when more worktrees follow; pass it as page_token. Empty on the last page.
+	NextPageToken string `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1000,6 +1014,13 @@ func (x *ListWorktreesResponse) GetTotal() int32 {
 		return x.Total
 	}
 	return 0
+}
+
+func (x *ListWorktreesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 // GetWorktreeRequest retrieves a worktree by ID
@@ -3721,19 +3742,23 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x13_source_worktree_idB\x12\n" +
 	"\x10_idempotency_key\"J\n" +
 	"\x16CreateWorktreeResponse\x120\n" +
-	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"\xc2\x01\n" +
+	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"\xf5\x01\n" +
 	"\x14ListWorktreesRequest\x12%\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12\x1c\n" +
 	"\achat_id\x18\x02 \x01(\tH\x00R\x06chatId\x88\x01\x01\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12.\n" +
-	"\x10include_archived\x18\x04 \x01(\bH\x01R\x0fincludeArchived\x88\x01\x01B\n" +
+	"\x10include_archived\x18\x04 \x01(\bH\x01R\x0fincludeArchived\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"page_token\x18\x05 \x01(\tH\x02R\tpageToken\x88\x01\x01B\n" +
 	"\n" +
 	"\b_chat_idB\x13\n" +
-	"\x11_include_archived\"a\n" +
+	"\x11_include_archivedB\r\n" +
+	"\v_page_token\"\x89\x01\n" +
 	"\x15ListWorktreesResponse\x122\n" +
 	"\tworktrees\x18\x01 \x03(\v2\x14.reliant.v1.WorktreeR\tworktrees\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"5\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\x12&\n" +
+	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\"5\n" +
 	"\x12GetWorktreeRequest\x12\x1f\n" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
 	"worktreeId\"G\n" +

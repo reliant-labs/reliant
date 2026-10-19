@@ -65,7 +65,7 @@ class FakeWebSocket {
 }
 
 vi.mock("../../../api/worktree-grpc", () => ({
-  worktreeGrpc: { list: vi.fn(), create: vi.fn() },
+  worktreeGrpc: { list: vi.fn(), listAll: vi.fn(), create: vi.fn() },
 }));
 
 vi.mock("../../../api/terminal-grpc", () => ({

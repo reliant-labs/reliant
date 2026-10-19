@@ -347,7 +347,7 @@ WHERE
     AND ($2::text IS NULL OR chat_id = $2::text)
     AND ($3::integer IS NULL OR status = $3::integer)
     AND ($4::boolean OR deleted_at IS NULL)
-ORDER BY (deleted_at IS NOT NULL), last_active DESC
+ORDER BY (deleted_at IS NOT NULL), is_main DESC, last_active DESC, id
 LIMIT $6 OFFSET $5
 `
 

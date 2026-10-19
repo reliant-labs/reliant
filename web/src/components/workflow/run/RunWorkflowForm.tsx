@@ -339,11 +339,11 @@ interface WorktreeFieldProps {
 function WorktreeField({ id, projectId, worktreeId, disabled, onChange }: WorktreeFieldProps) {
   const worktreesQuery = useQuery({
     queryKey: ["run-workflow-form", "worktrees", projectId],
-    queryFn: () => worktreeGrpc.list(projectId),
+    queryFn: () => worktreeGrpc.listAll(projectId),
     enabled: !!projectId,
     staleTime: 30_000,
   });
-  const worktrees = worktreesQuery.data?.worktrees;
+  const worktrees = worktreesQuery.data;
 
   const options = useMemo(() => {
     const listed = (worktrees ?? [])

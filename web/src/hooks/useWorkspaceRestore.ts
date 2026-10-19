@@ -256,7 +256,7 @@ export function useWorkspaceRestore(
             title: chatToRestore.title,
           });
           if (chatToRestore.worktreeId) {
-            const targetWorktree = useWorktreeStore.getState().worktrees.find((worktree) => worktree.id === chatToRestore.worktreeId) ?? null;
+            const targetWorktree = await useWorktreeStore.getState().resolveWorktree(chatToRestore.worktreeId);
             if (targetWorktree) {
               await useWorktreeStore.getState().switchWorktreeContext(currentProject.id, targetWorktree);
             }

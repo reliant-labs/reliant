@@ -24,7 +24,7 @@ WHERE
     AND (sqlc.narg('chat_id')::text IS NULL OR chat_id = sqlc.narg('chat_id')::text)
     AND (sqlc.narg('status')::integer IS NULL OR status = sqlc.narg('status')::integer)
     AND (sqlc.arg('include_archived')::boolean OR deleted_at IS NULL)
-ORDER BY (deleted_at IS NOT NULL), last_active DESC
+ORDER BY (deleted_at IS NOT NULL), is_main DESC, last_active DESC, id
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: UpdateWorktree :exec

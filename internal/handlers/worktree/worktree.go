@@ -3,6 +3,7 @@ package worktree
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -621,18 +622,24 @@ func (s *Service) ListWorktrees(
 	}
 
 	projectID := req.Msg.ProjectId
+	pageSize := defaultListWorktreesPageSize
+	if req.Msg.Limit > 0 {
+		pageSize = int(req.Msg.Limit)
+	}
+	offset, err := decodeWorktreePageToken(req.Msg.GetPageToken())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid page_token"))
+	}
 	filters := db.WorktreeFilters{
 		ProjectID:       &projectID,
 		IncludeArchived: req.Msg.GetIncludeArchived(),
-		Limit:           100,
+		// One extra row tells us whether another page follows.
+		Limit:  pageSize + 1,
+		Offset: offset,
 	}
 
 	if req.Msg.ChatId != nil && *req.Msg.ChatId != "" {
 		filters.ChatID = req.Msg.ChatId
-	}
-
-	if req.Msg.Limit > 0 {
-		filters.Limit = int(req.Msg.Limit)
 	}
 
 	worktrees, err := s.deps.Repo.ListWorktrees(ctx, filters)
@@ -641,9 +648,15 @@ func (s *Service) ListWorktrees(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list worktrees"))
 	}
 
+	nextPageToken := ""
+	if len(worktrees) > pageSize {
+		worktrees = worktrees[:pageSize]
+		nextPageToken = encodeWorktreePageToken(offset + pageSize)
+	}
+
 	// Self-heal invariant: every project should have a main worktree.
 	// This also repairs older projects created while Postgres parity bugs existed.
-	if len(worktrees) == 0 {
+	if len(worktrees) == 0 && offset == 0 {
 		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, req.Msg.ProjectId, userID)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
@@ -687,9 +700,33 @@ func (s *Service) ListWorktrees(
 	}
 
 	return connect.NewResponse(&reliantv1.ListWorktreesResponse{
-		Worktrees: protoWorktrees,
-		Total:     int32(len(protoWorktrees)),
+		Worktrees:     protoWorktrees,
+		Total:         int32(len(protoWorktrees)),
+		NextPageToken: nextPageToken,
 	}), nil
+}
+
+const defaultListWorktreesPageSize = 100
+
+// The token is an offset into a stable (main first, last_active, id) ordering.
+// It is opaque to clients so the ordering can move to a keyset later.
+func encodeWorktreePageToken(offset int) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(offset)))
+}
+
+func decodeWorktreePageToken(token string) (int, error) {
+	if token == "" {
+		return 0, nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return 0, err
+	}
+	offset, err := strconv.Atoi(string(raw))
+	if err != nil || offset < 0 {
+		return 0, fmt.Errorf("invalid offset")
+	}
+	return offset, nil
 }
 
 // GetWorktree retrieves a worktree by ID

@@ -13,7 +13,7 @@ import { getChatFromCache } from '../hooks/chat-queries';
 import { useChatNavigationStore } from './chatNavigationStore';
 import { useWorkspaceStateStore } from './workspaceStateStore';
 import { useBrowserStore } from './browserStore';
-import { ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { logger } from '../lib/logger';
 import { singleflight } from '../lib/singleflight';
 import { subscribeToRefetch, type RefetchEvent } from './refetchStore';
@@ -113,6 +113,14 @@ interface WorktreeStore {
   // mutation whose effects must be observed: a singleflight-deduplicated load
   // can return data fetched BEFORE the mutation landed.
   refreshWorktrees: (projectId?: string, options?: { includeArchived?: boolean }) => Promise<void>;
+  // Fetches by id any of these that the store does not hold and merges them in.
+  // A list is only ever a snapshot; this is how a chat's workspace is resolved
+  // when it is not in it. Ids the server does not know are remembered so a
+  // deleted workspace is not asked for again.
+  ensureWorktrees: (worktreeIds: string[]) => Promise<void>;
+  // The worktree with this id, fetched when the store does not hold it; null
+  // only when the server does not know it either.
+  resolveWorktree: (worktreeId: string) => Promise<Worktree | null>;
   selectWorktree: (worktree: Worktree | null, options?: { skipWorkspaceStateSave?: boolean }) => void;
   createWorktree: (data: CreateWorktreeInput) => Promise<Worktree>;
   importWorktree: (data: {
@@ -246,6 +254,11 @@ function announceCreateFailed(worktree: Worktree): void {
 // resolves before the pre-mutation load it raced — and applying them by
 // arrival order silently restores stale data.
 let loadTicket = 0;
+
+// Ids ensureWorktrees must not ask for again: the server said they are gone, or
+// a request for them is in flight.
+const unresolvableWorktreeIds = new Set<string>();
+const fetchingWorktreeIds = new Set<string>();
 let lastAppliedTicket = 0;
 
 /**
@@ -272,8 +285,10 @@ async function fetchWorktreesInto(
 
   try {
     const fetchWorktrees = async () => {
-      const response = await worktreeGrpc.list(projectId, { includeArchived });
-      return response.worktrees.map(grpcToStore);
+      // Every page: the sidebar and the main-workspace auto-select treat this
+      // list as complete, so a project past one page must not lose its tail.
+      const all = await worktreeGrpc.listAll(projectId, { includeArchived });
+      return all.map(grpcToStore);
     };
 
     const loadedWorktrees = dedupe
@@ -400,6 +415,45 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       options?.includeArchived ?? useWorktreeStore.getState().lastLoadIncludedArchived,
       false
     );
+  },
+
+  ensureWorktrees: async (worktreeIds: string[]) => {
+    const held = new Set(useWorktreeStore.getState().worktrees.map((w) => w.id));
+    const wanted = [...new Set(worktreeIds)].filter(
+      (id) => id && !held.has(id) && !unresolvableWorktreeIds.has(id) && !fetchingWorktreeIds.has(id)
+    );
+    if (wanted.length === 0) return;
+    wanted.forEach((id) => fetchingWorktreeIds.add(id));
+    const fetched: Worktree[] = [];
+    try {
+      await Promise.all(
+        wanted.map(async (id) => {
+          try {
+            fetched.push(grpcToStore(await worktreeGrpc.get(id)));
+          } catch (error) {
+            if (error instanceof ConnectError && (error.code === Code.NotFound || error.code === Code.PermissionDenied)) {
+              unresolvableWorktreeIds.add(id);
+            }
+            logger.warn('[WorktreeStore] Could not resolve worktree by id', { worktreeId: id, error });
+          }
+        })
+      );
+    } finally {
+      wanted.forEach((id) => fetchingWorktreeIds.delete(id));
+    }
+    if (fetched.length === 0) return;
+    useWorktreeStore.setState((state) => {
+      const have = new Set(state.worktrees.map((w) => w.id));
+      return { worktrees: [...state.worktrees, ...fetched.filter((w) => !have.has(w.id))] };
+    });
+  },
+
+  resolveWorktree: async (worktreeId: string) => {
+    const find = () => useWorktreeStore.getState().worktrees.find((w) => w.id === worktreeId) ?? null;
+    const held = find();
+    if (held) return held;
+    await useWorktreeStore.getState().ensureWorktrees([worktreeId]);
+    return find();
   },
 
   selectWorktree: (worktree: Worktree | null, options?: { skipWorkspaceStateSave?: boolean }) => {
@@ -903,6 +957,8 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
     lastAppliedTicket = loadTicket;
     announcedCreateFailures.clear();
     announcedCreates.clear();
+    unresolvableWorktreeIds.clear();
+    fetchingWorktreeIds.clear();
     set({
       worktrees: [],
       currentWorktree: null,

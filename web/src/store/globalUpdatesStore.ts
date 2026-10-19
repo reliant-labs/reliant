@@ -843,8 +843,7 @@ function handleChatStateChange(update: UserUpdate) {
           // Switch worktree context if needed
           const currentProject = projectStore.currentProject;
           if (chat.worktreeId && currentProject?.id) {
-            const worktrees = worktreeStore.worktrees;
-            const worktree = worktrees.find(w => w.id === chat.worktreeId);
+            const worktree = await worktreeStore.resolveWorktree(chat.worktreeId);
             if (worktree) {
               logger.warn(`${LOG_PREFIX} 🔄 Switching worktree context: ${worktree.name}`);
               await worktreeStore.switchWorktreeContext(currentProject.id, worktree);

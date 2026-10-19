@@ -17,7 +17,7 @@ vi.mock("../../api/worktree-grpc", () => ({
   worktreeGrpc: {
     archive: archiveMock,
     delete: deleteMock,
-    list: listMock,
+    listAll: async (...args: unknown[]) => (await listMock(...args)).worktrees,
   },
 }));
 

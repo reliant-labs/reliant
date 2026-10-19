@@ -118,6 +118,25 @@ describe("Sidebar and child runs", () => {
     } as Partial<ReturnType<typeof useProjectStore.getState>>);
   });
 
+  it("keeps a chat whose workspace is not loaded and fetches that workspace by id", async () => {
+    const ensureWorktrees = vi.fn(async () => undefined);
+    // `chats` is shared with the other test; add the stray chat for this one.
+    chats.push({ ...chats[0], id: "chat-far", title: "Chat far", worktreeId: "worktree-not-loaded" });
+    useWorktreeStore.setState({ ensureWorktrees } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
+    try {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <Sidebar />
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByText("Chat far")).toBeInTheDocument();
+      expect(ensureWorktrees).toHaveBeenCalledWith(["worktree-not-loaded"]);
+    } finally {
+      chats.pop();
+    }
+  });
+
   it("renders every row without asking for any chat's child runs", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(

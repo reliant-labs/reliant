@@ -48,9 +48,7 @@ export async function loadRunContext(chatId: string): Promise<Chat> {
   }
 
   const worktreeStore = useWorktreeStore.getState();
-  const worktree = chat.worktreeId
-    ? (worktreeStore.worktrees.find((w) => w.id === chat.worktreeId) ?? null)
-    : null;
+  const worktree = chat.worktreeId ? await worktreeStore.resolveWorktree(chat.worktreeId) : null;
   await worktreeStore.switchWorktreeContext(chat.projectId, worktree);
 
   useChatStore.getState().selectChat(chat);

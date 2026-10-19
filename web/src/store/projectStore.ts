@@ -303,7 +303,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             title: chat.title,
           });
           if (chat.worktreeId) {
-            const targetWorktree = useWorktreeStore.getState().worktrees.find((worktree) => worktree.id === chat.worktreeId) ?? null;
+            const targetWorktree = await useWorktreeStore.getState().resolveWorktree(chat.worktreeId);
             if (targetWorktree) {
               await useWorktreeStore.getState().switchWorktreeContext(project.id, targetWorktree);
             }

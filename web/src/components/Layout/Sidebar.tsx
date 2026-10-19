@@ -408,7 +408,7 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
 
     if (currentProject?.id) {
       if (chat.worktreeId) {
-        const targetWorktree = worktreeStore.worktrees.find((worktree) => worktree.id === chat.worktreeId) ?? null;
+        const targetWorktree = await worktreeStore.resolveWorktree(chat.worktreeId);
         if (targetWorktree) {
           await worktreeStore.switchWorktreeContext(currentProject.id, targetWorktree);
         }
@@ -846,6 +846,18 @@ function SidebarComponent({
     [worktrees]
   );
 
+  // The worktree list is a snapshot, so a chat's workspace can be missing from
+  // it (not loaded yet, or created elsewhere). Resolve those by id instead of
+  // treating absence as "archived".
+  useEffect(() => {
+    const missing = chatsWithActivity
+      .map((chat) => chat.worktreeId)
+      .filter((id): id is string => !!id && !worktrees.some((w) => w.id === id));
+    if (missing.length > 0) {
+      void useWorktreeStore.getState().ensureWorktrees(missing);
+    }
+  }, [chatsWithActivity, worktrees]);
+
   // Filtered and sorted chats grouped by worktree (or flat list)
   const { activeGroups, flatList, archivedChats: filteredArchivedChats, archivedGroups } = useMemo(() => {
     const filtered = chatsWithActivity;
@@ -857,8 +869,12 @@ function SidebarComponent({
     filtered.forEach((chat) => {
       const worktree = getWorktreeForChat(chat);
 
-      // Skip if worktree doesn't exist (these are archived)
+      // A chat's own state says whether it is archived (chatsWithActivity
+      // already dropped those). A worktree that isn't loaded says nothing
+      // about it, so the chat stays visible; it is grouped under a fallback
+      // until the worktree is fetched by id.
       if (!worktree) {
+        activeWorktreeChats.push(chat);
         return;
       }
 
@@ -888,20 +904,20 @@ function SidebarComponent({
 
     activeWorktreeChats.forEach((chat) => {
       const worktree = getWorktreeForChat(chat);
-      if (!worktree) return;
+      const groupId = worktree?.id ?? (chat.worktreeId || "no-worktree");
 
-      if (!worktreeGroupsMap.has(worktree.id)) {
-        worktreeGroupsMap.set(worktree.id, {
-          worktreeId: worktree.id,
-          worktreeName: worktree.name,
-          worktreeBranch: worktree.branch,
+      if (!worktreeGroupsMap.has(groupId)) {
+        worktreeGroupsMap.set(groupId, {
+          worktreeId: groupId,
+          worktreeName: worktree?.name ?? "Unknown workspace",
+          worktreeBranch: worktree?.branch ?? "Unknown workspace",
           chats: [],
           hasActivity: false,
-          isMain: worktree.is_main,
+          isMain: worktree?.is_main ?? false,
         });
       }
 
-      const group = worktreeGroupsMap.get(worktree.id)!;
+      const group = worktreeGroupsMap.get(groupId)!;
       group.chats.push(chat);
 
       // Check if any chat in group requires immediate action (awaiting_approval)
@@ -1023,7 +1039,7 @@ function SidebarComponent({
     async (worktreeId: string) => {
       if (!currentProject?.id) return;
 
-      const targetWorktree = worktrees.find((w) => w.id === worktreeId);
+      const targetWorktree = await useWorktreeStore.getState().resolveWorktree(worktreeId);
       if (!targetWorktree) return;
 
       await switchWorktreeContext(currentProject.id, targetWorktree);
@@ -1031,13 +1047,13 @@ function SidebarComponent({
       // Show New Chat page with the target workspace selected
       useChatStore.getState().clearCurrentChat(targetWorktree.id);
     },
-    [currentProject?.id, worktrees, switchWorktreeContext]
+    [currentProject?.id, switchWorktreeContext]
   );
 
   const handleChatClick = useCallback(async (chat: Chat) => {
     // Switch worktree context first to save/restore viewer state
     if (chat.worktreeId && currentProject?.id) {
-      const worktree = worktrees.find(w => w.id === chat.worktreeId);
+      const worktree = await useWorktreeStore.getState().resolveWorktree(chat.worktreeId);
       if (worktree) {
         await switchWorktreeContext(currentProject.id, worktree);
       }
@@ -1048,7 +1064,7 @@ function SidebarComponent({
     selectChat(chat);
     const { navigateToChat } = useChatNavigationStore.getState();
     navigateToChat(chat.id);
-  }, [currentProject?.id, worktrees, switchWorktreeContext, selectChat]);
+  }, [currentProject?.id, switchWorktreeContext, selectChat]);
 
   const handleChatContextMenu = useCallback((e: React.MouseEvent, chat: Chat) => {
     e.preventDefault();

@@ -65,7 +65,7 @@ async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
   if (projectId) {
     const worktreeStore = useWorktreeStore.getState();
     if (chat.worktreeId) {
-      const targetWorktree = worktreeStore.worktrees.find((worktree) => worktree.id === chat.worktreeId) ?? null;
+      const targetWorktree = await worktreeStore.resolveWorktree(chat.worktreeId);
       if (targetWorktree) {
         await worktreeStore.switchWorktreeContext(projectId, targetWorktree);
       }
@@ -83,7 +83,7 @@ async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
  * This replicates the Sidebar.tsx sorting logic for grouped/flat views.
  * IMPORTANT: This must match the sidebar's filtering logic exactly, including:
  * - State filters (needs_attention, active, idle)
- * - Worktree filtering (exclude chats with missing/completed/abandoned worktrees)
+ * - Worktree filtering (exclude chats with completed/abandoned worktrees)
  * - Activity state computation
  */
 async function getOrderedChatList(): Promise<Chat[]> {
@@ -122,12 +122,12 @@ async function getOrderedChatList(): Promise<Chat[]> {
   let activeChats = chats.filter((c) => c.state !== ChatState.ARCHIVED);
 
   // Apply worktree filtering (matching Sidebar.tsx logic)
-  // Skip chats whose worktrees don't exist or are completed/abandoned
+  // Skip chats whose worktrees are completed/abandoned. A worktree that isn't
+  // loaded is not a reason to skip: the sidebar still lists the chat.
   activeChats = activeChats.filter((chat) => {
     const worktree = getWorktreeForChat(chat);
-    // Skip if worktree doesn't exist
     if (!worktree) {
-      return false;
+      return true;
     }
     // Skip if worktree is completed/abandoned
     if (
@@ -171,9 +171,7 @@ async function getOrderedChatList(): Promise<Chat[]> {
 
   for (const chat of activeChats) {
     const worktree = getWorktreeForChat(chat);
-    if (!worktree) continue; // Skip if worktree doesn't exist (shouldn't happen after filtering, but be safe)
-
-    const groupKey = worktree.id;
+    const groupKey = worktree?.id ?? (chat.worktreeId || "no-worktree");
     if (!worktreeGroups.has(groupKey)) {
       worktreeGroups.set(groupKey, { chats: [] });
     }
