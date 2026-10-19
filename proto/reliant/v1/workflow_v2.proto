@@ -1008,6 +1008,10 @@ message SaveMessageNodeArgs {
   // forwarded from CallLLMOutput.message.phase and persisted onto the text
   // content block so the next turn can resend it.
   string resolved_phase = 32 [(reliant) = {hidden: true}];
+  // ResolvedProviderAccountId is the provider account that served the
+  // completion, forwarded from CallLLMOutput.provider_account_id and persisted
+  // onto messages.provider_account_id.
+  string resolved_provider_account_id = 33 [(reliant) = {hidden: true}];
 }
 
 // InjectFileMsg carries binary file data for inject file attachments.
@@ -1706,6 +1710,13 @@ message CallLLMOutput {
   // turn's tool calls enforces exactly what the model was shown, on whichever
   // worker it lands. See research/TOOL_CAPABILITIES.md.
   ToolCapabilities capabilities = 19 [(reliant) = {visibility_contexts: "advanced"}];
+
+  // ProviderAccountId is the provider account (provider_accounts.id) that served
+  // this completion; empty for local, test and one-shot drivers. The inline
+  // save_message persists it onto messages.provider_account_id, so a later
+  // request to a different account of the same provider can drop reasoning the
+  // new account cannot verify.
+  string provider_account_id = 20 [(reliant) = {visibility_contexts: "advanced"}];
 }
 
 // ToolCapabilities is one agent turn's tool capability set: resolved once by

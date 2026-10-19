@@ -48,6 +48,9 @@ type Activities struct {
 	// WriteLedger records the action node's mutating integration calls.
 	// Optional: nil records nothing.
 	WriteLedger writeledger.Service
+	// AccountRouting routes call_llm and compaction across a provider's
+	// accounts. Optional: nil uses each provider's default account.
+	AccountRouting *handlers.AccountRouting
 }
 
 // NewActivities creates a new Activities container

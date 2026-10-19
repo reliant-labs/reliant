@@ -39,6 +39,10 @@ type AtomicMessageWrite struct {
 	ActivityID      *string
 	CreatedAt       time.Time
 
+	// ProviderAccountID is the provider account that served an assistant
+	// message (messages.provider_account_id); nil for every other message.
+	ProviderAccountID *string
+
 	Blocks []MessageContentBlock
 
 	// ChatUpdateData is the chat_update payload. It is built by the caller
@@ -147,13 +151,13 @@ msg AS (
         id, chat_id, ordinal, seq, thread_id, context_window_id,
         node_id, node_path, role, display_style, model, agent,
         token_count, cost, workflow_id, run_id, activity_id,
-        created_at, updated_at
+        created_at, updated_at, provider_account_id
     )
     SELECT
         $3, $2, ord.last_assigned, sq.last_assigned, $1, $4,
         $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15,
-        $16, $16
+        $16, $16, $31
     FROM ord, sq
 ),
 blocks AS (
@@ -247,6 +251,7 @@ func (r *Repo) SaveMessageAtomic(ctx context.Context, w AtomicMessageWrite) (*At
 			cols.toolNames, cols.toolInputs, cols.toolCallIDs, cols.thoughtSignatures, cols.isErrors,
 			cols.versions, cols.activityIDs, cols.workflowRunIDs, cols.attemptNumbers,
 			cols.phases,
+			nullString(w.ProviderAccountID),
 		)
 
 		if err := row.Scan(&result.Ordinal, &result.Seq, &result.UpdateSeq); err != nil {

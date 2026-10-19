@@ -117,3 +117,51 @@ func TestTerminateChat_ReleasesTheUsageLimitWait(t *testing.T) {
 	assert.NotEqual(t, int(reliantv1.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT), *chat.Activity)
 	assert.Nil(t, chat.UsageLimitResumesAt)
 }
+
+// "Use <model> now" answers the wait with a fallback model. The model must be
+// one the person can actually use, or the next turn would only fail; and a
+// plain click sends no model at all.
+func TestRetryUsageLimitWait_UseModel(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+	chatID := seedWaitingRun(t, repo, ctx)
+
+	type capture struct{ payload []interface{} }
+	temporal := &usageLimitPayloadClient{}
+	svc := &Service{deps: Deps{Repo: repo, Temporal: temporal}}
+
+	t.Run("a plain retry carries no model", func(t *testing.T) {
+		_, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
+		require.NoError(t, err)
+		require.Len(t, temporal.payloads, 1)
+		assert.Equal(t, v2.UsageLimitRetrySignal{}, temporal.payloads[0])
+	})
+
+	t.Run("a model that names no provider is refused", func(t *testing.T) {
+		bad := "gpt-5.6-sol"
+		_, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID, UseModel: &bad}))
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assert.Len(t, temporal.payloads, 1, "nothing was signalled")
+	})
+
+	t.Run("a model that does not exist is refused", func(t *testing.T) {
+		bad := "no-such-model@codex"
+		_, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID, UseModel: &bad}))
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	})
+
+	_ = capture{}
+}
+
+type usageLimitPayloadClient struct {
+	terminateTestTemporalClient
+	payloads []interface{}
+}
+
+func (c *usageLimitPayloadClient) SignalWorkflow(_ context.Context, _, _, _ string, arg interface{}) error {
+	c.payloads = append(c.payloads, arg)
+	return nil
+}

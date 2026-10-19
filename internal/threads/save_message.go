@@ -73,6 +73,10 @@ type SaveMessageOpts struct {
 	// Model is the concrete model that served the completion, captured after tag
 	// resolution (e.g. "claude-4.8-opus"). Persisted to messages.model.
 	Model string
+	// ProviderAccountID is the provider account that served the completion
+	// (messages.provider_account_id). Empty for local / one-shot drivers and
+	// for every non-assistant message.
+	ProviderAccountID string
 	// Agent is the agent/workflow identity that produced the message
 	// (e.g. "builtin://agent", "get-it-right"). Persisted to messages.agent.
 	Agent string
@@ -248,21 +252,22 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 	}
 
 	write := db.AtomicMessageWrite{
-		MessageID:       messageID,
-		ChatID:          opts.ChatID,
-		ThreadID:        opts.Thread,
-		ContextWindowID: cw.ID,
-		Role:            reliantv1.MessageRole(opts.Role),
-		DisplayStyle:    displayStylePtrIfNonZero(opts.DisplayStyle),
-		Model:           ptr.StringIfNotEmpty(opts.Model),
-		Agent:           ptr.StringIfNotEmpty(opts.Agent),
-		TokenCount:      ptr.IntIfPositive(opts.TokenCount),
-		Cost:            ptr.Float64IfPositive(opts.Cost),
-		WorkflowID:      opts.WorkflowID,
-		NodeID:          ptr.StringIfNotEmpty(opts.StepID),
-		ActivityID:      opts.ActivityID,
-		CreatedAt:       timestamp,
-		Blocks:          blocks,
+		MessageID:         messageID,
+		ChatID:            opts.ChatID,
+		ThreadID:          opts.Thread,
+		ContextWindowID:   cw.ID,
+		Role:              reliantv1.MessageRole(opts.Role),
+		DisplayStyle:      displayStylePtrIfNonZero(opts.DisplayStyle),
+		Model:             ptr.StringIfNotEmpty(opts.Model),
+		Agent:             ptr.StringIfNotEmpty(opts.Agent),
+		ProviderAccountID: ptr.StringIfNotEmpty(opts.ProviderAccountID),
+		TokenCount:        ptr.IntIfPositive(opts.TokenCount),
+		Cost:              ptr.Float64IfPositive(opts.Cost),
+		WorkflowID:        opts.WorkflowID,
+		NodeID:            ptr.StringIfNotEmpty(opts.StepID),
+		ActivityID:        opts.ActivityID,
+		CreatedAt:         timestamp,
+		Blocks:            blocks,
 
 		ChatUpdateType:   db.UpdateTypeMessage,
 		ChatUpdateEntity: messageID,

@@ -159,6 +159,7 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 	activityDeps.Connections = cfg.IntegrationCredentials
 	activityDeps.ControlPlaneURL = cfg.ControlPlaneURL
 	activityDeps.WriteLedger = cfg.WriteLedger
+	activityDeps.AccountRouting = accountRouting(cfg.Database)
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)

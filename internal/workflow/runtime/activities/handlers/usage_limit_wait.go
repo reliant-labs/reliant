@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/activity"
+
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -24,6 +26,15 @@ type UsageLimitWaitInput struct {
 	// Probing is true when the provider named no reset and ResumeAt is only
 	// the next rung of the probe ladder.
 	Probing bool `json:"probing,omitempty"`
+
+	// Notice, when set, posts a transcript notice instead of writing or
+	// clearing a marker. "switch_provider": the thread continues on Model
+	// (another provider) until ResumeAt, because every account of Provider is
+	// limited.
+	Notice     string `json:"notice,omitempty"`
+	WorkflowID string `json:"workflow_id,omitempty" reliant:"-"`
+	// Model is the "<model>@<driver>" the thread continues on.
+	Model string `json:"model,omitempty"`
 }
 
 // UsageLimitWaitOutput is the output from the UsageLimitWait activity.
@@ -53,6 +64,16 @@ func (a *UsageLimitWaitActivity) Name() string {
 
 // Execute records or clears the wait marker.
 func (a *UsageLimitWaitActivity) Execute(ctx context.Context, input UsageLimitWaitInput) (UsageLimitWaitOutput, error) {
+	if input.Notice == "switch_provider" {
+		until, _ := time.Parse(time.RFC3339, input.ResumeAt)
+		key := ""
+		if activity.IsActivity(ctx) {
+			key = "provider-switch-" + activity.GetInfo(ctx).ActivityID + "-" + input.Thread
+		}
+		postNotice(ctx, a.repo, input.ChatID, input.Thread, input.WorkflowID, key,
+			providerSwitchNotice(input.Provider, input.Model, until))
+		return UsageLimitWaitOutput{Success: true}, nil
+	}
 	if input.Clear {
 		if err := a.repo.ClearUsageLimitWait(ctx, input.ChatID, input.Thread, time.Now()); err != nil {
 			return UsageLimitWaitOutput{}, err

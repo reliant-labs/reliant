@@ -1,0 +1,195 @@
+// Copyright (c) 2025 Reliant Labs
+package handlers
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
+	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
+)
+
+// The transcript notices that make account and provider moves visible. Each is
+// a warning-styled system message on the thread that moved, and each is
+// best-effort: the move already happened, so a notice that cannot be saved is
+// logged and the conversation goes on.
+
+// noticeProviderName is the short provider name notices use ("Claude", not the
+// settings label "Claude subscription").
+func noticeProviderName(driver string) string {
+	switch driver {
+	case "claude":
+		return "Claude"
+	case "codex":
+		return "Codex"
+	case "anthropic":
+		return "Anthropic"
+	}
+	return models.ProviderDisplayName(driver)
+}
+
+// noticeModelName is "<model name> · <provider>" for a "<model>@<driver>" id.
+func noticeModelName(modelAtDriver string) string {
+	id, driver := modelAtDriver, ""
+	for i := len(modelAtDriver) - 1; i >= 0; i-- {
+		if modelAtDriver[i] == '@' {
+			id, driver = modelAtDriver[:i], modelAtDriver[i+1:]
+			break
+		}
+	}
+	name := id
+	if def, ok := models.MustGetRegistry().GetDefinition(id); ok && def.Name != "" {
+		name = def.Name
+	}
+	if driver == "" {
+		return name
+	}
+	return name + " · " + noticeProviderName(driver)
+}
+
+func noticeWindowName(window string) string {
+	switch window {
+	case "five_hour", "5h":
+		return "5-hour"
+	case "seven_day", "7d":
+		return "7-day"
+	case "":
+		return ""
+	}
+	return window
+}
+
+func noticeClock(t time.Time) string {
+	return t.Local().Format("3:04 PM")
+}
+
+// accountMoveNotice is "Claude account alice@acme.com reached its 5-hour limit
+// (resets 3:40 PM). Continuing on bob@acme.com." for a thread that moved to
+// another account of the same provider.
+func accountMoveNotice(res accountrouter.Result, window string, resetAt time.Time) string {
+	driver := string(res.Account.DriverID)
+	from := "an account"
+	if res.Previous != nil {
+		if l := accountName(*res.Previous); l != "" {
+			from = l
+		}
+	}
+	to := accountName(res.Account)
+	provider := noticeProviderName(driver)
+
+	var why string
+	switch res.Reason {
+	case accountrouter.ReasonLimited:
+		why = "reached its limit"
+		if w := noticeWindowName(window); w != "" {
+			why = "reached its " + w + " limit"
+		}
+		if !resetAt.IsZero() {
+			why += " (resets " + noticeClock(resetAt) + ")"
+		}
+	case accountrouter.ReasonPaused:
+		why = "was paused"
+	case accountrouter.ReasonNeedsReauth:
+		why = "needs sign-in"
+	case accountrouter.ReasonRemoved:
+		why = "was removed"
+	case accountrouter.ReasonUnserved:
+		why = "cannot serve this model"
+	default:
+		why = "is no longer available"
+	}
+	msg := fmt.Sprintf("%s account **%s** %s.", provider, from, why)
+	if to != "" {
+		msg += fmt.Sprintf(" Continuing on **%s**.", to)
+	}
+	return msg
+}
+
+func accountName(c models.AccountConfig) string {
+	switch {
+	case c.AccountLabel != "":
+		return c.AccountLabel
+	case c.AccountEmail != "":
+		return c.AccountEmail
+	}
+	return ""
+}
+
+// providerSwitchNotice is the cross-provider fallback: every account of the
+// provider is limited and the chat allows (or the user asked for) another.
+func providerSwitchNotice(provider, model string, until time.Time) string {
+	msg := fmt.Sprintf("%s is rate-limited on all your accounts", noticeProviderName(provider))
+	if !until.IsZero() {
+		msg += " until " + noticeClock(until)
+	}
+	msg += fmt.Sprintf(". Continuing on **%s** as this chat allows", noticeModelName(model))
+	if provider != "" {
+		msg += fmt.Sprintf("; returning to %s after the reset", noticeProviderName(provider))
+	}
+	return msg + "."
+}
+
+// providerReturnNotice is the chat coming back to its own provider.
+func providerReturnNotice(provider, model string) string {
+	return fmt.Sprintf("%s's limit has reset. Back on **%s**.", noticeProviderName(provider), noticeModelName(model))
+}
+
+// postNotice saves text as a warning notice on thread. Best-effort, and
+// idempotent on key when one is given: a retried activity writes the notice
+// once.
+func postNotice(ctx context.Context, repo db.Repository, chatID, thread, workflowID, key, text string) {
+	if repo == nil || chatID == "" || thread == "" || text == "" {
+		return
+	}
+	var wf *string
+	if workflowID != "" {
+		wf = &workflowID
+	}
+	opts := threads.SaveMessageOpts{
+		ChatID:       chatID,
+		Thread:       thread,
+		Role:         int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM),
+		Content:      text,
+		DisplayStyle: int32(reliantv1.DisplayStyle_DISPLAY_STYLE_WARNING),
+		WorkflowID:   wf,
+	}
+	if key != "" {
+		opts.ActivityID = &key
+		opts.AttemptNumber = 1
+	}
+	if _, err := threads.NewService(repo).SaveMessage(ctx, opts); err != nil {
+		logging.Warn("[Failover] Could not save the provider notice; continuing",
+			"chatID", chatID, "thread", thread, "error", err)
+	}
+}
+
+// announceRouting saves the notices a resolved call owes the transcript: the
+// thread moved to another account of its provider, or the chat is back on its
+// own model after a stay on a fallback. Both are posted before the stream
+// starts, keyed to the step so a retried activity does not repeat them.
+func (a *CallLLMActivity) announceRouting(ctx context.Context, chat *db.Chat, thread string, rtx types.RuntimeContext, resolved *resolvedLLMCall) {
+	stepKey := rtx.MessageIdempotencyKey
+	if stepKey == "" {
+		stepKey = rtx.WorkflowID + "-" + rtx.StepID
+	}
+	if resolved.Account != nil {
+		a.routing.announceAccountMove(ctx, func(text string) {
+			postNotice(ctx, a.repo, chat.ID, thread, rtx.WorkflowID,
+				stepKey+"-account-"+resolved.Account.Config.AccountID, text)
+		}, chat.UserID, resolved.Account)
+	}
+	if ret := rtx.FallbackReturn; ret != nil && rtx.FallbackModel == "" {
+		own := resolved.ProviderDriver
+		if resolved.Definition != nil {
+			own = resolved.Definition.ID + "@" + resolved.ProviderDriver
+		}
+		postNotice(ctx, a.repo, chat.ID, thread, rtx.WorkflowID, stepKey+"-return",
+			providerReturnNotice(ret.Provider, own))
+	}
+}

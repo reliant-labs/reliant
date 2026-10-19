@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
@@ -40,4 +42,33 @@ func TestErrorSummaryKeepsTheResetTime(t *testing.T) {
 	assert.Contains(t, summary, "7-day window")
 	assert.Contains(t, summary, "resets Tue Sep 29 20:00 UTC")
 	assert.NotContains(t, summary, "[", "the summary is shown as-is; the marker must not leak into it")
+}
+
+// A refusal the activity gathered facts for crosses the Temporal boundary with
+// them as details, and the same error — flattened exactly as wrapActivity
+// returns it — still parses into a usage limit with those facts. The marker
+// payload (the reset) is untouched.
+func TestClassifyErrorCarriesTheFailoverFacts(t *testing.T) {
+	facts := activitytypes.UsageLimitFacts{
+		Provider: "claude", AccountID: "acct-a", AlternativeAccount: true,
+		ProviderEarliestReset: time.Date(2026, 9, 29, 19, 0, 0, 0, time.UTC),
+		FallbackModel:         "gpt-5.6-sol@codex",
+	}
+	classified := classifyError(fmt.Errorf("LLM streaming error: %w", &activitytypes.UsageLimitFailure{Err: usageLimitErr(), Facts: facts}))
+
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, classified, &appErr)
+	assert.True(t, appErr.NonRetryable())
+	assert.Equal(t, "ProviderUsageLimit", appErr.Type())
+	assert.Equal(t, temporal.ApplicationErrorCategoryBenign, appErr.Category(), "a usage limit is still a user error, not a server fault")
+
+	// flattenForTemporal leaves a detailed ApplicationError alone.
+	flat := flattenForTemporal(classified)
+	got, ok := parseUsageLimit(flat)
+	require.True(t, ok)
+	assert.Equal(t, "2026-09-29T20:00:00Z", got.ResetAt.Format(time.RFC3339), "the marker payload is unchanged")
+	assert.Equal(t, facts.AccountID, got.Facts.AccountID)
+	assert.True(t, got.Facts.AlternativeAccount)
+	assert.Equal(t, facts.FallbackModel, got.Facts.FallbackModel)
+	assert.True(t, got.Facts.ProviderEarliestReset.Equal(facts.ProviderEarliestReset))
 }

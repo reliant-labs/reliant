@@ -841,6 +841,11 @@ message ResumeChatRequest {
 
 message RetryUsageLimitWaitRequest {
   string chat_id = 1;
+  // use_model answers the wait with a cross-provider fallback instead of
+  // waiting: "<model>@<driver>". The run retries on it until the original
+  // provider's earliest reset. It does not change the chat's policy. Empty =
+  // plain "Retry now".
+  optional string use_model = 2;
 }
 
 message RetryUsageLimitWaitResponse {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // A provider usage limit (5-hour / weekly window) clears in hours. Retrying
@@ -516,7 +517,7 @@ func TestDecideOnUsageLimit(t *testing.T) {
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 
 	t.Run("known reset waits until reset plus margin and jitter", func(t *testing.T) {
-		d := decideOnUsageLimit(usageLimit{Provider: "Anthropic", ResetAt: now.Add(time.Hour)}, usageLimitState{}, now, 7*time.Second)
+		d := decideOnUsageLimit(usageLimit{Provider: "Anthropic", ResetAt: now.Add(time.Hour)}, types.UsageLimitFacts{}, usageLimitState{}, now, 7*time.Second)
 		require.Equal(t, usageLimitWaitUntil, d.Action)
 		require.False(t, d.Probing)
 		require.Equal(t, now.Add(time.Hour+usageLimitMargin+7*time.Second), d.Until)
@@ -525,14 +526,14 @@ func TestDecideOnUsageLimit(t *testing.T) {
 	t.Run("unknown reset climbs the ladder and then holds at an hour", func(t *testing.T) {
 		want := []time.Duration{5 * time.Minute, 15 * time.Minute, 30 * time.Minute, time.Hour, time.Hour, time.Hour}
 		for probes, rung := range want {
-			d := decideOnUsageLimit(usageLimit{}, usageLimitState{Probes: probes}, now, 0)
+			d := decideOnUsageLimit(usageLimit{}, types.UsageLimitFacts{}, usageLimitState{Probes: probes}, now, 0)
 			require.True(t, d.Probing)
 			require.Equal(t, now.Add(rung), d.Until, "probe %d", probes)
 		}
 	})
 
 	t.Run("a reset already in the past still probes", func(t *testing.T) {
-		d := decideOnUsageLimit(usageLimit{ResetAt: now.Add(-time.Minute)}, usageLimitState{}, now, 0)
+		d := decideOnUsageLimit(usageLimit{ResetAt: now.Add(-time.Minute)}, types.UsageLimitFacts{}, usageLimitState{}, now, 0)
 		require.True(t, d.Probing, "the provider still refuses: our clock and its disagree, so probe rather than spin")
 		require.Equal(t, now.Add(5*time.Minute), d.Until)
 	})

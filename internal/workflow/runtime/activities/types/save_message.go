@@ -24,23 +24,24 @@ type ThinkingOutput struct {
 // representation when building SaveMessage activity inputs via CEL evaluation.
 // It gets converted to an ActivityInput with SaveMessageNodeArgs at runtime.
 type SaveMessageInput struct {
-	ChatID          string               `json:"chat_id" reliant:"-"`
-	Thread          string               `json:"thread" reliant:"-"` // Auto-injected from workflow execution context
-	StepID          string               `json:"step_id,omitempty" reliant:"-"`
-	Role            string               `json:"role" reliant:"desc=Message role in conversation. Use display_style=hidden to hide from UI.,enum=user|assistant|tool|system"`
-	DisplayStyle    string               `json:"display_style,omitempty" reliant:"desc=UI display style hint. hidden=not shown in UI but sent to LLM.,enum=info|warning|success|hidden"`
-	Content         string               `json:"content,omitempty" reliant:"desc=Text content of the message,ui=textarea"`
-	Attachments     []string             `json:"attachments,omitempty" reliant:"-"`
-	ToolResults     []message.ToolResult `json:"tool_results,omitempty" reliant:"desc=Tool execution results (required for tool role messages)"`
-	ToolCalls       []message.ToolCall   `json:"tool_calls,omitempty" reliant:"desc=Tool calls from LLM response (for assistant messages)"`
-	TokenCount      int                  `json:"token_count,omitempty" reliant:"-"`       // Total tokens (prompt + response + context)
-	Cost            float64              `json:"cost,omitempty" reliant:"-"`              // Request cost in USD returned by the LLM provider
-	Model           string               `json:"model,omitempty" reliant:"-"`             // Concrete model that served the completion (post tag resolution), persisted to messages.model
-	Agent           string               `json:"agent,omitempty" reliant:"-"`             // Agent/workflow identity that produced the message, persisted to messages.agent
-	ContextWindowID string               `json:"context_window_id,omitempty" reliant:"-"` // FK to context_windows (nullable during migration)
-	WorkflowID      string               `json:"workflow_id,omitempty" reliant:"-"`
-	LoopNodeID      string               `json:"loop_node_id,omitempty" reliant:"-"`
-	LoopIteration   int                  `json:"loop_iteration" reliant:"-"`
+	ChatID            string               `json:"chat_id" reliant:"-"`
+	Thread            string               `json:"thread" reliant:"-"` // Auto-injected from workflow execution context
+	StepID            string               `json:"step_id,omitempty" reliant:"-"`
+	Role              string               `json:"role" reliant:"desc=Message role in conversation. Use display_style=hidden to hide from UI.,enum=user|assistant|tool|system"`
+	DisplayStyle      string               `json:"display_style,omitempty" reliant:"desc=UI display style hint. hidden=not shown in UI but sent to LLM.,enum=info|warning|success|hidden"`
+	Content           string               `json:"content,omitempty" reliant:"desc=Text content of the message,ui=textarea"`
+	Attachments       []string             `json:"attachments,omitempty" reliant:"-"`
+	ToolResults       []message.ToolResult `json:"tool_results,omitempty" reliant:"desc=Tool execution results (required for tool role messages)"`
+	ToolCalls         []message.ToolCall   `json:"tool_calls,omitempty" reliant:"desc=Tool calls from LLM response (for assistant messages)"`
+	TokenCount        int                  `json:"token_count,omitempty" reliant:"-"`         // Total tokens (prompt + response + context)
+	Cost              float64              `json:"cost,omitempty" reliant:"-"`                // Request cost in USD returned by the LLM provider
+	Model             string               `json:"model,omitempty" reliant:"-"`               // Concrete model that served the completion (post tag resolution), persisted to messages.model
+	Agent             string               `json:"agent,omitempty" reliant:"-"`               // Agent/workflow identity that produced the message, persisted to messages.agent
+	ProviderAccountID string               `json:"provider_account_id,omitempty" reliant:"-"` // Provider account that served the completion, persisted to messages.provider_account_id
+	ContextWindowID   string               `json:"context_window_id,omitempty" reliant:"-"`   // FK to context_windows (nullable during migration)
+	WorkflowID        string               `json:"workflow_id,omitempty" reliant:"-"`
+	LoopNodeID        string               `json:"loop_node_id,omitempty" reliant:"-"`
+	LoopIteration     int                  `json:"loop_iteration" reliant:"-"`
 
 	// Extended thinking support - contains both content and signature
 	Thinking ThinkingOutput `json:"thinking,omitempty" reliant:"desc=Extended thinking content and signature (for multi-turn thinking preservation)"`

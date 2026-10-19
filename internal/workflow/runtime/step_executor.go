@@ -1124,9 +1124,21 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		// The provider the user chose for the run: what a tier selector with
 		// no provider of its own resolves on (propagateProviderPreference).
 		rtx.ProviderPreference = ProviderPreference(e.workflowInputs)
+		rtx.Failover = failoverPolicy(e.workflowInputs)
+		// While the thread is on a fallback model (a usage limit on its own
+		// provider), the lease replaces the chat's selector; the first turn
+		// after it says the chat is back. Compared in the workflow, so a
+		// replay derives the same model.
+		rtx.FallbackModel, rtx.FallbackUntil, rtx.FallbackReturn = e.pauseCtrl.fallbackFor(e.ctx, rtx.Thread)
 		// Whether the loop took this turn on a hint (see
 		// RuntimeContext.SpeculativeTurn).
 		rtx.SpeculativeTurn = e.childTracker.isSpeculativeTurn(rtx.Thread)
+	}
+
+	// Compaction summarizes on the model the thread is on, so a chat on a
+	// fallback provider is not sent back to the limited one to compact.
+	if model.NodeType(node) == model.NodeTypeCompact {
+		rtx.FallbackModel = e.pauseCtrl.liveFallback(e.ctx, rtx.Thread)
 	}
 
 	// Loop context

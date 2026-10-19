@@ -134,6 +134,17 @@ type CallLLMActivity struct {
 	// controlPlaneURL is the control plane hosting this deployment, "" when it
 	// is self-hosted; see WithControlPlane.
 	controlPlaneURL string
+	// routing picks the account of a provider that serves a thread and
+	// handles an account that is refused; nil routes nothing.
+	routing *AccountRouting
+}
+
+// WithAccountRouting wires multi-account routing: which of a provider's
+// accounts serves a thread, the rate-limit observer on its requests, and the
+// bench plus failover facts when it is refused.
+func (a *CallLLMActivity) WithAccountRouting(r *AccountRouting) *CallLLMActivity {
+	a.routing = r
+	return a
 }
 
 // WithControlPlane records the control plane hosting this deployment, which
@@ -534,20 +545,21 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 	activityID := rtx.MessageIdempotencyKey
 
 	if _, err := threads.NewService(a.repo).SaveMessage(writeCtx, threads.SaveMessageOpts{
-		ChatID:       rtx.ChatID,
-		Thread:       thread,
-		Role:         int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
-		Content:      output.GetResponseText(),
-		ToolCalls:    convertToolCalls(protoToolCallsToMessage(output.GetToolCalls())),
-		Thinking:     thinking,
-		TokenCount:   int(output.GetTokenCount()),
-		Cost:         output.GetCost(),
-		Model:        output.GetModel(),
-		WorkflowID:   workflowID,
-		StepID:       rtx.StepID,
-		ActivityID:   &activityID,
-		MessageID:    output.GetMessageId(),
-		DisplayStyle: int32(reliantv1.DisplayStyle_DISPLAY_STYLE_UNSPECIFIED),
+		ChatID:            rtx.ChatID,
+		Thread:            thread,
+		Role:              int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
+		Content:           output.GetResponseText(),
+		ToolCalls:         convertToolCalls(protoToolCallsToMessage(output.GetToolCalls())),
+		Thinking:          thinking,
+		TokenCount:        int(output.GetTokenCount()),
+		Cost:              output.GetCost(),
+		Model:             output.GetModel(),
+		ProviderAccountID: output.GetProviderAccountId(),
+		WorkflowID:        workflowID,
+		StepID:            rtx.StepID,
+		ActivityID:        &activityID,
+		MessageID:         output.GetMessageId(),
+		DisplayStyle:      int32(reliantv1.DisplayStyle_DISPLAY_STYLE_UNSPECIFIED),
 	}); err != nil {
 		logging.Warn("[CallLLM] Could not persist the partial turn of an interrupted call",
 			"chatID", rtx.ChatID, "thread", thread, "error", err)
@@ -1053,6 +1065,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		modelSelector.Tags = protoModel.GetTags()
 		modelSelector.Providers = protoModel.GetProviders()
 	}
+	// While the thread is on a fallback model (its own provider hit a usage
+	// limit and the chat allows another), that model replaces the selector.
+	// The workflow only sets it inside the lease, so this needs no clock.
+	if rtx.FallbackModel != "" {
+		modelSelector = models.ModelSelector{ID: rtx.FallbackModel}
+	}
 
 	// Load project and project config via provider abstraction. This happens
 	// before model/driver resolution so the registry reflects the project's
@@ -1116,6 +1134,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		SessionID:      chat.ID,
 		Selector:       modelSelector,
 		RunProviders:   rtx.ProviderPreference,
+		ThreadID:       thread,
+		Routing:        a.routing,
+		Failover:       rtx.Failover,
 		Temperature:    explicitTemperature,
 		ThinkingLevel:  explicitThinkingLevel,
 		MaxTokens:      explicitMaxTokens,
@@ -1127,6 +1148,11 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		return nil, err
 	}
 	driver := resolved.Driver
+	accountID := ""
+	if resolved.Account != nil {
+		accountID = resolved.Account.Config.AccountID
+	}
+	a.announceRouting(ctx, chat, thread, rtx, resolved)
 
 	// Capture the concrete model that will serve this completion so the inline
 	// save_message can persist it onto messages.model. This is the resolved
@@ -1383,6 +1409,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// propagates cancellation through the context when the workflow is paused/cancelled.
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
+	// What the provider says about this account's limits lands under THIS
+	// account, not whichever the process last used.
+	streamCtx = a.routing.observe(streamCtx, chat.UserID, resolved.Account)
 
 	// Build prefix messages that appear before conversation history:
 	// 1. Memory (reliant.md) — global/project context
@@ -1526,6 +1555,10 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// context window, and normalize roles for API compatibility. The trim
 	// backstop threshold scales with the prompt ceiling, matching the
 	// compaction trigger above.
+	// Reasoning another account of the same provider produced is unverifiable
+	// here (Codex/OpenAI envelopes are organisation-bound): drop it before the
+	// request rather than learn that from a 400.
+	history = stripForeignReasoning(history, models.DriverID(resolved.ProviderDriver), accountID)
 	history = prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, ceiling)
 
 	toolNameDebug := summarizeToolNamesForLogging(availableTools)
@@ -1843,7 +1876,10 @@ streamLoop:
 				"retryDelay", retryDelay)
 			return nil, stalled
 		}
-		return nil, streamErr
+		return nil, a.routing.usageLimitFailure(ctx, streamErr, usageLimitContext{
+			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
+			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: rtx.Failover,
+		})
 	}
 
 	// A heartbeat RPC that merely timed out is NOT an instruction to stop.
@@ -2028,6 +2064,7 @@ streamLoop:
 		PendingInbox:        false,
 		CompactionThreshold: effectiveCompactionThreshold,
 		Model:               resolvedModelID,
+		ProviderAccountId:   accountID,
 		MessageId:           streamState.messageID,
 		LastStreamSeq:       streamState.streamSeq,
 	}

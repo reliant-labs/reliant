@@ -4135,8 +4135,13 @@ func (x *ResumeChatRequest) GetChatId() string {
 }
 
 type RetryUsageLimitWaitRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ChatId        string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	ChatId string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	// use_model answers the wait with a cross-provider fallback instead of
+	// waiting: "<model>@<driver>". The run retries on it until the original
+	// provider's earliest reset. It does not change the chat's policy. Empty =
+	// plain "Retry now".
+	UseModel      *string `protobuf:"bytes,2,opt,name=use_model,json=useModel,proto3,oneof" json:"use_model,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4174,6 +4179,13 @@ func (*RetryUsageLimitWaitRequest) Descriptor() ([]byte, []int) {
 func (x *RetryUsageLimitWaitRequest) GetChatId() string {
 	if x != nil {
 		return x.ChatId
+	}
+	return ""
+}
+
+func (x *RetryUsageLimitWaitRequest) GetUseModel() string {
+	if x != nil && x.UseModel != nil {
+		return *x.UseModel
 	}
 	return ""
 }
@@ -6846,9 +6858,12 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\",\n" +
 	"\x11ResumeChatRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\"5\n" +
+	"\achat_id\x18\x01 \x01(\tR\x06chatId\"e\n" +
 	"\x1aRetryUsageLimitWaitRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\"3\n" +
+	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12 \n" +
+	"\tuse_model\x18\x02 \x01(\tH\x00R\buseModel\x88\x01\x01B\f\n" +
+	"\n" +
+	"_use_model\"3\n" +
 	"\x1bRetryUsageLimitWaitResponse\x12\x14\n" +
 	"\x05woken\x18\x01 \x01(\bR\x05woken\"\xe6\x01\n" +
 	"\x12ResumeChatResponse\x12\x18\n" +
@@ -7458,6 +7473,7 @@ func file_reliant_v1_chat_proto_init() {
 	file_reliant_v1_chat_proto_msgTypes[28].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[29].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[38].OneofWrappers = []any{}
+	file_reliant_v1_chat_proto_msgTypes[47].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[56].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[57].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[59].OneofWrappers = []any{}

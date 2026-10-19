@@ -292,6 +292,15 @@ func evaluateSaveMessageConfig(
 		}
 	}
 
+	// The provider account that served the completion, for the same reason as
+	// the model: it is only known after the activity ran.
+	var providerAccountID string
+	if v, ok := activityOutput["provider_account_id"]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			providerAccountID = s
+		}
+	}
+
 	attachments, err := evalStringArray(model.CelStringRaw(config.GetAttachments()))
 	if err != nil {
 		return nil, fmt.Errorf("attachments: %w", err)
@@ -363,22 +372,23 @@ func evaluateSaveMessageConfig(
 	// Thread is always inherited from the executing thread; there is no
 	// explicit thread field — messages are saved to the current thread.
 	return &types.SaveMessageInput{
-		ChatID:       scope.ChatID,
-		Thread:       scope.Thread,
-		StepID:       scope.StepID,
-		Role:         role,
-		DisplayStyle: displayStyle,
-		Content:      content,
-		Attachments:  attachments,
-		ToolResults:  toolResults,
-		ToolCalls:    toolCalls,
-		TokenCount:   tokenCount,
-		Cost:         cost,
-		Model:        modelName,
-		Agent:        scope.AgentName,
-		WorkflowID:   scope.WorkflowID,
-		Thinking:     thinkingOutput,
-		Phase:        phase,
+		ChatID:            scope.ChatID,
+		Thread:            scope.Thread,
+		StepID:            scope.StepID,
+		Role:              role,
+		DisplayStyle:      displayStyle,
+		Content:           content,
+		Attachments:       attachments,
+		ToolResults:       toolResults,
+		ToolCalls:         toolCalls,
+		TokenCount:        tokenCount,
+		Cost:              cost,
+		Model:             modelName,
+		ProviderAccountID: providerAccountID,
+		Agent:             scope.AgentName,
+		WorkflowID:        scope.WorkflowID,
+		Thinking:          thinkingOutput,
+		Phase:             phase,
 	}, nil
 }
 
@@ -771,15 +781,16 @@ func executeSaveMessageInline(
 // avoiding the map[string]interface{} → JSON → protojson roundtrip.
 func buildSaveMessageNode(input *types.SaveMessageInput) *reliantv1.Node {
 	args := &reliantv1.SaveMessageNodeArgs{
-		ResolvedRole:         input.Role,
-		ResolvedContent:      input.Content,
-		ResolvedDisplayStyle: input.DisplayStyle,
-		ResolvedAttachments:  input.Attachments,
-		TokenCount:           int32(input.TokenCount),
-		Cost:                 input.Cost,
-		ResolvedModel:        input.Model,
-		ResolvedAgent:        input.Agent,
-		ResolvedPhase:        input.Phase,
+		ResolvedRole:              input.Role,
+		ResolvedContent:           input.Content,
+		ResolvedDisplayStyle:      input.DisplayStyle,
+		ResolvedAttachments:       input.Attachments,
+		TokenCount:                int32(input.TokenCount),
+		Cost:                      input.Cost,
+		ResolvedModel:             input.Model,
+		ResolvedProviderAccountId: input.ProviderAccountID,
+		ResolvedAgent:             input.Agent,
+		ResolvedPhase:             input.Phase,
 	}
 
 	// Convert tool calls

@@ -9,9 +9,34 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
+
+// usableFallbackModel checks the "<model>@<driver>" a person asked to continue
+// on: it must name a provider they have connected that serves the model. A
+// wait that was answered with a model nobody can serve would only fail the
+// next turn, so it is refused here, where the person can pick another.
+func usableFallbackModel(ctx context.Context, userID, modelAtDriver string) (string, error) {
+	modelID, driverID := drivers.ParseModelIDWithDriver(modelAtDriver)
+	if driverID == "" {
+		return "", fmt.Errorf("use_model must name a provider as <model>@<provider>")
+	}
+	if _, ok := models.MustGetRegistry().GetDefinition(modelID); !ok {
+		return "", fmt.Errorf("unknown model %q", modelID)
+	}
+	avail := drivers.GetAvailableDrivers(ctx, userID)
+	cfg, ok := avail.Drivers[models.DriverID(driverID)]
+	if !ok || !cfg.IsConfigured() {
+		return "", fmt.Errorf("the %s provider is not connected", models.ProviderDisplayName(driverID))
+	}
+	if !models.CanDriverUseModel(models.Family(driverID), models.ModelID(modelID)) {
+		return "", fmt.Errorf("the %s provider does not serve %s", models.ProviderDisplayName(driverID), modelID)
+	}
+	return modelAtDriver, nil
+}
 
 // RetryUsageLimitWait is "Retry now" on a run parked until a provider's usage
 // limit resets: it signals the run, which wakes every thread waiting on a limit
@@ -40,7 +65,15 @@ func (s *Service) RetryUsageLimitWait(
 	if chat.WorkflowID == nil || *chat.WorkflowID == "" {
 		return connect.NewResponse(&reliantv1.RetryUsageLimitWaitResponse{Woken: false}), nil
 	}
-	if err := s.deps.Temporal.SignalWorkflow(ctx, *chat.WorkflowID, "", v2.UsageLimitRetrySignalName, nil); err != nil {
+	signal := v2.UsageLimitRetrySignal{}
+	if req.Msg.UseModel != nil && *req.Msg.UseModel != "" {
+		useModel, err := usableFallbackModel(ctx, userID, *req.Msg.UseModel)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		signal.UseModel = useModel
+	}
+	if err := s.deps.Temporal.SignalWorkflow(ctx, *chat.WorkflowID, "", v2.UsageLimitRetrySignalName, signal); err != nil {
 		logging.Warn("Could not wake a run waiting on a usage limit",
 			"error", err, "chatID", chat.ID, "workflowID", *chat.WorkflowID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to wake the run"))

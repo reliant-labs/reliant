@@ -90,6 +90,11 @@ type subAgentFailureEnv struct {
 	failFirstCallOf func(thread string) error
 	callTimes       []callTime
 	events          []string
+	// callRuntime records the RuntimeContext each CallLLM was dispatched with,
+	// in call order, keyed "<who>#<turn>".
+	callRuntime map[string]types.RuntimeContext
+	// notices records the cross-provider notices the workflow asked for.
+	notices []map[string]interface{}
 	// cancelledCalls records CallLLM stubs whose activity context was
 	// cancelled while they were held in flight, as "<toolCallID>#<turn>"
 	// ("parent#N" for the parent).
@@ -161,16 +166,21 @@ func newSubAgentFailureEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 		thread, _ := input["thread"].(string)
 		clear, _ := input["clear"].(bool)
 		call := usageWaitCall{Thread: thread, Clear: clear, At: e.env.Now()}
-		if !clear {
+		if !clear && input["notice"] == nil {
 			call.Provider, _ = input["provider"].(string)
 			call.Probing, _ = input["probing"].(bool)
 			call.ResumeAt, _ = time.Parse(time.RFC3339, input["resume_at"].(string))
 		}
-		e.usageWaits = append(e.usageWaits, call)
 		verb := "set"
 		if clear {
 			verb = "clear"
 		}
+		if input["notice"] != nil {
+			e.notices = append(e.notices, input)
+			e.events = append(e.events, fmt.Sprintf("notice:%v:%s", input["notice"], thread))
+			return map[string]interface{}{"success": true}, nil
+		}
+		e.usageWaits = append(e.usageWaits, call)
 		e.events = append(e.events, fmt.Sprintf("marker:%s:%s", verb, thread))
 		return map[string]interface{}{"success": true}, nil
 	})
@@ -305,6 +315,10 @@ func (e *subAgentFailureEnv) callLLM(ctx context.Context, input types.ActivityIn
 		}
 	}
 	e.mu.Lock()
+	if e.callRuntime == nil {
+		e.callRuntime = map[string]types.RuntimeContext{}
+	}
+	e.callRuntime[fmt.Sprintf("%s#%d", who, turn)] = input.Runtime
 	e.events = append(e.events, fmt.Sprintf("callllm:%s#%d", who, turn))
 	e.callTimes = append(e.callTimes, callTime{Who: who, Turn: turn, At: e.env.Now()})
 	e.mu.Unlock()

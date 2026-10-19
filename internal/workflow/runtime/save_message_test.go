@@ -737,3 +737,33 @@ func testSaveMessageScope(workflowContext map[string]interface{}, chatID, thread
 	scope.Thread = thread
 	return scope
 }
+
+// The provider account that served the completion rides from CallLLMOutput
+// (provider_account_id) onto the save, as the model does, so
+// messages.provider_account_id records which account a reasoning envelope came
+// from.
+func TestEvaluateSaveMessageConfig_ProviderAccountID(t *testing.T) {
+	t.Parallel()
+	config := &reliantv1.SaveMessageConfig{Role: celLiteral("assistant"), Content: celLiteral("test")}
+	scope := testSaveMessageScope(map[string]interface{}{workflowContextKeyInputs: map[string]interface{}{}},
+		"chat-123", "thread-path", "workflow-123", "step-id", nil)
+
+	for name, tc := range map[string]struct {
+		output map[string]interface{}
+		want   string
+	}{
+		"from the output":      {map[string]interface{}{"provider_account_id": "acct-a"}, "acct-a"},
+		"absent stays empty":   {map[string]interface{}{}, ""},
+		"non-string ignored":   {map[string]interface{}{"provider_account_id": 7}, ""},
+		"explicit nil ignored": {map[string]interface{}{"provider_account_id": nil}, ""},
+	} {
+		result, err := evaluateSaveMessageConfig(config, tc.output, scope)
+		require.NoError(t, err, name)
+		assert.Equal(t, tc.want, result.ProviderAccountID, name)
+	}
+
+	// And it reaches the activity's node args, which is what the worker saves.
+	result, err := evaluateSaveMessageConfig(config, map[string]interface{}{"provider_account_id": "acct-a"}, scope)
+	require.NoError(t, err)
+	assert.Equal(t, "acct-a", buildSaveMessageNode(result).GetSaveMessageNode().GetResolvedProviderAccountId())
+}

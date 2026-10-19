@@ -3082,8 +3082,12 @@ type SaveMessageNodeArgs struct {
 	// forwarded from CallLLMOutput.message.phase and persisted onto the text
 	// content block so the next turn can resend it.
 	ResolvedPhase string `protobuf:"bytes,32,opt,name=resolved_phase,json=resolvedPhase,proto3" json:"resolved_phase,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// ResolvedProviderAccountId is the provider account that served the
+	// completion, forwarded from CallLLMOutput.provider_account_id and persisted
+	// onto messages.provider_account_id.
+	ResolvedProviderAccountId string `protobuf:"bytes,33,opt,name=resolved_provider_account_id,json=resolvedProviderAccountId,proto3" json:"resolved_provider_account_id,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *SaveMessageNodeArgs) Reset() {
@@ -3245,6 +3249,13 @@ func (x *SaveMessageNodeArgs) GetResolvedAgent() string {
 func (x *SaveMessageNodeArgs) GetResolvedPhase() string {
 	if x != nil {
 		return x.ResolvedPhase
+	}
+	return ""
+}
+
+func (x *SaveMessageNodeArgs) GetResolvedProviderAccountId() string {
+	if x != nil {
+		return x.ResolvedProviderAccountId
 	}
 	return ""
 }
@@ -5827,9 +5838,15 @@ type CallLLMOutput struct {
 	// recorded here — in workflow history — so the execute_tools that runs this
 	// turn's tool calls enforces exactly what the model was shown, on whichever
 	// worker it lands. See research/TOOL_CAPABILITIES.md.
-	Capabilities  *ToolCapabilities `protobuf:"bytes,19,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Capabilities *ToolCapabilities `protobuf:"bytes,19,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
+	// ProviderAccountId is the provider account (provider_accounts.id) that served
+	// this completion; empty for local, test and one-shot drivers. The inline
+	// save_message persists it onto messages.provider_account_id, so a later
+	// request to a different account of the same provider can drop reasoning the
+	// new account cannot verify.
+	ProviderAccountId string `protobuf:"bytes,20,opt,name=provider_account_id,json=providerAccountId,proto3" json:"provider_account_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *CallLLMOutput) Reset() {
@@ -5979,6 +5996,13 @@ func (x *CallLLMOutput) GetCapabilities() *ToolCapabilities {
 		return x.Capabilities
 	}
 	return nil
+}
+
+func (x *CallLLMOutput) GetProviderAccountId() string {
+	if x != nil {
+		return x.ProviderAccountId
+	}
+	return ""
 }
 
 // ToolCapabilities is one agent turn's tool capability set: resolved once by
@@ -8240,7 +8264,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0fAskQuestionArgs\x12\x93\x02\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB\xdf\x01\x82\xb5\x18\xda\x01\n" +
 	"XThe questions to ask, as JSON: a questions list, each with question text and its options\x82\x01v{\"type\":\"ask_user\",\"questions\":[{\"question\":\"Ship this change?\",\"options\":[{\"label\":\"Ship it\"},{\"label\":\"Not yet\"}]}]}\x8a\x01\x04JSONR\bmetadata:u\x8a\xb5\x18q\n" +
-	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\x8b\r\n" +
+	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\xd4\r\n" +
 	"\x13SaveMessageNodeArgs\x12Y\n" +
 	"\x04role\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB.\x82\xb5\x18*\n" +
 	"\fMessage role\x12\x1auser|assistant|system|toolR\x04role\x12\xa6\x01\n" +
@@ -8268,7 +8292,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x04cost\x18\x1d \x01(\x01B\x06\x82\xb5\x18\x02 \x01R\x04cost\x12-\n" +
 	"\x0eresolved_model\x18\x1e \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedModel\x12-\n" +
 	"\x0eresolved_agent\x18\x1f \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedAgent\x12-\n" +
-	"\x0eresolved_phase\x18  \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedPhase:c\x8a\xb5\x18_\n" +
+	"\x0eresolved_phase\x18  \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedPhase\x12G\n" +
+	"\x1cresolved_provider_account_id\x18! \x01(\tB\x06\x82\xb5\x18\x02 \x01R\x19resolvedProviderAccountId:c\x8a\xb5\x18_\n" +
 	"\fsave_message\x12\fSave Message\x1a)Save a message to the conversation thread*\aagentic2\rMessageSquare\"\\\n" +
 	"\rInjectFileMsg\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x1b\n" +
@@ -8559,7 +8584,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12\x1a\n" +
-	"\bredacted\x18\x03 \x01(\tR\bredacted\"\xf3\x06\n" +
+	"\bredacted\x18\x03 \x01(\tR\bredacted\"\xb3\a\n" +
 	"\rCallLLMOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12#\n" +
 	"\rresponse_text\x18\x02 \x01(\tR\fresponseText\x126\n" +
@@ -8590,7 +8615,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\rfinish_reason\x18\x11 \x01(\tB\x0e\x82\xb5\x18\n" +
 	"Z\badvancedR\ffinishReason\x12P\n" +
 	"\fcapabilities\x18\x13 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesB\x0e\x82\xb5\x18\n" +
-	"Z\badvancedR\fcapabilities\"\xce\x05\n" +
+	"Z\badvancedR\fcapabilities\x12>\n" +
+	"\x13provider_account_id\x18\x14 \x01(\tB\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\x11providerAccountId\"\xce\x05\n" +
 	"\x10ToolCapabilities\x12\x18\n" +
 	"\aoffered\x18\x01 \x03(\tR\aoffered\x12!\n" +
 	"\floadable_all\x18\x02 \x01(\bR\vloadableAll\x12\x1a\n" +

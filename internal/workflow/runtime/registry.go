@@ -30,6 +30,7 @@ import (
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
@@ -126,6 +127,19 @@ func classifyError(err error) error {
 	// retry it as an ordinary 429. Matched on the marker, which survives
 	// every wrap; see internal/chatmarkers.
 	if kind, _, ok := chatmarkers.Extract(err.Error()); ok && kind == chatmarkers.KindProviderUsageLimit {
+		// The facts the activity gathered (another account? when does the
+		// provider reset? a servable fallback?) ride as details for the
+		// workflow's decision. The message carries the whole chain, so the
+		// cause is dropped rather than rendered a second time.
+		var failure *activitytypes.UsageLimitFailure
+		if errors.As(err, &failure) {
+			return temporal.NewApplicationErrorWithOptions(err.Error(), "ProviderUsageLimit", temporal.ApplicationErrorOptions{
+				NonRetryable: true,
+				// A spent usage window is the user's to wait out, never a server fault.
+				Category: temporal.ApplicationErrorCategoryBenign,
+				Details:  []interface{}{failure.Facts},
+			})
+		}
 		return temporal.NewNonRetryableApplicationError(err.Error(), "ProviderUsageLimit", err)
 	}
 
