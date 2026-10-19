@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 
@@ -22,16 +21,41 @@ type TokenValidator interface {
 	ValidateToken(token string) (*JWTClaims, error)
 }
 
-// GetAuthMode returns the configured auth mode from the AUTH_MODE env var.
-// Recognized values: "apikey", "supabase". Defaults to "supabase" when unset.
-func GetAuthMode() string {
-	mode := strings.ToLower(os.Getenv("AUTH_MODE"))
-	switch mode {
-	case "apikey":
-		return mode
-	default:
-		return "supabase"
+// Auth modes (AUTH_MODE).
+const (
+	// ModeSupabase validates Supabase JWTs: the default.
+	ModeSupabase = "supabase"
+	// ModeAPIKey validates one shared bearer key, for self-hosting.
+	ModeAPIKey = "apikey"
+)
+
+// Settings is how the API server authenticates callers: the auth settings of
+// its config (ApiServerConfig).
+type Settings struct {
+	// Mode is ModeSupabase or ModeAPIKey; anything else (the zero value
+	// included) is ModeSupabase.
+	Mode string
+	// APIKey is the shared bearer key ModeAPIKey validates (AUTH_API_KEY).
+	APIKey string
+	// PublicKeyPEM, else JWKSURL, is what ModeSupabase validates JWTs
+	// against.
+	PublicKeyPEM string
+	JWKSURL      string
+	// RequireEmailVerifiedClaim: see the RequireEmailVerifiedClaim option.
+	RequireEmailVerifiedClaim bool
+}
+
+// ModeName is s's effective mode: ModeAPIKey or ModeSupabase.
+func (s Settings) ModeName() string {
+	if s.Mode == ModeAPIKey {
+		return ModeAPIKey
 	}
+	return ModeSupabase
+}
+
+// JWTOptions are the JWT validator options s implies.
+func (s Settings) JWTOptions() []ValidatorOption {
+	return []ValidatorOption{RequireEmailVerifiedClaim(s.RequireEmailVerifiedClaim)}
 }
 
 // Middleware provides token authentication for HTTP requests
@@ -64,16 +88,14 @@ func (t *firstSeenTracker) isFirstTimeSeen(userID string) bool {
 	return result
 }
 
-// NewMiddleware creates a new auth middleware.
-// The auth mode is determined by GetAuthMode():
-//   - "apikey":   validate bearer tokens against AUTH_API_KEY env var
-//   - "supabase": validate JWTs using publicKeyPEM or jwksURL (default)
-func NewMiddleware(publicKeyPEM string, jwksURL string) (*Middleware, error) {
-	mode := GetAuthMode()
-
-	switch mode {
-	case "apikey":
-		apiKey := os.Getenv("AUTH_API_KEY")
+// NewMiddleware creates a new auth middleware for settings' mode:
+//   - "apikey":   validate bearer tokens against settings.APIKey
+//   - "supabase": validate JWTs using settings.PublicKeyPEM or JWKSURL (default)
+func NewMiddleware(settings Settings) (*Middleware, error) {
+	publicKeyPEM, jwksURL := settings.PublicKeyPEM, settings.JWKSURL
+	switch settings.ModeName() {
+	case ModeAPIKey:
+		apiKey := settings.APIKey
 		if apiKey == "" {
 			return nil, fmt.Errorf("AUTH_MODE=apikey requires AUTH_API_KEY to be set")
 		}
@@ -93,13 +115,13 @@ func NewMiddleware(publicKeyPEM string, jwksURL string) (*Middleware, error) {
 		switch {
 		case publicKeyPEM != "":
 			var err error
-			validator, err = NewJWTValidator(publicKeyPEM)
+			validator, err = NewJWTValidator(publicKeyPEM, settings.JWTOptions()...)
 			if err != nil {
 				return nil, err
 			}
 		case jwksURL != "":
 			var err error
-			validator, err = LoadJWKS(context.Background(), jwksURL)
+			validator, err = LoadJWKS(context.Background(), jwksURL, settings.JWTOptions()...)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load JWKS from %s: %w", jwksURL, err)
 			}

@@ -38,7 +38,7 @@ func (d *stalledProgressDriver) StreamResponse(ctx context.Context, _ []string, 
 }
 
 func TestCallLLM_StalledProgressFailsForRetry(t *testing.T) {
-	t.Setenv("RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "100ms")
+	llm.SetStreamTimeoutsForTest(t, llm.StreamTimeouts{Progress: 100 * time.Millisecond})
 	for _, testCase := range []struct {
 		name    string
 		initial []llm.DriverEvent

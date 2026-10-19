@@ -96,7 +96,7 @@ func (r *HookRunner) runOne(ctx context.Context, h Hook, ev Event, evJSON []byte
 	cmd.Stdin = bytes.NewReader(evJSON)
 	cmd.Stdout = r.stderr() // hook output is diagnostics; keep stdout NDJSON-clean
 	cmd.Stderr = r.stderr()
-	cmd.Env = append(os.Environ(), hookEnv(ev)...)
+	cmd.Env = append(os.Environ(), hookEnv(ev)...) //nolint:forbidigo // passes this process environment to a child process; not configuration
 	cmd.WaitDelay = waitDelay
 
 	err := cmd.Run()

@@ -471,7 +471,7 @@ func fetchOriginBranch(ctx context.Context, repoPath, branch string) bool {
 	cmd := exec.CommandContext(fetchCtx, "git", "fetch", "--quiet", "--no-tags", "origin",
 		"+refs/heads/"+branch+":refs/remotes/origin/"+branch)
 	cmd.Dir = repoPath
-	cmd.Env = gitCredentialEnv(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"))
+	cmd.Env = gitCredentialEnv(append(os.Environ(), "GIT_TERMINAL_PROMPT=0")) //nolint:forbidigo // passes this process environment to a child process; not configuration
 	if out, err := cmd.CombinedOutput(); err != nil {
 		logging.Info("worktree base branch not found on origin",
 			"repo_path", repoPath, "base_branch", branch, "output", strings.TrimSpace(string(out)), "error", err)

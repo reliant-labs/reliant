@@ -83,7 +83,7 @@ func requestedLevel(s Settings) slog.Level {
 	if level, ok := explicitLevel(s); ok {
 		return level
 	}
-	if os.Getenv("DEBUG") == "true" || os.Getenv("RELIANT_DEV_DEBUG") == "true" {
+	if os.Getenv("DEBUG") == "true" || os.Getenv("RELIANT_DEV_DEBUG") == "true" { //nolint:forbidigo // forge gap: DEBUG/RELIANT_DEV_DEBUG=true are bools that map onto the log level field (only the exact string "true"; DEBUG is also other tools' variable), which forge config cannot express
 		return slog.LevelDebug
 	}
 	return slog.LevelInfo
@@ -151,7 +151,7 @@ func debugRequest(s Settings) string {
 		return ""
 	}
 	for _, flag := range []string{"DEBUG", "RELIANT_DEV_DEBUG"} {
-		if os.Getenv(flag) == "true" {
+		if os.Getenv(flag) == "true" { //nolint:forbidigo // forge gap: DEBUG/RELIANT_DEV_DEBUG=true map onto the log level field; see requestedLevel
 			return flag + "=true"
 		}
 	}

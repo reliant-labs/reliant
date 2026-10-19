@@ -170,7 +170,7 @@ func Path() (string, error) {
 // resolve applies the override, then the on-disk record, then a last-resort
 // ephemeral id.
 func resolve() string {
-	if pinned := strings.TrimSpace(os.Getenv(EnvOverride)); pinned != "" {
+	if pinned := strings.TrimSpace(os.Getenv(EnvOverride)); pinned != "" { //nolint:forbidigo // RELIANT_INSTANCE_ID: the machine identity every CLI command and the daemon resolve lazily; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
 		return pinned
 	}
 

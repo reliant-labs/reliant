@@ -3,8 +3,6 @@ package commands
 
 import (
 	"testing"
-
-	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 )
 
 // TestManagedDaemonIsNeverInteractive is the second half of the 2026-09-30
@@ -35,20 +33,15 @@ import (
 // no RELIANT_DAEMON_TYPE and keeps its interactive login.
 func TestManagedDaemonIsNeverInteractive(t *testing.T) {
 	cases := []struct {
-		name         string
-		daemonType   string
-		explicitFlag bool // --non-interactive passed on the command line
-		envFlag      string
-		want         bool
+		name       string
+		daemonType string
+		args       []string // `daemon start` command-line flags
+		envFlag    string
+		want       bool
 	}{
 		{
 			name:       "managed pod implies non-interactive",
 			daemonType: "managed",
-			want:       true,
-		},
-		{
-			name:       "cloud is the accepted synonym for managed",
-			daemonType: "cloud",
 			want:       true,
 		},
 		{
@@ -68,9 +61,21 @@ func TestManagedDaemonIsNeverInteractive(t *testing.T) {
 			want:       true,
 		},
 		{
-			name:       "explicit --non-interactive still wins on a laptop",
+			name:       "managed cannot be forced interactive by flag",
+			daemonType: "managed",
+			args:       []string{"--non-interactive=false"},
+			want:       true,
+		},
+		{
+			name:       "env opts a laptop out of browser login",
 			daemonType: "",
 			envFlag:    "true",
+			want:       true,
+		},
+		{
+			name:       "explicit --non-interactive still wins on a laptop",
+			daemonType: "",
+			args:       []string{"--non-interactive"},
 			want:       true,
 		},
 	}
@@ -80,13 +85,17 @@ func TestManagedDaemonIsNeverInteractive(t *testing.T) {
 			// Always set both, empty included: a case that says "no daemon
 			// type" must mean it even when the host (a workspace pod) exports
 			// RELIANT_DAEMON_TYPE=managed.
-			t.Setenv(daemonruntime.DaemonTypeEnvVar, tc.daemonType)
+			t.Setenv("RELIANT_DAEMON_TYPE", tc.daemonType)
 			t.Setenv("RELIANT_DAEMON_NON_INTERACTIVE", tc.envFlag)
 
-			got := daemonNonInteractiveDefault()
+			cfg, err := loadDaemonConfig(daemonCommandWithArgs(t, "start", tc.args...))
+			if err != nil {
+				t.Fatalf("loading daemon start config: %v", err)
+			}
+			got := daemonNonInteractive(cfg.GetNonInteractive(), daemonHost(cfg).Managed())
 			if got != tc.want {
-				t.Errorf("daemonNonInteractiveDefault() = %v, want %v (daemon_type=%q env=%q)",
-					got, tc.want, tc.daemonType, tc.envFlag)
+				t.Errorf("non-interactive = %v, want %v (daemon_type=%q env=%q args=%v)",
+					got, tc.want, tc.daemonType, tc.envFlag, tc.args)
 			}
 		})
 	}

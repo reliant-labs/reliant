@@ -13,7 +13,9 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
 	"github.com/spf13/cobra"
 
+	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // newDBCmd registers `reliant db` — the schema owner, detached from the server.
@@ -51,7 +53,7 @@ locks, which a transaction-pooling PgBouncer on DATABASE_URL cannot keep.`,
 		Short: "Manage database migrations",
 	}
 
-	migrateCmd.AddCommand(&cobra.Command{
+	upCmd := &cobra.Command{
 		Use:   "up",
 		Short: "Apply every pending migration",
 		Long: `Apply every migration this binary embeds that the database has not
@@ -68,16 +70,20 @@ refused with nothing applied. ` + "`db migrate status`" + ` previews which.`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := db.ResolveDatabaseConfig("")
+			cfg, err := config.LoadDbMigrateUpConfig(cmd)
 			if err != nil {
 				return err
 			}
+			if err := config.ValidateDbMigrateUpConfig(cfg); err != nil {
+				return err
+			}
+			migrationURL := migrationURL(cfg.GetDatabase())
 
 			out := cmd.OutOrStdout()
 			// The goose bridge logs its progress while it runs (goose prints
 			// a line per file); the migrator's report follows, one fact per
 			// line.
-			res, err := db.Migrate(cmd.Context(), cfg.MigrationURL(), slog.New(slog.NewTextHandler(out, nil)))
+			res, err := db.Migrate(cmd.Context(), migrationURL, slog.New(slog.NewTextHandler(out, nil)))
 			if err != nil {
 				return err
 			}
@@ -90,7 +96,7 @@ refused with nothing applied. ` + "`db migrate status`" + ` previews which.`,
 			// different set than this binary embeds — a mismatch worth failing
 			// the Job over, because every waiter is about to block on exactly
 			// this set.
-			sqlDB, err := sql.Open("pgx", cfg.MigrationURL())
+			sqlDB, err := sql.Open("pgx", migrationURL)
 			if err != nil {
 				return fmt.Errorf("verify schema after migrate: %w", err)
 			}
@@ -115,9 +121,12 @@ refused with nothing applied. ` + "`db migrate status`" + ` previews which.`,
 			fmt.Fprintf(out, "schema is current (version %d)\n", state.Version)
 			return nil
 		},
-	})
+	}
+	// DATABASE_URL, DATABASE_DIRECT_URL, --db-driver: proto/config/v1 DbMigrateUpConfig.
+	config.RegisterDbMigrateUpConfigFlags(upCmd)
+	migrateCmd.AddCommand(upCmd)
 
-	migrateCmd.AddCommand(&cobra.Command{
+	statusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Preview what `db migrate up` would do, changing nothing",
 		Long: `Read the database's migration state and print what ` + "`db migrate up`" + ` from
@@ -134,14 +143,18 @@ very deadlock the schema wait produces.`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := db.ResolveDatabaseConfig("")
+			cfg, err := config.LoadDbMigrateStatusConfig(cmd)
 			if err != nil {
 				return err
 			}
+			if err := config.ValidateDbMigrateStatusConfig(cfg); err != nil {
+				return err
+			}
+			migrationURL := migrationURL(cfg.GetDatabase())
 
 			// Deliberately NOT ConnectWithConfig: both of its policies act on
 			// the schema (apply, or block until current).
-			sqlDB, err := sql.Open("pgx", cfg.MigrationURL())
+			sqlDB, err := sql.Open("pgx", migrationURL)
 			if err != nil {
 				return fmt.Errorf("open database: %w", err)
 			}
@@ -156,9 +169,12 @@ very deadlock the schema wait produces.`,
 			}
 			return nil
 		},
-	})
+	}
+	// DATABASE_URL, DATABASE_DIRECT_URL, --db-driver: proto/config/v1 DbMigrateStatusConfig.
+	config.RegisterDbMigrateStatusConfigFlags(statusCmd)
+	migrateCmd.AddCommand(statusCmd)
 
-	migrateCmd.AddCommand(&cobra.Command{
+	forceCmd := &cobra.Command{
 		Use:   "force <version>",
 		Short: "Clear a dirty migration state by recording a version without running SQL",
 		Long: `Record <version> as the schema's version and clear the dirty flag, WITHOUT
@@ -178,21 +194,36 @@ records it without checking that the schema is the one it builds.`,
 			if err != nil || version < -1 {
 				return fmt.Errorf("force: %q is not a migration version (an integer, or -1 for none)", args[0])
 			}
-			cfg, err := db.ResolveDatabaseConfig("")
+			cfg, err := config.LoadDbMigrateForceConfig(cmd)
 			if err != nil {
 				return err
 			}
-			if err := db.Force(cfg.MigrationURL(), version); err != nil {
+			if err := config.ValidateDbMigrateForceConfig(cfg); err != nil {
+				return err
+			}
+			migrationURL := migrationURL(cfg.GetDatabase())
+			if err := db.Force(migrationURL, version); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "forced version %d: the dirty flag is cleared and no SQL was run; `%s up` applies the rest\n",
 				version, cmd.Parent().CommandPath())
 			return nil
 		},
-	})
+	}
+	// DATABASE_URL, DATABASE_DIRECT_URL, --db-driver: proto/config/v1 DbMigrateForceConfig.
+	config.RegisterDbMigrateForceConfigFlags(forceCmd)
+	migrateCmd.AddCommand(forceCmd)
 
 	dbCmd.AddCommand(migrateCmd)
 	return dbCmd
+}
+
+// migrationURL is the URL a `db migrate` command runs on: the direct
+// (session) URL when one is set, else the URL. The migrator holds
+// session-level locks, which a transaction-pooling PgBouncer cannot keep.
+func migrationURL(cfg *configv1.DatabaseConfig) string {
+	_, url, directURL := databaseSettings(cfg)
+	return db.DatabaseConfig{URL: url, DirectURL: directURL}.MigrationURL()
 }
 
 // readOnlyPlan runs db.PlanMigration inside one READ ONLY, REPEATABLE READ

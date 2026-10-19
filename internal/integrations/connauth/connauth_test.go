@@ -53,7 +53,7 @@ func newEnv(t *testing.T) *env {
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
 	v := vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})
-	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), func(string) string { return "" })
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)
 	store := repo.Connections()
 	tokens := connections.NewTokenSource(store, v, providers, nil)

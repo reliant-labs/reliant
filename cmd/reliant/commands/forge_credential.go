@@ -85,7 +85,7 @@ func exportForgeCredentialHelper(server, account string) {
 	value := cloudcred.FormatCommand(argv)
 	daemonForgeHelper.Lock()
 	defer daemonForgeHelper.Unlock()
-	current := os.Getenv(cloudcred.HelperEnv)
+	current := os.Getenv(cloudcred.HelperEnv) //nolint:forbidigo // FORGE_CREDENTIAL_HELPER is forge's credential-helper protocol, not reliant configuration
 	if current != "" && current != daemonForgeHelper.value {
 		logging.Info("leaving the user's forge credential helper in place", "env", cloudcred.HelperEnv)
 		return
@@ -123,7 +123,7 @@ func retireLegacyForgeDeposits() {
 // the helper for this process when nothing set one (a daemon's pinned value,
 // or the user's own, wins).
 func useReliantSessionForForge() {
-	if strings.TrimSpace(os.Getenv(cloudcred.HelperEnv)) != "" {
+	if strings.TrimSpace(os.Getenv(cloudcred.HelperEnv)) != "" { //nolint:forbidigo // FORGE_CREDENTIAL_HELPER is forge's credential-helper protocol, not reliant configuration
 		return
 	}
 	argv, err := forgeHelperArgv("", "")

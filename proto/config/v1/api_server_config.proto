@@ -2,8 +2,15 @@ syntax = "proto3";
 
 package config.v1;
 
+import "config/v1/analytics_config.proto";
 import "config/v1/control_plane_config.proto";
+import "config/v1/integrations_config.proto";
+import "config/v1/llm_config.proto";
+import "config/v1/observability_config.proto";
+import "config/v1/preview_config.proto";
+import "config/v1/server_config.proto";
 import "forge/v1/forge.proto";
+import "google/protobuf/duration.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
 
@@ -11,8 +18,6 @@ option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
 // only the API server reads. It loads alongside the root ReliantConfig
 // (config.proto, whose header has the rules every config here follows).
 //
-// It moves onto this message a field at a time; the rest of the API server's
-// flags are still registered by hand in cmd/reliant/commands/server.go.
 message ApiServerConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
@@ -20,8 +25,7 @@ message ApiServerConfig {
   };
 
   // How the API server validates a caller's JWT. Any one of these is enough.
-  // A PEM given directly wins over a file; serverapi.Run falls back to the
-  // legacy RELIANT_JWT_PUBLIC_KEY when both are empty.
+  // A PEM given directly wins over a file.
   string jwt_public_key = 1 [(forge.v1.config) = {
     env_var: "JWT_PUBLIC_KEY"
     flag: "jwt-public-key"
@@ -63,4 +67,134 @@ message ApiServerConfig {
     env_var: "RELIANT_DISABLE_FORGE_API"
     description: "Turn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)"
   }];
+
+  DatabaseConfig database = 10;
+  NatsConfig nats = 11;
+  TemporalConfig temporal = 12;
+  ServerTLSConfig tls = 13;
+  DrainConfig drain = 14;
+
+  int32 grpc_port = 15 [(forge.v1.config) = {
+    env_var: "GRPC_PORT"
+    flag: "grpc-port"
+    default_value: "9090"
+    description: "gRPC/ConnectRPC listen port"
+  }];
+  int32 health_port = 16 [(forge.v1.config) = {
+    env_var: "HEALTH_PORT"
+    flag: "health-port"
+    default_value: "8081"
+    description: "Health/readiness HTTP endpoint port"
+  }];
+  int32 pprof_port = 17 [(forge.v1.config) = {
+    env_var: "PPROF_PORT"
+    flag: "pprof-port"
+    default_value: "6060"
+    description: "pprof debug server port"
+  }];
+  string bind_address = 18 [(forge.v1.config) = {
+    env_var: "BIND_ADDRESS"
+    flag: "bind-address"
+    default_value: "0.0.0.0"
+    description: "Network address to bind to"
+  }];
+  string data_dir = 19 [(forge.v1.config) = {
+    env_var: "DATA_DIR"
+    flag: "data-dir"
+    default_value: "./data"
+    description: "Data directory for logs and certs"
+  }];
+
+  // How live deltas fan out across replicas. nats is the only driver; the
+  // knob remains because deployments set it.
+  string streaming_driver = 20 [(forge.v1.config) = {
+    env_var: "STREAMING_DRIVER"
+    flag: "streaming-driver"
+    default_value: "nats"
+    allowed_values: ["nats"]
+    description: "Streaming driver (nats)"
+  }];
+
+  // The browser origins allowed to call the API, comma-separated; "*"
+  // allows every origin. The loader trims each element and drops blank ones.
+  repeated string cors_allowed_origins = 21 [(forge.v1.config) = {
+    env_var: "CORS_ALLOWED_ORIGINS"
+    flag: "cors-origins"
+    default_value: "*"
+    description: "Comma-separated CORS allowed origins, or * for all"
+  }];
+
+  // How callers authenticate. supabase validates Supabase JWTs against the
+  // key above; apikey (self-hosting) checks one shared bearer key.
+  string auth_mode = 30 [(forge.v1.config) = {
+    env_var: "AUTH_MODE"
+    default_value: "supabase"
+    allowed_values: ["supabase", "apikey"]
+    description: "Auth mode: supabase (JWTs) or apikey (one shared bearer key)"
+  }];
+  // The shared bearer key apikey mode checks; required in that mode.
+  string auth_api_key = 31 [(forge.v1.config) = {
+    env_var: "AUTH_API_KEY"
+    sensitive: true
+    optional: true
+    description: "Shared bearer key for AUTH_MODE=apikey"
+  }];
+  // The second half of the email_verified rollout: on, a JWT without the
+  // claim carries no email. control-plane's validator reads the same
+  // variable, and its KCL hands both processes one value. Turn it on only
+  // once the Supabase custom access-token hook is live on the project.
+  bool require_email_verified_claim = 32 [(forge.v1.config) = {
+    env_var: "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM"
+    description: "A JWT without an email_verified claim carries no email"
+  }];
+
+  // The PUBLIC base URL of the control plane that issues this deployment's
+  // tokens: the issuer TokenService names, published as RFC 8414 metadata so
+  // `reliant auth login --server <this API>` can find where to log in. Not
+  // RELIANT_CONTROL_PLANE_URL, an in-cluster address a browser cannot reach.
+  // Unset: no browser login is offered.
+  string authorization_server = 33 [(forge.v1.config) = {
+    env_var: "RELIANT_AUTHORIZATION_SERVER"
+    description: "Public URL of the control plane that issues this deployment's tokens"
+  }];
+
+  // The authorization servers whose access tokens the connector (MCP)
+  // endpoint accepts, comma-separated (typically the Supabase project URL).
+  // None: connectors authenticate with rlat_ connector credentials only, and
+  // OAuth discovery is not advertised.
+  repeated string mcp_oauth_issuers = 34 [(forge.v1.config) = {
+    env_var: "MCP_OAUTH_ISSUERS"
+    description: "Comma-separated OAuth issuers whose tokens the connector endpoint accepts"
+  }];
+
+  // The largest attachment accepted, in bytes.
+  int64 max_upload_size = 35 [(forge.v1.config) = {
+    env_var: "MAX_UPLOAD_SIZE"
+    default_value: "10485760"
+    description: "Largest attachment accepted, in bytes"
+  }];
+
+  // What the worktree sweep does with active worktrees its daemon reports
+  // finished (clean, merged or pushed, idle over 24h, not in use): dry-run
+  // logs them and archives nothing; on archives them; off never asks.
+  string worktree_auto_archive = 36 [(forge.v1.config) = {
+    env_var: "RELIANT_WORKTREE_AUTO_ARCHIVE"
+    default_value: "dry-run"
+    allowed_values: ["dry-run", "on", "off"]
+    description: "Worktree auto-archive: dry-run, on or off"
+  }];
+  IntegrationsConfig integrations = 40;
+  ObservabilityConfig observability = 50;
+  SentryConfig sentry = 51;
+  AnalyticsConfig analytics = 60;
+  LLMConfig llm = 70;
+  // How long an unreferenced Temporal payload blob is kept before the API
+  // server's hourly GC deletes it. It must exceed the longest workflow run
+  // plus the namespace's history retention (internal/temporal/claimcheck).
+  google.protobuf.Duration payload_blob_gc_horizon = 80 [(forge.v1.config) = {
+    env_var: "RELIANT_PAYLOAD_BLOB_GC_HORIZON"
+    default_value: "720h"
+    description: "How long an unreferenced Temporal payload blob is kept"
+  }];
+  PreviewConfig preview = 90;
 }

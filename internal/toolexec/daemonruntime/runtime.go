@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -84,10 +83,12 @@ type daemonClient struct {
 	localExecutor *toolexec.LocalToolExecutor
 	capabilities  []string
 	// runtimeType is the sandbox/runtime this daemon executes under ("kata",
-	// "gvisor"), sourced from the DAEMON_RUNTIME_TYPE env stamped on cloud
+	// "gvisor"), from the DAEMON_RUNTIME_TYPE the operator stamps on cloud
 	// daemon pods. Empty for local/unknown daemons. Advertised to the server
 	// via a registration label so the model can be told about runtime limits.
 	runtimeType string
+	// host is what the platform declared about this daemon (StartOptions.Host).
+	host Host
 
 	// session is the gateway stream new work goes on: the newest one the
 	// gateway has registered. Nil until the first registers. While the daemon
@@ -195,6 +196,25 @@ type StartOptions struct {
 	// StorageReaper schedules forge's storage reaper on this machine; the zero
 	// value leaves it off (diskwatch.ReaperConfig).
 	StorageReaper diskwatch.ReaperConfig
+	// Host is what the platform declares about where this daemon runs; zero
+	// off a workspace pod.
+	Host Host
+	// ChromeBrowserURL, when set, points the built-in chrome-devtools MCP at
+	// an already-running browser (RELIANT_CHROME_BROWSER_URL).
+	ChromeBrowserURL string
+	// Guards is the policy for this machine's heavy commands and a filling
+	// disk; the zero value is the default policy.
+	Guards Guards
+}
+
+// Guards is the daemon's policy for heavy commands (internal/heavyjob) and a
+// filling disk (internal/diskguard).
+type Guards struct {
+	// Disk is the disk guard's thresholds; zero fields take the defaults.
+	Disk diskguard.Config
+	// HeavyCommands are the heavy-command patterns. Nil is
+	// heavyjob.DefaultCommands; empty declares nothing heavy by pattern.
+	HeavyCommands []string
 }
 
 func Start(ctx context.Context, opts StartOptions) error {
@@ -221,7 +241,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 		}
 	}()
 
-	client, err := newDaemonClient(opts.BootstrapConfig)
+	client, err := newDaemonClient(opts.BootstrapConfig, opts.Host, opts.Guards, mcp.WithChromeBrowserURL(opts.ChromeBrowserURL))
 	if err != nil {
 		return err
 	}
@@ -287,18 +307,18 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// Managed daemons: route github.com auth through the credential helper and
 	// scrub any token an older release left on disk. Local daemons are left
 	// alone. Best-effort and off the startup path.
-	setupManagedGitCredentials()
+	setupManagedGitCredentials(opts.Host.Managed())
 
 	// Preview forwarder: in-pod reverse proxy that lets the workspace-proxy
 	// reach loopback-bound user dev servers (see preview_forwarder.go). Runs
-	// only where a pod-facing surface exists: cloud pods set
-	// DAEMON_FRONTEND_PORT (workspace-controller pod spec), and server-mode
+	// only where a pod-facing surface exists: cloud pods set a frontend port
+	// (DAEMON_FRONTEND_PORT, workspace-controller pod spec), and server-mode
 	// daemons are always pod-hosted. Local/mac daemons skip it — nothing
 	// routes to their loopback, and binding :9191 could collide with the
 	// docker-compose daemon-gateway on dev machines. Startup failure is
 	// logged, never fatal: a broken preview surface must not take down tool
 	// execution.
-	if os.Getenv("DAEMON_FRONTEND_PORT") != "" || opts.BootstrapConfig.ServerMode {
+	if opts.Host.FrontendPort != 0 || opts.BootstrapConfig.ServerMode {
 		// Reserve the daemon's own RPC listen port so a preview URL can never
 		// route into the Connect/gRPC surface (the forwarder adds its own
 		// bound port automatically).
@@ -307,7 +327,8 @@ func Start(ctx context.Context, opts StartOptions) error {
 			rpcPort = 9190
 		}
 		forwarder := NewPreviewForwarder(rpcPort)
-		if err := forwarder.Start(previewListenAddr(os.Getenv)); err != nil {
+		previewPort := previewListenPort(opts.Host.FrontendPort)
+		if err := forwarder.Start(fmt.Sprintf(":%d", previewPort)); err != nil {
 			logging.Warn(logPrefix+" preview forwarder failed to start (previews of loopback-bound servers will 502)", "error", err)
 		} else {
 			logging.Info(logPrefix+" preview forwarder started", "addr", forwarder.Addr().String())
@@ -324,12 +345,6 @@ func Start(ctx context.Context, opts StartOptions) error {
 		// feed, and same pod-only gate: on a local dev machine the listener
 		// table is the user's whole machine, which is noise (and none of it
 		// is proxy-reachable anyway). Inert without /proc/net/tcp.
-		previewPort := DefaultPreviewPort
-		if addr := previewListenAddr(os.Getenv); strings.HasPrefix(addr, ":") {
-			if p, err := strconv.Atoi(addr[1:]); err == nil {
-				previewPort = p
-			}
-		}
 		client.portWatcher = netports.NewWatcher(netports.DefaultPollInterval, rpcPort, previewPort)
 		go client.portWatcher.Run(ctx)
 	}
@@ -382,9 +397,10 @@ func describeIncumbentDaemon(dataDir string) string {
 		state.PID, state.StartedAt.Local().Format(time.RFC3339))
 }
 
-func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, error) {
-	// Resolve CWD: prefer DAEMON_WORKING_DIR env var (used in Docker), else os.Getwd().
-	cwd := strings.TrimSpace(os.Getenv("DAEMON_WORKING_DIR"))
+func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards Guards, mcpOpts ...mcp.ManagerOption) (*daemonClient, error) {
+	// Resolve CWD: the platform's working directory (DAEMON_WORKING_DIR, used
+	// in Docker and on pods), else os.Getwd().
+	cwd := strings.TrimSpace(host.WorkingDir)
 	if cwd == "" {
 		resolvedCwd, err := os.Getwd()
 		if err != nil {
@@ -401,11 +417,11 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	// hostname flip; this field stays the machine's current name.
 	hostname := instanceid.Hostname()
 
-	// DAEMON_RUNTIME_TYPE is stamped by the control-plane on cloud daemon pods
+	// The runtime type is stamped by the control-plane on cloud daemon pods
 	// (e.g. "kata", "gvisor"); absent for local/self-hosted daemons.
-	runtimeType := strings.TrimSpace(os.Getenv("DAEMON_RUNTIME_TYPE"))
+	runtimeType := strings.TrimSpace(host.RuntimeType)
 
-	mcpManager := mcp.NewManager(mcp.RoleDaemon)
+	mcpManager := mcp.NewManager(mcp.RoleDaemon, mcpOpts...)
 	storedConfigProvider := config.NewStoredConfigProvider(&filesystemConfigStore{})
 	mcpManager.SetProjectConfigResolver(func(ctx context.Context, projectPath string) (*config.Config, error) {
 		// Pass the filesystem path directly as the "projectID" — the
@@ -426,16 +442,12 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	// The disk guard acts on a filling disk: past its reclaim threshold it
 	// runs the reclaimers and the heartbeat asks the server to re-check this
 	// machine's kept workspaces; past its refuse threshold it refuses new
-	// heavy commands. A threshold it cannot read keeps its default.
+	// heavy commands.
 	diskWatcher := diskwatch.Default()
-	guardCfg, err := diskguard.ConfigFromEnv(os.Environ())
-	if err != nil {
-		logging.Warn(logPrefix+" Disk guard keeps its default thresholds", "error", err)
-	}
 	// Its reclaimers — what frees space safely beside running builds — are
 	// registered in Start: forge's storage reaper, where the reaper routine
 	// is enabled.
-	diskGuard := diskguard.New(guardCfg, diskWatcher)
+	diskGuard := diskguard.New(guards.Disk, diskWatcher)
 
 	// Every agent on this machine runs its commands through this daemon, so
 	// this is where their heavy ones (builds, test suites, codegen) are held
@@ -443,9 +455,14 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	// and refused on a nearly full disk. A gate that cannot queue (slots
 	// switched off, own binary not found) runs them unqueued: a broken
 	// limiter must never stop work.
-	heavyCfg := heavyjob.ConfigFromEnv(os.Environ())
-	heavyCfg.Admission = diskGuard
-	heavyGate, err := heavyjob.New(heavyCfg)
+	heavyGate, err := heavyjob.New(heavyjob.Config{
+		Commands: guards.HeavyCommands,
+		// The slot pool is forge's, read from forge's own variables
+		// (FORGE_SLOTS_DIR, FORGE_HEAVY_SLOTS) exactly as forge's lanes
+		// read them, so both draw on one machine-wide budget.
+		Env:       os.Environ(), //nolint:forbidigo // forge's FORGE_* slot settings, passed through to forge/pkg/hostslot; not this daemon's config
+		Admission: diskGuard,
+	})
 	if err != nil {
 		logging.Warn(logPrefix+" Heavy commands run unqueued and unguarded", "error", err)
 	} else {
@@ -511,6 +528,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		localExecutor:     localExec,
 		capabilities:      caps,
 		runtimeType:       runtimeType,
+		host:              host,
 		cancelByReq:       make(map[string]context.CancelFunc),
 		backgroundByReq:   make(map[string]string),
 		watchersByPr:      make(map[string]context.CancelFunc),
@@ -959,7 +977,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			// Dialing out no longer implies a personal machine: managed
 			// workspaces dial out too under DAEMON_DIAL_OUT. See
 			// resolveDaemonType.
-			DaemonType: resolveDaemonType("local"),
+			DaemonType: resolveDaemonType(d.host.DaemonType, "local"),
 			Labels:     d.registerLabels(),
 			// Re-assert our persisted stable identity (empty on first-ever
 			// registration). The gateway trusts it for unbound PATs so identity
@@ -1996,7 +2014,7 @@ func (d *daemonClient) cancelAllRequests() {
 // sendProjectDiscovery announces the project under the daemon's working
 // directory on session s, as part of opening it.
 func (d *daemonClient) sendProjectDiscovery(s *gatewaySession) error {
-	projectPath := strings.TrimSpace(os.Getenv("PROJECT_PATH"))
+	projectPath := strings.TrimSpace(d.host.ProjectPath)
 	if projectPath == "" {
 		projectPath = d.cwd
 	}

@@ -4,8 +4,8 @@ package vertexai
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -75,17 +75,38 @@ func getProviderForModel(modelID models.ModelID) providerType {
 	return providerGemini
 }
 
-// initGeminiClient initializes the Gemini provider client
-func (c *VertexAIClient) initGeminiClient() error {
-	project := os.Getenv("VERTEXAI_PROJECT")
-	location := os.Getenv("VERTEXAI_LOCATION")
+// defaultLocation is the Vertex AI region used when none is configured.
+const defaultLocation = "us-central1"
 
-	if project == "" {
-		return fmt.Errorf("VERTEXAI_PROJECT environment variable is required")
+// placement is the process's configured Vertex AI project and region
+// (VERTEXAI_PROJECT, VERTEXAI_LOCATION: the server role's LLM config).
+type placement struct{ project, location string }
+
+var configured atomic.Pointer[placement]
+
+// Configure sets the Vertex AI project and region. A server role calls it once
+// at boot, from its config, before any Vertex AI call. An empty location is
+// us-central1.
+func Configure(project, location string) {
+	configured.Store(&placement{project: strings.TrimSpace(project), location: strings.TrimSpace(location)})
+}
+
+// projectAndLocation is the configured project ("" when none) and region.
+func projectAndLocation() (project, location string) {
+	if p := configured.Load(); p != nil {
+		project, location = p.project, p.location
 	}
 	if location == "" {
-		location = "us-central1" // Default location
-		logging.Debug("VERTEXAI_LOCATION not set, using default", "location", location)
+		location = defaultLocation
+	}
+	return project, location
+}
+
+// initGeminiClient initializes the Gemini provider client
+func (c *VertexAIClient) initGeminiClient() error {
+	project, location := projectAndLocation()
+	if project == "" {
+		return fmt.Errorf("VERTEXAI_PROJECT is required")
 	}
 
 	client, err := llm.NewGenAISDKClient(context.Background(), &genai.ClientConfig{
@@ -104,15 +125,13 @@ func (c *VertexAIClient) initGeminiClient() error {
 // initClaudeClient initializes the Claude provider client via Vertex AI
 func (c *VertexAIClient) initClaudeClient() error {
 	// Claude uses REST API with Google Cloud OAuth2, no SDK client needed
-	// We just need to validate the environment variables
-	project := os.Getenv("VERTEXAI_PROJECT")
-	location := os.Getenv("VERTEXAI_LOCATION")
-
+	// We just need to validate the configuration
+	project, location := projectAndLocation()
 	if project == "" {
-		return fmt.Errorf("VERTEXAI_PROJECT environment variable is required")
+		return fmt.Errorf("VERTEXAI_PROJECT is required")
 	}
-	if location == "" {
-		logging.Debug("VERTEXAI_LOCATION not set, using default", "location", "us-central1")
+	if location == defaultLocation {
+		logging.Debug("VERTEXAI_LOCATION not set, using default", "location", location)
 	}
 
 	return nil

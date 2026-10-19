@@ -3,9 +3,10 @@ package tools
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"testing"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/runenv"
@@ -46,6 +47,33 @@ func isPreviewablePort(p daemon.PortInfo) bool {
 	}
 }
 
+// PreviewSettings is how this process builds a remote daemon's preview URLs:
+// the PROXY_HOST / WORKSPACE_* settings the workspace proxy is configured
+// with, from the server role's config (PreviewConfig). The zero value builds
+// the environment's defaults.
+type PreviewSettings struct {
+	ProxyHost           string
+	WorkspaceBaseDomain string
+	// WorkspaceURLScheme is "" for https.
+	WorkspaceURLScheme string
+	// WorkspaceURLPort is 0 for none.
+	WorkspaceURLPort int
+}
+
+var previewSettings atomic.Pointer[PreviewSettings]
+
+// ConfigurePreviewURLs sets this process's preview settings. A server role
+// calls it once at boot, from its config, before any tool runs.
+func ConfigurePreviewURLs(s PreviewSettings) { previewSettings.Store(&s) }
+
+// SetPreviewURLsForTest sets the preview settings for the length of a test.
+func SetPreviewURLsForTest(tb testing.TB, s PreviewSettings) {
+	tb.Helper()
+	prev := previewSettings.Load()
+	previewSettings.Store(&s)
+	tb.Cleanup(func() { previewSettings.Store(prev) })
+}
+
 // PreviewURLTemplate returns the env-aware, externally-reachable preview URL for
 // a REMOTE daemon with a literal "{port}" placeholder in the port position, or
 // "" when there is no proxy to build one for (local daemon or unknown identity).
@@ -80,11 +108,15 @@ func PreviewURLTemplate(env runenv.Environment, daemonID string) string {
 	if daemonID == "" {
 		return ""
 	}
+	var cfg PreviewSettings
+	if p := previewSettings.Load(); p != nil {
+		cfg = *p
+	}
 	// PROXY_HOST wins → path-based routing (local k3d without wildcard DNS).
-	if host := os.Getenv("PROXY_HOST"); host != "" {
+	if host := cfg.ProxyHost; host != "" {
 		return fmt.Sprintf("http://%s/proxy/%s/{port}/", host, daemonID)
 	}
-	base := os.Getenv("WORKSPACE_BASE_DOMAIN")
+	base := cfg.WorkspaceBaseDomain
 	if base == "" {
 		// Nothing configured: keep the historical env-derived defaults.
 		switch env {
@@ -94,13 +126,13 @@ func PreviewURLTemplate(env runenv.Environment, daemonID string) string {
 			base = defaultWorkspaceBaseDomain
 		}
 	}
-	scheme := os.Getenv("WORKSPACE_URL_SCHEME")
+	scheme := cfg.WorkspaceURLScheme
 	if scheme == "" {
 		scheme = "https"
 	}
 	portSuffix := ""
-	if p := os.Getenv("WORKSPACE_URL_PORT"); p != "" {
-		portSuffix = ":" + p
+	if cfg.WorkspaceURLPort != 0 {
+		portSuffix = fmt.Sprintf(":%d", cfg.WorkspaceURLPort)
 	}
 	return fmt.Sprintf("%s://{port}-%s.%s%s", scheme, daemonID, base, portSuffix)
 }

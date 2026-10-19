@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -21,20 +20,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// defaultMaxFileSize is the largest upload accepted when neither
-// Deps.MaxFileSize nor MAX_UPLOAD_SIZE says otherwise: 10 MB.
+// defaultMaxFileSize is the largest upload accepted when Deps.MaxFileSize
+// does not say otherwise: 10 MB.
 const defaultMaxFileSize = int64(10 * 1024 * 1024)
-
-// maxFileSizeFromEnv is MAX_UPLOAD_SIZE in bytes, else defaultMaxFileSize.
-func maxFileSizeFromEnv() int64 {
-	if maxSizeEnv := os.Getenv("MAX_UPLOAD_SIZE"); maxSizeEnv != "" {
-		var size int64
-		if _, err := fmt.Sscanf(maxSizeEnv, "%d", &size); err == nil {
-			return size
-		}
-	}
-	return defaultMaxFileSize
-}
 
 // ============================================================================
 // Helper Methods

@@ -42,9 +42,7 @@ func mustMint(t *testing.T) string {
 
 func newAPIKeyMiddleware(t *testing.T) *Middleware {
 	t.Helper()
-	t.Setenv("AUTH_MODE", "apikey")
-	t.Setenv("AUTH_API_KEY", "legacy-secret")
-	mw, err := NewMiddleware("", "")
+	mw, err := NewMiddleware(Settings{Mode: ModeAPIKey, APIKey: "legacy-secret"})
 	if err != nil {
 		t.Fatalf("NewMiddleware: %v", err)
 	}

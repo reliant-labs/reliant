@@ -34,6 +34,22 @@ func OAuthClientEnv(integrationID string) (idVar, secretVar string) {
 	return base + "_CLIENT_ID", base + "_CLIENT_SECRET"
 }
 
+// OAuthClients looks up the deployment's OAuth client for an integration:
+// ("", "") when it configured none. The family it reads (OAuthClientEnv) is
+// keyed by the integration catalog, an open set a typed config message cannot
+// declare field by field, so a process entrypoint builds the lookup over its
+// environment once (OAuthClientsFromEnv) and hands it down.
+type OAuthClients func(integrationID string) (clientID, clientSecret string)
+
+// OAuthClientsFromEnv is the OAuthClients lookup over an environment, each
+// value trimmed.
+func OAuthClientsFromEnv(getenv func(string) string) OAuthClients {
+	return func(integrationID string) (string, string) {
+		idVar, secretVar := OAuthClientEnv(integrationID)
+		return strings.TrimSpace(getenv(idVar)), strings.TrimSpace(getenv(secretVar))
+	}
+}
+
 // HTTPDoer is the slice of *http.Client the broker, token source and probes use.
 type HTTPDoer interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -283,13 +299,13 @@ type Registry struct {
 }
 
 // ProvidersFromCatalog compiles every manifest that declares auth into a
-// provider, reading each OAuth client from deployment config
-// (OAuthClientEnv). A provider whose client is unset is still registered,
+// provider, with each OAuth client from the deployment's clients
+// (OAuthClients; nil means none is configured). A provider whose client is unset is still registered,
 // listed with its oauth2 method unavailable; it never fails boot. A manifest
 // that fails validation does: the catalog is embedded, so that is a build
 // defect, and it is re-validated here because a caller may hand in a manifest
 // that never went through the loader.
-func ProvidersFromCatalog(ms []*reliantv1.IntegrationManifest, getenv func(string) string) (*Registry, error) {
+func ProvidersFromCatalog(ms []*reliantv1.IntegrationManifest, clients OAuthClients) (*Registry, error) {
 	r := &Registry{providers: map[string]*Provider{}}
 	for _, m := range ms {
 		if len(m.GetConnection().GetAuth()) == 0 {
@@ -304,10 +320,14 @@ func ProvidersFromCatalog(ms []*reliantv1.IntegrationManifest, getenv func(strin
 			continue
 		}
 		idVar, secretVar := OAuthClientEnv(m.GetId())
+		var clientID, clientSecret string
+		if clients != nil {
+			clientID, clientSecret = clients(m.GetId())
+		}
 		p := &Provider{
 			ID: m.GetId(), DisplayName: orDefault(m.GetDisplayName(), m.GetId()), spec: m.GetConnection(),
-			ClientID:      strings.TrimSpace(getenv(idVar)),
-			ClientSecret:  vault.NewSecret([]byte(strings.TrimSpace(getenv(secretVar)))),
+			ClientID:      clientID,
+			ClientSecret:  vault.NewSecret([]byte(clientSecret)),
 			clientIDVar:   idVar,
 			secretVar:     secretVar,
 			paramPatterns: map[string]*regexp.Regexp{},

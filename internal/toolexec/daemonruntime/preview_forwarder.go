@@ -290,15 +290,13 @@ func dialLoopback(ctx context.Context, network, addr string) (net.Conn, error) {
 	return nil, fmt.Errorf("dial loopback:%s (tried 127.0.0.1 and ::1): %w", port, errors.Join(err4, err6))
 }
 
-// previewListenAddr resolves the forwarder bind address from the environment.
-// DAEMON_FRONTEND_PORT is stamped by the workspace-controller pod spec (9191);
-// absent (local dev, tests) the default applies. The forwarder binds all
+// previewListenPort is the forwarder's bind port: the pod's frontend port
+// (DAEMON_FRONTEND_PORT, stamped by the workspace-controller pod spec as 9191),
+// or the default when unset (local dev, tests). The forwarder binds all
 // interfaces — the workspace-proxy dials the POD IP, not loopback.
-func previewListenAddr(getenv func(string) string) string {
-	if raw := getenv("DAEMON_FRONTEND_PORT"); raw != "" {
-		if p, err := strconv.Atoi(raw); err == nil && p > 0 && p < 65536 {
-			return fmt.Sprintf(":%d", p)
-		}
+func previewListenPort(frontendPort int) int {
+	if frontendPort > 0 {
+		return frontendPort
 	}
-	return fmt.Sprintf(":%d", DefaultPreviewPort)
+	return DefaultPreviewPort
 }

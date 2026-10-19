@@ -9,12 +9,12 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-func TestNewReporterFromEnv(t *testing.T) {
+func TestNewReporter(t *testing.T) {
 	tests := []struct {
 		name         string
 		reliantEnv   string // value for RELIANT_ENV; "" means unset, as in a prod pod
 		sentryDSN    string
-		sentryEnable string // value for SENTRY_ENABLED; "" means unset
+		sentryEnable string // "false" turns SENTRY_ENABLED off; anything else leaves it on
 		wantSentry   bool
 	}{
 		{
@@ -60,14 +60,11 @@ func TestNewReporterFromEnv(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runenv.ConfigureForTest(t, tt.reliantEnv)
-			t.Setenv("SENTRY_DSN", tt.sentryDSN)
-			t.Setenv("SENTRY_ENABLED", tt.sentryEnable)
-
-			reporter := NewReporterFromEnv()
+			reporter := NewReporter(SentryConfig{Enabled: tt.sentryEnable != "false", DSN: tt.sentryDSN})
 
 			_, isSentry := reporter.(*SentryReporter)
 			if isSentry != tt.wantSentry {
-				t.Fatalf("NewReporterFromEnv() with RELIANT_ENV=%q: got sentry=%v, want sentry=%v (%T)",
+				t.Fatalf("NewReporter() with RELIANT_ENV=%q: got sentry=%v, want sentry=%v (%T)",
 					tt.reliantEnv, isSentry, tt.wantSentry, reporter)
 			}
 		})
@@ -77,10 +74,8 @@ func TestNewReporterFromEnv(t *testing.T) {
 // The deploy states its environment in SENTRY_ENVIRONMENT. Before, the server
 // reporter ignored it and guessed from the version string, so the deploy could
 // not say which environment its events belong to.
-func TestNewReporterFromEnv_EnvironmentFromDeploy(t *testing.T) {
+func TestNewReporter_EnvironmentFromDeploy(t *testing.T) {
 	runenv.ConfigureForTest(t, "prod")
-	t.Setenv("SENTRY_DSN", "https://public@example.ingest.sentry.io/1")
-	t.Setenv("SENTRY_ENABLED", "")
 
 	for _, tt := range []struct {
 		name, env, want string
@@ -89,8 +84,8 @@ func TestNewReporterFromEnv_EnvironmentFromDeploy(t *testing.T) {
 		{"unset falls back to the version guess", "", "production"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("SENTRY_ENVIRONMENT", tt.env)
-			if _, ok := NewReporterFromEnv().(*SentryReporter); !ok {
+			cfg := SentryConfig{Enabled: true, DSN: "https://public@example.ingest.sentry.io/1", Environment: tt.env}
+			if _, ok := NewReporter(cfg).(*SentryReporter); !ok {
 				t.Fatal("expected a Sentry reporter")
 			}
 			if got := sentry.CurrentHub().Client().Options().Environment; got != tt.want {

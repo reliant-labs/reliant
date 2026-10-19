@@ -84,12 +84,8 @@ func TestHeavyClassification(t *testing.T) {
 	}
 }
 
-func TestConfigFromEnvReplacesTheCommandList(t *testing.T) {
-	cfg := ConfigFromEnv([]string{EnvCommands + "=cargo build, bazel test* ,,"})
-	if want := []string{"cargo build", "bazel test*"}; !slices.Equal(cfg.Commands, want) {
-		t.Fatalf("Commands = %q, want %q", cfg.Commands, want)
-	}
-	g, err := New(Config{Commands: cfg.Commands, Env: []string{"FORGE_HEAVY_SLOTS=2"}, Self: testSelf(t)})
+func TestConfiguredCommandsReplaceTheDefaults(t *testing.T) {
+	g, err := New(Config{Commands: []string{"cargo build", "bazel test*"}, Env: []string{"FORGE_HEAVY_SLOTS=2"}, Self: testSelf(t)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,8 +93,20 @@ func TestConfigFromEnvReplacesTheCommandList(t *testing.T) {
 		t.Fatal("the configured list must replace the defaults")
 	}
 
-	if cfg := ConfigFromEnv(nil); cfg.Commands != nil {
-		t.Fatalf("no %s must keep the defaults, got %q", EnvCommands, cfg.Commands)
+	none, err := New(Config{Commands: []string{}, Env: []string{"FORGE_HEAVY_SLOTS=2"}, Self: testSelf(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if none.Heavy(Job{Command: "go test ./..."}) || !none.Heavy(Job{Command: "go test ./...", Declared: true}) {
+		t.Fatal("an empty list declares nothing heavy by pattern; a declared job still is")
+	}
+
+	def, err := New(Config{Env: []string{"FORGE_HEAVY_SLOTS=2"}, Self: testSelf(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !def.Heavy(Job{Command: "go test ./..."}) {
+		t.Fatal("nil Commands must keep DefaultCommands")
 	}
 }
 

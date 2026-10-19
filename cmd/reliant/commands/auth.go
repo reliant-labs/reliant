@@ -135,7 +135,7 @@ Purely local: no network call.`,
 				"server_from": target.describeServer(),
 			}
 			out := cmd.OutOrStdout()
-			if os.Getenv(envToken) != "" {
+			if os.Getenv(envToken) != "" { //nolint:forbidigo // RELIANT_TOKEN: forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
 				info["logged_in"] = true
 				info["credential"] = envToken
 				if jsonOutput {

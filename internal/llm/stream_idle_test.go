@@ -109,7 +109,7 @@ func TestStreamingHTTPClient_SlowButAliveStreamSurvives(t *testing.T) {
 // the idle timeout out of ssestream, not hang inside it.
 func TestNewOpenAISDKClient_CutsSilentStream(t *testing.T) {
 	srv := hangAfterHeaders(t)
-	t.Setenv(StreamIdleTimeoutEnv, "500ms")
+	SetStreamTimeoutsForTest(t, StreamTimeouts{Idle: 500 * time.Millisecond})
 
 	client := NewOpenAISDKClient(
 		openaiopt.WithBaseURL(srv.URL),
@@ -142,24 +142,18 @@ func TestNewOpenAISDKClient_CutsSilentStream(t *testing.T) {
 
 // TestStreamIdleTimeout_ResolvesOverride pins the operational escape hatch: the
 // timeout is lowered on inference about upstream keepalive cadence, so it must
-// be adjustable without a rebuild, and a bad value must not disable the guard.
+// be adjustable without a rebuild. (A malformed or non-positive value never
+// gets here: the process's config refuses it at boot.)
 func TestStreamIdleTimeout_ResolvesOverride(t *testing.T) {
 	t.Run("default when unset", func(t *testing.T) {
-		t.Setenv(StreamIdleTimeoutEnv, "")
+		SetStreamTimeoutsForTest(t, StreamTimeouts{})
 		assert.Equal(t, DefaultStreamIdleTimeout, StreamIdleTimeout())
 	})
 
-	t.Run("honours a valid duration", func(t *testing.T) {
-		t.Setenv(StreamIdleTimeoutEnv, "3m")
+	t.Run("honours a configured duration", func(t *testing.T) {
+		SetStreamTimeoutsForTest(t, StreamTimeouts{Idle: 3 * time.Minute})
 		assert.Equal(t, 3*time.Minute, StreamIdleTimeout())
 	})
-
-	for _, bad := range []string{"nonsense", "0s", "-10s"} {
-		t.Run("falls back on "+bad, func(t *testing.T) {
-			t.Setenv(StreamIdleTimeoutEnv, bad)
-			assert.Equal(t, DefaultStreamIdleTimeout, StreamIdleTimeout())
-		})
-	}
 }
 
 // TestDefaultStreamIdleTimeout_IsArguedFromData pins the value against silent

@@ -6,8 +6,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -93,11 +91,43 @@ type DatabaseConfig struct {
 	// Migrate defaults to MigrateApply; see MigrationPolicy.
 	Migrate MigrationPolicy
 
+	// Pool is how the process sizes its pool and waits on the database.
+	Pool Pool
+}
+
+// Pool is how a process sizes its connection pool and waits on its database:
+// the tuning half of its config's DatabaseConfig. A zero field takes its
+// default.
+type Pool struct {
+	// MaxOpenConns and MaxIdleConns size the pool; 0 is 25 / 10. Dev caps
+	// them low: the dev Postgres is SHARED by N parallel stacks (one per git
+	// worktree), and reliant's api + worker pools count against the same
+	// instance's max_connections alongside control-plane's services.
+	MaxOpenConns int
+	MaxIdleConns int
+
 	// ConnectTimeout is the total time the startup ping keeps retrying a
 	// database that is not up yet (a pooler or primary starting beside this
 	// process). Zero means serverkit.DefaultDBConnectTimeout. It must stay
 	// inside the deployment's startup probe window.
 	ConnectTimeout time.Duration
+
+	// SchemaWait bounds how long a MigrateWait process waits for the schema;
+	// 0 is DefaultSchemaWait.
+	SchemaWait time.Duration
+}
+
+// Pool defaults, for a zero Pool field.
+const (
+	defaultMaxOpenConns = 25
+	defaultMaxIdleConns = 10
+)
+
+func orDefault(v, def int) int {
+	if v > 0 {
+		return v
+	}
+	return def
 }
 
 func ParseDatabaseDriver(raw string) (DatabaseDriver, error) {
@@ -107,43 +137,6 @@ func ParseDatabaseDriver(raw string) (DatabaseDriver, error) {
 	default:
 		return "", fmt.Errorf("invalid DATABASE_DRIVER %q (expected postgres)", raw)
 	}
-}
-
-func ResolveDatabaseConfig(dataDir string) (DatabaseConfig, error) {
-	driver, err := ParseDatabaseDriver(os.Getenv("DATABASE_DRIVER"))
-	if err != nil {
-		return DatabaseConfig{}, err
-	}
-
-	cfg := DatabaseConfig{
-		Driver:    driver,
-		DataDir:   dataDir,
-		URL:       strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		DirectURL: strings.TrimSpace(os.Getenv("DATABASE_DIRECT_URL")),
-	}
-
-	if cfg.URL == "" {
-		return DatabaseConfig{}, fmt.Errorf("DATABASE_URL is required when DATABASE_DRIVER=postgres")
-	}
-
-	if raw := strings.TrimSpace(os.Getenv("DB_CONNECT_TIMEOUT")); raw != "" {
-		d, err := time.ParseDuration(raw)
-		if err != nil || d <= 0 {
-			return DatabaseConfig{}, fmt.Errorf("invalid DB_CONNECT_TIMEOUT %q (expected a positive Go duration, e.g. 5m)", raw)
-		}
-		cfg.ConnectTimeout = d
-	}
-
-	return cfg, nil
-}
-
-func Connect(dataDir string) (*sql.DB, error) {
-	cfg, err := ResolveDatabaseConfig(dataDir)
-	if err != nil {
-		return nil, err
-	}
-
-	return ConnectWithConfig(cfg)
 }
 
 func ConnectWithConfig(cfg DatabaseConfig) (*sql.DB, error) {
@@ -166,20 +159,17 @@ func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 	// retries the first ping with capped backoff: a database that comes up
 	// seconds after its clients is a wait, not a crash loop.
 	//
-	// Pool settings: defaults are 25 open / 10 idle, but both are
-	// env-overridable so dev can cap them low: the dev Postgres is SHARED by
-	// N parallel stacks (one per git worktree), and reliant's api + worker
-	// pools count against the same instance's max_connections alongside
-	// control-plane's services. Dev sets RELIANT_DB_MAX_OPEN_CONNS=8 /
-	// RELIANT_DB_MAX_IDLE_CONNS=2 (see control-plane deploy/kcl/dev/main.k
-	// _reliant_host_env). Prod/anything that sets neither keeps 25/10.
+	// Pool settings: cfg.Pool (see Pool). Dev sets
+	// RELIANT_DB_MAX_OPEN_CONNS=8 / RELIANT_DB_MAX_IDLE_CONNS=2 (control-plane
+	// deploy/kcl/dev/main.k _reliant_host_env); prod sets neither and keeps
+	// 25/10.
 	db, err := serverkit.OpenDB(context.Background(), "pgx", cfg.URL,
 		serverkit.DBPoolTuning{
-			MaxOpenConns:    envInt("RELIANT_DB_MAX_OPEN_CONNS", 25),
-			MaxIdleConns:    envInt("RELIANT_DB_MAX_IDLE_CONNS", 10),
+			MaxOpenConns:    orDefault(cfg.Pool.MaxOpenConns, defaultMaxOpenConns),
+			MaxIdleConns:    orDefault(cfg.Pool.MaxIdleConns, defaultMaxIdleConns),
 			ConnMaxLifetime: 30 * time.Minute,
 		},
-		serverkit.ConnectPolicy{Timeout: cfg.ConnectTimeout, Logger: slog.Default()})
+		serverkit.ConnectPolicy{Timeout: cfg.Pool.ConnectTimeout, Logger: slog.Default()})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to postgres database: %w", err)
 	}
@@ -191,7 +181,7 @@ func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 
 	switch cfg.Migrate {
 	case MigrateWait:
-		if err := WaitForSchema(db); err != nil {
+		if err := WaitForSchema(db, cfg.Pool.SchemaWait); err != nil {
 			if closeErr := db.Close(); closeErr != nil {
 				logging.Error("Failed to close postgres database after schema wait failure", "error", closeErr)
 			}
@@ -240,21 +230,4 @@ func openSessionPool(url string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to connect to the direct (session) database URL: %w", err)
 	}
 	return pool, nil
-}
-
-// envInt reads a non-negative integer from the named env var, falling back to
-// def when the var is unset, empty, or not a positive integer. Used for the
-// connection-pool sizing knobs so dev can cap them low (shared dev Postgres)
-// while prod keeps the built-in defaults.
-func envInt(name string, def int) int {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
-		return def
-	}
-	v, err := strconv.Atoi(raw)
-	if err != nil || v <= 0 {
-		logging.Warn("Ignoring invalid pool-size env var; using default", "var", name, "value", raw, "default", def)
-		return def
-	}
-	return v
 }

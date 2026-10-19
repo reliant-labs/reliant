@@ -23,7 +23,7 @@ import (
 func TestSetupToolsDaemonLoggingPersistsWhenQuiet(t *testing.T) {
 	dataDir := t.TempDir()
 
-	setupToolsDaemonLogging(dataDir, false, logging.Settings{})
+	setupToolsDaemonLogging(dataDir, false, false, logging.Settings{})
 	logging.Info("quiet-mode persistence test", "source", "file-only")
 	if err := logging.Close(); err != nil {
 		t.Fatalf("close tools-daemon log: %v", err)
@@ -42,7 +42,7 @@ func TestSetupToolsDaemonLoggingPersistsWhenQuiet(t *testing.T) {
 func TestSetupToolsDaemonLoggingPersistsOutput(t *testing.T) {
 	dataDir := t.TempDir()
 
-	setupToolsDaemonLogging(dataDir, true, logging.Settings{})
+	setupToolsDaemonLogging(dataDir, true, false, logging.Settings{})
 	logging.Info("tools-daemon persistence test", "source", "stdout-and-file")
 	if err := logging.Close(); err != nil {
 		t.Fatalf("close tools-daemon log: %v", err)
@@ -60,13 +60,12 @@ func TestSetupToolsDaemonLoggingPersistsOutput(t *testing.T) {
 	}
 }
 
-// A hosted daemon (RELIANT_DAEMON_TYPE=managed) is read through its stdout by
+// A hosted (managed) daemon is read through its stdout by
 // the node log agent, so it must emit JSON there as well as to the file, with
 // no --verbose, and must not leave its logging variables in the environment
 // its children inherit.
 func TestSetupToolsDaemonLoggingManagedWritesJSONToStdout(t *testing.T) {
 	dataDir := t.TempDir()
-	t.Setenv("RELIANT_DAEMON_TYPE", "managed")
 	t.Setenv("LOG_FORMAT", "json")
 	t.Setenv("RELIANT_LOG_LEVEL", "info")
 	t.Cleanup(func() { logging.Setup(logging.Settings{}, slog.LevelInfo) })
@@ -77,7 +76,7 @@ func TestSetupToolsDaemonLoggingManagedWritesJSONToStdout(t *testing.T) {
 	}
 	prev := os.Stdout
 	os.Stdout = w
-	setupToolsDaemonLogging(dataDir, false, loadedLogSettings(t))
+	setupToolsDaemonLogging(dataDir, false, true, loadedLogSettings(t))
 	logging.Info("managed stdout test")
 	os.Stdout = prev
 	_ = w.Close()

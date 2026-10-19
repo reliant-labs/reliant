@@ -246,15 +246,3 @@ func contains(ss []string, s string) bool {
 	}
 	return false
 }
-
-// GitHubAppSlugEnv names the GitHub App Reliant's own writes appear as when
-// they are made through it (reliant-labs in production). It is how an event the
-// App caused is recognised when no ledger entry names the run. Unset, no event is
-// attributed to the App: a deployment without one has no App to attribute to.
-const GitHubAppSlugEnv = "RELIANT_GITHUB_APP_SLUG"
-
-// OriginEnricherFromEnv builds the enricher a webhook receiver wires into its
-// Intake, reading the App slug from GitHubAppSlugEnv.
-func OriginEnricherFromEnv(ledger LedgerReader, lin RunLineage, getenv func(string) string) *OriginEnricher {
-	return NewOriginEnricher(ledger, lin, getenv(GitHubAppSlugEnv))
-}

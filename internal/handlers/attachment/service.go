@@ -24,8 +24,8 @@ type Deps struct {
 
 	// Repo stores attachments and their bytes.
 	Repo Repository
-	// MaxFileSize is the largest upload accepted, in bytes. Zero takes
-	// MAX_UPLOAD_SIZE from the environment, else 10 MB.
+	// MaxFileSize is the largest upload accepted, in bytes (the API server's
+	// MAX_UPLOAD_SIZE). Zero takes the default, 10 MB.
 	MaxFileSize int64
 }
 
@@ -59,13 +59,13 @@ type Service struct {
 
 // New creates a new attachment service instance with the supplied Deps.
 // Returns an error when validateDeps rejects a nil required field.
-// A zero Deps.MaxFileSize takes its default (MAX_UPLOAD_SIZE, else 10 MB).
+// A zero Deps.MaxFileSize takes its default, 10 MB.
 func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
 	if deps.MaxFileSize == 0 {
-		deps.MaxFileSize = maxFileSizeFromEnv()
+		deps.MaxFileSize = defaultMaxFileSize
 	}
 	return &Service{deps: deps}, nil
 }

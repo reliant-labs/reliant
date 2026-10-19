@@ -7,6 +7,10 @@ import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { ControlPlaneConfig } from "./control_plane_config_pb";
 import { file_config_v1_control_plane_config } from "./control_plane_config_pb";
+import type { ObservabilityConfig } from "./observability_config_pb";
+import { file_config_v1_observability_config } from "./observability_config_pb";
+import type { DatabaseConfig, DrainConfig, NatsConfig, ServerTLSConfig } from "./server_config_pb";
+import { file_config_v1_server_config } from "./server_config_pb";
 import { file_forge_v1_forge } from "../../forge/v1/forge_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -14,13 +18,12 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file config/v1/gateway_config.proto.
  */
 export const file_config_v1_gateway_config: GenFile = /*@__PURE__*/
-  fileDesc("Ch5jb25maWcvdjEvZ2F0ZXdheV9jb25maWcucHJvdG8SCWNvbmZpZy52MSJlCg1HYXRld2F5Q29uZmlnEjQKDWNvbnRyb2xfcGxhbmUYASABKAsyHS5jb25maWcudjEuQ29udHJvbFBsYW5lQ29uZmlnOh7KwRgaCgdyZWxpYW50EgZzZXJ2ZXISB2dhdGV3YXlCOFo2Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_config_v1_control_plane_config, file_forge_v1_forge]);
+  fileDesc("Ch5jb25maWcvdjEvZ2F0ZXdheV9jb25maWcucHJvdG8SCWNvbmZpZy52MSKsBgoNR2F0ZXdheUNvbmZpZxI0Cg1jb250cm9sX3BsYW5lGAEgASgLMh0uY29uZmlnLnYxLkNvbnRyb2xQbGFuZUNvbmZpZxIrCghkYXRhYmFzZRgKIAEoCzIZLmNvbmZpZy52MS5EYXRhYmFzZUNvbmZpZxIjCgRuYXRzGAsgASgLMhUuY29uZmlnLnYxLk5hdHNDb25maWcSJwoDdGxzGAwgASgLMhouY29uZmlnLnYxLlNlcnZlclRMU0NvbmZpZxIlCgVkcmFpbhgNIAEoCzIWLmNvbmZpZy52MS5EcmFpbkNvbmZpZxJnCgtkYWVtb25fcG9ydBgOIAEoBUJSgs4YTgoRVE9PTFNfREFFTU9OX1BPUlQSC2RhZW1vbi1wb3J0GgQ5MTkwKiZEYWVtb24gYmlkaS1zdHJlYW1pbmcgZ1JQQyBsaXN0ZW4gcG9ydBJeCgtoZWFsdGhfcG9ydBgPIAEoBUJJgs4YRQoLSEVBTFRIX1BPUlQSC2hlYWx0aC1wb3J0GgQ4MDgwKiNIZWFsdGgvcmVhZGluZXNzIEhUVFAgZW5kcG9pbnQgcG9ydBJbCgxiaW5kX2FkZHJlc3MYECABKAlCRYLOGEEKDEJJTkRfQUREUkVTUxIMYmluZC1hZGRyZXNzGgcwLjAuMC4wKhpOZXR3b3JrIGFkZHJlc3MgdG8gYmluZCB0bxJVCghkYXRhX2RpchgRIAEoCUJDgs4YPwoIREFUQV9ESVISCGRhdGEtZGlyGgYuL2RhdGEqIURhdGEgZGlyZWN0b3J5IGZvciBsb2dzIGFuZCBjZXJ0cxJvCgpwcHJvZl9hZGRyGBIgASgJQluCzhhXCgpQUFJPRl9BRERSEgpwcHJvZi1hZGRyKj1wcHJvZiBkZWJ1ZyBzZXJ2ZXIgYWRkcmVzcyBob3N0OnBvcnQgKHVuc2V0OiBubyBwcHJvZiBzZXJ2ZXIpEjUKDW9ic2VydmFiaWxpdHkYMiABKAsyHi5jb25maWcudjEuT2JzZXJ2YWJpbGl0eUNvbmZpZzoeysEYGgoHcmVsaWFudBIGc2VydmVyEgdnYXRld2F5QjhaNmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_config_v1_control_plane_config, file_config_v1_observability_config, file_config_v1_server_config, file_forge_v1_forge]);
 
 /**
  * GatewayConfig is the `reliant server gateway` process's own config. It loads
  * alongside the root ReliantConfig (config.proto, whose header has the rules
- * every config here follows). The rest of the gateway's flags are still
- * registered by hand in cmd/reliant/commands/server.go.
+ * every config here follows).
  *
  * @generated from message config.v1.GatewayConfig
  */
@@ -29,6 +32,62 @@ export type GatewayConfig = Message<"config.v1.GatewayConfig"> & {
    * @generated from field: config.v1.ControlPlaneConfig control_plane = 1;
    */
   controlPlane?: ControlPlaneConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.DatabaseConfig database = 10;
+   */
+  database?: DatabaseConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.NatsConfig nats = 11;
+   */
+  nats?: NatsConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.ServerTLSConfig tls = 12;
+   */
+  tls?: ServerTLSConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.DrainConfig drain = 13;
+   */
+  drain?: DrainConfig | undefined;
+
+  /**
+   * The port daemons dial: the gateway's bidi-streaming gRPC listener. A
+   * local daemon reads the same variable to find it (DaemonConfig).
+   *
+   * @generated from field: int32 daemon_port = 14;
+   */
+  daemonPort: number;
+
+  /**
+   * @generated from field: int32 health_port = 15;
+   */
+  healthPort: number;
+
+  /**
+   * @generated from field: string bind_address = 16;
+   */
+  bindAddress: string;
+
+  /**
+   * @generated from field: string data_dir = 17;
+   */
+  dataDir: string;
+
+  /**
+   * The pprof debug listener, host:port. Unset: no pprof server. (The API
+   * server and worker take a PPROF_PORT on loopback instead.)
+   *
+   * @generated from field: string pprof_addr = 18;
+   */
+  pprofAddr: string;
+
+  /**
+   * @generated from field: config.v1.ObservabilityConfig observability = 50;
+   */
+  observability?: ObservabilityConfig | undefined;
 };
 
 /**

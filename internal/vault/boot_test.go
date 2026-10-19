@@ -13,8 +13,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
-func env(kv map[string]string) func(string) string { return func(k string) string { return kv[k] } }
-
 type warnings struct{ msgs []string }
 
 func (w *warnings) warn(msg string, _ ...any) { w.msgs = append(w.msgs, msg) }
@@ -23,7 +21,7 @@ func TestBootHostedWithoutKeyFails(t *testing.T) {
 	_, raw, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 	dir := t.TempDir()
-	_, err := vault.Boot(context.Background(), vault.BootOptions{Hosted: true, Getenv: env(nil), DataDir: dir, DB: raw})
+	_, err := vault.Boot(context.Background(), vault.BootOptions{Hosted: true, DataDir: dir, DB: raw})
 	if err == nil {
 		t.Fatal("hosted boot without key succeeded")
 	}
@@ -42,7 +40,7 @@ func TestBootMalformedKeyAlwaysFails(t *testing.T) {
 	defer cleanup()
 	for _, hosted := range []bool{true, false} {
 		_, err := vault.Boot(context.Background(), vault.BootOptions{
-			Hosted: hosted, Getenv: env(map[string]string{vault.EnvKey: "v1:not-base64-32-bytes"}),
+			Hosted: hosted, Key: "v1:not-base64-32-bytes",
 			DataDir: t.TempDir(), DB: raw,
 		})
 		if err == nil || !strings.Contains(err.Error(), "malformed") {
@@ -58,7 +56,7 @@ func TestBootSelfHostedGeneratesKeyFileAndReusesIt(t *testing.T) {
 	dir := t.TempDir()
 	w := &warnings{}
 
-	v, err := vault.Boot(ctx, vault.BootOptions{Getenv: env(nil), DataDir: dir, DB: raw, Warn: w.warn})
+	v, err := vault.Boot(ctx, vault.BootOptions{DataDir: dir, DB: raw, Warn: w.warn})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +78,7 @@ func TestBootSelfHostedGeneratesKeyFileAndReusesIt(t *testing.T) {
 	}
 
 	w2 := &warnings{}
-	v2, err := vault.Boot(ctx, vault.BootOptions{Getenv: env(nil), DataDir: dir, DB: raw, Warn: w2.warn})
+	v2, err := vault.Boot(ctx, vault.BootOptions{DataDir: dir, DB: raw, Warn: w2.warn})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +95,7 @@ func TestBootSelfHostedRefusesWhenSealedDataExistsButKeyMissing(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	v, err := vault.Boot(ctx, vault.BootOptions{Getenv: env(nil), DataDir: t.TempDir(), DB: raw, Warn: (&warnings{}).warn})
+	v, err := vault.Boot(ctx, vault.BootOptions{DataDir: t.TempDir(), DB: raw, Warn: (&warnings{}).warn})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +104,7 @@ func TestBootSelfHostedRefusesWhenSealedDataExistsButKeyMissing(t *testing.T) {
 	}
 
 	emptyDir := t.TempDir() // key file "lost"
-	_, err = vault.Boot(ctx, vault.BootOptions{Getenv: env(nil), DataDir: emptyDir, DB: raw})
+	_, err = vault.Boot(ctx, vault.BootOptions{DataDir: emptyDir, DB: raw})
 	if err == nil || !strings.Contains(err.Error(), "orphan") {
 		t.Fatalf("err = %v, want refusal to orphan sealed data", err)
 	}
@@ -123,7 +121,7 @@ func TestBootEnvKeyWinsOverFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := vault.Boot(context.Background(), vault.BootOptions{
-		Getenv: env(map[string]string{vault.EnvKey: newKeyring(t, "v1")}), DataDir: dir, DB: raw,
+		Key: newKeyring(t, "v1"), DataDir: dir, DB: raw,
 	}); err != nil {
 		t.Fatalf("env key should win over a bad file: %v", err)
 	}

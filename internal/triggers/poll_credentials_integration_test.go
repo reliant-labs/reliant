@@ -106,9 +106,9 @@ func newPollCredEnv(t *testing.T) *pollCredEnv {
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
 	v := vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})
-	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), func(key string) string {
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(func(key string) string {
 		return map[string]string{"RELIANT_OAUTH_GITHUB_CLIENT_ID": "cid", "RELIANT_OAUTH_GITHUB_CLIENT_SECRET": "csecret"}[key]
-	})
+	}))
 	require.NoError(t, err)
 	te := newTokenEndpoint(t)
 	store := repo.Connections()

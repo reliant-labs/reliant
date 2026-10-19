@@ -8,6 +8,7 @@ import (
 	"time"
 
 	natstest "github.com/nats-io/nats-server/v2/test"
+	"github.com/reliant-labs/reliant/internal/natsutil"
 )
 
 // startJetStreamNATS spins up an in-process JetStream-enabled NATS server and
@@ -37,7 +38,7 @@ func startJetStreamNATS(t *testing.T) string {
 
 func newTestHub(t *testing.T) *NATSHub {
 	t.Helper()
-	hub, err := NewNATSHub(startJetStreamNATS(t))
+	hub, err := NewNATSHub(natsutil.Endpoint{URL: startJetStreamNATS(t)})
 	if err != nil {
 		t.Fatalf("NewNATSHub: %v", err)
 	}

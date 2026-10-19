@@ -60,7 +60,7 @@ func TestLowerChildIOPriorityReturnsErrorWithoutPanicWhenDenied(t *testing.T) {
 }
 
 func TestLowerChildIOPriorityOptOutSkipsSyscall(t *testing.T) {
-	t.Setenv(ChildPriorityEnv, "normal")
+	keepChildPriorityForTest(t)
 	stubIoprioSet(t, func(int, int, int) error {
 		t.Fatal("ioprio_set called despite opt-out")
 		return nil

@@ -70,7 +70,7 @@ func isolatedGitEnv() []string {
 	// Every GIT_* variable goes: GIT_DIR, GIT_WORK_TREE, GIT_EXEC_PATH and the
 	// like change WHICH repository git acts on, or what it runs.
 	var base []string
-	for _, kv := range os.Environ() {
+	for _, kv := range os.Environ() { //nolint:forbidigo // filters this process environment for an isolated git child; not configuration
 		if !strings.HasPrefix(strings.ToUpper(kv), "GIT_") {
 			base = append(base, kv)
 		}

@@ -368,7 +368,7 @@ func resolveGitHubToken(opts llm.DriverOptions) (string, error) {
 	if t := strings.TrimSpace(opts.ApiKey); t != "" {
 		return t, nil
 	}
-	if t := strings.TrimSpace(os.Getenv("GITHUB_TOKEN")); t != "" {
+	if t := strings.TrimSpace(os.Getenv("GITHUB_TOKEN")); t != "" { //nolint:forbidigo // GITHUB_TOKEN is the GitHub CLI convention for an ambient credential, not reliant configuration
 		return t, nil
 	}
 	if t, err := loadGitHubTokenFromDisk(); err == nil && t != "" {
@@ -382,16 +382,16 @@ func resolveGitHubToken(opts llm.DriverOptions) (string, error) {
 func loadGitHubTokenFromDisk() (string, error) {
 	var configDir string
 	switch {
-	case os.Getenv("XDG_CONFIG_HOME") != "":
-		configDir = os.Getenv("XDG_CONFIG_HOME")
+	case os.Getenv("XDG_CONFIG_HOME") != "": //nolint:forbidigo // ambient OS variable (XDG_CONFIG_HOME), not configuration
+		configDir = os.Getenv("XDG_CONFIG_HOME") //nolint:forbidigo // ambient OS variable (XDG_CONFIG_HOME), not configuration
 	case runtime.GOOS == "windows":
-		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" { //nolint:forbidigo // ambient OS variable (LOCALAPPDATA), not configuration
 			configDir = localAppData
 		} else {
-			configDir = filepath.Join(os.Getenv("HOME"), "AppData", "Local")
+			configDir = filepath.Join(os.Getenv("HOME"), "AppData", "Local") //nolint:forbidigo // ambient OS variable (HOME), not configuration
 		}
 	default:
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+		configDir = filepath.Join(os.Getenv("HOME"), ".config") //nolint:forbidigo // ambient OS variable (HOME), not configuration
 	}
 
 	filePaths := []string{

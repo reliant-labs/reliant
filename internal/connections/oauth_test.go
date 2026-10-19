@@ -321,7 +321,7 @@ func TestOAuth_CannotReconnectSomeoneElsesConnection(t *testing.T) {
 }
 
 func TestOAuth_ProviderWithoutCredentialsIsUnavailableNotFatal(t *testing.T) {
-	reg, err := connections.ProvidersFromCatalog(testManifests(t), oauthEnv(nil))
+	reg, err := connections.ProvidersFromCatalog(testManifests(t), connections.OAuthClientsFromEnv(oauthEnv(nil)))
 	require.NoError(t, err, "unset credentials must not fail boot")
 	p, ok := reg.Get("github")
 	require.True(t, ok)
@@ -331,9 +331,9 @@ func TestOAuth_ProviderWithoutCredentialsIsUnavailableNotFatal(t *testing.T) {
 	require.Contains(t, reason, "RELIANT_OAUTH_GITHUB_CLIENT_SECRET")
 	require.True(t, p.MethodStatus(connections.MethodAPIKey).Available, "a pasted token needs no deployment config")
 
-	reg, err = connections.ProvidersFromCatalog(testManifests(t), oauthEnv(map[string]string{
+	reg, err = connections.ProvidersFromCatalog(testManifests(t), connections.OAuthClientsFromEnv(oauthEnv(map[string]string{
 		"RELIANT_OAUTH_GITHUB_CLIENT_ID": "id", "RELIANT_OAUTH_GITHUB_CLIENT_SECRET": "sec",
-	}))
+	})))
 	require.NoError(t, err)
 	p, _ = reg.Get("github")
 	require.True(t, p.OAuthAvailable())
@@ -341,7 +341,7 @@ func TestOAuth_ProviderWithoutCredentialsIsUnavailableNotFatal(t *testing.T) {
 
 func TestOAuth_UnavailableProviderCannotStart(t *testing.T) {
 	e := newEnv(t)
-	reg, err := connections.ProvidersFromCatalog(testManifests(t), oauthEnv(nil))
+	reg, err := connections.ProvidersFromCatalog(testManifests(t), connections.OAuthClientsFromEnv(oauthEnv(nil)))
 	require.NoError(t, err)
 	b := connections.NewBroker(e.store, e.vault, reg, nil, "https://reliant.example")
 	_, err = b.Start(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "github", ClientOrigin: testAppOrigin})
@@ -355,7 +355,7 @@ func TestOAuth_UnavailableProviderCannotStart(t *testing.T) {
 func TestOAuth_RegistryRejectsNonHTTPSEndpoints(t *testing.T) {
 	m := testManifests(t)[0]
 	m.GetConnection().GetAuth()[0].GetOauth2().TokenUrl = "http://github.com/login/oauth/access_token"
-	_, err := connections.ProvidersFromCatalog([]*reliantv1.IntegrationManifest{m}, oauthEnv(nil))
+	_, err := connections.ProvidersFromCatalog([]*reliantv1.IntegrationManifest{m}, connections.OAuthClientsFromEnv(oauthEnv(nil)))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "token_url")
 }

@@ -12,24 +12,32 @@ package providers
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/features/types"
 )
 
-// EnvironmentProvider provides feature flags from environment variables
+// EnvironmentProvider provides feature flags from environment variables:
+// RELIANT_FEATURE_<KEY>, an open family keyed by flag name.
 type EnvironmentProvider struct {
 	prefix   string
 	priority int
+	getenv   func(string) string
 }
 
-// NewEnvironmentProvider creates a new environment variable provider
-func NewEnvironmentProvider(priority int) *EnvironmentProvider {
+// NewEnvironmentProvider creates a provider that reads flags through getenv,
+// the environment of the process that wires it (nil answers no flag). The
+// provider never reads the process environment itself: which environment
+// counts is its wirer's decision.
+func NewEnvironmentProvider(priority int, getenv func(string) string) *EnvironmentProvider {
+	if getenv == nil {
+		getenv = func(string) string { return "" }
+	}
 	return &EnvironmentProvider{
 		prefix:   "RELIANT_FEATURE_",
 		priority: priority,
+		getenv:   getenv,
 	}
 }
 
@@ -53,7 +61,7 @@ func (p *EnvironmentProvider) Initialize(ctx context.Context, config map[string]
 
 func (p *EnvironmentProvider) EvaluateBool(ctx context.Context, key string, evalCtx *types.EvaluationContext, defaultValue bool) (bool, error) {
 	envKey := p.formatEnvKey(key)
-	value := os.Getenv(envKey)
+	value := p.getenv(envKey)
 
 	if value == "" {
 		return defaultValue, fmt.Errorf("environment variable %s not set", envKey)
@@ -72,7 +80,7 @@ func (p *EnvironmentProvider) EvaluateBool(ctx context.Context, key string, eval
 
 func (p *EnvironmentProvider) EvaluateString(ctx context.Context, key string, evalCtx *types.EvaluationContext, defaultValue string) (string, error) {
 	envKey := p.formatEnvKey(key)
-	value := os.Getenv(envKey)
+	value := p.getenv(envKey)
 
 	if value == "" {
 		return defaultValue, fmt.Errorf("environment variable %s not set", envKey)
@@ -83,7 +91,7 @@ func (p *EnvironmentProvider) EvaluateString(ctx context.Context, key string, ev
 
 func (p *EnvironmentProvider) EvaluateInt(ctx context.Context, key string, evalCtx *types.EvaluationContext, defaultValue int) (int, error) {
 	envKey := p.formatEnvKey(key)
-	value := os.Getenv(envKey)
+	value := p.getenv(envKey)
 
 	if value == "" {
 		return defaultValue, fmt.Errorf("environment variable %s not set", envKey)
@@ -99,7 +107,7 @@ func (p *EnvironmentProvider) EvaluateInt(ctx context.Context, key string, evalC
 
 func (p *EnvironmentProvider) EvaluateFloat(ctx context.Context, key string, evalCtx *types.EvaluationContext, defaultValue float64) (float64, error) {
 	envKey := p.formatEnvKey(key)
-	value := os.Getenv(envKey)
+	value := p.getenv(envKey)
 
 	if value == "" {
 		return defaultValue, fmt.Errorf("environment variable %s not set", envKey)
@@ -116,7 +124,7 @@ func (p *EnvironmentProvider) EvaluateFloat(ctx context.Context, key string, eva
 func (p *EnvironmentProvider) EvaluateJSON(ctx context.Context, key string, evalCtx *types.EvaluationContext, defaultValue interface{}) (interface{}, error) {
 	// For JSON, we just return the string value and let the caller parse it
 	envKey := p.formatEnvKey(key)
-	value := os.Getenv(envKey)
+	value := p.getenv(envKey)
 
 	if value == "" {
 		return defaultValue, fmt.Errorf("environment variable %s not set", envKey)

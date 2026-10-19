@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
@@ -36,8 +35,8 @@ func checkExecutors() error {
 // newConnectionResolver builds the worker-side resolver. It shares the vault
 // key with the api-server: the worker is the only process that reads secrets,
 // and the only one besides the api-server that writes them (on refresh).
-func newConnectionResolver(repo *db.Repo, keys vault.Service) (*connections.Resolver, error) {
-	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), os.Getenv)
+func newConnectionResolver(repo *db.Repo, keys vault.Service, clients connections.OAuthClients) (*connections.Resolver, error) {
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), clients)
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)
 	}

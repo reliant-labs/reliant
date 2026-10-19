@@ -114,8 +114,8 @@ func gitCredentialEnv(env []string) []string {
 
 // setupManagedGitCredentials runs once at daemon start. A no-op off a managed
 // daemon. Best-effort: nothing here may block or fail the daemon.
-func setupManagedGitCredentials() {
-	if !IsManagedEnvironment() {
+func setupManagedGitCredentials(managed bool) {
+	if !managed {
 		return
 	}
 	home, err := os.UserHomeDir()

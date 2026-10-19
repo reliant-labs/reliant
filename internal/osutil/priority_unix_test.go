@@ -37,7 +37,7 @@ func TestLowerChildPriority(t *testing.T) {
 
 func TestLowerChildPriorityOptOut(t *testing.T) {
 	skipIfAlreadyAtChildNice(t)
-	t.Setenv(ChildPriorityEnv, "normal")
+	keepChildPriorityForTest(t)
 	cmd := startSleeper(t)
 	if err := LowerChildPriority(cmd.Process.Pid); err != nil {
 		t.Fatal(err)

@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,8 @@ import (
 
 // serverAPIConfigEnv is every variable `server api` reads through
 // ApiServerConfig.
-var serverAPIConfigEnv = []string{"JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "ALLOWED_EMAIL_DOMAINS", "RELIANT_DISABLE_FORGE_API", "RELIANT_CONFIG"}
+var serverAPIConfigEnv = []string{"JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "ALLOWED_EMAIL_DOMAINS", "RELIANT_DISABLE_FORGE_API", "RELIANT_CONFIG",
+	"AUTH_MODE", "AUTH_API_KEY", "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "RELIANT_AUTHORIZATION_SERVER", "MCP_OAUTH_ISSUERS", "MAX_UPLOAD_SIZE", "RELIANT_WORKTREE_AUTO_ARCHIVE"}
 
 // TestServerAPIConfigEnvContract pins that the variables `server api` now
 // reads through ApiServerConfig reach serverapi.Options exactly as the flag
@@ -121,6 +123,7 @@ func isolateServerAPIConfigEnv(t *testing.T) {
 		t.Setenv(name, "") // restores the original afterwards
 		require.NoError(t, os.Unsetenv(name))
 	}
+	isolateServerRoleEnv(t)
 }
 
 // loadServerAPIOptions runs what `server api`'s RunE does with its typed
@@ -186,4 +189,63 @@ func TestServerAPISharedConfigFile(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "jwksURL")
 	})
+}
+
+// TestServerAPIAuthAndSurfaceSettings pins the API server's auth and surface
+// settings to the names control-plane sets (AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM
+// in lib/env.k, RELIANT_AUTHORIZATION_SERVER and MCP_OAUTH_ISSUERS in prod)
+// and their defaults.
+func TestServerAPIAuthAndSurfaceSettings(t *testing.T) {
+	isolateServerAPIConfigEnv(t)
+	opts := loadServerAPIOptions(t)
+	assert.Equal(t, "supabase", opts.AuthMode)
+	assert.False(t, opts.RequireEmailVerifiedClaim)
+	assert.Empty(t, opts.AuthorizationServer)
+	assert.Empty(t, opts.OAuthIssuers)
+	assert.Equal(t, int64(10*1024*1024), opts.MaxUploadSize)
+	assert.Equal(t, "dry-run", string(opts.WorktreeAutoArchive))
+
+	t.Setenv("AUTH_MODE", "apikey")
+	t.Setenv("AUTH_API_KEY", "shared-key")
+	t.Setenv("AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "true")
+	t.Setenv("RELIANT_AUTHORIZATION_SERVER", " https://admin.example ")
+	t.Setenv("MCP_OAUTH_ISSUERS", "https://a.supabase.co/auth/v1, ,https://b.example")
+	t.Setenv("MAX_UPLOAD_SIZE", "4096")
+	t.Setenv("RELIANT_WORKTREE_AUTO_ARCHIVE", "on")
+	opts = loadServerAPIOptions(t)
+	assert.Equal(t, "apikey", opts.AuthMode)
+	assert.Equal(t, "shared-key", opts.AuthAPIKey)
+	assert.True(t, opts.RequireEmailVerifiedClaim)
+	assert.Equal(t, "https://admin.example", opts.AuthorizationServer)
+	assert.Equal(t, []string{"https://a.supabase.co/auth/v1", "https://b.example"}, opts.OAuthIssuers)
+	assert.Equal(t, int64(4096), opts.MaxUploadSize)
+	assert.Equal(t, "on", string(opts.WorktreeAutoArchive))
+}
+
+// A setting the API server cannot serve with stops it at load, naming it.
+func TestServerAPIAuthMisconfigurationFailsBoot(t *testing.T) {
+	for _, tc := range []struct {
+		env       map[string]string
+		wantInErr string
+	}{
+		{map[string]string{"AUTH_MODE": "apikey"}, "AUTH_API_KEY"},
+		{map[string]string{"AUTH_MODE": "jwt"}, "auth_mode"},
+		{map[string]string{"AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM": "yes"}, "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM"},
+		{map[string]string{"MAX_UPLOAD_SIZE": "10MB"}, "MAX_UPLOAD_SIZE"},
+		{map[string]string{"MAX_UPLOAD_SIZE": "0"}, "MAX_UPLOAD_SIZE"},
+		{map[string]string{"RELIANT_WORKTREE_AUTO_ARCHIVE": "true"}, "worktree_auto_archive"},
+	} {
+		t.Run(fmt.Sprint(tc.env), func(t *testing.T) {
+			isolateServerAPIConfigEnv(t)
+			for name, value := range tc.env {
+				t.Setenv(name, value)
+			}
+			cmd, _, err := NewRootCmd().Find([]string{"server", "api"})
+			require.NoError(t, err)
+			var opts serverapi.Options
+			err = loadServerAPIConfig(cmd, &opts)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantInErr)
+		})
+	}
 }

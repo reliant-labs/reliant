@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/daemoninstance"
 	"github.com/spf13/cobra"
+
+	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 const testServerURL = "http://localhost:8090"
@@ -58,9 +60,9 @@ func TestResolveDataDir_SameWorktreeFromAnySubdirectory(t *testing.T) {
 // drift; if they ever do, `stop` again fails to find what `start` created,
 // which is the original bug wearing a new hat.
 //
-// The commands are driven through cobra rather than by calling the helper four
-// times, so a subcommand that forgot to register the instance flags — or wired
-// up its own — fails here.
+// The commands are driven through cobra and each one's own config loader
+// rather than by calling the helper four times, so a subcommand that forgot to
+// compose the instance config — or wired up its own — fails here.
 func TestResolveDataDir_AllFourCommandsAgree(t *testing.T) {
 	isolateInstanceEnv(t)
 	worktree := initGitRepo(t)
@@ -81,15 +83,9 @@ func TestResolveDataDir_AllFourCommandsAgree(t *testing.T) {
 
 	resolved := make(map[string]string, len(dirs))
 	for name, dir := range dirs {
-		cmd := daemonSubcommand(t, name)
-		var flags daemonInstanceFlags
-		// Read back what the command's own --data-dir/--account/--workspace
-		// flags default to, then resolve through the shared helper the command
-		// itself uses.
-		flags.dataDir = flagValue(t, cmd, "data-dir")
-		flags.account = flagValue(t, cmd, "account")
-		flags.workspace = flagValue(t, cmd, "workspace")
-		resolved[name] = resolveFrom(t, dir, flags)
+		// Load what the command's own config says the instance is, then
+		// resolve through the shared helper the command itself uses.
+		resolved[name] = resolveFrom(t, dir, loadInstance(t, name))
 	}
 
 	want := resolved["start"]
@@ -113,15 +109,16 @@ func TestResolveDataDir_ExplicitDataDirWins(t *testing.T) {
 		t.Fatalf("explicit --data-dir must win verbatim, got %s", got)
 	}
 
-	// The environment variable, through the flag default the commands register.
-	t.Setenv(envDataDir, "/data")
-	cmd := daemonSubcommand(t, "start")
-	fromEnv := flagValue(t, cmd, "data-dir")
-	if fromEnv != "/data" {
-		t.Fatalf("DAEMON_DATA_DIR must become the --data-dir default, got %q", fromEnv)
-	}
-	if got := resolveFrom(t, worktree, daemonInstanceFlags{dataDir: fromEnv}); got != "/data" {
-		t.Fatalf("DAEMON_DATA_DIR must win over derivation, got %s", got)
+	// The environment variable, through each command's config.
+	t.Setenv("DAEMON_DATA_DIR", "/data")
+	for _, name := range []string{"start", "status", "stop", "logs"} {
+		fromEnv := loadInstance(t, name)
+		if fromEnv.dataDir != "/data" {
+			t.Fatalf("%s: DAEMON_DATA_DIR must become the data dir, got %q", name, fromEnv.dataDir)
+		}
+		if got := resolveFrom(t, worktree, fromEnv); got != "/data" {
+			t.Fatalf("%s: DAEMON_DATA_DIR must win over derivation, got %s", name, got)
+		}
 	}
 }
 
@@ -148,7 +145,7 @@ func TestResolveDataDir_DistinctAccountsAndWorkspaces(t *testing.T) {
 
 // TestResolveWorkspace_Precedence pins the ordering: flag, then env, then the
 // git worktree root. The env layer is what containers and CI use, where cwd
-// names nothing meaningful.
+// names nothing meaningful; flag-over-env is the config loader's precedence.
 func TestResolveWorkspace_Precedence(t *testing.T) {
 	isolateInstanceEnv(t)
 	worktree := initGitRepo(t)
@@ -158,15 +155,15 @@ func TestResolveWorkspace_Precedence(t *testing.T) {
 			t.Fatalf("flag must win, got %q", got)
 		}
 
-		t.Setenv(daemoninstance.EnvWorkspace, "ci-workload")
-		if got := resolveWorkspace(""); got != "ci-workload" {
+		t.Setenv("RELIANT_INSTANCE_WORKSPACE", "ci-workload")
+		if got := resolveWorkspace(loadInstance(t, "start").workspace); got != "ci-workload" {
 			t.Fatalf("env must win over the git root, got %q", got)
 		}
-		if got := resolveWorkspace("explicit-label"); got != "explicit-label" {
+		if got := resolveWorkspace(loadInstance(t, "start", "--workspace", "explicit-label").workspace); got != "explicit-label" {
 			t.Fatalf("flag must win over env, got %q", got)
 		}
 
-		t.Setenv(daemoninstance.EnvWorkspace, "")
+		t.Setenv("RELIANT_INSTANCE_WORKSPACE", "")
 		got, err := filepath.EvalSymlinks(resolveWorkspace(""))
 		if err != nil {
 			t.Fatalf("evalsymlinks: %v", err)
@@ -217,9 +214,9 @@ func TestResolveWorkspace_OutsideGitFallsBackToCwd(t *testing.T) {
 func isolateInstanceEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv(daemoninstance.EnvWorkspace, "")
-	t.Setenv(envAccount, "")
-	t.Setenv(envDataDir, "")
+	t.Setenv("RELIANT_INSTANCE_WORKSPACE", "")
+	t.Setenv("RELIANT_INSTANCE_ACCOUNT", "")
+	t.Setenv("DAEMON_DATA_DIR", "")
 }
 
 // resolveFrom runs the real resolution helper with cwd set to dir, which is the
@@ -280,27 +277,52 @@ func gitWorktreeRootIn(t *testing.T, dir string) string {
 	return string(out)
 }
 
-// daemonSubcommand returns the named subcommand of `reliant daemon`, built the
-// same way the real CLI builds it.
-func daemonSubcommand(t *testing.T, name string) *cobra.Command {
+// daemonCommandWithArgs returns `reliant daemon <name>`, built from the real
+// root so its config loader sees its real command path, with args parsed onto
+// it as a command line would be.
+func daemonCommandWithArgs(t *testing.T, name string, args ...string) *cobra.Command {
 	t.Helper()
-	for _, sub := range newDaemonCmd().Commands() {
-		if sub.Name() == name {
-			return sub
-		}
+	cmd, _, err := NewRootCmd().Find([]string{"daemon", name})
+	if err != nil || cmd.Name() != name {
+		t.Fatalf("daemon subcommand %q not found: %v", name, err)
 	}
-	t.Fatalf("daemon subcommand %q not found", name)
-	return nil
+	if err := cmd.ParseFlags(args); err != nil {
+		t.Fatalf("daemon %s %v: %v", name, args, err)
+	}
+	return cmd
 }
 
-// flagValue reads a registered flag's current (default) value, and fails when
-// the flag is absent — which is how a subcommand that skipped
-// registerDaemonInstanceFlags gets caught.
-func flagValue(t *testing.T, cmd *cobra.Command, name string) string {
+// loadInstance loads `reliant daemon <name>`'s config through the command's
+// own loader and returns the instance it names.
+func loadInstance(t *testing.T, name string, args ...string) daemonInstanceFlags {
 	t.Helper()
-	flag := cmd.Flags().Lookup(name)
-	if flag == nil {
-		t.Fatalf("command %q has no --%s flag", cmd.Name(), name)
+	cmd := daemonCommandWithArgs(t, name, args...)
+	var (
+		instance *configv1.DaemonInstanceConfig
+		err      error
+	)
+	switch name {
+	case "start":
+		var cfg *config.DaemonConfig
+		cfg, err = loadDaemonConfig(cmd)
+		instance = cfg.GetInstance()
+	case "status":
+		var cfg *config.DaemonStatusConfig
+		cfg, err = config.LoadDaemonStatusConfig(cmd)
+		instance = cfg.GetInstance()
+	case "stop":
+		var cfg *config.DaemonStopConfig
+		cfg, err = config.LoadDaemonStopConfig(cmd)
+		instance = cfg.GetInstance()
+	case "logs":
+		var cfg *config.DaemonLogsConfig
+		cfg, err = config.LoadDaemonLogsConfig(cmd)
+		instance = cfg.GetInstance()
+	default:
+		t.Fatalf("daemon %s names no instance", name)
 	}
-	return flag.Value.String()
+	if err != nil {
+		t.Fatalf("loading daemon %s config: %v", name, err)
+	}
+	return daemonInstance(instance)
 }

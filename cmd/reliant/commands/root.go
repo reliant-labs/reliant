@@ -4,14 +4,12 @@ package commands
 import (
 	"fmt"
 	"os"
-	"strconv"
 
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runenv"
-	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -95,44 +93,13 @@ func logSettings(cfg *config.ReliantConfig) logging.Settings {
 
 // storageReaperConfig is the root config's schedule for the daemon's storage
 // reaper (internal/diskwatch/reaper.go). A value it cannot use is named in a
-// warning and replaced by its default; it never stops the daemon.
-func storageReaperConfig(cfg *config.ReliantConfig) diskwatch.ReaperConfig {
+// warning and replaced by its default; it never stops the daemon. managed is
+// whether the platform declared this a managed daemon (DaemonConfig).
+func storageReaperConfig(cfg *config.ReliantConfig, managed bool) diskwatch.ReaperConfig {
 	sr := cfg.GetStorageReaper()
-	out, warnings := diskwatch.ParseReaperConfig(sr.GetMode(), sr.GetInterval(), sr.GetPressureInterval(), sr.GetPolicyPath(), daemonruntime.IsManagedEnvironment())
+	out, warnings := diskwatch.ParseReaperConfig(sr.GetMode(), sr.GetInterval(), sr.GetPressureInterval(), sr.GetPolicyPath(), managed)
 	for _, w := range warnings {
 		logging.Warn("Storage reaper config: " + w)
 	}
 	return out
-}
-
-// envOrDefault returns the environment variable value or the default.
-func envOrDefault(key, defaultVal string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return defaultVal
-}
-
-// envOrDefaultInt returns the environment variable as an int, or the default.
-func envOrDefaultInt(key string, defaultVal int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return defaultVal
-}
-
-// envOrDefaultBool returns the environment variable parsed as a bool, or the
-// default. Used as a flag's default value so an explicit CLI flag still wins
-// over the env var — cobra only applies the default when the flag is not
-// passed on the command line, so the precedence is: explicit flag > env var >
-// this default.
-func envOrDefaultBool(key string, defaultVal bool) bool {
-	if v := os.Getenv(key); v != "" {
-		if b, err := strconv.ParseBool(v); err == nil {
-			return b
-		}
-	}
-	return defaultVal
 }

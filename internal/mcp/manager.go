@@ -115,6 +115,11 @@ func detectSystemChrome() string {
 
 // Manager manages multiple MCP server connections and aggregates their capabilities
 type Manager struct {
+	// chromeBrowserURL, when set, is the DevTools endpoint of an
+	// already-running browser the built-in chrome-devtools MCP drives
+	// (WithChromeBrowserURL).
+	chromeBrowserURL string
+
 	// role is fixed at construction. A Server-role manager can never hold a
 	// stdio server and never reads the local filesystem for config.
 	role Role
@@ -217,9 +222,19 @@ func isStdioConfig(cfg config.MCPServer) bool {
 }
 
 // NewManager creates a new MCP manager for the given host role.
-func NewManager(role Role) *Manager {
+// ManagerOption configures a Manager at construction.
+type ManagerOption func(*Manager)
+
+// WithChromeBrowserURL points the built-in chrome-devtools MCP at an
+// already-running browser over the DevTools Protocol instead of a local
+// Chrome: the daemon's RELIANT_CHROME_BROWSER_URL (see builtinMCPServers).
+func WithChromeBrowserURL(url string) ManagerOption {
+	return func(m *Manager) { m.chromeBrowserURL = url }
+}
+
+func NewManager(role Role, opts ...ManagerOption) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Manager{
+	m := &Manager{
 		role:                role,
 		clients:             make(map[string]Client),
 		projectServers:      make(map[string]map[string]bool),
@@ -236,6 +251,10 @@ func NewManager(role Role) *Manager {
 		pendingServers:      make(map[string]config.MCPServer),
 		nextRetryAt:         make(map[string]time.Time),
 	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
 }
 
 // SetPendingServers stores servers for lazy initialization
@@ -1387,7 +1406,7 @@ func (m *Manager) ListProjectTools(projectPath string) (map[string][]Tool, error
 
 // builtinMCPServers returns MCP servers that ship with Reliant and are always available.
 // These have the lowest priority and can be overridden by user/project config.
-func builtinMCPServers() map[string]config.MCPServer {
+func builtinMCPServers(chromeBrowserURL string) map[string]config.MCPServer {
 	servers := map[string]config.MCPServer{
 		"reliant-docs": {
 			Type:    config.MCPHTTP,
@@ -1417,7 +1436,7 @@ func builtinMCPServers() map[string]config.MCPServer {
 	//     We point at the system binary via --executablePath so it never
 	//     downloads its own Chrome, and run --headless (no display in the pod)
 	//     --isolated (throwaway profile/session).
-	if browserURL := strings.TrimSpace(os.Getenv("RELIANT_CHROME_BROWSER_URL")); browserURL != "" {
+	if browserURL := strings.TrimSpace(chromeBrowserURL); browserURL != "" {
 		servers[chromeDevtoolsServerName] = config.MCPServer{
 			Type:    config.MCPStdio,
 			Command: "npx",
@@ -1502,7 +1521,7 @@ func (m *Manager) loadProjectServersFromConfig(ctx context.Context, projectPath 
 	}
 
 	// Start with built-in servers (lowest priority), then layer user config on top.
-	builtin := builtinMCPServers()
+	builtin := builtinMCPServers(m.chromeBrowserURL)
 	if len(userServers) == 0 {
 		return builtin
 	}

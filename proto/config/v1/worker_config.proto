@@ -2,15 +2,20 @@ syntax = "proto3";
 
 package config.v1;
 
+import "config/v1/analytics_config.proto";
 import "config/v1/control_plane_config.proto";
+import "config/v1/integrations_config.proto";
+import "config/v1/llm_config.proto";
+import "config/v1/observability_config.proto";
+import "config/v1/preview_config.proto";
+import "config/v1/server_config.proto";
 import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
 
 // WorkerConfig is the `reliant server worker` process's own config. It loads
 // alongside the root ReliantConfig (config.proto, whose header has the rules
-// every config here follows). The rest of the worker's flags are still
-// registered by hand in cmd/reliant/commands/server.go.
+// every config here follows).
 message WorkerConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
@@ -18,4 +23,41 @@ message WorkerConfig {
   };
 
   ControlPlaneConfig control_plane = 1;
+
+  DatabaseConfig database = 10;
+  NatsConfig nats = 11;
+  TemporalConfig temporal = 12;
+  DrainConfig drain = 13;
+
+  int32 health_port = 14 [(forge.v1.config) = {
+    env_var: "HEALTH_PORT"
+    flag: "health-port"
+    default_value: "8081"
+    description: "Health check endpoint port"
+  }];
+  int32 pprof_port = 15 [(forge.v1.config) = {
+    env_var: "PPROF_PORT"
+    flag: "pprof-port"
+    default_value: "6060"
+    description: "pprof debug server port (binds 127.0.0.1 only)"
+  }];
+  string data_dir = 16 [(forge.v1.config) = {
+    env_var: "DATA_DIR"
+    flag: "data-dir"
+    default_value: "./data"
+    description: "Data directory for logs"
+  }];
+  string streaming_driver = 17 [(forge.v1.config) = {
+    env_var: "STREAMING_DRIVER"
+    flag: "streaming-driver"
+    default_value: "nats"
+    allowed_values: ["nats"]
+    description: "Streaming driver (nats)"
+  }];
+  IntegrationsConfig integrations = 40;
+  ObservabilityConfig observability = 50;
+  SentryConfig sentry = 51;
+  AnalyticsConfig analytics = 60;
+  LLMConfig llm = 70;
+  PreviewConfig preview = 90;
 }

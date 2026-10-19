@@ -1,8 +1,9 @@
 package drivers
 
 import (
-	"os"
 	"strings"
+	"sync/atomic"
+	"testing"
 
 	accesstoken "github.com/reliant-labs/forge/pkg/accesstoken"
 )
@@ -29,13 +30,31 @@ const (
 	reliantNeutralBaseURL = "http://localhost:8090/v1"
 )
 
-func ResolveReliantBaseURL(_ string) string {
-	configuredBaseURL := strings.TrimSpace(os.Getenv("RELIANT_API_BASE_URL"))
-	if configuredBaseURL == "" {
-		return reliantNeutralBaseURL
-	}
+// reliantBaseURL is the process's configured Reliant LLM gateway URL
+// (RELIANT_API_BASE_URL, the server role's LLM config); nil or empty is the
+// neutral fallback.
+var reliantBaseURL atomic.Pointer[string]
 
-	return configuredBaseURL
+// ConfigureReliantBaseURL sets the Reliant LLM gateway URL. A server role calls
+// it once at boot, from its config, before any LLM call.
+func ConfigureReliantBaseURL(url string) {
+	url = strings.TrimSpace(url)
+	reliantBaseURL.Store(&url)
+}
+
+// SetReliantBaseURLForTest sets the gateway URL for the length of a test.
+func SetReliantBaseURLForTest(tb testing.TB, url string) {
+	tb.Helper()
+	prev := reliantBaseURL.Load()
+	ConfigureReliantBaseURL(url)
+	tb.Cleanup(func() { reliantBaseURL.Store(prev) })
+}
+
+func ResolveReliantBaseURL(_ string) string {
+	if configured := reliantBaseURL.Load(); configured != nil && *configured != "" {
+		return *configured
+	}
+	return reliantNeutralBaseURL
 }
 
 // ResolveReliantAPIKey returns the bearer to send to the Reliant LLM gateway.

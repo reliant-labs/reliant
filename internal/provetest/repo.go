@@ -143,7 +143,7 @@ func runGit(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(os.Environ(), //nolint:forbidigo // passes this process environment to a child process; not configuration
 		"GIT_OPTIONAL_LOCKS=0",    // never take the index lock from a read
 		"GIT_LITERAL_PATHSPECS=1", // a path is a path, not a glob
 		"GIT_TERMINAL_PROMPT=0",

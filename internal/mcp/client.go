@@ -112,7 +112,7 @@ func (c *client) Initialize(ctx context.Context) error {
 
 		// Create command with environment variables
 		cmd := exec.Command(resolvedCmd, cmdArgs...)
-		env := os.Environ()
+		env := os.Environ() //nolint:forbidigo // an MCP server inherits the daemon environment; not configuration
 		for _, e := range c.cfg.Env {
 			// Support environment variable expansion
 			expanded := os.ExpandEnv(e)

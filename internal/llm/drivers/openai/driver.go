@@ -17,9 +17,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/openai/openai-go/v3"
@@ -37,6 +37,18 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
+
+// Debug switches for the Responses API payloads: the server role's LLM config
+// (RELIANT_DEBUG_OPENAI_RESPONSES_INPUT, RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS).
+var debugResponsesInput, debugToolSchemas atomic.Bool
+
+// ConfigureDebug sets the debug switches. A server role calls it once at boot,
+// from its config: responsesInput logs each Responses input item,
+// toolSchemas logs each function tool's schema as sent.
+func ConfigureDebug(responsesInput, toolSchemas bool) {
+	debugResponsesInput.Store(responsesInput)
+	debugToolSchemas.Store(toolSchemas)
+}
 
 type OpenaiClient struct {
 	Options llm.DriverOptions
@@ -757,7 +769,7 @@ func (o *OpenaiClient) convertMessagesToResponsesInput(prompts []string, message
 	}
 
 	// Debug: help identify which function_call item is violating name length constraints.
-	if os.Getenv("RELIANT_DEBUG_OPENAI_RESPONSES_INPUT") == "1" {
+	if debugResponsesInput.Load() {
 		for i, it := range items {
 			// ResponseInputItemUnionParam is a union; easiest is to JSON marshal and check for a name field.
 			if b, err := json.Marshal(it); err == nil {
@@ -837,7 +849,7 @@ func (o *OpenaiClient) convertToolsToResponsesTools(toolList []tools.Tool) []res
 
 		// Debug log the schema we actually send to OpenAI Responses when requested.
 		// This is critical because OpenAI validates the *schema*, not our tool types.
-		if os.Getenv("RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS") == "1" {
+		if debugToolSchemas.Load() {
 			if b, err := json.MarshalIndent(ft, "", "  "); err == nil {
 				logging.Info("[OpenAI Responses] function tool", "tool", tool.Name(), "payload", string(b))
 			}

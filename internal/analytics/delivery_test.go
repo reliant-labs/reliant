@@ -159,13 +159,9 @@ func TestFlush_RejectedKeyStopsSendingAndWarnsOnce(t *testing.T) {
 func TestNewClientFromSettings_WithoutAKeySendsNothing(t *testing.T) {
 	logs := captureAnalyticsLogs(t)
 	runenv.ConfigureForTest(t, "prod")
-	t.Setenv("RELIANT_ANALYTICS_DISABLED", "")
-	t.Setenv("STATSIG_CLIENT_KEY", "")
-	t.Setenv("RELIANT_APP_DATA_DIR", "")
-	t.Setenv("SUPABASE_URL", "")
 	requests := fakeStatsig(t, http.StatusUnauthorized)
 
-	client, ok := NewClientFromSettings(context.Background(), "", true).(*Client)
+	client, ok := NewClientFromSettings(context.Background(), "", true, Settings{}).(*Client)
 	require.True(t, ok, "prod with analytics on builds the real client")
 	client.Track("workflow_started", nil)
 	client.Shutdown()

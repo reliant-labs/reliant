@@ -137,8 +137,8 @@ func New(deps Deps) Service {
 func DepsFromEnv() Deps {
 	home, _ := os.UserHomeDir()
 	return Deps{Dirs: credentials.Dirs{
-		ForgeHome:     os.Getenv("FORGE_HOME"),
-		XDGConfigHome: os.Getenv("XDG_CONFIG_HOME"),
+		ForgeHome:     os.Getenv("FORGE_HOME"),      //nolint:forbidigo // FORGE_HOME is forge's own variable (where forge keeps its credentials), not reliant configuration
+		XDGConfigHome: os.Getenv("XDG_CONFIG_HOME"), //nolint:forbidigo // ambient OS variable (XDG_CONFIG_HOME), not configuration
 		Home:          home,
 	}}
 }
@@ -226,13 +226,6 @@ func OpenBrowser(target string) error {
 		return fmt.Errorf("cannot open a browser on %s", runtime.GOOS)
 	}
 }
-
-// AuthorizationServerEnv names the PUBLIC base URL of the control plane that
-// issues this deployment's tokens. The API server publishes it as RFC 8414
-// metadata so `reliant auth login --server <this API>` can find where to log
-// in. It is public: the in-cluster RELIANT_CONTROL_PLANE_URL is a service
-// address a browser cannot reach, so it cannot stand in.
-const AuthorizationServerEnv = "RELIANT_AUTHORIZATION_SERVER"
 
 // MetadataHandler serves RFC 8414 metadata naming issuer (the control plane)
 // and its CLI login endpoints. Mount it at

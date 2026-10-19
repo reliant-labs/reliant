@@ -57,7 +57,7 @@ const DeadlockDetectionTimeout = 30 * time.Second
 // Under TEMPORAL_DEBUG the timeout is left unset so the SDK's own debug mode
 // (no deadlock detection, for sitting on a breakpoint) still applies.
 func WorkerOptions(opts worker.Options) worker.Options {
-	if opts.DeadlockDetectionTimeout == 0 && os.Getenv("TEMPORAL_DEBUG") == "" {
+	if opts.DeadlockDetectionTimeout == 0 && os.Getenv("TEMPORAL_DEBUG") == "" { //nolint:forbidigo // test-harness switch (TEMPORAL_DEBUG), not process configuration
 		opts.DeadlockDetectionTimeout = DeadlockDetectionTimeout
 	}
 	return opts

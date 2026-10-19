@@ -40,14 +40,13 @@ func TestManagedStartNeverTouchesTheInvokingUsersGitConfig(t *testing.T) {
 	}
 	before := snapshotFiles(t, invoking)
 
-	t.Setenv(DaemonTypeEnvVar, "managed")
 	previousExit := workspaceGuardExit
 	workspaceGuardExit = func(int) {}
 	t.Cleanup(func() { workspaceGuardExit = previousExit })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Start returns as soon as it reaches the run loop
-	_ = Start(ctx, StartOptions{BootstrapConfig: testBootstrapConfig(t.TempDir())})
+	_ = Start(ctx, StartOptions{BootstrapConfig: testBootstrapConfig(t.TempDir()), Host: Host{DaemonType: daemonTypeManaged}})
 
 	// The managed wiring really ran, and into the isolated config...
 	out, err := exec.Command("git", "config", "--global", "--show-origin", "--get-all", gitCredentialHelperKey()).CombinedOutput()

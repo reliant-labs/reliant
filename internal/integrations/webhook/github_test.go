@@ -121,17 +121,12 @@ func TestGitHubParse(t *testing.T) {
 	assert.Len(t, rev.Revocations, 1)
 }
 
-func TestRegistryFromEnvRegistersGitHubOnItsSecret(t *testing.T) {
-	r, err := RegistryFromEnv(func(string) string { return "" })
+func TestRegistryForRegistersGitHubOnItsSecret(t *testing.T) {
+	r, err := RegistryFor(RegistryConfig{})
 	require.NoError(t, err)
 	assert.False(t, r.HasInboundSource("github"), "no secret, no provider: a delivery could not be verified")
 
-	r, err = RegistryFromEnv(func(k string) string {
-		if k == "RELIANT_GITHUB_WEBHOOK_SECRET" {
-			return " s3cret "
-		}
-		return ""
-	})
+	r, err = RegistryFor(RegistryConfig{GitHubWebhookSecret: " s3cret "})
 	require.NoError(t, err)
 	p, ok := r.Provider("github")
 	require.True(t, ok)

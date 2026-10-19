@@ -150,17 +150,3 @@ func TestTryAdvisoryLockUsesTheMainPoolWhenNoSessionPoolIsConfigured(t *testing.
 		t.Errorf("main pool statements = %q, want one lock and one unlock", statements)
 	}
 }
-
-func TestResolveDatabaseConfigReadsTheDirectURL(t *testing.T) {
-	t.Setenv("DATABASE_DRIVER", "postgres")
-	t.Setenv("DATABASE_URL", "postgres://reliant@pgbouncer:6432/reliant_cp")
-	t.Setenv("DATABASE_DIRECT_URL", " postgres://reliant@pgbouncer:6432/reliant_cp_session ")
-
-	cfg, err := db.ResolveDatabaseConfig("")
-	if err != nil {
-		t.Fatalf("ResolveDatabaseConfig: %v", err)
-	}
-	if cfg.DirectURL != "postgres://reliant@pgbouncer:6432/reliant_cp_session" {
-		t.Errorf("DirectURL = %q, want the trimmed DATABASE_DIRECT_URL", cfg.DirectURL)
-	}
-}

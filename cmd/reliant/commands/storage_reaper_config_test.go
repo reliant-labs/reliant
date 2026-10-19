@@ -28,7 +28,9 @@ func storageReaperFor(t *testing.T, env map[string]string, args ...string) diskw
 	require.NoError(t, cmd.ParseFlags(args))
 	cfg, err := loadRootConfig(cmd)
 	require.NoError(t, err)
-	return storageReaperConfig(cfg)
+	dcfg, err := loadDaemonConfig(cmd)
+	require.NoError(t, err)
+	return storageReaperConfig(cfg, daemonHost(dcfg).Managed())
 }
 
 func TestStorageReaperConfig_DefaultsFollowTheDaemonType(t *testing.T) {

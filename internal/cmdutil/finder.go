@@ -49,7 +49,7 @@ func (cf *CommandFinder) Find() (string, error) {
 	}
 
 	// If not found, try to use shell to find it with full PATH
-	shellPath := os.Getenv("SHELL")
+	shellPath := os.Getenv("SHELL") //nolint:forbidigo // ambient OS variable (SHELL), not configuration
 	if shellPath == "" {
 		if runtime.GOOS == "windows" {
 			shellPath = "cmd"

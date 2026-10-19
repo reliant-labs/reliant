@@ -249,7 +249,7 @@ func TestStreamingHTTPClient_ClosingABlockRestoresTheAwaitingDeadline(t *testing
 // bound: the output budget at the floor generation rate, never tighter than
 // the awaiting deadline, never looser than the cap.
 func TestStreamMidBlockStallTimeout_ScalesWithOutputBudget(t *testing.T) {
-	t.Setenv(StreamMidBlockStallTimeoutEnv, "")
+	SetStreamTimeoutsForTest(t, StreamTimeouts{})
 	const awaiting = 5 * time.Minute
 	for _, tc := range []struct {
 		budget int64
@@ -269,20 +269,16 @@ func TestStreamMidBlockStallTimeout_ScalesWithOutputBudget(t *testing.T) {
 	// request carried, a block that long must fit with room to spare.
 	assert.Greater(t, StreamMidBlockStallTimeout(128000), 3*301*time.Second)
 
-	t.Run("env pins it", func(t *testing.T) {
-		t.Setenv(StreamMidBlockStallTimeoutEnv, "45m")
+	t.Run("config pins it", func(t *testing.T) {
+		SetStreamTimeoutsForTest(t, StreamTimeouts{MidBlock: 45 * time.Minute})
 		assert.Equal(t, 45*time.Minute, StreamMidBlockStallTimeout(4096))
-	})
-	t.Run("bad env is ignored", func(t *testing.T) {
-		t.Setenv(StreamMidBlockStallTimeoutEnv, "soon")
-		assert.Equal(t, DefaultStreamMidBlockStallTimeout, StreamMidBlockStallTimeout(0))
 	})
 }
 
 // The driver names its output budget on the request context; the transport
 // must size that response's mid-block deadline from it.
 func TestIdleTimeoutTransport_SizesMidBlockDeadlineFromRequestBudget(t *testing.T) {
-	t.Setenv(StreamMidBlockStallTimeoutEnv, "")
+	SetStreamTimeoutsForTest(t, StreamTimeouts{})
 	transport := &idleTimeoutTransport{
 		base: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil

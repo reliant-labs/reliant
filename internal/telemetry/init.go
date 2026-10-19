@@ -10,62 +10,37 @@
 package telemetry
 
 import (
-	"os"
-	"strconv"
-
 	"github.com/reliant-labs/reliant/internal/runenv"
 )
 
-// NewReporterFromEnv builds the process error reporter based on the runtime
-// environment and Sentry env vars. It centralizes the "prod yes, dev no" policy
-// so every server entrypoint stays a single call.
+// NewReporter builds the process error reporter from its Sentry config. It
+// centralizes the "prod yes, dev no" policy so every server entrypoint stays a
+// single call.
 //
-// The environment is runenv's resolution — the same one the logger's DEBUG
-// guard and auth use — so a pod with neither RELIANT_ENV nor NODE_ENV set,
-// which is how prod runs, reports.
+// The environment tier is runenv's resolution — the same one the logger's
+// DEBUG guard and auth use — so a pod with neither RELIANT_ENV nor NODE_ENV
+// set, which is how prod runs, reports.
 //
 // A NoopReporter is returned (Sentry stays dark) when ANY of the following hold:
 //   - the environment is dev or test
-//   - SENTRY_ENABLED is explicitly "false"
-//   - SENTRY_DSN is empty
+//   - cfg.Enabled is false (SENTRY_ENABLED=false)
+//   - cfg.DSN is empty
 //
 // Otherwise a live SentryReporter is returned. This mirrors the gating the
 // Electron main process (app.isPackaged) and web frontend (isDev) already use.
-func NewReporterFromEnv() ErrorReporter {
+// An empty cfg.Environment lets clientOptions guess from the version string,
+// which is right for a desktop build and only coincidentally right for a
+// server: a prerelease tag deployed to prod would file prod's errors under
+// "prerelease" — so a deploy states it.
+func NewReporter(cfg SentryConfig) ErrorReporter {
 	// Never report from dev or test runs.
 	if !runenv.IsProd() {
 		return NewNoopReporter()
 	}
-
-	// Explicit kill switch, independent of environment.
-	if os.Getenv("SENTRY_ENABLED") == "false" {
+	if !cfg.Enabled || cfg.DSN == "" {
 		return NewNoopReporter()
 	}
-
-	// No DSN configured → nothing to send to.
-	dsn := os.Getenv("SENTRY_DSN")
-	if dsn == "" {
-		return NewNoopReporter()
-	}
-
-	var tracesSampleRate float64
-	if raw := os.Getenv("SENTRY_TRACES_SAMPLE_RATE"); raw != "" {
-		if v, err := strconv.ParseFloat(raw, 64); err == nil {
-			tracesSampleRate = v
-		}
-	}
-
-	reporter, err := NewSentryReporter(SentryConfig{
-		Enabled: true,
-		DSN:     dsn,
-		// The deploy's own statement of which environment this is. Unset,
-		// clientOptions guesses from the version string, which is right for a
-		// desktop build and only coincidentally right for a server: a
-		// prerelease tag deployed to prod would file prod's errors under
-		// "prerelease".
-		Environment:      os.Getenv("SENTRY_ENVIRONMENT"),
-		TracesSampleRate: tracesSampleRate,
-	})
+	reporter, err := NewSentryReporter(cfg)
 	if err != nil || reporter == nil {
 		return NewNoopReporter()
 	}

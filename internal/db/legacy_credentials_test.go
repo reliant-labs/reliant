@@ -329,7 +329,6 @@ func TestUpgradeBootCopiesLegacyCredentialsAndTheyOpen(t *testing.T) {
 	_, err := rand.Read(k)
 	require.NoError(t, err)
 	envKey := "v1:" + base64.StdEncoding.EncodeToString(k)
-	t.Setenv(vault.EnvKey, envKey)
 	ring, err := crypto.ParseKeyring(envKey)
 	require.NoError(t, err)
 	// The previous release's vault: same key, same tenant DEKs (they live in vault_keys).
@@ -339,7 +338,7 @@ func TestUpgradeBootCopiesLegacyCredentialsAndTheyOpen(t *testing.T) {
 	prev.seedEverything(user)
 	prev.claude("other-user", "o-access", "o-refresh", "o-acct", "o-org", time.Now().Add(time.Hour))
 
-	_, err = BootVault(ctx, repo, true, t.TempDir())
+	_, err = BootVault(ctx, repo, true, t.TempDir(), envKey)
 	require.NoError(t, err)
 
 	got := accountsOf(t, repo, user)
@@ -358,7 +357,7 @@ func TestUpgradeBootCopiesLegacyCredentialsAndTheyOpen(t *testing.T) {
 	assert.Equal(t, "automation-secret", tok)
 
 	before := prev.count("provider_accounts")
-	_, err = BootVault(ctx, repo, true, t.TempDir())
+	_, err = BootVault(ctx, repo, true, t.TempDir(), envKey)
 	require.NoError(t, err)
 	assert.Equal(t, before, prev.count("provider_accounts"), "a second boot copies nothing")
 }

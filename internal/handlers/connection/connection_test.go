@@ -202,7 +202,7 @@ func newConnectionFixtureWithEnv(t *testing.T, getenv func(string) string) *conn
 	require.NoError(t, err)
 	v := vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})
 
-	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), getenv)
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(getenv))
 	require.NoError(t, err)
 	store := repo.Connections()
 	tokens := connections.NewTokenSource(store, v, providers, nil)

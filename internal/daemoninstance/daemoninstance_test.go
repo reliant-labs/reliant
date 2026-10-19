@@ -112,7 +112,6 @@ func TestResolveRejectsUnparseableOrigin(t *testing.T) {
 
 func TestResolveDefaultsOriginAndWorkspace(t *testing.T) {
 	t.Setenv(EnvServerURL, "http://localhost:3123")
-	t.Setenv(EnvWorkspace, "")
 
 	dir := t.TempDir()
 	key, err := Resolve("", "", dir)
@@ -123,23 +122,14 @@ func TestResolveDefaultsOriginAndWorkspace(t *testing.T) {
 		t.Errorf("origin = %q, want the RELIANT_SERVER_URL value", key.Origin)
 	}
 
-	// An explicit workspace label wins over the env override.
-	t.Setenv(EnvWorkspace, "/some/other/place")
-	key, err = Resolve("http://localhost:8090", "", dir)
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	if !strings.HasSuffix(key.Workspace, filepath.Base(dir)) {
-		t.Errorf("workspace = %q, want the explicit argument ending in %q", key.Workspace, filepath.Base(dir))
-	}
-
-	// With no explicit workspace, the env override is used.
+	// With no workspace, the working directory names it.
+	t.Chdir(dir)
 	key, err = Resolve("http://localhost:8090", "", "")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if key.Workspace != "/some/other/place" {
-		t.Errorf("workspace = %q, want the RELIANT_INSTANCE_WORKSPACE value", key.Workspace)
+	if !strings.HasSuffix(key.Workspace, filepath.Base(dir)) {
+		t.Errorf("workspace = %q, want the working directory ending in %q", key.Workspace, filepath.Base(dir))
 	}
 }
 

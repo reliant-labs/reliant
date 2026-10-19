@@ -51,13 +51,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// Environment variables that set the thresholds, as percentages of the volume
-// used ("90", "95"), or "off".
-const (
-	EnvReclaimAt = "RELIANT_DISK_RECLAIM_AT"
-	EnvRefuseAt  = "RELIANT_DISK_REFUSE_AT"
-)
-
 // Defaults. ReclaimAt is where cleaning up is cheap and still in time;
 // RefuseAt is where the next few build bursts may not fit. The free ceiling
 // keeps a big, mostly-free disk from refusing on percentage alone — 5% of a
@@ -119,23 +112,25 @@ func (c Config) withDefaults() Config {
 	return c
 }
 
-// ConfigFromEnv reads the thresholds from the daemon's environment
-// (EnvReclaimAt, EnvRefuseAt). A value it cannot read is an error naming it;
-// the caller keeps the defaults for it.
-func ConfigFromEnv(env []string) (Config, error) {
+// ParseThresholds reads the thresholds as the daemon's config carries them
+// (RELIANT_DISK_RECLAIM_AT, RELIANT_DISK_REFUSE_AT): a percentage of the
+// volume used ("90", "95%"), or "off". A blank one keeps its default. A value
+// it cannot read is an error naming it; the returned Config keeps the default
+// for that one and applies the other.
+func ParseThresholds(reclaimAt, refuseAt string) (Config, error) {
 	var cfg Config
 	var errs []string
 	for _, f := range []struct {
 		key string
+		v   string
 		dst *float64
-	}{{EnvReclaimAt, &cfg.ReclaimAt}, {EnvRefuseAt, &cfg.RefuseAt}} {
-		v, ok := lookup(env, f.key)
-		if !ok || strings.TrimSpace(v) == "" {
+	}{{"RELIANT_DISK_RECLAIM_AT", reclaimAt, &cfg.ReclaimAt}, {"RELIANT_DISK_REFUSE_AT", refuseAt, &cfg.RefuseAt}} {
+		if strings.TrimSpace(f.v) == "" {
 			continue
 		}
-		frac, err := parsePercent(v)
+		frac, err := parsePercent(f.v)
 		if err != nil {
-			errs = append(errs, fmt.Sprintf("%s=%q: %v", f.key, v, err))
+			errs = append(errs, fmt.Sprintf("%s=%q: %v", f.key, f.v, err))
 			continue
 		}
 		*f.dst = frac
@@ -480,14 +475,4 @@ func logTransition(v *reliantv1.DiskVolume, from, to reliantv1.DiskGuardState) {
 		return
 	}
 	logging.Info("[diskguard] Disk guard state changed", attrs...)
-}
-
-func lookup(env []string, key string) (string, bool) {
-	val, found := "", false
-	for _, kv := range env {
-		if k, v, ok := strings.Cut(kv, "="); ok && k == key {
-			val, found = v, true
-		}
-	}
-	return val, found
 }

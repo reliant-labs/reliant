@@ -22,7 +22,7 @@ func GetDefaultShell() (string, []string) {
 		return "C:\\Windows\\System32\\cmd.exe", []string{"/K"}
 	case "darwin", "linux":
 		// macOS and Linux - prefer zsh, respect user's SHELL
-		shell := os.Getenv("SHELL")
+		shell := os.Getenv("SHELL") //nolint:forbidigo // ambient OS variable (SHELL), not configuration
 		if shell == "" {
 			// Default to zsh first (modern macOS default), then bash
 			for _, s := range []string{"/bin/zsh", "/bin/bash", "/bin/sh"} {
@@ -41,7 +41,7 @@ func GetDefaultShell() (string, []string) {
 		return shell, []string{"-l"}
 	default:
 		// Other Unix-like systems
-		shell := os.Getenv("SHELL")
+		shell := os.Getenv("SHELL") //nolint:forbidigo // ambient OS variable (SHELL), not configuration
 		if shell == "" {
 			shell = "/bin/sh"
 		}
@@ -51,7 +51,7 @@ func GetDefaultShell() (string, []string) {
 
 // GetShellEnv returns environment variables for the shell
 func GetShellEnv(workingDir string) []string {
-	env := os.Environ()
+	env := os.Environ() //nolint:forbidigo // passes this process environment to a child process; not configuration
 
 	// Blacklist Reliant-specific environment variables that shouldn't propagate to user shells
 	// These are internal to the Reliant backend and Electron processes
@@ -126,10 +126,10 @@ func GetShellEnv(workingDir string) []string {
 func GetHomeDir() string {
 	if runtime.GOOS == "windows" {
 		// Windows: USERPROFILE is the standard home directory
-		home := os.Getenv("USERPROFILE")
+		home := os.Getenv("USERPROFILE") //nolint:forbidigo // ambient OS variable (USERPROFILE), not configuration
 		if home == "" {
 			// Fallback to HOMEDRIVE + HOMEPATH
-			home = os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
+			home = os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH") //nolint:forbidigo // ambient OS variables (HOMEDRIVE, HOMEPATH), not configuration
 		}
 		if home == "" {
 			home = "C:\\"
@@ -138,7 +138,7 @@ func GetHomeDir() string {
 	}
 
 	// Unix: HOME
-	home := os.Getenv("HOME")
+	home := os.Getenv("HOME") //nolint:forbidigo // ambient OS variable (HOME), not configuration
 	if home == "" {
 		home = "/"
 	}

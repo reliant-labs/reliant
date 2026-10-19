@@ -10,7 +10,6 @@ package features
 
 import (
 	"context"
-	"os"
 	"strings"
 	"sync"
 
@@ -41,13 +40,28 @@ var staticFlagDefaults = map[string]interface{}{
 	"project_analyzer_disabled": true, // TEMPORARY: Disable project analyzer and scanning
 }
 
+// Config is what the feature flag system is wired from: the process's config,
+// never its environment.
+type Config struct {
+	// StatsigClientKey is the Statsig key flags are evaluated with, when the
+	// settings service names none.
+	StatsigClientKey string
+	// StatsigServerSecretKey and StatsigEnvironment override the key and its
+	// environment in a dev-tier process only.
+	StatsigServerSecretKey string
+	StatsigEnvironment     string
+	// FeatureEnv looks up RELIANT_FEATURE_<KEY> flags, which a dev-tier
+	// process honours; nil honours none.
+	FeatureEnv func(string) string
+}
+
 // InitializeFeatureFlags sets up the feature flag system with configured providers
-func InitializeFeatureFlags(ctx context.Context) error {
-	return InitializeFeatureFlagsWithSettings(ctx, nil)
+func InitializeFeatureFlags(ctx context.Context, cfg Config) error {
+	return InitializeFeatureFlagsWithSettings(ctx, nil, cfg)
 }
 
 // InitializeFeatureFlagsWithSettings sets up the feature flag system with settings service
-func InitializeFeatureFlagsWithSettings(ctx context.Context, settings types.SettingsGetter) error {
+func InitializeFeatureFlagsWithSettings(ctx context.Context, settings types.SettingsGetter, cfg Config) error {
 	registry := GetGlobalRegistry()
 
 	// Initialize static provider (lowest priority)
@@ -74,19 +88,19 @@ func InitializeFeatureFlagsWithSettings(ctx context.Context, settings types.Sett
 		}
 	}
 
-	// Fall back to env var if not in settings
+	// Fall back to the process's config if not in settings
 	if statsigKey == "" {
-		statsigKey = os.Getenv("STATSIG_CLIENT_KEY")
+		statsigKey = cfg.StatsigClientKey
 	}
 	if statsigEnv == "" {
 		statsigEnv = "production"
 	}
 
-	// Fall back to environment variables for development only
-	if runenv.IsDev() && os.Getenv("STATSIG_SERVER_SECRET_KEY") != "" {
-		statsigKey = os.Getenv("STATSIG_SERVER_SECRET_KEY")
-		if os.Getenv("STATSIG_ENVIRONMENT") != "" {
-			statsigEnv = os.Getenv("STATSIG_ENVIRONMENT")
+	// A server secret key overrides it, for development only
+	if runenv.IsDev() && cfg.StatsigServerSecretKey != "" {
+		statsigKey = cfg.StatsigServerSecretKey
+		if cfg.StatsigEnvironment != "" {
+			statsigEnv = cfg.StatsigEnvironment
 		}
 	}
 
@@ -125,7 +139,7 @@ func InitializeFeatureFlagsWithSettings(ctx context.Context, settings types.Sett
 
 	// Environment variable provider (medium priority) - for development only
 	if runenv.IsDev() {
-		envProvider := providers.NewEnvironmentProvider(600)
+		envProvider := providers.NewEnvironmentProvider(600, cfg.FeatureEnv)
 		if err := envProvider.Initialize(ctx, nil); err != nil {
 			logging.Warn("Failed to initialize environment provider", "error", err)
 		} else {

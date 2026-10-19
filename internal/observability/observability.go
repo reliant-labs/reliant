@@ -44,24 +44,37 @@ type Config struct {
 	PrometheusEnabled bool
 }
 
-// ConfigFromEnv builds a Config from environment variables. Service identity is
-// the owning binary's canonical name; the Forge runtime lets a set
+// Settings is a server role's observability config (ObservabilityConfig):
+// where it exports, whether it must, and the environment it files telemetry
+// under.
+type Settings struct {
+	// Environment is the deployment environment; empty is "development".
+	Environment       string
+	OTLPEndpoint      string
+	OTLPEnabled       bool
+	PrometheusEnabled bool
+}
+
+// NewConfig is the Config of a process serving serviceName under s. Service
+// identity is the owning binary's canonical name; the Forge runtime lets a set
 // OTEL_SERVICE_NAME override it (forge derives that from the workload name).
-func ConfigFromEnv(serviceName string) Config {
+func NewConfig(serviceName string, s Settings) Config {
 	instanceID, err := os.Hostname()
 	if err != nil || instanceID == "" {
-		instanceID = getEnv("HOSTNAME", "reliant-local")
+		instanceID = "reliant-local"
 	}
-	environment := environmentFromEnv()
-	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	environment := strings.TrimSpace(s.Environment)
+	if environment == "" {
+		environment = "development"
+	}
 	return Config{
 		ServiceName:       serviceName,
 		Environment:       environment,
 		Version:           buildVersion(),
 		InstanceID:        instanceID,
-		OTLPEndpoint:      endpoint,
-		OTLPEnabled:       os.Getenv("OTEL_ENABLED") == "true",
-		PrometheusEnabled: os.Getenv("PROMETHEUS_ENABLED") != "false",
+		OTLPEndpoint:      strings.TrimSpace(s.OTLPEndpoint),
+		OTLPEnabled:       s.OTLPEnabled,
+		PrometheusEnabled: s.PrometheusEnabled,
 	}
 }
 
@@ -71,18 +84,6 @@ func buildVersion() string {
 		return "dev"
 	}
 	return v
-}
-
-// environmentFromEnv follows deployment precedence: Sentry's explicit
-// environment is authoritative, then the typed deployment ENVIRONMENT, with the
-// legacy RELIANT_ENV retained only for standalone development compositions.
-func environmentFromEnv() string {
-	for _, key := range []string{"SENTRY_ENVIRONMENT", "ENVIRONMENT", "RELIANT_ENV"} {
-		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-			return value
-		}
-	}
-	return "development"
 }
 
 var (
@@ -204,10 +205,3 @@ func validateOTLPEndpoint(endpoint string) error {
 
 // Registry is the global Prometheus registry used for all application metrics.
 var Registry = prometheus.NewRegistry()
-
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}

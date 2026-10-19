@@ -26,7 +26,7 @@ const (
 // This is the canonical location for user-editable config files.
 // Environment variable RELIANT_USER_CONFIG_DIR can override this.
 func GetUserConfigDir() string {
-	if configDir := os.Getenv("RELIANT_USER_CONFIG_DIR"); configDir != "" {
+	if configDir := os.Getenv("RELIANT_USER_CONFIG_DIR"); configDir != "" { //nolint:forbidigo // RELIANT_USER_CONFIG_DIR locates the product user config, resolved lazily by every process that touches ~/.reliant; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
 		return configDir
 	}
 	// Default to ~/.reliant/
@@ -41,7 +41,7 @@ func GetUserConfigDir() string {
 // This is for internal data like databases, analytics, auth tokens.
 // Environment variable RELIANT_APP_DATA_DIR can override this.
 func GetAppDataDir() string {
-	if appDataDir := os.Getenv("RELIANT_APP_DATA_DIR"); appDataDir != "" {
+	if appDataDir := os.Getenv("RELIANT_APP_DATA_DIR"); appDataDir != "" { //nolint:forbidigo // RELIANT_APP_DATA_DIR locates the product app data dir, resolved lazily by every process that touches it; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
 		return appDataDir
 	}
 	// Platform-specific defaults

@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
+	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -33,30 +34,25 @@ type daemonInstanceFlags struct {
 	workspace string
 }
 
-// envDataDir is the container-facing data-directory override. docker-compose.yml
-// and docker-compose.cloud.yml both set it to /data, where the volume is
-// mounted; derivation would put the daemon's state on the container's ephemeral
-// filesystem instead.
-const envDataDir = "DAEMON_DATA_DIR"
-
-// registerDaemonInstanceFlags wires the instance flags onto a command.
+// daemonInstance is the instance a daemon command's config names
+// (DaemonInstanceConfig: --data-dir/DAEMON_DATA_DIR, --account/
+// RELIANT_INSTANCE_ACCOUNT, --workspace/RELIANT_INSTANCE_WORKSPACE).
 //
-// --data-dir defaults to the empty string rather than to "./data". The old
-// default was the whole bug: a cwd-relative path meant `daemon start` from the
-// repo root and `daemon stop` from electron/ addressed two different daemons,
-// and stop reported "No daemon running" over a live one. Empty means "derive",
-// and derivation is stable no matter where the command is invoked from.
-func registerDaemonInstanceFlags(cmd *cobra.Command, f *daemonInstanceFlags, dataDirUsage string) {
-	cmd.Flags().StringVar(&f.dataDir, "data-dir", os.Getenv(envDataDir), dataDirUsage)
-	cmd.Flags().StringVar(&f.account, "account", os.Getenv(envAccount),
-		"Account (Supabase subject) this daemon runs as; selects among several accounts on one server")
-	cmd.Flags().StringVar(&f.workspace, "workspace", "",
-		"Workspace this daemon serves (defaults to the git worktree root of the current directory)")
+// The data directory defaults to the empty string rather than to "./data". The
+// old default was the whole bug: a cwd-relative path meant `daemon start` from
+// the repo root and `daemon stop` from electron/ addressed two different
+// daemons, and stop reported "No daemon running" over a live one. Empty means
+// "derive", and derivation is stable no matter where the command is invoked
+// from. Containers set DAEMON_DATA_DIR to their mounted volume
+// (docker-compose.yml, the workspace operator), where derivation would put the
+// daemon's state on the ephemeral filesystem.
+func daemonInstance(cfg *configv1.DaemonInstanceConfig) daemonInstanceFlags {
+	return daemonInstanceFlags{
+		dataDir:   cfg.GetDataDir(),
+		account:   cfg.GetAccount(),
+		workspace: cfg.GetWorkspace(),
+	}
 }
-
-// envAccount lets a container or CI job name the account without a flag, the
-// same way RELIANT_INSTANCE_WORKSPACE names the workspace.
-const envAccount = "RELIANT_INSTANCE_ACCOUNT"
 
 // resolveDaemonInstance builds the instance key these flags name.
 //
@@ -66,12 +62,12 @@ const envAccount = "RELIANT_INSTANCE_ACCOUNT"
 // subdirectories of one worktree are two different working directories, so
 // start and stop would again address two different instances.
 //
-//  1. --workspace                      the user said so
-//  2. RELIANT_INSTANCE_WORKSPACE       containers and CI, where cwd means nothing
-//  3. the git worktree root of cwd     every directory in a worktree is ONE instance
-//  4. cwd                              only when there is no git repository at all
+//  1. --workspace, else RELIANT_INSTANCE_WORKSPACE   the user, or a container or
+//     CI job where cwd means nothing, said so (the command's config)
+//  2. the git worktree root of cwd     every directory in a worktree is ONE instance
+//  3. cwd                              only when there is no git repository at all
 //
-// Rule 3 is the one that matters: `reliant/` and `reliant/electron/` share a
+// Rule 2 is the one that matters: `reliant/` and `reliant/electron/` share a
 // toplevel and therefore share an instance, while a second worktree has its own
 // toplevel and is properly separate.
 func resolveDaemonInstance(f daemonInstanceFlags, serverURL string) (daemoninstance.Key, error) {
@@ -82,9 +78,6 @@ func resolveDaemonInstance(f daemonInstanceFlags, serverURL string) (daemoninsta
 // value, so daemoninstance.Resolve never reaches its own cwd fallback.
 func resolveWorkspace(explicit string) string {
 	if w := strings.TrimSpace(explicit); w != "" {
-		return w
-	}
-	if w := strings.TrimSpace(os.Getenv(daemoninstance.EnvWorkspace)); w != "" {
 		return w
 	}
 	if root := gitWorktreeRoot(); root != "" {

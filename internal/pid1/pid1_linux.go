@@ -56,7 +56,7 @@ func Init() {
 	code, err := supervise(config{
 		path:   path,
 		argv:   os.Args,
-		env:    os.Environ(),
+		env:    os.Environ(), //nolint:forbidigo // passes this process environment to a child process; not configuration
 		stderr: os.Stderr,
 	})
 	if err != nil {

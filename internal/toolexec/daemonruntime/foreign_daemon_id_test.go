@@ -109,7 +109,6 @@ func setAsideFiles(t *testing.T, dataDir string) []string {
 // assigns.
 func newDaemonClientForInstance(t *testing.T, dataDir, gatewayURL, daemonID string) *daemonClient {
 	t.Helper()
-	t.Setenv("DAEMON_WORKING_DIR", t.TempDir())
 	client, err := newDaemonClient(bootstrap.DaemonBootstrapConfig{
 		AuthToken: "rlat_test",
 		GRPCURL:   gatewayURL,
@@ -117,7 +116,7 @@ func newDaemonClientForInstance(t *testing.T, dataDir, gatewayURL, daemonID stri
 		DataDir:   dataDir,
 		ServerURL: "https://api.example.com",
 		DaemonID:  daemonID,
-	})
+	}, Host{WorkingDir: t.TempDir()}, Guards{})
 	require.NoError(t, err)
 	return client
 }

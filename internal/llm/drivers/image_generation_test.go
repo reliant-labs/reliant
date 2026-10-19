@@ -91,7 +91,7 @@ func TestImageGenResolution_TagDegradationCannotPickTextModel(t *testing.T) {
 // path: a managed request must target the control-plane base URL, because that
 // proxy is the only place image spend is metered.
 func TestImageGenConfig_ManagedDriverRoutesThroughProxy(t *testing.T) {
-	t.Setenv("RELIANT_API_BASE_URL", "http://control-plane.test:8090/v1")
+	SetReliantBaseURLForTest(t, "http://control-plane.test:8090/v1")
 
 	resolved := &models.ResolvedModel{
 		Definition: models.ModelDefinition{ID: "gpt-image-2.5-flare"},

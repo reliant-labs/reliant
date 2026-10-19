@@ -16,7 +16,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
-	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -67,11 +66,17 @@ type Options struct {
 	// DatabaseDirectURL is the session-capable URL for session-scoped work
 	// (db.DatabaseConfig.DirectURL); empty when DatabaseURL already is one.
 	DatabaseDirectURL string
+	// DatabasePool sizes the pool and bounds the waits on the database
+	// (the role config's DatabaseConfig).
+	DatabasePool db.Pool
 	// DataDir is the directory for local data (logs, certs).
 	DataDir string
 
-	// NATSURL is the NATS server connection URL.
-	NATSURL string
+	// NATS is the NATS server and its credentials.
+	NATS natsutil.Endpoint
+
+	// PprofAddr is the pprof debug listener (host:port); empty serves none.
+	PprofAddr string
 
 	// TLSCertFile is the path to the TLS certificate file.
 	TLSCertFile string
@@ -87,6 +92,10 @@ type Options struct {
 	// ControlPlane is the control plane hosting this deployment; the zero
 	// value is self-hosted (the role config's ControlPlaneConfig).
 	ControlPlane controlplane.Endpoint
+
+	// Observability is where this role exports telemetry and the
+	// environment it files it under (ObservabilityConfig).
+	Observability observability.Settings
 }
 
 // Run bootstraps and runs the daemon-gateway server. It blocks until a
@@ -96,7 +105,7 @@ func Run(ctx context.Context, opts Options) error {
 	// -------------------------------------------------------------------------
 	// 1. Validate required options
 	// -------------------------------------------------------------------------
-	if opts.NATSURL == "" {
+	if opts.NATS.URL == "" {
 		return fmt.Errorf("daemon-gateway: NATS_URL is required")
 	}
 	if opts.DatabaseURL == "" {
@@ -122,7 +131,7 @@ func Run(ctx context.Context, opts Options) error {
 	defer logging.Close() //nolint:errcheck
 
 	// Forge owns the OTel runtime; Sentry remains independently initialized below.
-	obsProvider, err := observability.Init(observability.ConfigFromEnv("daemon-gateway"))
+	obsProvider, err := observability.Init(observability.NewConfig("daemon-gateway", opts.Observability))
 	if err != nil {
 		return fmt.Errorf("initialize observability: %w", err)
 	}
@@ -136,10 +145,10 @@ func Run(ctx context.Context, opts Options) error {
 		"daemon_port", opts.ToolsDaemonPort,
 		"health_port", opts.HealthPort,
 		"db_driver", opts.DatabaseDriver,
-		"nats_url", opts.NATSURL,
+		"nats_url", opts.NATS.URL,
 	)
 
-	// pprof, off unless PPROF_ADDR names an address.
+	// pprof, off unless PprofAddr (PPROF_ADDR) names an address.
 	//
 	// The gateway had no profiler at all, and that is what turned a memory
 	// question into guesswork: dev's gateway holds ~1.06 GB of anonymous
@@ -153,7 +162,7 @@ func Run(ctx context.Context, opts Options) error {
 	// theirs to keep on loopback or a cluster-internal port. control-plane's
 	// AppConfig already projects PPROF_ADDR for its own binaries; the gateway
 	// simply never read it, so the knob existed on one side of the wire only.
-	startPprofServer(os.Getenv("PPROF_ADDR"))
+	startPprofServer(opts.PprofAddr)
 
 	// Database
 	dbDriver, err := db.ParseDatabaseDriver(opts.DatabaseDriver)
@@ -168,6 +177,7 @@ func Run(ctx context.Context, opts Options) error {
 		DataDir:   opts.DataDir,
 		URL:       opts.DatabaseURL,
 		DirectURL: opts.DatabaseDirectURL,
+		Pool:      opts.DatabasePool,
 		Migrate:   db.MigrateWait,
 	})
 	if err != nil {
@@ -196,12 +206,12 @@ func Run(ctx context.Context, opts Options) error {
 	logging.Info("daemon credential authentication initialized", "authority", authorityMode)
 
 	// NATS connection
-	nc, err := natsutil.Connect(opts.NATSURL)
+	nc, err := natsutil.Connect(opts.NATS)
 	if err != nil {
 		return fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 	defer nc.Close()
-	logging.Info("Connected to NATS", "url", opts.NATSURL)
+	logging.Info("Connected to NATS", "url", opts.NATS.URL)
 
 	// TLS certificates
 	tlsCertFile := opts.TLSCertFile

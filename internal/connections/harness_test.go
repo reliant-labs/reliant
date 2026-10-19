@@ -245,9 +245,9 @@ func newEnv(t *testing.T) *env {
 	v := vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})
 
 	gh := newFakeGitHub(t)
-	providers, err := connections.ProvidersFromCatalog(testManifests(t), oauthEnv(map[string]string{
+	providers, err := connections.ProvidersFromCatalog(testManifests(t), connections.OAuthClientsFromEnv(oauthEnv(map[string]string{
 		"RELIANT_OAUTH_GITHUB_CLIENT_ID": clientID, "RELIANT_OAUTH_GITHUB_CLIENT_SECRET": clientSecret,
-	}))
+	})))
 	require.NoError(t, err)
 	doer := redirectingDoer{target: gh.srv}
 

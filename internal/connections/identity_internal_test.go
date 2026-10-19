@@ -25,7 +25,7 @@ func (f doerFunc) Do(r *http.Request) (*http.Response, error) { return f(r) }
 // id, never the login. A login can be renamed and then registered by someone
 // else; an allowlist written from it would admit them.
 func TestGitHubProbeRecordsTheNumericUserIDAsTheSender(t *testing.T) {
-	reg, err := ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), func(string) string { return "" })
+	reg, err := ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)
 	prov, ok := reg.Get("github")
 	require.True(t, ok)

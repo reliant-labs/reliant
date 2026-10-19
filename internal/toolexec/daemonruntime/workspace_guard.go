@@ -158,7 +158,7 @@ func (d *daemonClient) armWorkspaceGuard(ctx context.Context, stopRuntime func()
 	if err != nil {
 		home = ""
 	}
-	guard, recordErr := newWorkspaceGuard(home, IsManagedEnvironment(), rootwatch.Options{Interval: workspaceGuardPollInterval})
+	guard, recordErr := newWorkspaceGuard(home, d.host.Managed(), rootwatch.Options{Interval: workspaceGuardPollInterval})
 	guard.cancelInFlight = d.cancelAllRequests
 	guard.stopRuntime = stopRuntime
 	if !d.bootCfg.Verbose {

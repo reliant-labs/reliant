@@ -55,7 +55,7 @@
 // delete to issue — and one blob may be shared by identical payloads from
 // several runs. A purged user's blobs stop being referenced once their
 // workflows end and are deleted by the api-server's GC within the horizon
-// (claimcheck.DefaultGCHorizon, 30 days, env RELIANT_PAYLOAD_BLOB_GC_HORIZON).
+// (claimcheck.DefaultGCHorizon, 30 days; the API server's RELIANT_PAYLOAD_BLOB_GC_HORIZON).
 // That horizon is this table's data-retention bound.
 //
 //forge:lint-disable-next-line forge-exclude-contract-outbound-io: its only I/O is the purge transaction it exists to run; a contract.go would buy no mock or decorator because reliant is not forge-generated (no forge.yaml); conversion tracked in H-RELIANT-CI-lint follow-ups

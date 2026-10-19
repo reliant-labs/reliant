@@ -102,13 +102,11 @@ func TestUTF8Sanitization(t *testing.T) {
 }
 
 func TestNewDaemonClient_BindsLocalMCPContextBinder(t *testing.T) {
-	t.Setenv("DAEMON_WORKING_DIR", t.TempDir())
-
 	client, err := newDaemonClient(bootstrap.DaemonBootstrapConfig{
 		AuthToken: "test-token",
 		GRPCURL:   "http://127.0.0.1:9999",
 		TLSMode:   bootstrap.TLSModeH2C,
-	})
+	}, Host{WorkingDir: t.TempDir()}, Guards{})
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	require.NotNil(t, client.localExecutor)

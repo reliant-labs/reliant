@@ -2,13 +2,16 @@
 package commands
 
 import (
-	"os"
-	"strconv"
+	"fmt"
 	"strings"
 	"time"
 
 	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/worktreesweep"
 
 	"github.com/reliant-labs/reliant/internal/serverapi"
 	"github.com/reliant-labs/reliant/internal/servergateway"
@@ -32,68 +35,7 @@ server role for split-deployment mode.`,
 	return cmd
 }
 
-// serverEnvOrDefault returns the environment variable value or the default.
-// Local to this file to avoid modifying root.go.
-func serverEnvOrDefault(key, defaultVal string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return defaultVal
-}
-
-// serverEnvOrDefaultInt returns the environment variable as int, or the default.
-func serverEnvOrDefaultInt(key string, defaultVal int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return defaultVal
-}
-
-// serverEnvOrDefaultBool returns the environment variable as bool, or the default.
-func serverEnvOrDefaultBool(key string, defaultVal bool) bool {
-	if v := os.Getenv(key); v != "" {
-		if b, err := strconv.ParseBool(v); err == nil {
-			return b
-		}
-	}
-	return defaultVal
-}
-
-// drainBudgetFromEnv reads the rollout drain budget control-plane sets on
-// every server workload — PRE_STOP_DELAY and SHUTDOWN_TIMEOUT, from which
-// forge derives the pod's terminationGracePeriodSeconds, so a process that
-// ignores them cannot stay inside the grace period it was given — in the
-// terms serverkit.Drainer takes them.
-//
-// It reads them exactly as forge's grace-period arithmetic does
-// (pkg/deploy's drainSeconds), so the two can never disagree about the
-// budget: a Go duration ("30s", "1m30s") or a bare count of seconds, passed
-// through under serverkit's one rule for both — zero (or unset) is the
-// default, 5s / 30s, and negative is none. Anything else takes the default: a
-// malformed duration must not stop a server from booting, nor make its
-// shutdown instantaneous.
-func drainBudgetFromEnv() (preStopDelay, shutdownTimeout time.Duration) {
-	return serverEnvDuration("PRE_STOP_DELAY"), serverEnvDuration("SHUTDOWN_TIMEOUT")
-}
-
-// serverEnvDuration returns the environment variable as a duration — a Go
-// duration or a bare count of seconds — and zero when it is unset or neither.
-func serverEnvDuration(key string) time.Duration {
-	raw := strings.TrimSpace(os.Getenv(key))
-	if d, err := time.ParseDuration(raw); err == nil {
-		return d
-	}
-	if n, err := strconv.ParseInt(raw, 10, 64); err == nil {
-		return time.Duration(n) * time.Second
-	}
-	return 0
-}
-
 func newServerAPICmd() *cobra.Command {
-	opts := serverapi.Options{}
-
 	cmd := &cobra.Command{
 		Use:   "api",
 		Short: "Run the stateless HTTP + gRPC API server",
@@ -103,56 +45,16 @@ external Temporal, Postgres, and NATS services.
 
 Designed to run as N replicas behind a load balancer.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var opts serverapi.Options
 			if err := loadServerAPIConfig(cmd, &opts); err != nil {
 				return err
 			}
-			opts.PreStopDelay, opts.ShutdownTimeout = drainBudgetFromEnv()
-
-			// Parse CORS origins: "*" → wildcard, otherwise comma-separated
-			corsRaw, _ := cmd.Flags().GetString("cors-origins")
-			if corsRaw == "*" {
-				opts.CORSAllowedOrigins = []string{"*"}
-			} else {
-				opts.CORSAllowedOrigins = strings.Split(corsRaw, ",")
-			}
-
 			return serverapi.Run(cmd.Context(), opts)
 		},
 	}
 
-	// Ports
-	cmd.Flags().IntVar(&opts.GRPCPort, "grpc-port", serverEnvOrDefaultInt("GRPC_PORT", 9090), "gRPC/ConnectRPC listen port")
-	cmd.Flags().IntVar(&opts.PprofPort, "pprof-port", serverEnvOrDefaultInt("PPROF_PORT", 6060), "pprof debug server port")
-	cmd.Flags().StringVar(&opts.BindAddress, "bind-address", serverEnvOrDefault("BIND_ADDRESS", "0.0.0.0"), "Network address to bind to")
-	cmd.Flags().IntVar(&opts.HealthPort, "health-port", serverEnvOrDefaultInt("HEALTH_PORT", 8081), "Health/readiness HTTP endpoint port")
-
-	// Database
-	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (postgres)")
-	cmd.Flags().StringVar(&opts.DatabaseURL, "db-url", serverEnvOrDefault("DATABASE_URL", ""), "Database connection URL (required)")
-	cmd.Flags().StringVar(&opts.DatabaseDirectURL, "db-direct-url", serverEnvOrDefault("DATABASE_DIRECT_URL", ""), "Session-capable connection URL for the same database, for session-scoped work (advisory locks); set when --db-url is a transaction-pooling PgBouncer")
-	cmd.Flags().StringVar(&opts.DataDir, "data-dir", serverEnvOrDefault("DATA_DIR", "./data"), "Data directory for logs and certs")
-
-	// Temporal
-	cmd.Flags().StringVar(&opts.TemporalHost, "temporal-host", serverEnvOrDefault("TEMPORAL_HOST", "localhost"), "Temporal server host")
-	cmd.Flags().IntVar(&opts.TemporalPort, "temporal-port", serverEnvOrDefaultInt("TEMPORAL_PORT", 7233), "Temporal server port")
-	cmd.Flags().StringVar(&opts.TemporalNamespace, "temporal-namespace", serverEnvOrDefault("TEMPORAL_NAMESPACE", "reliant"), "Temporal namespace")
-
-	// NATS / streaming
-	cmd.Flags().StringVar(&opts.NATSURL, "nats-url", serverEnvOrDefault("NATS_URL", ""), "NATS server URL (required)")
-	cmd.Flags().StringVar(&opts.StreamingDriver, "streaming-driver", serverEnvOrDefault("STREAMING_DRIVER", "nats"), "Streaming driver (memory or nats)")
-
-	// CORS — default to wildcard; hosted deployments override via CORS_ALLOWED_ORIGINS
-	corsDefault := "*"
-	cmd.Flags().String("cors-origins", serverEnvOrDefault("CORS_ALLOWED_ORIGINS", corsDefault), "Comma-separated CORS allowed origins, or * for all")
-
-	// TLS
-	cmd.Flags().StringVar(&opts.TLSCertFile, "tls-cert", serverEnvOrDefault("TLS_CERT_FILE", ""), "TLS certificate file path")
-	cmd.Flags().StringVar(&opts.TLSKeyFile, "tls-key", serverEnvOrDefault("TLS_KEY_FILE", ""), "TLS key file path")
-	cmd.Flags().BoolVar(&opts.DisableTLS, "disable-tls", serverEnvOrDefaultBool("DISABLE_TLS", false), "Disable TLS (use plaintext HTTP)")
-
-	// JWT (--jwt-public-key, --jwt-public-key-file, --jwks-url), the
-	// email-domain allowlist and the control plane (env only):
-	// proto/config/v1 ApiServerConfig.
+	// Every flag and variable `server api` reads: proto/config/v1
+	// ApiServerConfig.
 	config.RegisterApiServerConfigFlags(cmd)
 
 	return cmd
@@ -169,13 +71,79 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	if err != nil {
 		return err
 	}
+	if err := config.ValidateApiServerConfig(api); err != nil {
+		return err
+	}
+	if err := checkServerPorts(
+		serverPort{"GRPC_PORT (--grpc-port)", api.GetGrpcPort()},
+		serverPort{"HEALTH_PORT (--health-port)", api.GetHealthPort()},
+		serverPort{"PPROF_PORT (--pprof-port)", api.GetPprofPort()},
+		serverPort{"TEMPORAL_PORT (--temporal-port)", api.GetTemporal().GetPort()},
+	); err != nil {
+		return err
+	}
+	drain := drainBudget(api.GetDrain())
 	opts.Log = logSettings(base)
+	opts.GRPCPort = int(api.GetGrpcPort())
+	opts.HealthPort = int(api.GetHealthPort())
+	opts.PprofPort = int(api.GetPprofPort())
+	opts.BindAddress = api.GetBindAddress()
+	opts.DataDir = api.GetDataDir()
+	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = databaseSettings(api.GetDatabase())
+	if opts.DatabasePool, err = databasePool(api.GetDatabase()); err != nil {
+		return err
+	}
+	opts.TemporalHost, opts.TemporalPort, opts.TemporalNamespace = temporalSettings(api.GetTemporal())
+	opts.NATS = natsEndpoint(api.GetNats())
+	opts.StreamingDriver = api.GetStreamingDriver()
+	opts.CORSAllowedOrigins = api.GetCorsAllowedOrigins()
+	opts.TLSCertFile, opts.TLSKeyFile, opts.DisableTLS = tlsSettings(api.GetTls())
+	opts.PreStopDelay, opts.ShutdownTimeout = drain.preStopDelay, drain.shutdownTimeout
 	opts.JWTPublicKey = api.GetJwtPublicKey()
 	opts.JWTPublicKeyFile = api.GetJwtPublicKeyFile()
 	opts.JWKSURL = api.GetJwksUrl()
 	opts.AllowedEmailDomains = api.GetAllowedEmailDomains()
 	opts.DisableForgeAPI = api.GetDisableForgeApi()
 	opts.ControlPlane = controlPlaneEndpoint(api.GetControlPlane())
+	opts.AuthMode = api.GetAuthMode()
+	opts.AuthAPIKey = api.GetAuthApiKey()
+	opts.RequireEmailVerifiedClaim = api.GetRequireEmailVerifiedClaim()
+	opts.AuthorizationServer = strings.TrimSpace(api.GetAuthorizationServer())
+	opts.OAuthIssuers = api.GetMcpOauthIssuers()
+	opts.MaxUploadSize = api.GetMaxUploadSize()
+	opts.WorktreeAutoArchive = worktreesweep.ParseAutoArchiveMode(api.GetWorktreeAutoArchive())
+	in, err := integrations(api.GetIntegrations())
+	if err != nil {
+		return err
+	}
+	opts.PublicURL, opts.VaultKey, opts.Webhooks = in.publicURL, in.vaultKey, in.webhooks
+	opts.GitHubAppSlug, opts.GitHubBot = in.gitHubAppSlug, in.gitHubBot
+	opts.Analytics = analyticsSettings(api.GetAnalytics())
+	if opts.PayloadGCHorizon = api.GetPayloadBlobGcHorizon().AsDuration(); opts.PayloadGCHorizon <= 0 {
+		return fmt.Errorf("config: RELIANT_PAYLOAD_BLOB_GC_HORIZON = %s is not a positive duration", opts.PayloadGCHorizon)
+	}
+	opts.Observability = observabilitySettings(api.GetObservability(), base)
+	if opts.Sentry, err = sentrySettings(api.GetSentry(), api.GetObservability()); err != nil {
+		return err
+	}
+	if opts.LLM, err = llmSettings(api.GetLlm()); err != nil {
+		return err
+	}
+	if opts.Preview, err = previewSettings(api.GetPreview()); err != nil {
+		return err
+	}
+	return validateServerAPIAuth(opts)
+}
+
+// validateServerAPIAuth refuses an auth configuration the API server cannot
+// serve with, at load rather than when the first request arrives.
+func validateServerAPIAuth(opts *serverapi.Options) error {
+	if opts.AuthMode == auth.ModeAPIKey && opts.AuthAPIKey == "" {
+		return fmt.Errorf("config: AUTH_MODE=apikey requires AUTH_API_KEY")
+	}
+	if opts.MaxUploadSize <= 0 {
+		return fmt.Errorf("config: MAX_UPLOAD_SIZE = %d is not a positive byte count", opts.MaxUploadSize)
+	}
 	return nil
 }
 
@@ -190,9 +158,46 @@ func loadServerWorkerConfig(cmd *cobra.Command, opts *serverworker.Options) erro
 	if err != nil {
 		return err
 	}
+	if err := config.ValidateWorkerConfig(worker); err != nil {
+		return err
+	}
+	if err := checkServerPorts(
+		serverPort{"HEALTH_PORT (--health-port)", worker.GetHealthPort()},
+		serverPort{"PPROF_PORT (--pprof-port)", worker.GetPprofPort()},
+		serverPort{"TEMPORAL_PORT (--temporal-port)", worker.GetTemporal().GetPort()},
+	); err != nil {
+		return err
+	}
+	drain := drainBudget(worker.GetDrain())
 	opts.Log = logSettings(base)
+	opts.HealthPort = int(worker.GetHealthPort())
+	opts.PprofPort = int(worker.GetPprofPort())
+	opts.DataDir = worker.GetDataDir()
+	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = databaseSettings(worker.GetDatabase())
+	if opts.DatabasePool, err = databasePool(worker.GetDatabase()); err != nil {
+		return err
+	}
+	opts.TemporalHost, opts.TemporalPort, opts.TemporalNamespace = temporalSettings(worker.GetTemporal())
+	opts.NATS = natsEndpoint(worker.GetNats())
+	opts.StreamingDriver = worker.GetStreamingDriver()
+	opts.PreStopDelay, opts.ShutdownTimeout = drain.preStopDelay, drain.shutdownTimeout
 	opts.ControlPlane = controlPlaneEndpoint(worker.GetControlPlane())
-	return nil
+	in, err := integrations(worker.GetIntegrations())
+	if err != nil {
+		return err
+	}
+	opts.PublicURL, opts.VaultKey, opts.Webhooks = in.publicURL, in.vaultKey, in.webhooks
+	opts.GitHubAppSlug, opts.GitHubBot = in.gitHubAppSlug, in.gitHubBot
+	opts.Analytics = analyticsSettings(worker.GetAnalytics())
+	opts.Observability = observabilitySettings(worker.GetObservability(), base)
+	if opts.Sentry, err = sentrySettings(worker.GetSentry(), worker.GetObservability()); err != nil {
+		return err
+	}
+	if opts.LLM, err = llmSettings(worker.GetLlm()); err != nil {
+		return err
+	}
+	opts.Preview, err = previewSettings(worker.GetPreview())
+	return err
 }
 
 // loadServerGatewayConfig fills opts with what `server gateway` reads through
@@ -206,8 +211,31 @@ func loadServerGatewayConfig(cmd *cobra.Command, opts *servergateway.Options) er
 	if err != nil {
 		return err
 	}
+	if err := config.ValidateGatewayConfig(gateway); err != nil {
+		return err
+	}
+	if err := checkServerPorts(
+		serverPort{"TOOLS_DAEMON_PORT (--daemon-port)", gateway.GetDaemonPort()},
+		serverPort{"HEALTH_PORT (--health-port)", gateway.GetHealthPort()},
+	); err != nil {
+		return err
+	}
+	drain := drainBudget(gateway.GetDrain())
 	opts.Log = logSettings(base)
+	opts.ToolsDaemonPort = int(gateway.GetDaemonPort())
+	opts.HealthPort = int(gateway.GetHealthPort())
+	opts.BindAddress = gateway.GetBindAddress()
+	opts.DataDir = gateway.GetDataDir()
+	opts.PprofAddr = gateway.GetPprofAddr()
+	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = databaseSettings(gateway.GetDatabase())
+	if opts.DatabasePool, err = databasePool(gateway.GetDatabase()); err != nil {
+		return err
+	}
+	opts.NATS = natsEndpoint(gateway.GetNats())
+	opts.TLSCertFile, opts.TLSKeyFile, opts.DisableTLS = tlsSettings(gateway.GetTls())
+	opts.PreStopDelay, opts.ShutdownTimeout = drain.preStopDelay, drain.shutdownTimeout
 	opts.ControlPlane = controlPlaneEndpoint(gateway.GetControlPlane())
+	opts.Observability = observabilitySettings(gateway.GetObservability(), base)
 	return nil
 }
 
@@ -221,9 +249,95 @@ func controlPlaneEndpoint(cfg *configv1.ControlPlaneConfig) controlplane.Endpoin
 	}
 }
 
-func newServerWorkerCmd() *cobra.Command {
-	opts := serverworker.Options{}
+// databaseSettings is a role's DatabaseConfig in the shape the server
+// packages' Options take: driver, URL, direct (session) URL. The URLs are
+// trimmed, as the database layer trimmed them.
+func databaseSettings(cfg *configv1.DatabaseConfig) (driver, url, directURL string) {
+	return cfg.GetDriver(), strings.TrimSpace(cfg.GetUrl()), strings.TrimSpace(cfg.GetDirectUrl())
+}
 
+// databasePool is a role's DatabaseConfig pool and wait settings in the shape
+// the database layer takes. A size or a wait that cannot be honoured is
+// refused rather than quietly replaced by its default.
+func databasePool(cfg *configv1.DatabaseConfig) (db.Pool, error) {
+	if n := cfg.GetMaxOpenConns(); n < 1 {
+		return db.Pool{}, fmt.Errorf("config: RELIANT_DB_MAX_OPEN_CONNS = %d must be at least 1", n)
+	}
+	if n := cfg.GetMaxIdleConns(); n < 1 {
+		return db.Pool{}, fmt.Errorf("config: RELIANT_DB_MAX_IDLE_CONNS = %d must be at least 1", n)
+	}
+	if s := cfg.GetSchemaWaitSeconds(); s < 1 {
+		return db.Pool{}, fmt.Errorf("config: RELIANT_DB_SCHEMA_WAIT_SECONDS = %d must be at least 1", s)
+	}
+	pool := db.Pool{
+		MaxOpenConns: int(cfg.GetMaxOpenConns()),
+		MaxIdleConns: int(cfg.GetMaxIdleConns()),
+		SchemaWait:   time.Duration(cfg.GetSchemaWaitSeconds()) * time.Second,
+	}
+	if d := cfg.GetConnectTimeout(); d != nil {
+		if pool.ConnectTimeout = d.AsDuration(); pool.ConnectTimeout <= 0 {
+			return db.Pool{}, fmt.Errorf("config: DB_CONNECT_TIMEOUT = %s is not a positive duration", pool.ConnectTimeout)
+		}
+	}
+	return pool, nil
+}
+
+// temporalSettings is a role's TemporalConfig in the shape the server
+// packages' Options take.
+func temporalSettings(cfg *configv1.TemporalConfig) (host string, port int, namespace string) {
+	return cfg.GetHost(), int(cfg.GetPort()), cfg.GetNamespace()
+}
+
+// tlsSettings is a role's ServerTLSConfig in the shape the server packages'
+// Options take.
+func tlsSettings(cfg *configv1.ServerTLSConfig) (certFile, keyFile string, disable bool) {
+	return cfg.GetCertFile(), cfg.GetKeyFile(), cfg.GetDisable()
+}
+
+// natsEndpoint is a role's NatsConfig as natsutil connects to it.
+func natsEndpoint(cfg *configv1.NatsConfig) natsutil.Endpoint {
+	return natsutil.Endpoint{URL: cfg.GetUrl(), User: cfg.GetUser(), Password: cfg.GetPassword()}
+}
+
+// serverDrain is a role's rollout drain budget in the terms serverkit.Drainer
+// takes it.
+type serverDrain struct {
+	preStopDelay    time.Duration
+	shutdownTimeout time.Duration
+}
+
+// drainBudget is a role's DrainConfig (PRE_STOP_DELAY, SHUTDOWN_TIMEOUT) in
+// the terms serverkit.Drainer takes it, under the rule forge's grace-period
+// arithmetic applies to the same variables (pkg/deploy drainSeconds), so the
+// two can never disagree about the budget: zero is serverkit's default
+// (5s / 30s) and negative is none. A value that is not a duration has already
+// stopped the server at load.
+func drainBudget(cfg *configv1.DrainConfig) serverDrain {
+	return serverDrain{
+		preStopDelay:    cfg.GetPreStopDelay().AsDuration(),
+		shutdownTimeout: cfg.GetShutdownTimeout().AsDuration(),
+	}
+}
+
+// serverPort is a port setting, named as an operator sets it.
+type serverPort struct {
+	name string
+	port int32
+}
+
+// checkServerPorts refuses a port setting that is not a TCP port: the loader
+// has parsed it as an integer, but 0 or 70000 would fail later, at bind time,
+// as something less clear.
+func checkServerPorts(ports ...serverPort) error {
+	for _, p := range ports {
+		if p.port < 1 || p.port > 65535 {
+			return fmt.Errorf("config: %s = %d is not a TCP port (1-65535)", p.name, p.port)
+		}
+	}
+	return nil
+}
+
+func newServerWorkerCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "worker",
 		Short: "Run the Temporal workflow worker",
@@ -233,42 +347,22 @@ tool execution routing, etc.).
 
 Designed to run as N replicas for horizontal scaling.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var opts serverworker.Options
 			if err := loadServerWorkerConfig(cmd, &opts); err != nil {
 				return err
 			}
-			opts.PreStopDelay, opts.ShutdownTimeout = drainBudgetFromEnv()
 			return serverworker.Run(cmd.Context(), opts)
 		},
 	}
 
-	// The control plane (env only): proto/config/v1 WorkerConfig.
+	// Every flag and variable `server worker` reads: proto/config/v1
+	// WorkerConfig.
 	config.RegisterWorkerConfigFlags(cmd)
-
-	// Database
-	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (postgres)")
-	cmd.Flags().StringVar(&opts.DatabaseURL, "db-url", serverEnvOrDefault("DATABASE_URL", ""), "Database connection URL (required)")
-	cmd.Flags().StringVar(&opts.DatabaseDirectURL, "db-direct-url", serverEnvOrDefault("DATABASE_DIRECT_URL", ""), "Session-capable connection URL for the same database, for session-scoped work (advisory locks); set when --db-url is a transaction-pooling PgBouncer")
-	cmd.Flags().StringVar(&opts.DataDir, "data-dir", serverEnvOrDefault("DATA_DIR", "./data"), "Data directory for logs")
-
-	// Temporal
-	cmd.Flags().StringVar(&opts.TemporalHost, "temporal-host", serverEnvOrDefault("TEMPORAL_HOST", "localhost"), "Temporal server host")
-	cmd.Flags().IntVar(&opts.TemporalPort, "temporal-port", serverEnvOrDefaultInt("TEMPORAL_PORT", 7233), "Temporal server port")
-	cmd.Flags().StringVar(&opts.TemporalNamespace, "temporal-namespace", serverEnvOrDefault("TEMPORAL_NAMESPACE", "reliant"), "Temporal namespace")
-
-	// NATS / streaming
-	cmd.Flags().StringVar(&opts.NATSURL, "nats-url", serverEnvOrDefault("NATS_URL", ""), "NATS server URL (required)")
-	cmd.Flags().StringVar(&opts.StreamingDriver, "streaming-driver", serverEnvOrDefault("STREAMING_DRIVER", "nats"), "Streaming driver (memory or nats)")
-
-	// Health
-	cmd.Flags().IntVar(&opts.HealthPort, "health-port", serverEnvOrDefaultInt("HEALTH_PORT", 8081), "Health check endpoint port")
-	cmd.Flags().IntVar(&opts.PprofPort, "pprof-port", serverEnvOrDefaultInt("PPROF_PORT", 6060), "pprof debug server port (binds 127.0.0.1 only)")
 
 	return cmd
 }
 
 func newServerGatewayCmd() *cobra.Command {
-	opts := servergateway.Options{}
-
 	cmd := &cobra.Command{
 		Use:   "gateway",
 		Short: "Run the daemon connection gateway",
@@ -278,35 +372,17 @@ and Temporal workers to the correct daemon via NATS.
 
 Designed to run as few stateful replicas.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var opts servergateway.Options
 			if err := loadServerGatewayConfig(cmd, &opts); err != nil {
 				return err
 			}
-			opts.PreStopDelay, opts.ShutdownTimeout = drainBudgetFromEnv()
 			return servergateway.Run(cmd.Context(), opts)
 		},
 	}
 
-	// The control plane (env only): proto/config/v1 GatewayConfig.
+	// Every flag and variable `server gateway` reads: proto/config/v1
+	// GatewayConfig.
 	config.RegisterGatewayConfigFlags(cmd)
-
-	// Ports
-	cmd.Flags().IntVar(&opts.ToolsDaemonPort, "daemon-port", serverEnvOrDefaultInt("TOOLS_DAEMON_PORT", 9190), "Daemon bidi-streaming gRPC listen port")
-	cmd.Flags().IntVar(&opts.HealthPort, "health-port", serverEnvOrDefaultInt("HEALTH_PORT", 8080), "Health/readiness HTTP endpoint port")
-	cmd.Flags().StringVar(&opts.BindAddress, "bind-address", serverEnvOrDefault("BIND_ADDRESS", "0.0.0.0"), "Network address to bind to")
-
-	// Database
-	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (postgres)")
-	cmd.Flags().StringVar(&opts.DatabaseURL, "db-url", serverEnvOrDefault("DATABASE_URL", ""), "Database connection URL (required)")
-	cmd.Flags().StringVar(&opts.DatabaseDirectURL, "db-direct-url", serverEnvOrDefault("DATABASE_DIRECT_URL", ""), "Session-capable connection URL for the same database, for session-scoped work (advisory locks); set when --db-url is a transaction-pooling PgBouncer")
-	cmd.Flags().StringVar(&opts.DataDir, "data-dir", serverEnvOrDefault("DATA_DIR", "./data"), "Data directory for logs and certs")
-
-	// NATS
-	cmd.Flags().StringVar(&opts.NATSURL, "nats-url", serverEnvOrDefault("NATS_URL", ""), "NATS server URL (required)")
-
-	// TLS
-	cmd.Flags().StringVar(&opts.TLSCertFile, "tls-cert", serverEnvOrDefault("TLS_CERT_FILE", ""), "TLS certificate file path")
-	cmd.Flags().StringVar(&opts.TLSKeyFile, "tls-key", serverEnvOrDefault("TLS_KEY_FILE", ""), "TLS key file path")
-	cmd.Flags().BoolVar(&opts.DisableTLS, "disable-tls", serverEnvOrDefaultBool("DISABLE_TLS", false), "Disable TLS (use plaintext HTTP)")
 
 	return cmd
 }

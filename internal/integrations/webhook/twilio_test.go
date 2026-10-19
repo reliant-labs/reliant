@@ -408,16 +408,11 @@ func TestTwilioWithoutConnectionSecretsIsUnavailable(t *testing.T) {
 }
 
 func TestTwilioRegisteredFromEnvWhenThereIsAPublicURL(t *testing.T) {
-	r, err := RegistryFromEnv(func(string) string { return "" })
+	r, err := RegistryFor(RegistryConfig{})
 	require.NoError(t, err)
 	assert.False(t, r.HasInboundSource(TwilioProviderID), "no PUBLIC_URL: Twilio's signatures cannot be checked")
 
-	r, err = RegistryFromEnv(func(k string) string {
-		if k == "PUBLIC_URL" {
-			return "https://reliant.example.com"
-		}
-		return ""
-	})
+	r, err = RegistryFor(RegistryConfig{PublicURL: "https://reliant.example.com"})
 	require.NoError(t, err)
 	assert.True(t, r.HasInboundSource(TwilioProviderID))
 	assert.True(t, r.UserConfiguredURL(TwilioProviderID), "each number's webhook is the user's to set")

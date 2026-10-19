@@ -2,7 +2,7 @@
 
 package osutil
 
-import "os"
+import "sync/atomic"
 
 // ChildNiceValue is the Unix nice value applied to every process the daemon
 // spawns on behalf of agent tool executions (foreground and background
@@ -18,9 +18,15 @@ import "os"
 // the value on fork, so the build tools a shell spawns are covered too.
 const ChildNiceValue = 10
 
-// ChildPriorityEnv, set to "normal", opts out of lowering child priority.
-const ChildPriorityEnv = "RELIANT_CHILD_PRIORITY"
+// childPriorityNormal opts out of lowering child priority: the daemon's
+// RELIANT_CHILD_PRIORITY=normal.
+var childPriorityNormal atomic.Bool
+
+// ConfigureChildPriority sets whether this process leaves its children at
+// normal priority instead of lowering it. The daemon calls it once at boot,
+// from its config; a process that never calls it lowers.
+func ConfigureChildPriority(normal bool) { childPriorityNormal.Store(normal) }
 
 func childPriorityDisabled() bool {
-	return os.Getenv(ChildPriorityEnv) == "normal"
+	return childPriorityNormal.Load()
 }

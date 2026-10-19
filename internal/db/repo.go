@@ -236,20 +236,6 @@ func (r *Repo) bindQuery(query string) string {
 	return builder.String()
 }
 
-func NewRepoFromDir(dbPath string) (*Repo, error) {
-	cfg, err := ResolveDatabaseConfig(dbPath)
-	if err != nil {
-		return nil, err
-	}
-
-	db, err := ConnectWithConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewRepoWithDriver(db, cfg.Driver), nil
-}
-
 func NewRepoFromConfig(cfg DatabaseConfig) (*Repo, error) {
 	db, err := ConnectWithConfig(cfg)
 	if err != nil {

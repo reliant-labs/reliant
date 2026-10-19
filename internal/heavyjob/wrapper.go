@@ -47,7 +47,7 @@ func RunWrapper(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "reliant %s: %v\n", WrapperArg, err)
 		return 2
 	}
-	opt.Env = os.Environ()
+	opt.Env = os.Environ() //nolint:forbidigo // forge hostslot reads its own FORGE_* slot variables from the environment it is given; not reliant configuration
 	opt.Subtree = true
 	notice := &waitNotice{w: stderr, label: opt.Label}
 	opt.Out = notice
@@ -71,7 +71,7 @@ func RunWrapper(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	c := exec.Command(argv[0], argv[1:]...)
-	c.Env = append(os.Environ(), slot.Env()...)
+	c.Env = append(os.Environ(), slot.Env()...) //nolint:forbidigo // passes this process environment to a child process; not configuration
 	c.Stdin, c.Stdout, c.Stderr = stdin, stdout, stderr
 	if err := c.Start(); err != nil {
 		fmt.Fprintf(stderr, "reliant: %v\n", err)

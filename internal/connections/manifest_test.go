@@ -122,7 +122,7 @@ func acmeEnv(t *testing.T, env map[string]string) (*env, *fakeAcme) {
 	t.Helper()
 	e := newEnv(t)
 	f := newFakeAcme(t)
-	providers, err := connections.ProvidersFromCatalog(testManifests(t, acmeManifest), oauthEnv(env))
+	providers, err := connections.ProvidersFromCatalog(testManifests(t, acmeManifest), connections.OAuthClientsFromEnv(oauthEnv(env)))
 	require.NoError(t, err)
 	doer := hostRouter{"acme.example.com": f.srv, "": e.gh.srv}
 	e.providers = providers
@@ -235,7 +235,7 @@ func TestManifestOAuth_CommaScopesAreSentCommaJoined(t *testing.T) {
 	e := newEnv(t)
 	comma := strings.Replace(acmeManifest, "        scopes: [records.read, records.write]\n", "        scopes: [records.read, records.write]\n        scope_separator: \",\"\n", 1)
 	f := newFakeAcme(t)
-	providers, err := connections.ProvidersFromCatalog(testManifests(t, comma), oauthEnv(acmeCreds))
+	providers, err := connections.ProvidersFromCatalog(testManifests(t, comma), connections.OAuthClientsFromEnv(oauthEnv(acmeCreds)))
 	require.NoError(t, err)
 	doer := hostRouter{"acme.example.com": f.srv, "": e.gh.srv}
 	tokens := connections.NewTokenSource(e.store, e.vault, providers, doer)

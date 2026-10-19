@@ -88,11 +88,6 @@ const (
 	// signed-out instance into its parent.
 	DefaultSubSegment = "_default"
 
-	// EnvWorkspace pins the workspace component explicitly. Intended for
-	// containers and CI, where the working directory is not a meaningful
-	// workspace identity but the workload's is.
-	EnvWorkspace = "RELIANT_INSTANCE_WORKSPACE"
-
 	// EnvServerURL is the same server-URL override the rest of the binary
 	// honours, consulted when no origin is passed.
 	EnvServerURL = "RELIANT_SERVER_URL"
@@ -131,8 +126,9 @@ type Key struct {
 // has no explicit flag lands on the same backend the rest of the process talks
 // to. An origin that is present but unparseable is an error.
 //
-// An empty workspace falls back to EnvWorkspace, then to the current working
-// directory. A workspace that looks like a filesystem path is made absolute and
+// An empty workspace falls back to the current working directory (a
+// container or CI job names its workspace through the daemon commands'
+// RELIANT_INSTANCE_WORKSPACE before it gets here). A workspace that looks like a filesystem path is made absolute and
 // symlink-resolved so that two spellings of one directory are one instance;
 // anything else is kept verbatim as a label.
 func Resolve(origin, sub, workspace string) (Key, error) {
@@ -147,9 +143,6 @@ func Resolve(origin, sub, workspace string) (Key, error) {
 	}
 
 	workspace = strings.TrimSpace(workspace)
-	if workspace == "" {
-		workspace = strings.TrimSpace(os.Getenv(EnvWorkspace))
-	}
 	if workspace == "" {
 		cwd, err := os.Getwd()
 		if err != nil {

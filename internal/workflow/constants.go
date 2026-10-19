@@ -9,8 +9,6 @@
 package workflow
 
 import (
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,15 +47,8 @@ const (
 )
 
 // WorkflowExecutionTimeout is how long a paused workflow stays alive in Temporal
-// before expiring. Override with RELIANT_WORKFLOW_TIMEOUT_SECONDS for testing.
-var WorkflowExecutionTimeout = func() time.Duration {
-	if s := os.Getenv("RELIANT_WORKFLOW_TIMEOUT_SECONDS"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil {
-			return time.Duration(n) * time.Second
-		}
-	}
-	return 14 * 24 * time.Hour // 14 day timeout by default
-}()
+// before expiring: 14 days.
+const WorkflowExecutionTimeout = 14 * 24 * time.Hour
 
 // DynamicWorkflowTaskTimeout bounds one workflow task — a replay of the run's
 // history plus the code between two commands — for every DynamicWorkflow.

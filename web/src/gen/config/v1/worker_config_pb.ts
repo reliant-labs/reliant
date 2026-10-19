@@ -5,8 +5,20 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import type { AnalyticsConfig } from "./analytics_config_pb";
+import { file_config_v1_analytics_config } from "./analytics_config_pb";
 import type { ControlPlaneConfig } from "./control_plane_config_pb";
 import { file_config_v1_control_plane_config } from "./control_plane_config_pb";
+import type { IntegrationsConfig } from "./integrations_config_pb";
+import { file_config_v1_integrations_config } from "./integrations_config_pb";
+import type { LLMConfig } from "./llm_config_pb";
+import { file_config_v1_llm_config } from "./llm_config_pb";
+import type { ObservabilityConfig, SentryConfig } from "./observability_config_pb";
+import { file_config_v1_observability_config } from "./observability_config_pb";
+import type { PreviewConfig } from "./preview_config_pb";
+import { file_config_v1_preview_config } from "./preview_config_pb";
+import type { DatabaseConfig, DrainConfig, NatsConfig, TemporalConfig } from "./server_config_pb";
+import { file_config_v1_server_config } from "./server_config_pb";
 import { file_forge_v1_forge } from "../../forge/v1/forge_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -14,13 +26,12 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file config/v1/worker_config.proto.
  */
 export const file_config_v1_worker_config: GenFile = /*@__PURE__*/
-  fileDesc("Ch1jb25maWcvdjEvd29ya2VyX2NvbmZpZy5wcm90bxIJY29uZmlnLnYxImMKDFdvcmtlckNvbmZpZxI0Cg1jb250cm9sX3BsYW5lGAEgASgLMh0uY29uZmlnLnYxLkNvbnRyb2xQbGFuZUNvbmZpZzodysEYGQoHcmVsaWFudBIGc2VydmVyEgZ3b3JrZXJCOFo2Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_config_v1_control_plane_config, file_forge_v1_forge]);
+  fileDesc("Ch1jb25maWcvdjEvd29ya2VyX2NvbmZpZy5wcm90bxIJY29uZmlnLnYxIpAHCgxXb3JrZXJDb25maWcSNAoNY29udHJvbF9wbGFuZRgBIAEoCzIdLmNvbmZpZy52MS5Db250cm9sUGxhbmVDb25maWcSKwoIZGF0YWJhc2UYCiABKAsyGS5jb25maWcudjEuRGF0YWJhc2VDb25maWcSIwoEbmF0cxgLIAEoCzIVLmNvbmZpZy52MS5OYXRzQ29uZmlnEisKCHRlbXBvcmFsGAwgASgLMhkuY29uZmlnLnYxLlRlbXBvcmFsQ29uZmlnEiUKBWRyYWluGA0gASgLMhYuY29uZmlnLnYxLkRyYWluQ29uZmlnElUKC2hlYWx0aF9wb3J0GA4gASgFQkCCzhg8CgtIRUFMVEhfUE9SVBILaGVhbHRoLXBvcnQaBDgwODEqGkhlYWx0aCBjaGVjayBlbmRwb2ludCBwb3J0EmYKCnBwcm9mX3BvcnQYDyABKAVCUoLOGE4KClBQUk9GX1BPUlQSCnBwcm9mLXBvcnQaBDYwNjAqLnBwcm9mIGRlYnVnIHNlcnZlciBwb3J0IChiaW5kcyAxMjcuMC4wLjEgb25seSkSSwoIZGF0YV9kaXIYECABKAlCOYLOGDUKCERBVEFfRElSEghkYXRhLWRpchoGLi9kYXRhKhdEYXRhIGRpcmVjdG9yeSBmb3IgbG9ncxJnChBzdHJlYW1pbmdfZHJpdmVyGBEgASgJQk2CzhhJChBTVFJFQU1JTkdfRFJJVkVSEhBzdHJlYW1pbmctZHJpdmVyGgRuYXRzKhdTdHJlYW1pbmcgZHJpdmVyIChuYXRzKUoEbmF0cxIzCgxpbnRlZ3JhdGlvbnMYKCABKAsyHS5jb25maWcudjEuSW50ZWdyYXRpb25zQ29uZmlnEjUKDW9ic2VydmFiaWxpdHkYMiABKAsyHi5jb25maWcudjEuT2JzZXJ2YWJpbGl0eUNvbmZpZxInCgZzZW50cnkYMyABKAsyFy5jb25maWcudjEuU2VudHJ5Q29uZmlnEi0KCWFuYWx5dGljcxg8IAEoCzIaLmNvbmZpZy52MS5BbmFseXRpY3NDb25maWcSIQoDbGxtGEYgASgLMhQuY29uZmlnLnYxLkxMTUNvbmZpZxIpCgdwcmV2aWV3GFogASgLMhguY29uZmlnLnYxLlByZXZpZXdDb25maWc6HcrBGBkKB3JlbGlhbnQSBnNlcnZlchIGd29ya2VyQjhaNmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_config_v1_analytics_config, file_config_v1_control_plane_config, file_config_v1_integrations_config, file_config_v1_llm_config, file_config_v1_observability_config, file_config_v1_preview_config, file_config_v1_server_config, file_forge_v1_forge]);
 
 /**
  * WorkerConfig is the `reliant server worker` process's own config. It loads
  * alongside the root ReliantConfig (config.proto, whose header has the rules
- * every config here follows). The rest of the worker's flags are still
- * registered by hand in cmd/reliant/commands/server.go.
+ * every config here follows).
  *
  * @generated from message config.v1.WorkerConfig
  */
@@ -29,6 +40,76 @@ export type WorkerConfig = Message<"config.v1.WorkerConfig"> & {
    * @generated from field: config.v1.ControlPlaneConfig control_plane = 1;
    */
   controlPlane?: ControlPlaneConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.DatabaseConfig database = 10;
+   */
+  database?: DatabaseConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.NatsConfig nats = 11;
+   */
+  nats?: NatsConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.TemporalConfig temporal = 12;
+   */
+  temporal?: TemporalConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.DrainConfig drain = 13;
+   */
+  drain?: DrainConfig | undefined;
+
+  /**
+   * @generated from field: int32 health_port = 14;
+   */
+  healthPort: number;
+
+  /**
+   * @generated from field: int32 pprof_port = 15;
+   */
+  pprofPort: number;
+
+  /**
+   * @generated from field: string data_dir = 16;
+   */
+  dataDir: string;
+
+  /**
+   * @generated from field: string streaming_driver = 17;
+   */
+  streamingDriver: string;
+
+  /**
+   * @generated from field: config.v1.IntegrationsConfig integrations = 40;
+   */
+  integrations?: IntegrationsConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.ObservabilityConfig observability = 50;
+   */
+  observability?: ObservabilityConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.SentryConfig sentry = 51;
+   */
+  sentry?: SentryConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.AnalyticsConfig analytics = 60;
+   */
+  analytics?: AnalyticsConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.LLMConfig llm = 70;
+   */
+  llm?: LLMConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.PreviewConfig preview = 90;
+   */
+  preview?: PreviewConfig | undefined;
 };
 
 /**

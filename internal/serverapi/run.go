@@ -17,13 +17,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
+	"github.com/reliant-labs/reliant/internal/worktreesweep"
 
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -35,6 +35,7 @@ import (
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
+	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -67,7 +68,10 @@ type Options struct {
 	// DatabaseDirectURL is the session-capable URL for session-scoped work
 	// (db.DatabaseConfig.DirectURL); empty when DatabaseURL already is one.
 	DatabaseDirectURL string
-	DataDir           string
+	// DatabasePool sizes the pool and bounds the waits on the database
+	// (the role config's DatabaseConfig).
+	DatabasePool db.Pool
+	DataDir      string
 
 	// Temporal
 	TemporalHost      string
@@ -75,7 +79,7 @@ type Options struct {
 	TemporalNamespace string
 
 	// NATS / streaming
-	NATSURL         string
+	NATS            natsutil.Endpoint
 	StreamingDriver string
 
 	// Health check
@@ -107,6 +111,26 @@ type Options struct {
 	JWTPublicKeyFile string
 	JWKSURL          string
 
+	// AuthMode is auth.ModeSupabase or auth.ModeAPIKey (AUTH_MODE), and
+	// AuthAPIKey the shared key apikey mode checks (AUTH_API_KEY).
+	AuthMode   string
+	AuthAPIKey string
+	// RequireEmailVerifiedClaim is AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM; see
+	// auth.RequireEmailVerifiedClaim.
+	RequireEmailVerifiedClaim bool
+
+	// AuthorizationServer is the public URL of the control plane that issues
+	// this deployment's rlat_ tokens (RELIANT_AUTHORIZATION_SERVER).
+	AuthorizationServer string
+	// OAuthIssuers are the authorization servers whose access tokens the
+	// connector (MCP) endpoint accepts (MCP_OAUTH_ISSUERS).
+	OAuthIssuers []string
+	// MaxUploadSize is the largest attachment accepted, in bytes
+	// (MAX_UPLOAD_SIZE).
+	MaxUploadSize int64
+	// WorktreeAutoArchive is RELIANT_WORKTREE_AUTO_ARCHIVE; see worktreesweep.
+	WorktreeAutoArchive worktreesweep.AutoArchiveMode
+
 	// Log is the configured log level and format (the root config's
 	// LogConfig).
 	Log logging.Settings
@@ -114,6 +138,39 @@ type Options struct {
 	// ControlPlane is the control plane hosting this deployment; the zero
 	// value is self-hosted (the role config's ControlPlaneConfig).
 	ControlPlane controlplane.Endpoint
+
+	// PublicURL is this deployment's externally reachable base URL
+	// (PUBLIC_URL); empty reports webhook URLs as bare paths.
+	PublicURL string
+	// VaultKey is the credential vault's key (RELIANT_VAULT_KEY); see
+	// vault.Boot.
+	VaultKey string
+	// Webhooks decides which integrations deliver events here: the role's
+	// IntegrationsConfig and the deployment's OAuth clients, which the
+	// connections registry reads too.
+	Webhooks webhook.RegistryConfig
+	// GitHubAppSlug is the GitHub App Reliant's own writes appear as
+	// (RELIANT_GITHUB_APP_SLUG); empty attributes no event to the App.
+	GitHubAppSlug string
+	// GitHubBot is that App's bot as GitHub names it in a webhook's sender.
+	GitHubBot github.OurBot
+	// Observability is where this role exports telemetry and the
+	// environment it files it under (ObservabilityConfig).
+	Observability observability.Settings
+	// Sentry is where this role reports errors (SentryConfig); only a
+	// prod-tier process reports.
+	Sentry telemetry.SentryConfig
+	// Analytics is where product analytics events go (AnalyticsConfig).
+	Analytics analytics.Settings
+	// LLM is how this server calls models (LLMConfig).
+	LLM drivers.Settings
+	// PayloadGCHorizon is how long an unreferenced Temporal payload blob is
+	// kept (RELIANT_PAYLOAD_BLOB_GC_HORIZON); zero is
+	// claimcheck.DefaultGCHorizon.
+	PayloadGCHorizon time.Duration
+	// Preview is how this role builds a remote daemon's preview URLs
+	// (PreviewConfig).
+	Preview tools.PreviewSettings
 }
 
 // Run boots the stateless API server with the given options. It blocks until
@@ -125,7 +182,7 @@ func Run(ctx context.Context, opts Options) error {
 	if opts.DatabaseURL == "" {
 		return fmt.Errorf("DATABASE_URL is required")
 	}
-	if opts.NATSURL == "" {
+	if opts.NATS.URL == "" {
 		return fmt.Errorf("NATS_URL is required (daemon routing goes through NATS)")
 	}
 
@@ -134,7 +191,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("invalid STREAMING_DRIVER %q: %w", opts.StreamingDriver, err)
 	}
 
-	// JWT public key: explicit value > file > env var
+	// JWT public key: explicit value > file
 	jwtPublicKey := opts.JWTPublicKey
 	if jwtPublicKey == "" && opts.JWTPublicKeyFile != "" {
 		data, err := os.ReadFile(opts.JWTPublicKeyFile)
@@ -143,15 +200,17 @@ func Run(ctx context.Context, opts Options) error {
 		}
 		jwtPublicKey = string(data)
 	}
-	if jwtPublicKey == "" {
-		jwtPublicKey = os.Getenv("RELIANT_JWT_PUBLIC_KEY")
-	}
 
 	// JWKS URL (RELIANT_JWKS_URL / --jwks-url), the alternative to a PEM key
 	jwksURL := opts.JWKSURL
 
-	// Auth mode
-	authMode := auth.GetAuthMode()
+	authSettings := auth.Settings{
+		Mode:                      opts.AuthMode,
+		APIKey:                    opts.AuthAPIKey,
+		PublicKeyPEM:              jwtPublicKey,
+		JWKSURL:                   jwksURL,
+		RequireEmailVerifiedClaim: opts.RequireEmailVerifiedClaim,
+	}
 
 	// -----------------------------------------------------------------
 	// 2. Initialize subsystems
@@ -173,7 +232,7 @@ func Run(ctx context.Context, opts Options) error {
 	defer logging.Close() //nolint:errcheck
 
 	// Forge owns the OTel runtime; Sentry remains independently initialized below.
-	obsProvider, err := observability.Init(observability.ConfigFromEnv("reliant-api-server"))
+	obsProvider, err := observability.Init(observability.NewConfig("reliant-api-server", opts.Observability))
 	if err != nil {
 		return fmt.Errorf("initialize observability: %w", err)
 	}
@@ -188,7 +247,7 @@ func Run(ctx context.Context, opts Options) error {
 		"temporal", fmt.Sprintf("%s:%d", opts.TemporalHost, opts.TemporalPort),
 		"db_driver", opts.DatabaseDriver,
 		"data_dir", opts.DataDir,
-		"auth_mode", authMode,
+		"auth_mode", authSettings.ModeName(),
 	)
 
 	// Ensure RELIANT_DATA_DIR is set for activities that need to locate files
@@ -197,6 +256,10 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// Global model registry
+	// The LLM layer's process settings, before anything can call a model.
+	drivers.Configure(opts.LLM)
+	tools.ConfigurePreviewURLs(opts.Preview)
+
 	if err := models.InitGlobalRegistryWithUserConfig(nil); err != nil {
 		return fmt.Errorf("failed to initialize model registry: %w", err)
 	}
@@ -216,6 +279,7 @@ func Run(ctx context.Context, opts Options) error {
 		DataDir:   opts.DataDir,
 		URL:       opts.DatabaseURL,
 		DirectURL: opts.DatabaseDirectURL,
+		Pool:      opts.DatabasePool,
 		Migrate:   db.MigrateApply,
 	})
 	if err != nil {
@@ -225,11 +289,11 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Credential vault: required when hosted, generated when self-hosted.
 	// Fails startup on a missing or malformed key.
-	vaultKeys, err := db.BootVault(ctx, repo, opts.ControlPlane.Hosted(), opts.DataDir)
+	vaultKeys, err := db.BootVault(ctx, repo, opts.ControlPlane.Hosted(), opts.DataDir, opts.VaultKey)
 	if err != nil {
 		return err
 	}
-	conns, err := wireConnections(repo, vaultKeys, strings.TrimSpace(os.Getenv("PUBLIC_URL")), opts.CORSAllowedOrigins, opts.ControlPlane.Hosted())
+	conns, err := wireConnections(repo, vaultKeys, opts.Webhooks.OAuthClients, opts.PublicURL, opts.CORSAllowedOrigins, opts.ControlPlane.Hosted())
 	if err != nil {
 		return err
 	}
@@ -246,7 +310,11 @@ func Run(ctx context.Context, opts Options) error {
 	// same table; both processes must use it or neither can read the other's
 	// histories. The api-server owns the schema, so it also owns GC.
 	payloadStore := claimcheck.NewPostgresStore(repo.DB.SQLDB())
-	go payloadStore.RunGC(ctx, claimcheck.GCHorizonFromEnv())
+	gcHorizon := opts.PayloadGCHorizon
+	if gcHorizon <= 0 {
+		gcHorizon = claimcheck.DefaultGCHorizon
+	}
+	go payloadStore.RunGC(ctx, gcHorizon)
 
 	// External Temporal client
 	temporalClient, err := temporal.NewExternalClient(ctx, temporal.ExternalClientConfig{
@@ -285,8 +353,8 @@ func Run(ctx context.Context, opts Options) error {
 	})
 	// Streaming hub
 	streamingHub, err := streaming.NewStreamingHub(streaming.StreamingConfig{
-		Driver:  streamingDriver,
-		NATSUrl: opts.NATSURL,
+		Driver: streamingDriver,
+		NATS:   opts.NATS,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create streaming hub: %w", err)
@@ -294,7 +362,7 @@ func Run(ctx context.Context, opts Options) error {
 	defer func() { _ = streamingHub.Close() }()
 
 	// Single NATS connection for update hubs and daemon routing
-	nc, err := natsutil.Connect(opts.NATSURL)
+	nc, err := natsutil.Connect(opts.NATS)
 	if err != nil {
 		return fmt.Errorf("failed to connect to NATS: %w", err)
 	}
@@ -348,12 +416,12 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Analytics
 	logging.Info("[Analytics] Initializing analytics")
-	analyticsClient := analytics.NewClientFromSettings(ctx, "", true)
+	analyticsClient := analytics.NewClientFromSettings(ctx, "", true, opts.Analytics)
 	analytics.SetClient(analyticsClient)
 	analytics.SetPrivacyChecker(repo)
 
 	// Telemetry — Sentry in prod (when SENTRY_DSN is set), noop in dev/test.
-	telemetry.SetReporter(telemetry.NewReporterFromEnv())
+	telemetry.SetReporter(telemetry.NewReporter(opts.Sentry))
 
 	// TLS certificates
 	tlsCertFile := opts.TLSCertFile
@@ -391,7 +459,8 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Inbound triggers: the receivers record an event and start its fire on
 	// the worker; launching never happens here.
-	inboundRegistry, err := webhook.RegistryFromEnv(os.Getenv)
+	github.ConfigureBot(opts.GitHubBot)
+	inboundRegistry, err := webhook.RegistryFor(opts.Webhooks)
 	if err != nil {
 		return fmt.Errorf("integration webhook providers: %w", err)
 	}
@@ -400,13 +469,13 @@ func Run(ctx context.Context, opts Options) error {
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			// Who caused an event is resolved against the write ledger before
 			// any filter reads it.
-			WithEnrichers(triggers.OriginEnricherFromEnv(repo.IntegrationWrites(), repo, os.Getenv)),
-		inboundRegistry, vaultKeys, strings.TrimSpace(os.Getenv("PUBLIC_URL"))).
+			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, opts.GitHubAppSlug)),
+		inboundRegistry, vaultKeys, opts.PublicURL).
 		WithConnectionSecrets(conns.tokens)
 	// GitHub events are access-gated: each owner's repository access is
 	// refreshed when a trigger is activated and every few minutes while one
 	// exists. Every replica runs the loop; leases share the work.
-	ghAccess, err := wireGitHubAccess(repo, vaultKeys, opts.ControlPlane, os.Getenv)
+	ghAccess, err := wireGitHubAccess(repo, vaultKeys, opts.ControlPlane, opts.Webhooks)
 	if err != nil {
 		return err
 	}
@@ -416,7 +485,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	// "Only from" stores GitHub user ids and shows logins: this looks people
 	// up, as the caller, in both directions.
-	triggerSenders, err := wireGitHubSenders(repo, vaultKeys, opts.ControlPlane, os.Getenv)
+	triggerSenders, err := wireGitHubSenders(repo, vaultKeys, opts.ControlPlane, opts.Webhooks)
 	if err != nil {
 		return err
 	}
@@ -424,8 +493,7 @@ func Run(ctx context.Context, opts Options) error {
 	grpcSrv, err := grpcserver.NewServer(&grpcserver.Config{
 		Port:           opts.GRPCPort,
 		BindAddress:    opts.BindAddress,
-		JWTPublicKey:   jwtPublicKey,
-		JWKSURL:        jwksURL,
+		Auth:           authSettings,
 		Connections:    conns.service,
 		CatalogSearch:  catalogSearch,
 		OAuthRoutes:    conns.oauth,
@@ -438,8 +506,11 @@ func Run(ctx context.Context, opts Options) error {
 		// connector endpoint accepts (typically the Supabase project URL);
 		// without it, connectors authenticate with `rlat_` connector credentials
 		// only and OAuth discovery is not advertised.
-		PublicURL:           strings.TrimSpace(os.Getenv("PUBLIC_URL")),
-		OAuthIssuers:        splitAndTrim(os.Getenv("MCP_OAUTH_ISSUERS")),
+		PublicURL:           opts.PublicURL,
+		OAuthIssuers:        opts.OAuthIssuers,
+		AuthorizationServer: opts.AuthorizationServer,
+		MaxUploadSize:       opts.MaxUploadSize,
+		WorktreeAutoArchive: opts.WorktreeAutoArchive,
 		CORSAllowedOrigins:  opts.CORSAllowedOrigins,
 		AllowedEmailDomains: opts.AllowedEmailDomains,
 		DisableForgeAPI:     opts.DisableForgeAPI,
@@ -541,7 +612,7 @@ func Run(ctx context.Context, opts Options) error {
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status":    "ok",
 			"service":   "api-server",
-			"auth_mode": auth.GetAuthMode(),
+			"auth_mode": authSettings.ModeName(),
 		})
 	})
 	healthMux.HandleFunc("/ready", drainer.ReadinessHandler([]serverkit.ReadyCheck{
@@ -671,18 +742,6 @@ func Run(ctx context.Context, opts Options) error {
 // top of it, so no selector can degrade into a text model.
 func resolveImageGenerator(ctx context.Context, userID string, selector models.ModelSelector) (tools.ImageGenerator, error) {
 	return drivers.ResolveImageGenerator(ctx, userID, selector)
-}
-
-// splitAndTrim parses a comma-separated environment list, dropping empties so
-// a trailing comma or a blank setting does not produce a phantom entry.
-func splitAndTrim(raw string) []string {
-	var out []string
-	for _, part := range strings.Split(raw, ",") {
-		if v := strings.TrimSpace(part); v != "" {
-			out = append(out, v)
-		}
-	}
-	return out
 }
 
 // resolveVideoGenerator adapts the driver layer's video-model selection to the

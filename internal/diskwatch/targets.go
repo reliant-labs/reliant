@@ -109,9 +109,9 @@ type Environment struct {
 func SystemEnvironment() Environment {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		home = os.Getenv("HOME")
+		home = os.Getenv("HOME") //nolint:forbidigo // ambient OS variable (HOME), not configuration
 	}
-	return Environment{Getenv: os.Getenv, Home: home, GoEnv: goEnvOnce(), GOOS: runtime.GOOS}
+	return Environment{Getenv: os.Getenv, Home: home, GoEnv: goEnvOnce(), GOOS: runtime.GOOS} //nolint:forbidigo // tool cache locations come from the tools' own ambient variables (GOMODCACHE, npm_config_cache, ...), not configuration
 }
 
 // goEnvOnce returns a lookup over one `go env GOCACHE GOMODCACHE` call, made

@@ -106,7 +106,7 @@ func TestBuildAvailableDrivers_ReliantConfiguredViaProviderAPIKey(t *testing.T) 
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	t.Setenv("RELIANT_API_BASE_URL", "https://proxy.example.com/v1")
+	SetReliantBaseURLForTest(t, "https://proxy.example.com/v1")
 
 	ctx := context.Background()
 	userID := "test-user"

@@ -230,7 +230,7 @@ func resolveTestDSN(t *testing.T) string {
 		t.Skip(reason)
 	}
 
-	dsn, unavailable := testDBTarget(os.Getenv("DATABASE_URL"), probeTestDB)
+	dsn, unavailable := testDBTarget(os.Getenv("DATABASE_URL"), probeTestDB) //nolint:forbidigo // test-harness DSN for DB-backed tests (DATABASE_URL), not process configuration
 	if unavailable != "" {
 		if requireTestDB() {
 			t.Fatalf("REQUIRE_TEST_DB=1 but %s", unavailable)
@@ -293,7 +293,7 @@ func shortModeDBSkipReason(short, required bool) string {
 
 // requireTestDB reports whether a missing database must fail rather than skip.
 func requireTestDB() bool {
-	v := strings.TrimSpace(os.Getenv("REQUIRE_TEST_DB"))
+	v := strings.TrimSpace(os.Getenv("REQUIRE_TEST_DB")) //nolint:forbidigo // test-harness switch (REQUIRE_TEST_DB), not process configuration
 	return v != "" && v != "0" && !strings.EqualFold(v, "false")
 }
 

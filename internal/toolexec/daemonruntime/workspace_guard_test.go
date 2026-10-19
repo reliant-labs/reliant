@@ -282,7 +282,6 @@ func TestStart_ManagedDaemonExitsWhenItsHomeVolumeIsLost(t *testing.T) {
 	}
 	ws := newIncidentWorkspace(t)
 	t.Setenv("HOME", ws.home)
-	t.Setenv(DaemonTypeEnvVar, "managed")
 	previousInterval, previousExit := workspaceGuardPollInterval, workspaceGuardExit
 	workspaceGuardPollInterval = 10 * time.Millisecond
 	// The backstop stays armed after Start returns; it must not take the
@@ -294,7 +293,7 @@ func TestStart_ManagedDaemonExitsWhenItsHomeVolumeIsLost(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- Start(ctx, StartOptions{BootstrapConfig: testBootstrapConfig(t.TempDir())})
+		done <- Start(ctx, StartOptions{BootstrapConfig: testBootstrapConfig(t.TempDir()), Host: Host{DaemonType: daemonTypeManaged}})
 	}()
 
 	// Let the runtime come up and record $HOME before pulling it away.

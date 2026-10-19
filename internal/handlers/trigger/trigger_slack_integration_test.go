@@ -80,9 +80,9 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(key))
 	require.NoError(t, err)
 	sealer := vault.New(vault.Deps{DB: repo.DB, Keys: vault.NewEnvKeyWrapper(ring)})
-	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), func(k string) string {
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(func(k string) string {
 		return map[string]string{"RELIANT_OAUTH_SLACK_CLIENT_ID": "1234.5678", "RELIANT_OAUTH_SLACK_CLIENT_SECRET": "s3cret"}[k]
-	})
+	}))
 	require.NoError(t, err)
 	doer := slackDoer{target: slack}
 	store := repo.Connections()
@@ -103,12 +103,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 
 	// --- receivers -------------------------------------------------------
 	const signingSecret = "slack-signing-secret-e2e"
-	registry, err := webhook.RegistryFromEnv(func(k string) string {
-		if k == webhook.SlackSigningSecretEnv {
-			return signingSecret
-		}
-		return ""
-	})
+	registry, err := webhook.RegistryFor(webhook.RegistryConfig{SlackSigningSecret: signingSecret})
 	require.NoError(t, err)
 	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
 	const publicURL = "https://hooks.example.com"

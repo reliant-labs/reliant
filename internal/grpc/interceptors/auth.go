@@ -12,7 +12,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -108,19 +107,18 @@ func (i *AuthInterceptor) SetAccessTokenIntrospector(v auth.AccessTokenIntrospec
 }
 
 // NewAuthInterceptor creates a new auth interceptor.
-// The auth mode is determined by auth.GetAuthMode():
-//   - "apikey":   validate bearer tokens against AUTH_API_KEY env var
-//   - "supabase": validate JWTs using publicKeyPEM or jwksURL (default)
+// The auth mode is settings':
+//   - "apikey":   validate bearer tokens against settings.APIKey
+//   - "supabase": validate JWTs using settings.PublicKeyPEM or JWKSURL (default)
 //
 // publicProcedures skip authentication entirely; the server passes the
 // generated middleware.UnauthenticatedProcedures, which every rpc declaring
 // (forge.v1.method) auth_required: false projects into.
-func NewAuthInterceptor(publicKeyPEM string, jwksURL string, publicProcedures map[string]struct{}) (*AuthInterceptor, error) {
-	mode := auth.GetAuthMode()
-
-	switch mode {
-	case "apikey":
-		apiKey := os.Getenv("AUTH_API_KEY")
+func NewAuthInterceptor(settings auth.Settings, publicProcedures map[string]struct{}) (*AuthInterceptor, error) {
+	publicKeyPEM, jwksURL := settings.PublicKeyPEM, settings.JWKSURL
+	switch settings.ModeName() {
+	case auth.ModeAPIKey:
+		apiKey := settings.APIKey
 		if apiKey == "" {
 			return nil, fmt.Errorf("AUTH_MODE=apikey requires AUTH_API_KEY to be set")
 		}
@@ -140,13 +138,13 @@ func NewAuthInterceptor(publicKeyPEM string, jwksURL string, publicProcedures ma
 		switch {
 		case publicKeyPEM != "":
 			var err error
-			validator, err = auth.NewJWTValidator(publicKeyPEM)
+			validator, err = auth.NewJWTValidator(publicKeyPEM, settings.JWTOptions()...)
 			if err != nil {
 				return nil, err
 			}
 		case jwksURL != "":
 			var err error
-			validator, err = auth.LoadJWKS(context.Background(), jwksURL)
+			validator, err = auth.LoadJWKS(context.Background(), jwksURL, settings.JWTOptions()...)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load JWKS from %s: %w", jwksURL, err)
 			}

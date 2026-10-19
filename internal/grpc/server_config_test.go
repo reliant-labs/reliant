@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -68,9 +69,7 @@ func testServerConfig(t *testing.T, repo db.Repository) *Config {
 // URL.
 func startTestServer(t *testing.T, cfg *Config) (*Server, string) {
 	t.Helper()
-	t.Setenv("AUTH_MODE", "apikey")
-	t.Setenv("AUTH_API_KEY", drainTestAPIKey)
-	t.Setenv("RELIANT_AUTHORIZATION_SERVER", "")
+	cfg.Auth = auth.Settings{Mode: auth.ModeAPIKey, APIKey: drainTestAPIKey}
 
 	srv, err := NewServer(cfg)
 	require.NoError(t, err)

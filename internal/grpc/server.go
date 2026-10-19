@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -132,10 +131,22 @@ type Server struct {
 // web client reports as version skew (web/src/api/rpcErrorPolicy.ts) — the
 // wrong diagnosis for a composition bug.
 type Config struct {
-	Port                int
-	BindAddress         string   // Bind address (default: "127.0.0.1", use "0.0.0.0" for containers)
-	JWTPublicKey        string   // RSA public key for JWT validation
-	JWKSURL             string   // JWKS endpoint URL for JWT validation (alternative to JWTPublicKey)
+	Port        int
+	BindAddress string // Bind address (default: "127.0.0.1", use "0.0.0.0" for containers)
+	// Auth is how callers authenticate: the auth mode, the shared API key or
+	// the JWT key (PEM, else JWKS URL), and the email_verified switch.
+	Auth auth.Settings
+	// AuthorizationServer is the control plane that issues this deployment's
+	// rlat_ tokens (RELIANT_AUTHORIZATION_SERVER): the issuer TokenService
+	// names, and what CLI login discovery (RFC 8414) advertises. Empty on a
+	// self-hosted server with no control plane.
+	AuthorizationServer string
+	// MaxUploadSize is the largest attachment accepted, in bytes; zero takes
+	// AttachmentService's default.
+	MaxUploadSize int64
+	// WorktreeAutoArchive is what the worktree sweep does with finished
+	// worktrees (RELIANT_WORKTREE_AUTO_ARCHIVE); see worktreesweep.
+	WorktreeAutoArchive worktreesweep.AutoArchiveMode
 	CORSAllowedOrigins  []string // Allowed CORS origins; defaults to ["*"] if empty
 	AllowedEmailDomains []string // If non-empty, only these email domains may access the system
 	// DisableForgeAPI is the operator's kill switch for the forge RPC surface
@@ -265,7 +276,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// Create auth interceptor. The procedures it lets through unauthenticated
 	// are the ones whose proto declares (forge.v1.method) auth_required: false;
 	// forge generate projects them into middleware.UnauthenticatedProcedures.
-	authInterceptor, err := interceptors.NewAuthInterceptor(cfg.JWTPublicKey, cfg.JWKSURL, middleware.UnauthenticatedProcedures)
+	authInterceptor, err := interceptors.NewAuthInterceptor(cfg.Auth, middleware.UnauthenticatedProcedures)
 	if err != nil {
 		return nil, fmt.Errorf("auth interceptor setup failed: %w", err)
 	}
@@ -363,14 +374,14 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("project service: %w", err)
 	}
-	// RELIANT_WORKTREE_AUTO_ARCHIVE: "dry-run" (default) logs the active
+	// Config.WorktreeAutoArchive: "dry-run" (default) logs the active
 	// worktrees its daemon reports finished (clean, merged or pushed, idle over
 	// 24h, not in use) and archives nothing; read the finished= count in the
 	// "[WorktreeSweep] auto-archive" line, then set "on" to archive them so the
 	// ordinary removal reaches them; "off" never asks.
 	worktreeSweeper := worktreesweep.New(database, router).
 		WithKeepFiles(worktreesweep.KeepSetting{R: database}).
-		WithAutoArchive(worktreesweep.ParseAutoArchiveMode(os.Getenv("RELIANT_WORKTREE_AUTO_ARCHIVE")), database,
+		WithAutoArchive(cfg.WorktreeAutoArchive, database,
 			func(ctx context.Context, userID, projectID, worktreeID string) {
 				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
 					logging.Warn("worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
@@ -518,9 +529,10 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	attachmentService, err := attachment.New(attachment.Deps{
-		Logger: handlerLogger,
-		Config: handlerConfig,
-		Repo:   database,
+		Logger:      handlerLogger,
+		Config:      handlerConfig,
+		Repo:        database,
+		MaxFileSize: cfg.MaxUploadSize,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("attachment service: %w", err)
@@ -583,7 +595,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		Config:    handlerConfig,
 		Authority: authority,
 		ControlPlane: token.TokenControlPlane{
-			Issuer:      os.Getenv(cliauth.AuthorizationServerEnv),
+			Issuer:      cfg.AuthorizationServer,
 			ClipsGrants: authorityMode == tokenauthority.ModeControlPlane,
 		},
 		GitTokens: gitTokens,
@@ -758,16 +770,16 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	// WebSocket terminal handler (browser bidi terminal I/O)
 	var wsValidator auth.TokenValidator
-	switch auth.GetAuthMode() {
-	case "apikey":
-		if key := os.Getenv("AUTH_API_KEY"); key != "" {
+	switch cfg.Auth.ModeName() {
+	case auth.ModeAPIKey:
+		if key := cfg.Auth.APIKey; key != "" {
 			wsValidator, _ = auth.NewAPIKeyValidator(key)
 		}
 	default: // supabase
-		if cfg.JWTPublicKey != "" {
-			wsValidator, _ = auth.NewJWTValidator(cfg.JWTPublicKey)
-		} else if cfg.JWKSURL != "" {
-			wsValidator, _ = auth.LoadJWKS(context.Background(), cfg.JWKSURL)
+		if cfg.Auth.PublicKeyPEM != "" {
+			wsValidator, _ = auth.NewJWTValidator(cfg.Auth.PublicKeyPEM, cfg.Auth.JWTOptions()...)
+		} else if cfg.Auth.JWKSURL != "" {
+			wsValidator, _ = auth.LoadJWKS(context.Background(), cfg.Auth.JWKSURL, cfg.Auth.JWTOptions()...)
 		}
 	}
 	// A terminal websocket lives as long as the browser tab: long-lived, so
@@ -901,7 +913,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// deployment's rlat_ tokens, so `reliant auth login --server <this>` finds
 	// where to send the browser. Absent on a self-hosted server with no
 	// control plane: it offers no browser login.
-	if h := cliauth.MetadataHandler(os.Getenv(cliauth.AuthorizationServerEnv)); h != nil {
+	if h := cliauth.MetadataHandler(cfg.AuthorizationServer); h != nil {
 		mux.Handle(oauth2.AuthorizationServerMetadataPath, h)
 	}
 
@@ -912,7 +924,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status":    "ok",
 			"service":   "grpc-server",
-			"auth_mode": auth.GetAuthMode(),
+			"auth_mode": cfg.Auth.ModeName(),
 		})
 	})
 
@@ -1249,10 +1261,10 @@ func connectorTokenValidator(cfg *Config) mcpserver.OAuthTokenValidator {
 	var err error
 
 	switch {
-	case cfg.JWTPublicKey != "":
-		validator, err = auth.NewJWTValidator(cfg.JWTPublicKey)
-	case cfg.JWKSURL != "":
-		validator, err = auth.LoadJWKS(context.Background(), cfg.JWKSURL)
+	case cfg.Auth.PublicKeyPEM != "":
+		validator, err = auth.NewJWTValidator(cfg.Auth.PublicKeyPEM, cfg.Auth.JWTOptions()...)
+	case cfg.Auth.JWKSURL != "":
+		validator, err = auth.LoadJWKS(context.Background(), cfg.Auth.JWKSURL, cfg.Auth.JWTOptions()...)
 	default:
 		return nil
 	}

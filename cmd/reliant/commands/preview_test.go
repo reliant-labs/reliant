@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 func TestPreviewURLForPort(t *testing.T) {
@@ -54,8 +56,7 @@ func TestPreviewURLForPort(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv(previewURLTemplateEnv, tt.template)
-			gotURL, gotRemote := previewURLForPort(tt.port)
+			gotURL, gotRemote := previewURLForPort(tt.template, tt.port)
 			if gotURL != tt.wantURL {
 				t.Errorf("url = %q, want %q", gotURL, tt.wantURL)
 			}
@@ -92,5 +93,22 @@ func TestPreviewURLCmdPrintsURL(t *testing.T) {
 	}
 	if got := strings.TrimSpace(out.String()); got != "https://3000-abc.workspaces.reliantapi.com" {
 		t.Errorf("stdout = %q, want the substituted URL", got)
+	}
+}
+
+// `reliant preview-url` reads the template the workspace operator injects
+// through its own config.
+func TestPreviewURLCommandReadsTheInjectedTemplate(t *testing.T) {
+	t.Setenv("RELIANT_PREVIEW_URL_TEMPLATE", "https://{port}-d1.workspaces.example.com")
+	cmd, _, err := NewRootCmd().Find([]string{"preview-url"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadPreviewURLConfig(cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, remote := previewURLForPort(cfg.GetUrlTemplate(), 3000); got != "https://3000-d1.workspaces.example.com" || !remote {
+		t.Fatalf("previewURLForPort = %q (remote %v)", got, remote)
 	}
 }

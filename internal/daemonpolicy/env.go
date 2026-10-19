@@ -115,7 +115,7 @@ func ChildEnv(ctx context.Context, extra map[string]string, credentials string) 
 }
 
 func childEnv(ctx context.Context, extra map[string]string) []string {
-	base := os.Environ()
+	base := os.Environ() //nolint:forbidigo // filters this process environment for a child (the agent-shell allowlist); not configuration
 	extra = withAgentShellMarker(extra)
 
 	if FromContext(ctx) == nil {

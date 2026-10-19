@@ -19,13 +19,16 @@ import (
 	"github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cliauth"
+	"github.com/reliant-labs/reliant/internal/daemon/configloader"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/osutil"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 	"github.com/reliant-labs/reliant/internal/version"
+	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -53,8 +56,7 @@ func toolsDaemonLogPath(dataDir string) string {
 // The level is RELIANT_LOG_LEVEL (default INFO) and the format is LOG_FORMAT
 // (text, or JSON for a hosted daemon), both from the root config's log
 // settings; see logging.SetupDaemon.
-func setupToolsDaemonLogging(dataDir string, verboseOutput bool, log logging.Settings) {
-	managed := daemonruntime.IsManagedEnvironment()
+func setupToolsDaemonLogging(dataDir string, verboseOutput, managed bool, log logging.Settings) {
 	logging.SetupDaemon(logging.DaemonLogConfig{
 		Rotation: &logging.RotationConfig{
 			Filename:   toolsDaemonLogPath(dataDir),
@@ -99,8 +101,9 @@ the Reliant cloud platform via a bidirectional gRPC stream.`,
 // label>, and the server rotates on that name: re-registering this instance
 // replaces its previous token rather than adding one.
 //
-// daemonNonInteractiveDefault is the default for --non-interactive when the
-// flag is absent from the command line.
+// daemonNonInteractive decides whether `daemon start` may run an interactive
+// login: never when nonInteractive (--non-interactive /
+// RELIANT_DAEMON_NON_INTERACTIVE) says so, and never on a managed daemon.
 //
 // A MANAGED daemon is always non-interactive, and this is not an overridable
 // preference. Such a daemon is a pod created by the workspace operator: there
@@ -114,15 +117,13 @@ the Reliant cloud platform via a bidirectional gRPC stream.`,
 // instead of fatal, because the non-interactive path stays resident and picks
 // up a credential as soon as one is mounted.
 //
-// RELIANT_DAEMON_NON_INTERACTIVE is still honoured for everything else (it is
-// how Electron opts its child daemon out of browser login), but it cannot turn
-// interactivity ON for a managed pod — there is nothing there to be
-// interactive with, so permitting that would only restore the crash loop.
-func daemonNonInteractiveDefault() bool {
-	if daemonruntime.IsManagedEnvironment() {
-		return true
-	}
-	return envOrDefaultBool("RELIANT_DAEMON_NON_INTERACTIVE", false)
+// The setting is still honoured for everything else (it is how Electron opts
+// its child daemon out of browser login), but neither it nor an explicit
+// --non-interactive=false can turn interactivity ON for a managed pod — there
+// is nothing there to be interactive with, so permitting that would only
+// restore the crash loop.
+func daemonNonInteractive(nonInteractive, managed bool) bool {
+	return nonInteractive || managed
 }
 
 // nonInteractive, when true, forbids opening a browser: registerDaemon returns
@@ -539,8 +540,6 @@ func credentialsFromToken(cmd *cobra.Command, conn *connection, token, account s
 }
 
 func newDaemonRegisterCmd() *cobra.Command {
-	var account string
-
 	cmd := &cobra.Command{
 		Use:   "register",
 		Short: "Register this machine as a daemon",
@@ -559,6 +558,11 @@ After registering, run 'reliant daemon start' to connect.`,
 			if err != nil {
 				return err
 			}
+			cfg, err := config.LoadDaemonRegisterConfig(cmd)
+			if err != nil {
+				return err
+			}
+			account := cfg.GetAccount()
 
 			// Check if already registered
 			creds, err := auth.ReadDaemonCredentials(conn.ServerURL, account)
@@ -581,8 +585,8 @@ After registering, run 'reliant daemon start' to connect.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&account, "account", os.Getenv(envAccount),
-		"Account (Supabase subject) to register; separate accounts on one server keep separate credentials")
+	// --account / RELIANT_INSTANCE_ACCOUNT: proto/config/v1 DaemonRegisterConfig.
+	config.RegisterDaemonRegisterConfigFlags(cmd)
 
 	return cmd
 }
@@ -633,13 +637,13 @@ func daemonStartFailure(err error, useToken bool, conn *connection) (failure err
 // TLS mode is the explicit flag, else TLS when a cert and key are given (which
 // also points an unflagged URL at the local TLS listener), else TLS for an
 // https:// URL, else h2c.
-func resolveDaemonGateway(cmd *cobra.Command, grpcURL, credsGatewayURL, port, tlsMode, tlsCert, tlsKey string) (daemonGateway, error) {
+func resolveDaemonGateway(cmd *cobra.Command, grpcURL, credsGatewayURL string, port int, tlsMode, tlsCert, tlsKey string) (daemonGateway, error) {
 	url := grpcURL
 	if url == "" {
 		url = credsGatewayURL
 	}
 	if url == "" {
-		url = fmt.Sprintf("http://localhost:%s", port)
+		url = fmt.Sprintf("http://localhost:%d", port)
 	}
 	url, err := bootstrap.NormalizeGatewayURL(url)
 	if err != nil {
@@ -653,7 +657,7 @@ func resolveDaemonGateway(cmd *cobra.Command, grpcURL, credsGatewayURL, port, tl
 	case tlsCert != "" && tlsKey != "":
 		mode = bootstrap.TLSModeTLS
 		if !cmd.Flags().Changed("grpc-url") {
-			url = fmt.Sprintf("https://localhost:%s", port)
+			url = fmt.Sprintf("https://localhost:%d", port)
 		}
 	case strings.HasPrefix(url, "https://"):
 		mode = bootstrap.TLSModeTLS
@@ -697,18 +701,9 @@ func watchShutdownSignals(sigCh <-chan os.Signal, w io.Writer, cancel context.Ca
 
 func newDaemonStartCmd() *cobra.Command {
 	var (
-		port           string
-		grpcURL        string
-		instance       daemonInstanceFlags
-		background     bool
-		tlsCert        string
-		tlsKey         string
-		tlsMode        string
-		useToken       bool
-		daemonName     string
-		serverMode     bool
-		listenPort     int
-		nonInteractive bool
+		background bool
+		useToken   bool
+		daemonName string
 	)
 
 	cmd := &cobra.Command{
@@ -747,6 +742,30 @@ To switch back to an account whose token is already stored:
 			if err != nil {
 				return err
 			}
+			dcfg, err := loadDaemonConfig(cmd)
+			if err != nil {
+				return err
+			}
+			var (
+				instance   = daemonInstance(dcfg.GetInstance())
+				grpcURL    = dcfg.GetGatewayUrl()
+				port       = int(dcfg.GetGatewayPort())
+				tlsMode    = dcfg.GetTlsMode()
+				tlsCert    = dcfg.GetTlsCertFile()
+				tlsKey     = dcfg.GetTlsKeyFile()
+				serverMode = dcfg.GetServerMode()
+				listenPort = int(dcfg.GetListenPort())
+				host       = daemonHost(dcfg)
+				// Electron spawns the daemon with --non-interactive so it
+				// never opens a browser — Electron's own login page owns
+				// interactive sign-in. See registerDaemon /
+				// waitForCredentialsNonInteractive.
+				nonInteractive = daemonNonInteractive(dcfg.GetNonInteractive(), host.Managed())
+			)
+			// Process-wide daemon settings, before the daemon spawns or
+			// loads anything.
+			osutil.ConfigureChildPriority(dcfg.GetChildPriority() == "normal")
+			configloader.ConfigureWorktreeDir(strings.TrimSpace(dcfg.GetWorktreeDir()))
 
 			// The target server is resolved before anything else because the
 			// data directory is derived from it: the instance is (origin,
@@ -807,7 +826,7 @@ To switch back to an account whose token is already stored:
 			// reliant.log with the API server: dev-electron can run both processes
 			// against the same data root, and separate lumberjack writers must not
 			// rotate the same file.
-			setupToolsDaemonLogging(dataDir, verbose, logSettings(base))
+			setupToolsDaemonLogging(dataDir, verbose, host.Managed(), logSettings(base))
 			defer logging.Close() //nolint:errcheck
 
 			// The daemon runtime publishes the record `daemon status` and
@@ -833,7 +852,7 @@ To switch back to an account whose token is already stored:
 					"listen_port", listenPort, "data_dir", dataDir)
 
 				err = daemonruntime.Start(ctx, daemonruntime.StartOptions{
-					StorageReaper: storageReaperConfig(base),
+					StorageReaper: storageReaperConfig(base, host.Managed()),
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
 						ServerMode: true,
 						ListenPort: listenPort,
@@ -841,6 +860,9 @@ To switch back to an account whose token is already stored:
 						Name:       daemonName,
 						Verbose:    verbose,
 					},
+					Host:             host,
+					ChromeBrowserURL: dcfg.GetChromeBrowserUrl(),
+					Guards:           daemonGuards(dcfg),
 				})
 				if err != nil && !errors.Is(err, context.Canceled) {
 					return fmt.Errorf("tools-daemon exited with error: %w", err)
@@ -877,7 +899,7 @@ To switch back to an account whose token is already stored:
 
 			startDaemon := func(c *auth.DaemonCredentials) error {
 				return daemonruntime.Start(ctx, daemonruntime.StartOptions{
-					StorageReaper: storageReaperConfig(base),
+					StorageReaper: storageReaperConfig(base, host.Managed()),
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
 						AuthToken: c.PAT,
 						GRPCURL:   daemonGRPCURL,
@@ -895,6 +917,9 @@ To switch back to an account whose token is already stored:
 						ListenPort: listenPort,
 						Verbose:    verbose,
 					},
+					Host:             host,
+					ChromeBrowserURL: dcfg.GetChromeBrowserUrl(),
+					Guards:           daemonGuards(dcfg),
 				})
 			}
 
@@ -940,27 +965,14 @@ To switch back to an account whose token is already stored:
 		},
 	}
 
-	cmd.Flags().StringVar(&port, "port", envOrDefault("TOOLS_DAEMON_PORT", "9190"), "Daemon listen port")
-
-	cmd.Flags().StringVar(&grpcURL, "grpc-url", envOrDefault("DAEMON_GRPC_URL", ""), "gRPC server URL to connect to")
-	registerDaemonInstanceFlags(cmd, &instance, "Data directory (default: this instance's directory under ~/.reliant/instances)")
+	// --port, --grpc-url, --tls-*, --server-mode, --listen-port,
+	// --non-interactive, the instance flags (--data-dir, --account,
+	// --workspace) and the pod-only env settings: proto/config/v1 DaemonConfig.
+	config.RegisterDaemonConfigFlags(cmd)
 
 	cmd.Flags().BoolVar(&background, "background", false, "Run daemon in background (detached)")
-	cmd.Flags().StringVar(&tlsCert, "tls-cert", envOrDefault("TLS_CERT_FILE", ""), "TLS certificate file path")
-	cmd.Flags().StringVar(&tlsKey, "tls-key", envOrDefault("TLS_KEY_FILE", ""), "TLS key file path")
-	cmd.Flags().StringVar(&tlsMode, "tls-mode", envOrDefault("DAEMON_TLS_MODE", ""), "TLS mode (tls, insecure_tls_skip_verify, h2c, or disabled)")
 	cmd.Flags().BoolVar(&useToken, "token", false, "Read a PAT from stdin and use it as the daemon credential")
 	cmd.Flags().StringVar(&daemonName, "name", "", "Human-friendly daemon name (default: <instance-id>@<hostname>)")
-	cmd.Flags().BoolVar(&serverMode, "server-mode", envOrDefault("DAEMON_SERVER_MODE", "") == "true", "Listen for incoming gateway connections instead of dialing out")
-	cmd.Flags().IntVar(&listenPort, "listen-port", envOrDefaultInt("DAEMON_LISTEN_PORT", 9190), "Port to listen on in server mode")
-	// Precedence: explicit --non-interactive on the command line always wins
-	// (cobra only applies this default when the flag is absent); otherwise
-	// see daemonNonInteractiveDefault. Electron spawns the daemon with this
-	// flag set so it never opens a browser — Electron's own login page owns
-	// interactive sign-in. See registerDaemon /
-	// waitForCredentialsNonInteractive.
-	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", daemonNonInteractiveDefault(),
-		"Never open a browser or run interactive login; idle and wait for credentials to appear on disk instead")
 
 	return cmd
 }
@@ -1059,8 +1071,6 @@ func printDaemonStreamStability(w io.Writer, state daemonstate.State, now time.T
 }
 
 func newDaemonStatusCmd() *cobra.Command {
-	var instance daemonInstanceFlags
-
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Check daemon status",
@@ -1074,11 +1084,15 @@ stream is not established.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 
+			cfg, err := config.LoadDaemonStatusConfig(cmd)
+			if err != nil {
+				return err
+			}
 			conn, err := resolveServer(cmd)
 			if err != nil {
 				return err
 			}
-			dataDir, err := resolveDaemonDataDir(instance, conn.ServerURL)
+			dataDir, err := resolveDaemonDataDir(daemonInstance(cfg.GetInstance()), conn.ServerURL)
 			if err != nil {
 				return err
 			}
@@ -1135,7 +1149,8 @@ stream is not established.`,
 		},
 	}
 
-	registerDaemonInstanceFlags(cmd, &instance, "Data directory (default: this instance's directory under ~/.reliant/instances)")
+	// --data-dir, --account, --workspace: proto/config/v1 DaemonStatusConfig.
+	config.RegisterDaemonStatusConfigFlags(cmd)
 
 	return cmd
 }
@@ -1261,8 +1276,7 @@ func clearDaemonRecord(w io.Writer, dataDir string) error {
 
 func newDaemonStopCmd() *cobra.Command {
 	var (
-		force    bool
-		instance daemonInstanceFlags
+		force bool
 	)
 
 	cmd := &cobra.Command{
@@ -1277,11 +1291,15 @@ record in place. A daemon reported as stopped while it is still running keeps
 its gateway registration, and the next 'daemon start' then registers a second
 daemon under the same identity — the two evict each other until one is killed.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.LoadDaemonStopConfig(cmd)
+			if err != nil {
+				return err
+			}
 			conn, err := resolveServer(cmd)
 			if err != nil {
 				return err
 			}
-			dataDir, err := resolveDaemonDataDir(instance, conn.ServerURL)
+			dataDir, err := resolveDaemonDataDir(daemonInstance(cfg.GetInstance()), conn.ServerURL)
 			if err != nil {
 				return err
 			}
@@ -1300,16 +1318,16 @@ daemon under the same identity — the two evict each other until one is killed.
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "Force kill (SIGKILL) instead of graceful shutdown")
-	registerDaemonInstanceFlags(cmd, &instance, "Data directory (default: this instance's directory under ~/.reliant/instances)")
+	// --data-dir, --account, --workspace: proto/config/v1 DaemonStopConfig.
+	config.RegisterDaemonStopConfigFlags(cmd)
 
 	return cmd
 }
 
 func newDaemonLogsCmd() *cobra.Command {
 	var (
-		follow   bool
-		lines    int
-		instance daemonInstanceFlags
+		follow bool
+		lines  int
 	)
 
 	cmd := &cobra.Command{
@@ -1317,11 +1335,15 @@ func newDaemonLogsCmd() *cobra.Command {
 		Short: "Tail daemon logs",
 		Long:  `Streams daemon log output. Defaults to the last 50 lines with live follow.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.LoadDaemonLogsConfig(cmd)
+			if err != nil {
+				return err
+			}
 			conn, err := resolveServer(cmd)
 			if err != nil {
 				return err
 			}
-			dataDir, err := resolveDaemonDataDir(instance, conn.ServerURL)
+			dataDir, err := resolveDaemonDataDir(daemonInstance(cfg.GetInstance()), conn.ServerURL)
 			if err != nil {
 				return err
 			}
@@ -1369,7 +1391,8 @@ func newDaemonLogsCmd() *cobra.Command {
 
 	cmd.Flags().BoolVarP(&follow, "follow", "f", true, "Follow log output")
 	cmd.Flags().IntVarP(&lines, "lines", "n", 50, "Number of lines to show")
-	registerDaemonInstanceFlags(cmd, &instance, "Data directory containing logs (default: this instance's directory under ~/.reliant/instances)")
+	// --data-dir, --account, --workspace: proto/config/v1 DaemonLogsConfig.
+	config.RegisterDaemonLogsConfigFlags(cmd)
 
 	return cmd
 }

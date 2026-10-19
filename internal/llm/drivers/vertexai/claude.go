@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -536,11 +535,7 @@ func (c *VertexAIClient) convertSchemaToMap(schema interface{}) map[string]inter
 
 // getClaudeEndpoint returns the Vertex AI Claude API endpoint
 func (c *VertexAIClient) getClaudeEndpoint(stream bool) string {
-	project := os.Getenv("VERTEXAI_PROJECT")
-	location := os.Getenv("VERTEXAI_LOCATION")
-	if location == "" {
-		location = "us-central1"
-	}
+	project, location := projectAndLocation()
 
 	action := "rawPredict"
 	if stream {

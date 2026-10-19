@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -236,7 +237,7 @@ func LoadMCPServersFromFile(mcpConfigPath string) map[string]config.MCPServer {
 				if value, ok := serverEnv[key]; ok {
 					return value, true
 				}
-				value := os.Getenv(key)
+				value := os.Getenv(key) //nolint:forbidigo // expands ${VAR} in the user's MCP config from the user's environment, by design
 				if value == "" {
 					return "", false
 				}
@@ -428,11 +429,19 @@ func (l *Loader) mergeConfigs(userConfig, projectConfig, localConfig, userMCPCon
 	return merged
 }
 
-// getDefaultWorktreeDir returns the default worktree directory (~/.reliant/worktrees/).
-// Environment variable RELIANT_WORKTREE_DIR can override this.
+// worktreeDir is the process's configured worktree directory: the daemon's
+// RELIANT_WORKTREE_DIR. Empty is the default under the user config dir.
+var worktreeDir atomic.Pointer[string]
+
+// ConfigureWorktreeDir sets the directory new worktrees go in. The daemon
+// calls it once at boot, from its config; "" keeps ~/.reliant/worktrees.
+func ConfigureWorktreeDir(dir string) { worktreeDir.Store(&dir) }
+
+// getDefaultWorktreeDir returns the configured worktree directory, else the
+// default (~/.reliant/worktrees/).
 func getDefaultWorktreeDir() string {
-	if worktreeDir := os.Getenv("RELIANT_WORKTREE_DIR"); worktreeDir != "" {
-		return worktreeDir
+	if dir := worktreeDir.Load(); dir != nil && *dir != "" {
+		return *dir
 	}
 	return filepath.Join(config.GetUserConfigDir(), "worktrees")
 }
@@ -471,7 +480,7 @@ func (l *Loader) validateConfig(cfg *config.Config) error {
 // using process environment variables.
 func expandEnvVarsLoader(s string) string {
 	return expandEnvVarsWithLookup(s, func(key string) (string, bool) {
-		value := os.Getenv(key)
+		value := os.Getenv(key) //nolint:forbidigo // expands ${VAR} in the user's MCP config from the user's environment, by design
 		if value == "" {
 			return "", false
 		}

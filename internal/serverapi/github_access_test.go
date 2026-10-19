@@ -14,20 +14,17 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/integrations/ghusers"
+	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 )
-
-func envOf(vars map[string]string) func(string) string {
-	return func(k string) string { return vars[k] }
-}
 
 var (
 	hosted     = controlplane.Endpoint{URL: "http://cp", InternalServiceSecret: "x"}
 	selfHosted = controlplane.Endpoint{}
-	webhooks   = envOf(map[string]string{"RELIANT_GITHUB_WEBHOOK_SECRET": "s"})
+	webhooks   = webhook.RegistryConfig{GitHubWebhookSecret: "s"}
 )
 
 func TestWireGitHubAccess(t *testing.T) {
-	r, err := wireGitHubAccess(nil, nil, hosted, envOf(nil))
+	r, err := wireGitHubAccess(nil, nil, hosted, webhook.RegistryConfig{})
 	require.NoError(t, err)
 	assert.Nil(t, r, "no webhook secret: GitHub events never arrive, so nothing to keep fresh")
 
@@ -39,18 +36,18 @@ func TestWireGitHubAccess(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, r, "hosted: tokens are delegated by control-plane")
 
-	tokens, err := gitHubTokenSource(nil, nil, hosted, envOf(nil))
+	tokens, err := gitHubTokenSource(nil, nil, hosted, nil)
 	require.NoError(t, err)
 	assert.IsType(t, &ghaccess.DelegatedTokens{}, tokens)
 
-	_, err = gitHubTokenSource(nil, nil, selfHosted, envOf(nil))
+	_, err = gitHubTokenSource(nil, nil, selfHosted, nil)
 	assert.Error(t, err, "self-hosted needs the database for saved connections")
 }
 
 // The "Only from" lookup is wired exactly when GitHub triggers are, over the
 // same token source, and classifies its errors for the handler.
 func TestWireGitHubSenders(t *testing.T) {
-	dirs, err := wireGitHubSenders(nil, nil, hosted, envOf(nil))
+	dirs, err := wireGitHubSenders(nil, nil, hosted, webhook.RegistryConfig{})
 	require.NoError(t, err)
 	assert.Nil(t, dirs, "no GitHub triggers on this server: nobody to look up")
 

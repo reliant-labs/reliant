@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -31,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
+	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
@@ -63,7 +63,10 @@ type Options struct {
 	// DatabaseDirectURL is the session-capable URL for session-scoped work
 	// (db.DatabaseConfig.DirectURL); empty when DatabaseURL already is one.
 	DatabaseDirectURL string
-	DataDir           string
+	// DatabasePool sizes the pool and bounds the waits on the database
+	// (the role config's DatabaseConfig).
+	DatabasePool db.Pool
+	DataDir      string
 
 	// Temporal
 	TemporalHost      string
@@ -71,7 +74,7 @@ type Options struct {
 	TemporalNamespace string
 
 	// NATS / streaming
-	NATSURL         string
+	NATS            natsutil.Endpoint
 	StreamingDriver string
 
 	// Health check
@@ -93,6 +96,35 @@ type Options struct {
 	// Log is the configured log level and format (the root config's
 	// LogConfig).
 	Log logging.Settings
+
+	// PublicURL is this deployment's externally reachable base URL
+	// (PUBLIC_URL); empty reports webhook URLs as bare paths.
+	PublicURL string
+	// VaultKey is the credential vault's key (RELIANT_VAULT_KEY); see
+	// vault.Boot.
+	VaultKey string
+	// Webhooks decides which integrations deliver events here: the role's
+	// IntegrationsConfig and the deployment's OAuth clients, which the
+	// connections registry reads too.
+	Webhooks webhook.RegistryConfig
+	// GitHubAppSlug is the GitHub App Reliant's own writes appear as
+	// (RELIANT_GITHUB_APP_SLUG); empty attributes no event to the App.
+	GitHubAppSlug string
+	// GitHubBot is that App's bot as GitHub names it in a webhook's sender.
+	GitHubBot github.OurBot
+	// Observability is where this role exports telemetry and the
+	// environment it files it under (ObservabilityConfig).
+	Observability observability.Settings
+	// Sentry is where this role reports errors (SentryConfig); only a
+	// prod-tier process reports.
+	Sentry telemetry.SentryConfig
+	// Analytics is where product analytics events go (AnalyticsConfig).
+	Analytics analytics.Settings
+	// LLM is how this worker calls models (LLMConfig).
+	LLM drivers.Settings
+	// Preview is how this role builds a remote daemon's preview URLs
+	// (PreviewConfig).
+	Preview tools.PreviewSettings
 }
 
 // Run boots the Temporal worker with the given options. It blocks until a
@@ -105,7 +137,7 @@ func Run(ctx context.Context, opts Options) error {
 	if opts.DatabaseURL == "" {
 		return fmt.Errorf("DATABASE_URL is required")
 	}
-	if opts.NATSURL == "" {
+	if opts.NATS.URL == "" {
 		return fmt.Errorf("NATS_URL is required (tool routing and streaming go through NATS)")
 	}
 
@@ -129,7 +161,7 @@ func Run(ctx context.Context, opts Options) error {
 	defer logging.Close() //nolint:errcheck
 
 	// Forge owns the OTel runtime; Sentry remains independently initialized below.
-	obsProvider, err := observability.Init(observability.ConfigFromEnv("reliant-temporal-worker"))
+	obsProvider, err := observability.Init(observability.NewConfig("reliant-temporal-worker", opts.Observability))
 	if err != nil {
 		return fmt.Errorf("initialize observability: %w", err)
 	}
@@ -154,6 +186,10 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 3. Global model registry
 	// -----------------------------------------------------------------
+	// The LLM layer's process settings, before anything can call a model.
+	drivers.Configure(opts.LLM)
+	tools.ConfigurePreviewURLs(opts.Preview)
+
 	if err := models.InitGlobalRegistryWithUserConfig(nil); err != nil {
 		return fmt.Errorf("failed to initialize model registry: %w", err)
 	}
@@ -173,6 +209,7 @@ func Run(ctx context.Context, opts Options) error {
 		DataDir:   opts.DataDir,
 		URL:       opts.DatabaseURL,
 		DirectURL: opts.DatabaseDirectURL,
+		Pool:      opts.DatabasePool,
 		Migrate:   db.MigrateWait,
 	})
 	if err != nil {
@@ -182,11 +219,11 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Credential vault: required when hosted, generated when self-hosted.
 	// Fails startup on a missing or malformed key.
-	vaultKeys, err := db.BootVault(ctx, repo, opts.ControlPlane.Hosted(), opts.DataDir)
+	vaultKeys, err := db.BootVault(ctx, repo, opts.ControlPlane.Hosted(), opts.DataDir, opts.VaultKey)
 	if err != nil {
 		return err
 	}
-	connResolver, err := newConnectionResolver(repo, vaultKeys)
+	connResolver, err := newConnectionResolver(repo, vaultKeys, opts.Webhooks.OAuthClients)
 	if err != nil {
 		return err
 	}
@@ -250,8 +287,8 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	streamingHub, err := streaming.NewStreamingHub(streaming.StreamingConfig{
-		Driver:  streamingDriver,
-		NATSUrl: opts.NATSURL,
+		Driver: streamingDriver,
+		NATS:   opts.NATS,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create streaming hub: %w", err)
@@ -263,7 +300,7 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 8. NATS connection + update hubs
 	// -----------------------------------------------------------------
-	nc, err := natsutil.Connect(opts.NATSURL)
+	nc, err := natsutil.Connect(opts.NATS)
 	if err != nil {
 		return fmt.Errorf("failed to connect to NATS: %w", err)
 	}
@@ -293,12 +330,12 @@ func Run(ctx context.Context, opts Options) error {
 	// 9. Analytics + telemetry
 	// -----------------------------------------------------------------
 	logging.Info("[Analytics] Initializing analytics")
-	analyticsClient := analytics.NewClientFromSettings(ctx, "", true)
+	analyticsClient := analytics.NewClientFromSettings(ctx, "", true, opts.Analytics)
 	analytics.SetClient(analyticsClient)
 	analytics.SetPrivacyChecker(repo)
 
 	// Telemetry — Sentry in prod (when SENTRY_DSN is set), noop in dev/test.
-	telemetry.SetReporter(telemetry.NewReporterFromEnv())
+	telemetry.SetReporter(telemetry.NewReporter(opts.Sentry))
 
 	// -----------------------------------------------------------------
 	// 10. Tool execution routing via NATS
@@ -351,7 +388,8 @@ func Run(ctx context.Context, opts Options) error {
 
 	// The same registry the api-server builds, so both agree on which
 	// integrations are polled and which deliver events at all.
-	triggerPollers, err := webhook.RegistryFromEnv(os.Getenv)
+	github.ConfigureBot(opts.GitHubBot)
+	triggerPollers, err := webhook.RegistryFor(opts.Webhooks)
 	if err != nil {
 		return fmt.Errorf("integration pollers: %w", err)
 	}
@@ -359,7 +397,7 @@ func Run(ctx context.Context, opts Options) error {
 	// list_triggers reads as the calling chat's owner through the same
 	// TriggerService the api-server serves. Its inbound half needs the
 	// provider registry (which integrations deliver events here) and the
-	// vault (signed webhooks). PUBLIC_URL is read when the worker has it;
+	// vault (signed webhooks). PublicURL (PUBLIC_URL) is used when the worker has it;
 	// without it a webhook's URL is reported as a bare path.
 	triggerSyncer, triggerFires := trigger.TemporalBackend(temporalClient, repo, v2workflow.SharedTaskQueue, triggerPollers.IsPolled)
 	triggerService, err := trigger.New(trigger.Deps{
@@ -368,12 +406,12 @@ func Run(ctx context.Context, opts Options) error {
 		Repo:      repo,
 		Syncer:    triggerSyncer,
 		Fires:     triggerFires,
-		PublicURL: strings.TrimSpace(os.Getenv("PUBLIC_URL")),
+		PublicURL: opts.PublicURL,
 		Sealer:    vaultKeys,
 		Catalog:   triggerPollers,
 		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
-			WithEnrichers(triggers.OriginEnricherFromEnv(repo.IntegrationWrites(), repo, os.Getenv)),
+			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, opts.GitHubAppSlug)),
 	})
 	if err != nil {
 		return fmt.Errorf("trigger service: %w", err)

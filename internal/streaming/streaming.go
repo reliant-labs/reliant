@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/reliant-labs/reliant/internal/natsutil"
 )
 
 // StreamingDriver identifies which streaming backend to use.
@@ -30,8 +32,8 @@ func ParseStreamingDriver(raw string) (StreamingDriver, error) {
 
 // StreamingConfig holds configuration for the streaming hub.
 type StreamingConfig struct {
-	Driver  StreamingDriver
-	NATSUrl string // Required when Driver == DriverNATS
+	Driver StreamingDriver
+	NATS   natsutil.Endpoint // Required when Driver == DriverNATS
 }
 
 // StreamingHub is the interface for pub/sub streaming of ephemeral events.
@@ -86,7 +88,7 @@ type Subscription interface {
 func NewStreamingHub(cfg StreamingConfig) (StreamingHub, error) {
 	switch cfg.Driver {
 	case DriverNATS, "":
-		return NewNATSHub(cfg.NATSUrl)
+		return NewNATSHub(cfg.NATS)
 	default:
 		return nil, fmt.Errorf("unknown streaming driver: %q", cfg.Driver)
 	}

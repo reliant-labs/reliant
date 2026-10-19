@@ -16,8 +16,6 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -81,22 +79,34 @@ type JWTValidator struct {
 	// token signed with the other one.
 	keysByKid map[string]*ecdsa.PublicKey
 	// requireEmailVerifiedClaim: a token with no email_verified claim
-	// carries no email. Read from RequireEmailVerifiedClaimEnv at
-	// construction; see verifiedEmailClaim.
+	// carries no email. Set at construction (RequireEmailVerifiedClaim); see
+	// verifiedEmailClaim.
 	requireEmailVerifiedClaim bool
 }
 
-// RequireEmailVerifiedClaimEnv names the switch for the second half of the
-// email_verified rollout. control-plane's validator reads the same variable
-// (its typed config auth.require_email_verified_claim), and its KCL hands both
-// processes one value. "true" (any strconv.ParseBool truth) makes a token
-// WITHOUT the claim carry no email; unset or false keeps that token's email.
-// Turn it on only once the Supabase custom access-token hook is live on the
-// project (control-plane docs/runbook.md, "Supabase email_verified hook").
-const RequireEmailVerifiedClaimEnv = "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM"
+// ValidatorOption configures a JWTValidator at construction.
+type ValidatorOption func(*JWTValidator)
+
+// RequireEmailVerifiedClaim is the switch for the second half of the
+// email_verified rollout (AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM, the API server's
+// config; control-plane's validator reads the same variable, and its KCL hands
+// both processes one value). On, a token WITHOUT the claim carries no email;
+// off keeps that token's email. Turn it on only once the Supabase custom
+// access-token hook is live on the project (control-plane docs/runbook.md,
+// "Supabase email_verified hook").
+func RequireEmailVerifiedClaim(require bool) ValidatorOption {
+	return func(v *JWTValidator) { v.requireEmailVerifiedClaim = require }
+}
+
+func (v *JWTValidator) apply(opts []ValidatorOption) *JWTValidator {
+	for _, opt := range opts {
+		opt(v)
+	}
+	return v
+}
 
 // NewJWTValidator creates a new JWT validator with ECDSA public key from PEM format
-func NewJWTValidator(publicKeyPEM string) (*JWTValidator, error) {
+func NewJWTValidator(publicKeyPEM string, opts ...ValidatorOption) (*JWTValidator, error) {
 	if publicKeyPEM == "" {
 		return nil, ErrInvalidPublicKey
 	}
@@ -116,10 +126,7 @@ func NewJWTValidator(publicKeyPEM string) (*JWTValidator, error) {
 		return nil, fmt.Errorf("%w: not an ECDSA public key", ErrInvalidPublicKey)
 	}
 
-	return &JWTValidator{
-		publicKey:                 ecdsaPub,
-		requireEmailVerifiedClaim: requireEmailVerifiedClaimFromEnv(),
-	}, nil
+	return (&JWTValidator{publicKey: ecdsaPub}).apply(opts), nil
 }
 
 // ecdsaKeyFromCoordinates builds a public key from a JWK's x and y. The JWK
@@ -140,7 +147,7 @@ func ecdsaKeyFromCoordinates(curve elliptic.Curve, x, y []byte) (*ecdsa.PublicKe
 }
 
 // NewJWTValidatorFromJWKS creates a validator from JWKS JSON
-func NewJWTValidatorFromJWKS(jwksJSON string) (*JWTValidator, error) {
+func NewJWTValidatorFromJWKS(jwksJSON string, opts ...ValidatorOption) (*JWTValidator, error) {
 	var jwks struct {
 		Keys []struct {
 			Kty string `json:"kty"`
@@ -206,19 +213,7 @@ func NewJWTValidatorFromJWKS(jwksJSON string) (*JWTValidator, error) {
 		return nil, fmt.Errorf("%w: no EC keys in JWKS", ErrInvalidPublicKey)
 	}
 
-	return &JWTValidator{
-		publicKey:                 firstKey,
-		keysByKid:                 keysByKid,
-		requireEmailVerifiedClaim: requireEmailVerifiedClaimFromEnv(),
-	}, nil
-}
-
-// requireEmailVerifiedClaimFromEnv reads RequireEmailVerifiedClaimEnv. An
-// unset or unparseable value is false — the pre-hook behaviour — because a
-// typo that silently stripped every user's email would be the worse failure.
-func requireEmailVerifiedClaimFromEnv() bool {
-	require, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(RequireEmailVerifiedClaimEnv)))
-	return err == nil && require
+	return (&JWTValidator{publicKey: firstKey, keysByKid: keysByKid}).apply(opts), nil
 }
 
 // emailVerifiedClaim is the top-level claim the Supabase custom access-token
@@ -259,7 +254,7 @@ func verifiedEmailClaim(email string, raw map[string]any, requireClaim bool) str
 }
 
 // LoadJWKS fetches a JWKS document from the given URL and returns a JWTValidator.
-func LoadJWKS(ctx context.Context, jwksURL string) (*JWTValidator, error) {
+func LoadJWKS(ctx context.Context, jwksURL string, opts ...ValidatorOption) (*JWTValidator, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, jwksURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create JWKS request: %v", ErrInvalidPublicKey, err)
@@ -281,7 +276,7 @@ func LoadJWKS(ctx context.Context, jwksURL string) (*JWTValidator, error) {
 		return nil, fmt.Errorf("%w: failed to read JWKS response: %v", ErrInvalidPublicKey, err)
 	}
 
-	return NewJWTValidatorFromJWKS(string(body))
+	return NewJWTValidatorFromJWKS(string(body), opts...)
 }
 
 // ValidateToken validates a JWT token and returns the claims

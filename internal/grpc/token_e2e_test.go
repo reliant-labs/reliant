@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 
 	"connectrpc.com/connect"
@@ -288,7 +289,7 @@ func (s *sessionSigner) sign(t *testing.T, userID string) string {
 // GetGitToken among them).
 func serveTokenService(t *testing.T, authority tokenauthority.Authority, jwtPubPEM string, cp token.TokenControlPlane) string {
 	t.Helper()
-	authInterceptor, err := interceptors.NewAuthInterceptor(jwtPubPEM, "", middleware.UnauthenticatedProcedures)
+	authInterceptor, err := interceptors.NewAuthInterceptor(auth.Settings{PublicKeyPEM: jwtPubPEM}, middleware.UnauthenticatedProcedures)
 	require.NoError(t, err)
 	authInterceptor.SetAccessTokenIntrospector(accesstokenclient.NewCachedIntrospector(authority))
 	tokenService, err := token.New(token.Deps{

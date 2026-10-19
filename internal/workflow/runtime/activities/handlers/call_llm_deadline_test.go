@@ -27,7 +27,7 @@ import (
 // unambiguously what ends the stream; this is the deadline path, not the
 // stalled-stream path its sibling test covers.
 func TestCallLLM_DeadlineExceededFailsRatherThanCompleting(t *testing.T) {
-	t.Setenv("RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "5m")
+	llm.SetStreamTimeoutsForTest(t, llm.StreamTimeouts{Progress: 5 * time.Minute})
 
 	driver := &stalledProgressDriver{stopped: make(chan struct{})}
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {

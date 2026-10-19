@@ -82,7 +82,7 @@ func texterEnv(t *testing.T) (*env, *fakeTexter) {
 	t.Helper()
 	e := newEnv(t)
 	f := newFakeTexter(t)
-	providers, err := connections.ProvidersFromCatalog(testManifests(t, texterManifest), oauthEnv(nil))
+	providers, err := connections.ProvidersFromCatalog(testManifests(t, texterManifest), connections.OAuthClientsFromEnv(oauthEnv(nil)))
 	require.NoError(t, err)
 	doer := hostRouter{"texter.example.com": f.srv, "": e.gh.srv}
 	e.providers = providers
@@ -151,7 +151,7 @@ func TestTriggersWithoutRoutesEventsDoNotProbeAtCreate(t *testing.T) {
 	e, f := texterEnv(t)
 	accessGated := strings.Replace(texterManifest, "    routes_events: true\n", "", 1)
 	require.NotEqual(t, texterManifest, accessGated)
-	providers, err := connections.ProvidersFromCatalog(testManifests(t, accessGated), oauthEnv(nil))
+	providers, err := connections.ProvidersFromCatalog(testManifests(t, accessGated), connections.OAuthClientsFromEnv(oauthEnv(nil)))
 	require.NoError(t, err)
 	doer := hostRouter{"texter.example.com": f.srv, "": e.gh.srv}
 	tokens := connections.NewTokenSource(e.store, e.vault, providers, doer)

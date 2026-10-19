@@ -166,9 +166,8 @@ func TestSetupManagedGitCredentials_LocalDaemonLeavesGlobalConfigAlone(t *testin
 	cfg := filepath.Join(t.TempDir(), "gitconfig")
 	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
 	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-	t.Setenv(DaemonTypeEnvVar, "")
 	withHelper(t, "/bin/h")
-	setupManagedGitCredentials()
+	setupManagedGitCredentials(false)
 	if _, err := os.Stat(cfg); err == nil {
 		t.Fatal("a local daemon wrote the global git config")
 	}

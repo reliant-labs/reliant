@@ -71,17 +71,17 @@ func TestNext_Thresholds(t *testing.T) {
 	}
 }
 
-func TestConfigFromEnv(t *testing.T) {
-	cfg, err := ConfigFromEnv([]string{EnvReclaimAt + "=85", EnvRefuseAt + "=97%"})
+func TestParseThresholds(t *testing.T) {
+	cfg, err := ParseThresholds("85", "97%")
 	if err != nil || cfg.ReclaimAt != 0.85 || cfg.RefuseAt != 0.97 {
 		t.Fatalf("got %+v, %v", cfg, err)
 	}
-	cfg, err = ConfigFromEnv([]string{EnvRefuseAt + "=off"})
+	cfg, err = ParseThresholds("", "off")
 	if err != nil || !math.IsInf(cfg.RefuseAt, 1) || cfg.ReclaimAt != 0 {
 		t.Fatalf("off: got %+v, %v", cfg, err)
 	}
-	cfg, err = ConfigFromEnv([]string{EnvReclaimAt + "=ninety", EnvRefuseAt + "=96"})
-	if err == nil || !strings.Contains(err.Error(), EnvReclaimAt) || cfg.RefuseAt != 0.96 || cfg.ReclaimAt != 0 {
+	cfg, err = ParseThresholds("ninety", "96")
+	if err == nil || !strings.Contains(err.Error(), "RELIANT_DISK_RECLAIM_AT") || cfg.RefuseAt != 0.96 || cfg.ReclaimAt != 0 {
 		t.Fatalf("a bad value names itself and keeps its default, the rest still apply: %+v, %v", cfg, err)
 	}
 }

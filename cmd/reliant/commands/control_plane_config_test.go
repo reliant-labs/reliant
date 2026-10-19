@@ -137,4 +137,5 @@ func isolateControlPlaneEnv(t *testing.T) {
 		t.Setenv(name, "") // restores the original afterwards
 		require.NoError(t, os.Unsetenv(name))
 	}
+	isolateServerRoleEnv(t)
 }

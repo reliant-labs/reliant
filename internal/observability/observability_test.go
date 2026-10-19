@@ -108,44 +108,24 @@ func TestInitEnabledModeAcceptsGRPCCollectorEndpoint(t *testing.T) {
 	t.Cleanup(func() { _ = provider.Shutdown() })
 }
 
-func TestConfigFromEnvCurrentProductionRolloutDisabled(t *testing.T) {
-	t.Setenv("SENTRY_ENVIRONMENT", "")
-	t.Setenv("ENVIRONMENT", "production")
-	t.Setenv("RELIANT_ENV", "")
-	t.Setenv("OTEL_ENABLED", "")
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
-	cfg := ConfigFromEnv("reliant-api-server")
+func TestNewConfigCurrentProductionRolloutDisabled(t *testing.T) {
+	cfg := NewConfig("reliant-api-server", Settings{Environment: "production", PrometheusEnabled: true})
 	require.Equal(t, "production", cfg.Environment)
 	require.False(t, cfg.OTLPEnabled)
 	require.Empty(t, cfg.OTLPEndpoint)
 	require.NoError(t, func() error { _, err := Init(cfg); return err }())
 }
 
-func TestConfigFromEnvProductionEnabledWithoutCollectorFails(t *testing.T) {
-	t.Setenv("SENTRY_ENVIRONMENT", "")
-	t.Setenv("ENVIRONMENT", "production")
-	t.Setenv("RELIANT_ENV", "")
-	t.Setenv("OTEL_ENABLED", "true")
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
-	cfg := ConfigFromEnv("reliant-api-server")
+func TestNewConfigProductionEnabledWithoutCollectorFails(t *testing.T) {
+	cfg := NewConfig("reliant-api-server", Settings{Environment: "production", OTLPEnabled: true})
 	require.True(t, cfg.OTLPEnabled)
 	_, err := Init(cfg)
 	require.ErrorContains(t, err, "OTEL_EXPORTER_OTLP_ENDPOINT is empty")
 }
 
-func TestConfigFromEnvEnvironmentPrecedence(t *testing.T) {
-	t.Setenv("SENTRY_ENVIRONMENT", "sentry-environment")
-	t.Setenv("ENVIRONMENT", "deployment-environment")
-	t.Setenv("RELIANT_ENV", "legacy-environment")
-	cfg := ConfigFromEnv("reliant-api-server")
-	require.Equal(t, "sentry-environment", cfg.Environment)
-
-	t.Setenv("SENTRY_ENVIRONMENT", "")
-	cfg = ConfigFromEnv("reliant-api-server")
-	require.Equal(t, "deployment-environment", cfg.Environment)
-
-	t.Setenv("ENVIRONMENT", "")
-	cfg = ConfigFromEnv("reliant-api-server")
-	require.Equal(t, "legacy-environment", cfg.Environment)
+func TestNewConfigEnvironmentDefault(t *testing.T) {
+	cfg := NewConfig("reliant-api-server", Settings{})
+	require.Equal(t, "development", cfg.Environment)
 	require.NotEmpty(t, strings.TrimSpace(cfg.InstanceID))
+	require.Equal(t, "staging", NewConfig("reliant-api-server", Settings{Environment: " staging "}).Environment)
 }

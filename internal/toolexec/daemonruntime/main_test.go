@@ -10,14 +10,15 @@ import (
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 )
 
-// Start on a managed daemon (RELIANT_DAEMON_TYPE=managed) rewrites the GLOBAL
-// git config. Run inside a Reliant workspace, where that variable and a real
-// HOME are both set, this package's tests that call Start would otherwise
-// point the developer's own ~/.gitconfig at a test binary go deletes moments
-// later, breaking every later git fetch/push on the machine.
+// Start on a managed daemon (Host.DaemonType "managed") rewrites the GLOBAL
+// git config. Run inside a Reliant workspace, where a real HOME is set, this
+// package's tests that start a managed daemon would otherwise point the
+// developer's own ~/.gitconfig at a test binary go deletes moments later,
+// breaking every later git fetch/push on the machine.
 //
-// So TestMain gives every test a private HOME and git config and strips the
-// variables that make Start behave as a pod, before any test runs.
+// So TestMain gives every test a private HOME and git config before any test
+// runs. (Whether Start behaves as a pod is its StartOptions.Host, never the
+// environment the test binary inherited.)
 
 func TestMain(m *testing.M) {
 	// This test binary also stands in for the reliant binary as the
@@ -50,11 +51,6 @@ func runIsolated(m *testing.M) int {
 		"GIT_CONFIG_NOSYSTEM": "1",
 	} {
 		os.Setenv(k, v)
-	}
-	// What makes Start behave as a pod: the managed git wiring, and the
-	// preview forwarder binding a fixed port.
-	for _, k := range []string{DaemonTypeEnvVar, "DAEMON_RUNTIME_TYPE", "DAEMON_FRONTEND_PORT"} {
-		os.Unsetenv(k)
 	}
 	return m.Run()
 }

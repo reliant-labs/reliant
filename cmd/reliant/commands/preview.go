@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/netports"
+	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -74,7 +75,11 @@ the deliverable shape a handoff node can post.`,
 				return fmt.Errorf("invalid port %q: must be an integer in 1..65535", args[0])
 			}
 
-			url, remote := previewURLForPort(port)
+			cfg, err := config.LoadPreviewURLConfig(cmd)
+			if err != nil {
+				return err
+			}
+			url, remote := previewURLForPort(cfg.GetUrlTemplate(), port)
 
 			// Listening check is advisory (mirrors netports' "affordance, not a
 			// gate" stance). ok=false on non-Linux hosts where /proc is absent —
@@ -123,14 +128,17 @@ the deliverable shape a handoff node can post.`,
 	cmd.Flags().StringVar(&runCommand, "run", "", "The command that runs it (included in --json output)")
 	cmd.Flags().BoolVar(&requireListening, "require-listening", false, "Fail if nothing is listening on the port")
 
+	// RELIANT_PREVIEW_URL_TEMPLATE: proto/config/v1 PreviewURLConfig.
+	config.RegisterPreviewURLConfigFlags(cmd)
+
 	return cmd
 }
 
 // previewURLForPort returns the preview URL for a port and whether it is a
-// REMOTE (managed-daemon) URL. When the injected template is present and valid
-// it is authoritative; otherwise the port is on the local machine (loopback).
-func previewURLForPort(port int) (url string, remote bool) {
-	tmpl := envOrDefault(previewURLTemplateEnv, "")
+// REMOTE (managed-daemon) URL. When the injected template (tmpl,
+// RELIANT_PREVIEW_URL_TEMPLATE) is present and valid it is authoritative;
+// otherwise the port is on the local machine (loopback).
+func previewURLForPort(tmpl string, port int) (url string, remote bool) {
 	if tmpl != "" && strings.Contains(tmpl, previewPortPlaceholder) {
 		return strings.ReplaceAll(tmpl, previewPortPlaceholder, strconv.Itoa(port)), true
 	}

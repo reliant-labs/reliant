@@ -4,13 +4,10 @@ package llm
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // StreamStallPhase names where in a response the content-stall guard fired.
@@ -84,10 +81,6 @@ const DefaultStreamMidBlockStallTimeout = 30 * time.Minute
 // so a provider running at half speed under load is still nowhere near it.
 const streamMidBlockFloorTokensPerSecond = 40
 
-// StreamMidBlockStallTimeoutEnv pins the mid-block deadline for every request,
-// overriding the budget-derived value.
-const StreamMidBlockStallTimeoutEnv = "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT"
-
 // StreamMidBlockStallTimeout returns how long a content block may stay open
 // with only keepalives on a request that may generate up to maxOutputTokens
 // (0 when unknown).
@@ -103,14 +96,13 @@ func StreamMidBlockStallTimeout(maxOutputTokens int64) time.Duration {
 }
 
 // midBlockStallTimeout takes the awaiting deadline explicitly so a transport
-// whose awaiting deadline is pinned (tests) derives from that, not the env.
+// whose awaiting deadline is pinned (tests) derives from that, not the
+// config. A configured StreamTimeouts.MidBlock
+// (RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT) pins it for every request,
+// overriding the budget-derived value.
 func midBlockStallTimeout(maxOutputTokens int64, awaiting time.Duration) time.Duration {
-	if raw := strings.TrimSpace(os.Getenv(StreamMidBlockStallTimeoutEnv)); raw != "" {
-		if d, err := time.ParseDuration(raw); err == nil && d > 0 {
-			return d
-		}
-		logging.Warn("[Transport] Ignoring unusable stream mid-block stall timeout override",
-			"env", StreamMidBlockStallTimeoutEnv, "value", raw)
+	if t := streamTimeouts.Load(); t != nil && t.MidBlock > 0 {
+		return t.MidBlock
 	}
 
 	budget := DefaultStreamMidBlockStallTimeout

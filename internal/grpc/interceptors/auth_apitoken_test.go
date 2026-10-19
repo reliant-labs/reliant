@@ -36,11 +36,9 @@ func mintFor(t *testing.T, authority *tokenauthority.Memory, userID string, scop
 // identity a session produces — reliant:api ONLY. Daemon credentials, revoked
 // and unknown tokens are rejected, and non-`rlat_` bearers behave as before.
 func TestAuthInterceptorAccessTokenDispatch(t *testing.T) {
-	t.Setenv("AUTH_MODE", "apikey")
-	t.Setenv("AUTH_API_KEY", "legacy-api-key-secret")
 
 	authority := tokenauthority.NewMemory()
-	interceptor, err := NewAuthInterceptor("", "", map[string]struct{}{"/reliant.v1.SystemService/Health": {}})
+	interceptor, err := NewAuthInterceptor(auth.Settings{Mode: auth.ModeAPIKey, APIKey: "legacy-api-key-secret"}, map[string]struct{}{"/reliant.v1.SystemService/Health": {}})
 	require.NoError(t, err)
 	interceptor.SetAccessTokenIntrospector(authority)
 
@@ -109,10 +107,8 @@ func TestAuthInterceptorAccessTokenDispatch(t *testing.T) {
 // With no introspector wired, `rlat_` bearers are rejected outright instead of
 // falling through to JWT validation.
 func TestAuthInterceptorAccessTokensDisabled(t *testing.T) {
-	t.Setenv("AUTH_MODE", "apikey")
-	t.Setenv("AUTH_API_KEY", "legacy-api-key-secret")
 
-	interceptor, err := NewAuthInterceptor("", "", nil)
+	interceptor, err := NewAuthInterceptor(auth.Settings{Mode: auth.ModeAPIKey, APIKey: "legacy-api-key-secret"}, nil)
 	require.NoError(t, err)
 	token, err := fat.Mint()
 	require.NoError(t, err)
@@ -127,12 +123,10 @@ func TestAuthInterceptorAccessTokensDisabled(t *testing.T) {
 // Both directions are asserted — a test that only checked the outage would
 // pass if every error became Unavailable.
 func TestAuthInterceptorUnreachableAuthorityIsNotARejection(t *testing.T) {
-	t.Setenv("AUTH_MODE", "apikey")
-	t.Setenv("AUTH_API_KEY", "legacy-api-key-secret")
 
 	authority := tokenauthority.NewMemory()
 	token := mintFor(t, authority, "user-at", fat.ScopeReliantAPI)
-	interceptor, err := NewAuthInterceptor("", "", nil)
+	interceptor, err := NewAuthInterceptor(auth.Settings{Mode: auth.ModeAPIKey, APIKey: "legacy-api-key-secret"}, nil)
 	require.NoError(t, err)
 	interceptor.SetAccessTokenIntrospector(authority)
 

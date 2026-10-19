@@ -58,10 +58,8 @@ func TestWaitForSchema_ReturnsImmediatelyWhenCurrent(t *testing.T) {
 	_, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	t.Setenv("RELIANT_DB_SCHEMA_WAIT_SECONDS", "5")
-
 	start := time.Now()
-	if err := WaitForSchema(rawDB); err != nil {
+	if err := WaitForSchema(rawDB, 5*time.Second); err != nil {
 		t.Fatalf("WaitForSchema on a migrated DB: %v", err)
 	}
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
@@ -93,9 +91,7 @@ func TestWaitForSchema_TimesOutWhenNoMigratorRuns(t *testing.T) {
 		t.Fatal("expected schema_migrations to be hidden by the restricted search_path")
 	}
 
-	t.Setenv("RELIANT_DB_SCHEMA_WAIT_SECONDS", "1")
-
-	err := WaitForSchema(blind)
+	err := WaitForSchema(blind, time.Second)
 	if err == nil {
 		t.Fatal("expected WaitForSchema to time out against an unmigrated database")
 	}

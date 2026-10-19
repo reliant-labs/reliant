@@ -27,7 +27,7 @@ var errAgentCannotEnable = fmt.Errorf("an agent cannot create or enable automati
 // running on its own. See daemonpolicy.AgentShellEnv for why this is a
 // guardrail and not a boundary.
 func refuseFromAgentShell(*cobra.Command, []string) error {
-	if os.Getenv(daemonpolicy.AgentShellEnv) != "" {
+	if os.Getenv(daemonpolicy.AgentShellEnv) != "" { //nolint:forbidigo // the marker the daemon sets on agent shells (daemonpolicy.AgentShellEnv), a process signal, not configuration
 		return errAgentCannotEnable
 	}
 	return nil

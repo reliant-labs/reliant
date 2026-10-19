@@ -792,7 +792,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 		return nil, err
 	}
 	if len(req.Env) > 0 || credentials == daemonpolicy.CredentialsNone {
-		cmd.Env = os.Environ()
+		cmd.Env = os.Environ() //nolint:forbidigo // passes this process environment to a child process; not configuration
 		for k, v := range req.Env {
 			cmd.Env = append(cmd.Env, k+"="+v)
 		}

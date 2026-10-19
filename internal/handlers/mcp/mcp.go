@@ -616,7 +616,7 @@ func protoConfigToInternal(cfg *reliantv1.MCPServerConfig) config.MCPServer {
 			if value, ok := envMap[key]; ok {
 				return value
 			}
-			return os.Getenv(key)
+			return os.Getenv(key) //nolint:forbidigo // expands ${VAR} in the user's MCP config from the user's environment, by design
 		})
 	}
 
@@ -661,7 +661,7 @@ func scopedConfigToInternal(cfg MCPServerConfig) config.MCPServer {
 			if value, ok := envMap[key]; ok {
 				return value
 			}
-			return os.Getenv(key)
+			return os.Getenv(key) //nolint:forbidigo // expands ${VAR} in the user's MCP config from the user's environment, by design
 		})
 	}
 

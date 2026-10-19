@@ -81,8 +81,8 @@ func streamConfig() jetstream.StreamConfig {
 }
 
 // NewNATSHub creates a new NATS JetStream streaming hub.
-func NewNATSHub(natsURL string) (*NATSHub, error) {
-	nc, err := natsutil.Connect(natsURL)
+func NewNATSHub(ep natsutil.Endpoint) (*NATSHub, error) {
+	nc, err := natsutil.Connect(ep)
 	if err != nil {
 		return nil, err
 	}

@@ -122,7 +122,7 @@ func cloneAtomically(ctx context.Context, repo, branch, dest string) error {
 	// would be written to .git/config as remote.origin.url and outlive its
 	// validity there.
 	cmd := exec.CommandContext(ctx, "git", "clone", "--branch", branch, repo, staging)
-	cmd.Env = gitCredentialEnv(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"))
+	cmd.Env = gitCredentialEnv(append(os.Environ(), "GIT_TERMINAL_PROMPT=0")) //nolint:forbidigo // passes this process environment to a child process; not configuration
 
 	// git clone can be memory-heavy on large repos; attribute a SIGKILL to
 	// the workspace OOM killer when the cgroup recorded one.
@@ -233,7 +233,7 @@ func handleGitPull(ctx context.Context, payload []byte) ([]byte, error) {
 		args = append(args, "origin", req.Branch)
 	}
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0") //nolint:forbidigo // passes this process environment to a child process; not configuration
 
 	oomSnap := memReader.SnapshotOOMKills()
 	output, err := cmd.CombinedOutput()

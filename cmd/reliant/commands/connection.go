@@ -135,7 +135,7 @@ func resolveServer(cmd *cobra.Command) (*connection, error) {
 	conn := &connection{ServerURL: server, ServerSource: sourceDefault}
 	if serverFlagSet {
 		conn.ServerSource = sourceFlag
-	} else if os.Getenv(envServerURL) != "" {
+	} else if os.Getenv(envServerURL) != "" { //nolint:forbidigo // RELIANT_SERVER_URL: forge gap: its default is set at build time (-ldflags), a layer forge config does not have; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
 		conn.ServerSource = sourceEnv
 	}
 	conn.GatewayURL, conn.GatewaySource = resolveGateway(cmd, conn)
@@ -149,7 +149,7 @@ func resolveConnection(cmd *cobra.Command) (*connection, error) {
 	if err != nil {
 		return nil, err
 	}
-	if t := strings.TrimSpace(os.Getenv(envToken)); t != "" {
+	if t := strings.TrimSpace(os.Getenv(envToken)); t != "" { //nolint:forbidigo // RELIANT_TOKEN: forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
 		conn.Token, conn.TokenFrom = t, envToken
 		return conn, nil
 	}
@@ -184,7 +184,7 @@ func resolveGateway(cmd *cobra.Command, conn *connection) (string, valueSource) 
 	if gw, changed := persistentFlag(cmd, flagGateway); changed && gw != "" {
 		return gw, sourceFlag
 	}
-	if env := os.Getenv(envGatewayURL); env != "" {
+	if env := os.Getenv(envGatewayURL); env != "" { //nolint:forbidigo // RELIANT_GATEWAY_URL: forge gap: its default is set at build time (-ldflags), a layer forge config does not have; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
 		return env, sourceEnv
 	}
 	if conn.ServerSource == sourceDefault && builddefaults.GatewayURL != "" {
@@ -329,7 +329,7 @@ func (c *connection) httpClientWithBearer(bearer string) *http.Client {
 // shouldSkipTLSVerify returns true when TLS cert verification should be skipped
 // for the given server URL (localhost targets or explicit env override).
 func shouldSkipTLSVerify(server string) bool {
-	if os.Getenv("RELIANT_SKIP_TLS_VERIFY") == "1" {
+	if os.Getenv("RELIANT_SKIP_TLS_VERIFY") == "1" { //nolint:forbidigo // RELIANT_SKIP_TLS_VERIFY: forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
 		return true
 	}
 	// For localhost URLs, self-signed certs are common in dev.

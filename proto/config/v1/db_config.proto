@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package config.v1;
+
+import "config/v1/server_config.proto";
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
+
+// The `reliant db migrate` commands' configs. Each composes DatabaseConfig —
+// the same block, and so the same variables, every server role reads — so a
+// migration Job and the API server cannot disagree about which database they
+// mean. The rules every config here follows are in config.proto's header.
+
+// DbMigrateUpConfig is `reliant db migrate up`'s config.
+message DbMigrateUpConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    command: ["db", "migrate", "up"]
+  };
+
+  DatabaseConfig database = 1;
+}
+
+// DbMigrateStatusConfig is `reliant db migrate status`'s config.
+message DbMigrateStatusConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    command: ["db", "migrate", "status"]
+  };
+
+  DatabaseConfig database = 1;
+}
+
+// DbMigrateForceConfig is `reliant db migrate force`'s config.
+message DbMigrateForceConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    command: ["db", "migrate", "force"]
+  };
+
+  DatabaseConfig database = 1;
+}

@@ -4,7 +4,6 @@ package serverapi
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -32,8 +31,8 @@ type wiredConnections struct {
 // appOrigins is the deployment's CORS allow-list: the origins the web app is
 // served from, which are the only ones (besides PUBLIC_URL's and loopback) a
 // browser OAuth flow is relayed back to.
-func wireConnections(repo *db.Repo, keys vault.Service, publicURL string, appOrigins []string, hosted bool) (*wiredConnections, error) {
-	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), os.Getenv)
+func wireConnections(repo *db.Repo, keys vault.Service, clients connections.OAuthClients, publicURL string, appOrigins []string, hosted bool) (*wiredConnections, error) {
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), clients)
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)
 	}

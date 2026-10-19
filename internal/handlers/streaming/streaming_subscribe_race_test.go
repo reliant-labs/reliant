@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/streaming"
 )
 
@@ -179,7 +180,7 @@ func TestStreamUserUpdates_ChatUpdatePublishedDuringSnapshotIsNotLost(t *testing
 	t.Cleanup(func() { _ = chatHub.Close() })
 	userHub := streaming.NewNATSUpdateHub[db.UserUpdate](nc, "user.updates", "user-updates")
 	t.Cleanup(func() { _ = userHub.Close() })
-	deltaHub, err := streaming.NewNATSHub(natsURL)
+	deltaHub, err := streaming.NewNATSHub(natsutil.Endpoint{URL: natsURL})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = deltaHub.Close() })
 

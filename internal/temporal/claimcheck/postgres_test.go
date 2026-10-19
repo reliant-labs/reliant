@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
@@ -107,20 +106,5 @@ func TestPostgresStoreGC(t *testing.T) {
 	}
 	if remaining != 3 {
 		t.Errorf("remaining = %d, want 3", remaining)
-	}
-}
-
-func TestGCHorizonFromEnv(t *testing.T) {
-	t.Setenv(claimcheck.GCHorizonEnv, "")
-	if got := claimcheck.GCHorizonFromEnv(); got != claimcheck.DefaultGCHorizon {
-		t.Errorf("unset = %v", got)
-	}
-	t.Setenv(claimcheck.GCHorizonEnv, "48h")
-	if got := claimcheck.GCHorizonFromEnv(); got != 48*time.Hour {
-		t.Errorf("48h = %v", got)
-	}
-	t.Setenv(claimcheck.GCHorizonEnv, "garbage")
-	if got := claimcheck.GCHorizonFromEnv(); got != claimcheck.DefaultGCHorizon {
-		t.Errorf("garbage = %v", got)
 	}
 }

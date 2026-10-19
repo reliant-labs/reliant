@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -76,10 +75,6 @@ func (p *StatsigProvider) Initialize(ctx context.Context, config map[string]inte
 		// Fall back to server key
 		p.apiKey = key
 		p.isClientKey = false
-	} else {
-		// Last resort: check environment
-		p.apiKey = os.Getenv("STATSIG_SERVER_SECRET_KEY")
-		p.isClientKey = false
 	}
 
 	// Detect if it's a client key by prefix
@@ -92,13 +87,10 @@ func (p *StatsigProvider) Initialize(ctx context.Context, config map[string]inte
 	}
 
 	// Get environment
-	if env, ok := config["environment"].(string); ok {
+	if env, ok := config["environment"].(string); ok && env != "" {
 		p.environment = env
 	} else {
-		p.environment = os.Getenv("STATSIG_ENVIRONMENT")
-		if p.environment == "" {
-			p.environment = "production"
-		}
+		p.environment = "production"
 	}
 
 	// Set timeout if configured

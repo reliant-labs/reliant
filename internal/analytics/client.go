@@ -40,11 +40,24 @@ const (
 	retryBackoff           = 2 * time.Second
 )
 
-// statsigKeyEnv supplies the key events are sent with.
+// statsigKeyEnv names the setting that supplies the key events are sent
+// with (Settings.StatsigKey), for the operator-facing messages.
 const statsigKeyEnv = "STATSIG_CLIENT_KEY"
 
-func getAPIKey() string {
-	return os.Getenv(statsigKeyEnv)
+// Settings is where a process sends analytics events: its AnalyticsConfig.
+type Settings struct {
+	// Disabled turns every event off (RELIANT_ANALYTICS_DISABLED).
+	Disabled bool
+	// StatsigKey is the key events are sent with (STATSIG_CLIENT_KEY); empty
+	// turns Statsig sending off, said once.
+	StatsigKey string
+	// SupabaseURL and SupabaseAnonKey name the Supabase project events are
+	// also written to.
+	SupabaseURL     string
+	SupabaseAnonKey string
+	// AppDataDir is a writable app data directory to cache the device id in
+	// (RELIANT_APP_DATA_DIR); empty caches nothing.
+	AppDataDir string
 }
 
 // errStatsigKeyRejected is a 401 or 403 from Statsig: the key is missing,
@@ -118,12 +131,12 @@ func setStatsigEndpoint(endpoint string) {
 	statsigEndpoint = endpoint
 }
 
-// NewClientFromSettings creates a new analytics client based on privacy settings
-// Returns a NoopClient if analytics is disabled, otherwise returns a real Client
-func NewClientFromSettings(ctx context.Context, userID string, analyticsEnabled bool) AnalyticsClient {
-	// Check environment override
-	if os.Getenv("RELIANT_ANALYTICS_DISABLED") == "true" {
-		logging.Info("[Analytics] Analytics disabled by environment variable")
+// NewClientFromSettings creates a new analytics client based on the process's
+// analytics settings and the user's privacy settings. Returns a NoopClient if
+// analytics is disabled, otherwise returns a real Client.
+func NewClientFromSettings(ctx context.Context, userID string, analyticsEnabled bool, settings Settings) AnalyticsClient {
+	if settings.Disabled {
+		logging.Info("[Analytics] Analytics disabled by RELIANT_ANALYTICS_DISABLED")
 		return NewNoopClient()
 	}
 
@@ -143,8 +156,8 @@ func NewClientFromSettings(ctx context.Context, userID string, analyticsEnabled 
 
 	clientCtx, cancel := context.WithCancel(ctx)
 	client := &Client{
-		apiKey:       getAPIKey(),
-		deviceID:     getDeviceID(),
+		apiKey:       settings.StatsigKey,
+		deviceID:     getDeviceID(settings.AppDataDir),
 		userID:       userID,
 		httpClient:   &http.Client{Timeout: 10 * time.Second},
 		eventQueue:   make([]Event, 0, maxBatchSize),
@@ -153,8 +166,8 @@ func NewClientFromSettings(ctx context.Context, userID string, analyticsEnabled 
 		sessionID:    uuid.New().String(),
 		sessionStart: time.Now(),
 		recentEvents: make(map[string]time.Time),
-		gtmURL:       os.Getenv("SUPABASE_URL"),
-		gtmAPIKey:    os.Getenv("SUPABASE_ANON_KEY"),
+		gtmURL:       settings.SupabaseURL,
+		gtmAPIKey:    settings.SupabaseAnonKey,
 	}
 	if client.apiKey == "" {
 		client.stopStatsig(statsigKeyEnv + " is not set")
@@ -896,11 +909,10 @@ func (c *Client) writeToGTM(events []Event) {
 
 // analyticsDataDir is where analytics caches state on disk, or "" when there
 // is nowhere to write. Only a configured app data directory counts
-// (RELIANT_APP_DATA_DIR, which the desktop app sets): a server container sets
-// none, and its root filesystem is read-only, so guessing a platform default
-// there produced an error on every write.
-func analyticsDataDir() string {
-	appDataDir := os.Getenv("RELIANT_APP_DATA_DIR")
+// (Settings.AppDataDir): a server container sets none, and its root
+// filesystem is read-only, so guessing a platform default there produced an
+// error on every write.
+func analyticsDataDir(appDataDir string) string {
 	if appDataDir == "" {
 		return ""
 	}
@@ -917,9 +929,9 @@ func analyticsDataDir() string {
 // data directory when there is one. Without one it is derived again each
 // start — the same value wherever the OS has a machine id — and never
 // written.
-func getDeviceID() string {
+func getDeviceID(appDataDir string) string {
 	userIDFile := ""
-	if dataDir := analyticsDataDir(); dataDir != "" {
+	if dataDir := analyticsDataDir(appDataDir); dataDir != "" {
 		userIDFile = filepath.Join(dataDir, "userid")
 		// #nosec G304 -- userIDFile is derived from internal analytics data directory
 		if data, err := os.ReadFile(userIDFile); err == nil && len(data) > 0 {

@@ -123,12 +123,7 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 
 	// --- the deployment: GitHub provider + access refresher ---------------
 	const secret = "gh-e2e-secret"
-	registry, err := webhook.RegistryFromEnv(func(k string) string {
-		if k == "RELIANT_GITHUB_WEBHOOK_SECRET" {
-			return secret
-		}
-		return ""
-	})
+	registry, err := webhook.RegistryFor(webhook.RegistryConfig{GitHubWebhookSecret: secret})
 	require.NoError(t, err)
 
 	alice, bob := uuid.NewString(), uuid.NewString()

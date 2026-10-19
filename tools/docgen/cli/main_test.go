@@ -67,7 +67,7 @@ func TestReferenceIgnoresTheGeneratingEnvironment(t *testing.T) {
 	for _, want := range []string{
 		"| `--server` | `string` | `" + builddefaults.ServerURL + "` |",
 		"| `--gateway` | `string` | `" + builddefaults.GatewayURL + "` |",
-		"| `--listen-port` | `int` | `9190` |",
+		"| `--listen-port` | `int32` | `9190` |",
 	} {
 		if !strings.Contains(reference, want) {
 			t.Errorf("cli.md should document the compiled-in default %q", want)

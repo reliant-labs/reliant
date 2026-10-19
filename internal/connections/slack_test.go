@@ -160,7 +160,7 @@ func slackEnv(t *testing.T) (*env, *fakeSlack) {
 	t.Helper()
 	e := newEnv(t)
 	f := newFakeSlack(t)
-	providers, err := connections.ProvidersFromCatalog(append(testManifests(t), shippedManifest(t, "slack")), oauthEnv(slackCreds))
+	providers, err := connections.ProvidersFromCatalog(append(testManifests(t), shippedManifest(t, "slack")), connections.OAuthClientsFromEnv(oauthEnv(slackCreds)))
 	require.NoError(t, err)
 	doer := hostRouter{"slack.com": f.srv, "": e.gh.srv}
 	e.providers = providers

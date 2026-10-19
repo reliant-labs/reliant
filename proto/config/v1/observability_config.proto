@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package config.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
+
+// ObservabilityConfig is how a server role reports what it is doing: OTLP
+// export, the Prometheus endpoint, and the deployment environment its
+// telemetry is filed under. Every server role composes it. The rules every
+// config here follows are in config.proto's header.
+message ObservabilityConfig {
+  // The OTLP collector base URL (not a /v1/<signal> path). The forge runtime
+  // exports whenever it is set.
+  string otlp_endpoint = 1 [(forge.v1.config) = {
+    env_var: "OTEL_EXPORTER_OTLP_ENDPOINT"
+    description: "OTLP collector base URL (export is on whenever it is set)"
+  }];
+
+  // Makes a missing collector endpoint a startup error, so a deployment that
+  // means to export cannot silently become Prometheus-only.
+  bool otel_enabled = 2 [(forge.v1.config) = {
+    env_var: "OTEL_ENABLED"
+    description: "Require an OTLP collector endpoint (OTEL_EXPORTER_OTLP_ENDPOINT)"
+  }];
+
+  // Reliant's own Prometheus endpoint.
+  bool prometheus_enabled = 3 [(forge.v1.config) = {
+    env_var: "PROMETHEUS_ENABLED"
+    default_value: "true"
+    description: "Serve Reliant's Prometheus metrics"
+  }];
+
+  // The deployment environment telemetry and Sentry events are filed under:
+  // SENTRY_ENVIRONMENT, else the deploy layer's typed ENVIRONMENT. Unset: the
+  // process's tier (RELIANT_ENV), else development.
+  string environment = 4 [(forge.v1.config) = {
+    env_var: "SENTRY_ENVIRONMENT"
+    env_var_aliases: [{name: "ENVIRONMENT"}]
+    description: "Deployment environment telemetry is filed under"
+  }];
+}
+
+// SentryConfig is where the API server and the worker report errors. Only a
+// prod-tier process reports at all (internal/runenv).
+message SentryConfig {
+  // A kill switch: unset is on.
+  bool enabled = 1 [(forge.v1.config) = {
+    env_var: "SENTRY_ENABLED"
+    default_value: "true"
+    description: "Report errors to Sentry (when SENTRY_DSN is set and the tier is prod)"
+  }];
+
+  // Unset: nothing to report to.
+  string dsn = 2 [(forge.v1.config) = {
+    env_var: "SENTRY_DSN"
+    sensitive: true
+    optional: true
+    description: "Sentry DSN"
+  }];
+
+  // The share of transactions traced, 0 to 1.
+  double traces_sample_rate = 3 [(forge.v1.config) = {
+    env_var: "SENTRY_TRACES_SAMPLE_RATE"
+    default_value: "0"
+    description: "Share of transactions Sentry traces, 0 to 1"
+  }];
+}

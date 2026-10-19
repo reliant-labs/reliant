@@ -26,7 +26,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
-	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -246,7 +245,6 @@ func TestForgeCredential_ElectronDaemonSessionEndToEnd(t *testing.T) {
 // no login.
 func TestForgeCredential_ManagedCloudDaemon(t *testing.T) {
 	_, home := isolateForgeCredHome(t)
-	t.Setenv(daemonruntime.DaemonTypeEnvVar, "managed")
 	api := serveReliantAPI(t, testControlPlane)
 	const userID = "user-cloud"
 	pat := api.mintSession(t, userID, append([]fat.Scope{fat.ScopeReliantAPI}, daemonCeiling...)...)
@@ -269,7 +267,7 @@ func TestForgeCredential_ManagedCloudDaemon(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)
 	if _, err := resolveOrAwaitCredentials(context.Background(), cmd, &connection{ServerURL: api.url}, "",
-		t.TempDir(), daemonNonInteractiveDefault()); err != nil {
+		t.TempDir(), daemonNonInteractive(false, true)); err != nil {
 		t.Fatalf("a managed daemon failed to start on its mounted credential: %v", err)
 	}
 	argv, err := cloudcred.ParseCommand(os.Getenv(cloudcred.HelperEnv))

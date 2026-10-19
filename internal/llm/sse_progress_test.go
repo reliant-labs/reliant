@@ -140,25 +140,17 @@ func TestStreamingHTTPClient_SilentSocketStillReportsIdle(t *testing.T) {
 }
 
 // TestStreamContentStallTimeout_ResolvesOverride mirrors the byte-idle
-// override test: operators must be able to widen this without a rebuild, and a
-// bad value must not disable the guard.
+// override test: operators must be able to widen this without a rebuild.
 func TestStreamContentStallTimeout_ResolvesOverride(t *testing.T) {
 	t.Run("default when unset", func(t *testing.T) {
-		t.Setenv(StreamContentStallTimeoutEnv, "")
+		SetStreamTimeoutsForTest(t, StreamTimeouts{})
 		assert.Equal(t, DefaultStreamContentStallTimeout, StreamContentStallTimeout())
 	})
 
-	t.Run("honours a valid duration", func(t *testing.T) {
-		t.Setenv(StreamContentStallTimeoutEnv, "12m")
+	t.Run("honours a configured duration", func(t *testing.T) {
+		SetStreamTimeoutsForTest(t, StreamTimeouts{ContentStall: 12 * time.Minute})
 		assert.Equal(t, 12*time.Minute, StreamContentStallTimeout())
 	})
-
-	for _, bad := range []string{"nonsense", "0s", "-1m"} {
-		t.Run("falls back on "+bad, func(t *testing.T) {
-			t.Setenv(StreamContentStallTimeoutEnv, bad)
-			assert.Equal(t, DefaultStreamContentStallTimeout, StreamContentStallTimeout())
-		})
-	}
 }
 
 // TestStreamContentStallTimeout_IsLooserThanIdle pins the invariant that makes

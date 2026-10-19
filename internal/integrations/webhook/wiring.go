@@ -4,7 +4,6 @@ package webhook
 import (
 	"context"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/gmail"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
-	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -80,21 +78,38 @@ func (in *Inbound) Register(handle func(pattern string, handler http.Handler)) {
 	in.events.Register(handle)
 }
 
-// RegistryFromEnv builds the provider registry this deployment receives for.
+// RegistryConfig is what decides which integrations this deployment receives
+// events for: each one's deployment secret (the server role's
+// IntegrationsConfig) and its OAuth clients.
+type RegistryConfig struct {
+	// SlackSigningSecret verifies Slack deliveries; empty receives none.
+	SlackSigningSecret string
+	// GitHubWebhookSecret verifies the GitHub App's deliveries; empty
+	// receives none.
+	GitHubWebhookSecret string
+	// OAuthClients are the deployment's integration OAuth clients; a polled
+	// integration is registered only when its client is configured.
+	OAuthClients connections.OAuthClients
+	// PublicURL is this deployment's public base URL; Twilio signs it, so
+	// Twilio is registered only when it parses.
+	PublicURL string
+	// TestIntegrationSecret registers the test provider and poller; only an
+	// e2e stack sets it, never production.
+	TestIntegrationSecret string
+}
+
+// RegistryFor builds the provider registry this deployment receives for.
 // Wave-1 providers (GitHub, Slack, Twilio) register here, each gated on its
 // own deployment secret; polled integrations (Gmail) on the OAuth client their
 // connections need. The test provider is registered only when
-// RELIANT_TEST_INTEGRATION_SECRET is set — an e2e stack, never production.
+// cfg.TestIntegrationSecret is set — an e2e stack, never production.
 //
 // The api-server and the worker both build it, so they agree on which
 // integrations deliver events: the api-server refuses a trigger whose
 // integration has no source, and the worker runs the polls.
-func RegistryFromEnv(getenv func(string) string) (*Registry, error) {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
+func RegistryFor(cfg RegistryConfig) (*Registry, error) {
 	r := NewRegistry()
-	if secret := strings.TrimSpace(getenv(SlackSigningSecretEnv)); secret != "" {
+	if secret := strings.TrimSpace(cfg.SlackSigningSecret); secret != "" {
 		if err := r.Register(NewSlackProvider(secret)); err != nil {
 			return nil, err
 		}
@@ -102,7 +117,7 @@ func RegistryFromEnv(getenv func(string) string) (*Registry, error) {
 	// GitHub: the one App's webhook. Without its secret nothing could be
 	// verified, so the route stays 404 and integration triggers for github
 	// are refused at write time.
-	if secret := strings.TrimSpace(getenv(github.SecretEnv)); secret != "" {
+	if secret := strings.TrimSpace(cfg.GitHubWebhookSecret); secret != "" {
 		if err := r.Register(NewGitHubProvider(secret)); err != nil {
 			return nil, err
 		}
@@ -110,7 +125,7 @@ func RegistryFromEnv(getenv func(string) string) (*Registry, error) {
 	// Gmail is polled, not pushed: there is no webhook to verify. It is
 	// registered when the deployment configured the Google OAuth client,
 	// without which no one can hold a Gmail connection to poll through.
-	if clientIDVar, _ := connections.OAuthClientEnv(gmail.ID); strings.TrimSpace(getenv(clientIDVar)) != "" {
+	if gmailClientID(cfg.OAuthClients) != "" {
 		m, err := catalog.MustBuiltin().Manifest(gmail.ID, 1)
 		if err != nil {
 			return nil, err
@@ -126,12 +141,12 @@ func RegistryFromEnv(getenv func(string) string) (*Registry, error) {
 	// Twilio: no deployment secret — each delivery is verified against its
 	// account's Auth Token, from the users' own connections. What it does
 	// need is PUBLIC_URL, because Twilio signs the URL itself.
-	if parsePublicBase(getenv("PUBLIC_URL")) != nil {
+	if parsePublicBase(cfg.PublicURL) != nil {
 		if err := r.Register(NewTwilioProvider()); err != nil {
 			return nil, err
 		}
 	}
-	if secret := strings.TrimSpace(getenv("RELIANT_TEST_INTEGRATION_SECRET")); secret != "" {
+	if secret := strings.TrimSpace(cfg.TestIntegrationSecret); secret != "" {
 		if err := r.Register(NewTestProvider(secret)); err != nil {
 			return nil, err
 		}
@@ -140,6 +155,15 @@ func RegistryFromEnv(getenv func(string) string) (*Registry, error) {
 		}
 	}
 	return r, nil
+}
+
+// gmailClientID is the deployment's Gmail OAuth client id, "" when it has none.
+func gmailClientID(clients connections.OAuthClients) string {
+	if clients == nil {
+		return ""
+	}
+	id, _ := clients(gmail.ID)
+	return strings.TrimSpace(id)
 }
 
 var _ Store = (interface {

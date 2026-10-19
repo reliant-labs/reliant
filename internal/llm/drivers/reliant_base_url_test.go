@@ -11,7 +11,7 @@ import (
 var reliantLLMKey = "rlat_" + strings.Repeat("A1b2", 8)
 
 func TestResolveReliantBaseURL_DefaultWhenUnset(t *testing.T) {
-	t.Setenv("RELIANT_API_BASE_URL", "")
+	SetReliantBaseURLForTest(t, "")
 	assert.Equal(t, reliantNeutralBaseURL, ResolveReliantBaseURL(reliantLLMKey))
 }
 
@@ -19,7 +19,7 @@ func TestResolveReliantBaseURL_DefaultWhenUnset(t *testing.T) {
 // default would break internal/builddefaults' OSS-clean contract, and the old
 // https://api.reliant.dev/v1 did not resolve at all.
 func TestResolveReliantBaseURL_FallbackIsNeutralNotHosted(t *testing.T) {
-	t.Setenv("RELIANT_API_BASE_URL", "")
+	SetReliantBaseURLForTest(t, "")
 	resolved := ResolveReliantBaseURL(reliantLLMKey)
 	u, err := url.Parse(resolved)
 	assert.NoError(t, err)
@@ -29,7 +29,7 @@ func TestResolveReliantBaseURL_FallbackIsNeutralNotHosted(t *testing.T) {
 }
 
 func TestResolveReliantBaseURL_UsesConfiguredURL(t *testing.T) {
-	t.Setenv("RELIANT_API_BASE_URL", "https://proxy.example.com/v1")
+	SetReliantBaseURLForTest(t, "https://proxy.example.com/v1")
 	assert.Equal(t, "https://proxy.example.com/v1", ResolveReliantBaseURL(reliantLLMKey))
 }
 

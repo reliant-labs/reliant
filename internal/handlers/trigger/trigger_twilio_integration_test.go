@@ -90,7 +90,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(key))
 	require.NoError(t, err)
 	sealer := vault.New(vault.Deps{DB: repo.DB, Keys: vault.NewEnvKeyWrapper(ring)})
-	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), func(string) string { return "" })
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)
 	doer := twilioDoer{target: twilio}
 	store := repo.Connections()
@@ -116,12 +116,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 
 	// --- receivers -------------------------------------------------------
 	const publicURL = "https://hooks.example.com"
-	registry, err := webhook.RegistryFromEnv(func(k string) string {
-		if k == "PUBLIC_URL" {
-			return publicURL
-		}
-		return ""
-	})
+	registry, err := webhook.RegistryFor(webhook.RegistryConfig{PublicURL: publicURL})
 	require.NoError(t, err)
 	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
 	inbound := webhook.NewInbound(repo, intake, registry, nil, publicURL).WithConnectionSecrets(tokens)

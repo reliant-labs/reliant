@@ -7,10 +7,9 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -266,28 +265,49 @@ func ResilientHTTPClient() *http.Client {
 // produced zero bytes for 8-17 minutes, and the automatic retry then succeeded
 // in 12-17s, so the cost of a false positive is bounded and small.
 //
-// Override with RELIANT_LLM_STREAM_IDLE_TIMEOUT (a Go duration, e.g. "3m") if a
-// provider is found to hold a stream silent for longer than this.
+// Override with RELIANT_LLM_STREAM_IDLE_TIMEOUT (a Go duration, e.g. "3m";
+// StreamTimeouts.Idle) if a provider is found to hold a stream silent for
+// longer than this.
 const DefaultStreamIdleTimeout = 90 * time.Second
 
-// StreamIdleTimeoutEnv overrides DefaultStreamIdleTimeout at runtime.
-const StreamIdleTimeoutEnv = "RELIANT_LLM_STREAM_IDLE_TIMEOUT"
+// StreamTimeouts are the stream guards' deadlines: the LLM config of the
+// process that streams (RELIANT_LLM_STREAM_*). A zero field takes its default;
+// a zero MidBlock is derived per request from its output budget.
+type StreamTimeouts struct {
+	Idle         time.Duration
+	ContentStall time.Duration
+	Progress     time.Duration
+	MidBlock     time.Duration
+}
 
-// StreamIdleTimeout returns the configured stream idle timeout. It is read on
-// every client construction (once per LLM call) so the override takes effect
-// without a rebuild.
+// streamTimeouts is the process's configured deadlines; nil is every default.
+var streamTimeouts atomic.Pointer[StreamTimeouts]
+
+// ConfigureStreamTimeouts sets the process's stream deadlines. A server role
+// calls it once at boot, from its config, before any LLM call.
+func ConfigureStreamTimeouts(t StreamTimeouts) { streamTimeouts.Store(&t) }
+
+// SetStreamTimeoutsForTest sets the process's stream deadlines for the length
+// of a test.
+func SetStreamTimeoutsForTest(tb testing.TB, t StreamTimeouts) {
+	tb.Helper()
+	prev := streamTimeouts.Load()
+	streamTimeouts.Store(&t)
+	tb.Cleanup(func() { streamTimeouts.Store(prev) })
+}
+
+func configuredStreamTimeout(pick func(StreamTimeouts) time.Duration, def time.Duration) time.Duration {
+	if t := streamTimeouts.Load(); t != nil {
+		if d := pick(*t); d > 0 {
+			return d
+		}
+	}
+	return def
+}
+
+// StreamIdleTimeout returns the configured stream idle timeout.
 func StreamIdleTimeout() time.Duration {
-	raw := strings.TrimSpace(os.Getenv(StreamIdleTimeoutEnv))
-	if raw == "" {
-		return DefaultStreamIdleTimeout
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil || d <= 0 {
-		logging.Warn("[Transport] Ignoring unusable stream idle timeout override",
-			"env", StreamIdleTimeoutEnv, "value", raw, "using", DefaultStreamIdleTimeout)
-		return DefaultStreamIdleTimeout
-	}
-	return d
+	return configuredStreamTimeout(func(t StreamTimeouts) time.Duration { return t.Idle }, DefaultStreamIdleTimeout)
 }
 
 // ErrStreamIdleTimeout is returned by IdleTimeoutReader.Read when the stream
@@ -329,11 +349,9 @@ var ErrStreamContentStalled = errors.New("llm stream content stall timeout: prov
 // twice its p99 entire lifetime without emitting content is left alone. The
 // point is not to cut promptly; it is to make an unbounded hang bounded.
 //
-// Override with RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT.
+// Override with RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT
+// (StreamTimeouts.ContentStall).
 const DefaultStreamContentStallTimeout = 5 * time.Minute
-
-// StreamContentStallTimeoutEnv overrides DefaultStreamContentStallTimeout.
-const StreamContentStallTimeoutEnv = "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT"
 
 // ErrStreamProgressTimeout is returned when a stream produced no DRIVER EVENT
 // for StreamProgressTimeout.
@@ -364,45 +382,17 @@ var ErrStreamProgressTimeout = errors.New("llm stream progress timeout: no strea
 // deadline — the transport reports them on the request's StreamLiveness, and
 // CallLLM holds this timer off for as long as they keep coming.
 //
-// Override with RELIANT_LLM_STREAM_PROGRESS_TIMEOUT.
+// Override with RELIANT_LLM_STREAM_PROGRESS_TIMEOUT (StreamTimeouts.Progress).
 const DefaultStreamProgressTimeout = 10 * time.Minute
 
-// StreamProgressTimeoutEnv overrides DefaultStreamProgressTimeout.
-const StreamProgressTimeoutEnv = "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT"
-
 // StreamProgressTimeout returns the configured stream-progress timeout.
-//
-// Read per call rather than cached at init so a test — or an operator
-// debugging a wedged provider — can set it without rebuilding. The two timeouts
-// above are read per client construction for the same reason.
 func StreamProgressTimeout() time.Duration {
-	raw := strings.TrimSpace(os.Getenv(StreamProgressTimeoutEnv))
-	if raw == "" {
-		return DefaultStreamProgressTimeout
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil || d <= 0 {
-		logging.Warn("[Transport] Ignoring unusable stream progress timeout override",
-			"env", StreamProgressTimeoutEnv, "value", raw, "using", DefaultStreamProgressTimeout)
-		return DefaultStreamProgressTimeout
-	}
-	return d
+	return configuredStreamTimeout(func(t StreamTimeouts) time.Duration { return t.Progress }, DefaultStreamProgressTimeout)
 }
 
-// StreamContentStallTimeout returns the configured content-stall timeout,
-// read per client construction like StreamIdleTimeout.
+// StreamContentStallTimeout returns the configured content-stall timeout.
 func StreamContentStallTimeout() time.Duration {
-	raw := strings.TrimSpace(os.Getenv(StreamContentStallTimeoutEnv))
-	if raw == "" {
-		return DefaultStreamContentStallTimeout
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil || d <= 0 {
-		logging.Warn("[Transport] Ignoring unusable stream content stall timeout override",
-			"env", StreamContentStallTimeoutEnv, "value", raw, "using", DefaultStreamContentStallTimeout)
-		return DefaultStreamContentStallTimeout
-	}
-	return d
+	return configuredStreamTimeout(func(t StreamTimeouts) time.Duration { return t.ContentStall }, DefaultStreamContentStallTimeout)
 }
 
 // IdleTimeoutReader wraps an io.ReadCloser and enforces two independent

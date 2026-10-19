@@ -83,7 +83,7 @@ var (
 )
 
 func Value(envKey, compiledDefault, fallback string) string {
-	if value := os.Getenv(envKey); value != "" {
+	if value := os.Getenv(envKey); value != "" { //nolint:forbidigo // the env > ldflags > neutral layering of RELIANT_SERVER_URL/_GATEWAY_URL/_AUTH_URL/_AUTH_KEY; forge gap: its default is set at build time (-ldflags), a layer forge config does not have
 		return value
 	}
 	if compiledDefault != "" {

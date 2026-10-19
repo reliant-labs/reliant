@@ -492,14 +492,14 @@ func buildAllowedOrigins(extra []string) map[string]bool {
 		"http://localhost:3000", // common dev port (web/src/routes.tsx, scripts/dev.sh)
 	}
 	origins = append(origins, extra...)
-	if env := os.Getenv("RELIANT_WEB_ORIGIN"); env != "" {
+	if env := os.Getenv("RELIANT_WEB_ORIGIN"); env != "" { //nolint:forbidigo // RELIANT_WEB_ORIGIN: read by `auth serve` and the daemon-hosted helper alike; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
 		origins = append(origins, strings.Split(env, ",")...)
 	}
 	// FRONTEND_PORT is what forge publishes for the dev web server and what the
 	// Electron main process already reads. Accepting the loopback origins it
 	// implies means a worktree stack works without anyone also having to set
 	// RELIANT_WEB_ORIGIN to the same number.
-	if p := strings.TrimSpace(os.Getenv("FRONTEND_PORT")); p != "" {
+	if p := strings.TrimSpace(os.Getenv("FRONTEND_PORT")); p != "" { //nolint:forbidigo // FRONTEND_PORT: read by `auth serve` and the daemon-hosted helper alike; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
 		origins = append(origins,
 			"http://localhost:"+p,
 			"http://127.0.0.1:"+p,

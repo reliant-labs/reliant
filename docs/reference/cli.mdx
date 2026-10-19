@@ -540,11 +540,11 @@ reliant daemon logs [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--account` | `string` | - | Account (Supabase subject) this daemon runs as; selects among several accounts on one server |
-| `--data-dir` | `string` | - | Data directory containing logs (default: this instance's directory under ~/.reliant/instances) |
+| `--account` | `string` | - | Account (Supabase subject) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--follow`, `-f` | `bool` | `true` | Follow log output |
 | `--lines`, `-n` | `int` | `50` | Number of lines to show |
-| `--workspace` | `string` | - | Workspace this daemon serves (defaults to the git worktree root of the current directory) |
+| `--workspace` | `string` | - | Workspace this daemon serves (defaults to the git worktree root of the current directory) [env: RELIANT_INSTANCE_WORKSPACE] |
 
 ---
 
@@ -590,7 +590,7 @@ reliant daemon register [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--account` | `string` | - | Account (Supabase subject) to register; separate accounts on one server keep separate credentials |
+| `--account` | `string` | - | Account (Supabase subject) to register; separate accounts on one server keep separate credentials [env: RELIANT_INSTANCE_ACCOUNT] |
 
 ---
 
@@ -631,20 +631,20 @@ reliant daemon start [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--account` | `string` | - | Account (Supabase subject) this daemon runs as; selects among several accounts on one server |
+| `--account` | `string` | - | Account (Supabase subject) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
 | `--background` | `bool` | - | Run daemon in background (detached) |
-| `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) |
-| `--grpc-url` | `string` | - | gRPC server URL to connect to |
-| `--listen-port` | `int` | `9190` | Port to listen on in server mode |
+| `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
+| `--grpc-url` | `string` | - | Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port) [env: DAEMON_GRPC_URL] |
+| `--listen-port` | `int32` | `9190` | Port to listen on in server mode [env: DAEMON_LISTEN_PORT] |
 | `--name` | `string` | - | Human-friendly daemon name (default: `<instance-id>`@`<hostname>`) |
-| `--non-interactive` | `bool` | - | Never open a browser or run interactive login; idle and wait for credentials to appear on disk instead |
-| `--port` | `string` | `9190` | Daemon listen port |
-| `--server-mode` | `bool` | - | Listen for incoming gateway connections instead of dialing out |
-| `--tls-cert` | `string` | - | TLS certificate file path |
-| `--tls-key` | `string` | - | TLS key file path |
-| `--tls-mode` | `string` | - | TLS mode (tls, insecure_tls_skip_verify, h2c, or disabled) |
+| `--non-interactive` | `bool` | - | Never open a browser or run interactive login; idle and wait for credentials to appear on disk instead [env: RELIANT_DAEMON_NON_INTERACTIVE] |
+| `--port` | `int32` | `9190` | Port of the local daemon gateway, dialled when no gateway URL is known [env: TOOLS_DAEMON_PORT] |
+| `--server-mode` | `bool` | - | Listen for incoming gateway connections instead of dialing out [env: DAEMON_SERVER_MODE] |
+| `--tls-cert` | `string` | - | TLS certificate file path [env: TLS_CERT_FILE] |
+| `--tls-key` | `string` | - | TLS key file path [env: TLS_KEY_FILE] |
+| `--tls-mode` | `string` | - | TLS mode for the gateway connection: tls, insecure_tls_skip_verify, h2c or disabled [env: DAEMON_TLS_MODE] |
 | `--token` | `bool` | - | Read a PAT from stdin and use it as the daemon credential |
-| `--workspace` | `string` | - | Workspace this daemon serves (defaults to the git worktree root of the current directory) |
+| `--workspace` | `string` | - | Workspace this daemon serves (defaults to the git worktree root of the current directory) [env: RELIANT_INSTANCE_WORKSPACE] |
 
 ---
 
@@ -668,9 +668,9 @@ reliant daemon status [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--account` | `string` | - | Account (Supabase subject) this daemon runs as; selects among several accounts on one server |
-| `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) |
-| `--workspace` | `string` | - | Workspace this daemon serves (defaults to the git worktree root of the current directory) |
+| `--account` | `string` | - | Account (Supabase subject) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
+| `--workspace` | `string` | - | Workspace this daemon serves (defaults to the git worktree root of the current directory) [env: RELIANT_INSTANCE_WORKSPACE] |
 
 ---
 
@@ -695,10 +695,10 @@ reliant daemon stop [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--account` | `string` | - | Account (Supabase subject) this daemon runs as; selects among several accounts on one server |
-| `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) |
+| `--account` | `string` | - | Account (Supabase subject) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--force` | `bool` | - | Force kill (SIGKILL) instead of graceful shutdown |
-| `--workspace` | `string` | - | Workspace this daemon serves (defaults to the git worktree root of the current directory) |
+| `--workspace` | `string` | - | Workspace this daemon serves (defaults to the git worktree root of the current directory) [env: RELIANT_INSTANCE_WORKSPACE] |
 
 ---
 
@@ -760,8 +760,14 @@ means no version applied. Never force the baseline onto a database: that
 records it without checking that the schema is the one it builds.
 
 ```
-reliant db migrate force <version>
+reliant db migrate force <version> [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
 
 ---
 
@@ -782,8 +788,14 @@ It is the pre-flight for a database we keep, and stays usable to diagnose the
 very deadlock the schema wait produces.
 
 ```
-reliant db migrate status
+reliant db migrate status [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
 
 ---
 
@@ -804,8 +816,14 @@ itself, then adopted. A goose history the baseline does not describe is
 refused with nothing applied. `db migrate status` previews which.
 
 ```
-reliant db migrate up
+reliant db migrate up [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
 
 ---
 
@@ -8898,26 +8916,23 @@ reliant server api [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--bind-address` | `string` | `0.0.0.0` | Network address to bind to |
-| `--cors-origins` | `string` | `*` | Comma-separated CORS allowed origins, or * for all |
-| `--data-dir` | `string` | `./data` | Data directory for logs and certs |
-| `--db-direct-url` | `string` | - | Session-capable connection URL for the same database, for session-scoped work (advisory locks); set when --db-url is a transaction-pooling PgBouncer |
-| `--db-driver` | `string` | `postgres` | Database driver (postgres) |
-| `--db-url` | `string` | - | Database connection URL (required) |
-| `--disable-tls` | `bool` | - | Disable TLS (use plaintext HTTP) |
-| `--grpc-port` | `int` | `9090` | gRPC/ConnectRPC listen port |
-| `--health-port` | `int` | `8081` | Health/readiness HTTP endpoint port |
+| `--bind-address` | `string` | `0.0.0.0` | Network address to bind to [env: BIND_ADDRESS] |
+| `--cors-origins` | `string` | `*` | Comma-separated CORS allowed origins, or * for all [env: CORS_ALLOWED_ORIGINS] |
+| `--data-dir` | `string` | `./data` | Data directory for logs and certs [env: DATA_DIR] |
+| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
+| `--disable-tls` | `bool` | - | Disable TLS (use plaintext HTTP) [env: DISABLE_TLS] |
+| `--grpc-port` | `int32` | `9090` | gRPC/ConnectRPC listen port [env: GRPC_PORT] |
+| `--health-port` | `int32` | `8081` | Health/readiness HTTP endpoint port [env: HEALTH_PORT] |
 | `--jwks-url` | `string` | - | JWKS endpoint URL for JWT validation (alternative to PEM key) [env: RELIANT_JWKS_URL] |
 | `--jwt-public-key` | `string` | - | JWT public key PEM for token validation [env: JWT_PUBLIC_KEY] |
 | `--jwt-public-key-file` | `string` | - | Path to JWT public key PEM file [env: JWT_PUBLIC_KEY_FILE] |
-| `--nats-url` | `string` | - | NATS server URL (required) |
-| `--pprof-port` | `int` | `6060` | pprof debug server port |
-| `--streaming-driver` | `string` | `nats` | Streaming driver (memory or nats) |
-| `--temporal-host` | `string` | `localhost` | Temporal server host |
-| `--temporal-namespace` | `string` | `reliant` | Temporal namespace |
-| `--temporal-port` | `int` | `7233` | Temporal server port |
-| `--tls-cert` | `string` | - | TLS certificate file path |
-| `--tls-key` | `string` | - | TLS key file path |
+| `--pprof-port` | `int32` | `6060` | pprof debug server port [env: PPROF_PORT] |
+| `--streaming-driver` | `string` | `nats` | Streaming driver (nats) [env: STREAMING_DRIVER] |
+| `--temporal-host` | `string` | `localhost` | Temporal server host [env: TEMPORAL_HOST] |
+| `--temporal-namespace` | `string` | `reliant` | Temporal namespace [env: TEMPORAL_NAMESPACE] |
+| `--temporal-port` | `int32` | `7233` | Temporal server port [env: TEMPORAL_PORT] |
+| `--tls-cert` | `string` | - | TLS certificate file path [env: TLS_CERT_FILE] |
+| `--tls-key` | `string` | - | TLS key file path [env: TLS_KEY_FILE] |
 
 ---
 
@@ -8939,17 +8954,15 @@ reliant server gateway [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--bind-address` | `string` | `0.0.0.0` | Network address to bind to |
-| `--daemon-port` | `int` | `9190` | Daemon bidi-streaming gRPC listen port |
-| `--data-dir` | `string` | `./data` | Data directory for logs and certs |
-| `--db-direct-url` | `string` | - | Session-capable connection URL for the same database, for session-scoped work (advisory locks); set when --db-url is a transaction-pooling PgBouncer |
-| `--db-driver` | `string` | `postgres` | Database driver (postgres) |
-| `--db-url` | `string` | - | Database connection URL (required) |
-| `--disable-tls` | `bool` | - | Disable TLS (use plaintext HTTP) |
-| `--health-port` | `int` | `8080` | Health/readiness HTTP endpoint port |
-| `--nats-url` | `string` | - | NATS server URL (required) |
-| `--tls-cert` | `string` | - | TLS certificate file path |
-| `--tls-key` | `string` | - | TLS key file path |
+| `--bind-address` | `string` | `0.0.0.0` | Network address to bind to [env: BIND_ADDRESS] |
+| `--daemon-port` | `int32` | `9190` | Daemon bidi-streaming gRPC listen port [env: TOOLS_DAEMON_PORT] |
+| `--data-dir` | `string` | `./data` | Data directory for logs and certs [env: DATA_DIR] |
+| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
+| `--disable-tls` | `bool` | - | Disable TLS (use plaintext HTTP) [env: DISABLE_TLS] |
+| `--health-port` | `int32` | `8080` | Health/readiness HTTP endpoint port [env: HEALTH_PORT] |
+| `--pprof-addr` | `string` | - | pprof debug server address host:port (unset: no pprof server) [env: PPROF_ADDR] |
+| `--tls-cert` | `string` | - | TLS certificate file path [env: TLS_CERT_FILE] |
+| `--tls-key` | `string` | - | TLS key file path [env: TLS_KEY_FILE] |
 
 ---
 
@@ -8971,17 +8984,14 @@ reliant server worker [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--data-dir` | `string` | `./data` | Data directory for logs |
-| `--db-direct-url` | `string` | - | Session-capable connection URL for the same database, for session-scoped work (advisory locks); set when --db-url is a transaction-pooling PgBouncer |
-| `--db-driver` | `string` | `postgres` | Database driver (postgres) |
-| `--db-url` | `string` | - | Database connection URL (required) |
-| `--health-port` | `int` | `8081` | Health check endpoint port |
-| `--nats-url` | `string` | - | NATS server URL (required) |
-| `--pprof-port` | `int` | `6060` | pprof debug server port (binds 127.0.0.1 only) |
-| `--streaming-driver` | `string` | `nats` | Streaming driver (memory or nats) |
-| `--temporal-host` | `string` | `localhost` | Temporal server host |
-| `--temporal-namespace` | `string` | `reliant` | Temporal namespace |
-| `--temporal-port` | `int` | `7233` | Temporal server port |
+| `--data-dir` | `string` | `./data` | Data directory for logs [env: DATA_DIR] |
+| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
+| `--health-port` | `int32` | `8081` | Health check endpoint port [env: HEALTH_PORT] |
+| `--pprof-port` | `int32` | `6060` | pprof debug server port (binds 127.0.0.1 only) [env: PPROF_PORT] |
+| `--streaming-driver` | `string` | `nats` | Streaming driver (nats) [env: STREAMING_DRIVER] |
+| `--temporal-host` | `string` | `localhost` | Temporal server host [env: TEMPORAL_HOST] |
+| `--temporal-namespace` | `string` | `reliant` | Temporal namespace [env: TEMPORAL_NAMESPACE] |
+| `--temporal-port` | `int32` | `7233` | Temporal server port [env: TEMPORAL_PORT] |
 
 ---
 

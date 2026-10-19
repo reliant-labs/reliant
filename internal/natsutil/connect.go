@@ -1,17 +1,26 @@
 package natsutil
 
 import (
-	"os"
 	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
+// Endpoint is a NATS server and the credentials to present to it.
+type Endpoint struct {
+	// URL is the server URL; it may embed credentials (nats://user:pass@host).
+	URL string
+	// User and Password authenticate out of band; used only when both are
+	// set.
+	User     string
+	Password string
+}
+
 // Connect establishes a NATS connection with default resilience options.
 // Caller-provided opts are appended after defaults, so they can override.
-// If NATS_USER and NATS_PASSWORD env vars are set, they are used for auth.
-func Connect(url string, opts ...nats.Option) (*nats.Conn, error) {
+// The endpoint's User and Password, when both are set, are used for auth.
+func Connect(ep Endpoint, opts ...nats.Option) (*nats.Conn, error) {
 	defaults := []nats.Option{
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(2 * time.Second),
@@ -25,8 +34,8 @@ func Connect(url string, opts ...nats.Option) (*nats.Conn, error) {
 			logging.Warn("NATS connection closed")
 		}),
 	}
-	if user, pass := os.Getenv("NATS_USER"), os.Getenv("NATS_PASSWORD"); user != "" && pass != "" {
-		defaults = append(defaults, nats.UserInfo(user, pass))
+	if ep.User != "" && ep.Password != "" {
+		defaults = append(defaults, nats.UserInfo(ep.User, ep.Password))
 	}
-	return nats.Connect(url, append(defaults, opts...)...)
+	return nats.Connect(ep.URL, append(defaults, opts...)...)
 }

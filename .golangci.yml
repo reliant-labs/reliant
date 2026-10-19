@@ -16,6 +16,7 @@ linters:
   enable:
     - gosec        # Security-focused linter
     - revive       # Extensible linter, golint replacement
+    - forbidigo    # Typed-config guardrail (forge.yaml config.enforce_typed_access: error)
   
   # Exclusions for paths
   exclusions:
@@ -76,15 +77,28 @@ linters:
       - path: ^pkg/config/
         linters:
           - forbidigo
+      # Tests and the developer binaries under tools/ are not reliant
+      # processes. A test reads harness knobs (RELIANT_TEST_*, DATABASE_URL)
+      # and hands its environment to the subprocesses it runs; tools/* are
+      # separate dev CLIs. The guardrail is about how a reliant PROCESS reads
+      # its configuration, so neither is in its scope.
+      - path: _test\.go
+        linters:
+          - forbidigo
+      - path: ^tools/
+        linters:
+          - forbidigo
 
   settings:
     forbidigo:
-      # Typed-config guardrail (forge.yaml: config.enforce_typed_access: warn).
-      # ADVISORY: forbidigo is deliberately ABSENT from `linters.enable`
-      # above, so `golangci-lint run` never fails on these findings; `forge
-      # lint` runs it as a separate, non-failing step so they stay visible
-      # while P4 moves each read onto proto/config (pkg/config). Enabling
-      # forbidigo above is what would make them gate.
+      # Typed-config guardrail (forge.yaml: config.enforce_typed_access: error).
+      # GATING: forbidigo is in `linters.enable` above, so a direct
+      # environment read fails `golangci-lint run` and `forge lint`. Every
+      # process setting is declared in proto/config/v1 and read through
+      # pkg/config (exempt above, as the generated loader). A read that is not
+      # configuration — an ambient OS variable, an environment passed through
+      # to a child, a forge-owned FORGE_* knob — takes a scoped
+      # //nolint:forbidigo naming why.
       forbid:
         - pattern: 'os\.Getenv'
           msg: &typed-config >-

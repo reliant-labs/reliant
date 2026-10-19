@@ -1,19 +1,10 @@
 package github
 
 import (
-	"os"
-	"strconv"
 	"strings"
 )
 
 const (
-	// BotUserIDEnv names the numeric GitHub user id of the App's bot account
-	// (`<slug>[bot]`). The default is the production App's; a deployment with
-	// its own App sets this (and BotLoginEnv) to that App's bot.
-	BotUserIDEnv = "RELIANT_GITHUB_BOT_USER_ID"
-	// BotLoginEnv names the bot's login, used only when no id is configured.
-	BotLoginEnv = "RELIANT_GITHUB_BOT_LOGIN"
-
 	// defaultBotUserID is `reliant-labs[bot]`, the production App's bot
 	// (GET /users/reliant-labs%5Bbot%5D). Assigned once by GitHub and never
 	// reused, unlike a login.
@@ -30,25 +21,26 @@ type OurBot struct {
 	Login string
 }
 
-// BotFromEnv reads the configured bot, defaulting to the production App's.
-func BotFromEnv(getenv func(string) string) OurBot {
-	if getenv == nil {
-		getenv = os.Getenv
+// BotFrom is the configured bot (RELIANT_GITHUB_BOT_USER_ID,
+// RELIANT_GITHUB_BOT_LOGIN): the user id when one is set, else the login, else
+// the production App's bot. A deployment with its own App names that App's.
+func BotFrom(userID int64, login string) OurBot {
+	if userID > 0 {
+		return OurBot{ID: userID}
 	}
-	bot := OurBot{ID: defaultBotUserID, Login: defaultBotLogin}
-	if v := strings.TrimSpace(getenv(BotUserIDEnv)); v != "" {
-		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
-			bot = OurBot{ID: id}
-		}
+	if login = strings.TrimSpace(login); login != "" {
+		return OurBot{Login: login}
 	}
-	if v := strings.TrimSpace(getenv(BotLoginEnv)); v != "" && getenv(BotUserIDEnv) == "" {
-		bot = OurBot{Login: v}
-	}
-	return bot
+	return OurBot{ID: defaultBotUserID, Login: defaultBotLogin}
 }
 
-// ourBot is the process's bot, read once. Tests that need another use SetBot.
-var ourBot = BotFromEnv(os.Getenv)
+// ourBot is the process's bot: the production App's until the process
+// configures its own (ConfigureBot).
+var ourBot = BotFrom(0, "")
+
+// ConfigureBot sets the process's bot. A server role calls it once at boot,
+// from its config, before any webhook is parsed.
+func ConfigureBot(b OurBot) { ourBot = b }
 
 // SetBot replaces the process's bot and returns a restore func, for tests.
 func SetBot(b OurBot) (restore func()) {

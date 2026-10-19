@@ -10,6 +10,7 @@ import (
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -25,14 +26,10 @@ const (
 // ApiServerConfig is the `reliant server api` process's own config: the knobs
 // only the API server reads. It loads alongside the root ReliantConfig
 // (config.proto, whose header has the rules every config here follows).
-//
-// It moves onto this message a field at a time; the rest of the API server's
-// flags are still registered by hand in cmd/reliant/commands/server.go.
 type ApiServerConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// How the API server validates a caller's JWT. Any one of these is enough.
-	// A PEM given directly wins over a file; serverapi.Run falls back to the
-	// legacy RELIANT_JWT_PUBLIC_KEY when both are empty.
+	// A PEM given directly wins over a file.
 	JwtPublicKey     string `protobuf:"bytes,1,opt,name=jwt_public_key,json=jwtPublicKey,proto3" json:"jwt_public_key,omitempty"`
 	JwtPublicKeyFile string `protobuf:"bytes,2,opt,name=jwt_public_key_file,json=jwtPublicKeyFile,proto3" json:"jwt_public_key_file,omitempty"`
 	JwksUrl          string `protobuf:"bytes,3,opt,name=jwks_url,json=jwksUrl,proto3" json:"jwks_url,omitempty"`
@@ -52,9 +49,62 @@ type ApiServerConfig struct {
 	// Parsed as a bool (1/true/0/false, any case). The raw read this replaced
 	// also took yes/on and silently ignored anything else, which for a kill
 	// switch failed OPEN on a typo; an unrecognised value now stops the process.
-	DisableForgeApi bool `protobuf:"varint,6,opt,name=disable_forge_api,json=disableForgeApi,proto3" json:"disable_forge_api,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	DisableForgeApi bool             `protobuf:"varint,6,opt,name=disable_forge_api,json=disableForgeApi,proto3" json:"disable_forge_api,omitempty"`
+	Database        *DatabaseConfig  `protobuf:"bytes,10,opt,name=database,proto3" json:"database,omitempty"`
+	Nats            *NatsConfig      `protobuf:"bytes,11,opt,name=nats,proto3" json:"nats,omitempty"`
+	Temporal        *TemporalConfig  `protobuf:"bytes,12,opt,name=temporal,proto3" json:"temporal,omitempty"`
+	Tls             *ServerTLSConfig `protobuf:"bytes,13,opt,name=tls,proto3" json:"tls,omitempty"`
+	Drain           *DrainConfig     `protobuf:"bytes,14,opt,name=drain,proto3" json:"drain,omitempty"`
+	GrpcPort        int32            `protobuf:"varint,15,opt,name=grpc_port,json=grpcPort,proto3" json:"grpc_port,omitempty"`
+	HealthPort      int32            `protobuf:"varint,16,opt,name=health_port,json=healthPort,proto3" json:"health_port,omitempty"`
+	PprofPort       int32            `protobuf:"varint,17,opt,name=pprof_port,json=pprofPort,proto3" json:"pprof_port,omitempty"`
+	BindAddress     string           `protobuf:"bytes,18,opt,name=bind_address,json=bindAddress,proto3" json:"bind_address,omitempty"`
+	DataDir         string           `protobuf:"bytes,19,opt,name=data_dir,json=dataDir,proto3" json:"data_dir,omitempty"`
+	// How live deltas fan out across replicas. nats is the only driver; the
+	// knob remains because deployments set it.
+	StreamingDriver string `protobuf:"bytes,20,opt,name=streaming_driver,json=streamingDriver,proto3" json:"streaming_driver,omitempty"`
+	// The browser origins allowed to call the API, comma-separated; "*"
+	// allows every origin. The loader trims each element and drops blank ones.
+	CorsAllowedOrigins []string `protobuf:"bytes,21,rep,name=cors_allowed_origins,json=corsAllowedOrigins,proto3" json:"cors_allowed_origins,omitempty"`
+	// How callers authenticate. supabase validates Supabase JWTs against the
+	// key above; apikey (self-hosting) checks one shared bearer key.
+	AuthMode string `protobuf:"bytes,30,opt,name=auth_mode,json=authMode,proto3" json:"auth_mode,omitempty"`
+	// The shared bearer key apikey mode checks; required in that mode.
+	AuthApiKey string `protobuf:"bytes,31,opt,name=auth_api_key,json=authApiKey,proto3" json:"auth_api_key,omitempty"`
+	// The second half of the email_verified rollout: on, a JWT without the
+	// claim carries no email. control-plane's validator reads the same
+	// variable, and its KCL hands both processes one value. Turn it on only
+	// once the Supabase custom access-token hook is live on the project.
+	RequireEmailVerifiedClaim bool `protobuf:"varint,32,opt,name=require_email_verified_claim,json=requireEmailVerifiedClaim,proto3" json:"require_email_verified_claim,omitempty"`
+	// The PUBLIC base URL of the control plane that issues this deployment's
+	// tokens: the issuer TokenService names, published as RFC 8414 metadata so
+	// `reliant auth login --server <this API>` can find where to log in. Not
+	// RELIANT_CONTROL_PLANE_URL, an in-cluster address a browser cannot reach.
+	// Unset: no browser login is offered.
+	AuthorizationServer string `protobuf:"bytes,33,opt,name=authorization_server,json=authorizationServer,proto3" json:"authorization_server,omitempty"`
+	// The authorization servers whose access tokens the connector (MCP)
+	// endpoint accepts, comma-separated (typically the Supabase project URL).
+	// None: connectors authenticate with rlat_ connector credentials only, and
+	// OAuth discovery is not advertised.
+	McpOauthIssuers []string `protobuf:"bytes,34,rep,name=mcp_oauth_issuers,json=mcpOauthIssuers,proto3" json:"mcp_oauth_issuers,omitempty"`
+	// The largest attachment accepted, in bytes.
+	MaxUploadSize int64 `protobuf:"varint,35,opt,name=max_upload_size,json=maxUploadSize,proto3" json:"max_upload_size,omitempty"`
+	// What the worktree sweep does with active worktrees its daemon reports
+	// finished (clean, merged or pushed, idle over 24h, not in use): dry-run
+	// logs them and archives nothing; on archives them; off never asks.
+	WorktreeAutoArchive string               `protobuf:"bytes,36,opt,name=worktree_auto_archive,json=worktreeAutoArchive,proto3" json:"worktree_auto_archive,omitempty"`
+	Integrations        *IntegrationsConfig  `protobuf:"bytes,40,opt,name=integrations,proto3" json:"integrations,omitempty"`
+	Observability       *ObservabilityConfig `protobuf:"bytes,50,opt,name=observability,proto3" json:"observability,omitempty"`
+	Sentry              *SentryConfig        `protobuf:"bytes,51,opt,name=sentry,proto3" json:"sentry,omitempty"`
+	Analytics           *AnalyticsConfig     `protobuf:"bytes,60,opt,name=analytics,proto3" json:"analytics,omitempty"`
+	Llm                 *LLMConfig           `protobuf:"bytes,70,opt,name=llm,proto3" json:"llm,omitempty"`
+	// How long an unreferenced Temporal payload blob is kept before the API
+	// server's hourly GC deletes it. It must exceed the longest workflow run
+	// plus the namespace's history retention (internal/temporal/claimcheck).
+	PayloadBlobGcHorizon *durationpb.Duration `protobuf:"bytes,80,opt,name=payload_blob_gc_horizon,json=payloadBlobGcHorizon,proto3" json:"payload_blob_gc_horizon,omitempty"`
+	Preview              *PreviewConfig       `protobuf:"bytes,90,opt,name=preview,proto3" json:"preview,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ApiServerConfig) Reset() {
@@ -129,11 +179,193 @@ func (x *ApiServerConfig) GetDisableForgeApi() bool {
 	return false
 }
 
+func (x *ApiServerConfig) GetDatabase() *DatabaseConfig {
+	if x != nil {
+		return x.Database
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetNats() *NatsConfig {
+	if x != nil {
+		return x.Nats
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetTemporal() *TemporalConfig {
+	if x != nil {
+		return x.Temporal
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetTls() *ServerTLSConfig {
+	if x != nil {
+		return x.Tls
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetDrain() *DrainConfig {
+	if x != nil {
+		return x.Drain
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetGrpcPort() int32 {
+	if x != nil {
+		return x.GrpcPort
+	}
+	return 0
+}
+
+func (x *ApiServerConfig) GetHealthPort() int32 {
+	if x != nil {
+		return x.HealthPort
+	}
+	return 0
+}
+
+func (x *ApiServerConfig) GetPprofPort() int32 {
+	if x != nil {
+		return x.PprofPort
+	}
+	return 0
+}
+
+func (x *ApiServerConfig) GetBindAddress() string {
+	if x != nil {
+		return x.BindAddress
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetDataDir() string {
+	if x != nil {
+		return x.DataDir
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetStreamingDriver() string {
+	if x != nil {
+		return x.StreamingDriver
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetCorsAllowedOrigins() []string {
+	if x != nil {
+		return x.CorsAllowedOrigins
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetAuthMode() string {
+	if x != nil {
+		return x.AuthMode
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetAuthApiKey() string {
+	if x != nil {
+		return x.AuthApiKey
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetRequireEmailVerifiedClaim() bool {
+	if x != nil {
+		return x.RequireEmailVerifiedClaim
+	}
+	return false
+}
+
+func (x *ApiServerConfig) GetAuthorizationServer() string {
+	if x != nil {
+		return x.AuthorizationServer
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetMcpOauthIssuers() []string {
+	if x != nil {
+		return x.McpOauthIssuers
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetMaxUploadSize() int64 {
+	if x != nil {
+		return x.MaxUploadSize
+	}
+	return 0
+}
+
+func (x *ApiServerConfig) GetWorktreeAutoArchive() string {
+	if x != nil {
+		return x.WorktreeAutoArchive
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIntegrations() *IntegrationsConfig {
+	if x != nil {
+		return x.Integrations
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetObservability() *ObservabilityConfig {
+	if x != nil {
+		return x.Observability
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetSentry() *SentryConfig {
+	if x != nil {
+		return x.Sentry
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetAnalytics() *AnalyticsConfig {
+	if x != nil {
+		return x.Analytics
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetLlm() *LLMConfig {
+	if x != nil {
+		return x.Llm
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetPayloadBlobGcHorizon() *durationpb.Duration {
+	if x != nil {
+		return x.PayloadBlobGcHorizon
+	}
+	return nil
+}
+
+func (x *ApiServerConfig) GetPreview() *PreviewConfig {
+	if x != nil {
+		return x.Preview
+	}
+	return nil
+}
+
 var File_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	"!config/v1/api_server_config.proto\x12\tconfig.v1\x1a$config/v1/control_plane_config.proto\x1a\x14forge/v1/forge.proto\"\x9a\x06\n" +
+	"!config/v1/api_server_config.proto\x12\tconfig.v1\x1a config/v1/analytics_config.proto\x1a$config/v1/control_plane_config.proto\x1a#config/v1/integrations_config.proto\x1a\x1aconfig/v1/llm_config.proto\x1a$config/v1/observability_config.proto\x1a\x1econfig/v1/preview_config.proto\x1a\x1dconfig/v1/server_config.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xe0\x19\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -145,7 +377,54 @@ const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x15ALLOWED_EMAIL_DOMAINS*BComma-separated email domains allowed to sign in (none allows all)R\x13allowedEmailDomains\x12B\n" +
 	"\rcontrol_plane\x18\x05 \x01(\v2\x1d.config.v1.ControlPlaneConfigR\fcontrolPlane\x12\x9f\x01\n" +
 	"\x11disable_forge_api\x18\x06 \x01(\bBs\x82\xce\x18o\n" +
-	"\x19RELIANT_DISABLE_FORGE_API*RTurn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)R\x0fdisableForgeApi:\x1a\xca\xc1\x18\x16\n" +
+	"\x19RELIANT_DISABLE_FORGE_API*RTurn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)R\x0fdisableForgeApi\x125\n" +
+	"\bdatabase\x18\n" +
+	" \x01(\v2\x19.config.v1.DatabaseConfigR\bdatabase\x12)\n" +
+	"\x04nats\x18\v \x01(\v2\x15.config.v1.NatsConfigR\x04nats\x125\n" +
+	"\btemporal\x18\f \x01(\v2\x19.config.v1.TemporalConfigR\btemporal\x12,\n" +
+	"\x03tls\x18\r \x01(\v2\x1a.config.v1.ServerTLSConfigR\x03tls\x12,\n" +
+	"\x05drain\x18\x0e \x01(\v2\x16.config.v1.DrainConfigR\x05drain\x12Z\n" +
+	"\tgrpc_port\x18\x0f \x01(\x05B=\x82\xce\x189\n" +
+	"\tGRPC_PORT\x12\tgrpc-port\x1a\x049090*\x1bgRPC/ConnectRPC listen portR\bgrpcPort\x12j\n" +
+	"\vhealth_port\x18\x10 \x01(\x05BI\x82\xce\x18E\n" +
+	"\vHEALTH_PORT\x12\vhealth-port\x1a\x048081*#Health/readiness HTTP endpoint portR\n" +
+	"healthPort\x12Z\n" +
+	"\n" +
+	"pprof_port\x18\x11 \x01(\x05B;\x82\xce\x187\n" +
+	"\n" +
+	"PPROF_PORT\x12\n" +
+	"pprof-port\x1a\x046060*\x17pprof debug server portR\tpprofPort\x12h\n" +
+	"\fbind_address\x18\x12 \x01(\tBE\x82\xce\x18A\n" +
+	"\fBIND_ADDRESS\x12\fbind-address\x1a\a0.0.0.0*\x1aNetwork address to bind toR\vbindAddress\x12^\n" +
+	"\bdata_dir\x18\x13 \x01(\tBC\x82\xce\x18?\n" +
+	"\bDATA_DIR\x12\bdata-dir\x1a\x06./data*!Data directory for logs and certsR\adataDir\x12x\n" +
+	"\x10streaming_driver\x18\x14 \x01(\tBM\x82\xce\x18I\n" +
+	"\x10STREAMING_DRIVER\x12\x10streaming-driver\x1a\x04nats*\x17Streaming driver (nats)J\x04natsR\x0fstreamingDriver\x12\x91\x01\n" +
+	"\x14cors_allowed_origins\x18\x15 \x03(\tB_\x82\xce\x18[\n" +
+	"\x14CORS_ALLOWED_ORIGINS\x12\fcors-origins\x1a\x01**2Comma-separated CORS allowed origins, or * for allR\x12corsAllowedOrigins\x12\x86\x01\n" +
+	"\tauth_mode\x18\x1e \x01(\tBi\x82\xce\x18e\n" +
+	"\tAUTH_MODE\x1a\bsupabase*<Auth mode: supabase (JWTs) or apikey (one shared bearer key)J\bsupabaseJ\x06apikeyR\bauthMode\x12`\n" +
+	"\fauth_api_key\x18\x1f \x01(\tB>\x82\xce\x18:\n" +
+	"\fAUTH_API_KEY*&Shared bearer key for AUTH_MODE=apikey0\x01P\x01R\n" +
+	"authApiKey\x12\xa0\x01\n" +
+	"\x1crequire_email_verified_claim\x18  \x01(\bB_\x82\xce\x18[\n" +
+	"!AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM*6A JWT without an email_verified claim carries no emailR\x19requireEmailVerifiedClaim\x12\x9b\x01\n" +
+	"\x14authorization_server\x18! \x01(\tBh\x82\xce\x18d\n" +
+	"\x1cRELIANT_AUTHORIZATION_SERVER*DPublic URL of the control plane that issues this deployment's tokensR\x13authorizationServer\x12\x8e\x01\n" +
+	"\x11mcp_oauth_issuers\x18\" \x03(\tBb\x82\xce\x18^\n" +
+	"\x11MCP_OAUTH_ISSUERS*IComma-separated OAuth issuers whose tokens the connector endpoint acceptsR\x0fmcpOauthIssuers\x12n\n" +
+	"\x0fmax_upload_size\x18# \x01(\x03BF\x82\xce\x18B\n" +
+	"\x0fMAX_UPLOAD_SIZE\x1a\b10485760*%Largest attachment accepted, in bytesR\rmaxUploadSize\x12\x9d\x01\n" +
+	"\x15worktree_auto_archive\x18$ \x01(\tBi\x82\xce\x18e\n" +
+	"\x1dRELIANT_WORKTREE_AUTO_ARCHIVE\x1a\adry-run*)Worktree auto-archive: dry-run, on or offJ\adry-runJ\x02onJ\x03offR\x13worktreeAutoArchive\x12A\n" +
+	"\fintegrations\x18( \x01(\v2\x1d.config.v1.IntegrationsConfigR\fintegrations\x12D\n" +
+	"\robservability\x182 \x01(\v2\x1e.config.v1.ObservabilityConfigR\robservability\x12/\n" +
+	"\x06sentry\x183 \x01(\v2\x17.config.v1.SentryConfigR\x06sentry\x128\n" +
+	"\tanalytics\x18< \x01(\v2\x1a.config.v1.AnalyticsConfigR\tanalytics\x12&\n" +
+	"\x03llm\x18F \x01(\v2\x14.config.v1.LLMConfigR\x03llm\x12\xb5\x01\n" +
+	"\x17payload_blob_gc_horizon\x18P \x01(\v2\x19.google.protobuf.DurationBc\x82\xce\x18_\n" +
+	"\x1fRELIANT_PAYLOAD_BLOB_GC_HORIZON\x1a\x04720h*6How long an unreferenced Temporal payload blob is keptR\x14payloadBlobGcHorizon\x122\n" +
+	"\apreview\x18Z \x01(\v2\x18.config.v1.PreviewConfigR\apreview:\x1a\xca\xc1\x18\x16\n" +
 	"\areliant\x12\x06server\x12\x03apiB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 
 var (
@@ -162,16 +441,40 @@ func file_config_v1_api_server_config_proto_rawDescGZIP() []byte {
 
 var file_config_v1_api_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_config_v1_api_server_config_proto_goTypes = []any{
-	(*ApiServerConfig)(nil),    // 0: config.v1.ApiServerConfig
-	(*ControlPlaneConfig)(nil), // 1: config.v1.ControlPlaneConfig
+	(*ApiServerConfig)(nil),     // 0: config.v1.ApiServerConfig
+	(*ControlPlaneConfig)(nil),  // 1: config.v1.ControlPlaneConfig
+	(*DatabaseConfig)(nil),      // 2: config.v1.DatabaseConfig
+	(*NatsConfig)(nil),          // 3: config.v1.NatsConfig
+	(*TemporalConfig)(nil),      // 4: config.v1.TemporalConfig
+	(*ServerTLSConfig)(nil),     // 5: config.v1.ServerTLSConfig
+	(*DrainConfig)(nil),         // 6: config.v1.DrainConfig
+	(*IntegrationsConfig)(nil),  // 7: config.v1.IntegrationsConfig
+	(*ObservabilityConfig)(nil), // 8: config.v1.ObservabilityConfig
+	(*SentryConfig)(nil),        // 9: config.v1.SentryConfig
+	(*AnalyticsConfig)(nil),     // 10: config.v1.AnalyticsConfig
+	(*LLMConfig)(nil),           // 11: config.v1.LLMConfig
+	(*durationpb.Duration)(nil), // 12: google.protobuf.Duration
+	(*PreviewConfig)(nil),       // 13: config.v1.PreviewConfig
 }
 var file_config_v1_api_server_config_proto_depIdxs = []int32{
-	1, // 0: config.v1.ApiServerConfig.control_plane:type_name -> config.v1.ControlPlaneConfig
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	1,  // 0: config.v1.ApiServerConfig.control_plane:type_name -> config.v1.ControlPlaneConfig
+	2,  // 1: config.v1.ApiServerConfig.database:type_name -> config.v1.DatabaseConfig
+	3,  // 2: config.v1.ApiServerConfig.nats:type_name -> config.v1.NatsConfig
+	4,  // 3: config.v1.ApiServerConfig.temporal:type_name -> config.v1.TemporalConfig
+	5,  // 4: config.v1.ApiServerConfig.tls:type_name -> config.v1.ServerTLSConfig
+	6,  // 5: config.v1.ApiServerConfig.drain:type_name -> config.v1.DrainConfig
+	7,  // 6: config.v1.ApiServerConfig.integrations:type_name -> config.v1.IntegrationsConfig
+	8,  // 7: config.v1.ApiServerConfig.observability:type_name -> config.v1.ObservabilityConfig
+	9,  // 8: config.v1.ApiServerConfig.sentry:type_name -> config.v1.SentryConfig
+	10, // 9: config.v1.ApiServerConfig.analytics:type_name -> config.v1.AnalyticsConfig
+	11, // 10: config.v1.ApiServerConfig.llm:type_name -> config.v1.LLMConfig
+	12, // 11: config.v1.ApiServerConfig.payload_blob_gc_horizon:type_name -> google.protobuf.Duration
+	13, // 12: config.v1.ApiServerConfig.preview:type_name -> config.v1.PreviewConfig
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_config_v1_api_server_config_proto_init() }
@@ -179,7 +482,13 @@ func file_config_v1_api_server_config_proto_init() {
 	if File_config_v1_api_server_config_proto != nil {
 		return
 	}
+	file_config_v1_analytics_config_proto_init()
 	file_config_v1_control_plane_config_proto_init()
+	file_config_v1_integrations_config_proto_init()
+	file_config_v1_llm_config_proto_init()
+	file_config_v1_observability_config_proto_init()
+	file_config_v1_preview_config_proto_init()
+	file_config_v1_server_config_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

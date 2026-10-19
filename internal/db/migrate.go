@@ -175,6 +175,10 @@ func Force(dsn string, version int) error {
 	return m.Force(version)
 }
 
+// DefaultSchemaWait is how long a MigrateWait process waits for the schema
+// when its config does not say (RELIANT_DB_SCHEMA_WAIT_SECONDS).
+const DefaultSchemaWait = 5 * time.Minute
+
 // WaitForSchema blocks until the database has applied every migration this
 // binary embeds — i.e. until the process holding MigrateApply has finished. It
 // is the read-only half of the single-migrator rule.
@@ -188,13 +192,17 @@ func Force(dsn string, version int) error {
 // It reads schema_migrations directly rather than opening a migrator, which
 // would create that table and take session locks: a waiter changes nothing,
 // and may be talking to a transaction pooler.
-func WaitForSchema(db *sql.DB) error {
+//
+// timeout bounds the wait; 0 is DefaultSchemaWait.
+func WaitForSchema(db *sql.DB, timeout time.Duration) error {
 	want, err := EmbeddedMigrationVersions()
 	if err != nil {
 		return err
 	}
 
-	timeout := time.Duration(envInt("RELIANT_DB_SCHEMA_WAIT_SECONDS", 300)) * time.Second
+	if timeout <= 0 {
+		timeout = DefaultSchemaWait
+	}
 	deadline := time.Now().Add(timeout)
 
 	const pollInterval = time.Second

@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -27,9 +26,6 @@ import (
 // retention grows, raise this with it — the invariant is
 // horizon > max run + max retention.
 const DefaultGCHorizon = 30 * 24 * time.Hour
-
-// GCHorizonEnv overrides DefaultGCHorizon (Go duration syntax, e.g. "720h").
-const GCHorizonEnv = "RELIANT_PAYLOAD_BLOB_GC_HORIZON"
 
 const (
 	gcInterval  = time.Hour
@@ -96,22 +92,6 @@ func (s *PostgresStore) DeleteExpired(ctx context.Context, horizon time.Duration
 			return total, nil
 		}
 	}
-}
-
-// GCHorizonFromEnv returns DefaultGCHorizon, or the GCHorizonEnv override
-// when it parses to a positive duration.
-func GCHorizonFromEnv() time.Duration {
-	v := os.Getenv(GCHorizonEnv)
-	if v == "" {
-		return DefaultGCHorizon
-	}
-	d, err := time.ParseDuration(v)
-	if err != nil || d <= 0 {
-		logging.Warn("Ignoring invalid payload blob GC horizon; using default",
-			"env", GCHorizonEnv, "value", v, "default", DefaultGCHorizon)
-		return DefaultGCHorizon
-	}
-	return d
 }
 
 // RunGC deletes expired blobs once immediately and then every hour until ctx

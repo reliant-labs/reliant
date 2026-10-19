@@ -128,7 +128,7 @@ func (d *generatingSilentlyDriver) StreamResponse(ctx context.Context, _ []strin
 // Keepalives read inside the open block hold it off; with none, the existing
 // TestCallLLM_StalledProgressFailsForRetry still cuts.
 func TestCallLLM_KeepalivesInsideAnOpenBlockHoldTheProgressGuard(t *testing.T) {
-	t.Setenv("RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "100ms")
+	llm.SetStreamTimeoutsForTest(t, llm.StreamTimeouts{Progress: 100 * time.Millisecond})
 	driver := &generatingSilentlyDriver{silentFor: 500 * time.Millisecond, keepaliveEvery: 20 * time.Millisecond}
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil

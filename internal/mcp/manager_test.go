@@ -267,7 +267,7 @@ func TestLoadProjectServersFromConfig_MergesFilesystemScopeOverridesOverResolved
 	})
 
 	servers := manager.loadProjectServersFromConfig(context.Background(), projectPath)
-	builtinCount := len(builtinMCPServers())
+	builtinCount := len(builtinMCPServers(""))
 	if len(servers) != 3+builtinCount {
 		t.Fatalf("expected merged servers from provider + filesystem + builtin, got %d: %#v", len(servers), servers)
 	}
@@ -311,7 +311,7 @@ func TestLoadProjectServersFromConfig_FallsBackToFilesystemWhenResolverFails(t *
 	})
 
 	servers := manager.loadProjectServersFromConfig(context.Background(), projectPath)
-	builtinCount := len(builtinMCPServers())
+	builtinCount := len(builtinMCPServers(""))
 	if len(servers) != 1+builtinCount {
 		t.Fatalf("expected filesystem fallback + builtin servers, got %d: %#v", len(servers), servers)
 	}
@@ -333,7 +333,7 @@ func TestLoadProjectServersFromConfig_IncludesBuiltinServers(t *testing.T) {
 
 	// No resolver, no filesystem config — should still get built-in servers.
 	servers := manager.loadProjectServersFromConfig(context.Background(), projectPath)
-	builtin := builtinMCPServers()
+	builtin := builtinMCPServers("")
 	if len(servers) != len(builtin) {
 		t.Fatalf("expected only built-in servers with no user config, got %d: %#v", len(servers), servers)
 	}

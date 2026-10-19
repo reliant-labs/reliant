@@ -24,8 +24,10 @@ const KeyFileName = "vault.key"
 type BootOptions struct {
 	// Hosted is true when a control plane is configured (tokenauthority
 	// ModeControlPlane). A hosted server never invents a key.
-	Hosted  bool
-	Getenv  func(string) string
+	Hosted bool
+	// Key is the configured key-encryption key (RELIANT_VAULT_KEY, the server
+	// role's config); empty when none is configured.
+	Key     string
 	DataDir string
 	DB      interface {
 		DBTX
@@ -42,16 +44,12 @@ type BootOptions struct {
 //     (0600, create-exclusive) and warns. It refuses to generate when sealed data
 //     already exists: a fresh key would silently orphan it.
 func Boot(ctx context.Context, opts BootOptions) (Service, error) {
-	getenv := opts.Getenv
-	if getenv == nil {
-		getenv = os.Getenv
-	}
 	warn := opts.Warn
 	if warn == nil {
 		warn = slog.Warn
 	}
 
-	raw := strings.TrimSpace(getenv(EnvKey))
+	raw := strings.TrimSpace(opts.Key)
 	if raw != "" {
 		return fromRaw(opts.DB, raw, EnvKey)
 	}

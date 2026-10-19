@@ -62,13 +62,12 @@ func waitForStream(t *testing.T, dataDir string, want daemonstate.Stream) daemon
 
 func newDaemonClientForTest(t *testing.T, dataDir, gatewayURL string) *daemonClient {
 	t.Helper()
-	t.Setenv("DAEMON_WORKING_DIR", t.TempDir())
 	client, err := newDaemonClient(bootstrap.DaemonBootstrapConfig{
 		AuthToken: "rlnt_pat_test",
 		GRPCURL:   gatewayURL,
 		TLSMode:   bootstrap.TLSModeH2C,
 		DataDir:   dataDir,
-	})
+	}, Host{WorkingDir: t.TempDir()}, Guards{})
 	require.NoError(t, err)
 	return client
 }

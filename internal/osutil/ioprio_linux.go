@@ -36,7 +36,7 @@ var ioprioSet = func(which, who, prio int) error {
 // child with the given PID to the best-effort class at its lowest level, the
 // I/O counterpart of LowerChildPriority. The child leads its own process group
 // (the spawn sites set Setpgid), so the whole group is covered; falls back to
-// the single process otherwise. Honors ChildPriorityEnv.
+// the single process otherwise. Honors ConfigureChildPriority.
 //
 // Best-effort by contract: callers should log failures at debug level and
 // never fail the spawn because of them (the syscall may be unsupported or

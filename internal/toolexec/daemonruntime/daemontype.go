@@ -2,11 +2,6 @@
 
 package daemonruntime
 
-import (
-	"os"
-	"strings"
-)
-
 // Daemon type as self-reported at registration.
 //
 // This is not cosmetic. The server records it on the daemon row, and it gates
@@ -27,47 +22,51 @@ import (
 // managed workspace in a dial-out environment then registered as
 // "local"/self_hosted, and became unresumable.
 //
-// So the transport no longer decides. The environment does, and the transport
-// is only the fallback for a daemon that says nothing.
+// So the transport no longer decides. The platform does (Host.DaemonType), and
+// the transport is only the fallback for a daemon that says nothing.
 const (
-	// DaemonTypeEnvVar lets the platform state what it is running. The
-	// workspace operator sets it on managed pods; nothing sets it on a
-	// user's own machine.
-	DaemonTypeEnvVar = "RELIANT_DAEMON_TYPE"
-
 	daemonTypeManaged    = "managed"
 	daemonTypeSelfHosted = "self_hosted"
 )
 
-// resolveDaemonType returns the daemon_type to self-report at registration.
-//
-// fallback is what the caller's transport implies, used only when the
-// environment is silent. The server normalizes the vocabulary
-// ("cloud"/"managed", "local"/"self_hosted"), so either spelling is accepted
-// here; unrecognized values fall through to the caller's default rather than
-// being passed on as a third vocabulary the server would discard.
-func resolveDaemonType(fallback string) string {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(DaemonTypeEnvVar))) {
-	case "cloud", "managed":
-		return daemonTypeManaged
-	case "local", "self_hosted", "self-hosted":
-		return daemonTypeSelfHosted
-	default:
-		return fallback
-	}
+// Host is what the platform declares about where this daemon runs. The
+// workspace operator stamps it on the pods it creates, through `reliant daemon
+// start`'s config (DaemonConfig, proto/config/v1/daemon_config.proto); a
+// daemon on a user's machine — or the in-process runtime `reliant open`
+// starts — leaves it zero.
+type Host struct {
+	// DaemonType is "managed", "self_hosted", or "" when the platform said
+	// nothing. The config loader has already rejected any other value.
+	DaemonType string
+	// WorkingDir is the directory the daemon serves; "" means the process's
+	// working directory.
+	WorkingDir string
+	// RuntimeType is the container runtime ("kata", "gvisor") the daemon runs
+	// under, advertised at registration; "" off a pod.
+	RuntimeType string
+	// FrontendPort is the preview forwarder's pod-facing port. Non-zero is
+	// what starts the forwarder outside server mode; 0 means unset.
+	FrontendPort int
+	// ProjectPath is the project announced at connect; "" means WorkingDir.
+	ProjectPath string
 }
 
-// IsManagedEnvironment reports whether the PLATFORM has declared this process
-// a managed daemon — a workspace pod the operator created, not a machine
-// someone is sitting at.
+// Managed reports whether the PLATFORM has declared this process a managed
+// daemon — a workspace pod the operator created, not a machine someone is
+// sitting at.
 //
 // Unlike resolveDaemonType there is no fallback: a daemon that says nothing is
-// not managed. The absence of the variable is the normal case for a laptop,
-// and guessing "managed" from a transport is the mistake this file's history
-// documents.
-//
-// It exists so the CLI can refuse to start an interactive browser login where
-// no browser can exist. See commands.daemonNonInteractiveDefault.
-func IsManagedEnvironment() bool {
-	return resolveDaemonType(daemonTypeSelfHosted) == daemonTypeManaged
+// not managed. Saying nothing is the normal case for a laptop, and guessing
+// "managed" from a transport is the mistake this file's history documents.
+func (h Host) Managed() bool { return h.DaemonType == daemonTypeManaged }
+
+// resolveDaemonType returns the daemon_type to self-report at registration:
+// what the platform declared, else fallback — what the caller's transport
+// implies. The server normalizes the transport vocabulary ("cloud"/"local")
+// onto the platform's ("managed"/"self_hosted").
+func resolveDaemonType(declared, fallback string) string {
+	if declared != "" {
+		return declared
+	}
+	return fallback
 }

@@ -97,7 +97,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 			"RELIANT_OAUTH_GMAIL_CLIENT_SECRET": "GOCSPX-fake-secret",
 		}[k]
 	}
-	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), env)
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(env))
 	require.NoError(t, err)
 	doer := google.client()
 	store := repo.Connections()

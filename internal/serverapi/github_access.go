@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -19,7 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/integrations/ghusers"
-	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
+	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -54,14 +53,11 @@ func (gitHubSenders) IsInvalid(err error) bool { return errors.Is(err, ghusers.E
 // wireGitHubSenders builds the GitHub people lookup behind "Only from", or
 // nil under the same condition as wireGitHubAccess: a deployment that
 // receives no GitHub webhooks has no GitHub triggers to restrict.
-func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp controlplane.Endpoint, getenv func(string) string) (map[string]trigger.SenderDirectory, error) {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	if strings.TrimSpace(getenv(github.SecretEnv)) == "" {
+func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp controlplane.Endpoint, hooks webhook.RegistryConfig) (map[string]trigger.SenderDirectory, error) {
+	if strings.TrimSpace(hooks.GitHubWebhookSecret) == "" {
 		return nil, nil
 	}
-	tokens, err := gitHubTokenSource(repo, keys, cp, getenv)
+	tokens, err := gitHubTokenSource(repo, keys, cp, hooks.OAuthClients)
 	if err != nil {
 		return nil, err
 	}
@@ -80,14 +76,11 @@ func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp controlplane.Endpoi
 // control-plane URL without INTERNAL_SERVICE_SECRET is a boot error, never a
 // silent fall-back: hosted users have no saved connection, so falling back
 // would refuse every GitHub trigger as "not connected".
-func wireGitHubAccess(repo *db.Repo, keys vault.Service, cp controlplane.Endpoint, getenv func(string) string) (*ghaccess.Refresher, error) {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	if strings.TrimSpace(getenv(github.SecretEnv)) == "" {
+func wireGitHubAccess(repo *db.Repo, keys vault.Service, cp controlplane.Endpoint, hooks webhook.RegistryConfig) (*ghaccess.Refresher, error) {
+	if strings.TrimSpace(hooks.GitHubWebhookSecret) == "" {
 		return nil, nil
 	}
-	tokens, err := gitHubTokenSource(repo, keys, cp, getenv)
+	tokens, err := gitHubTokenSource(repo, keys, cp, hooks.OAuthClients)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +89,7 @@ func wireGitHubAccess(repo *db.Repo, keys vault.Service, cp controlplane.Endpoin
 	}), nil
 }
 
-func gitHubTokenSource(repo *db.Repo, keys vault.Service, cp controlplane.Endpoint, getenv func(string) string) (ghaccess.TokenSource, error) {
+func gitHubTokenSource(repo *db.Repo, keys vault.Service, cp controlplane.Endpoint, clients connections.OAuthClients) (ghaccess.TokenSource, error) {
 	if cp.Hosted() {
 		secret := cp.InternalServiceSecret
 		if secret == "" {
@@ -111,7 +104,7 @@ func gitHubTokenSource(repo *db.Repo, keys vault.Service, cp controlplane.Endpoi
 	if repo == nil {
 		return nil, errors.New("github triggers: no database for saved GitHub connections")
 	}
-	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), getenv)
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), clients)
 	if err != nil {
 		return nil, fmt.Errorf("github triggers: %w", err)
 	}

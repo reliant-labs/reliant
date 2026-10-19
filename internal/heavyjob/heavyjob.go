@@ -54,10 +54,6 @@ import (
 // its old path.
 const WrapperArg = "__heavy-slot"
 
-// EnvCommands replaces the default heavy-command patterns: comma-separated,
-// each pattern a space-separated word list (see Gate.Heavy).
-const EnvCommands = "RELIANT_HEAVY_COMMANDS"
-
 // DefaultCommands are the commands that are heavy without being declared so:
 // work that saturates several cores and gigabytes of memory for seconds to
 // minutes. Each is a word list matched against the start of every simple
@@ -134,20 +130,6 @@ type RefusedError struct {
 
 func (e *RefusedError) Error() string {
 	return fmt.Sprintf("reliant: `%s` was not started. %s", e.Command, e.Reason)
-}
-
-// ConfigFromEnv builds the daemon's Config from its environment.
-func ConfigFromEnv(env []string) Config {
-	cfg := Config{Env: env}
-	if v, ok := lookup(env, EnvCommands); ok {
-		cfg.Commands = []string{}
-		for _, p := range strings.Split(v, ",") {
-			if p = strings.TrimSpace(p); p != "" {
-				cfg.Commands = append(cfg.Commands, p)
-			}
-		}
-	}
-	return cfg
 }
 
 // Gate queues heavy commands behind the machine's heavy slots, and asks its

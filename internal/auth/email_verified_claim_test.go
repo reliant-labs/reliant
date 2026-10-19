@@ -58,28 +58,27 @@ func TestValidateToken_EmailVerifiedClaim(t *testing.T) {
 	const keep = "person@example.com"
 	for _, tc := range []struct {
 		name    string
-		require string
+		require bool
 		extra   map[string]any
 		want    string
 	}{
-		{"claim true keeps the email", "", map[string]any{"email_verified": true}, keep},
-		{"claim true keeps the email with the switch on", "true", map[string]any{"email_verified": true}, keep},
-		{"claim false drops the email", "", map[string]any{"email_verified": false}, ""},
-		{"claim false drops the email with the switch on", "true", map[string]any{"email_verified": false}, ""},
-		{"a string \"true\" is not verified", "", map[string]any{"email_verified": "true"}, ""},
-		{"a null claim is not verified", "", map[string]any{"email_verified": nil}, ""},
-		{"claim absent with the switch off keeps today's behaviour", "", nil, keep},
-		{"claim absent with the switch explicitly false keeps today's behaviour", "false", nil, keep},
-		{"claim absent with the switch on yields no email", "true", nil, ""},
+		{"claim true keeps the email", false, map[string]any{"email_verified": true}, keep},
+		{"claim true keeps the email with the switch on", true, map[string]any{"email_verified": true}, keep},
+		{"claim false drops the email", false, map[string]any{"email_verified": false}, ""},
+		{"claim false drops the email with the switch on", true, map[string]any{"email_verified": false}, ""},
+		{"a string \"true\" is not verified", false, map[string]any{"email_verified": "true"}, ""},
+		{"a null claim is not verified", false, map[string]any{"email_verified": nil}, ""},
+		{"claim absent with the switch off keeps today's behaviour", false, nil, keep},
+		{"claim absent with the switch explicitly false keeps today's behaviour", false, nil, keep},
+		{"claim absent with the switch on yields no email", true, nil, ""},
 		// GoTrue never confirms an email on a token that is still anonymous.
-		{"an anonymous token carries no email", "", map[string]any{"is_anonymous": true}, ""},
-		{"user_metadata.email_verified does not count", "true",
+		{"an anonymous token carries no email", false, map[string]any{"is_anonymous": true}, ""},
+		{"user_metadata.email_verified does not count", true,
 			map[string]any{"user_metadata": map[string]any{"email_verified": true}}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(RequireEmailVerifiedClaimEnv, tc.require)
 			key, pubPEM := newTestKeyAndPEM(t)
-			v, err := NewJWTValidator(pubPEM)
+			v, err := NewJWTValidator(pubPEM, RequireEmailVerifiedClaim(tc.require))
 			if err != nil {
 				t.Fatalf("NewJWTValidator: %v", err)
 			}
@@ -110,7 +109,6 @@ func TestValidateToken_EmailVerifiedClaim(t *testing.T) {
 // TestJWKSValidatorReadsTheSwitch: the JWKS constructor — the one every cloud
 // env uses (RELIANT_JWKS_URL) — must honor the switch too.
 func TestJWKSValidatorReadsTheSwitch(t *testing.T) {
-	t.Setenv(RequireEmailVerifiedClaimEnv, "true")
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +118,7 @@ func TestJWKSValidatorReadsTheSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := ecdhPub.Bytes()
-	v, err := NewJWTValidatorFromJWKS(jwksFor(t, "P-256", raw[1:33], raw[33:]))
+	v, err := NewJWTValidatorFromJWKS(jwksFor(t, "P-256", raw[1:33], raw[33:]), RequireEmailVerifiedClaim(true))
 	if err != nil {
 		t.Fatalf("NewJWTValidatorFromJWKS: %v", err)
 	}
