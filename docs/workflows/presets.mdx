@@ -169,6 +169,33 @@ The `tag` field determines which workflows and groups this preset can configure.
 
 **max_turns**: Maximum conversation turns before the agent stops.
 
+### Provider policy: `providers:`
+
+A preset can say which providers a run prefers and what it does when they are rate-limited. It sits beside `params`, not inside it, and it is plain data (no expressions):
+
+```yaml
+name: claude-only-reviewer
+tag: agent
+params:
+  model:
+    tags: [flagship]
+providers:
+  prefer: [claude, "claude:work@acme.com"]   # ordered; "<driver>" or "<driver>:<account email, label or id>"
+  on_limit: wait                              # wait (the default) | fallback
+  # on_limit: fallback
+  # fallback: gpt-5.6-sol@codex               # "<model>@<driver>", required with on_limit: fallback
+```
+
+| Key | Meaning |
+|-----|---------|
+| `prefer` | Providers to run on, in order. A tier with no provider of its own resolves on the first one that serves it. An account (`claude:work@acme.com`) is a preference, not a pin: if that account is limited, the run moves to another account and says so. |
+| `on_limit` | `wait` holds the run until the limit resets. `fallback` continues on `fallback` until then, then returns. Falling back to another provider is never the default. |
+| `fallback` | The model to continue on. It must be on a different provider from the run's own, and it is only valid with `on_limit: fallback`. |
+
+Unknown keys, unknown providers and a `fallback` with no model are rejected when the preset loads.
+
+**Who wins.** For a sub-agent: the `providers` argument of its `spawn` call, then its preset's `providers:`, then what it inherits from its parent. Each field resolves on its own, so a spawn that only sets `prefer` keeps the preset's `on_limit`. The root of a chat takes the chat's own choice (the **If \<provider\> is rate-limited** row in the model settings), then the preset, then the Settings default (Settings → AI → Your providers). A model pinned as `<model>@<driver>` still decides which provider the run is on; the policy applies around it.
+
 ### Tool Specification
 
 ```yaml

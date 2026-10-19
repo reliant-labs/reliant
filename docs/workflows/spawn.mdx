@@ -167,6 +167,7 @@ When an agent has access to spawn, the tool accepts these parameters:
 | `agent_id` | No | Agent ID to resume an existing conversation |
 | `worktree` | No | Worktree name to run this workflow in |
 | `create_worktree` | No | Configuration to create a new worktree |
+| `providers` | No | Provider policy for this sub-agent only: `{ "prefer": ["codex"], "on_limit": "wait" \| "fallback", "fallback": "<model>@<driver>" }`. Beats the preset's `providers:` and the chat's policy; see [Presets](/workflows/presets#provider-policy-providers). |
 
 ### Basic Example
 
