@@ -33,6 +33,10 @@ vi.mock('@/lib/sentry', () => ({
   initSentry: mocks.initSentry,
 }))
 
+vi.mock('@/lib/telemetry', () => ({
+  initTelemetry: vi.fn(),
+}))
+
 vi.mock('@/lib/configReady', () => ({
   isConfigReady: mocks.isConfigReady,
   waitForConfig: mocks.waitForConfig,

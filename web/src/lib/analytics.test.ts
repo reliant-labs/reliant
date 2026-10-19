@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // The condition under test is PRODUCTION'S CURRENT ONE: Sentry is live and
 // VITE_STATSIG_CLIENT_KEY is unset. Before this change that combination
@@ -32,8 +32,13 @@ vi.mock("@statsig/js-client", () => ({
   StatsigClient: vi.fn(),
 }));
 
+vi.mock("@reliantlabs/forge-web-runtime", () => ({
+  track: vi.fn(),
+}));
+
 import * as Sentry from "@sentry/react";
-import { trackEvent } from "./analytics";
+import { track } from "@reliantlabs/forge-web-runtime";
+import { toSnakeCaseKey, trackEvent } from "./analytics";
 
 describe("trackEvent with no Statsig key (production's current state)", () => {
   beforeEach(() => {
@@ -90,6 +95,158 @@ describe("trackEvent with no Statsig key (production's current state)", () => {
     });
 
     expect(() => trackEvent("onboarding_flow_started")).not.toThrow();
+  });
+});
+
+// The sinks flag (telemetrySinks.ts) decides which of Sentry and ClickStack an
+// event reaches. Both run in parallel until web Sentry is removed.
+describe("VITE_TELEMETRY_SINKS", () => {
+  const ENDPOINT = "https://ingest.example.dev/k/rbk_x";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    vi.stubEnv("VITE_STATSIG_CLIENT_KEY", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("sends to both Sentry and ClickStack for `sentry,clickstack`", () => {
+    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
+    vi.stubEnv("VITE_TELEMETRY_SINKS", "sentry,clickstack");
+
+    trackEvent("onboarding_completed", { provider: "github" });
+
+    expect(track).toHaveBeenCalledWith("onboarding_completed", { provider: "github" });
+    expect(Sentry.addBreadcrumb).toHaveBeenCalled();
+    expect(Sentry.captureMessage).toHaveBeenCalledWith("funnel: onboarding_completed", "info");
+  });
+
+  it("sends only to ClickStack for `clickstack`", () => {
+    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
+    vi.stubEnv("VITE_TELEMETRY_SINKS", "clickstack");
+
+    trackEvent("onboarding_completed");
+
+    expect(track).toHaveBeenCalledWith("onboarding_completed", {});
+    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+    expect(Sentry.captureMessage).not.toHaveBeenCalled();
+  });
+
+  it("sends only to Sentry for `sentry`", () => {
+    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
+    vi.stubEnv("VITE_TELEMETRY_SINKS", "sentry");
+
+    trackEvent("onboarding_completed");
+
+    expect(track).not.toHaveBeenCalled();
+    expect(Sentry.addBreadcrumb).toHaveBeenCalled();
+  });
+
+  it("changes nothing for a build that configures no endpoint: Sentry only", () => {
+    trackEvent("onboarding_completed");
+
+    expect(track).not.toHaveBeenCalled();
+    expect(Sentry.addBreadcrumb).toHaveBeenCalled();
+  });
+
+  it("still reaches ClickStack when Sentry fails", () => {
+    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
+    vi.stubEnv("VITE_TELEMETRY_SINKS", "sentry,clickstack");
+    vi.mocked(Sentry.addBreadcrumb).mockImplementationOnce(() => {
+      throw new Error("sentry exploded");
+    });
+
+    expect(() => trackEvent("onboarding_flow_started")).not.toThrow();
+    expect(track).toHaveBeenCalledWith("onboarding_flow_started", {});
+  });
+
+  it("never throws when the runtime does", () => {
+    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
+    vi.stubEnv("VITE_TELEMETRY_SINKS", "clickstack");
+    vi.mocked(track).mockImplementationOnce(() => {
+      throw new Error("runtime exploded");
+    });
+
+    expect(() => trackEvent("onboarding_flow_started")).not.toThrow();
+  });
+});
+
+// The runtime keeps keys matching [a-z0-9_.]{1,64} and silently drops the rest;
+// reliant's callers use camelCase (stepId, contentLength), which would vanish.
+// Value and key-count bounding (20 keys, 256 chars, credential redaction) is the
+// runtime's and is covered by its own tests.
+describe("ClickStack prop keys", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv("VITE_OTEL_ENDPOINT", "https://ingest.example.dev/k/rbk_x");
+    vi.stubEnv("VITE_TELEMETRY_SINKS", "clickstack");
+    vi.stubEnv("VITE_STATSIG_CLIENT_KEY", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("snake_cases camelCase keys and keeps native value types", () => {
+    trackEvent("tour_step_viewed", { stepId: "welcome", stepsCompleted: 2, hasAttachments: false });
+
+    expect(track).toHaveBeenCalledWith("tour_step_viewed", {
+      step_id: "welcome",
+      steps_completed: 2,
+      has_attachments: false,
+    });
+  });
+
+  it("leaves already-conforming keys alone", () => {
+    trackEvent("onboarding_flow_step_completed", { step: "compute", duration_ms: 1234 });
+
+    expect(track).toHaveBeenCalledWith("onboarding_flow_step_completed", {
+      step: "compute",
+      duration_ms: 1234,
+    });
+  });
+
+  it.each([
+    ["stepId", "step_id"],
+    ["isGitRepo", "is_git_repo"],
+    ["contentLength", "content_length"],
+    ["code_source", "code_source"],
+    ["a-b c", "a_b_c"],
+  ])("toSnakeCaseKey(%s) = %s", (input, expected) => {
+    expect(toSnakeCaseKey(input)).toBe(expected);
+  });
+
+  it("sends nothing when analytics consent is off", async () => {
+    vi.resetModules();
+    vi.doMock("../store/privacyStore", () => ({
+      getPrivacySettings: () => ({ analyticsEnabled: false }),
+    }));
+    vi.doMock("./constants", () => ({ isDev: false }));
+    vi.doMock("@reliantlabs/forge-web-runtime", () => ({ track: vi.fn() }));
+    const runtime = await import("@reliantlabs/forge-web-runtime");
+
+    const { trackEvent: gated } = await import("./analytics");
+    gated("onboarding_completed", { provider: "github" });
+
+    expect(runtime.track).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing in dev", async () => {
+    vi.resetModules();
+    vi.doMock("../store/privacyStore", () => ({
+      getPrivacySettings: () => ({ analyticsEnabled: true }),
+    }));
+    vi.doMock("./constants", () => ({ isDev: true }));
+    vi.doMock("@reliantlabs/forge-web-runtime", () => ({ track: vi.fn() }));
+    const runtime = await import("@reliantlabs/forge-web-runtime");
+
+    const { trackEvent: gated } = await import("./analytics");
+    gated("onboarding_completed");
+
+    expect(runtime.track).not.toHaveBeenCalled();
   });
 });
 

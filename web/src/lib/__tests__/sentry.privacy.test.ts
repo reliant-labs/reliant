@@ -194,4 +194,18 @@ describe("Sentry privacy boundary (web)", () => {
     setSentryUser({ id: "user-8d7f", email: EMAIL });
     expect(Sentry.setUser).toHaveBeenCalledWith({ id: "user-8d7f" });
   });
+
+  it("does not start when the sinks flag leaves Sentry out of the build", async () => {
+    vi.stubEnv("VITE_TELEMETRY_SINKS", "clickstack");
+    vi.stubEnv("VITE_OTEL_ENDPOINT", "https://ingest.example.dev/k/rbk_x");
+    await initSentry();
+    expect(Sentry.init).not.toHaveBeenCalled();
+  });
+
+  it("starts when the flag names Sentry", async () => {
+    vi.stubEnv("VITE_TELEMETRY_SINKS", "sentry,clickstack");
+    vi.stubEnv("VITE_OTEL_ENDPOINT", "https://ingest.example.dev/k/rbk_x");
+    await initSentry();
+    expect(Sentry.init).toHaveBeenCalledTimes(1);
+  });
 });

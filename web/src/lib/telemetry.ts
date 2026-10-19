@@ -1,0 +1,273 @@
+/**
+ * Browser telemetry on forge's web runtime (the HyperDX / ClickStack SDK).
+ *
+ * Errors, page loads, fetch/XHR spans and masked session replay go to the
+ * ingest URL in VITE_OTEL_ENDPOINT. Nothing starts unless that is set AND the
+ * `clickstack` sink is on (telemetrySinks.ts), so a build that configures
+ * neither is unchanged. Sentry runs beside this until it is removed.
+ *
+ * Consent: init only when crash reporting is on. Turning it off mid-session
+ * calls the runtime's disableTelemetry(). The SDK has no off switch for its own
+ * auto-instrumentation, which is why init, not a flag, is the gate.
+ *
+ * Privacy rules the runtime forces while replay is on: all text and inputs
+ * masked, media blocked, no canvas, no request/response bodies, no query
+ * strings on fetch/XHR URLs. consoleCapture is off here because console output
+ * can hold chat content.
+ */
+
+import {
+  disableTelemetry,
+  reportException,
+  setTelemetryUser,
+} from "@reliantlabs/forge-web-runtime";
+import {
+  initBrowserTelemetry,
+  type BrowserTelemetryConfig,
+} from "@reliantlabs/forge-web-runtime/telemetry";
+import { getPrivacySettings, usePrivacyStore } from "../store/privacyStore";
+import { appBuild } from "./appBuild";
+import { isDev } from "./constants";
+import { clickstackEnabled } from "./telemetrySinks";
+
+const PRERELEASE_REGEX = /-rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+/i;
+
+const TRACKING_KEY = "telemetry_session_tracking";
+const COUNTED_KEY = "telemetry_session_counted";
+const NEW_USER_SESSION_LIMIT = 5;
+const NEW_USER_WINDOW_MS = 15 * 60 * 1000;
+const NEW_USER_RATE = 1.0;
+const DEFAULT_RATE = 0.1;
+
+/** Replay policy name that records a new user's first sessions in full. */
+export const NEW_USER_FUNNEL_POLICY = "new-user-funnel";
+
+/** Longest React component stack attached to a reported error. */
+const MAX_COMPONENT_STACK_CHARS = 4000;
+
+interface SessionTracking {
+  firstSeenAt: number;
+  sessionCount: number;
+}
+
+interface ReplayRateInput {
+  prerelease: boolean;
+  policy?: string;
+  rateOverride?: string;
+  now: number;
+  local: Pick<Storage, "getItem" | "setItem"> | null;
+  session: Pick<Storage, "getItem" | "setItem"> | null;
+}
+
+/**
+ * The share of sessions to record this load.
+ *
+ * Prerelease records everything. A numeric override wins next. Under the
+ * `new-user-funnel` policy a new user (first 5 sessions or first 15 minutes)
+ * is recorded in full and everyone else at 10%; with no policy the rate is
+ * 10%. A tab counts as one session however often it reloads.
+ */
+export function replaySampleRate(input: ReplayRateInput): number {
+  if (input.prerelease) return 1;
+
+  const override = parseFloat(input.rateOverride ?? "");
+  if (!Number.isNaN(override)) return override;
+
+  if (input.policy !== NEW_USER_FUNNEL_POLICY) return DEFAULT_RATE;
+
+  try {
+    const raw = input.local?.getItem(TRACKING_KEY);
+    let tracking: SessionTracking = raw
+      ? JSON.parse(raw)
+      : { firstSeenAt: input.now, sessionCount: 0 };
+
+    if (input.session?.getItem(COUNTED_KEY) !== "1") {
+      tracking = { ...tracking, sessionCount: tracking.sessionCount + 1 };
+      input.local?.setItem(TRACKING_KEY, JSON.stringify(tracking));
+      input.session?.setItem(COUNTED_KEY, "1");
+    }
+
+    const isNewUser =
+      tracking.sessionCount <= NEW_USER_SESSION_LIMIT ||
+      input.now - tracking.firstSeenAt < NEW_USER_WINDOW_MS;
+    return isNewUser ? NEW_USER_RATE : DEFAULT_RATE;
+  } catch {
+    return DEFAULT_RATE;
+  }
+}
+
+export interface TelemetryConfigInput {
+  env: Record<string, string | undefined>;
+  prerelease: boolean;
+  /** This bundle's baked build version (appBuild().version). */
+  buildVersion: string;
+  replayRate: number;
+  extraApiOrigins?: Array<string | undefined>;
+}
+
+/** The runtime config for this build. Pure; the privacy-relevant options are fixed here. */
+export function buildTelemetryConfig(
+  input: TelemetryConfigInput,
+): BrowserTelemetryConfig {
+  const { env } = input;
+  return {
+    serviceName: "reliant-web",
+    serviceVersion: env.VITE_APP_VERSION || input.buildVersion,
+    environment: input.prerelease ? "prerelease" : "prod",
+    endpoint: env.VITE_OTEL_ENDPOINT,
+    apiOrigins: [
+      env.VITE_API_URL,
+      env.VITE_GRPC_URL,
+      env.VITE_CONTROL_PLANE_API_URL,
+      env.VITE_GATEWAY_URL,
+      ...(input.extraApiOrigins ?? []),
+    ],
+    consoleCapture: false,
+    advancedNetworkCapture: false,
+    replay: env.VITE_OTEL_REPLAY === "true",
+    replaySampleRate: input.replayRate,
+  };
+}
+
+interface GlobalAttributeClient {
+  setGlobalAttributes(attributes: Record<string, string>): void;
+}
+
+// @hyperdx/browser's module.exports IS the client; a bundler wraps it in
+// namespace objects whose `default` leads to it. Take the deepest `default`
+// that is still a client, as the runtime does, so both hold the same instance.
+function findClient(mod: unknown): GlobalAttributeClient | null {
+  const isClient = (v: unknown): v is GlobalAttributeClient =>
+    typeof (v as GlobalAttributeClient | null)?.setGlobalAttributes ===
+    "function";
+  let cur: unknown = mod;
+  for (let depth = 0; depth < 4; depth++) {
+    const next = (cur as { default?: unknown } | null)?.default;
+    if (!isClient(next)) break;
+    cur = next;
+  }
+  return isClient(cur) ? cur : null;
+}
+
+// The runtime exposes no resource-attribute hook for these two, so they ride
+// as global span attributes.
+async function stampClientAttributes(
+  attributes: Record<string, string>,
+): Promise<void> {
+  const client = findClient(await import("@hyperdx/browser"));
+  client?.setGlobalAttributes(attributes);
+}
+
+let started: Promise<boolean> | null = null;
+let unsubscribeConsent: (() => void) | null = null;
+
+/**
+ * Start browser telemetry. Idempotent, never throws, and resolves to whether
+ * it is running.
+ */
+export function initTelemetry(): Promise<boolean> {
+  if (started) return started;
+  if (isDev || !clickstackEnabled()) return Promise.resolve(false);
+  if (!getPrivacySettings().crashReportingEnabled) return Promise.resolve(false);
+
+  started = start().catch((err) => {
+    console.warn("[telemetry] init failed:", err);
+    return false;
+  });
+  return started;
+}
+
+async function start(): Promise<boolean> {
+  const env = import.meta.env as Record<string, string | undefined>;
+  const desktop = typeof window !== "undefined" && !!window.electronAPI;
+
+  let prerelease = false;
+  try {
+    if (window.electronAPI?.getVersion) {
+      prerelease = PRERELEASE_REGEX.test(await window.electronAPI.getVersion());
+    }
+  } catch (e) {
+    console.warn("[telemetry] failed to get version:", e);
+  }
+
+  // Consent may have been withdrawn while the version was being read.
+  if (!getPrivacySettings().crashReportingEnabled) return false;
+
+  const buildVersion = appBuild()?.version ?? "unknown";
+  const config = buildTelemetryConfig({
+    env,
+    prerelease,
+    buildVersion,
+    replayRate: replaySampleRate({
+      prerelease,
+      policy: env.VITE_OTEL_REPLAY_SAMPLE_POLICY,
+      rateOverride: env.VITE_OTEL_REPLAY_SAMPLE_RATE,
+      now: Date.now(),
+      local: safeStorage("localStorage"),
+      session: safeStorage("sessionStorage"),
+    }),
+    extraApiOrigins: [
+      window.RELIANT_CONFIG?.grpcUrl,
+      window.RELIANT_CONFIG?.controlPlaneURL,
+      window.RELIANT_CONFIG?.gatewayUrl,
+    ],
+  });
+
+  const running = await initBrowserTelemetry(config);
+  if (!running) return false;
+
+  unsubscribeConsent = usePrivacyStore.subscribe((state) => {
+    if (!state.crashReportingEnabled) disableTelemetry();
+  });
+
+  try {
+    await stampClientAttributes({
+      "reliant.client": desktop ? "desktop" : "web",
+      "reliant.build": buildVersion,
+    });
+  } catch (e) {
+    console.debug("[telemetry] client attributes not set:", e);
+  }
+  return true;
+}
+
+function safeStorage(
+  which: "localStorage" | "sessionStorage",
+): Storage | null {
+  try {
+    return window[which];
+  } catch {
+    return null;
+  }
+}
+
+/** Attach the signed-in user's id (never the email) to telemetry, or clear it. */
+export function setTelemetryUserId(user: { id: string } | null): void {
+  if (!clickstackEnabled()) return;
+  setTelemetryUser(user ? user.id : null);
+}
+
+/**
+ * Hand an error a React boundary caught to the SDK. The runtime skips an error
+ * the SDK already recorded, so a boundary-caught error is one record.
+ */
+export function reportErrorToTelemetry(
+  error: unknown,
+  componentStack?: string | null,
+): void {
+  if (!clickstackEnabled()) return;
+  if (!getPrivacySettings().crashReportingEnabled) return;
+  reportException(
+    error,
+    componentStack
+      ? { componentStack: componentStack.slice(0, MAX_COMPONENT_STACK_CHARS) }
+      : undefined,
+  );
+}
+
+/** Test seam: forget that telemetry started. */
+export function resetTelemetryForTests(): void {
+  started = null;
+  unsubscribeConsent?.();
+  unsubscribeConsent = null;
+}

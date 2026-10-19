@@ -5,6 +5,8 @@ import { AlertTriangle, Copy, RefreshCw } from 'lucide-react';
 import { getPrivacySettings } from '../store/privacyStore';
 import { Button } from './ui/Button';
 import { isDev } from '../lib/constants';
+import { sentryEnabled } from '../lib/telemetrySinks';
+import { reportErrorToTelemetry } from '../lib/telemetry';
 import { StaleBuildError } from '../lib/lazyRoute';
 import { cn } from '../lib/utils';
 
@@ -193,18 +195,24 @@ export function ErrorFallbackUI(props: {
 /**
  * Report an error an error boundary caught. A caught error never reaches
  * Sentry's global handlers, so a boundary that does not report it hides it.
+ *
+ * It goes to every sink the build ships to. The telemetry runtime skips an
+ * error its SDK already recorded, so ClickStack counts it once.
  */
 export function reportCaughtError(error: unknown, componentStack?: string | null) {
-  // Only report to Sentry if user has crash reporting enabled
+  // Only report if user has crash reporting enabled
   const { crashReportingEnabled } = getPrivacySettings();
   if (!crashReportingEnabled) return;
-  Sentry.captureException(error, {
-    contexts: {
-      react: {
-        componentStack,
+  if (sentryEnabled()) {
+    Sentry.captureException(error, {
+      contexts: {
+        react: {
+          componentStack,
+        },
       },
-    },
-  });
+    });
+  }
+  reportErrorToTelemetry(error, componentStack);
 }
 
 /**
@@ -286,6 +294,8 @@ export const SentryErrorBoundary = Sentry.withErrorBoundary(
       />
     ),
     showDialog: isDev,
+    // Sentry's boundary reports to Sentry itself; this is the other sink.
+    onError: (error, componentStack) => reportErrorToTelemetry(error, componentStack),
   }
 );
 

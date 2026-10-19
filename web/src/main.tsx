@@ -10,13 +10,10 @@ import "./components/workflow/workflow-theme.css";
 import "./lib/debug.ts";
 import "./lib/theme";
 import "./lib/tabSwitchProfiler"; // Tab switch performance profiler
-import { initOTelTracing } from "./lib/otel";
 import { logger } from "./lib/logger";
 import { Root } from "./components/Root";
 import { STARTUP_SPINNER_MARKUP } from "./components/icons/StartupSpinnerMark";
 
-// Initialize OpenTelemetry tracing (no-op if VITE_OTEL_ENDPOINT is not set)
-initOTelTracing();
 import { monacoManager } from "./lib/monacoManager";
 import { shouldPreloadMonaco } from "./lib/monacoPreload";
 import { waitForConfig, isConfigReady } from "./lib/configReady";

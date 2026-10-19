@@ -60,6 +60,7 @@ vi.mock('@/lib/constants', async (importOriginal) => ({
 vi.mock('@/lib/sentry', () => ({
   setSentryUser: vi.fn(),
 }))
+vi.mock('@/lib/telemetry', () => ({ setTelemetryUserId: vi.fn() }))
 
 type TestWindow = Window & { electronAPI?: unknown }
 

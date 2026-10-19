@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/react";
 import { getPrivacySettings } from "../store/privacyStore";
 import { appBuild } from "./appBuild";
 import { isDev } from "./constants";
+import { sentryEnabled } from "./telemetrySinks";
 import { scrubBreadcrumb, scrubEvent, scrubRecordingEvent } from "./sentryScrub";
 
 // Regex to detect prerelease versions (RC, alpha, beta)
@@ -59,6 +60,11 @@ function getReplaySessionSampleRate(isPrerelease: boolean): number {
 export async function initSentry() {
   // Skip Sentry initialization in development or if explicitly disabled
   if (isDev || import.meta.env.VITE_SENTRY_ENABLED === "false") {
+    return;
+  }
+
+  // VITE_TELEMETRY_SINKS can take Sentry out of the build ahead of its removal.
+  if (!sentryEnabled()) {
     return;
   }
 

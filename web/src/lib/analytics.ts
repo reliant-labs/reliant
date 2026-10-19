@@ -1,7 +1,13 @@
 /**
  * Analytics event pipe.
  *
- * Events fan out to two sinks, and BOTH are optional:
+ * Events fan out to up to three sinks, and ALL are optional:
+ *
+ *  - ClickStack, through forge's web runtime `track()`, when the build ships to
+ *    it (VITE_TELEMETRY_SINKS includes `clickstack` and VITE_OTEL_ENDPOINT is
+ *    set; see telemetrySinks.ts). An event becomes a span on the same session as
+ *    the page's errors and replay. The runtime bounds and redacts the props.
+ *    Statsig is removed together with web Sentry (DECISIONS.md, Q3), not before.
  *
  *  - Statsig, when VITE_STATSIG_CLIENT_KEY is set. This is the growth-analytics
  *    sink and it is currently unset in every environment, which is why the whole
@@ -29,7 +35,9 @@
 import { StatsigClient } from "@statsig/js-client";
 import * as Sentry from "@sentry/react";
 import { getPrivacySettings } from "../store/privacyStore";
+import { track } from "@reliantlabs/forge-web-runtime";
 import { isDev } from "./constants";
+import { clickstackEnabled, sentryEnabled } from "./telemetrySinks";
 
 let client: StatsigClient | null = null;
 let initPromise: Promise<void> | null = null;
@@ -79,8 +87,9 @@ const FUNNEL_MARKER_EVENTS = new Set([
 /**
  * Track an analytics event. No-op when analytics is disabled or in dev mode.
  *
- * Delivery to the two sinks is independent: a missing Statsig key must not stop
- * the event reaching Sentry, which is the whole reason the funnel is dark today.
+ * Delivery to the sinks is independent: a missing Statsig key must not stop the
+ * event reaching Sentry or ClickStack, which is the whole reason the funnel was
+ * dark.
  */
 export function trackEvent(
   eventName: string,
@@ -94,12 +103,47 @@ export function trackEvent(
       )
     : undefined;
 
-  sendToSentry(eventName, stringMeta);
+  if (sentryEnabled()) sendToSentry(eventName, stringMeta);
+  if (clickstackEnabled()) sendToClickstack(eventName, metadata);
 
   const c = getClient();
   if (!c) return;
 
   c.logEvent(eventName, undefined, stringMeta);
+}
+
+/**
+ * The runtime keeps only keys matching [a-z0-9_.]{1,64} and drops the rest, so
+ * a camelCase key (`stepId`) would vanish without a trace. Callers keep their
+ * names; they are snake_cased here, once.
+ */
+export function toSnakeCaseKey(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^A-Za-z0-9_.]+/g, "_")
+    .toLowerCase();
+}
+
+/**
+ * Send an event through the web runtime's `track()`. Best-effort like the other
+ * sinks. Bounding (20 keys, 256-char values, credential redaction) is the
+ * runtime's; calls made before the SDK has started are held and replayed.
+ */
+function sendToClickstack(
+  eventName: string,
+  metadata?: Record<string, string | number | boolean>,
+): void {
+  try {
+    const props: Record<string, string | number | boolean> = {};
+    if (metadata) {
+      for (const [key, value] of Object.entries(metadata)) {
+        props[toSnakeCaseKey(key)] = value;
+      }
+    }
+    track(eventName, props);
+  } catch {
+    // Analytics is best-effort and must never surface to the user.
+  }
 }
 
 /**

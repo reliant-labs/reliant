@@ -4,6 +4,7 @@ import { supabase, setAuthStorageUnreadableHandler } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 import { getAppURL } from '@/lib/constants'
 import { setSentryUser } from '@/lib/sentry'
+import { setTelemetryUserId } from '@/lib/telemetry'
 import { queryClient } from '@/lib/query-client'
 import {
   startOAuthSignIn,
@@ -929,6 +930,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
         // Update Sentry user context for error correlation
         setSentryUser(session?.user ? { id: session.user.id, email: session.user.email } : null)
+        setTelemetryUserId(session?.user ? { id: session.user.id } : null)
 
         // The Supabase GitHub provider is sign-in only (0 scopes); we never
         // persist its provider_token. Repo access is owned by the dedicated

@@ -7,6 +7,7 @@ import { useProjectStore } from "@/store/projectStore";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
 import { initSentry } from "@/lib/sentry";
+import { initTelemetry } from "@/lib/telemetry";
 import { identifyUser, resetUser } from "@/lib/analytics";
 import { settingsSync } from "@/services/settingsSync";
 
@@ -169,6 +170,10 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
       } catch (error) {
         logger.warn("[AuthInitializer] Sentry initialization failed:", error);
       }
+
+      // After initializePrivacy(): telemetry only starts with crash-reporting
+      // consent, so the loaded setting must be in the store first.
+      void initTelemetry();
 
       // Identify user for analytics
       void identifyUser(user.id, user.email ?? undefined);

@@ -58,6 +58,7 @@ vi.mock('@/lib/logger', () => ({
 }))
 
 vi.mock('@/lib/sentry', () => ({ setSentryUser: vi.fn() }))
+vi.mock('@/lib/telemetry', () => ({ setTelemetryUserId: vi.fn() }))
 
 vi.mock('@/lib/constants', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/constants')>()),

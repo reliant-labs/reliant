@@ -53,6 +53,7 @@ vi.mock('@/lib/constants', async (importOriginal) => ({
 }))
 
 vi.mock('@/lib/sentry', () => ({ setSentryUser: vi.fn() }))
+vi.mock('@/lib/telemetry', () => ({ setTelemetryUserId: vi.fn() }))
 
 const LOOPBACK_URI = 'http://127.0.0.1:52111/auth/callback'
 
