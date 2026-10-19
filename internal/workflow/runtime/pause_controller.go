@@ -67,6 +67,11 @@ type PauseController struct {
 	// the spawn's own controller, which every executor inside the spawn
 	// inherits.
 	SubAgent bool
+
+	// UsageLimit holds a step that failed on a provider's usage limit until the
+	// limit resets (usage_limit_wait.go). One per run, shared by every thread.
+	// nil when not wired (tests).
+	UsageLimit *usageLimitWaiter
 }
 
 // IsCancelled reports whether this thread has been cancelled by the user.

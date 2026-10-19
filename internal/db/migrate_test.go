@@ -243,13 +243,16 @@ func freshShape(t *testing.T) string {
 // CREATEs) changes every oid, so an adoption that ran the baseline's DDL changes
 // it; a migration after the baseline that only ALTERs a table does not, because
 // adopting the baseline is followed by running those.
+// Views are left out: a migration that rebuilds one (chats_with_activity gains a
+// column whenever the chat's activity does) gets a new OID, and a view holds no
+// data and is not the DDL adoption must not run.
 func schemaFingerprint(t *testing.T, db *sql.DB) string {
 	t.Helper()
 	var fp string
 	require.NoError(t, db.QueryRow(`
 		SELECT count(*) || ':' || md5(string_agg(c.oid::text || '/' || c.relname, ',' ORDER BY c.oid))
 		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE n.nspname = 'public' AND c.relname NOT LIKE 'schema_migrations%'`).Scan(&fp))
+		WHERE n.nspname = 'public' AND c.relkind <> 'v' AND c.relname NOT LIKE 'schema_migrations%'`).Scan(&fp))
 	return fp
 }
 

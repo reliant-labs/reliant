@@ -192,6 +192,9 @@ type ChatsWithActivity struct {
 	TriggerID              sql.NullString `json:"trigger_id"`
 	ListInSidebar          sql.NullBool   `json:"list_in_sidebar"`
 	DisplayState           int32          `json:"display_state"`
+	UsageLimitResumesAt    sql.NullTime   `json:"usage_limit_resumes_at"`
+	UsageLimitProvider     sql.NullString `json:"usage_limit_provider"`
+	UsageLimitProbing      bool           `json:"usage_limit_probing"`
 }
 
 type ClaudeAuthToken struct {
@@ -609,6 +612,7 @@ type ProviderBackoff struct {
 	Retries      int64        `json:"retries"`
 	WaitedMs     int64        `json:"waited_ms"`
 	UpdatedAt    time.Time    `json:"updated_at"`
+	Provider     string       `json:"provider"`
 }
 
 type Question struct {

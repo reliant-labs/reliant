@@ -103,6 +103,7 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 	state, stateErr := s.State(ctx, workflowID)
 	if stateErr == nil && (!state.Exists || !state.IsRunning) {
 		s.reconcileStoppedRun(ctx, workflowID, db.Cancelled())
+		s.clearUsageLimitWait(ctx, chatID)
 		return nil
 	}
 	if stateErr != nil {
@@ -124,7 +125,18 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 	if err := s.markTerminated(ctx, workflowID); err != nil {
 		return err
 	}
+	s.clearUsageLimitWait(ctx, chatID)
 	return nil
+}
+
+// clearUsageLimitWait releases the chat's usage-limit wait markers. A
+// terminated run executes no code, so the workflow cannot clear its own; left
+// behind, the marker would read as a wait nobody is in.
+func (s *Service) clearUsageLimitWait(ctx context.Context, chatID string) {
+	if err := s.repo.ClearUsageLimitWait(ctx, chatID, "", time.Now()); err != nil {
+		logging.Warn("[runs] Failed to clear the usage-limit wait marker of a stopped run",
+			"chatID", chatID, "error", err)
+	}
 }
 
 // Resume makes the chat's run execute again, and reports what a caller must

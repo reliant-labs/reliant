@@ -10,8 +10,6 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-
-	"github.com/reliant-labs/reliant/internal/chatmarkers"
 )
 
 // subAgentFailsAloneChangeID gates ending a sub-agent whose step exhausted its
@@ -77,7 +75,7 @@ func (e *subAgentFailedError) Unwrap() error { return e.Err }
 // (subagent_resume.go).
 func endSubAgent(ctx workflow.Context, exhaustion retryExhaustionError, stepID string) error {
 	reason := oneLineError(exhaustion.Err)
-	exhaustion.Summary = reason + ". " + stoppedAgentNextStep(exhaustion.Err)
+	exhaustion.Summary = reason + ". " + stoppedAgentNextStep()
 
 	errorCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
@@ -91,26 +89,10 @@ func endSubAgent(ctx workflow.Context, exhaustion retryExhaustionError, stepID s
 }
 
 // stoppedAgentNextStep is what the user is told to do about a sub-agent that
-// stopped on err. A provider usage limit lasts until its reset — days, for a
-// 7-day window — so resuming on the same provider would only fail again; the
-// way on is another provider's model.
-func stoppedAgentNextStep(err error) string {
-	if isProviderUsageLimit(err) {
-		return "This agent stopped and its parent was told. To carry on before the limit resets, " +
-			"switch this agent to a model from another provider, then send it a message to resume it."
-	}
+// stopped on a failure. A provider usage limit is never one: the agent waits it
+// out in place (usage_limit_wait.go) and carries on by itself.
+func stoppedAgentNextStep() string {
 	return "This agent stopped and its parent was told. Send it a message to resume it where it stopped."
-}
-
-// isProviderUsageLimit reports whether err is a provider's usage window
-// (chatmarkers.KindProviderUsageLimit), matched on the marker that survives
-// every wrap the error has been through.
-func isProviderUsageLimit(err error) bool {
-	if err == nil {
-		return false
-	}
-	kind, _, ok := chatmarkers.Extract(err.Error())
-	return ok && kind == chatmarkers.KindProviderUsageLimit
 }
 
 // maxReportedErrorRunes bounds the one-line cause handed to a parent. An error
@@ -150,9 +132,7 @@ func oneLineError(err error) string {
 // everything that decision needs and nothing it has to dig for.
 //
 // Either resume works: spawn(agent_id=...) with new instructions, or a plain
-// spawn_send, since a message resumes a stopped agent (subagent_resume.go). A
-// usage limit gets one more line, because resuming on the provider that
-// imposed it fails again until it resets.
+// spawn_send, since a message resumes a stopped agent (subagent_resume.go).
 //
 // The <system> line mirrors fetchSpawnResult's, which is where a parent
 // already learns an agent's resumption handle on success.
@@ -167,17 +147,11 @@ func spawnFailureReport(title, agentID string, err error) string {
 	if title == "" {
 		title = agentID
 	}
-	limit := ""
-	if isProviderUsageLimit(err) {
-		limit = fmt.Sprintf("\n\nThis is a provider usage limit: resumed on the same provider, the agent fails again until the limit resets. "+
-			"To resume it sooner, give it a model from another provider with spawn(agent_id=%q, preset=\"<a preset on another provider>\", prompt=\"<what to do now>\").",
-			agentID)
-	}
 	return fmt.Sprintf(
 		"<system>Use agent_id: %s to resume this agent where it stopped.</system>\n\n"+
 			"Agent %q failed: %s.%s\n\n"+
 			"Only this agent stopped; nothing else in this chat was paused. Decide what happens next: "+
 			"resume it where it stopped — spawn(agent_id=%q, prompt=\"<what to do now>\"), or spawn_send it a message — "+
-			"retry the work with a fresh agent, or continue without it.%s",
-		agentID, title, strings.TrimSuffix(reason, "."), how, agentID, limit)
+			"retry the work with a fresh agent, or continue without it.",
+		agentID, title, strings.TrimSuffix(reason, "."), how, agentID)
 }

@@ -343,6 +343,9 @@ export const api = {
       return chatGrpc.pause(chatId);
     },
 
+    retryUsageLimitWait: async (chatId: string) => {
+      return chatGrpc.retryUsageLimitWait(chatId);
+    },
     resume: async (chatId: string) => {
       return chatGrpc.resume(chatId);
     },

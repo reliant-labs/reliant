@@ -1259,6 +1259,8 @@ function App() {
           return "awaiting_input";
         case ChatActivity.PAUSED:
           return "paused";
+        case ChatActivity.WAITING_FOR_USAGE_LIMIT:
+          return "waiting_for_usage_limit";
         default:
           return "idle";
       }

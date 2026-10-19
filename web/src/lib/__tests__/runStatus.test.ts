@@ -234,6 +234,15 @@ describe("waiting for a machine overrides the lifecycle row (G7)", () => {
     expect(status).toMatchObject({ label: "Waiting for machine", dotVariant: "pending", badgeVariant: "warning" });
   });
 
+  it("a live run held for a usage-limit reset reads Waiting for usage limit, not Running", () => {
+    const status = runStatus({
+      state: WorkflowState.ACTIVE,
+      stopReason: WorkflowStopReason.UNSPECIFIED,
+      activity: ChatActivity.WAITING_FOR_USAGE_LIMIT,
+    });
+    expect(status).toMatchObject({ label: "Waiting for usage limit", dotVariant: "pending", badgeVariant: "warning", pulse: false });
+  });
+
   it("the sidebar's activity view says the same", () => {
     expect(runStatusFromActivity(ChatActivity.WAITING_FOR_DAEMON)?.label).toBe("Waiting for machine");
   });

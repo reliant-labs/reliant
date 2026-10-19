@@ -684,6 +684,17 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 				}
 
 				if stepEvent.RetryExhausted {
+					if waited := e.pauseCtrl.waitOutUsageLimit(gCtx, iterThread, running.StepID, stepEvent.Error); waited.Handled {
+						if waited.Err != nil {
+							result.Error = waited.Err
+							return result
+						}
+						runningSteps = append(runningSteps, iterExecutor.Start(&core.TriggeredNode{
+							Node:  running.Node,
+							Event: running.Event,
+						}))
+						continue
+					}
 					result.Error = fmt.Errorf("step %s exhausted retries: %w", running.StepID, stepEvent.Error)
 					return result
 				}

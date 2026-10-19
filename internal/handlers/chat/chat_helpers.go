@@ -175,6 +175,15 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 		proto.ActiveDaemonId = c.ActiveDaemonID
 	}
 	proto.NoMachine = c.NoMachine
+	if c.UsageLimitResumesAt != nil {
+		resumes := c.UsageLimitResumesAt.UTC().Format(time.RFC3339)
+		proto.UsageLimitResumesAt = &resumes
+		proto.UsageLimitProbing = c.UsageLimitProbing
+		if c.UsageLimitProvider != "" {
+			provider := c.UsageLimitProvider
+			proto.UsageLimitProvider = &provider
+		}
+	}
 	// The root run's lifecycle: the web decides paused/pending from these, and
 	// a pending state is what tells it to StartChat rather than SendMessage.
 	proto.WorkflowState = runstateproto.State(c.RootStatus.State)

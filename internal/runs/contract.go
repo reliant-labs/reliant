@@ -6,6 +6,7 @@ package runs
 import (
 	"context"
 	"errors"
+	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -34,6 +35,9 @@ type Repository interface {
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	LockChatRunControl(ctx context.Context, chatID string) (release func(), err error)
+	// ClearUsageLimitWait releases a chat's usage-limit wait markers; an empty
+	// thread releases every thread of the chat.
+	ClearUsageLimitWait(ctx context.Context, chatID, threadID string, now time.Time) error
 	// RunTx runs f in one transaction; a terminal status and its cascade
 	// commit together.
 	RunTx(ctx context.Context, f func(ctx context.Context) error) error

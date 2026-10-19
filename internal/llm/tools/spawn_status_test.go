@@ -88,6 +88,38 @@ func TestSpawnStatus_Listing_OnlyReturnsCallersOwnChildren(t *testing.T) {
 	require.Contains(t, otherResp.Content, otherChildID)
 }
 
+// A child parked until a provider's usage limit resets is WAITING, not failed:
+// the parent is told when it carries on, so it neither resumes it behind its
+// back nor spawns a duplicate.
+func TestSpawnStatus_Listing_ShowsAChildWaitingOnAUsageLimit(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+
+	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
+	tool := NewSpawnStatusTool(repo)
+	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
+
+	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{})
+	require.NotContains(t, resp.Content, "waiting for usage limit", "a child that is not waiting reads as running")
+
+	resumeAt := time.Now().UTC().Add(90 * time.Minute).Truncate(time.Second)
+	require.NoError(t, repo.RecordUsageLimitWait(ctx, chatID, childID, "Anthropic", false, resumeAt, time.Now()))
+
+	resp, _ = runSpawnStatus(t, tool, rc, SpawnStatusParams{})
+	require.False(t, resp.IsError, "response: %+v", resp)
+	require.Contains(t, resp.Content, "Status: waiting for usage limit")
+	require.Contains(t, resp.Content, "Anthropic's usage limit until "+resumeAt.Format(time.RFC3339))
+	require.Contains(t, resp.Content, "not failed and continues by itself")
+
+	require.NoError(t, repo.ClearUsageLimitWait(ctx, chatID, childID, time.Now()))
+	resp, _ = runSpawnStatus(t, tool, rc, SpawnStatusParams{})
+	require.NotContains(t, resp.Content, "waiting for usage limit", "back to running once the wait is over")
+}
+
 func TestSpawnStatus_Listing_NoChildren_ReturnsFriendlyMessage(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)

@@ -201,6 +201,15 @@ type Chat struct {
 	// ListInSidebar is the view's sidebar policy for this chat.
 	ListInSidebar bool `json:"list_in_sidebar"`
 
+	// UsageLimitResumesAt is when the chat's root run retries, while it is parked
+	// until a provider's usage limit resets (activity 7); nil otherwise.
+	UsageLimitResumesAt *time.Time `json:"usage_limit_resumes_at,omitempty"`
+	// UsageLimitProvider names who imposed the limit; empty when unknown.
+	UsageLimitProvider string `json:"usage_limit_provider,omitempty"`
+	// UsageLimitProbing is true when the provider named no reset, so
+	// UsageLimitResumesAt is only the next probe.
+	UsageLimitProbing bool `json:"usage_limit_probing,omitempty"`
+
 	// RootStatus is the lifecycle of the chat's ROOT workflow — the row whose
 	// id is WorkflowID. It travels with every chat read because callers that
 	// ask "is this chat paused" or "has this chat started yet" are asking

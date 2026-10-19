@@ -68,7 +68,7 @@ func (q *Queries) DeleteChat(ctx context.Context, id string) error {
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, queued_for_machine_at, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity WHERE id = $1
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, queued_for_machine_at, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state, usage_limit_resumes_at, usage_limit_provider, usage_limit_probing FROM chats_with_activity WHERE id = $1
 `
 
 func (q *Queries) GetChat(ctx context.Context, id string) (ChatsWithActivity, error) {
@@ -103,12 +103,15 @@ func (q *Queries) GetChat(ctx context.Context, id string) (ChatsWithActivity, er
 		&i.TriggerID,
 		&i.ListInSidebar,
 		&i.DisplayState,
+		&i.UsageLimitResumesAt,
+		&i.UsageLimitProvider,
+		&i.UsageLimitProbing,
 	)
 	return i, err
 }
 
 const getChatWithUserCheck = `-- name: GetChatWithUserCheck :one
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, queued_for_machine_at, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity WHERE id = $1 AND user_id = $2
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, queued_for_machine_at, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state, usage_limit_resumes_at, usage_limit_provider, usage_limit_probing FROM chats_with_activity WHERE id = $1 AND user_id = $2
 `
 
 type GetChatWithUserCheckParams struct {
@@ -148,13 +151,16 @@ func (q *Queries) GetChatWithUserCheck(ctx context.Context, arg GetChatWithUserC
 		&i.TriggerID,
 		&i.ListInSidebar,
 		&i.DisplayState,
+		&i.UsageLimitResumesAt,
+		&i.UsageLimitProvider,
+		&i.UsageLimitProbing,
 	)
 	return i, err
 }
 
 const listArchivedChats = `-- name: ListArchivedChats :many
 SELECT
-    c.id, c.title, c.project_id, c.user_id, c.state, c.workflow_id, c.run_id, c.created_at, c.updated_at, c.last_active, c.worktree_id, c.workflow_name, c.selected_presets, c.archived_worktree_name, c.unread, c.active_daemon_id, c.adopted_at, c.daemon_blocked_at, c.no_machine, c.queued_for_machine_at, c.last_message_at, c.activity, c.root_workflow_state, c.root_workflow_stop_reason, c.launch_kind, c.trigger_id, c.list_in_sidebar, c.display_state,
+    c.id, c.title, c.project_id, c.user_id, c.state, c.workflow_id, c.run_id, c.created_at, c.updated_at, c.last_active, c.worktree_id, c.workflow_name, c.selected_presets, c.archived_worktree_name, c.unread, c.active_daemon_id, c.adopted_at, c.daemon_blocked_at, c.no_machine, c.queued_for_machine_at, c.last_message_at, c.activity, c.root_workflow_state, c.root_workflow_stop_reason, c.launch_kind, c.trigger_id, c.list_in_sidebar, c.display_state, c.usage_limit_resumes_at, c.usage_limit_provider, c.usage_limit_probing,
     COALESCE(w.name, c.archived_worktree_name, p.name) as worktree_name,
     w.deleted_at as worktree_deleted_at
 FROM chats_with_activity c
@@ -194,6 +200,9 @@ type ListArchivedChatsRow struct {
 	TriggerID              sql.NullString `json:"trigger_id"`
 	ListInSidebar          sql.NullBool   `json:"list_in_sidebar"`
 	DisplayState           int32          `json:"display_state"`
+	UsageLimitResumesAt    sql.NullTime   `json:"usage_limit_resumes_at"`
+	UsageLimitProvider     sql.NullString `json:"usage_limit_provider"`
+	UsageLimitProbing      bool           `json:"usage_limit_probing"`
 	WorktreeName           string         `json:"worktree_name"`
 	WorktreeDeletedAt      sql.NullTime   `json:"worktree_deleted_at"`
 }
@@ -239,6 +248,9 @@ func (q *Queries) ListArchivedChats(ctx context.Context, userID string) ([]ListA
 			&i.TriggerID,
 			&i.ListInSidebar,
 			&i.DisplayState,
+			&i.UsageLimitResumesAt,
+			&i.UsageLimitProvider,
+			&i.UsageLimitProbing,
 			&i.WorktreeName,
 			&i.WorktreeDeletedAt,
 		); err != nil {
@@ -256,7 +268,7 @@ func (q *Queries) ListArchivedChats(ctx context.Context, userID string) ([]ListA
 }
 
 const listChats = `-- name: ListChats :many
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, queued_for_machine_at, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, queued_for_machine_at, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state, usage_limit_resumes_at, usage_limit_provider, usage_limit_probing FROM chats_with_activity
 WHERE
     user_id = $1
     AND ($2::text IS NULL OR project_id = $2::text)
@@ -325,6 +337,9 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWi
 			&i.TriggerID,
 			&i.ListInSidebar,
 			&i.DisplayState,
+			&i.UsageLimitResumesAt,
+			&i.UsageLimitProvider,
+			&i.UsageLimitProbing,
 		); err != nil {
 			return nil, err
 		}
@@ -492,7 +507,7 @@ func (q *Queries) ListChatsWaitingForMachine(ctx context.Context, userID string)
 }
 
 const searchChats = `-- name: SearchChats :many
-SELECT DISTINCT cws.id, cws.title, cws.project_id, cws.user_id, cws.state, cws.workflow_id, cws.run_id, cws.created_at, cws.updated_at, cws.last_active, cws.worktree_id, cws.workflow_name, cws.selected_presets, cws.archived_worktree_name, cws.unread, cws.active_daemon_id, cws.adopted_at, cws.daemon_blocked_at, cws.no_machine, cws.queued_for_machine_at, cws.last_message_at, cws.activity, cws.root_workflow_state, cws.root_workflow_stop_reason, cws.launch_kind, cws.trigger_id, cws.list_in_sidebar, cws.display_state
+SELECT DISTINCT cws.id, cws.title, cws.project_id, cws.user_id, cws.state, cws.workflow_id, cws.run_id, cws.created_at, cws.updated_at, cws.last_active, cws.worktree_id, cws.workflow_name, cws.selected_presets, cws.archived_worktree_name, cws.unread, cws.active_daemon_id, cws.adopted_at, cws.daemon_blocked_at, cws.no_machine, cws.queued_for_machine_at, cws.last_message_at, cws.activity, cws.root_workflow_state, cws.root_workflow_stop_reason, cws.launch_kind, cws.trigger_id, cws.list_in_sidebar, cws.display_state, cws.usage_limit_resumes_at, cws.usage_limit_provider, cws.usage_limit_probing
 FROM chats_with_activity cws
 LEFT JOIN messages m ON cws.id = m.chat_id
 LEFT JOIN message_content_blocks mcb ON m.id = mcb.message_id AND mcb.block_type = 1
@@ -568,6 +583,9 @@ func (q *Queries) SearchChats(ctx context.Context, arg SearchChatsParams) ([]Cha
 			&i.TriggerID,
 			&i.ListInSidebar,
 			&i.DisplayState,
+			&i.UsageLimitResumesAt,
+			&i.UsageLimitProvider,
+			&i.UsageLimitProbing,
 		); err != nil {
 			return nil, err
 		}

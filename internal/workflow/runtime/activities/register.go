@@ -219,6 +219,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(deps.Repo))
+	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowCheckpointActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowErrorActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(deps.Repo))

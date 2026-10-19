@@ -22,6 +22,7 @@ import {
   TerminateChatRequestSchema,
   PauseChatRequestSchema,
   ResumeChatRequestSchema,
+  RetryUsageLimitWaitRequestSchema,
   DismissChatRequestSchema,
   MarkUnreadChatRequestSchema,
   CompactChatRequestSchema,
@@ -629,6 +630,14 @@ export const chatGrpc = {
       needs_recovery: response.needsRecovery,
       recovery_type: response.recoveryType,
     };
+  },
+
+  // "Retry now" on a run held until a provider's usage limit resets. Resolves to
+  // whether a waiting run was woken.
+  async retryUsageLimitWait(chatId: string): Promise<boolean> {
+    const client = grpcClient.chat();
+    const response = await client.retryUsageLimitWait(create(RetryUsageLimitWaitRequestSchema, { chatId }));
+    return response.woken;
   },
 
   // Dismiss unread state (proper gRPC call)

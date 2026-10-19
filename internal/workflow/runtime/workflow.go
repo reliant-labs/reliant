@@ -1235,6 +1235,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	getActivityCtx := pauser.ActivityCtx
 	checkPause := pauser.CheckPause
 	requestPause := pauser.RequestPause
+	usageLimitWaiter := newUsageLimitWaiter(pauser, childTracker, input.ChatID, workflowID, input.WorkflowName)
 
 	// STEP 8.55: Daemon-offline circuit breaker.
 	// Counts consecutive daemon-targeted step completions that failed with
@@ -1313,6 +1314,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			ActivityCtxFn: getActivityCtx,
 			RequestPause:  requestPause,
 			DaemonOffline: daemonOfflineBreaker,
+			UsageLimit:    usageLimitWaiter,
 			Cancelled:     func() bool { return cancelledThreads[thread] },
 			ResetCancelled: func() {
 				delete(cancelledThreads, thread)
@@ -1364,6 +1366,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		ActivityCtxFn: getActivityCtx,
 		RequestPause:  requestPause,
 		DaemonOffline: daemonOfflineBreaker,
+		UsageLimit:    usageLimitWaiter,
 	}
 
 	// STEP 8.7: Create step executor for unified step lifecycle
@@ -2333,6 +2336,22 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					})
 					runningSteps = append(runningSteps, newRunning)
 					continue
+				}
+
+				// A provider usage limit holds the step until the limit resets
+				// and then retries it; it neither pauses the run nor fails it.
+				if stepEvent.RetryExhausted {
+					if waited := pauseCtrl.waitOutUsageLimit(ctx, thread, running.StepID, stepEvent.Error); waited.Handled {
+						if waited.Err != nil {
+							return nil, waited.Err
+						}
+						newRunning := executor.Start(&core.TriggeredNode{
+							Node:  running.Node,
+							Event: running.Event,
+						})
+						runningSteps = append(runningSteps, newRunning)
+						continue
+					}
 				}
 
 				// Handle retry exhaustion - pause workflow and retry on resume

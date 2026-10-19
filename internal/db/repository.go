@@ -698,6 +698,10 @@ type Repository interface {
 	RecordProviderBackoff(ctx context.Context, chatID, threadID string, attempt, maxAttempts, statusCode int, reason string, delay time.Duration, now time.Time) error
 	ClearProviderBackoff(ctx context.Context, threadID string, now time.Time) error
 	ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]ProviderBackoff, error)
+	// Usage-limit waits — a workflow-level wait for a provider window to reset,
+	// written before the run parks on its timer. See provider_backoff.go.
+	RecordUsageLimitWait(ctx context.Context, chatID, threadID, provider string, probing bool, resumeAt, now time.Time) error
+	ClearUsageLimitWait(ctx context.Context, chatID, threadID string, now time.Time) error
 	// Threads - First-class entity for thread hierarchy and fork relationships.
 	// Thread.Origin (main/spawn/fork/node) is a stored column, not re-derived
 	// at read time from a workflow row's spawned_by_node_id sentinel -- see

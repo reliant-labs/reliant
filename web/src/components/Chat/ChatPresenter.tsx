@@ -11,6 +11,8 @@ import { ChatInputWrapper } from "./ChatInputWrapper";
 import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
 import { ChatMachineNoticeLine } from "./ChatMachineNotice";
 import { QueuedForMachineNote } from "./QueuedForMachineNote";
+import { UsageLimitWaitNote } from "./UsageLimitWaitNote";
+import { usageLimitWaitOf } from "@/lib/usageLimitWait";
 import { ChatMessagesContainer } from "./ChatMessagesContainer";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { PermissionsPanelWrapper } from "./PermissionsPanelWrapper";
@@ -435,6 +437,12 @@ export const ChatPresenter = memo(function ChatPresenter({
   // machine surfaces apply, and the composer says what the chat can do.
   const currentChat = chatForQueue?.id === chatId ? chatForQueue : undefined;
   const noMachine = !!currentChat?.noMachine;
+
+  // The run is parked until a provider's usage limit resets (server-side timer;
+  // it retries by itself). The reset time rides on the chat, the activity says
+  // whether it applies.
+  const usageLimitWait =
+    chatActivity === ChatActivity.WAITING_FOR_USAGE_LIMIT ? usageLimitWaitOf(currentChat) : undefined;
   // For a chat ON a machine that is unavailable, "Continue without machine"
   // branches at its latest stored main-thread message.
   const continueFromMessageId = useMemo(
@@ -532,6 +540,9 @@ export const ChatPresenter = memo(function ChatPresenter({
     if (machineNotice) {
       return <ChatMachineNoticeLine notice={machineNotice} />;
     }
+    if (usageLimitWait && chatId) {
+      return <UsageLimitWaitNote chatId={chatId} wait={usageLimitWait} onStop={handleStopRun} />;
+    }
     if (hasThinkingFooter) {
       return (
         <ChatThinkingIndicator
@@ -548,6 +559,7 @@ export const ChatPresenter = memo(function ChatPresenter({
     return hasQueuedForMachineFooter ? <QueuedForMachineNote /> : undefined;
   }, [
     machineNotice,
+    usageLimitWait,
     hasThinkingFooter,
     hasQueuedForMachineFooter,
     chatId,

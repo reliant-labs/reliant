@@ -3810,6 +3810,19 @@
           "OutputProtoFile": "reliant/v1/chat.proto"
         },
         {
+          "Name": "RetryUsageLimitWait",
+          "InputType": "RetryUsageLimitWaitRequest",
+          "OutputType": "RetryUsageLimitWaitResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.RetryUsageLimitWaitRequest",
+          "OutputTypeFQ": "reliant.v1.RetryUsageLimitWaitResponse",
+          "InputProtoFile": "reliant/v1/chat.proto",
+          "OutputProtoFile": "reliant/v1/chat.proto"
+        },
+        {
           "Name": "DismissChat",
           "InputType": "DismissChatRequest",
           "OutputType": "DismissChatResponse",
@@ -4532,6 +4545,20 @@
             "IsOptional": false
           }
         ],
+        "RetryUsageLimitWaitRequest": [
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "RetryUsageLimitWaitResponse": [
+          {
+            "Name": "woken",
+            "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
         "SearchChatsRequest": [
           {
             "Name": "project_id",
@@ -5174,6 +5201,20 @@
           },
           {
             "name": "no_machine",
+            "kind": "bool"
+          },
+          {
+            "name": "usage_limit_resumes_at",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "usage_limit_provider",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "usage_limit_probing",
             "kind": "bool"
           }
         ],
@@ -5898,6 +5939,18 @@
             "type_name": "reliant.v1.RecoveryType"
           }
         ],
+        "reliant.v1.RetryUsageLimitWaitRequest": [
+          {
+            "name": "chat_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.RetryUsageLimitWaitResponse": [
+          {
+            "name": "woken",
+            "kind": "bool"
+          }
+        ],
         "reliant.v1.SearchChatsRequest": [
           {
             "name": "project_id",
@@ -6504,6 +6557,8 @@
         "reliant.v1.QueuedAgentMessage": "reliant/v1/chat.proto",
         "reliant.v1.ResumeChatRequest": "reliant/v1/chat.proto",
         "reliant.v1.ResumeChatResponse": "reliant/v1/chat.proto",
+        "reliant.v1.RetryUsageLimitWaitRequest": "reliant/v1/chat.proto",
+        "reliant.v1.RetryUsageLimitWaitResponse": "reliant/v1/chat.proto",
         "reliant.v1.SearchChatsRequest": "reliant/v1/chat.proto",
         "reliant.v1.SearchChatsResponse": "reliant/v1/chat.proto",
         "reliant.v1.SendAgentMessageRequest": "reliant/v1/chat.proto",
@@ -6536,7 +6591,8 @@
           "CHAT_ACTIVITY_ERROR",
           "CHAT_ACTIVITY_PAUSED",
           "CHAT_ACTIVITY_WAITING_FOR_DAEMON",
-          "CHAT_ACTIVITY_QUEUED_FOR_MACHINE"
+          "CHAT_ACTIVITY_QUEUED_FOR_MACHINE",
+          "CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT"
         ],
         "reliant.v1.ChatState": [
           "CHAT_STATE_UNSPECIFIED",
@@ -6621,7 +6677,8 @@
           3,
           4,
           5,
-          6
+          6,
+          7
         ],
         "reliant.v1.ChatState": [
           0,
@@ -13250,7 +13307,8 @@
           "CHAT_ACTIVITY_ERROR",
           "CHAT_ACTIVITY_PAUSED",
           "CHAT_ACTIVITY_WAITING_FOR_DAEMON",
-          "CHAT_ACTIVITY_QUEUED_FOR_MACHINE"
+          "CHAT_ACTIVITY_QUEUED_FOR_MACHINE",
+          "CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT"
         ],
         "reliant.v1.DisplayStyle": [
           "DISPLAY_STYLE_UNSPECIFIED",
@@ -13299,7 +13357,8 @@
           3,
           4,
           5,
-          6
+          6,
+          7
         ],
         "reliant.v1.DisplayStyle": [
           0,
@@ -34278,5 +34337,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "5b00001d4e7b43fbecf76a2d68ace6ecc85ce42e6043a72220b86410681cbe12"
+  "source_hash": "bd31aeea72eb33cc9d190923d7d233868b913c42a6073887566dde5b16a12bef"
 }

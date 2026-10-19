@@ -1937,6 +1937,30 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				// This handles rate limits, transient errors, etc. that exhaust
 				// Temporal's retry budget.
 				if stepEvent.RetryExhausted {
+					// A provider usage limit holds the step, root or sub-agent,
+					// until the limit resets; see usage_limit_wait.go.
+					if waited := e.pauseCtrl.waitOutUsageLimit(e.ctx, e.threadForError(), running.StepID, stepEvent.Error); waited.Handled {
+						if waited.Err != nil {
+							return nil, waited.Err
+						}
+						e.syncIterationInputs(iterInputs)
+						// A message that ended the wait is read by the retried
+						// turn, so the loop-exit gate measures from here.
+						if waited.MessageRead && e.turnBaseline != nil {
+							thread := e.GetThread()
+							e.turnBaseline = &detachedSpawnBaseline{
+								completions: e.childTracker.detachedCompletionCount(thread),
+								wakes:       e.childTracker.threadWakeCount(thread),
+								reports:     e.childTracker.detachedReportCount(thread),
+							}
+						}
+						newRunning := iterExecutor.Start(&core.TriggeredNode{
+							Node:  running.Node,
+							Event: running.Event,
+						})
+						runningSteps = append(runningSteps, newRunning)
+						continue
+					}
 					// A sub-agent ends alone and reports to its parent; only
 					// the root pauses the run. See failsAlone.
 					if e.pauseCtrl.failsAlone(e.ctx) {

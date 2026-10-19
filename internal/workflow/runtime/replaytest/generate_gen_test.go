@@ -16,6 +16,7 @@ package replaytest
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -202,20 +203,19 @@ func TestGenerateFixture_SpawnFailure(t *testing.T) {
 	h.ExportHistory(workflowID, "spawn_failure")
 }
 
-// usageLimitFailure is the error a provider usage window fails a request with:
-// the anthropic driver's marked sentence (RetryAfterTooLongError) inside the
-// stream-error wrap, so CallLLM fails it at once rather than retrying.
-func usageLimitFailure() error {
-	sentence := chatmarkers.ProviderUsageLimitLead +
-		" (Anthropic, 7-day window, overage unavailable: org level disabled) — resets Sun Oct 18 02:00 UTC (in 4d22h). " +
-		"Switch to another provider, or send a message after it resets"
-	return fmt.Errorf("LLM streaming error: %s: 429 Too Many Requests",
-		chatmarkers.Wrap(chatmarkers.KindProviderUsageLimit, "2026-10-18T02:00:00Z", sentence))
+// stoppedAgentFailure is the error that stops a spawned agent for good: a
+// provider that rejects the request outright, which CallLLM fails at once
+// rather than retrying. (A provider usage window used to be this scenario's
+// failure; it is waited out now — see TestGenerateFixture_UsageLimitWait — and
+// the stop-and-report shape it recorded is frozen in
+// fixtures/frozen/2026-10-18-usage-limit-pauses-run.)
+func stoppedAgentFailure() error {
+	return errors.New(`POST "https://api.example.com/v1/messages": 400 Bad Request invalid_request_error`)
 }
 
 // TestGenerateFixture_SpawnFailureResumedByMessage pins a stopped sub-agent
 // resumed by a message (the 2026-10-13 prod shape, workflow 9fbaace8): the
-// spawned agent's first call_llm hits a provider usage limit and fails at once,
+// spawned agent's first call_llm is rejected by its provider and fails at once,
 // the agent stops and reports to its parent, the user messages the stopped
 // agent through the production SendAgentMessage handler, and the run relaunches
 // it — the message-resumes-stopped-subagent marker, the agent's row and spawn
@@ -238,7 +238,7 @@ func TestGenerateFixture_SpawnFailureResumedByMessage(t *testing.T) {
 		Turn{Text: "Waiting on the sub-agent.", During: func() { close(parentWaiting) }},
 		// Turn 3: the parent reads the failure, and the user messages the
 		// stopped agent while this turn is in flight.
-		Turn{Text: "The sub-agent hit a usage limit.", During: func() {
+		Turn{Text: "The sub-agent was rejected by its provider.", During: func() {
 			chatID := <-chatIDs
 			agentThread := wfruntime.DeterministicWorkflowID(chatID, spawnCall.ID)
 			resp, err := h.SendAgentMessage(chatID, agentThread, resumeText)
@@ -257,7 +257,7 @@ func TestGenerateFixture_SpawnFailureResumedByMessage(t *testing.T) {
 			return nil
 		}
 		<-parentWaiting
-		return usageLimitFailure()
+		return stoppedAgentFailure()
 	})
 	h = newHarness(t, script)
 
@@ -345,6 +345,54 @@ nodes:
 outputs:
   selected: "{{nodes.classify.selected_node}}"
 `
+
+// TestGenerateFixture_UsageLimitWait pins a run held for a provider's usage
+// limit: the spawned agent's first call_llm is refused with a window whose reset
+// is a few seconds away, and instead of stopping and reporting a failure (the
+// shape frozen/2026-10-18-usage-limit-pauses-run records) the agent writes its
+// wait marker, parks on a durable timer, clears the marker, retries the same
+// step and completes. The parent never sees a failure: it parks on the live
+// agent, hears the completion and finishes. The reset is seconds out so the
+// recording needs no clock tricks; the margin the run adds is shrunk the same
+// way (usageLimitMargin is a constant, so the wait is ~30s of real time).
+func TestGenerateFixture_UsageLimitWait(t *testing.T) {
+	spawnCall := ToolCall("call-spawn-1", "spawn", `{"preset":"general","prompt":"`+subAgentFailureMarker+` Implement the change."}`)
+	var refused atomic.Bool
+	script := NewScriptedLLM(
+		// Turn 1: the parent delegates.
+		Turn{Text: "I'll delegate this to a sub-agent.", ToolCalls: []message.ToolCall{spawnCall}},
+		// Turn 2: the parent's exit candidate; it parks on the live agent.
+		Turn{Text: "Waiting on the sub-agent."},
+		// Turn 3: the agent's retried step, after the wait.
+		Turn{Text: "The change is done."},
+		// Turn 4: the parent reacts to the agent's completion.
+		Turn{Text: "The sub-agent finished after waiting out its limit."},
+	)
+	script.FailWhen(func(msgs []message.Message) error {
+		if !conversationMentions(msgs, subAgentFailureMarker) || refused.Load() {
+			return nil
+		}
+		refused.Store(true)
+		sentence := chatmarkers.ProviderUsageLimitLead + " (Anthropic, 5-hour window) — resets in a few seconds"
+		reset := time.Now().UTC().Add(5 * time.Second).Format(time.RFC3339)
+		return fmt.Errorf("LLM streaming error: %s: 429 Too Many Requests",
+			chatmarkers.Wrap(chatmarkers.KindProviderUsageLimit, reset, sentence))
+	})
+	h := newHarness(t, script)
+
+	created := h.StartChat("builtin://agent", "Please delegate a task to a sub-agent", map[string]any{
+		"mode": "auto",
+	})
+	workflowID := created.WorkflowId
+
+	h.WaitTemporalWorkflowDoneWithin(workflowID, 3*time.Minute)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
+	h.WaitWorkflowStatus(wfruntime.DeterministicWorkflowID(workflowID, spawnCall.ID), db.Completed())
+	h.RequireToolCallStatus(spawnCall.ID, core.ToolCallStatusCompleted)
+	assert.True(t, refused.Load(), "the agent must have hit the usage limit")
+
+	h.ExportHistory(workflowID, "usage_limit_wait")
+}
 
 // TestGenerateFixture_RouterDispatch pins the router-dispatch shape: an LLM
 // routing decision (CallLLM with the node_routing_decision response tool)

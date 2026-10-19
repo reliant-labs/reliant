@@ -1006,11 +1006,22 @@ function handleChatActivityChanged(update: UserUpdate) {
     seq: update.sequence_number,
   });
 
+  const previousActivity = useActivityStore.getState().activities.get(chat_id);
+
   // Single source of truth: update the activity store. The event's sequence
   // number decides precedence against list/get snapshot writes — no clocks.
   useActivityStore
     .getState()
     .applyStreamActivity(chat_id, activity, update.sequence_number);
+
+  // The wait's reset time and provider live on the chat, not on the activity
+  // event (which carries only the number). A run entering the wait needs them;
+  // one that left it must drop them, or a stale "resumes 3:42 PM" outlives it.
+  // A wait that re-parks on a new reset re-sends the same activity, so this
+  // refetches then too.
+  if (activity === ChatActivity.WAITING_FOR_USAGE_LIMIT || previousActivity === ChatActivity.WAITING_FOR_USAGE_LIMIT) {
+    queryClient.invalidateQueries({ queryKey: chatKeys.detail(chat_id) });
+  }
 
   // Clear pending approvals when activity goes idle.
   // NOTE: Thread activity is intentionally NOT cleared here. Thread metadata

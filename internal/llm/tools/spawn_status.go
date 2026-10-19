@@ -25,6 +25,14 @@ type SpawnAgentInfo struct {
 	GatedOnAgent bool   `json:"gated,omitempty"`
 	GateReason   string `json:"gate_reason,omitempty"`
 	GateUnknown  bool   `json:"gate_unknown,omitempty"`
+	// WaitingUntil is set while the agent is parked until a provider's usage
+	// limit resets (RFC 3339 UTC): it is waiting, not failed, and retries by
+	// itself. WaitingFor names the provider when known.
+	WaitingUntil string `json:"waiting_until,omitempty"`
+	WaitingFor   string `json:"waiting_for,omitempty"`
+	// WaitingProbing is true when the provider named no reset, so WaitingUntil
+	// is only the agent's next probe.
+	WaitingProbing bool `json:"waiting_probing,omitempty"`
 	// InheritedFrom is the owning thread when this agent was inherited
 	// through a branch rather than spawned by the caller. Read-only.
 	InheritedFrom string `json:"inherited_from,omitempty"`
@@ -255,6 +263,8 @@ type spawnSignals struct {
 	pendingApprovalThreads  map[string]bool
 	approvalSignalAvailable bool
 	lastActivity            map[string]time.Time
+	// usageWaits holds the threads parked on a provider usage limit.
+	usageWaits map[string]db.ProviderBackoff
 }
 
 // loadSignals reads the gating and activity signals for one chat. Neither
@@ -279,6 +289,14 @@ func (s *spawnStatusTool) loadSignals(rctx *rctx.ToolContext, chatID string) *sp
 	}
 	if lastActivity, laErr := s.repo.LastThreadActivityByChat(rctx.Context, chatID); laErr == nil {
 		signals.lastActivity = lastActivity
+	}
+	if backoffs, bErr := s.repo.ProviderBackoffByChat(rctx.Context, chatID); bErr == nil {
+		signals.usageWaits = map[string]db.ProviderBackoff{}
+		for thread, b := range backoffs {
+			if b.Waiting() && b.IsUsageLimit() {
+				signals.usageWaits[thread] = b
+			}
+		}
 	}
 	return signals
 }
@@ -334,6 +352,12 @@ func (s *spawnStatusTool) describeChild(rctx *rctx.ToolContext, child *db.SpawnC
 		if count, cErr := s.repo.CountMessagesInThread(rctx.Context, info.AgentID); cErr == nil {
 			info.TurnCount = count
 		}
+		if wait, ok := signals.usageWaits[info.AgentID]; ok && isRunning {
+			info.Status = "waiting for usage limit"
+			info.WaitingUntil = wait.ResumeAt.UTC().Format(time.RFC3339)
+			info.WaitingFor = wait.Provider
+			info.WaitingProbing = wait.Reason == db.ReasonUsageLimitProbe
+		}
 		if q, ok := signals.pendingQuestions[info.AgentID]; ok && q != nil {
 			info.GatedOnAgent = true
 			info.GateReason = "pending question"
@@ -361,6 +385,9 @@ func writeSpawnAgentInfos(sb *strings.Builder, infos []SpawnAgentInfo) {
 			fmt.Fprintf(sb, "Preset: %s\n", info.Preset)
 		}
 		fmt.Fprintf(sb, "Status: %s\n", info.Status)
+		if info.WaitingUntil != "" {
+			fmt.Fprintf(sb, "Waiting: %s\n", usageWaitSentence(info.WaitingFor, info.WaitingUntil, info.WaitingProbing))
+		}
 		fmt.Fprintf(sb, "Elapsed: %s\n", formatDuration(time.Duration(info.ElapsedMs)*time.Millisecond))
 		if info.LastActivity != "" {
 			fmt.Fprintf(sb, "Last activity: %s\n", info.LastActivity)
@@ -635,3 +662,16 @@ func toolCallStatusLabel(status int32) string {
 // here are gone: db.WorkflowStatus.Live() and .Label() answer both questions,
 // and a second copy of "which statuses count as still working" is exactly the
 // kind of drift the shared predicate exists to prevent.
+
+// usageWaitSentence tells a parent that a child is waiting out a provider's
+// usage limit and will carry on by itself.
+func usageWaitSentence(provider, until string, probing bool) string {
+	who := "its provider's"
+	if provider != "" {
+		who = provider + "'s"
+	}
+	if probing {
+		return fmt.Sprintf("held by %s usage limit (no reset time given; retries at %s). It is not failed and continues by itself.", who, until)
+	}
+	return fmt.Sprintf("held by %s usage limit until %s. It is not failed and continues by itself.", who, until)
+}

@@ -120,6 +120,11 @@ enum ChatActivity {
   // run is started for it as soon as the chat's machine connects (or the user
   // sends again). Outranks ERROR; every live-run state outranks it.
   CHAT_ACTIVITY_QUEUED_FOR_MACHINE = 6;
+  // A live run whose root thread is parked until a provider's usage limit
+  // resets (Chat.usage_limit_*). The run is not paused or failed: it retries the
+  // step by itself at the reset, or at once on RetryUsageLimitWait. Outranked by
+  // AWAITING_INPUT and WAITING_FOR_DAEMON, outranks RUNNING.
+  CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT = 7;
 }
 
 // ChatService handles chat-related operations
@@ -234,6 +239,11 @@ service ChatService {
   // ResumeChat resumes a paused or expired workflow
   rpc ResumeChat(ResumeChatRequest) returns (ResumeChatResponse) {}
 
+  // RetryUsageLimitWait wakes a run parked until a provider's usage limit
+  // resets ("Retry now"): it retries the step immediately instead of waiting
+  // for the reset. A run that is not waiting is left alone (woken = false).
+  rpc RetryUsageLimitWait(RetryUsageLimitWaitRequest) returns (RetryUsageLimitWaitResponse) {}
+
   // REMOVED: UpdateChatAgent - agent is now a workflow param, not stored on chat
   
   // ============================================
@@ -328,6 +338,15 @@ message Chat {
   // only server-side tools. One-way: SetChatDaemon with a daemon clears it, and
   // nothing sets it on a chat that already has a machine.
   bool no_machine = 36;
+  // Set while activity is WAITING_FOR_USAGE_LIMIT: when the run retries (the
+  // provider's reset plus a margin, or the next probe when the provider named
+  // none), RFC 3339 UTC.
+  optional string usage_limit_resumes_at = 37;
+  // Who imposed the limit ("Anthropic", "OpenAI"); empty when unknown.
+  optional string usage_limit_provider = 38;
+  // True when the provider named no reset, so usage_limit_resumes_at is only the
+  // next probe, not a promise.
+  bool usage_limit_probing = 39;
 }
 
 // ArchivedChat includes worktree information for archived chats
@@ -785,6 +804,15 @@ message PauseChatResponse {
 // ResumeChatRequest resumes a paused workflow
 message ResumeChatRequest {
   string chat_id = 1;
+}
+
+message RetryUsageLimitWaitRequest {
+  string chat_id = 1;
+}
+
+message RetryUsageLimitWaitResponse {
+  // True when a waiting run was woken.
+  bool woken = 1;
 }
 
 // RecoveryType indicates what kind of resume/recovery happened

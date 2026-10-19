@@ -1069,6 +1069,19 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 
 				// Handle retry exhaustion - pause workflow and retry on resume.
 				if stepEvent.RetryExhausted {
+					// A provider usage limit holds the step, root or sub-agent,
+					// until the limit resets; see usage_limit_wait.go.
+					if waited := e.pauseCtrl.waitOutUsageLimit(e.ctx, e.threadForError(), running.StepID, stepEvent.Error); waited.Handled {
+						if waited.Err != nil {
+							return nil, waited.Err
+						}
+						newRunning := executor.Start(&core.TriggeredNode{
+							Node:  running.Node,
+							Event: running.Event,
+						})
+						runningSteps = append(runningSteps, newRunning)
+						continue
+					}
 					// A sub-agent ends alone and reports to its parent; only
 					// the root pauses the run. See failsAlone.
 					if e.pauseCtrl.failsAlone(e.ctx) {

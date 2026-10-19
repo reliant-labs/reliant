@@ -157,6 +157,13 @@ type psRow struct {
 	BackoffStatus      int64 `json:"backoff_status,omitempty"`       // provider HTTP status (429, 503…)
 	BackoffRetries     int64 `json:"backoff_retries,omitempty"`      // cumulative retries on this thread
 	BackoffWaitedMs    int64 `json:"backoff_waited_ms,omitempty"`    // cumulative time asleep in backoff
+	// UsageLimitResumeAt is set while the thread is held until a provider's
+	// usage limit resets (a workflow-level wait, hours long): RFC 3339, with
+	// UsageLimitProbing true when the provider named no reset and this is only
+	// the next probe.
+	UsageLimitResumeAt string `json:"usage_limit_resume_at,omitempty"`
+	UsageLimitProvider string `json:"usage_limit_provider,omitempty"`
+	UsageLimitProbing  bool   `json:"usage_limit_probing,omitempty"`
 }
 
 // psWait is a durable wait marker found for one workflow row.
@@ -443,6 +450,11 @@ func buildPsRows(workflows []*db.Workflow, markers map[string]psChatMarkers, nod
 				row.BackoffMaxAttempts = b.MaxAttempts
 				// While parked, the honest total includes the wait in progress.
 				row.BackoffWaitedMs = b.WaitedMs + now.Sub(b.WaitingSince).Milliseconds()
+				if b.IsUsageLimit() {
+					row.UsageLimitResumeAt = b.ResumeAt.UTC().Format(time.RFC3339)
+					row.UsageLimitProvider = b.Provider
+					row.UsageLimitProbing = b.Reason == db.ReasonUsageLimitProbe
+				}
 			}
 		}
 		// Gate detail is reported only for a marker written against THIS thread.
@@ -786,6 +798,16 @@ func psBackoffCell(r psRow) string {
 		return ""
 	}
 	waited := wfaDuration(time.Duration(r.BackoffWaitedMs) * time.Millisecond)
+	if r.State == string(psStateBackoff) && r.UsageLimitResumeAt != "" {
+		who := r.UsageLimitProvider
+		if who == "" {
+			who = "provider"
+		}
+		if r.UsageLimitProbing {
+			return fmt.Sprintf("⏳ %s usage limit — no reset given, next try %s, %s waited", who, r.UsageLimitResumeAt, waited)
+		}
+		return fmt.Sprintf("⏳ %s usage limit — resumes %s, %s waited", who, r.UsageLimitResumeAt, waited)
+	}
 	if r.State == string(psStateBackoff) {
 		return fmt.Sprintf("⏳ provider %d — attempt %d/%d, %s waited",
 			r.BackoffStatus, r.BackoffAttempt, r.BackoffMaxAttempts, waited)

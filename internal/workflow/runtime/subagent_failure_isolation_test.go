@@ -77,6 +77,19 @@ type subAgentFailureEnv struct {
 	statuses          []map[string]interface{}
 	toolStatuses      []map[string]interface{}
 	workflowErrors    []map[string]interface{}
+	// usageWaits records every UsageLimitWait activity (the durable wait
+	// marker), with the mock-clock time it ran; events is the order of the
+	// marker writes and CallLLM dispatches ("callllm:<who>#<turn>",
+	// "marker:set:<thread>", "marker:clear:<thread>").
+	usageWaits []usageWaitCall
+	// workflowYAMLs overrides the definition ActivityLoadWorkflow returns for a
+	// workflow name; any other name gets the agent loop.
+	workflowYAMLs map[string]string
+	// failFirstCallOf, when set, is asked before every CallLLM with the thread
+	// it runs on; a non-nil error fails that call.
+	failFirstCallOf func(thread string) error
+	callTimes       []callTime
+	events          []string
 	// cancelledCalls records CallLLM stubs whose activity context was
 	// cancelled while they were held in flight, as "<toolCallID>#<turn>"
 	// ("parent#N" for the parent).
@@ -125,7 +138,15 @@ func newSubAgentFailureEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 		return map[string]interface{}{"success": true}, nil
 	}
 
-	register("ActivityLoadWorkflow", func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+	register("ActivityLoadWorkflow", func(_ context.Context, in map[string]string) (LoadedWorkflow, error) {
+		if def, ok := e.workflowYAMLs[in["workflow_name"]]; ok {
+			parsed, err := wfyaml.ParseWorkflow([]byte(def))
+			if err != nil {
+				return LoadedWorkflow{}, err
+			}
+			raw, err := protojson.Marshal(parsed)
+			return LoadedWorkflow{WorkflowJSON: raw}, err
+		}
 		return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 	})
 	for _, name := range []string{"WorkflowCheckpoint", "ThreadStatus", "Cleanup"} {
@@ -133,6 +154,25 @@ func newSubAgentFailureEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 	}
 	register("EmitStreamFinalized", func(_ context.Context, _ types.EmitStreamFinalizedInput) (types.EmitStreamFinalizedOutput, error) {
 		return types.EmitStreamFinalizedOutput{}, nil
+	})
+	register("UsageLimitWait", func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		thread, _ := input["thread"].(string)
+		clear, _ := input["clear"].(bool)
+		call := usageWaitCall{Thread: thread, Clear: clear, At: e.env.Now()}
+		if !clear {
+			call.Provider, _ = input["provider"].(string)
+			call.Probing, _ = input["probing"].(bool)
+			call.ResumeAt, _ = time.Parse(time.RFC3339, input["resume_at"].(string))
+		}
+		e.usageWaits = append(e.usageWaits, call)
+		verb := "set"
+		if clear {
+			verb = "clear"
+		}
+		e.events = append(e.events, fmt.Sprintf("marker:%s:%s", verb, thread))
+		return map[string]interface{}{"success": true}, nil
 	})
 	register("WorkflowError", func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
 		e.mu.Lock()
@@ -259,6 +299,15 @@ func (e *subAgentFailureEnv) callLLM(ctx context.Context, input types.ActivityIn
 		who = toolCallID
 	}
 	e.reach(milestoneStarted(who, turn))
+	if e.failFirstCallOf != nil {
+		if ferr := e.failFirstCallOf(thread); ferr != nil {
+			return nil, ferr
+		}
+	}
+	e.mu.Lock()
+	e.events = append(e.events, fmt.Sprintf("callllm:%s#%d", who, turn))
+	e.callTimes = append(e.callTimes, callTime{Who: who, Turn: turn, At: e.env.Now()})
+	e.mu.Unlock()
 	if waitFor := e.hold(toolCallIDOrEmpty(isParent, toolCallID), turn); waitFor != "" {
 		e.await(waitFor)
 		// A held call that a pause cancelled is exactly the collateral damage

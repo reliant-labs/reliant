@@ -30,8 +30,8 @@ import (
 // A sub-agent that stopped on a failure is not finished: a message sent to it
 // resumes it where it stopped, and that message is what its next turn reads.
 //
-// Observed in prod (workflow 9fbaace8, 2026-10-13): a sub-agent hit the
-// provider's 7-day usage limit, ended with status failed, and every later
+// Observed in prod (workflow 9fbaace8, 2026-10-13): a sub-agent hit a
+// provider failure, ended with status failed, and every later
 // message to it — the user's, from the UI — was refused with "This agent has
 // already finished". A transient condition had terminally killed the thread.
 //
@@ -400,34 +400,6 @@ func (e *subAgentResumeEnv) reportsFrom(toolCallID string) []string {
 	return out
 }
 
-func (e *subAgentResumeEnv) reportBodiesFrom(toolCallID string) []string {
-	thread := e.agentThread(toolCallID)
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	var out []string
-	for _, r := range e.reports {
-		if r["from_thread_id"] == thread {
-			body, _ := r["body"].(string)
-			out = append(out, body)
-		}
-	}
-	return out
-}
-
-// errorSummariesOn is the summary of every error row written to thread.
-func (e *subAgentResumeEnv) errorSummariesOn(thread string) []string {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	var out []string
-	for _, row := range e.errorRows {
-		if row["thread"] == thread {
-			summary, _ := row["error_summary"].(string)
-			out = append(out, summary)
-		}
-	}
-	return out
-}
-
 // toolStatusesOf is every status the workflow wrote for a spawn tool call.
 func (e *subAgentResumeEnv) toolStatusesOf(toolCallID string) []string {
 	e.mu.Lock()
@@ -466,7 +438,7 @@ func TestSubAgentResumeE2E(t *testing.T) {
 	suite.Run(t, new(SubAgentResumeE2ESuite))
 }
 
-// The prod shape: a sub-agent hits a provider usage limit and stops; its
+// The prod shape: a sub-agent's provider fails and it stops; its
 // sibling keeps the run going; the user messages the stopped agent. The
 // message resumes it, its next CallLLM reads the message, and it reports its
 // new outcome to its parent under a fresh slot — the original spawn's one
@@ -479,7 +451,7 @@ func (s *SubAgentResumeE2ESuite) TestStoppedSubAgentIsResumedByAMessageAndReadsI
 	// The agent fails once the parent is parked on its spawns, so the
 	// parent's next turn is the one that reacts to the failure.
 	e.failingAgentWaitsFor[1] = milestoneParentTurnDelivered(2)
-	e.failTurns[1] = classifyError(usageLimitErr())
+	e.failTurns[1] = classifyError(stoppingFailureErr())
 	// That turn is where the user, having read the error, messages the
 	// stopped agent.
 	e.onParentTurn[3] = func(agent string) { e.messageAgent(agent, msg) }
@@ -519,7 +491,7 @@ func (s *SubAgentResumeE2ESuite) TestResumeRunsOnTheModelChosenWhileStopped() {
 	e := newSubAgentResumeEnv(s.T(), env, true)
 
 	e.failingAgentWaitsFor[1] = milestoneParentTurnDelivered(2)
-	e.failTurns[1] = classifyError(usageLimitErr())
+	e.failTurns[1] = classifyError(stoppingFailureErr())
 	e.onParentTurn[3] = func(agent string) {
 		e.changeAgentModel(agent, "gpt-5@openai")
 		e.messageAgent(agent, "switched you to OpenAI, continue")
@@ -544,7 +516,7 @@ func (s *SubAgentResumeE2ESuite) TestMessageThatArrivesWhileTheStepFailsGetsATur
 
 	e.failingAgentWaitsFor[1] = milestoneParentTurnDelivered(2)
 	e.onFailingAgentTurn[1] = func(agent string) { e.messageAgent(agent, msg) }
-	e.failTurns[1] = classifyError(usageLimitErr())
+	e.failTurns[1] = classifyError(stoppingFailureErr())
 
 	e.execute("chat-message-during-failure")
 
@@ -557,36 +529,6 @@ func (s *SubAgentResumeE2ESuite) TestMessageThatArrivesWhileTheStepFailsGetsATur
 		"the agent recovered, so its parent hears one completion and no failure")
 }
 
-// A provider usage limit fails the step on its first attempt — retrying a
-// window measured in days only delays the error — and what the user and the
-// parent are told names the reset time and how to continue.
-func (s *SubAgentResumeE2ESuite) TestUsageLimitStopsTheAgentAtOnceAndSaysHowToResume() {
-	env := s.NewTestWorkflowEnvironment()
-	e := newSubAgentResumeEnv(s.T(), env, false)
-	e.failingAgentWaitsFor[1] = milestoneParentTurnDelivered(2)
-	e.failTurns[1] = classifyError(usageLimitErr())
-
-	e.execute("chat-usage-limit")
-
-	s.Require().True(env.IsWorkflowCompleted())
-	s.Require().NoError(env.GetWorkflowError())
-	s.Require().Equal(1, e.agentTurns("tc1"), "a usage limit must not be retried")
-	s.Require().Equal([]string{"4@tc1"}, e.reportsFrom("tc1"))
-
-	summaries := e.errorSummariesOn(e.agentThread("tc1"))
-	s.Require().Len(summaries, 1, "the agent's own thread shows the error once")
-	s.Require().Contains(summaries[0], "resets Tue Sep 29 20:00 UTC")
-	s.Require().Contains(summaries[0], "switch this agent to a model from another provider",
-		"the user must be told how to continue: %q", summaries[0])
-	s.Require().Contains(summaries[0], "send it a message to resume it", "got %q", summaries[0])
-
-	body := e.reportBodiesFrom("tc1")[0]
-	s.Require().Contains(body, "resets Tue Sep 29 20:00 UTC")
-	s.Require().Contains(body, "provider usage limit",
-		"the parent must know resuming on the same provider fails until the reset: %q", body)
-	s.Require().Contains(body, "spawn_send", "the parent must know a message resumes it: %q", body)
-}
-
 // The parent acts on the failure report it got earlier and asks to resume the
 // agent — after a message has already resumed it. One agent is one loop on
 // one thread: the parent is told it is running, and no second loop starts.
@@ -595,7 +537,7 @@ func (s *SubAgentResumeE2ESuite) TestParentCannotResumeAnAgentAMessageAlreadyRes
 	e := newSubAgentResumeEnv(s.T(), env, true)
 
 	e.failingAgentWaitsFor[1] = milestoneParentTurnDelivered(2)
-	e.failTurns[1] = classifyError(usageLimitErr())
+	e.failTurns[1] = classifyError(stoppingFailureErr())
 	e.onParentTurn[3] = func(agent string) { e.messageAgent(agent, "carry on") }
 	e.parentToolCalls[3] = func(agent string) []map[string]interface{} {
 		input, _ := json.Marshal(map[string]interface{}{"agent_id": agent, "prompt": "retry it", "preset": "general"})
@@ -722,7 +664,7 @@ func (s *SubAgentResumeE2ESuite) TestMessageForAStoppedAgentAsTheRunEndsIsLeftTo
 	const msg = "carry on with the other provider"
 
 	e.failingAgentWaitsFor[1] = milestoneParentTurnDelivered(2)
-	e.failTurns[1] = classifyError(usageLimitErr())
+	e.failTurns[1] = classifyError(stoppingFailureErr())
 	e.onRootFinishing = func(agent string) { e.messageAgent(agent, msg) }
 
 	e.execute("chat-stopped-agent-at-run-end")
@@ -787,4 +729,11 @@ func (s *SubAgentResumeE2ESuite) TestRunStartedForAStoppedAgentResumesItBeforeTh
 	s.Require().Equal([]string{"report:tc-old#resume-3"}, rootRead[0],
 		"the root's first turn is the one that reads what the resumed agent reported")
 	s.Require().Empty(e.lookedUp(), "an agent handed to the run is not looked up again")
+}
+
+// stoppingFailureErr is a failure that really does stop a sub-agent: its
+// provider rejects the request outright. (A provider usage limit does not — the
+// agent waits it out in place; see usage_limit_wait_test.go.)
+func stoppingFailureErr() error {
+	return errors.New(`POST "https://api.example.com/v1/messages": 400 Bad Request invalid_request_error`)
 }

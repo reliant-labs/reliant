@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ChatState } from "../../gen/reliant/v1/chat_pb";
+import { ChatActivity, ChatState } from "../../gen/reliant/v1/chat_pb";
 import { UserUpdateType, EntityType } from "../../gen/reliant/v1/streaming_pb";
 import type { Chat } from "../../api/client";
 import type { UserUpdate } from "../../types/streaming";
@@ -107,6 +107,42 @@ afterEach(() => {
   queryClient.clear();
   useChatStore.setState({ activeChatId: null });
   useProjectStore.setState({ currentProject: null });
+});
+
+// The activity event carries only the number. The usage-limit wait's reset time
+// and provider live on the chat, so entering the wait must refetch it, and
+// leaving it must drop it — or "resumes 3:42 PM" outlives the wait.
+describe("globalUpdatesStore: usage-limit wait", () => {
+  it("refetches the chat when its run enters, re-parks in, and leaves the wait", () => {
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const send = (activity: ChatActivity, seq: number) =>
+      useGlobalUpdatesStore.getState().handleUpdate([
+        buildUpdate({
+          sequence_number: seq,
+          update_type: UserUpdateType.CHAT_ACTIVITY_CHANGED,
+          data: { chat_id: "c1", activity, timestamp: now },
+        }),
+      ]);
+    const detailRefetches = () =>
+      invalidate.mock.calls.filter(([f]) => JSON.stringify(f?.queryKey) === JSON.stringify(chatKeys.detail("c1"))).length;
+
+    send(ChatActivity.RUNNING, 1);
+    expect(detailRefetches()).toBe(0);
+
+    send(ChatActivity.WAITING_FOR_USAGE_LIMIT, 2);
+    expect(detailRefetches()).toBe(1);
+
+    // Re-parked on a new reset: the same activity again, a new time on the chat.
+    send(ChatActivity.WAITING_FOR_USAGE_LIMIT, 3);
+    expect(detailRefetches()).toBe(2);
+
+    send(ChatActivity.RUNNING, 4);
+    expect(detailRefetches()).toBe(3);
+
+    send(ChatActivity.RUNNING, 5);
+    expect(detailRefetches()).toBe(3);
+    invalidate.mockRestore();
+  });
 });
 
 describe("globalUpdatesStore cache patching", () => {

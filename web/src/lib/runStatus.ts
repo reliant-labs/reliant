@@ -58,7 +58,7 @@ export type RunLifecycleKey =
  * (`ChatActivity.WAITING_FOR_DAEMON`), and the server folds the same thing
  * into `RunDisplayState.WAITING_FOR_MACHINE` for the Runs list.
  */
-export type RunStatusOverlayKey = "waiting_for_machine" | "queued_for_machine";
+export type RunStatusOverlayKey = "waiting_for_machine" | "queued_for_machine" | "waiting_for_usage_limit";
 
 export type RunStatusKey = RunLifecycleKey | RunStatusOverlayKey;
 
@@ -114,6 +114,16 @@ const OVERLAY_ROWS: Record<RunStatusOverlayKey, RunStatusDisplay> = {
     badgeVariant: "warning",
     pulse: false,
   },
+  // The run is live but parked until a provider's usage limit resets
+  // (`ChatActivity.WAITING_FOR_USAGE_LIMIT`): not failed, not paused — it
+  // retries by itself.
+  waiting_for_usage_limit: {
+    key: "waiting_for_usage_limit",
+    label: "Waiting for usage limit",
+    dotVariant: "pending",
+    badgeVariant: "warning",
+    pulse: false,
+  },
 };
 
 /** The G7 hook point. See RunStatusOverlayKey. */
@@ -123,6 +133,8 @@ function overlayFor(input: { activity?: ChatActivity }): RunStatusOverlayKey | n
       return "waiting_for_machine";
     case ChatActivity.QUEUED_FOR_MACHINE:
       return "queued_for_machine";
+    case ChatActivity.WAITING_FOR_USAGE_LIMIT:
+      return "waiting_for_usage_limit";
     default:
       return null;
   }

@@ -81,6 +81,9 @@ const (
 	ChatServicePauseChatProcedure = "/reliant.v1.ChatService/PauseChat"
 	// ChatServiceResumeChatProcedure is the fully-qualified name of the ChatService's ResumeChat RPC.
 	ChatServiceResumeChatProcedure = "/reliant.v1.ChatService/ResumeChat"
+	// ChatServiceRetryUsageLimitWaitProcedure is the fully-qualified name of the ChatService's
+	// RetryUsageLimitWait RPC.
+	ChatServiceRetryUsageLimitWaitProcedure = "/reliant.v1.ChatService/RetryUsageLimitWait"
 	// ChatServiceDismissChatProcedure is the fully-qualified name of the ChatService's DismissChat RPC.
 	ChatServiceDismissChatProcedure = "/reliant.v1.ChatService/DismissChat"
 	// ChatServiceMarkUnreadChatProcedure is the fully-qualified name of the ChatService's
@@ -205,6 +208,10 @@ type ChatServiceClient interface {
 	PauseChat(context.Context, *connect.Request[v1.PauseChatRequest]) (*connect.Response[v1.PauseChatResponse], error)
 	// ResumeChat resumes a paused or expired workflow
 	ResumeChat(context.Context, *connect.Request[v1.ResumeChatRequest]) (*connect.Response[v1.ResumeChatResponse], error)
+	// RetryUsageLimitWait wakes a run parked until a provider's usage limit
+	// resets ("Retry now"): it retries the step immediately instead of waiting
+	// for the reset. A run that is not waiting is left alone (woken = false).
+	RetryUsageLimitWait(context.Context, *connect.Request[v1.RetryUsageLimitWaitRequest]) (*connect.Response[v1.RetryUsageLimitWaitResponse], error)
 	// DismissChat clears needs_attention state when user views a chat
 	DismissChat(context.Context, *connect.Request[v1.DismissChatRequest]) (*connect.Response[v1.DismissChatResponse], error)
 	// MarkUnreadChat marks a chat as needing attention (mark as unread)
@@ -365,6 +372,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceMethods.ByName("ResumeChat")),
 			connect.WithClientOptions(opts...),
 		),
+		retryUsageLimitWait: connect.NewClient[v1.RetryUsageLimitWaitRequest, v1.RetryUsageLimitWaitResponse](
+			httpClient,
+			baseURL+ChatServiceRetryUsageLimitWaitProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("RetryUsageLimitWait")),
+			connect.WithClientOptions(opts...),
+		),
 		dismissChat: connect.NewClient[v1.DismissChatRequest, v1.DismissChatResponse](
 			httpClient,
 			baseURL+ChatServiceDismissChatProcedure,
@@ -461,6 +474,7 @@ type chatServiceClient struct {
 	terminateChat            *connect.Client[v1.TerminateChatRequest, v1.TerminateChatResponse]
 	pauseChat                *connect.Client[v1.PauseChatRequest, v1.PauseChatResponse]
 	resumeChat               *connect.Client[v1.ResumeChatRequest, v1.ResumeChatResponse]
+	retryUsageLimitWait      *connect.Client[v1.RetryUsageLimitWaitRequest, v1.RetryUsageLimitWaitResponse]
 	dismissChat              *connect.Client[v1.DismissChatRequest, v1.DismissChatResponse]
 	markUnreadChat           *connect.Client[v1.MarkUnreadChatRequest, v1.MarkUnreadChatResponse]
 	compactChat              *connect.Client[v1.CompactChatRequest, v1.CompactChatResponse]
@@ -568,6 +582,11 @@ func (c *chatServiceClient) PauseChat(ctx context.Context, req *connect.Request[
 // ResumeChat calls reliant.v1.ChatService.ResumeChat.
 func (c *chatServiceClient) ResumeChat(ctx context.Context, req *connect.Request[v1.ResumeChatRequest]) (*connect.Response[v1.ResumeChatResponse], error) {
 	return c.resumeChat.CallUnary(ctx, req)
+}
+
+// RetryUsageLimitWait calls reliant.v1.ChatService.RetryUsageLimitWait.
+func (c *chatServiceClient) RetryUsageLimitWait(ctx context.Context, req *connect.Request[v1.RetryUsageLimitWaitRequest]) (*connect.Response[v1.RetryUsageLimitWaitResponse], error) {
+	return c.retryUsageLimitWait.CallUnary(ctx, req)
 }
 
 // DismissChat calls reliant.v1.ChatService.DismissChat.
@@ -719,6 +738,10 @@ type ChatServiceHandler interface {
 	PauseChat(context.Context, *connect.Request[v1.PauseChatRequest]) (*connect.Response[v1.PauseChatResponse], error)
 	// ResumeChat resumes a paused or expired workflow
 	ResumeChat(context.Context, *connect.Request[v1.ResumeChatRequest]) (*connect.Response[v1.ResumeChatResponse], error)
+	// RetryUsageLimitWait wakes a run parked until a provider's usage limit
+	// resets ("Retry now"): it retries the step immediately instead of waiting
+	// for the reset. A run that is not waiting is left alone (woken = false).
+	RetryUsageLimitWait(context.Context, *connect.Request[v1.RetryUsageLimitWaitRequest]) (*connect.Response[v1.RetryUsageLimitWaitResponse], error)
 	// DismissChat clears needs_attention state when user views a chat
 	DismissChat(context.Context, *connect.Request[v1.DismissChatRequest]) (*connect.Response[v1.DismissChatResponse], error)
 	// MarkUnreadChat marks a chat as needing attention (mark as unread)
@@ -875,6 +898,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceMethods.ByName("ResumeChat")),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceRetryUsageLimitWaitHandler := connect.NewUnaryHandler(
+		ChatServiceRetryUsageLimitWaitProcedure,
+		svc.RetryUsageLimitWait,
+		connect.WithSchema(chatServiceMethods.ByName("RetryUsageLimitWait")),
+		connect.WithHandlerOptions(opts...),
+	)
 	chatServiceDismissChatHandler := connect.NewUnaryHandler(
 		ChatServiceDismissChatProcedure,
 		svc.DismissChat,
@@ -987,6 +1016,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServicePauseChatHandler.ServeHTTP(w, r)
 		case ChatServiceResumeChatProcedure:
 			chatServiceResumeChatHandler.ServeHTTP(w, r)
+		case ChatServiceRetryUsageLimitWaitProcedure:
+			chatServiceRetryUsageLimitWaitHandler.ServeHTTP(w, r)
 		case ChatServiceDismissChatProcedure:
 			chatServiceDismissChatHandler.ServeHTTP(w, r)
 		case ChatServiceMarkUnreadChatProcedure:
@@ -1094,6 +1125,10 @@ func (UnimplementedChatServiceHandler) PauseChat(context.Context, *connect.Reque
 
 func (UnimplementedChatServiceHandler) ResumeChat(context.Context, *connect.Request[v1.ResumeChatRequest]) (*connect.Response[v1.ResumeChatResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ResumeChat is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) RetryUsageLimitWait(context.Context, *connect.Request[v1.RetryUsageLimitWaitRequest]) (*connect.Response[v1.RetryUsageLimitWaitResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.RetryUsageLimitWait is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) DismissChat(context.Context, *connect.Request[v1.DismissChatRequest]) (*connect.Response[v1.DismissChatResponse], error) {

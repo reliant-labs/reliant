@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -28,6 +29,7 @@ type fakeRepo struct {
 	updatedChats       []db.Chat
 	updatedStatuses    map[string]db.WorkflowStatus
 	deletedCheckpoints []string
+	clearedUsageLimit  []string
 	casCalls           []workflowCASCall
 	casErr             error
 	cascadedReason     db.WorkflowStopReason
@@ -121,6 +123,11 @@ func (f *fakeRepo) EmitQuestionUpdate(_ context.Context, _ string, update db.Que
 
 func (f *fakeRepo) LockChatRunControl(context.Context, string) (func(), error) {
 	return func() {}, nil
+}
+
+func (f *fakeRepo) ClearUsageLimitWait(_ context.Context, chatID, threadID string, _ time.Time) error {
+	f.clearedUsageLimit = append(f.clearedUsageLimit, chatID+"|"+threadID)
+	return nil
 }
 
 // RunTx runs f inline; the fake has no transactions.
@@ -246,6 +253,19 @@ func TestTerminate_LiveRunHardTerminatesAndDrainsSubtree(t *testing.T) {
 	assert.Contains(t, *repo.resolvedResponse, "terminated by operator")
 	require.Len(t, repo.emittedQuestions, 1)
 	assert.Equal(t, "resolved", repo.emittedQuestions[0].Status)
+}
+
+// A terminated run executes no workflow code, so it cannot release its own
+// usage-limit wait marker; left behind, the chat would read as waiting for a
+// run that is gone.
+func TestTerminate_ReleasesUsageLimitWaitMarker(t *testing.T) {
+	repo, _, _, svc := fixture(t)
+	repo.workflow = &db.Workflow{ID: "wf-1", Status: db.Active()}
+
+	require.NoError(t, svc.Terminate(context.Background(), "chat-1"))
+
+	assert.Equal(t, []string{"chat-1|"}, repo.clearedUsageLimit,
+		"a stop must release every thread's marker (empty thread) for the chat")
 }
 
 func TestTerminate_PausedRunUsesPausedCAS(t *testing.T) {

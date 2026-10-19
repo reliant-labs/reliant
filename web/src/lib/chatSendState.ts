@@ -122,6 +122,16 @@ export function getSendState(input: SendStateInput): SendState {
         reason: "Agent is working — your message will be queued",
       };
 
+    case ChatActivity.WAITING_FOR_USAGE_LIMIT:
+      // The run is parked until a provider's usage limit resets. The message is
+      // saved to the thread's mailbox (never lost) and wakes the wait, so the
+      // run retries now — which is how a model or provider switch takes effect.
+      return {
+        action: "queue",
+        canType: true,
+        reason: "Waiting for a usage limit to reset — your message will be delivered and the run will retry now",
+      };
+
     case ChatActivity.AWAITING_INPUT:
       // The workflow is blocked *on the user*. This is the highest-priority
       // send there is: it unblocks a stalled run.

@@ -255,6 +255,10 @@ func chatFromRow(row pgdb.ChatsWithActivity) *core.Chat {
 		ListInSidebar:   row.ListInSidebar.Bool,
 		LaunchKind:      row.LaunchKind.String,
 		TriggerID:       chatNullStringToPtr(row.TriggerID),
+
+		UsageLimitResumesAt: chatNullTimeToPtr(row.UsageLimitResumesAt),
+		UsageLimitProvider:  row.UsageLimitProvider.String,
+		UsageLimitProbing:   row.UsageLimitProbing,
 		RootStatus: chatRootStatus(
 			row.RootWorkflowState,
 			row.RootWorkflowStopReason,

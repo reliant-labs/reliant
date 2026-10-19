@@ -1171,7 +1171,8 @@ function isRunExecuting(chatId: string): boolean {
   return (
     activity === ChatActivity.RUNNING ||
     activity === ChatActivity.AWAITING_INPUT ||
-    activity === ChatActivity.WAITING_FOR_DAEMON
+    activity === ChatActivity.WAITING_FOR_DAEMON ||
+    activity === ChatActivity.WAITING_FOR_USAGE_LIMIT
   );
 }
 
