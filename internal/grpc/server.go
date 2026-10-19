@@ -56,6 +56,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
+	"github.com/reliant-labs/reliant/internal/handlers/provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/repo"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
@@ -72,8 +73,15 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/worktree"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
+	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
+	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
+	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
@@ -415,14 +423,33 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, fmt.Errorf("message service: %w", err)
 	}
 	settingsService, err := settings.New(settings.Deps{
-		Logger:             handlerLogger,
-		Config:             handlerConfig,
-		Repo:               database,
-		ControlPlane:       controlplane.NewClient(cfg.ControlPlane.URL),
-		ExchangeClaudeCode: claude.ExchangeClaudeAuthorizationCode,
+		Logger:                  handlerLogger,
+		Config:                  handlerConfig,
+		Repo:                    database,
+		ControlPlane:            controlplane.NewClient(cfg.ControlPlane.URL),
+		ExchangeClaudeCode:      claude.ExchangeClaudeAuthorizationCode,
+		ExchangeCodexCode:       codex.ExchangeCodexAuthorizationCode,
+		ExchangeAntigravityCode: antigravity.ExchangeAntigravityAuthorizationCode,
+		PollCopilotDevice:       copilot.PollDeviceAuthOnce,
+		ValidateKey:             keyvalidate.Validate,
+		ClaudeProfile: func(ctx context.Context, accessToken string) (providerusage.ClaudeAccountProfile, error) {
+			return providerusage.ClaudeProfile(ctx, nil, accessToken)
+		},
+		GitHubIdentity: settings.FetchGitHubUser,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("settings service: %w", err)
+	}
+	providerAccountService, err := provider_account.New(provider_account.Deps{
+		Logger:      handlerLogger,
+		Config:      handlerConfig,
+		Store:       database,
+		ValidateKey: keyvalidate.Validate,
+		// The same refreshing token source the worker's poller uses, so a refresh never races a live request.
+		UsageRefresher: &accountlimits.Fetcher{Store: database, Tokens: drivers.RefreshingTokens{Store: database}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("provider account service: %w", err)
 	}
 	mcpService, err := mcp.New(mcp.Deps{
 		Logger: handlerLogger,
@@ -602,6 +629,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	runPath, runHandler := reliantv1connect.NewRunServiceHandler(runService, opts...)
 	messagePath, messageHandler := reliantv1connect.NewMessageServiceHandler(messageService, opts...)
 	settingsPath, settingsHandler := reliantv1connect.NewSettingsServiceHandler(settingsService, opts...)
+	providerAccountPath, providerAccountHandler := reliantv1connect.NewProviderAccountServiceHandler(providerAccountService, opts...)
 	mcpPath, mcpHandler := reliantv1connect.NewMCPServiceHandler(mcpService, opts...)
 	workflowPath, workflowHandler := reliantv1connect.NewWorkflowServiceHandler(workflowService, opts...)
 	scenarioPath, scenarioHandler := reliantv1connect.NewScenarioServiceHandler(scenarioService, opts...)
@@ -793,6 +821,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	mux.Handle(runPath, runHandler)
 	mux.Handle(messagePath, messageHandler)
 	mux.Handle(settingsPath, settingsHandler)
+	mux.Handle(providerAccountPath, providerAccountHandler)
 	mux.Handle(mcpPath, mcpHandler)
 	mux.Handle(workflowPath, workflowHandler)
 	mux.Handle(scenarioPath, scenarioHandler)

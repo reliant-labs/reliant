@@ -24,7 +24,7 @@ import (
 )
 
 // claudeOnly is prod user 30542add's providers on 2026-10-10: Codex
-// disconnected (UpdateProviderAPIKey 2026-10-09T22:56:22Z), Claude connected
+// disconnected (the provider-removal RPC, 2026-10-09T22:56:22Z), Claude connected
 // (CompleteClaudeOAuth 22:56:40Z), which the resolver registers as claude.
 func claudeOnly() models.AvailableDrivers {
 	return models.AvailableDrivers{Drivers: map[models.DriverID]models.DriverConfig{

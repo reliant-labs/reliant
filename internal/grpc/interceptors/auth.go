@@ -388,8 +388,8 @@ func NewTimeoutInterceptor() *TimeoutInterceptor {
 			// Attachment uploads - depends on file size
 			"/reliant.v1.AttachmentService/Upload": 60 * time.Second,
 			// Provider API key validation - Gemini requires minimum 10s deadline
-			"/reliant.v1.SettingsService/ValidateProviderAPIKey": 20 * time.Second,
-			"/reliant.v1.SettingsService/UpdateProviderAPIKey":   20 * time.Second,
+			"/reliant.v1.SettingsService/ValidateProviderAPIKey":   20 * time.Second,
+			"/reliant.v1.ProviderAccountService/AddProviderAPIKey": 20 * time.Second,
 			// Worktree operations can involve git worktree add/remove, diffing, and file copying.
 			"/reliant.v1.WorktreeService/CreateWorktree":           worktreeOperationTimeout,
 			"/reliant.v1.WorktreeService/DeleteWorktree":           worktreeOperationTimeout,
@@ -425,8 +425,9 @@ func NewTimeoutInterceptor() *TimeoutInterceptor {
 			"/reliant.v1.DaemonService/StartOAuthFlow":   0,
 			"/reliant.v1.SystemService/StartOAuthSignIn": 0,
 			// OAuth token exchange - external network call
-			"/reliant.v1.SettingsService/CompleteClaudeOAuth": 30 * time.Second,
-			"/reliant.v1.SettingsService/CompleteCodexOAuth":  30 * time.Second,
+			"/reliant.v1.SettingsService/CompleteClaudeOAuth":      30 * time.Second,
+			"/reliant.v1.SettingsService/CompleteCodexOAuth":       30 * time.Second,
+			"/reliant.v1.SettingsService/CompleteAntigravityOAuth": 30 * time.Second,
 		},
 	}
 }

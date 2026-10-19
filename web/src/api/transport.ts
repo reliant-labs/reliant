@@ -173,9 +173,10 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   // OAuth token exchange - external network call
   CompleteClaudeOAuth: OAUTH_EXCHANGE_TIMEOUT_MS,
   CompleteCodexOAuth: OAUTH_EXCHANGE_TIMEOUT_MS,
+  CompleteAntigravityOAuth: OAUTH_EXCHANGE_TIMEOUT_MS,
   // Provider API key validation - external network call
   ValidateProviderAPIKey: PROVIDER_VALIDATION_TIMEOUT_MS,
-  UpdateProviderAPIKey: PROVIDER_VALIDATION_TIMEOUT_MS,
+  AddProviderAPIKey: PROVIDER_VALIDATION_TIMEOUT_MS,
   // Control-plane CloneRepo: NATS request/reply to the daemon with a 60s
   // server-side timeout (gitcredential.svc.Clone), then a real `git clone`
   // subprocess on large repos. WORKTREE_OPERATION_TIMEOUT_MS gives headroom

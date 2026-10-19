@@ -1,6 +1,7 @@
 package provider_account
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -9,25 +10,42 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the provider_account service. Composition
-// (internal/app/compose.go) supplies Logger/Config and resolves added fields
-// by type. The rpc methods on *Service are where this service's logic lives;
-// see the forge `api` / `services` skill.
+// Store is the slice of the repository this service uses; *db.Repo satisfies it.
+type Store interface {
+	ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error)
+	ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error)
+	UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error)
+	PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
+	ReorderProviderAccounts(ctx context.Context, userID, provider string, orderedIDs []string) error
+	DeleteProviderAccount(ctx context.Context, userID, accountID string) error
+	GetChatWithUserCheck(ctx context.Context, id, userID string) (*db.Chat, error)
+	GetRootThread(ctx context.Context, chatID string) (*db.Thread, error)
+	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
+	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
+}
+
+// Deps holds dependencies for the provider_account service. The rpc methods on *Service are
+// where this service's logic lives; see the forge `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
+	// Store holds accounts, their limit state and thread assignments.
+	Store Store
+	// ValidateKey checks a pasted API key against its provider before it is stored
+	// (keyvalidate.Validate in production). ok=false carries a message for the user.
+	ValidateKey func(ctx context.Context, provider models.Family, apiKey string) (ok bool, message string)
 	// UsageRefresher reads an account's usage on demand
 	// (RefreshProviderAccountUsage). A server that cannot reach the account
 	// store leaves it nil and the rpc answers Unavailable.
 	// forge:optional-dep
 	UsageRefresher accountlimits.Refresher
-	// Add your dependencies here (e.g. Repo Repository). Required ones get
-	// a validateDeps() check below. Tag intentionally-optional fields with
-	// the `forge:optional-dep` directive directly above the field.
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -39,8 +57,12 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("provider_account: Deps.Config is required")
 	}
-	// Add checks for your required Deps fields here. Example:
-	//   if d.Repo == nil { return fmt.Errorf("provider_account: Deps.Repo is required") }
+	if d.Store == nil {
+		return fmt.Errorf("provider_account: Deps.Store is required")
+	}
+	if d.ValidateKey == nil {
+		return fmt.Errorf("provider_account: Deps.ValidateKey is required")
+	}
 	return nil
 }
 

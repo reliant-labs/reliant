@@ -82,10 +82,14 @@ describe('runAntigravityOAuthFlow', () => {
 
   it('builds a Google authorize URL with PKCE, offline access and forced consent', async () => {
     const captured = echoStateDaemon()
-    completeAntigravityOAuthMock.mockResolvedValue({ success: true, message: 'Connected' })
+    completeAntigravityOAuthMock.mockResolvedValue({ success: true, message: 'Connected', created: true })
 
     const result = await runAntigravityOAuthFlow()
-    expect(result).toEqual({ ok: true, message: 'Connected' })
+    expect(result).toEqual({
+      ok: true,
+      message: 'Connected',
+      outcome: { success: true, message: 'Connected', created: true },
+    })
 
     const template = captured()
     expect(template).toContain('{redirect_uri}')
@@ -125,8 +129,25 @@ describe('runAntigravityOAuthFlow', () => {
       'test-code',
       expect.any(String),
       'http://127.0.0.1:9999/callback',
+      undefined,
     )
-    expect(completeAntigravityOAuthMock.mock.calls[0]).toHaveLength(3)
+  })
+
+  it('names the reconnect target on the exchange, and asks Google to pick an account only when adding', async () => {
+    const captured = echoStateDaemon()
+    completeAntigravityOAuthMock.mockResolvedValue({ success: true, message: 'Connected', created: false })
+
+    await runAntigravityOAuthFlow({ accountId: 'acct-7' })
+    expect(completeAntigravityOAuthMock.mock.calls[0][3]).toBe('acct-7')
+    const reconnectUrl = new URL(captured().replace('{redirect_uri}', 'http://placeholder'))
+    expect(reconnectUrl.searchParams.get('prompt')).toBe('consent')
+
+    completeAntigravityOAuthMock.mockClear()
+    const captured2 = echoStateDaemon()
+    await runAntigravityOAuthFlow({ prompt: 'select_account' })
+    expect(completeAntigravityOAuthMock.mock.calls[0][3]).toBeUndefined()
+    const addUrl = new URL(captured2().replace('{redirect_uri}', 'http://placeholder'))
+    expect(addUrl.searchParams.get('prompt')).toBe('select_account consent')
   })
 
   it('still verifies state locally even though the exchange does not carry it', async () => {

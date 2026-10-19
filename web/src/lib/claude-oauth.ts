@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/react'
-import { settingsGrpc } from '@/api/settings-grpc'
+import { settingsGrpc, type SignInOutcome } from '@/api/settings-grpc'
 import { startOAuthViaDaemon } from '@/api/daemon-grpc'
 import { startOAuthViaLocalServer } from '@/lib/oauth-local'
 import { startOAuthViaDesktop, supportsLocalProviderOAuth } from '@/lib/oauth-desktop'
@@ -30,6 +30,8 @@ export type ClaudeOAuthResult =
   | {
       ok: true
       message: string
+      /** What the sign-in did to the account list; see SignInOutcome. */
+      outcome: SignInOutcome
     }
   | {
       ok: false
@@ -43,6 +45,8 @@ export interface ClaudeOAuthOptions {
   clientId?: string
   scope?: string
   statePrefix?: string
+  /** Reconnect target: the account that is signing in again. Empty = add / sign in. */
+  accountId?: string
 }
 
 const errorResult = (errorCode: ClaudeOAuthErrorCode, message: string): ClaudeOAuthResult => ({
@@ -122,11 +126,12 @@ export async function runClaudeOAuthFlow(options: ClaudeOAuthOptions = {}): Prom
       oauthResp.code,
       codeVerifier,
       oauthResp.redirectUri,
-      state
+      state,
+      options.accountId
     )
 
     if (result.success) {
-      return { ok: true, message: result.message || 'Claude connected successfully' }
+      return { ok: true, message: result.message || 'Claude connected successfully', outcome: result }
     }
     Sentry.captureMessage('Claude OAuth token exchange failed', {
       tags: { component: 'oauth', provider: 'claude' },

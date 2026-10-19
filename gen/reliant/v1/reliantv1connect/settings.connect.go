@@ -77,9 +77,6 @@ const (
 	// SettingsServiceGetProviderStatusesProcedure is the fully-qualified name of the SettingsService's
 	// GetProviderStatuses RPC.
 	SettingsServiceGetProviderStatusesProcedure = "/reliant.v1.SettingsService/GetProviderStatuses"
-	// SettingsServiceUpdateProviderAPIKeyProcedure is the fully-qualified name of the SettingsService's
-	// UpdateProviderAPIKey RPC.
-	SettingsServiceUpdateProviderAPIKeyProcedure = "/reliant.v1.SettingsService/UpdateProviderAPIKey"
 	// SettingsServiceValidateProviderAPIKeyProcedure is the fully-qualified name of the
 	// SettingsService's ValidateProviderAPIKey RPC.
 	SettingsServiceValidateProviderAPIKeyProcedure = "/reliant.v1.SettingsService/ValidateProviderAPIKey"
@@ -176,8 +173,6 @@ type SettingsServiceClient interface {
 	SavePrompts(context.Context, *connect.Request[v1.SavePromptsRequest]) (*connect.Response[v1.SavePromptsResponse], error)
 	// GetProviderStatuses retrieves configuration status of all providers
 	GetProviderStatuses(context.Context, *connect.Request[v1.GetProviderStatusesRequest]) (*connect.Response[v1.GetProviderStatusesResponse], error)
-	// UpdateProviderAPIKey updates or deletes an API key for a provider
-	UpdateProviderAPIKey(context.Context, *connect.Request[v1.UpdateProviderAPIKeyRequest]) (*connect.Response[v1.UpdateProviderAPIKeyResponse], error)
 	// ValidateProviderAPIKey validates an API key for a provider
 	ValidateProviderAPIKey(context.Context, *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error)
 	// SyncReliantProvider hydrates the Reliant provider API key from authenticated control-plane state.
@@ -318,12 +313,6 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(settingsServiceMethods.ByName("GetProviderStatuses")),
 			connect.WithClientOptions(opts...),
 		),
-		updateProviderAPIKey: connect.NewClient[v1.UpdateProviderAPIKeyRequest, v1.UpdateProviderAPIKeyResponse](
-			httpClient,
-			baseURL+SettingsServiceUpdateProviderAPIKeyProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("UpdateProviderAPIKey")),
-			connect.WithClientOptions(opts...),
-		),
 		validateProviderAPIKey: connect.NewClient[v1.ValidateProviderAPIKeyRequest, v1.ValidateProviderAPIKeyResponse](
 			httpClient,
 			baseURL+SettingsServiceValidateProviderAPIKeyProcedure,
@@ -451,7 +440,6 @@ type settingsServiceClient struct {
 	getPrompts                  *connect.Client[v1.GetPromptsRequest, v1.GetPromptsResponse]
 	savePrompts                 *connect.Client[v1.SavePromptsRequest, v1.SavePromptsResponse]
 	getProviderStatuses         *connect.Client[v1.GetProviderStatusesRequest, v1.GetProviderStatusesResponse]
-	updateProviderAPIKey        *connect.Client[v1.UpdateProviderAPIKeyRequest, v1.UpdateProviderAPIKeyResponse]
 	validateProviderAPIKey      *connect.Client[v1.ValidateProviderAPIKeyRequest, v1.ValidateProviderAPIKeyResponse]
 	syncReliantProvider         *connect.Client[v1.SyncReliantProviderRequest, v1.SyncReliantProviderResponse]
 	completeCodexOAuth          *connect.Client[v1.CompleteCodexOAuthRequest, v1.CompleteCodexOAuthResponse]
@@ -540,11 +528,6 @@ func (c *settingsServiceClient) SavePrompts(ctx context.Context, req *connect.Re
 // GetProviderStatuses calls reliant.v1.SettingsService.GetProviderStatuses.
 func (c *settingsServiceClient) GetProviderStatuses(ctx context.Context, req *connect.Request[v1.GetProviderStatusesRequest]) (*connect.Response[v1.GetProviderStatusesResponse], error) {
 	return c.getProviderStatuses.CallUnary(ctx, req)
-}
-
-// UpdateProviderAPIKey calls reliant.v1.SettingsService.UpdateProviderAPIKey.
-func (c *settingsServiceClient) UpdateProviderAPIKey(ctx context.Context, req *connect.Request[v1.UpdateProviderAPIKeyRequest]) (*connect.Response[v1.UpdateProviderAPIKeyResponse], error) {
-	return c.updateProviderAPIKey.CallUnary(ctx, req)
 }
 
 // ValidateProviderAPIKey calls reliant.v1.SettingsService.ValidateProviderAPIKey.
@@ -677,8 +660,6 @@ type SettingsServiceHandler interface {
 	SavePrompts(context.Context, *connect.Request[v1.SavePromptsRequest]) (*connect.Response[v1.SavePromptsResponse], error)
 	// GetProviderStatuses retrieves configuration status of all providers
 	GetProviderStatuses(context.Context, *connect.Request[v1.GetProviderStatusesRequest]) (*connect.Response[v1.GetProviderStatusesResponse], error)
-	// UpdateProviderAPIKey updates or deletes an API key for a provider
-	UpdateProviderAPIKey(context.Context, *connect.Request[v1.UpdateProviderAPIKeyRequest]) (*connect.Response[v1.UpdateProviderAPIKeyResponse], error)
 	// ValidateProviderAPIKey validates an API key for a provider
 	ValidateProviderAPIKey(context.Context, *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error)
 	// SyncReliantProvider hydrates the Reliant provider API key from authenticated control-plane state.
@@ -813,12 +794,6 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		SettingsServiceGetProviderStatusesProcedure,
 		svc.GetProviderStatuses,
 		connect.WithSchema(settingsServiceMethods.ByName("GetProviderStatuses")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceUpdateProviderAPIKeyHandler := connect.NewUnaryHandler(
-		SettingsServiceUpdateProviderAPIKeyProcedure,
-		svc.UpdateProviderAPIKey,
-		connect.WithSchema(settingsServiceMethods.ByName("UpdateProviderAPIKey")),
 		connect.WithHandlerOptions(opts...),
 	)
 	settingsServiceValidateProviderAPIKeyHandler := connect.NewUnaryHandler(
@@ -959,8 +934,6 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 			settingsServiceSavePromptsHandler.ServeHTTP(w, r)
 		case SettingsServiceGetProviderStatusesProcedure:
 			settingsServiceGetProviderStatusesHandler.ServeHTTP(w, r)
-		case SettingsServiceUpdateProviderAPIKeyProcedure:
-			settingsServiceUpdateProviderAPIKeyHandler.ServeHTTP(w, r)
 		case SettingsServiceValidateProviderAPIKeyProcedure:
 			settingsServiceValidateProviderAPIKeyHandler.ServeHTTP(w, r)
 		case SettingsServiceSyncReliantProviderProcedure:
@@ -1060,10 +1033,6 @@ func (UnimplementedSettingsServiceHandler) SavePrompts(context.Context, *connect
 
 func (UnimplementedSettingsServiceHandler) GetProviderStatuses(context.Context, *connect.Request[v1.GetProviderStatusesRequest]) (*connect.Response[v1.GetProviderStatusesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.GetProviderStatuses is not implemented"))
-}
-
-func (UnimplementedSettingsServiceHandler) UpdateProviderAPIKey(context.Context, *connect.Request[v1.UpdateProviderAPIKeyRequest]) (*connect.Response[v1.UpdateProviderAPIKeyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.UpdateProviderAPIKey is not implemented"))
 }
 
 func (UnimplementedSettingsServiceHandler) ValidateProviderAPIKey(context.Context, *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error) {

@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -11,7 +12,12 @@ import (
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
+	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -34,6 +40,21 @@ type Deps struct {
 	// server.go passes claude.ExchangeClaudeAuthorizationCode; a test passes a
 	// fake so CompleteClaudeOAuth never reaches Anthropic's token endpoint.
 	ExchangeClaudeCode func(code, codeVerifier, redirectURI, state string) (*claude.ClaudeTokens, error)
+	// ExchangeCodexCode and ExchangeAntigravityCode do the same for Codex and Antigravity.
+	ExchangeCodexCode       func(code, codeVerifier, redirectURI string) (*codex.CodexTokens, error)
+	ExchangeAntigravityCode func(code, codeVerifier, redirectURI string) (*antigravity.AntigravityTokens, error)
+	// ValidateKey checks a pasted API key against its provider (keyvalidate.Validate).
+	ValidateKey func(ctx context.Context, provider models.Family, apiKey string) (ok bool, message string)
+	// PollCopilotDevice performs one poll of GitHub's device flow.
+	PollCopilotDevice func(ctx context.Context, deviceCode string) (*copilot.GitHubTokens, error)
+	// ClaudeProfile reads the account behind a Claude token (plan, email). A server that cannot
+	// reach it leaves it nil and a new Claude account's plan stays unknown until the next poll.
+	// forge:optional-dep
+	ClaudeProfile func(ctx context.Context, accessToken string) (providerusage.ClaudeAccountProfile, error)
+	// GitHubIdentity reads the GitHub user behind a Copilot token. Nil leaves a Copilot account
+	// unlabelled, and signing in again replaces it instead of adding another.
+	// forge:optional-dep
+	GitHubIdentity func(ctx context.Context, accessToken string) (GitHubUser, error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -53,6 +74,18 @@ func (d Deps) validateDeps() error {
 	}
 	if d.ExchangeClaudeCode == nil {
 		return fmt.Errorf("settings: Deps.ExchangeClaudeCode is required")
+	}
+	if d.ExchangeCodexCode == nil {
+		return fmt.Errorf("settings: Deps.ExchangeCodexCode is required")
+	}
+	if d.ExchangeAntigravityCode == nil {
+		return fmt.Errorf("settings: Deps.ExchangeAntigravityCode is required")
+	}
+	if d.ValidateKey == nil {
+		return fmt.Errorf("settings: Deps.ValidateKey is required")
+	}
+	if d.PollCopilotDevice == nil {
+		return fmt.Errorf("settings: Deps.PollCopilotDevice is required")
 	}
 	return nil
 }

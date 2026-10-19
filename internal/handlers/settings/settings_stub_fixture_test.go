@@ -7,6 +7,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	settings "github.com/reliant-labs/reliant/internal/handlers/settings"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
 )
 
 // memorySettings is the caller's settings rows, by key, behind a StubRepo
@@ -51,9 +52,15 @@ func (m memorySettings) repo() *settings.StubRepo {
 }
 
 // newSettingsService is the service over repo through the generated harness.
-// The control plane and the Claude code exchange are stand-ins that fail
-// loudly if a row reaches them.
+// The control plane and the code exchanges are stand-ins that fail loudly if a row
+// reaches them. The Copilot poll is the one the real flow has: it fails on a cancelled
+// context before anything leaves the process.
 func newSettingsService(t *testing.T, repo db.Repository) *settings.Service {
 	t.Helper()
-	return settings.NewTestSettings(t, settings.WithSettingsDeps(settings.Deps{Repo: repo}), settings.WithPlaceholderDeps())
+	return settings.NewTestSettings(t, settings.WithSettingsDeps(settings.Deps{
+		Repo: repo,
+		PollCopilotDevice: func(ctx context.Context, _ string) (*copilot.GitHubTokens, error) {
+			return nil, ctx.Err()
+		},
+	}), settings.WithPlaceholderDeps())
 }

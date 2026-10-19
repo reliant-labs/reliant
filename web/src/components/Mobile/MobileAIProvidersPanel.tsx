@@ -90,7 +90,6 @@ interface ProviderStatus {
   provider: string;
   configured: boolean;
   hasApiKey: boolean;
-  maskedKey?: string;
   displayName: string;
 }
 
@@ -287,11 +286,6 @@ function ConfiguredProviderRow({
         <div className="flex items-center gap-2 text-xs text-success-ink">
           <Check className="h-3 w-3 shrink-0" />
           <span>Connected</span>
-          {!isReliant && provider.maskedKey && (
-            <span className="truncate font-mono text-muted-foreground" data-sentry-mask>
-              {provider.maskedKey}
-            </span>
-          )}
         </div>
       </div>
       <button
@@ -439,7 +433,7 @@ export function MobileAIProvidersPanel({
 
     setDeletingProvider(provider);
     try {
-      await api.settings.updateProvider(provider, "");
+      await api.settings.deleteProvider(provider);
       await refreshAfterKeyChange(provider);
       const remainingWithKeys = providers.filter(
         (p) => p.hasApiKey && p.provider !== provider,

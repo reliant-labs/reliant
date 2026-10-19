@@ -16,13 +16,13 @@ import (
 )
 
 // Provider credentials are independent of each other. Settings → Providers
-// sends one RPC per action — UpdateProviderAPIKey for a disconnect or a key
-// change, Complete<Provider>OAuth for a sign-in — and each must change only
+// sends one RPC per action — ProviderAccountService.DeleteProviderAccount for a disconnect,
+// Complete<Provider>OAuth for a sign-in — and each must change only
 // the provider it names. These tests pin that at the RPC boundary: a user whose
 // Codex vanished around a Claude sign-in (prod, 2026-10-09) must be able to
 // rule the server out from the test suite alone.
 
-// isolationProviders is every provider UpdateProviderAPIKey accepts.
+// isolationProviders is every provider an account can belong to.
 var isolationProviders = []string{
 	"claude", "codex", "copilot", "antigravity",
 	"reliant", "anthropic", "openai", "gemini", "openrouter",
@@ -67,6 +67,9 @@ func seedProviders(t *testing.T, ctx context.Context, repo *db.Repo, userID stri
 		}
 		require.NoError(t, repo.SetProviderAPIKey(ctx, userID, provider, marker))
 	}
+	// Existing connections become accounts the way they do in production: the boot copy.
+	_, err := repo.CopyLegacyCredentials(ctx)
+	require.NoError(t, err)
 }
 
 // providerCredentials reports, per provider, exactly what is stored for
@@ -121,36 +124,6 @@ func withoutProvider(credentials map[string]string, provider string) map[string]
 	return rest
 }
 
-func TestSettingsService_DisconnectingOneProviderLeavesEveryOtherProviderIntact(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-	svc := newTestService(t, Deps{Repo: repo})
-
-	for _, target := range isolationProviders {
-		t.Run(target, func(t *testing.T) {
-			// One user per case: each starts with every provider connected.
-			userID := "isolation-disconnect-" + target
-			ctx := isolationContext(userID)
-			seedProviders(t, ctx, repo, userID, isolationProviders...)
-			before := providerCredentials(t, ctx, repo, userID)
-			require.Len(t, before, len(isolationProviders), "every provider must be seeded")
-
-			// Exactly what Settings → Providers sends for "Disconnect"/"Delete".
-			resp, err := svc.UpdateProviderAPIKey(ctx, connect.NewRequest(&reliantv1.UpdateProviderAPIKeyRequest{
-				Provider: target,
-				ApiKey:   "",
-			}))
-			require.NoError(t, err)
-			require.True(t, resp.Msg.Success)
-
-			after := providerCredentials(t, ctx, repo, userID)
-			assert.NotContains(t, after, target, "the named provider must be disconnected")
-			assert.Equal(t, withoutProvider(before, target), after,
-				"disconnecting %s must not change any other provider's credentials", target)
-		})
-	}
-}
-
 func TestSettingsService_CompleteClaudeOAuth_LeavesCodexConnected(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
@@ -162,13 +135,13 @@ func TestSettingsService_CompleteClaudeOAuth_LeavesCodexConnected(t *testing.T) 
 				AccessToken:  "sk-ant-oat01-new-claude-access",
 				RefreshToken: "new-claude-refresh",
 				ExpiresAt:    time.Now().Add(time.Hour),
+				AccountUUID:  "acct-1", OrganizationUUID: "org-1",
 				AccountEmail: "user@example.com",
 			}, nil
 		},
 	})
 
-	// Codex-only before the sign-in (prod's user), and every provider but
-	// Claude (a user with more connected than Codex).
+	// Codex-only before the sign-in, and every provider but Claude (a user with more connected than Codex).
 	cases := map[string][]string{
 		"codex only":           {"codex"},
 		"every other provider": withoutClaude(isolationProviders),
@@ -189,13 +162,12 @@ func TestSettingsService_CompleteClaudeOAuth_LeavesCodexConnected(t *testing.T) 
 			}))
 			require.NoError(t, err)
 			require.True(t, resp.Msg.Success)
+			require.NotNil(t, resp.Msg.Account)
+			assert.Equal(t, "user@example.com", resp.Msg.Account.Label, "the account is labelled by its detected email")
 
 			after := providerCredentials(t, ctx, repo, userID)
 			assert.Equal(t, withoutProvider(before, "claude"), withoutProvider(after, "claude"),
 				"connecting Claude must not change any other provider's credentials")
-			assert.Equal(t,
-				fmt.Sprintf("api_keys=%q token=%q", db.ProviderOAuthMarker, "sk-ant-oat01-new-claude-access"),
-				after["claude"])
 
 			// And the user sees both connected, which is what Settings renders.
 			statuses, err := svc.GetProviderStatuses(ctx, connect.NewRequest(&reliantv1.GetProviderStatusesRequest{}))

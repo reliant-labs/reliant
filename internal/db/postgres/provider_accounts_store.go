@@ -1025,6 +1025,26 @@ func (s *AccountStore) GetThreadAssignment(ctx context.Context, threadID, provid
 	return &a, nil
 }
 
+// ListThreadAssignments returns the thread's sticky account for every provider it has used,
+// most recently assigned first.
+func (s *AccountStore) ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT thread_id, provider, account_id, assigned_at, reason
+		FROM thread_provider_accounts WHERE thread_id = $1 ORDER BY assigned_at DESC, provider`, threadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []core.Assignment
+	for rows.Next() {
+		var a core.Assignment
+		if err := rows.Scan(&a.ThreadID, &a.Provider, &a.AccountID, &a.AssignedAt, &a.Reason); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 func (s *AccountStore) SetThreadAssignment(ctx context.Context, a core.Assignment, expectedAccountID string) (bool, error) {
 	if a.ThreadID == "" || a.Provider == "" || a.AccountID == "" {
 		return false, errors.New("thread_id, provider and account_id are required")

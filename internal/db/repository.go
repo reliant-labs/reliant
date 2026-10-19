@@ -352,6 +352,13 @@ type Repository interface {
 	// Provider accounts: one row per connected LLM credential, with its limit state and the
 	// sticky thread assignments (core.ProviderAccountStore).
 	core.ProviderAccountStore
+	// ListThreadAssignments returns a thread's sticky account per provider, newest first.
+	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
+	// GetAccountLimits, ClaimUsageFetch and EnsureUsagePollScheduled are the usage poller's and
+	// on-demand refresh's reads and claims (internal/llm/accountlimits).
+	GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error)
+	ClaimUsageFetch(ctx context.Context, accountID string, now time.Time, floor time.Duration) (bool, error)
+	EnsureUsagePollScheduled(ctx context.Context, accountID string, next time.Time, providers []string) error
 
 	// Privacy Settings
 	GetAnalyticsEnabled(ctx context.Context, userID string) (bool, error)

@@ -5,6 +5,7 @@ import { chatGrpc } from "./chat-grpc";
 import type { Chat, Message } from "../types/chat";
 import { ChatState, MessageRole } from "../types/chat";
 import { settingsGrpc, type Preferences } from "./settings-grpc";
+import { providerAccountGrpc } from "./provider-account-grpc";
 import { mcpGrpc } from "./mcp-grpc";
 import { toolCallGrpc } from "./tool-call-grpc";
 import { logger } from "../lib/logger";
@@ -553,8 +554,8 @@ export const api = {
       return providers.map((p) => ({
         provider: p.provider,
         configured: p.configured,
-        hasApiKey: p.has_api_key,
-        maskedKey: p.masked_key,
+        hasApiKey: p.configured,
+        accountCount: p.account_count,
         displayName: p.display_name,
       }));
     },
@@ -569,21 +570,34 @@ export const api = {
       return {
         provider: found.provider,
         configured: found.configured,
-        hasApiKey: found.has_api_key,
-        maskedKey: found.masked_key,
+        hasApiKey: found.configured,
+        accountCount: found.account_count,
         displayName: found.display_name,
       };
     },
 
+    /**
+     * Adds an API key as a new account of the provider (ProviderAccountService.AddProviderAPIKey,
+     * which validates it first). The same key twice is one account. Rejects an empty key: removing
+     * a provider is {@link deleteProvider}.
+     */
     updateProvider: async (provider: string, apiKey: string) => {
-      const result = await settingsGrpc.updateProviderAPIKey(provider, apiKey);
-      return { message: result.message };
+      if (!apiKey.trim()) {
+        throw new Error('An API key is required.');
+      }
+      const { created } = await providerAccountGrpc.addApiKey(provider, apiKey.trim());
+      return { message: created ? 'API key added' : 'That key is already connected' };
     },
 
+    /** Removes every account of the provider (it becomes disconnected). */
     deleteProvider: async (provider: string) => {
-      // Delete by setting empty API key
-      const result = await settingsGrpc.updateProviderAPIKey(provider, "");
-      return { message: result.message };
+      const accounts = await providerAccountGrpc.listAccounts();
+      for (const account of accounts) {
+        if (account.provider === provider) {
+          await providerAccountGrpc.deleteAccount(account.id);
+        }
+      }
+      return { message: 'Disconnected' };
     },
 
     validateProviderAPIKey: async (provider: string, apiKey: string) => {

@@ -32,7 +32,6 @@ import {
   SavePromptsRequestSchema,
   // Sub-phase 6d: Provider Settings
   GetProviderStatusesRequestSchema,
-  UpdateProviderAPIKeyRequestSchema,
   ValidateProviderAPIKeyRequestSchema,
   SyncReliantProviderRequestSchema,
   CompleteCodexOAuthRequestSchema,
@@ -76,10 +75,25 @@ export interface UserPrompt {
 
 export interface ProviderStatus {
   provider: string;
+  /** At least one account of the provider can serve (none is waiting for sign-in). */
   configured: boolean;
-  has_api_key: boolean;
-  masked_key?: string;
+  /** Accounts connected for the provider, whatever their state. */
+  account_count: number;
   display_name: string;
+}
+
+/**
+ * What a sign-in completion says happened to the account. Signing in to an upstream account that
+ * is already connected refreshes it (`created` false); signing in as someone other than the
+ * reconnect target saves a separate account and sets `identityMismatch`.
+ */
+export interface SignInOutcome {
+  success: boolean;
+  message: string;
+  created: boolean;
+  identityMismatch?: string;
+  /** The account's label (its detected email, else a name), for the confirmation line. */
+  accountLabel?: string;
 }
 
 export interface Preferences {
@@ -149,8 +163,7 @@ function protoProviderStatusToFrontend(
   return {
     provider: proto.provider,
     configured: proto.configured,
-    has_api_key: proto.hasApiKey,
-    masked_key: proto.maskedKey || undefined,
+    account_count: proto.accountCount,
     display_name: proto.displayName,
   };
 }
@@ -424,25 +437,6 @@ export const settingsGrpc = {
     });
   },
 
-  async updateProviderAPIKey(
-    provider: string,
-    apiKey: string
-  ): Promise<{
-    success: boolean;
-    message: string;
-  }> {
-    const client = grpcClient.settings();
-    const request = create(UpdateProviderAPIKeyRequestSchema, {
-      provider,
-      apiKey,
-    });
-    const response = await client.updateProviderAPIKey(request);
-    return {
-      success: response.success,
-      message: response.message,
-    };
-  },
-
   async validateProviderAPIKey(
     provider: string,
     apiKey: string
@@ -465,21 +459,23 @@ export const settingsGrpc = {
   async completeCodexOAuth(
     code: string,
     codeVerifier: string,
-    redirectURI: string
-  ): Promise<{
-    success: boolean;
-    message: string;
-  }> {
+    redirectURI: string,
+    accountId?: string
+  ): Promise<SignInOutcome> {
     const client = grpcClient.settings();
     const request = create(CompleteCodexOAuthRequestSchema, {
       code,
       codeVerifier,
       redirectUri: redirectURI,
+      accountId,
     });
     const response = await client.completeCodexOAuth(request);
     return {
       success: response.success,
       message: response.message,
+      created: response.created,
+      identityMismatch: response.identityMismatch || undefined,
+      accountLabel: response.account?.label || undefined,
     };
   },
 
@@ -521,22 +517,24 @@ export const settingsGrpc = {
     code: string,
     codeVerifier: string,
     redirectURI: string,
-    state: string
-  ): Promise<{
-    success: boolean;
-    message: string;
-  }> {
+    state: string,
+    accountId?: string
+  ): Promise<SignInOutcome> {
     const client = grpcClient.settings();
     const request = create(CompleteClaudeOAuthRequestSchema, {
       code,
       codeVerifier,
       redirectUri: redirectURI,
       state,
+      accountId,
     });
     const response = await client.completeClaudeOAuth(request);
     return {
       success: response.success,
       message: response.message,
+      created: response.created,
+      identityMismatch: response.identityMismatch || undefined,
+      accountLabel: response.account?.label || undefined,
     };
   },
 
@@ -550,21 +548,23 @@ export const settingsGrpc = {
   async completeAntigravityOAuth(
     code: string,
     codeVerifier: string,
-    redirectURI: string
-  ): Promise<{
-    success: boolean;
-    message: string;
-  }> {
+    redirectURI: string,
+    accountId?: string
+  ): Promise<SignInOutcome> {
     const client = grpcClient.settings();
     const request = create(CompleteAntigravityOAuthRequestSchema, {
       code,
       codeVerifier,
       redirectUri: redirectURI,
+      accountId,
     });
     const response = await client.completeAntigravityOAuth(request);
     return {
       success: response.success,
       message: response.message,
+      created: response.created,
+      identityMismatch: response.identityMismatch || undefined,
+      accountLabel: response.account?.label || undefined,
     };
   },
 
@@ -601,19 +601,27 @@ export const settingsGrpc = {
    * single flavor — there is no longer a tier concept.
    */
   async pollCopilotDeviceAuth(
-    deviceCode: string
+    deviceCode: string,
+    accountId?: string
   ): Promise<{
     status: PollCopilotDeviceAuthResponse_Status;
     errorMessage: string;
+    created: boolean;
+    identityMismatch?: string;
+    accountLabel?: string;
   }> {
     const client = grpcClient.settings();
     const request = create(PollCopilotDeviceAuthRequestSchema, {
       deviceCode,
+      accountId,
     });
     const response = await client.pollCopilotDeviceAuth(request);
     return {
       status: response.status,
       errorMessage: response.errorMessage,
+      created: response.created,
+      identityMismatch: response.identityMismatch || undefined,
+      accountLabel: response.account?.label || undefined,
     };
   },
 

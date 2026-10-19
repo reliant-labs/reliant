@@ -4563,6 +4563,11 @@
             "Name": "chat_id",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "use_model",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "RetryUsageLimitWaitResponse": [
@@ -6034,6 +6039,11 @@
           {
             "name": "chat_id",
             "kind": "string"
+          },
+          {
+            "name": "use_model",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.RetryUsageLimitWaitResponse": [
@@ -24056,19 +24066,6 @@
           "OutputProtoFile": "reliant/v1/settings.proto"
         },
         {
-          "Name": "UpdateProviderAPIKey",
-          "InputType": "UpdateProviderAPIKeyRequest",
-          "OutputType": "UpdateProviderAPIKeyResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.UpdateProviderAPIKeyRequest",
-          "OutputTypeFQ": "reliant.v1.UpdateProviderAPIKeyResponse",
-          "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
-        },
-        {
           "Name": "ValidateProviderAPIKey",
           "InputType": "ValidateProviderAPIKeyRequest",
           "OutputType": "ValidateProviderAPIKeyResponse",
@@ -24342,6 +24339,11 @@
             "Name": "redirect_uri",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "account_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "CompleteAntigravityOAuthResponse": [
@@ -24354,6 +24356,22 @@
             "Name": "message",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "account",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ProviderAccount"
+          },
+          {
+            "Name": "created",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "identity_mismatch",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "CompleteClaudeOAuthRequest": [
@@ -24376,6 +24394,11 @@
             "Name": "state",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "account_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "CompleteClaudeOAuthResponse": [
@@ -24388,6 +24411,22 @@
             "Name": "message",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "account",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ProviderAccount"
+          },
+          {
+            "Name": "created",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "identity_mismatch",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "CompleteCodexOAuthRequest": [
@@ -24405,6 +24444,11 @@
             "Name": "redirect_uri",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "account_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "CompleteCodexOAuthResponse": [
@@ -24417,6 +24461,22 @@
             "Name": "message",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "account",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ProviderAccount"
+          },
+          {
+            "Name": "created",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "identity_mismatch",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "CreateSettingRequest": [
@@ -24860,6 +24920,11 @@
             "Name": "tier",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "account_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "PollCopilotDeviceAuthResponse": [
@@ -24872,6 +24937,22 @@
             "Name": "error_message",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "account",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ProviderAccount"
+          },
+          {
+            "Name": "created",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "identity_mismatch",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "SavePromptsRequest": [
@@ -25212,30 +25293,6 @@
             "IsOptional": false
           }
         ],
-        "UpdateProviderAPIKeyRequest": [
-          {
-            "Name": "provider",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "api_key",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "UpdateProviderAPIKeyResponse": [
-          {
-            "Name": "success",
-            "ProtoType": "bool",
-            "IsOptional": false
-          },
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
         "UpdateSettingRequest": [
           {
             "Name": "key",
@@ -25344,6 +25401,11 @@
           {
             "name": "redirect_uri",
             "kind": "string"
+          },
+          {
+            "name": "account_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.CompleteAntigravityOAuthResponse": [
@@ -25354,6 +25416,20 @@
           {
             "name": "message",
             "kind": "string"
+          },
+          {
+            "name": "account",
+            "kind": "message",
+            "type_name": "reliant.v1.ProviderAccount"
+          },
+          {
+            "name": "created",
+            "kind": "bool"
+          },
+          {
+            "name": "identity_mismatch",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.CompleteClaudeOAuthRequest": [
@@ -25372,6 +25448,11 @@
           {
             "name": "state",
             "kind": "string"
+          },
+          {
+            "name": "account_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.CompleteClaudeOAuthResponse": [
@@ -25382,6 +25463,20 @@
           {
             "name": "message",
             "kind": "string"
+          },
+          {
+            "name": "account",
+            "kind": "message",
+            "type_name": "reliant.v1.ProviderAccount"
+          },
+          {
+            "name": "created",
+            "kind": "bool"
+          },
+          {
+            "name": "identity_mismatch",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.CompleteCodexOAuthRequest": [
@@ -25396,6 +25491,11 @@
           {
             "name": "redirect_uri",
             "kind": "string"
+          },
+          {
+            "name": "account_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.CompleteCodexOAuthResponse": [
@@ -25406,6 +25506,20 @@
           {
             "name": "message",
             "kind": "string"
+          },
+          {
+            "name": "account",
+            "kind": "message",
+            "type_name": "reliant.v1.ProviderAccount"
+          },
+          {
+            "name": "created",
+            "kind": "bool"
+          },
+          {
+            "name": "identity_mismatch",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ConfigError": [
@@ -25872,6 +25986,11 @@
           {
             "name": "tier",
             "kind": "string"
+          },
+          {
+            "name": "account_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.PollCopilotDeviceAuthResponse": [
@@ -25882,6 +26001,117 @@
           },
           {
             "name": "error_message",
+            "kind": "string"
+          },
+          {
+            "name": "account",
+            "kind": "message",
+            "type_name": "reliant.v1.ProviderAccount"
+          },
+          {
+            "name": "created",
+            "kind": "bool"
+          },
+          {
+            "name": "identity_mismatch",
+            "kind": "string",
+            "optional": true
+          }
+        ],
+        "reliant.v1.ProviderAccount": [
+          {
+            "name": "id",
+            "kind": "string"
+          },
+          {
+            "name": "provider",
+            "kind": "string"
+          },
+          {
+            "name": "provider_display_name",
+            "kind": "string"
+          },
+          {
+            "name": "auth_kind",
+            "kind": "enum",
+            "type_name": "reliant.v1.ProviderAuthKind"
+          },
+          {
+            "name": "label",
+            "kind": "string"
+          },
+          {
+            "name": "email",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "organization_name",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "plan",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "plan_display",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "masked_key",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "priority",
+            "kind": "int32"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "type_name": "reliant.v1.ProviderAccountStatus"
+          },
+          {
+            "name": "limited_until",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "limited_window",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "needs_sign_in_reason",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "windows",
+            "kind": "message",
+            "type_name": "reliant.v1.UsageWindow",
+            "repeated": true
+          },
+          {
+            "name": "usage_observed_at",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "usage_source",
+            "kind": "enum",
+            "type_name": "reliant.v1.UsageSource"
+          },
+          {
+            "name": "usage_error",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "created_at",
             "kind": "string"
           }
         ],
@@ -25895,15 +26125,6 @@
             "kind": "bool"
           },
           {
-            "name": "has_api_key",
-            "kind": "bool"
-          },
-          {
-            "name": "masked_key",
-            "kind": "string",
-            "optional": true
-          },
-          {
             "name": "display_name",
             "kind": "string"
           },
@@ -25911,6 +26132,10 @@
             "name": "output_modalities",
             "kind": "string",
             "repeated": true
+          },
+          {
+            "name": "account_count",
+            "kind": "int32"
           }
         ],
         "reliant.v1.RecommendedSkill": [
@@ -26383,26 +26608,6 @@
             "kind": "bool"
           }
         ],
-        "reliant.v1.UpdateProviderAPIKeyRequest": [
-          {
-            "name": "provider",
-            "kind": "string"
-          },
-          {
-            "name": "api_key",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.UpdateProviderAPIKeyResponse": [
-          {
-            "name": "success",
-            "kind": "bool"
-          },
-          {
-            "name": "message",
-            "kind": "string"
-          }
-        ],
         "reliant.v1.UpdateSettingRequest": [
           {
             "name": "key",
@@ -26445,6 +26650,30 @@
           {
             "name": "message",
             "kind": "string"
+          }
+        ],
+        "reliant.v1.UsageWindow": [
+          {
+            "name": "name",
+            "kind": "string"
+          },
+          {
+            "name": "label",
+            "kind": "string"
+          },
+          {
+            "name": "used_fraction",
+            "kind": "double",
+            "optional": true
+          },
+          {
+            "name": "resets_at",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "length_seconds",
+            "kind": "int64"
           }
         ],
         "reliant.v1.UserPrompt": [
@@ -26540,6 +26769,7 @@
         "reliant.v1.ListSettingsResponse": "reliant/v1/settings.proto",
         "reliant.v1.PollCopilotDeviceAuthRequest": "reliant/v1/settings.proto",
         "reliant.v1.PollCopilotDeviceAuthResponse": "reliant/v1/settings.proto",
+        "reliant.v1.ProviderAccount": "reliant/v1/provider_account.proto",
         "reliant.v1.ProviderStatus": "reliant/v1/settings.proto",
         "reliant.v1.RecommendedSkill": "reliant/v1/settings.proto",
         "reliant.v1.SavePromptsRequest": "reliant/v1/settings.proto",
@@ -26565,12 +26795,11 @@
         "reliant.v1.UpdatePreferencesResponse": "reliant/v1/settings.proto",
         "reliant.v1.UpdatePrivacySettingsRequest": "reliant/v1/settings.proto",
         "reliant.v1.UpdatePrivacySettingsResponse": "reliant/v1/settings.proto",
-        "reliant.v1.UpdateProviderAPIKeyRequest": "reliant/v1/settings.proto",
-        "reliant.v1.UpdateProviderAPIKeyResponse": "reliant/v1/settings.proto",
         "reliant.v1.UpdateSettingRequest": "reliant/v1/settings.proto",
         "reliant.v1.UpdateSettingResponse": "reliant/v1/settings.proto",
         "reliant.v1.UpdateShortcutsRequest": "reliant/v1/settings.proto",
         "reliant.v1.UpdateShortcutsResponse": "reliant/v1/settings.proto",
+        "reliant.v1.UsageWindow": "reliant/v1/provider_account.proto",
         "reliant.v1.UserPrompt": "reliant/v1/settings.proto",
         "reliant.v1.ValidateProviderAPIKeyRequest": "reliant/v1/settings.proto",
         "reliant.v1.ValidateProviderAPIKeyResponse": "reliant/v1/settings.proto"
@@ -26600,6 +26829,20 @@
           "STATUS_DENIED",
           "STATUS_ERROR"
         ],
+        "reliant.v1.ProviderAccountStatus": [
+          "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
+          "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
+          "PROVIDER_ACCOUNT_STATUS_LIMITED",
+          "PROVIDER_ACCOUNT_STATUS_PAUSED",
+          "PROVIDER_ACCOUNT_STATUS_NEEDS_SIGN_IN"
+        ],
+        "reliant.v1.ProviderAuthKind": [
+          "PROVIDER_AUTH_KIND_UNSPECIFIED",
+          "PROVIDER_AUTH_KIND_OAUTH",
+          "PROVIDER_AUTH_KIND_API_KEY",
+          "PROVIDER_AUTH_KIND_DEVICE",
+          "PROVIDER_AUTH_KIND_MANAGED"
+        ],
         "reliant.v1.SkillConflictPolicy": [
           "SKILL_CONFLICT_POLICY_UNSPECIFIED",
           "SKILL_CONFLICT_POLICY_SKIP",
@@ -26621,6 +26864,12 @@
           "SKILL_SOURCE_TYPE_UNSPECIFIED",
           "SKILL_SOURCE_TYPE_LOCAL",
           "SKILL_SOURCE_TYPE_GIT"
+        ],
+        "reliant.v1.UsageSource": [
+          "USAGE_SOURCE_UNSPECIFIED",
+          "USAGE_SOURCE_HEADERS",
+          "USAGE_SOURCE_USAGE_API",
+          "USAGE_SOURCE_LIMIT_ERROR"
         ]
       },
       "EnumNumbers": {
@@ -26648,6 +26897,20 @@
           4,
           5
         ],
+        "reliant.v1.ProviderAccountStatus": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "reliant.v1.ProviderAuthKind": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
         "reliant.v1.SkillConflictPolicy": [
           0,
           1,
@@ -26669,6 +26932,12 @@
           0,
           1,
           2
+        ],
+        "reliant.v1.UsageSource": [
+          0,
+          1,
+          2,
+          3
         ]
       },
       "EnumGoRefs": {
@@ -26688,6 +26957,14 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "PollCopilotDeviceAuthResponse_Status"
         },
+        "reliant.v1.ProviderAccountStatus": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "ProviderAccountStatus"
+        },
+        "reliant.v1.ProviderAuthKind": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "ProviderAuthKind"
+        },
         "reliant.v1.SkillConflictPolicy": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "SkillConflictPolicy"
@@ -26703,6 +26980,10 @@
         "reliant.v1.SkillSourceType": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "SkillSourceType"
+        },
+        "reliant.v1.UsageSource": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "UsageSource"
         }
       }
     },
@@ -31646,6 +31927,10 @@
           {
             "name": "resolved_phase",
             "kind": "string"
+          },
+          {
+            "name": "resolved_provider_account_id",
+            "kind": "string"
           }
         ],
         "reliant.v1.SaveWorkflowRequest": [
@@ -35029,5 +35314,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "b44ef718220e989edb9b5fa45a246913defce12d215142c5787e2b786ce7fd0c"
+  "source_hash": "f17d40881d4fec5d07cba79ed678dbafbba230047eff2329d53ed2c9f225eba1"
 }

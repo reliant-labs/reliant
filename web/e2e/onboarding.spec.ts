@@ -85,11 +85,11 @@ async function mockGrpcRoutes(page: Page) {
       body: JSON.stringify({ valid: true, message: 'ok' }),
     }),
   );
-  await page.route('**/reliant.v1.SettingsService/UpdateProviderAPIKey', (route: Route) =>
+  await page.route('**/reliant.v1.ProviderAccountService/AddProviderAPIKey', (route: Route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ message: 'ok' }),
+      body: JSON.stringify({ created: true }),
     }),
   );
 

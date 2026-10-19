@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,13 +20,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
-	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
-	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 
@@ -91,52 +90,6 @@ func isSettingNotFoundError(err error) bool {
 		return true
 	}
 	return strings.Contains(strings.ToLower(err.Error()), "setting not found")
-}
-
-// validateAPIKey validates an API key for a provider
-func (s *Service) validateAPIKey(ctx context.Context, provider models.Family, apiKey string) (bool, string) {
-	registry := models.MustGetRegistry()
-	providerDefs := registry.ListModelsByProvider(string(provider))
-	if len(providerDefs) == 0 {
-		return false, fmt.Sprintf("No models found for provider: %s", provider)
-	}
-	testModel := providerDefs[0].ToModel()
-
-	resolvedAPIKey := apiKey
-	driverOpts := []llm.DriverOption{
-		llm.WithMaxTokens(100),
-	}
-	if provider == "reliant" {
-		baseURL := drivers.ResolveReliantBaseURL(apiKey)
-		var extraHeaders map[string]string
-		resolvedAPIKey, extraHeaders = drivers.ResolveReliantAPIKey(apiKey, baseURL)
-		driverOpts = append(driverOpts, llm.WithBaseURL(baseURL))
-		if len(extraHeaders) > 0 {
-			driverOpts = append(driverOpts, llm.WithExtraHeaders(extraHeaders))
-		}
-	}
-	driverOpts = append(driverOpts, llm.WithAPIKey(resolvedAPIKey))
-	driver, err := drivers.GetDriverForModel(testModel, provider, driverOpts...)
-	if err != nil {
-		logging.Error("Failed to create driver for validation", "provider", provider, "error", err)
-		return false, fmt.Sprintf("Failed to initialize provider: %v", err)
-	}
-
-	err = driver.ValidateKey(ctx)
-	if err != nil {
-		errStr := strings.ToLower(err.Error())
-		if strings.Contains(errStr, "unauthorized") ||
-			strings.Contains(errStr, "authentication") ||
-			strings.Contains(errStr, "invalid") ||
-			strings.Contains(errStr, "api key") ||
-			strings.Contains(errStr, "401") {
-			return false, "Invalid API key"
-		}
-		logging.Warn("API key validation error (may not be auth-related)", "provider", provider, "error", err)
-		return false, fmt.Sprintf("Validation failed: %v", err)
-	}
-
-	return true, "API key is valid"
 }
 
 // ============================================================================
@@ -876,493 +829,139 @@ func providerOutputModalities(provider string) []string {
 	return append(result, extras...)
 }
 
-// GetProviderStatuses retrieves configuration status of all providers
+// providerDisplayNames name the providers GetProviderStatuses reports, in display order.
+var statusProviders = []struct{ id, name string }{
+	{"claude", "Claude subscription"},
+	{"codex", "Codex (ChatGPT)"},
+	{"copilot", "GitHub Copilot"},
+	{antigravity.DriverID, "Antigravity"},
+	{"openrouter", "OpenRouter"},
+	{"anthropic", "Anthropic API"},
+	{"openai", "OpenAI"},
+	{"gemini", "Google Gemini"},
+	{"reliant", "Reliant"},
+}
+
+// GetProviderStatuses reports which providers can serve, derived from the user's accounts: a
+// provider is configured when at least one of its accounts is not waiting for sign-in. Masked
+// keys and per-account detail live on the accounts (ProviderAccountService).
 func (s *Service) GetProviderStatuses(ctx context.Context, req *connect.Request[reliantv1.GetProviderStatusesRequest]) (*connect.Response[reliantv1.GetProviderStatusesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	// Get all API keys from dedicated table
-	keys, err := s.deps.Repo.GetProviderAPIKeys(ctx, userID)
+	accounts, err := s.deps.Repo.ListProviderAccounts(ctx, userID)
 	if err != nil {
-		logging.Error("Failed to get provider API keys", "error", err)
+		logging.Error("Failed to list provider accounts", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get provider statuses"))
 	}
-
-	// Mask the keys for display
-	apiKeys := make(map[string]string)
-	for provider, key := range keys {
-		maskedKey := ""
-		if len(key) > 8 {
-			maskedKey = key[:4] + "..." + key[len(key)-4:]
-		} else if len(key) > 0 {
-			maskedKey = "***"
-		}
-		apiKeys[provider] = maskedKey
-	}
-
-	// Supported providers
-	providers := []models.Family{
-		"claude",
-		"codex",
-		"copilot",
-		antigravity.DriverID,
-		"openrouter",
-		"anthropic",
-		"openai",
-		"gemini",
-	}
-
-	providerDisplayNames := map[models.Family]string{
-		"claude":             "Claude subscription",
-		"codex":              "Codex (ChatGPT)",
-		"copilot":            "GitHub Copilot",
-		antigravity.DriverID: "Antigravity",
-		"openrouter":         "OpenRouter",
-		"anthropic":          "Anthropic API",
-		"openai":             "OpenAI",
-		"gemini":             "Google Gemini",
-	}
-
-	statuses := make([]*reliantv1.ProviderStatus, 0, len(providers))
-	for _, provider := range providers {
-		status := &reliantv1.ProviderStatus{
-			Provider:         string(provider),
-			DisplayName:      providerDisplayNames[provider],
-			OutputModalities: providerOutputModalities(string(provider)),
-		}
-
-		// Claude uses OAuth tokens persisted by Reliant.
-		switch provider {
-		case "claude":
-			tokens, tokenErr := s.deps.Repo.GetClaudeAuthTokens(ctx, userID)
-			if tokenErr != nil {
-				logging.Warn("Failed to load Claude auth tokens", "error", tokenErr)
-			}
-
-			configured := tokenErr == nil && tokens != nil && strings.TrimSpace(tokens.AccessToken) != ""
-			if configured {
-				// claude.IsTokenExpired reports true a full TokenRefreshBuffer
-				// before real expiry, so on its own it means "refresh before
-				// using", not "disconnected". A stored refresh token is what
-				// makes the session recoverable without the user reconnecting,
-				// and the transport interceptor refreshes it automatically —
-				// the same rule drivers.BuildAvailableDrivers applies when
-				// deciding whether the credential is usable.
-				if claude.IsTokenExpired(tokens.ExpiresAt) && strings.TrimSpace(tokens.RefreshToken) == "" {
-					configured = false
-				}
-			}
-
-			status.Configured = configured
-			status.HasApiKey = configured
-			// Don't set MaskedKey for Claude - no API key to display
-		case "codex":
-			// Codex uses OAuth tokens persisted by Reliant.
-			tokens, tokenErr := s.deps.Repo.GetCodexAuthTokens(ctx, userID)
-			if tokenErr != nil {
-				logging.Warn("Failed to load Codex auth tokens", "error", tokenErr)
-			}
-
-			configured := tokenErr == nil && tokens != nil && strings.TrimSpace(tokens.AccessToken) != ""
-			if configured {
-				if codex.IsTokenExpired(tokens.AccessToken) {
-					configured = false
-				}
-			}
-
-			status.Configured = configured
-			status.HasApiKey = configured
-			// Don't set MaskedKey for Codex - no API key to display
-		case antigravity.DriverID:
-			// Antigravity uses Google OAuth tokens persisted by Reliant. The
-			// expiry is stored (Google's token is opaque), and the transport
-			// refreshes it, so an expired token with a refresh token still
-			// counts as connected — the same rule Claude uses.
-			tokens, tokenErr := s.deps.Repo.GetAntigravityAuthTokens(ctx, userID)
-			if tokenErr != nil {
-				logging.Warn("Failed to load Antigravity auth tokens", "error", tokenErr)
-			}
-
-			configured := tokenErr == nil && tokens != nil && strings.TrimSpace(tokens.AccessToken) != ""
-			if configured {
-				if antigravity.IsTokenExpired(tokens.ExpiresAt) && strings.TrimSpace(tokens.RefreshToken) == "" {
-					configured = false
-				}
-			}
-
-			status.Configured = configured
-			status.HasApiKey = configured
-			// Don't set MaskedKey for Antigravity - no API key to display
-		case "copilot":
-			// Copilot uses GitHub device-flow OAuth tokens persisted by Reliant.
-			tokens, tokenErr := s.deps.Repo.GetCopilotAuthTokens(ctx, userID)
-			if tokenErr != nil {
-				logging.Warn("Failed to load Copilot auth tokens", "error", tokenErr)
-			}
-
-			configured := tokenErr == nil && tokens != nil && strings.TrimSpace(tokens.GitHubAccessToken) != ""
-
-			status.Configured = configured
-			status.HasApiKey = configured
-			// Don't set MaskedKey for Copilot - no API key to display
-		default:
-			maskedKey, hasKey := apiKeys[string(provider)]
-			status.Configured = hasKey
-			status.HasApiKey = hasKey
-			if hasKey {
-				status.MaskedKey = &maskedKey
-			}
-		}
-
-		statuses = append(statuses, status)
-	}
-
-	// Reliant provider is configured once the user has synced an rlat_ LLM key
-	// from control-plane via SyncReliantProvider.
-	reliantStatus := &reliantv1.ProviderStatus{
-		Provider:         "reliant",
-		DisplayName:      "Reliant",
-		OutputModalities: providerOutputModalities("reliant"),
-	}
-	if maskedKey, hasKey := apiKeys["reliant"]; hasKey {
-		reliantStatus.Configured = true
-		reliantStatus.HasApiKey = true
-		if maskedKey != "" {
-			reliantStatus.MaskedKey = &maskedKey
+	total := map[string]int32{}
+	usable := map[string]bool{}
+	for _, a := range accounts {
+		total[a.Provider]++
+		if a.NeedsReauthAt == nil {
+			usable[a.Provider] = true
 		}
 	}
-	statuses = append(statuses, reliantStatus)
 
-	return connect.NewResponse(&reliantv1.GetProviderStatusesResponse{
-		Providers: statuses,
-	}), nil
-}
-
-// UpdateProviderAPIKey updates or deletes an API key for a provider
-func (s *Service) UpdateProviderAPIKey(ctx context.Context, req *connect.Request[reliantv1.UpdateProviderAPIKeyRequest]) (*connect.Response[reliantv1.UpdateProviderAPIKeyResponse], error) {
-	userID := auth.MustGetUserID(ctx)
-	provider := req.Msg.Provider
-	analyticsClient := analytics.GetClientForUser(ctx, userID)
-	trackProviderEvent := func(action, authMethod string) {
-		analyticsClient.TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
-			Provider:   provider,
-			Action:     action,
-			AuthMethod: authMethod,
+	statuses := make([]*reliantv1.ProviderStatus, 0, len(statusProviders))
+	for _, p := range statusProviders {
+		statuses = append(statuses, &reliantv1.ProviderStatus{
+			Provider:         p.id,
+			DisplayName:      p.name,
+			Configured:       usable[p.id],
+			AccountCount:     total[p.id],
+			OutputModalities: providerOutputModalities(p.id),
 		})
-
-		// Also fire api_key_configured for connect/update actions
-		if action == "connected" || action == "updated" {
-			existingKeys, err := s.deps.Repo.GetProviderAPIKeys(ctx, userID)
-			totalProviders := 0
-			if err == nil {
-				for _, v := range existingKeys {
-					if v != "" {
-						totalProviders++
-					}
-				}
-			}
-			analyticsClient.TrackAPIKeyConfigured(analytics.APIKeyConfiguredMetrics{
-				Provider:       provider,
-				AuthMethod:     authMethod,
-				IsFirstKey:     totalProviders <= 1,
-				TotalProviders: totalProviders,
-			})
-		}
 	}
-
-	// Only supported providers
-	validProviders := map[string]bool{
-		"claude":             true,
-		"codex":              true,
-		"copilot":            true,
-		antigravity.DriverID: true,
-		"reliant":            true,
-		"anthropic":          true,
-		"openai":             true,
-		"gemini":             true,
-		"openrouter":         true,
-	}
-
-	if !validProviders[provider] {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unsupported provider: %s", provider))
-	}
-
-	if provider == "claude" {
-		if strings.TrimSpace(req.Msg.ApiKey) != "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("claude does not use manual API keys; use Login with Claude in Settings"))
-		}
-
-		if err := s.deps.Repo.DeleteClaudeAuthTokens(ctx, userID); err != nil {
-			logging.Error("Failed to delete Claude auth tokens", "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Claude"))
-		}
-
-		if err := s.deps.Repo.DeleteProviderAPIKey(ctx, userID, "claude"); err != nil {
-			logging.Warn("Failed to remove Claude provider marker", "error", err)
-		}
-
-		trackProviderEvent("disconnected", "oauth")
-
-		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-			logging.Warn("Failed to emit config_health refetch after Claude disconnect", "error", err)
-		}
-
-		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{
-			Success: true,
-			Message: "Disconnected from Claude",
-		}), nil
-	}
-
-	if provider == "codex" {
-		if strings.TrimSpace(req.Msg.ApiKey) != "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("codex does not use manual API keys. Use Login with Codex in Settings"))
-		}
-
-		if err := s.deps.Repo.DeleteCodexAuthTokens(ctx, userID); err != nil {
-			logging.Error("Failed to delete Codex auth tokens", "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Codex"))
-		}
-		if err := s.deps.Repo.DeleteProviderAPIKey(ctx, userID, "codex"); err != nil {
-			logging.Error("Failed to delete codex provider marker", "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Codex"))
-		}
-		trackProviderEvent("disconnected", "oauth")
-
-		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-			logging.Warn("Failed to emit config_health refetch after codex disconnect", "error", err)
-		}
-
-		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{
-			Success: true,
-			Message: "Disconnected from Codex",
-		}), nil
-	}
-
-	if provider == "copilot" {
-		if strings.TrimSpace(req.Msg.ApiKey) != "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("copilot does not use manual API keys. Use Connect GitHub Copilot in Settings"))
-		}
-
-		if err := s.deps.Repo.DeleteCopilotAuthTokens(ctx, userID); err != nil {
-			logging.Error("Failed to delete Copilot auth tokens", "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from GitHub Copilot"))
-		}
-		if err := s.deps.Repo.DeleteProviderAPIKey(ctx, userID, "copilot"); err != nil {
-			logging.Error("Failed to delete copilot provider marker", "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from GitHub Copilot"))
-		}
-		trackProviderEvent("disconnected", "oauth")
-
-		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-			logging.Warn("Failed to emit config_health refetch after copilot disconnect", "error", err)
-		}
-
-		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{
-			Success: true,
-			Message: "Disconnected from GitHub Copilot",
-		}), nil
-	}
-
-	if provider == antigravity.DriverID {
-		if strings.TrimSpace(req.Msg.ApiKey) != "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("antigravity does not use manual API keys. Use Login with Antigravity in Settings"))
-		}
-
-		if err := s.deps.Repo.DeleteAntigravityAuthTokens(ctx, userID); err != nil {
-			logging.Error("Failed to delete Antigravity auth tokens", "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Antigravity"))
-		}
-		if err := s.deps.Repo.DeleteProviderAPIKey(ctx, userID, antigravity.DriverID); err != nil {
-			logging.Error("Failed to delete Antigravity provider marker", "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Antigravity"))
-		}
-		trackProviderEvent("disconnected", "oauth")
-
-		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-			logging.Warn("Failed to emit config_health refetch after Antigravity disconnect", "error", err)
-		}
-
-		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{
-			Success: true,
-			Message: "Disconnected from Antigravity",
-		}), nil
-	}
-
-	if len(req.Msg.ApiKey) == 0 {
-		// Delete the API key
-		if err := s.deps.Repo.DeleteProviderAPIKey(ctx, userID, provider); err != nil {
-			logging.Error("Failed to delete provider API key", "provider", provider, "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete API key"))
-		}
-		trackProviderEvent("deleted", "api_key")
-	} else {
-		// Validate the API key first
-		valid, message := s.validateAPIKey(ctx, models.Family(provider), req.Msg.ApiKey)
-		if !valid {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s", message))
-		}
-
-		// Save the API key to dedicated table
-		if err := s.deps.Repo.SetProviderAPIKey(ctx, userID, provider, req.Msg.ApiKey); err != nil {
-			logging.Error("Failed to set provider API key", "provider", provider, "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save API key"))
-		}
-		trackProviderEvent("updated", "api_key")
-	}
-
-	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after UpdateProviderAPIKey", "error", err)
-	}
-
-	return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{
-		Success: true,
-		Message: "API key updated successfully",
-	}), nil
+	return connect.NewResponse(&reliantv1.GetProviderStatusesResponse{Providers: statuses}), nil
 }
 
-// ValidateProviderAPIKey validates an API key for a provider
+// ValidateProviderAPIKey validates a pasted API key for a provider. Subscription providers have
+// no key to validate: they answer whether the user has a working account.
 func (s *Service) ValidateProviderAPIKey(ctx context.Context, req *connect.Request[reliantv1.ValidateProviderAPIKeyRequest]) (*connect.Response[reliantv1.ValidateProviderAPIKeyResponse], error) {
 	provider := models.Family(req.Msg.Provider)
 	userID := auth.MustGetUserID(ctx)
 
-	if provider == "claude" {
-		tokens, err := s.deps.Repo.GetClaudeAuthTokens(ctx, userID)
+	switch provider {
+	case "claude", "codex", "copilot", antigravity.DriverID:
+		name := providerName(string(provider))
+		accounts, err := s.deps.Repo.ListProviderAccounts(ctx, userID)
 		if err != nil {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Failed to load Claude credentials",
-			}), nil
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "Failed to load " + name + " credentials"}), nil
 		}
-		if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Claude is not connected",
-			}), nil
+		have, usable := false, false
+		for _, a := range accounts {
+			if a.Provider == string(provider) {
+				have = true
+				usable = usable || a.NeedsReauthAt == nil
+			}
 		}
-		// Only a token that is expired AND has no refresh token needs the user
-		// to reconnect. Anything else is refreshed by the transport, so
-		// reporting it as expired here would contradict the connected status
-		// GetProviderStatuses shows for the very same credential.
-		if claude.IsTokenExpired(tokens.ExpiresAt) && strings.TrimSpace(tokens.RefreshToken) == "" {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Claude session expired. Please reconnect Claude.",
-			}), nil
+		switch {
+		case !have:
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: name + " is not connected"}), nil
+		case !usable:
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: name + " session expired. Please reconnect " + name + "."}), nil
 		}
-		return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-			Valid:   true,
-			Message: "Connected to Claude",
-		}), nil
+		return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: true, Message: "Connected to " + name}), nil
 	}
 
-	if provider == "codex" {
-		tokens, err := s.deps.Repo.GetCodexAuthTokens(ctx, userID)
-		if err != nil {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Failed to load Codex credentials",
-			}), nil
-		}
-		if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Codex is not connected",
-			}), nil
-		}
-		if codex.IsTokenExpired(tokens.AccessToken) {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Codex session expired. Please reconnect Codex.",
-			}), nil
-		}
-		return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-			Valid:   true,
-			Message: "Connected to Codex",
-		}), nil
-	}
-
-	if provider == "copilot" {
-		tokens, err := s.deps.Repo.GetCopilotAuthTokens(ctx, userID)
-		if err != nil {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Failed to load GitHub Copilot credentials",
-			}), nil
-		}
-		if tokens == nil || strings.TrimSpace(tokens.GitHubAccessToken) == "" {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "GitHub Copilot is not connected",
-			}), nil
-		}
-		return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-			Valid:   true,
-			Message: "Connected to GitHub Copilot",
-		}), nil
-	}
-
-	valid, message := s.validateAPIKey(ctx, provider, req.Msg.ApiKey)
-
-	return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-		Valid:   valid,
-		Message: message,
-	}), nil
+	valid, message := s.deps.ValidateKey(ctx, provider, req.Msg.ApiKey)
+	return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: valid, Message: message}), nil
 }
 
+func requireOAuthParams(code, codeVerifier, redirectURI string) error {
+	switch {
+	case code == "":
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("authorization code is required"))
+	case codeVerifier == "":
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("code_verifier is required"))
+	case redirectURI == "":
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("redirect_uri is required"))
+	}
+	return nil
+}
+
+// connectedMessage is the success line for a sign-in, naming what happened to the account.
+func connectedMessage(provider string, res signInResult) string {
+	name := providerName(provider)
+	if res.created {
+		return "Connected to " + name
+	}
+	return name + " account already connected; signed in again"
+}
+
+// CompleteCodexOAuth exchanges an OAuth authorization code + PKCE verifier and stores the result
+// as a Codex account: labelled by the ChatGPT email, planned from the id_token, deduped by the
+// ChatGPT account and user.
 func (s *Service) CompleteCodexOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteCodexOAuthRequest]) (*connect.Response[reliantv1.CompleteCodexOAuthResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	code := strings.TrimSpace(req.Msg.Code)
 	codeVerifier := strings.TrimSpace(req.Msg.CodeVerifier)
 	redirectURI := strings.TrimSpace(req.Msg.RedirectUri)
-
-	if code == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("authorization code is required"))
-	}
-	if codeVerifier == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("code_verifier is required"))
-	}
-	if redirectURI == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("redirect_uri is required"))
+	if err := requireOAuthParams(code, codeVerifier, redirectURI); err != nil {
+		return nil, err
 	}
 
-	tokens, err := codex.ExchangeCodexAuthorizationCode(code, codeVerifier, redirectURI)
+	tokens, err := s.deps.ExchangeCodexCode(code, codeVerifier, redirectURI)
 	if err != nil {
 		logging.Error("Codex OAuth code exchange failed", "error", err)
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Codex OAuth: %w", err))
 	}
 
-	if err := s.deps.Repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-		IDToken:      tokens.IDToken,
-		AccountID:    tokens.AccountID,
-	}); err != nil {
-		logging.Error("Failed to persist Codex auth tokens", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save Codex credentials"))
-	}
-
-	if err := s.deps.Repo.SetProviderAPIKey(ctx, userID, "codex", db.ProviderOAuthMarker); err != nil {
-		logging.Error("Failed to set Codex provider marker", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect Codex provider"))
-	}
-
-	analytics.GetClientForUser(ctx, userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
-		Provider:   "codex",
-		Action:     "connected",
-		AuthMethod: "oauth",
+	res, err := s.connectAccount(ctx, signIn{
+		userID: userID, provider: "codex", targetID: req.Msg.GetAccountId(),
+		upsert: codexIdentity(tokens.AccessToken, tokens.RefreshToken, tokens.IDToken, tokens.AccountID),
 	})
-
-	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after Codex OAuth connect", "error", err)
+	if err != nil {
+		return nil, err
 	}
-
 	return connect.NewResponse(&reliantv1.CompleteCodexOAuthResponse{
-		Success: true,
-		Message: "Connected to Codex",
+		Success: true, Message: connectedMessage("codex", res),
+		Account: res.account, Created: res.created, IdentityMismatch: res.mismatch,
 	}), nil
 }
 
-// CompleteAntigravityOAuth exchanges a Google OAuth authorization code + PKCE
-// verifier for Antigravity tokens and marks the provider connected.
+// CompleteAntigravityOAuth exchanges a Google OAuth authorization code + PKCE verifier for
+// Antigravity tokens and stores them as an account keyed by the Google subject.
 //
 // Unlike CompleteClaudeOAuth there is no state parameter: Google's token
 // endpoint does not require it echoed back. The frontend still generates and
@@ -1372,52 +971,30 @@ func (s *Service) CompleteAntigravityOAuth(ctx context.Context, req *connect.Req
 	code := strings.TrimSpace(req.Msg.Code)
 	codeVerifier := strings.TrimSpace(req.Msg.CodeVerifier)
 	redirectURI := strings.TrimSpace(req.Msg.RedirectUri)
-
-	if code == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("authorization code is required"))
-	}
-	if codeVerifier == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("code_verifier is required"))
-	}
-	if redirectURI == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("redirect_uri is required"))
+	if err := requireOAuthParams(code, codeVerifier, redirectURI); err != nil {
+		return nil, err
 	}
 
-	tokens, err := antigravity.ExchangeAntigravityAuthorizationCode(code, codeVerifier, redirectURI)
+	tokens, err := s.deps.ExchangeAntigravityCode(code, codeVerifier, redirectURI)
 	if err != nil {
 		logging.Error("Antigravity OAuth code exchange failed", "error", err)
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Antigravity OAuth: %w", err))
 	}
 
-	if err := s.deps.Repo.SetAntigravityAuthTokens(ctx, userID, db.AntigravityAuthTokens{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-		ExpiresAt:    tokens.ExpiresAt,
-		IDToken:      tokens.IDToken,
-		Scope:        tokens.Scope,
-	}); err != nil {
-		logging.Error("Failed to persist Antigravity auth tokens", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save Antigravity credentials"))
+	u := core.AccountUpsert{
+		AuthKind: core.AuthKindOAuth, Scope: tokens.Scope, ExpiresAt: tokens.ExpiresAt,
+		Secrets: core.AccountSecrets{Secret: tokens.AccessToken, Refresh: tokens.RefreshToken, IDToken: tokens.IDToken},
 	}
-
-	if err := s.deps.Repo.SetProviderAPIKey(ctx, userID, antigravity.DriverID, db.ProviderOAuthMarker); err != nil {
-		logging.Error("Failed to set Antigravity provider marker", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect Antigravity provider"))
+	if id, ok := core.GoogleIdentityFromIDToken(tokens.IDToken); ok {
+		u.IdentityKey, u.Email, u.ExternalAccountID = id.IdentityKey, id.Email, id.ExternalAccountID
 	}
-
-	analytics.GetClientForUser(ctx, userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
-		Provider:   antigravity.DriverID,
-		Action:     "connected",
-		AuthMethod: "oauth",
-	})
-
-	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after Antigravity OAuth connect", "error", err)
+	res, err := s.connectAccount(ctx, signIn{userID: userID, provider: antigravity.DriverID, targetID: req.Msg.GetAccountId(), upsert: u})
+	if err != nil {
+		return nil, err
 	}
-
 	return connect.NewResponse(&reliantv1.CompleteAntigravityOAuthResponse{
-		Success: true,
-		Message: "Connected to Antigravity",
+		Success: true, Message: connectedMessage(antigravity.DriverID, res),
+		Account: res.account, Created: res.created, IdentityMismatch: res.mismatch,
 	}), nil
 }
 
@@ -1443,9 +1020,8 @@ func (s *Service) StartCopilotDeviceAuth(ctx context.Context, req *connect.Reque
 	}), nil
 }
 
-// PollCopilotDeviceAuth performs a single poll of the GitHub device flow. On
-// success it persists the GitHub OAuth token + selected tier and marks the
-// copilot provider as connected.
+// PollCopilotDeviceAuth performs a single poll of the GitHub device flow. On success it stores
+// the GitHub token as a Copilot account keyed by the GitHub user id.
 func (s *Service) PollCopilotDeviceAuth(ctx context.Context, req *connect.Request[reliantv1.PollCopilotDeviceAuthRequest]) (*connect.Response[reliantv1.PollCopilotDeviceAuthResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
@@ -1454,12 +1030,7 @@ func (s *Service) PollCopilotDeviceAuth(ctx context.Context, req *connect.Reques
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("device_code is required"))
 	}
 
-	// Individual is the only supported GitHub Copilot tier. Ignore whatever tier
-	// the client sent (including a legacy "enterprise") and always store
-	// "individual" so the driver routes to api.individual.githubcopilot.com.
-	tier := "individual"
-
-	tokens, err := copilot.PollDeviceAuthOnce(ctx, deviceCode)
+	tokens, err := s.deps.PollCopilotDevice(ctx, deviceCode)
 	if err != nil {
 		switch {
 		case errors.Is(err, copilot.ErrAuthorizationPending), errors.Is(err, copilot.ErrSlowDown):
@@ -1476,62 +1047,57 @@ func (s *Service) PollCopilotDeviceAuth(ctx context.Context, req *connect.Reques
 			}), nil
 		default:
 			logging.Error("Copilot device authorization poll failed", "error", err)
-			msg := err.Error()
 			return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
 				Status:       reliantv1.PollCopilotDeviceAuthResponse_STATUS_ERROR,
-				ErrorMessage: msg,
+				ErrorMessage: err.Error(),
 			}), nil
 		}
 	}
 
-	if err := s.deps.Repo.SetCopilotAuthTokens(ctx, userID, db.CopilotAuthTokens{
-		UserID:            userID,
-		GitHubAccessToken: tokens.AccessToken,
-		Tier:              tier,
-	}); err != nil {
-		logging.Error("Failed to persist Copilot auth tokens", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save GitHub Copilot credentials"))
+	// Individual is the only supported GitHub Copilot tier. Ignore whatever tier the client sent
+	// (including a legacy "enterprise") so the driver routes to api.individual.githubcopilot.com.
+	u := core.AccountUpsert{
+		AuthKind: core.AuthKindDevice, PlanRaw: "individual", Scope: tokens.Scope,
+		Secrets: core.AccountSecrets{Secret: tokens.AccessToken},
 	}
-
-	if err := s.deps.Repo.SetProviderAPIKey(ctx, userID, "copilot", db.ProviderOAuthMarker); err != nil {
-		logging.Error("Failed to set Copilot provider marker", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect GitHub Copilot provider"))
+	var label string
+	if s.deps.GitHubIdentity != nil {
+		gctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		gh, ghErr := s.deps.GitHubIdentity(gctx, tokens.AccessToken)
+		cancel()
+		if ghErr != nil {
+			logging.Warn("GitHub identity read failed; the Copilot account stays unlabelled", "error", ghErr)
+		} else if gh.ID != 0 {
+			u.IdentityKey = core.GitHubIdentityKey(strconv.FormatInt(gh.ID, 10))
+			u.ExternalAccountID, u.Email, label = strconv.FormatInt(gh.ID, 10), gh.Email, gh.Login
+		}
+	}
+	res, err := s.connectAccount(ctx, signIn{userID: userID, provider: "copilot", targetID: req.Msg.GetAccountId(), upsert: u, label: label})
+	if err != nil {
+		return nil, err
 	}
 
 	// Drop any cached per-account model availability so the picker re-queries GET
 	// /models for the freshly-connected account on its next load.
 	copilot.EvictAvailabilityCache(tokens.AccessToken)
 
-	analytics.GetClientForUser(ctx, userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
-		Provider:   "copilot",
-		Action:     "connected",
-		AuthMethod: "oauth",
-	})
-
-	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after Copilot OAuth connect", "error", err)
-	}
-
 	return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
-		Status: reliantv1.PollCopilotDeviceAuthResponse_STATUS_AUTHORIZED,
+		Status:  reliantv1.PollCopilotDeviceAuthResponse_STATUS_AUTHORIZED,
+		Account: res.account, Created: res.created, IdentityMismatch: res.mismatch,
 	}), nil
 }
 
+// CompleteClaudeOAuth exchanges an OAuth authorization code + PKCE verifier and stores the result
+// as a Claude subscription account: labelled by the account email, planned from the profile
+// endpoint, deduped by account and organization.
 func (s *Service) CompleteClaudeOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteClaudeOAuthRequest]) (*connect.Response[reliantv1.CompleteClaudeOAuthResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	code := strings.TrimSpace(req.Msg.Code)
 	codeVerifier := strings.TrimSpace(req.Msg.CodeVerifier)
 	redirectURI := strings.TrimSpace(req.Msg.RedirectUri)
 	state := strings.TrimSpace(req.Msg.State)
-
-	if code == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("authorization code is required"))
-	}
-	if codeVerifier == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("code_verifier is required"))
-	}
-	if redirectURI == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("redirect_uri is required"))
+	if err := requireOAuthParams(code, codeVerifier, redirectURI); err != nil {
+		return nil, err
 	}
 
 	tokens, err := s.deps.ExchangeClaudeCode(code, codeVerifier, redirectURI, state)
@@ -1540,38 +1106,17 @@ func (s *Service) CompleteClaudeOAuth(ctx context.Context, req *connect.Request[
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Claude OAuth: %w", err))
 	}
 
-	if err := s.deps.Repo.SetClaudeAuthTokens(ctx, userID, db.ClaudeAuthTokens{
-		AccessToken:      tokens.AccessToken,
-		RefreshToken:     tokens.RefreshToken,
-		ExpiresAt:        tokens.ExpiresAt,
-		AccountUUID:      tokens.AccountUUID,
-		AccountEmail:     tokens.AccountEmail,
-		OrganizationUUID: tokens.OrganizationUUID,
-		OrganizationName: tokens.OrganizationName,
-		Scope:            tokens.Scope,
-	}); err != nil {
-		logging.Error("Failed to persist Claude auth tokens", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save Claude credentials"))
-	}
-
-	if err := s.deps.Repo.SetProviderAPIKey(ctx, userID, "claude", db.ProviderOAuthMarker); err != nil {
-		logging.Error("Failed to set Claude provider marker", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect Claude provider"))
-	}
-
-	analytics.GetClientForUser(ctx, userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
-		Provider:   "claude",
-		Action:     "connected",
-		AuthMethod: "oauth",
+	res, err := s.connectAccount(ctx, signIn{
+		userID: userID, provider: "claude", targetID: req.Msg.GetAccountId(),
+		upsert: s.claudeIdentity(ctx, tokens.AccessToken, tokens.AccountUUID, tokens.OrganizationUUID,
+			tokens.AccountEmail, tokens.OrganizationName, tokens.Scope, tokens.ExpiresAt, tokens.RefreshToken),
 	})
-
-	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after Claude OAuth connect", "error", err)
+	if err != nil {
+		return nil, err
 	}
-
 	return connect.NewResponse(&reliantv1.CompleteClaudeOAuthResponse{
-		Success: true,
-		Message: "Connected to Claude",
+		Success: true, Message: connectedMessage("claude", res),
+		Account: res.account, Created: res.created, IdentityMismatch: res.mismatch,
 	}), nil
 }
 
@@ -1605,7 +1150,11 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("control-plane returned an empty Reliant LLM key"))
 	}
 
-	if err := s.deps.Repo.SetProviderAPIKey(ctx, userID, "reliant", plaintext); err != nil {
+	_, _, err = s.deps.Repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+		UserID: userID, Provider: "reliant", AuthKind: core.AuthKindManaged, IdentityKey: core.ManagedIdentityKey,
+		KeyHint: core.KeyHint(plaintext), Secrets: core.AccountSecrets{Secret: plaintext},
+	})
+	if err != nil {
 		logging.Error("Failed to persist Reliant provider API key", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to persist Reliant API key"))
 	}
@@ -1617,13 +1166,6 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 	created := !key.Rotated
 	rotated := key.Rotated
 
-	maskedKey := ""
-	if len(plaintext) > 8 {
-		maskedKey = plaintext[:4] + "..." + plaintext[len(plaintext)-4:]
-	} else {
-		maskedKey = "***"
-	}
-
 	return connect.NewResponse(&reliantv1.SyncReliantProviderResponse{
 		Success:    true,
 		Message:    "Reliant provider synced",
@@ -1631,11 +1173,10 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 		CreatedKey: created,
 		RotatedKey: rotated,
 		Provider: &reliantv1.ProviderStatus{
-			Provider:    "reliant",
-			DisplayName: "Reliant",
-			Configured:  true,
-			HasApiKey:   true,
-			MaskedKey:   &maskedKey,
+			Provider:     "reliant",
+			DisplayName:  "Reliant",
+			Configured:   true,
+			AccountCount: 1,
 		},
 	}), nil
 }

@@ -18,6 +18,7 @@ const MOBILE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const mocks = vi.hoisted(() => ({
   refetchModels: vi.fn(),
   updateProvider: vi.fn(),
+  deleteProvider: vi.fn(),
   validateProviderAPIKey: vi.fn(),
   getPreferences: vi.fn(),
   updatePreferences: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock("../../../api/client", () => ({
   api: {
     settings: {
       updateProvider: mocks.updateProvider,
+      deleteProvider: mocks.deleteProvider,
       validateProviderAPIKey: mocks.validateProviderAPIKey,
       getPreferences: mocks.getPreferences,
       updatePreferences: mocks.updatePreferences,
@@ -86,7 +88,6 @@ function renderPanel(providers: Array<{
   provider: string;
   configured: boolean;
   hasApiKey: boolean;
-  maskedKey?: string;
   displayName: string;
 }> = []) {
   const onProvidersUpdate = vi.fn();
@@ -99,6 +100,7 @@ function renderPanel(providers: Array<{
 beforeEach(() => {
   mocks.refetchModels.mockReset().mockResolvedValue(undefined);
   mocks.updateProvider.mockReset().mockResolvedValue({});
+  mocks.deleteProvider.mockReset().mockResolvedValue({});
   mocks.validateProviderAPIKey.mockReset();
   mocks.getPreferences.mockReset().mockResolvedValue({});
   mocks.updatePreferences.mockReset().mockResolvedValue({});
@@ -116,18 +118,17 @@ describe("MobileAIProvidersPanel", () => {
     expect(notice.textContent).toMatch(/github copilot/i);
   });
 
-  it("lists configured providers with their masked key", () => {
+  it("lists configured providers as connected", () => {
     renderPanel([
       {
         provider: "anthropic",
         configured: true,
         hasApiKey: true,
-        maskedKey: "sk-ant-...abcd",
         displayName: "Anthropic",
       },
     ]);
     expect(screen.getByText("Anthropic")).toBeInTheDocument();
-    expect(screen.getByText("sk-ant-...abcd")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /delete anthropic/i })).toBeInTheDocument();
   });
 
   it("saves a manual API key through the same api.settings.updateProvider call desktop uses", async () => {
@@ -169,7 +170,7 @@ describe("MobileAIProvidersPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("deletes a configured provider through updateProvider with an empty key", async () => {
+  it("deletes a configured provider through deleteProvider", async () => {
     vi.stubGlobal("confirm", vi.fn(() => true));
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
@@ -178,13 +179,12 @@ describe("MobileAIProvidersPanel", () => {
         provider: "anthropic",
         configured: true,
         hasApiKey: true,
-        maskedKey: "sk-ant-...abcd",
         displayName: "Anthropic",
       },
     ]);
 
     await user.click(screen.getByRole("button", { name: /delete anthropic/i }));
-    await waitFor(() => expect(mocks.updateProvider).toHaveBeenCalledWith("anthropic", ""));
+    await waitFor(() => expect(mocks.deleteProvider).toHaveBeenCalledWith("anthropic"));
     vi.unstubAllGlobals();
   });
 
@@ -202,7 +202,7 @@ describe("MobileAIProvidersPanel", () => {
     expect(prompt).toMatch(/^Disconnect Codex \(ChatGPT\)\?/);
     expect(prompt).toContain("Your other providers stay connected");
     expect(prompt).not.toMatch(/api key/i);
-    expect(mocks.updateProvider).not.toHaveBeenCalled();
+    expect(mocks.deleteProvider).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 

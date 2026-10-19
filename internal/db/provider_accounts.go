@@ -165,3 +165,9 @@ func (r *Repo) EnsureUsagePollScheduled(ctx context.Context, accountID string, n
 func (r *Repo) ClaimUsageFetch(ctx context.Context, accountID string, now time.Time, floor time.Duration) (bool, error) {
 	return r.accounts.ClaimUsageFetch(ctx, accountID, now, floor)
 }
+
+// ListThreadAssignments returns the thread's sticky account per provider, most recent first. Not
+// part of core.ProviderAccountStore: only the account-management handler reads it.
+func (r *Repo) ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error) {
+	return r.accounts.ListThreadAssignments(ctx, threadID)
+}

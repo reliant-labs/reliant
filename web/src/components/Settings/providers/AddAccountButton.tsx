@@ -36,6 +36,30 @@ export interface ConnectPanelProps {
   onClose: () => void;
 }
 
+/**
+ * What to tell the user after a sign-in that did not do what they expected, or null when it did.
+ *
+ * "Add another account" in a browser that is still signed in to the first account usually
+ * re-authorizes that account silently, which the server answers as created = false. That is not an
+ * error, but it is not what the user came for, so the panel stays open with the way out.
+ */
+export function signInNote(
+  provider: string,
+  mode: "add" | "reconnect",
+  outcome: { created: boolean; identityMismatch?: string; accountLabel?: string },
+): { ok: boolean; message: string } | null {
+  if (outcome.identityMismatch) return { ok: false, message: outcome.identityMismatch };
+  if (mode === "add" && !outcome.created) {
+    const who = outcome.accountLabel ? `That's ${outcome.accountLabel}, already connected.` : "That account is already connected.";
+    const site = provider === "codex" ? "chatgpt.com" : provider === "claude" ? "claude.ai" : provider === "antigravity" ? "accounts.google.com" : "github.com";
+    return {
+      ok: true,
+      message: `${who} To add a different account, sign out of ${site} in your browser, or use a private window, then try again.`,
+    };
+  }
+  return null;
+}
+
 function useAfterConnect(provider: string, onConnected: () => void | Promise<void>) {
   return async () => {
     await onConnected();
@@ -82,17 +106,31 @@ export function ConnectPanel({
   const [showKey, setShowKey] = useState(false);
   const afterConnect = useAfterConnect(provider, onConnected);
 
+  // A reconnect names its account so the server can tell "signed in again" from "signed in as
+  // someone else". Adding never does.
+  const targetId = mode === "reconnect" ? account?.id : undefined;
+
   const connectRedirect = async (flowKind: RedirectOAuthProvider) => {
     setBusy(true);
     setFeedback(null);
     try {
-      const result = await resolveOAuthFlow(flows, flowKind).start();
+      const result = await resolveOAuthFlow(flows, flowKind).start({
+        accountId: targetId,
+        // Google keeps offering the browser's signed-in account unless asked; Claude and ChatGPT
+        // have no documented equivalent, so for them the copy below carries the instruction.
+        ...(flowKind === "antigravity" && mode === "add" ? { prompt: "select_account" } : {}),
+      });
       if (!result.ok) {
         // Cancelled is not a failure to report — see lib/oauth-abort.
         if (result.errorCode !== "cancelled") setFeedback({ ok: false, message: result.message });
         return;
       }
       await afterConnect();
+      const note = signInNote(provider, mode, result.outcome);
+      if (note) {
+        setFeedback({ ok: note.ok, message: note.message });
+        return;
+      }
       onClose();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Connection failed";
@@ -104,10 +142,15 @@ export function ConnectPanel({
 
   const connectCopilot = async () => {
     setFeedback(null);
-    const result = await copilotOAuth.start();
+    const result = await copilotOAuth.start({ accountId: targetId });
     if (!result.ok) return;
     await afterConnect();
+    const note = signInNote(provider, mode, result.outcome);
     copilotOAuth.reset();
+    if (note) {
+      setFeedback({ ok: note.ok, message: note.message });
+      return;
+    }
     onClose();
   };
 

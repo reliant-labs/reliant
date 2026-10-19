@@ -39,7 +39,6 @@ interface ProviderStatus {
   provider: string;
   configured: boolean;
   hasApiKey: boolean;
-  maskedKey?: string;
   displayName: string;
 }
 

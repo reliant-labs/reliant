@@ -5,6 +5,7 @@ package reliant.v1;
 
 import "buf/validate/validate.proto";
 import "reliant/v1/common.proto";
+import "reliant/v1/provider_account.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -77,9 +78,6 @@ service SettingsService {
   
   // GetProviderStatuses retrieves configuration status of all providers
   rpc GetProviderStatuses(GetProviderStatusesRequest) returns (GetProviderStatusesResponse) {}
-  
-  // UpdateProviderAPIKey updates or deletes an API key for a provider
-  rpc UpdateProviderAPIKey(UpdateProviderAPIKeyRequest) returns (UpdateProviderAPIKeyResponse) {}
   
   // ValidateProviderAPIKey validates an API key for a provider
   rpc ValidateProviderAPIKey(ValidateProviderAPIKeyRequest) returns (ValidateProviderAPIKeyResponse) {}
@@ -227,9 +225,12 @@ message UserPrompt {
 // ProviderStatus represents the status of a provider
 message ProviderStatus {
   string provider = 1;
+  // True when at least one account of the provider can serve (is not
+  // waiting for sign-in). Masked keys live on the accounts
+  // (ProviderAccountService.ListProviderAccounts).
   bool configured = 2;
-  bool has_api_key = 3;
-  optional string masked_key = 4;
+  reserved 3, 4;
+  reserved "has_api_key", "masked_key";
   string display_name = 5;
   // Output modalities this provider's models can generate ("text", "image").
   // Derived from the model registry, so a provider gains a modality as soon as
@@ -240,6 +241,8 @@ message ProviderStatus {
   // configured while image generation fails, which is indistinguishable to a
   // user from a bug.
   repeated string output_modalities = 6;
+  // Accounts connected for the provider, whatever their state.
+  int32 account_count = 7;
 }
 
 // ============================================
@@ -437,16 +440,6 @@ message GetProviderStatusesResponse {
   repeated ProviderStatus providers = 1;
 }
 
-message UpdateProviderAPIKeyRequest {
-  string provider = 1;
-  string api_key = 2;  // Empty string triggers deletion
-}
-
-message UpdateProviderAPIKeyResponse {
-  bool success = 1;
-  string message = 2;
-}
-
 message ValidateProviderAPIKeyRequest {
   string provider = 1;
   string api_key = 2;
@@ -471,15 +464,28 @@ message SyncReliantProviderResponse {
   ProviderStatus provider = 7;
 }
 
+// Every sign-in completion (Claude, Codex, Antigravity, Copilot) answers with the
+// account it landed on. Signing in to an upstream account that is already
+// connected refreshes that account (created = false) instead of adding a copy;
+// signing in to a different one adds an account. account_id names a
+// reconnect target.
 message CompleteCodexOAuthRequest {
   string code = 1;
   string code_verifier = 2;
   string redirect_uri = 3;
+  // Reconnect target. Empty = add / sign in.
+  optional string account_id = 4;
 }
 
 message CompleteCodexOAuthResponse {
   bool success = 1;
   string message = 2;
+  ProviderAccount account = 3;
+  // False = an existing account (same identity) was refreshed.
+  bool created = 4;
+  // Set when account_id named a different identity than the one that signed in:
+  // the sign-in was saved as its own account and the target was left untouched.
+  optional string identity_mismatch = 5;
 }
 
 message CompleteClaudeOAuthRequest {
@@ -487,11 +493,16 @@ message CompleteClaudeOAuthRequest {
   string code_verifier = 2;
   string redirect_uri = 3;
   string state = 4;
+  // Reconnect target. Empty = add / sign in.
+  optional string account_id = 5;
 }
 
 message CompleteClaudeOAuthResponse {
   bool success = 1;
   string message = 2;
+  ProviderAccount account = 3;
+  bool created = 4;
+  optional string identity_mismatch = 5;
 }
 
 // Antigravity authenticates through Google's OAuth endpoints. Unlike Claude,
@@ -501,11 +512,15 @@ message CompleteAntigravityOAuthRequest {
   string code = 1;
   string code_verifier = 2;
   string redirect_uri = 3;
+  optional string account_id = 4;
 }
 
 message CompleteAntigravityOAuthResponse {
   bool success = 1;
   string message = 2;
+  ProviderAccount account = 3;
+  bool created = 4;
+  optional string identity_mismatch = 5;
 }
 
 message StartCopilotDeviceAuthRequest {}
@@ -522,6 +537,7 @@ message PollCopilotDeviceAuthRequest {
   string device_code = 1;
   // tier is the explicitly-selected Copilot tier: "enterprise" | "individual".
   string tier = 2;
+  optional string account_id = 3;
 }
 
 message PollCopilotDeviceAuthResponse {
@@ -536,6 +552,10 @@ message PollCopilotDeviceAuthResponse {
   }
   Status status = 1;
   string error_message = 2;
+  // Set once status is AUTHORIZED.
+  ProviderAccount account = 3;
+  bool created = 4;
+  optional string identity_mismatch = 5;
 }
 
 // ============================================

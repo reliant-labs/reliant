@@ -19,7 +19,6 @@ interface AISettingsProps {
     provider: string;
     displayName: string;
     hasApiKey: boolean;
-    maskedKey?: string;
     configured: boolean;
   }>;
   onProvidersUpdate?: () => void;

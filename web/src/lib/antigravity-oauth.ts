@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/react'
-import { settingsGrpc } from '@/api/settings-grpc'
+import { settingsGrpc, type SignInOutcome } from '@/api/settings-grpc'
 import { startOAuthViaDaemon } from '@/api/daemon-grpc'
 import { startOAuthViaLocalServer } from '@/lib/oauth-local'
 import { startOAuthViaDesktop, supportsLocalProviderOAuth } from '@/lib/oauth-desktop'
@@ -50,6 +50,7 @@ export type AntigravityOAuthResult =
   | {
       ok: true
       message: string
+      outcome: SignInOutcome
     }
   | {
       ok: false
@@ -63,6 +64,13 @@ export interface AntigravityOAuthOptions {
   clientId?: string
   scope?: string
   statePrefix?: string
+  /** Reconnect target: the account that is signing in again. Empty = add / sign in. */
+  accountId?: string
+  /**
+   * Google's authorize `prompt` ("select_account" on add-another, so the browser's signed-in
+   * Google account is not silently re-used). Never set on a reconnect, which should fast-path.
+   */
+  prompt?: string
 }
 
 const errorResult = (
@@ -125,6 +133,10 @@ export async function runAntigravityOAuthFlow(
   Object.entries(ANTIGRAVITY_OAUTH_ADDITIONAL_AUTHORIZE_PARAMS).forEach(([key, value]) => {
     url.searchParams.set(key, value)
   })
+  // Google takes a space-delimited prompt list; keep `consent` (it is what yields a refresh token).
+  if (options.prompt) {
+    url.searchParams.set('prompt', `${options.prompt} ${ANTIGRAVITY_OAUTH_ADDITIONAL_AUTHORIZE_PARAMS.prompt}`)
+  }
 
   // The URL will have {redirect_uri} URL-encoded in the query string.
   // We need to replace the encoded version with the literal placeholder.
@@ -168,10 +180,11 @@ export async function runAntigravityOAuthFlow(
       authCode,
       codeVerifier,
       oauthResp.redirectUri,
+      options.accountId,
     )
 
     if (result.success) {
-      return { ok: true, message: result.message || 'Antigravity connected successfully' }
+      return { ok: true, message: result.message || 'Antigravity connected successfully', outcome: result }
     }
     Sentry.captureMessage('Antigravity OAuth token exchange failed', {
       tags: { component: 'oauth', provider: 'antigravity' },

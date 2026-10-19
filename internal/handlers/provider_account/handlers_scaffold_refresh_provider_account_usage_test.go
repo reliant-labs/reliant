@@ -83,7 +83,7 @@ func TestRefreshProviderAccountUsage_Generated(t *testing.T) {
 	broken := &fakeRefresher{err: errors.New("database unreachable")}
 
 	svc := func(r accountlimits.Refresher) *provider_account.Service {
-		return provider_account.NewTestProviderAccount(t, provider_account.WithProviderAccountDeps(provider_account.Deps{UsageRefresher: r}))
+		return provider_account.NewTestProviderAccount(t, provider_account.WithProviderAccountDeps(provider_account.Deps{UsageRefresher: r}), provider_account.WithPlaceholderDeps())
 	}
 	req := func(id string) *connect.Request[pb.RefreshProviderAccountUsageRequest] {
 		return connect.NewRequest(&pb.RefreshProviderAccountUsageRequest{AccountId: id})
