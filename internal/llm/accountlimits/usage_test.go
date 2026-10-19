@@ -490,7 +490,7 @@ func TestPollerRunStopsWithItsContext(t *testing.T) {
 	p := &Poller{Store: &fakeLeaser{store: fx.store}, Fetcher: fx.f, Every: time.Millisecond}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { p.Run(ctx); close(done) }()
+	go func() { _ = p.Run(ctx); close(done) }()
 	time.Sleep(10 * time.Millisecond)
 	cancel()
 	select {

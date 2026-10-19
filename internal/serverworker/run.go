@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 
+	"github.com/reliant-labs/forge/pkg/lifecyclekit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"go.temporal.io/sdk/client"
 
@@ -127,9 +129,9 @@ type Options struct {
 	Preview tools.PreviewSettings
 }
 
-// Run boots the Temporal worker with the given options. It blocks until a
-// SIGINT/SIGTERM is received or the worker exits, then performs graceful
-// shutdown.
+// Run boots the Temporal worker with the given options and runs its
+// components under lifecyclekit.Supervise. It blocks until a SIGINT/SIGTERM
+// is received, ctx ends or a component fails, then drains (see workerNodes).
 func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 1. Validate required config
@@ -141,10 +143,12 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("NATS_URL is required (tool routing and streaming go through NATS)")
 	}
 
-	// The readiness gate and rollout drain budget. The worker serves no
-	// inbound traffic, so its readiness flip matters less than the
-	// api-server's — but the same budget is what bounds Worker.Stop, and that
-	// is the part that has to fit inside the pod's grace period.
+	// The readiness gate and rollout drain budget, from the role's DrainConfig.
+	// The budget is what bounds the Temporal worker's Stop, and that is the
+	// part that has to fit inside the pod's grace period (control-plane states
+	// 60s for the worker; the default 5s + 30s fits). Nothing routes to the
+	// worker, so its pre-stop pause buys nothing — the Temporal worker keeps
+	// polling through it — and PRE_STOP_DELAY=-1s on the workload removes it.
 	drainer := serverkit.NewDrainer(serverkit.Config{PreStopDelay: opts.PreStopDelay, ShutdownTimeout: opts.ShutdownTimeout})
 
 	// -----------------------------------------------------------------
@@ -241,7 +245,6 @@ func Run(ctx context.Context, opts Options) error {
 	// Every mutating integration call, from the action node or an agent tool,
 	// is recorded before it is made, so the event it causes can be attributed.
 	writeLedger := writeledger.New(writeledger.Deps{Store: repo.IntegrationWrites(), Runs: repo})
-	go writeLedger.PruneLoop(ctx, repo.IntegrationWrites())
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
@@ -353,7 +356,6 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	router := toolexec.NewNATSDaemonRouter(nc, daemonRouterOpts...)
 	remoteExecutor.SetDaemonRouter(router)
-	natsChecker := nc.IsConnected
 	logging.Info("Tool execution routing via NATS")
 
 	// The run-management tools (start_run, control_run, send_to_run) act as the
@@ -471,7 +473,7 @@ func Run(ctx context.Context, opts Options) error {
 	remoteExecutor.SetDaemonClientFactory(toolexec.RemoteDaemonClients(router))
 
 	// -----------------------------------------------------------------
-	// 11. Start the worker
+	// 11. The Temporal worker and the background loops
 	// -----------------------------------------------------------------
 	// The launcher a scheduled fire launches through. The prober is the daemon
 	// router, which the worker does have — but triggers never ask for a
@@ -482,9 +484,8 @@ func Run(ctx context.Context, opts Options) error {
 	// One recorder per worker: it folds every response's rate-limit headers into
 	// the account that served it, and benches an account the provider refused.
 	accountRecorder := accountlimits.NewRecorder(repo, nil)
-	defer accountRecorder.Close()
 
-	handle, _, err := workersetup.StartWorker(&workersetup.Config{
+	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
 		AccountLimits:          accountRecorder,
 		TemporalClient:         temporalClient,
 		Database:               repo,
@@ -502,28 +503,33 @@ func Run(ctx context.Context, opts Options) error {
 		ControlPlaneURL:        opts.ControlPlane.URL,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to start worker: %w", err)
+		accountRecorder.Close()
+		return fmt.Errorf("failed to create worker: %w", err)
 	}
 
-	// Workflow-event triggers: move run-event outbox rows into dispatch
-	// workflows. Every worker runs a relay; rows are leased with SKIP LOCKED,
-	// so they share the queue rather than duplicating it.
-	relayCtx, stopRelay := context.WithCancel(ctx)
-	defer stopRelay()
-	go workflowevent.NewRelay(repo, temporalClient, v2workflow.SharedTaskQueue).Run(relayCtx)
-
-	// Account usage: persist the rate-limit headers every LLM response carries, and poll the
-	// providers' usage APIs for accounts those headers do not cover. Every worker runs a
-	// poller; accounts are leased with SKIP LOCKED, so they share the queue. An expired access
-	// token is refreshed through the same per-account coordinator the LLM drivers use, so a
-	// poll never consumes a refresh token a live request is about to consume.
-	go (&accountlimits.Poller{
-		Store: repo,
-		Fetcher: &accountlimits.Fetcher{
-			Store:  repo,
-			Tokens: drivers.RefreshingTokens{Store: repo},
+	nodes := workerNodes(workerComponents{
+		accountRecorder: accountRecorder,
+		writeLedger:     writeLedger,
+		writes:          repo.IntegrationWrites(),
+		// Account usage: poll the providers' usage APIs for accounts the
+		// rate-limit headers do not cover. Every worker runs a poller;
+		// accounts are leased with SKIP LOCKED, so they share the queue. An
+		// expired access token is refreshed through the same per-account
+		// coordinator the LLM drivers use, so a poll never consumes a refresh
+		// token a live request is about to consume.
+		usagePoller: &accountlimits.Poller{
+			Store: repo,
+			Fetcher: &accountlimits.Fetcher{
+				Store:  repo,
+				Tokens: drivers.RefreshingTokens{Store: repo},
+			},
 		},
-	}).Run(relayCtx)
+		// Workflow-event triggers: move run-event outbox rows into dispatch
+		// workflows. Every worker runs a relay; rows are leased with SKIP
+		// LOCKED, so they share the queue rather than duplicating it.
+		relay:          workflowevent.NewRelay(repo, temporalClient, v2workflow.SharedTaskQueue),
+		temporalWorker: temporalWorker,
+	})
 
 	// -----------------------------------------------------------------
 	// 12. Health endpoint
@@ -535,14 +541,14 @@ func Run(ctx context.Context, opts Options) error {
 		_, _ = w.Write([]byte(`{"status":"ok","service":"temporal-worker"}`))
 	})
 	healthMux.Handle("/metrics", observability.MetricsHandler())
-	healthMux.HandleFunc("/ready", drainer.ReadinessHandler([]serverkit.ReadyCheck{
+	healthMux.HandleFunc("/ready", drainer.ReadinessHandler(append([]serverkit.ReadyCheck{
 		{Name: "db", Check: repo.Ping},
 		{Name: "temporal", Check: func(ctx context.Context) error {
 			_, err := temporalClient.CheckHealth(ctx, &client.CheckHealthRequest{})
 			return err
 		}},
 		{Name: "nats", Check: func(context.Context) error {
-			if natsChecker != nil && !natsChecker() {
+			if !nc.IsConnected() {
 				return fmt.Errorf("disconnected")
 			}
 			return nil
@@ -553,88 +559,119 @@ func Run(ctx context.Context, opts Options) error {
 			}
 			return nil
 		}},
-	}, 0, slog.Default()))
-	// The Temporal worker is running: /ready now answers from its checks.
-	drainer.MarkReady()
+	}, lifecyclekit.ReadyChecks(nodes...)...), 0, slog.Default()))
 
+	// The probes are the root's, not a node's, as in the gateway: served from
+	// before the first node starts (503 "not_ready" until Supervise marks the
+	// process ready, which waits for the Temporal worker to be polling) until
+	// after the last one stopped (503 "draining" through the whole drain).
+	healthAddr := fmt.Sprintf(":%d", opts.HealthPort)
 	healthServer := &http.Server{
-		Addr:              fmt.Sprintf(":%d", opts.HealthPort),
+		Addr:              healthAddr,
 		Handler:           healthMux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	healthLn, err := net.Listen("tcp", healthAddr)
+	if err != nil {
+		accountRecorder.Close()
+		return fmt.Errorf("failed to bind health endpoint: %w", err)
+	}
 	go func() {
 		logging.Info("Health endpoint started", "port", opts.HealthPort)
-		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := healthServer.Serve(healthLn); err != nil && err != http.ErrServerClosed {
 			logging.Error("Health endpoint failed", "error", err)
 		}
 	}()
 
 	debugserver.Start(opts.PprofPort)
 
-	logging.Info("temporal-worker started successfully")
-
 	// -----------------------------------------------------------------
-	// 13. Wait for shutdown signal or worker exit
+	// 13. Run, then drain
 	// -----------------------------------------------------------------
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	// Supervise starts the nodes in order and marks the process ready once
+	// the Temporal worker is polling. On SIGTERM (or ctx ending) it flips
+	// readiness, pauses for PRE_STOP_DELAY, then stops the nodes in reverse
+	// inside one SHUTDOWN_TIMEOUT budget — the Temporal worker first (see
+	// workerNodes) — logs each phase ("drain: …"), and flushes telemetry last.
+	logging.Info("Starting temporal-worker nodes", "health_port", opts.HealthPort)
+	stopCtx, stopSignals := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer stopSignals()
+	runErr := lifecyclekit.Supervise(stopCtx, lifecyclekit.Policy{
+		Drainer: drainer,
+		Logger:  slog.Default(),
+		Flush:   flushTelemetry,
+	}, nodes...)
 
-	select {
-	case sig := <-sigCh:
-		logging.Info("Received shutdown signal", "signal", sig)
-	case <-handle.Done:
-		if handle.Err != nil {
-			logging.Error("Worker stopped with error", "error", handle.Err)
-		} else {
-			logging.Info("Worker stopped unexpectedly")
-		}
-	case <-ctx.Done():
-		logging.Info("Context cancelled")
-	}
-
-	// -----------------------------------------------------------------
-	// 14. Graceful shutdown
-	// -----------------------------------------------------------------
-	// Same sequence as the other two mains, for consistency: flip readiness,
-	// pause, then stop, bounded by the budget. The pause buys the worker
-	// nothing directly (nothing routes to it), but keeping one drain shape
-	// across the three mains is what makes the grace-period arithmetic
-	// checkable from the deployment alone.
-	drainer.Begin() // logs the flip and the pause ("drain: …" phase lines)
-
-	shutdownCtx, cancel := drainer.ShutdownContext()
-	defer cancel()
-
-	handle.Worker.Stop()
-
-	// Bounded by the shutdown budget rather than a hardcoded 15s: the wait
-	// has to fit inside the grace period the platform derived from
-	// SHUTDOWN_TIMEOUT, and a constant cannot track a value it never reads.
-	select {
-	case <-handle.Done:
-		logging.Info("Worker stopped successfully")
-	case <-shutdownCtx.Done():
-		logging.Warn("Worker did not stop within the shutdown budget",
-			"shutdown_timeout", drainer.ShutdownTimeout)
-	}
-
-	// Health server LAST, on its own short budget: the shutdown context may
-	// be spent by now.
+	// Health endpoint LAST — it is what answered 503 "draining" for the
+	// whole drain. Its own short budget: the shutdown budget may be spent by
+	// now, and its only clients are probes that take microseconds.
 	healthCtx, cancelHealth := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelHealth()
 	if err := healthServer.Shutdown(healthCtx); err != nil {
-		logging.Error("Health server shutdown error", "error", err)
+		logging.Warn("Health endpoint did not stop cleanly", "error", err)
 	}
-	// The shutdown's total ("drain: complete"), before telemetry is flushed
-	// so the point is exported.
-	drainer.Complete()
 
-	analytics.Shutdown()
-
-	// Flush any pending telemetry (Sentry) events before exit.
-	telemetry.Flush(5)
-
+	// Note: NATS, the Temporal client, the database and OTel are closed via
+	// the defers above, after every node has stopped.
+	if runErr != nil {
+		return fmt.Errorf("temporal-worker: %w", runErr)
+	}
 	logging.Info("temporal-worker shut down gracefully")
+	return nil
+}
+
+// workerComponents are the parts of the worker that have a lifecycle.
+type workerComponents struct {
+	accountRecorder *accountlimits.Recorder
+	writeLedger     writeledger.Service
+	writes          writeledger.Pruner
+	usagePoller     *accountlimits.Poller
+	relay           *workflowevent.Relay
+	temporalWorker  *workersetup.Worker
+}
+
+// workerNodes are the worker's components in START order, each after what it
+// depends on; lifecyclekit.Supervise stops them in reverse:
+//
+//  1. temporal-worker: stops taking work first. Its Drain stops polling,
+//     gives in-flight activities a short grace, then cancels the ones still
+//     running and waits for them to report — releasing them, so Temporal
+//     re-dispatches them to a live replica rather than waiting out their
+//     heartbeat timeout (see workersetup.Worker). The Temporal client it
+//     reports through closes after Supervise returns.
+//     It is also the one node whose Ready gates the process's readiness.
+//  2. workflow-event-relay, account-usage-poller, write-ledger-prune: the
+//     background loops, which take no Temporal tasks; each ends with its
+//     context.
+//  3. account-recorder: last, because the activities above record into it;
+//     its Close flushes the rate-limit state they recorded.
+func workerNodes(c workerComponents) []lifecyclekit.Node {
+	return []lifecyclekit.Node{
+		{
+			Name: "account-recorder",
+			Close: func(context.Context) error {
+				c.accountRecorder.Close()
+				return nil
+			},
+		},
+		{
+			Name: "write-ledger-prune",
+			Run: func(ctx context.Context) error {
+				c.writeLedger.PruneLoop(ctx, c.writes)
+				return nil
+			},
+		},
+		lifecyclekit.Component("account-usage-poller", c.usagePoller),
+		lifecyclekit.Component("workflow-event-relay", c.relay),
+		lifecyclekit.Component("temporal-worker", c.temporalWorker),
+	}
+}
+
+// flushTelemetry is the root's last step, after every node has stopped:
+// analytics, then any pending Sentry events.
+func flushTelemetry(context.Context) error {
+	analytics.Shutdown()
+	telemetry.Flush(5)
 	return nil
 }
 

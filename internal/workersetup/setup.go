@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 // Package workersetup registers reliant's Temporal workflows and activities
-// on a worker and starts it (StartWorker), for the api-server and the
-// temporal-worker alike.
+// on a worker (NewWorker) and runs it as a supervised component (Worker), for
+// the temporal-worker and the test harnesses alike.
 //
 //forge:exclude-contract: Temporal worker composition (workflow/activity registration over injected collaborators) shared by reliant's hand-wired server mains; it wires services rather than being one, and becomes a supervised forge worker in P3c (research/forge-migration/PLAN.md)
 package workersetup
@@ -114,13 +114,6 @@ type Config struct {
 	TaskQueueSuffix string // Optional suffix for test isolation
 }
 
-// Handle holds a running worker and its lifecycle.
-type Handle struct {
-	Worker worker.Worker
-	Done   chan struct{} // Closed when worker exits
-	Err    error         // Set to the error from worker.Run, if any
-}
-
 // taskQueueName returns the full task queue name with optional suffix.
 func (c *Config) taskQueueName() string {
 	base := v2workflow.SharedTaskQueue
@@ -130,10 +123,10 @@ func (c *Config) taskQueueName() string {
 	return base + "-" + c.TaskQueueSuffix
 }
 
-// StartWorker creates, registers, and starts a Temporal worker.
-// The returned Handle can be used to wait for shutdown via handle.Done.
-// Call handle.Worker.Stop() to initiate graceful shutdown.
-func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
+// NewWorker creates a Temporal worker and registers every workflow and
+// activity on it. It does not start it: the returned Worker is a component,
+// polling from Run until Drain stops it (see Worker).
+func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// Create activity registry
 	registry := v2.NewActivityRegistry(cfg.Database)
 
@@ -174,7 +167,11 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		StickyScheduleToStartTimeout:     5 * time.Second,
 		MaxConcurrentWorkflowTaskPollers: 5,
 		MaxConcurrentActivityTaskPollers: 10,
-		WorkerStopTimeout:                5 * time.Second,
+		// On Stop, in-flight tasks get activityReleaseGrace to finish; then
+		// activityRelease cancels the activities still running, and the rest
+		// is time for them to report, so Temporal re-dispatches them at once.
+		// Must fit the shutdown budget (SHUTDOWN_TIMEOUT) the Drain runs in.
+		WorkerStopTimeout: activityReleaseGrace + activityReportReserve,
 		// This is the SDK's heartbeat batching window. Ticks from
 		// ActivityWrapper's background heartbeater (activityHeartbeatInterval,
 		// 500ms, workflow/runtime/registry.go) that land inside an open window
@@ -236,7 +233,10 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		// hostname-based default cannot answer that question.
 		Identity:                 instanceid.WorkerIdentity(),
 		DeadlockDetectionTimeout: 30 * time.Second,
-		Interceptors:             append([]interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor()}, cfg.WorkflowInterceptors...),
+		Interceptors: append([]interceptor.WorkerInterceptor{
+			observability.NewOTelWorkerInterceptor(),
+			newActivityRelease(),
+		}, cfg.WorkflowInterceptors...),
 	}
 
 	w := worker.New(cfg.TemporalClient, cfg.taskQueueName(), workerOpts)
@@ -312,18 +312,7 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		)
 	}
 
-	// Start worker with lifecycle management
-	handle := &Handle{
-		Worker: w,
-		Done:   make(chan struct{}),
-	}
-
-	go func() {
-		defer close(handle.Done)
-		handle.Err = w.Run(worker.InterruptCh())
-	}()
-
-	return handle, registry, nil
+	return newWorker(w), registry, nil
 }
 
 // TaskQueueName returns the task queue name that would be used by a worker with the given config.

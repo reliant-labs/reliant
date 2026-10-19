@@ -128,8 +128,8 @@ func NewRelay(store RelayStore, starter WorkflowStarter, taskQueue string) *Rela
 	}
 }
 
-// Run drives the relay until ctx is done.
-func (r *Relay) Run(ctx context.Context) {
+// Run drives the relay until ctx is done (a lifecyclekit.Runner).
+func (r *Relay) Run(ctx context.Context) error {
 	ticker := time.NewTicker(r.Interval)
 	defer ticker.Stop()
 	lastPrune := time.Time{}
@@ -147,7 +147,7 @@ func (r *Relay) Run(ctx context.Context) {
 		}
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-ticker.C:
 		}
 	}

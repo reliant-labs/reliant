@@ -2,7 +2,7 @@
 
 These JSON files are **real Temporal event histories** of `DynamicWorkflow`
 runs, captured from an ephemeral Temporal dev server driving the production
-worker registration path (`workersetup.StartWorker`) with a scripted LLM.
+worker registration path (`workersetup.NewWorker`) with a scripted LLM.
 
 They are a contract: **the current workflow code must stay replay-compatible
 with these histories.** `TestReplayFixtures` (in the parent package, plain

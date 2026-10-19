@@ -13,7 +13,7 @@
 //
 // The fixtures under fixtures/ are real histories captured from an ephemeral
 // Temporal dev server running the production worker registration path
-// (workersetup.StartWorker) with a scripted LLM. They are the contract:
+// (workersetup.NewWorker) with a scripted LLM. They are the contract:
 // "current workflow code must stay replay-compatible with THESE histories."
 //
 // fixtures/frozen/<set>/ holds histories recorded before a command-sequence

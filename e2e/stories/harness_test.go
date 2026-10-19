@@ -248,7 +248,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	triggerLauncher := launch.NewLauncher(s.Repo, threads.NewService(s.Repo), s.Temporal,
 		runs.NewService(s.Repo, s.Temporal, pause), taskQueue)
 
-	handle, _, err := workersetup.StartWorker(&workersetup.Config{
+	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
 		TemporalClient:  s.Temporal,
 		Database:        s.Repo,
 		StreamingHub:    hub,
@@ -261,13 +261,17 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		TaskQueueSuffix: taskQueueSuffix,
 		TriggerLauncher: triggerLauncher,
 	})
-	require.NoError(t, err, "start story worker")
+	require.NoError(t, err, "create story worker")
+	workerRun := make(chan error, 1)
+	go func() { workerRun <- temporalWorker.Run(context.Background()) }()
 	t.Cleanup(func() {
-		handle.Worker.Stop()
-		select {
-		case <-handle.Done:
-		case <-time.After(10 * time.Second):
-			t.Log("worker did not stop within 10s")
+		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := temporalWorker.Drain(stopCtx); err != nil {
+			t.Logf("worker did not stop: %v", err)
+		}
+		if err := <-workerRun; err != nil {
+			t.Logf("worker stopped with: %v", err)
 		}
 	})
 

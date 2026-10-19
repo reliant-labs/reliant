@@ -7,7 +7,7 @@
 //
 //	real Postgres (DATABASE_URL, same conventions as internal/db tests)
 //	real Temporal (ephemeral dev server owned by TestMain)
-//	real worker (workersetup.StartWorker — production registration path)
+//	real worker (workersetup.NewWorker — production registration path)
 //	real Connect service handlers (chat.Service etc., called in-process)
 //	real local tool execution (LocalToolExecutor + daemon.LocalClient — the
 //	  same execution path the daemon runtime uses, minus the NATS transport)

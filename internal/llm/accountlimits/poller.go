@@ -45,8 +45,8 @@ type Poller struct {
 	Now         func() time.Time
 }
 
-// Run polls until ctx is done.
-func (p *Poller) Run(ctx context.Context) {
+// Run polls until ctx is done (a lifecyclekit.Runner).
+func (p *Poller) Run(ctx context.Context) error {
 	every := orDefault(p.Every, defaultPollEvery)
 	t := time.NewTicker(every)
 	defer t.Stop()
@@ -54,7 +54,7 @@ func (p *Poller) Run(ctx context.Context) {
 		p.Tick(ctx)
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-t.C:
 		}
 	}

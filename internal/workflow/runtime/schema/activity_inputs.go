@@ -35,7 +35,7 @@ type ActivityInputType struct {
 var activityTypes = make(map[string]*ActivityInputType)
 
 // activityTypesMu serializes WRITES to activityTypes. Most registration happens
-// in init(), but StartWorker also registers — and a process that starts two
+// in init(), but NewWorker also registers — and a process that starts two
 // workers concurrently (the parallel e2e stories) raced a check-then-register
 // into a duplicate-registration panic. Reads happen after registration settles
 // and are not locked.
@@ -62,7 +62,7 @@ func RegisterActivityType(name string, inputType, outputType reflect.Type) {
 }
 
 // RegisterActivityTypeIfAbsent registers name unless it already is, as one
-// atomic step. It is for runtime registration (StartWorker), which may run
+// atomic step. It is for runtime registration (NewWorker), which may run
 // once per worker in the same process; IsActivityTypeRegistered followed by
 // RegisterActivityType is two steps another worker can interleave.
 func RegisterActivityTypeIfAbsent(name string, inputType, outputType reflect.Type) {

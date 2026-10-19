@@ -36,7 +36,7 @@ var generatorMode bool
 // registration produces false failures (or false passes), so every knob here
 // is traced to its production counterpart:
 //
-//   - Workflow registration: workersetup.StartWorker registers
+//   - Workflow registration: workersetup.NewWorker registers
 //     v2.DynamicWorkflow under the name v2workflow.WorkflowDynamic and
 //     workersetup.GenerateTitleWorkflow under "GenerateTitleWorkflow"
 //     (internal/workersetup/setup.go). Mirrored 1:1 below.
@@ -69,7 +69,7 @@ func newProductionMirroredReplayer(t *testing.T) worker.WorkflowReplayer {
 		t.Fatalf("create workflow replayer: %v", err)
 	}
 
-	// Mirror of workersetup.StartWorker's workflow registrations.
+	// Mirror of workersetup.NewWorker's workflow registrations.
 	replayer.RegisterWorkflowWithOptions(v2.DynamicWorkflow, sdkworkflow.RegisterOptions{
 		Name: v2workflow.WorkflowDynamic,
 	})

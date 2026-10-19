@@ -61,7 +61,7 @@ import (
 // (e2e/stories/main_test.go + harness_test.go). That package is test-only and
 // build-tagged, so it is not importable; the minimal pieces needed to drive
 // real workflow executions through the PRODUCTION paths (StartChat handler →
-// workersetup.StartWorker worker → scripted LLM → local tool execution) are
+// workersetup.NewWorker worker → scripted LLM → local tool execution) are
 // replicated here. Fixture generation must run the production registration
 // path so the captured histories are representative of production runs.
 
@@ -316,7 +316,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 
 	// Production worker registration path — the same code the real worker
 	// binary runs. This is what makes the captured histories representative.
-	handle, _, err := workersetup.StartWorker(&workersetup.Config{
+	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
 		TemporalClient:  s.Temporal,
 		Database:        s.Repo,
 		StreamingHub:    hub,
@@ -330,13 +330,17 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		// Inert for every workflow but the workflow_panic scenario's.
 		WorkflowInterceptors: []interceptor.WorkerInterceptor{&workflowPanicInjector{}},
 	})
-	require.NoError(t, err, "start scenario worker")
+	require.NoError(t, err, "create scenario worker")
+	workerRun := make(chan error, 1)
+	go func() { workerRun <- temporalWorker.Run(context.Background()) }()
 	t.Cleanup(func() {
-		handle.Worker.Stop()
-		select {
-		case <-handle.Done:
-		case <-time.After(10 * time.Second):
-			t.Log("worker did not stop within 10s")
+		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := temporalWorker.Drain(stopCtx); err != nil {
+			t.Logf("worker did not stop: %v", err)
+		}
+		if err := <-workerRun; err != nil {
+			t.Logf("worker stopped with: %v", err)
 		}
 	})
 
