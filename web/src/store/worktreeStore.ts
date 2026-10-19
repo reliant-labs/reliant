@@ -384,7 +384,7 @@ async function clearArchivedWorktreeActiveChat(
   await useChatNavigationStore.getState().removeFromQueue(activeChatId);
 }
 
-export const useWorktreeStore = create<WorktreeStore>((set) => ({
+export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
   worktrees: [],
   currentWorktree: null,
   discoveredWorktrees: [],
@@ -448,11 +448,14 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
     });
   },
 
+  // Reads through the creator's `get`, not useWorktreeStore.getState(): a value
+  // returned from useWorktreeStore inside its own initializer makes the store's
+  // type circular, and tsc then infers `any` for the whole store.
   resolveWorktree: async (worktreeId: string) => {
-    const find = () => useWorktreeStore.getState().worktrees.find((w) => w.id === worktreeId) ?? null;
+    const find = () => get().worktrees.find((w) => w.id === worktreeId) ?? null;
     const held = find();
     if (held) return held;
-    await useWorktreeStore.getState().ensureWorktrees([worktreeId]);
+    await get().ensureWorktrees([worktreeId]);
     return find();
   },
 

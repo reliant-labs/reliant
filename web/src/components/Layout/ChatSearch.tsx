@@ -86,7 +86,6 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
   const selectChat = useChatStore((state) => state.selectChat);
   const navigateToChat = useChatNavigationStore((state) => state.navigateToChat);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
 
   // Get current chat messages
   // From the detail cache, not the project list: the list omits automation-
