@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -4901,7 +4902,7 @@ var File_reliant_v1_tools_daemon_proto protoreflect.FileDescriptor
 const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\n" +
 	"\x1dreliant/v1/tools_daemon.proto\x12\n" +
-	"reliant.v1\"\x0f\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\"\x0f\n" +
 	"\rWhoAmIRequest\")\n" +
 	"\x0eWhoAmIResponse\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\"\xf4\t\n" +
@@ -5313,12 +5314,12 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x0eDiskGuardState\x12 \n" +
 	"\x1cDISK_GUARD_STATE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bDISK_GUARD_STATE_RECLAIMING\x10\x01\x12#\n" +
-	"\x1fDISK_GUARD_STATE_REFUSING_HEAVY\x10\x022\xd3\x02\n" +
+	"\x1fDISK_GUARD_STATE_REFUSING_HEAVY\x10\x022\xe1\x02\n" +
 	"\x12ToolsDaemonService\x12K\n" +
 	"\rConnectDaemon\x12\x19.reliant.v1.DaemonMessage\x1a\x19.reliant.v1.ServerMessage\"\x00(\x010\x01\x12L\n" +
 	"\x0eConnectGateway\x12\x19.reliant.v1.ServerMessage\x1a\x19.reliant.v1.DaemonMessage\"\x00(\x010\x01\x12_\n" +
 	"\x10ReportToolResult\x12#.reliant.v1.ReportToolResultRequest\x1a$.reliant.v1.ReportToolResultResponse\"\x00\x12A\n" +
-	"\x06WhoAmI\x12\x19.reliant.v1.WhoAmIRequest\x1a\x1a.reliant.v1.WhoAmIResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x06WhoAmI\x12\x19.reliant.v1.WhoAmIRequest\x1a\x1a.reliant.v1.WhoAmIResponse\"\x00\x1a\f\x82\xb5\x18\b:\x06daemonB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_tools_daemon_proto_rawDescOnce sync.Once

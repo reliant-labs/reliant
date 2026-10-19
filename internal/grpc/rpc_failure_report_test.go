@@ -189,7 +189,7 @@ type failingAPI struct {
 
 func newFailingAPI(t *testing.T, fail map[string]error) failingAPI {
 	t.Helper()
-	opts := connect.WithInterceptors(newInterceptors(true, &testNamedInterceptor{})...)
+	opts := connect.WithInterceptors(newInterceptors(&testNamedInterceptor{})...)
 	mux := http.NewServeMux()
 	for procedure, err := range fail {
 		if procedure == watchFilesProcedure {

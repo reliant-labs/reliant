@@ -47,7 +47,7 @@ import (
 //	             ─► tokenauthority (selected from the environment, as in prod)
 //	             ─► accesstokenclient over HTTP ─► control-plane
 //	             ◄─ `rlat_`
-//	daemon ─► real DaemonServer (NewDaemonServer, h2c, DaemonAuthInterceptor)
+//	daemon ─► real daemon listener (NewDaemonListener, h2c, DaemonAuthInterceptor)
 //	       ─► Introspect over HTTP ─► control-plane ─► registered
 //	user revokes through TokenService ─► next connect is refused
 //
@@ -307,19 +307,15 @@ func serveTokenService(t *testing.T, authority tokenauthority.Authority, jwtPubP
 	return srv.URL
 }
 
-// serveGateway starts the REAL daemon gateway server (NewDaemonServer) over
-// h2c, authenticating daemons through authority.
+// serveGateway starts the REAL daemon gateway listener (NewDaemonListener)
+// over h2c, authenticating daemons through authority.
 func serveGateway(t *testing.T, authority tokenauthority.Authority) string {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	gateway, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo})
 	require.NoError(t, err)
-	ds := NewDaemonServer(&DaemonConfig{
-		ToolsDaemonService: gateway,
-		DaemonTokens:       authority,
-	})
-	return serveCleartext(t, ds.server.Handler)
+	return serveDaemonListener(t, newTestDaemonListener(t, authority, gateway))
 }
 
 // connectDaemon opens ConnectDaemon with bearer, registers, and returns the

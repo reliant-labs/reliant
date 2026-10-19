@@ -61,7 +61,7 @@ func TestConnectAndHTTPInstrumentationPropagateTrace(t *testing.T) {
 		_, err = io.Copy(io.Discard, resp.Body)
 		require.NoError(t, err)
 		return connect.NewResponse(&emptypb.Empty{}), nil
-	}, connect.WithInterceptors(newInterceptors(true, &testNamedInterceptor{})...))
+	}, connect.WithInterceptors(newInterceptors(&testNamedInterceptor{})...))
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -89,7 +89,7 @@ func TestUntrustedServerStartsNewRootAndLinksRemoteTrace(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		trust bool
-	}{{"trusted public API continues the caller trace", true}, {"untrusted daemon server starts a new root", false}} {
+	}{{"trusted public API continues the caller trace", true}, {"untrusted daemon listener starts a new root", false}} {
 		t.Run(tc.name, func(t *testing.T) {
 			exporter := tracetest.NewInMemoryExporter()
 			provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
@@ -103,9 +103,15 @@ func TestUntrustedServerStartsNewRootAndLinksRemoteTrace(t *testing.T) {
 				require.NoError(t, provider.Shutdown(context.Background()))
 			})
 
+			chain := newInterceptors(&testNamedInterceptor{})
+			if !tc.trust {
+				daemonTrace, err := newDaemonTraceInterceptor()
+				require.NoError(t, err)
+				chain = []connect.Interceptor{daemonTrace} // NewDaemonChain's Trace slot
+			}
 			handler := connect.NewUnaryHandler(echoProcedure, func(context.Context, *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
 				return connect.NewResponse(&emptypb.Empty{}), nil
-			}, connect.WithInterceptors(newInterceptors(tc.trust, &testNamedInterceptor{})...))
+			}, connect.WithInterceptors(chain...))
 			server := httptest.NewServer(handler)
 			defer server.Close()
 

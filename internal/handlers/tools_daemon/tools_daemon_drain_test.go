@@ -20,7 +20,7 @@ import (
 
 // Close must ACTIVELY end every open daemon stream with Unavailable.
 //
-// The defect it pins: Close was a no-op, and DaemonServer.Stop's only other
+// The defect it pins: Close was a no-op, and the gateway's stop's only other
 // step was http.Server.Shutdown, which waits for active requests to finish.
 // A daemon bidi stream never finishes on its own, so Shutdown always burned
 // the full shutdown budget and the process then exited with every daemon's TCP

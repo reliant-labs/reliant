@@ -73,8 +73,7 @@ func TestModelEndpointE2E(t *testing.T) {
 	toolsSvc.AddConnectionListener(bridge)
 	require.NoError(t, bridge.Start())
 	t.Cleanup(func() { _ = bridge.Close() })
-	gw := NewDaemonServer(&DaemonConfig{ToolsDaemonService: toolsSvc, DaemonTokens: authority})
-	gatewayURL := serveCleartext(t, gw.server.Handler)
+	gatewayURL := serveDaemonListener(t, newTestDaemonListener(t, authority, toolsSvc))
 
 	m, err := authority.MintForUser(context.Background(), tokenauthority.MintRequest{
 		UserID: e2eUserA, Name: "e2e", Scopes: []fat.Scope{fat.ScopeDaemonConnect},

@@ -137,9 +137,11 @@ require (
 	github.com/dominikbraun/graph v0.23.0 // indirect
 	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/elliotchance/orderedmap/v2 v2.7.0 // indirect
+	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.39.0 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.3.3 // indirect
+	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/evanw/esbuild v0.28.2 // indirect
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
@@ -296,6 +298,7 @@ require (
 	golang.org/x/telemetry v0.0.0-20260924152758-ed294f943157 // indirect
 	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect
+	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/api v0.297.0 // indirect
 	google.golang.org/genproto v0.0.0-20260831171406-18b4a7587f8a // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect
@@ -314,6 +317,7 @@ require (
 	kcl-lang.io/kpm v0.13.1 // indirect
 	kcl-lang.io/lib v0.13.1 // indirect
 	oras.land/oras-go/v2 v2.6.2 // indirect
+	sigs.k8s.io/controller-runtime v0.25.2 // indirect
 	sigs.k8s.io/controller-tools v0.22.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect

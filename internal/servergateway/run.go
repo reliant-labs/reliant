@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -23,6 +24,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/reliant-labs/forge/pkg/lifecyclekit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	"github.com/reliant-labs/reliant/internal/certs"
@@ -257,7 +259,6 @@ func Run(ctx context.Context, opts Options) error {
 		_ = userUpdateHub.Close()
 		return fmt.Errorf("tools_daemon service: %w", err)
 	}
-	defer toolsDaemonService.Close()
 	defer func() { _ = userUpdateHub.Close() }()
 	logging.Info("Daemon state publisher wired",
 		"subjectPrefix", daemonwire.SubjectPrefix,
@@ -273,21 +274,6 @@ func Run(ctx context.Context, opts Options) error {
 	// an OOM kill) changes what ListDaemons reports, so tell the owner's web
 	// clients to refetch rather than leaving them to poll for it.
 	derivation.NotifyLifecycleApplied(toolsDaemonService.PublishDaemonListChanged)
-	go func() {
-		if err := derivation.Start(ctx); err != nil && ctx.Err() == nil {
-			logging.Error("Daemon state derivation consumer failed", "error", err)
-		}
-	}()
-	logging.Info("Daemon state derivation consumer started",
-		"subject", daemonwire.SubjectWildcard,
-	)
-
-	// Stale-connection sweeper: nukes connections whose application-level
-	// stream has died but whose TCP socket is still ESTABLISHED (observed
-	// in production — see Layer B of the half-open-cleanup fix). Bound to
-	// the same ctx as the rest of the bootstrap.
-	go toolsDaemonService.Start(ctx)
-	logging.Info("Stale-connection sweeper started for ToolsDaemonService")
 
 	// JetStream context — shared by the tool bridge (pending command drain)
 	// and the daemon lifecycle event publisher.
@@ -303,7 +289,6 @@ func Run(ctx context.Context, opts Options) error {
 	if err := toolBridge.Start(); err != nil {
 		return fmt.Errorf("failed to start NATS tool bridge: %w", err)
 	}
-	defer func() { _ = toolBridge.Close() }()
 	logging.Info("NATS tool bridge started — per-daemon subscriptions on connect/disconnect")
 
 	// Daemon lifecycle event publisher: forwards connect/disconnect to the
@@ -355,42 +340,53 @@ func Run(ctx context.Context, opts Options) error {
 	// reflects real usage between heartbeats.
 	activitySubscriber := daemonactivity.NewSubscriber()
 	if err := activitySubscriber.Start(nc, toolsDaemonService); err != nil {
+		_ = toolBridge.Close()
 		return fmt.Errorf("failed to start daemon activity subscriber: %w", err)
 	}
-	defer activitySubscriber.Stop()
 	logging.Info("Daemon activity subscriber started",
 		"subjectPattern", daemonactivity.SubjectWildcard,
 	)
 
-	// Daemon gRPC server (bidi streaming endpoint for tools-daemon connections)
-	daemonSrv := grpcserver.NewDaemonServer(&grpcserver.DaemonConfig{
+	// The daemon listener: the address daemons dial, serving
+	// ToolsDaemonService's bidi streams through a chain that authenticates
+	// daemon credentials (and only them: ToolsDaemonService declares the
+	// daemon audience, and serverkit checks it against the chain's).
+	daemonChain, err := grpcserver.NewDaemonChain(grpcserver.DaemonChainDeps{DaemonTokens: tokenAuthority})
+	if err != nil {
+		_ = toolBridge.Close()
+		activitySubscriber.Stop()
+		return err
+	}
+	daemonListener, err := grpcserver.NewDaemonListener(grpcserver.DaemonListenerDeps{
 		Port:               opts.ToolsDaemonPort,
 		BindAddress:        opts.BindAddress,
-		ToolsDaemonService: toolsDaemonService,
-		DaemonTokens:       tokenAuthority,
 		TLSCertFile:        tlsCertFile,
 		TLSKeyFile:         tlsKeyFile,
+		Chain:              daemonChain,
+		ToolsDaemonService: toolsDaemonService,
 	})
-	if err := daemonSrv.Start(); err != nil {
-		return fmt.Errorf("failed to start daemon gRPC server: %w", err)
+	if err != nil {
+		_ = toolBridge.Close()
+		activitySubscriber.Stop()
+		return err
 	}
-	// The listener is bound: /ready now answers from its dependency checks.
-	drainer.MarkReady()
-	logging.Info("Daemon gRPC server started", "port", opts.ToolsDaemonPort)
 
 	// Outbound daemon connector: dial engine driven by ManagedDaemonReconciler.
 	// The connector publishes connect-failure events via the same
 	// daemonevents.Publisher used for connected/disconnected so the control
 	// plane can persist a reason on the daemon row.
 	connector := NewDaemonConnector(toolsDaemonService, eventPublisher)
-
 	managedReconciler := NewManagedDaemonReconciler(js, connector)
-	go func() {
-		if err := managedReconciler.Start(ctx); err != nil && ctx.Err() == nil {
-			logging.Error("ManagedDaemonReconciler failed", "error", err)
-		}
-	}()
-	logging.Info("Managed daemon reconciler started")
+
+	nodes := gatewayNodes(gatewayComponents{
+		toolsDaemon:        toolsDaemonService,
+		derivation:         derivation,
+		toolBridge:         toolBridge,
+		activitySubscriber: activitySubscriber,
+		listener:           daemonListener,
+		reconciler:         managedReconciler,
+		connector:          connector,
+	})
 
 	// -------------------------------------------------------------------------
 	// 4. Health endpoint
@@ -402,7 +398,7 @@ func Run(ctx context.Context, opts Options) error {
 		_, _ = w.Write([]byte(`{"status":"ok","service":"daemon-gateway"}`))
 	})
 	healthMux.Handle("/metrics", observability.MetricsHandler())
-	healthMux.HandleFunc("/ready", drainer.ReadinessHandler([]serverkit.ReadyCheck{
+	healthMux.HandleFunc("/ready", drainer.ReadinessHandler(append([]serverkit.ReadyCheck{
 		{Name: "db", Check: repo.Ping},
 		{Name: "nats", Check: func(context.Context) error {
 			if !nc.IsConnected() {
@@ -410,7 +406,7 @@ func Run(ctx context.Context, opts Options) error {
 			}
 			return nil
 		}},
-	}, 0, slog.Default()))
+	}, lifecyclekit.ReadyChecks(nodes...)...), 0, slog.Default()))
 	// /flow-health: the APP-FLOW assertion (daemon-connected invariant). The
 	// gateway OWNS the attachment registry, so it asserts internally and
 	// exposes a STATUS-ONLY 200/503 — no per-daemon detail — that `forge
@@ -420,86 +416,152 @@ func Run(ctx context.Context, opts Options) error {
 	// flowhealth.go.
 	healthMux.HandleFunc("/flow-health", flowHealthHandler(repo, toolsDaemonService))
 
+	// The probes are the root's, not a node's: served from before the first
+	// node starts (answering 503 "not_ready" until Supervise marks the
+	// process ready) until after the last one stopped (503 "draining" through
+	// the whole drain), so kubelet and the load balancer always get an
+	// answer rather than a refused connection.
 	healthAddr := fmt.Sprintf("%s:%d", opts.BindAddress, opts.HealthPort)
 	healthServer := &http.Server{
 		Addr:              healthAddr,
 		Handler:           healthMux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	healthLn, err := net.Listen("tcp", healthAddr)
+	if err != nil {
+		_ = toolBridge.Close()
+		activitySubscriber.Stop()
+		return fmt.Errorf("failed to bind health endpoint: %w", err)
+	}
 	go func() {
 		logging.Info("Health endpoint started", "address", healthAddr)
-		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := healthServer.Serve(healthLn); err != nil && err != http.ErrServerClosed {
 			logging.Error("Health endpoint failed", "error", err)
 		}
 	}()
 
 	// -------------------------------------------------------------------------
-	// Startup complete
+	// 5. Run, then drain
 	// -------------------------------------------------------------------------
-	logging.Info("Reliant daemon-gateway ready",
-		"startup_duration", time.Since(startTime),
+	// Supervise starts the nodes in order and marks the process ready. On
+	// SIGTERM (or ctx ending) it flips readiness and keeps serving for
+	// PRE_STOP_DELAY, so this replica leaves EndpointSlices before anything
+	// stops accepting; then it stops the nodes in reverse, inside one
+	// SHUTDOWN_TIMEOUT budget — see gatewayNodes for why that order is the
+	// daemon hand-over — and logs each phase ("drain: …").
+	logging.Info("Starting Reliant daemon-gateway nodes",
+		"setup_duration", time.Since(startTime),
 		"daemon_port", opts.ToolsDaemonPort,
 		"health_port", opts.HealthPort,
 	)
-
-	// -------------------------------------------------------------------------
-	// 5. Graceful shutdown
-	// -------------------------------------------------------------------------
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case sig := <-sigCh:
-		logging.Info("Received shutdown signal, beginning graceful shutdown", "signal", sig)
-	case <-ctx.Done():
-		logging.Info("Context cancelled, beginning graceful shutdown")
-	}
-
-	// Flip /ready to 503 and keep serving for PRE_STOP_DELAY so this replica
-	// leaves EndpointSlices before anything stops accepting. The health
-	// server stays up through the whole drain and is stopped last.
-	drainer.Begin() // logs the flip and the pause ("drain: …" phase lines)
-
-	shutdownCtx, cancel := drainer.ShutdownContext()
-	defer cancel()
-
-	// Cancel outbound gateway→daemon dials before ending inbound streams, so
-	// the connector does not redial a daemon this process is about to drop.
-	connector.CloseAll()
-
-	// Stop the daemon server, make-before-break: as the listener's drain
-	// begins every held daemon is told to move (GatewayDrain, naming the
-	// drain's hard deadline) and opens a stream to a replica that is already
-	// serving — this one stopped being ready a pre-stop pause ago — while
-	// its stream here stays open for the replies to what is in flight on it.
-	// The listener's drain waits for those streams and ends the ones still
-	// open at its deadline with Unavailable, the daemon's redial signal:
-	// http.Server.Shutdown alone waits for active requests to finish, and a
-	// bidi stream never finishes on its own. A tool call cut off at the
-	// deadline is not lost; its result arrives through the replica the
-	// daemon moved to. See grpcserver.DaemonServer.Stop.
-	logging.Info("Stopping daemon gRPC server")
-	if err := daemonSrv.Stop(shutdownCtx); err != nil {
-		logging.Error("Error stopping daemon gRPC server", "error", err)
-	}
+	stopCtx, stopSignals := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer stopSignals()
+	runErr := lifecyclekit.Supervise(stopCtx, lifecyclekit.Policy{Drainer: drainer, Logger: slog.Default()}, nodes...)
 
 	// Health endpoint LAST — it is what answered 503 "draining" for the
-	// whole window above.
-	// Its own short budget: the shutdown context is usually spent by now.
-	logging.Info("Stopping health endpoint")
+	// whole drain. Its own short budget: the shutdown budget is usually
+	// spent by now, and its only clients are probes that take microseconds.
 	healthCtx, cancelHealth := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelHealth()
 	if err := healthServer.Shutdown(healthCtx); err != nil {
-		logging.Error("Error stopping health endpoint", "error", err)
+		logging.Warn("Health endpoint did not stop cleanly", "error", err)
 	}
-	// The shutdown's total ("drain: complete"), before telemetry is flushed
-	// (deferred above) so the point is exported.
-	drainer.Complete()
 
-	// Note: database is closed via defer above
-
+	// Note: NATS, the database and telemetry are closed via defers above.
+	if runErr != nil {
+		return fmt.Errorf("daemon-gateway: %w", runErr)
+	}
 	logging.Info("Daemon-gateway shut down gracefully")
 	return nil
+}
+
+// gatewayComponents are the parts of the gateway that have a lifecycle.
+type gatewayComponents struct {
+	toolsDaemon        *tools_daemon.Service
+	derivation         *daemonstate.Derivation
+	toolBridge         *toolexec.NATSToolBridge
+	activitySubscriber *daemonactivity.Subscriber
+	listener           *grpcserver.DaemonListener
+	reconciler         *ManagedDaemonReconciler
+	connector          *DaemonConnector
+}
+
+// gatewayNodes are the gateway's components in START order, each after what
+// it depends on; lifecyclekit.Supervise stops them in reverse. The stop order
+// is the daemon hand-over, and it is load-bearing:
+//
+//  1. managed-reconciler: outbound gateway→daemon dials stop first, so the
+//     connector does not redial a daemon this replica is about to drop.
+//  2. daemon-listener: its drain is make-before-break. As it begins, every
+//     ConnectDaemon stream hands its daemon over (tools_daemon's
+//     handOverOnDrain: stop routing here, then GatewayDrain naming the
+//     drain's hard deadline); the daemon opens a stream to a replica that
+//     is already serving and closes this one once nothing is in flight on
+//     it. The drain waits for that, and ends what is still open at the
+//     deadline with Unavailable, the daemon's redial signal.
+//  3. activity-subscriber, tool-bridge, state-derivation: the NATS sides,
+//     after no daemon stream is left to route to.
+//  4. tools-daemon: ends anything the service still holds (an outbound
+//     connection), and stops the stale-connection sweeper.
+func gatewayNodes(c gatewayComponents) []lifecyclekit.Node {
+	return []lifecyclekit.Node{
+		{
+			Name: "tools-daemon",
+			// The stale-connection sweeper: nukes connections whose
+			// application-level stream has died but whose TCP socket is
+			// still ESTABLISHED (observed in production — see Layer B of the
+			// half-open-cleanup fix).
+			Run: func(ctx context.Context) error {
+				c.toolsDaemon.Start(ctx)
+				return nil
+			},
+			Close: func(context.Context) error {
+				c.toolsDaemon.Close()
+				return nil
+			},
+		},
+		{
+			// Mirrors the control plane's lifecycle, removal and
+			// registry-snapshot events onto the daemons table. A failure is
+			// logged, not fatal: the daemon streams do not depend on it.
+			Name: "state-derivation",
+			Run: func(ctx context.Context) error {
+				logging.Info("Daemon state derivation consumer started", "subject", daemonwire.SubjectWildcard)
+				if err := c.derivation.Start(ctx); err != nil && ctx.Err() == nil {
+					logging.Error("Daemon state derivation consumer failed", "error", err)
+				}
+				return nil
+			},
+		},
+		{
+			Name:  "tool-bridge",
+			Close: func(context.Context) error { return c.toolBridge.Close() },
+		},
+		{
+			Name: "activity-subscriber",
+			Close: func(context.Context) error {
+				c.activitySubscriber.Stop()
+				return nil
+			},
+		},
+		lifecyclekit.Component("daemon-listener", c.listener),
+		{
+			// A failure is logged, not fatal: inbound daemons do not
+			// depend on it.
+			Name: "managed-reconciler",
+			Run: func(ctx context.Context) error {
+				logging.Info("Managed daemon reconciler started")
+				if err := c.reconciler.Start(ctx); err != nil && ctx.Err() == nil {
+					logging.Error("ManagedDaemonReconciler failed", "error", err)
+				}
+				return nil
+			},
+			Close: func(context.Context) error {
+				c.connector.CloseAll()
+				return nil
+			},
+		},
+	}
 }
 
 // startPprofServer serves net/http/pprof on addr, or does nothing when addr is

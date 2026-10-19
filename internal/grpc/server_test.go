@@ -30,7 +30,7 @@ func TestNewInterceptorsUsesForgeChainWithExtras(t *testing.T) {
 	timeout := &testNamedInterceptor{}
 	auth := &testNamedInterceptor{}
 
-	result := newInterceptors(true, timeout, auth)
+	result := newInterceptors(timeout, auth)
 	// Forge's five middleware slots stay stable. otelconnect is the first extra
 	// and owns the only Connect server span; the remaining extras are Reliant's:
 	// the slow-RPC watchdog, timeout and auth. There is no error reporter: a
@@ -44,7 +44,7 @@ func TestNewInterceptorsUsesForgeChainWithExtras(t *testing.T) {
 func TestNewInterceptorsSkipsNilAuthInterceptor(t *testing.T) {
 	timeout := &testNamedInterceptor{}
 
-	result := newInterceptors(true, timeout, (*interceptors.AuthInterceptor)(nil))
+	result := newInterceptors(timeout, (*interceptors.AuthInterceptor)(nil))
 	// Forge's five + otelconnect + watchdog + timeout = 8 (nil auth skipped).
 	require.Len(t, result, 8)
 	require.IsType(t, &interceptors.SlowRPCWatchdogInterceptor{}, result[6])

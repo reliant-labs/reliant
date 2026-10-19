@@ -286,7 +286,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// A failed RPC reaches Sentry once, as forge's "rpc failed" line through
 	// the slog bridge (internal/logging), grouped per procedure and code.
 	timeouts := interceptors.NewTimeoutInterceptor().WithMethodTimeouts(forge.ForgeRPCDeadlines())
-	opts := newHandlerOptions(true, timeouts.Interceptor(), authInterceptor, domainWhitelistInterceptor)
+	opts := newHandlerOptions(timeouts.Interceptor(), authInterceptor, domainWhitelistInterceptor)
 	// Innermost, so logging records the status the client received: every
 	// streaming handler is bound to the listener's drain registry, and a
 	// stream the drain ends finishes OK with the x-forge-drained trailer —
@@ -1057,9 +1057,9 @@ func (s *Server) Mux() *http.ServeMux {
 }
 
 // newHandlerOptions builds the standard Connect handler options with the shared
-// interceptor chain. See newInterceptors for trustRemoteTrace.
-func newHandlerOptions(trustRemoteTrace bool, timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.HandlerOption {
-	all := newInterceptors(trustRemoteTrace, timeoutInterceptor, authInterceptors...)
+// interceptor chain.
+func newHandlerOptions(timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.HandlerOption {
+	all := newInterceptors(timeoutInterceptor, authInterceptors...)
 	opts := make([]connect.HandlerOption, 0, len(all))
 	for _, i := range all {
 		opts = append(opts, connect.WithInterceptors(i))
@@ -1067,20 +1067,17 @@ func newHandlerOptions(trustRemoteTrace bool, timeoutInterceptor connect.Interce
 	return opts
 }
 
-// newInterceptors returns the ordered interceptor slice used by both main and daemon servers.
+// newInterceptors returns the API server's ordered interceptor slice.
 // The canonical chain is provided by forge's observe.DefaultMiddlewares:
 //
 //	Recovery → RequestID → Logging → Tracing → Metrics → Extras
 //
 // Reliant-specific interceptors (slow-RPC watchdog, timeout, auth) are passed as Extras.
 //
-// trustRemoteTrace controls whether a caller-supplied traceparent becomes the
-// parent of the server span. The public API trusts it for browser-to-API trace
-// continuity. The daemon-facing server must not: daemons run on user machines
-// and are untrusted, so a caller could otherwise pick the trace ID and sampled
-// flag. Untrusted servers start a new root span and record the remote context
-// as a span link only.
-func newInterceptors(trustRemoteTrace bool, timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.Interceptor {
+// A caller-supplied traceparent becomes the parent of the server span: the
+// public API trusts it for browser-to-API trace continuity. (The daemon
+// listener does not: see NewDaemonChain.)
+func newInterceptors(timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.Interceptor {
 	extras := []connect.Interceptor{
 		interceptors.NewSlowRPCWatchdogInterceptor(),
 		timeoutInterceptor,
@@ -1092,11 +1089,7 @@ func newInterceptors(trustRemoteTrace bool, timeoutInterceptor connect.Intercept
 		extras = append(extras, ai)
 	}
 
-	var otelOpts []otelconnect.Option
-	if trustRemoteTrace {
-		otelOpts = append(otelOpts, otelconnect.WithTrustRemote())
-	}
-	otelInterceptor, err := otelconnect.NewInterceptor(otelOpts...)
+	otelInterceptor, err := otelconnect.NewInterceptor(otelconnect.WithTrustRemote())
 	if err != nil {
 		panic(fmt.Sprintf("create Connect OpenTelemetry interceptor: %v", err))
 	}

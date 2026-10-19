@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net"
 	"testing"
 	"time"
 
@@ -17,43 +16,78 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// A daemon-gateway rollout, through the real listener: DaemonServer.Stop is
-// make-before-break. Every held daemon is told to move; the drain waits for
-// the daemons to close their old streams, and ends whatever is still open at
-// its deadline with Unavailable — the status a daemon redials on — never with
-// the OK a watch stream ends with, and never by cutting the connection.
+// A daemon-gateway rollout, through the real listener: the DaemonListener's
+// drain is make-before-break. Every held daemon is told to move; the drain
+// waits for the daemons to close their old streams, and ends whatever is still
+// open at its deadline with Unavailable — the status a daemon redials on —
+// never with the OK a watch stream ends with, and never by cutting the
+// connection.
 
-// startDrainGateway serves the REAL daemon gateway (NewDaemonServer) on a
-// loopback port and returns it with its URL and a daemon credential.
-func startDrainGateway(t *testing.T) (*DaemonServer, string, string) {
+// drainGateway is the gateway's daemon side as servergateway.Run supervises
+// it: the listener, then the service behind it.
+type drainGateway struct {
+	listener *DaemonListener
+	service  *tools_daemon.Service
+}
+
+// stop is the supervisor's reverse walk over the two: drain the listener,
+// then close what the service still holds.
+func (g *drainGateway) stop(ctx context.Context) error {
+	err := g.listener.Drain(ctx)
+	g.service.Close()
+	return err
+}
+
+// startDrainGateway serves the REAL daemon listener (NewDaemonChain +
+// NewDaemonListener) on a loopback port and returns it with its URL and a
+// daemon credential.
+func startDrainGateway(t *testing.T) (*drainGateway, string, string) {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	authority := tokenauthority.NewMemory()
 	gateway, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo})
 	require.NoError(t, err)
-	ds := NewDaemonServer(&DaemonConfig{ToolsDaemonService: gateway, DaemonTokens: authority})
-
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	served := make(chan error, 1)
-	go func() { served <- ds.server.Serve(ln) }()
-	t.Cleanup(func() {
-		_ = ds.server.Close()
-		<-served
-	})
+	listener := newTestDaemonListener(t, authority, gateway)
 
 	minted, err := authority.MintForUser(context.Background(), tokenauthority.MintRequest{
 		UserID: "user-drain", Name: "drain", Scopes: []fat.Scope{fat.ScopeDaemonConnect},
 	})
 	require.NoError(t, err)
-	return ds, "http://" + ln.Addr().String(), minted.Plaintext
+	return &drainGateway{listener: listener, service: gateway}, serveDaemonListener(t, listener), minted.Plaintext
+}
+
+// newTestDaemonListener builds the daemon listener on a loopback port,
+// authenticating against tokens.
+func newTestDaemonListener(t *testing.T, tokens auth.AccessTokenIntrospector, svc *tools_daemon.Service) *DaemonListener {
+	t.Helper()
+	chain, err := NewDaemonChain(DaemonChainDeps{DaemonTokens: tokens})
+	require.NoError(t, err)
+	listener, err := NewDaemonListener(DaemonListenerDeps{BindAddress: "127.0.0.1", Chain: chain, ToolsDaemonService: svc})
+	require.NoError(t, err)
+	return listener
+}
+
+// serveDaemonListener binds and runs l, returning its h2c URL. Cleanup closes
+// it and waits for Run to return.
+func serveDaemonListener(t *testing.T, l *DaemonListener) string {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	require.NoError(t, l.Listen(ctx))
+	ran := make(chan error, 1)
+	go func() { ran <- l.Run(ctx) }()
+	t.Cleanup(func() {
+		cancel()
+		require.NoError(t, <-ran)
+	})
+	return "http://" + l.Addr().String()
 }
 
 // attachMovingDaemon opens ConnectDaemon as a current daemon (one that acts
@@ -89,20 +123,20 @@ func nextMessage(t *testing.T, stream *connect.BidiStreamForClient[reliantv1.Dae
 	}
 }
 
-// stopInBackground runs Stop under budget, returning how it ended and how long
+// stopInBackground runs the stop under budget, returning how it ended and how long
 // it took.
 type stopResult struct {
 	err     error
 	elapsed time.Duration
 }
 
-func stopInBackground(ds *DaemonServer, budget time.Duration) <-chan stopResult {
+func stopInBackground(g *drainGateway, budget time.Duration) <-chan stopResult {
 	done := make(chan stopResult, 1)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), budget)
 		defer cancel()
 		start := time.Now()
-		err := ds.Stop(ctx)
+		err := g.stop(ctx)
 		done <- stopResult{err: err, elapsed: time.Since(start)}
 	}()
 	return done
@@ -111,12 +145,12 @@ func stopInBackground(ds *DaemonServer, budget time.Duration) <-chan stopResult 
 // The drain returns as soon as the daemon has moved: it waits for the old
 // stream to close rather than for its deadline, and the notice names when
 // the stream would otherwise have been ended.
-func TestDaemonServerStopWaitsForTheDaemonToMove(t *testing.T) {
-	ds, url, bearer := startDrainGateway(t)
+func TestDaemonListenerDrainWaitsForTheDaemonToMove(t *testing.T) {
+	gw, url, bearer := startDrainGateway(t)
 	stream := attachMovingDaemon(t, url, bearer)
 
 	const budget = 20 * time.Second
-	stopped := stopInBackground(ds, budget)
+	stopped := stopInBackground(gw, budget)
 	notice := nextMessage(t, stream, "the drain notice", func(m *reliantv1.ServerMessage) bool { return m.GetDrain() != nil }).GetDrain()
 	until := time.Until(time.UnixMilli(notice.GetDeadlineUnixMs()))
 	require.InDelta(t, (budget - serverkit.DefaultDrainReserve).Seconds(), until.Seconds(), 2,
@@ -124,7 +158,7 @@ func TestDaemonServerStopWaitsForTheDaemonToMove(t *testing.T) {
 
 	select {
 	case r := <-stopped:
-		t.Fatalf("Stop returned (%v) while the daemon's stream was still open", r.err)
+		t.Fatalf("the drain returned (%v) while the daemon's stream was still open", r.err)
 	case <-time.After(200 * time.Millisecond):
 	}
 
@@ -132,19 +166,19 @@ func TestDaemonServerStopWaitsForTheDaemonToMove(t *testing.T) {
 	require.NoError(t, stream.CloseRequest())
 	r := <-stopped
 	require.NoError(t, r.err)
-	require.Less(t, r.elapsed, budget/2, "Stop must return once the daemon moved, not wait out its deadline")
+	require.Less(t, r.elapsed, budget/2, "the drain must return once the daemon moved, not wait out its deadline")
 }
 
 // A stream still open at the drain's deadline is ended with Unavailable —
 // the daemon's redial signal — marked as drained.
-func TestDaemonServerStopEndsAStreamThatDidNotMoveWithUnavailable(t *testing.T) {
-	ds, url, bearer := startDrainGateway(t)
+func TestDaemonListenerDrainEndsAStreamThatDidNotMoveWithUnavailable(t *testing.T) {
+	gw, url, bearer := startDrainGateway(t)
 	stream := attachMovingDaemon(t, url, bearer)
 
 	// Under twice the reserve, the drain keeps half the budget back: the
 	// stream is ended at 1.5s.
 	const budget = 3 * time.Second
-	stopped := stopInBackground(ds, budget)
+	stopped := stopInBackground(gw, budget)
 	nextMessage(t, stream, "the drain notice", func(m *reliantv1.ServerMessage) bool { return m.GetDrain() != nil })
 
 	var err error

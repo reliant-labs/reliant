@@ -3,12 +3,20 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // ToolsDaemonService provides bidirectional streaming for tool execution.
 // The daemon connects and maintains a persistent stream for receiving tool requests
 // and sending back tool responses.
 service ToolsDaemonService {
+  // Daemons are the callers. The daemon-gateway's daemon listener
+  // authenticates daemon credentials (`rlat_` tokens granting daemon:connect)
+  // and admits only this audience; serverkit refuses at boot to mount the
+  // service on a listener whose chain admits any other.
+  option (forge.v1.service) = {audience: "daemon"};
+
   // ConnectDaemon establishes a bidirectional stream for tool execution.
   // - Server sends ToolRequest messages when tools need to be executed
   // - Client sends ToolResponse messages with execution results

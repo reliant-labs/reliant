@@ -5,7 +5,7 @@ package grpc
 
 // Whole-chain proof for Wave 4 local models against a REAL local Ollama.
 //
-//	embedded NATS ── NATSToolBridge ── ToolsDaemonService ── NewDaemonServer (h2c, rlat_ auth)
+//	embedded NATS ── NATSToolBridge ── ToolsDaemonService ── NewDaemonListener (h2c, rlat_ auth)
 //	                                          ▲                         ▲
 //	  NATSDaemonRouter ◄─ DaemonRegistryService / CatalogService        │ ConnectDaemon
 //	        ▲                                                  daemonruntime.Start ──► Ollama :11434
@@ -173,8 +173,7 @@ func TestLocalModelE2E(t *testing.T) {
 	toolsSvc.AddConnectionListener(bridge)
 	require.NoError(t, bridge.Start())
 	t.Cleanup(func() { _ = bridge.Close() })
-	gw := NewDaemonServer(&DaemonConfig{ToolsDaemonService: toolsSvc, DaemonTokens: authority})
-	gatewayURL := serveCleartext(t, gw.server.Handler)
+	gatewayURL := serveDaemonListener(t, newTestDaemonListener(t, authority, toolsSvc))
 
 	mint := func(userID string) string {
 		m, err := authority.MintForUser(context.Background(), tokenauthority.MintRequest{
