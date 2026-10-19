@@ -381,8 +381,13 @@ export const api = {
       return chatGrpc.compact(chatId, threadId);
     },
 
-    updateWorkflowParams: async (chatId: string, params: Record<string, unknown>, threadId?: string) => {
-      return chatGrpc.updateWorkflowParams(chatId, params, threadId);
+    updateWorkflowParams: async (
+      chatId: string,
+      params: Record<string, unknown>,
+      threadId?: string,
+      expectedVersion?: bigint,
+    ) => {
+      return chatGrpc.updateWorkflowParams(chatId, params, threadId, expectedVersion);
     },
 
     sendMessage: async (

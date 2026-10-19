@@ -1,22 +1,21 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { logger } from '../lib/logger';
-import { repairLegacyPresetSelections, repairLegacyWorkflowParams } from '../lib/paramUtils';
 
 /**
- * Persisted store for per-chat workflow params and preset selections.
+ * In-memory draft of per-chat workflow params and preset selections.
  *
- * `chatParams` holds workflow inputs that the user customized for a given
- * chat — these are sent to the backend verbatim on each send.
+ * A chat's params live on the server (its ChatSelection), and the composer
+ * seeds from there; nothing here survives a reload, and nothing here is read as
+ * the chat's truth. This is the composer's working copy: `chatParams` holds the
+ * inputs as the user is editing them, `chatPresets` the preset selections
+ * (group → preset name), and both are what a send or a sync pushes.
  *
- * `chatPresets` holds preset selections (group → preset name) for that chat;
- * the chat record is the eventual source of truth, but we cache them here so
- * the UI state survives remounts before the chat record syncs back.
+ * What an older build persisted in localStorage (`reliant-chat-params`) is read
+ * once per chat by lib/legacyChatParams to seed a chat the server has no
+ * selection for, and then deleted.
  *
- * The `tempNewChat*` siblings hold the same shape for a new chat that
- * doesn't have an ID yet. They are intentionally NOT persisted — composing
- * a new chat is a transient action that should respect workflow defaults
- * after a reload.
+ * The `tempNewChat*` siblings hold the same shape for a new chat that doesn't
+ * have an ID yet, until it is created and they transfer to its id.
  */
 
 export type WorkflowParams = Record<string, unknown>;
@@ -51,23 +50,7 @@ interface ChatParamsStore {
   clearTempNewChatParams: () => void;
 }
 
-function repairLegacyState(state: {
-  chatParams?: Record<string, WorkflowParams>;
-  chatPresets?: Record<string, PresetSelections>;
-}) {
-  const chatParams: Record<string, WorkflowParams> = {};
-  for (const [id, params] of Object.entries(state.chatParams ?? {})) {
-    chatParams[id] = repairLegacyWorkflowParams(params);
-  }
-  const chatPresets: Record<string, PresetSelections> = {};
-  for (const [id, presets] of Object.entries(state.chatPresets ?? {})) {
-    chatPresets[id] = repairLegacyPresetSelections(presets);
-  }
-  return { chatParams, chatPresets };
-}
-
 export const useChatParamsStore = create<ChatParamsStore>()(
-  persist(
     (set, get) => ({
       chatParams: {},
       chatPresets: {},
@@ -162,76 +145,7 @@ export const useChatParamsStore = create<ChatParamsStore>()(
           tempNewChatPresets: {},
         });
       },
-    }),
-    {
-      name: 'reliant-chat-params',
-      version: 7,
-      partialize: (state) => ({
-        chatParams: state.chatParams,
-        chatPresets: state.chatPresets,
-        // tempNewChat* fields are intentionally NOT persisted — composing a
-        // new chat is transient and should respect workflow defaults on reload.
-      }),
-      migrate: (persistedState: unknown, version: number) => {
-        // v1: { chatModes: { [chatId]: { autoApprove, planningMode } } }
-        if (version === 1) {
-          const old = persistedState as { chatModes?: Record<string, { autoApprove: boolean; planningMode: boolean }> };
-          const chatParams: Record<string, WorkflowParams> = {};
-          for (const [id, m] of Object.entries(old.chatModes || {})) {
-            chatParams[id] = { mode: m.planningMode ? "plan" : m.autoApprove ? "auto" : "manual" };
-          }
-          return { chatParams, chatPresets: {} };
-        }
-        // v2: { chatModes: { [chatId]: mode } }
-        if (version === 2) {
-          const old = persistedState as { chatModes?: Record<string, string>; tempNewChatMode?: string };
-          const chatParams: Record<string, WorkflowParams> = {};
-          for (const [id, mode] of Object.entries(old.chatModes || {})) {
-            chatParams[id] = { mode };
-          }
-          return { chatParams, chatPresets: {} };
-        }
-        // v3: Drop tempNewChatParams from persistence.
-        if (version === 3) {
-          const old = persistedState as { chatParams?: Record<string, WorkflowParams> };
-          return { chatParams: old.chatParams || {}, chatPresets: {} };
-        }
-        // v4 → v5: Clear all chat params to purge ungrouped preset keys.
-        if (version === 4) {
-          return { chatParams: {}, chatPresets: {} };
-        }
-        // v5 → v6: Lift `__selectedPresets` out of chatParams[*] into a sibling
-        // `chatPresets` map. Strip any other `__`-prefixed metadata keys that
-        // might have leaked into chatParams (e.g. `__selectedWorkflow`).
-        if (version === 5) {
-          const old = persistedState as { chatParams?: Record<string, WorkflowParams> };
-          const cleanParams: Record<string, WorkflowParams> = {};
-          const chatPresets: Record<string, PresetSelections> = {};
-          for (const [id, params] of Object.entries(old.chatParams ?? {})) {
-            const filtered: WorkflowParams = {};
-            for (const [k, v] of Object.entries(params)) {
-              if (!k.startsWith("__")) filtered[k] = v;
-            }
-            cleanParams[id] = filtered;
-            const presets = (params as { __selectedPresets?: unknown }).__selectedPresets;
-            if (presets && typeof presets === "object" && !Array.isArray(presets)) {
-              chatPresets[id] = presets as PresetSelections;
-            }
-          }
-          return repairLegacyState({ chatParams: cleanParams, chatPresets });
-        }
-        // v6 → v7: the Cmd+K H shortcut stored a top-level `thinking_level` and
-        // the popover's preset picker stored `default.*` keys; both make every
-        // send fail. Repair them in place.
-        if (version === 6) {
-          return repairLegacyState(
-            persistedState as { chatParams?: Record<string, WorkflowParams>; chatPresets?: Record<string, PresetSelections> }
-          );
-        }
-        return persistedState;
-      },
-    }
-  )
+    })
 );
 
 // Selectors

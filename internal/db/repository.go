@@ -6,6 +6,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	core "github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -706,6 +707,11 @@ type Repository interface {
 	// written before the run parks on its timer. See provider_backoff.go.
 	RecordUsageLimitWait(ctx context.Context, chatID, threadID, provider string, probing bool, resumeAt, now time.Time) error
 	ClearUsageLimitWait(ctx context.Context, chatID, threadID string, now time.Time) error
+	// Chat selection — the composer's server-side choice for a chat, layered
+	// under every run the chat builds. See chat_selection.go.
+	GetChatSelection(ctx context.Context, chatID string) (*chatselection.Selection, error)
+	MutateChatSelection(ctx context.Context, chatID string, mutate func(current *chatselection.Selection) (*chatselection.Selection, error)) (*chatselection.Selection, error)
+	CopyChatSelection(ctx context.Context, fromChatID, toChatID, userID string) error
 	// Threads - First-class entity for thread hierarchy and fork relationships.
 	// Thread.Origin (main/spawn/fork/node) is a stored column, not re-derived
 	// at read time from a workflow row's spawned_by_node_id sentinel -- see

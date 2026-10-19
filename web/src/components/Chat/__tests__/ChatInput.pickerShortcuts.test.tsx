@@ -28,10 +28,29 @@ globalThis.ResizeObserver ??= class {
 vi.mock("../../../lib/toast-manager", () => ({
   toast: { error: vi.fn(), info: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }));
+// The chat's server-side selection is what the composer opens on. Each test
+// sets it; `null` is a chat the server holds no selection for.
+const serverSelection: { current: { workflowName: string; params: Record<string, unknown>; version: bigint } | null } = {
+  current: null,
+};
 vi.mock("../../../hooks/chat-queries", async () => {
   const actual = await vi.importActual<typeof import("../../../hooks/chat-queries")>("../../../hooks/chat-queries");
-  return { ...actual, useChat: () => ({ data: undefined, isLoading: false }), getChatFromCache: () => undefined };
+  return {
+    ...actual,
+    useChat: () => ({ data: undefined, isLoading: false }),
+    useChatSelection: () => ({ data: serverSelection.current, isLoading: false }),
+    getChatFromCache: () => undefined,
+    refetchChatSelection: vi.fn().mockResolvedValue(undefined),
+  };
 });
+// Edits are pushed to the server; capture them instead of reaching the network.
+const pushed = vi.hoisted(() => ({ calls: [] as Array<Record<string, unknown>> }));
+vi.mock("../../../lib/chatSelection", () => ({
+  pushChatParams: vi.fn(async (_chatId: string, params: Record<string, unknown>) => {
+    pushed.calls.push(params);
+    return null;
+  }),
+}));
 vi.mock("../../../hooks/approval-queries", () => ({
   usePendingQuestion: () => ({ data: null, isLoading: false }),
 }));
@@ -81,11 +100,13 @@ PRESETS.presets.push(PRESET);
 beforeEach(() => {
   useProjectStore.setState({ currentProject: { id: "p-picker" } as never });
   useChatParamsStore.getState().removeChatParams(CHAT_ID);
+  serverSelection.current = null;
+  pushed.calls.length = 0;
 });
 
 describe("Cmd+K H (cycle thinking level)", () => {
   it("writes the level onto the model selector, so the next send is accepted", async () => {
-    useChatParamsStore.getState().setChatParams(CHAT_ID, { model: { tags: ["flagship"] } });
+    serverSelection.current = { workflowName: "builtin://agent", params: { model: { tags: ["flagship"] } }, version: 1n };
     renderWithQuery(<ChatInput onSend={vi.fn()} chatId={CHAT_ID} isStreaming={false} />);
 
     act(() => {

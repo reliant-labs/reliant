@@ -3901,6 +3901,19 @@
           "OutputProtoFile": "reliant/v1/chat.proto"
         },
         {
+          "Name": "UpdateChatProviderPolicy",
+          "InputType": "UpdateChatProviderPolicyRequest",
+          "OutputType": "UpdateChatProviderPolicyResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.UpdateChatProviderPolicyRequest",
+          "OutputTypeFQ": "reliant.v1.UpdateChatProviderPolicyResponse",
+          "InputProtoFile": "reliant/v1/chat.proto",
+          "OutputProtoFile": "reliant/v1/chat.proto"
+        },
+        {
           "Name": "GetChatUpdates",
           "InputType": "GetChatUpdatesRequest",
           "OutputType": "GetChatUpdatesResponse",
@@ -4868,6 +4881,32 @@
             "MessageType": "reliant.v1.Chat"
           }
         ],
+        "UpdateChatProviderPolicyRequest": [
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "provider_policy",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ProviderPolicy"
+          },
+          {
+            "Name": "expected_version",
+            "ProtoType": "int64",
+            "IsOptional": true
+          }
+        ],
+        "UpdateChatProviderPolicyResponse": [
+          {
+            "Name": "selection",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ChatSelection"
+          }
+        ],
         "UpdateChatRequest": [
           {
             "Name": "chat_id",
@@ -4942,6 +4981,11 @@
             "Name": "thread_id",
             "ProtoType": "string",
             "IsOptional": true
+          },
+          {
+            "Name": "expected_version",
+            "ProtoType": "int64",
+            "IsOptional": true
           }
         ],
         "UpdateWorkflowParamsResponse": [
@@ -4954,6 +4998,12 @@
             "Name": "message",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "selection",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ChatSelection"
           }
         ]
       },
@@ -5216,6 +5266,11 @@
           {
             "name": "usage_limit_probing",
             "kind": "bool"
+          },
+          {
+            "name": "selection",
+            "kind": "message",
+            "type_name": "reliant.v1.ChatSelection"
           }
         ],
         "reliant.v1.ChatPlan": [
@@ -5253,6 +5308,30 @@
             "name": "completed_at",
             "kind": "string",
             "optional": true
+          }
+        ],
+        "reliant.v1.ChatSelection": [
+          {
+            "name": "workflow_name",
+            "kind": "string"
+          },
+          {
+            "name": "params",
+            "kind": "message",
+            "type_name": "google.protobuf.Struct"
+          },
+          {
+            "name": "provider_policy",
+            "kind": "message",
+            "type_name": "reliant.v1.ProviderPolicy"
+          },
+          {
+            "name": "version",
+            "kind": "int64"
+          },
+          {
+            "name": "updated_at",
+            "kind": "string"
           }
         ],
         "reliant.v1.ChatUpdate": [
@@ -5883,6 +5962,18 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.ProviderPolicy": [
+          {
+            "name": "on_limit",
+            "kind": "enum",
+            "type_name": "reliant.v1.ProviderPolicy.OnLimit"
+          },
+          {
+            "name": "fallback_model",
+            "kind": "string",
+            "optional": true
+          }
+        ],
         "reliant.v1.QueuedAgentMessage": [
           {
             "name": "id",
@@ -6310,6 +6401,32 @@
             "type_name": "reliant.v1.Chat"
           }
         ],
+        "reliant.v1.UpdateChatProviderPolicyRequest": [
+          {
+            "name": "chat_id",
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
+          },
+          {
+            "name": "provider_policy",
+            "kind": "message",
+            "type_name": "reliant.v1.ProviderPolicy"
+          },
+          {
+            "name": "expected_version",
+            "kind": "int64",
+            "optional": true
+          }
+        ],
+        "reliant.v1.UpdateChatProviderPolicyResponse": [
+          {
+            "name": "selection",
+            "kind": "message",
+            "type_name": "reliant.v1.ChatSelection"
+          }
+        ],
         "reliant.v1.UpdateChatRequest": [
           {
             "name": "chat_id",
@@ -6381,6 +6498,11 @@
             "name": "thread_id",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "expected_version",
+            "kind": "int64",
+            "optional": true
           }
         ],
         "reliant.v1.UpdateWorkflowParamsResponse": [
@@ -6391,6 +6513,11 @@
           {
             "name": "message",
             "kind": "string"
+          },
+          {
+            "name": "selection",
+            "kind": "message",
+            "type_name": "reliant.v1.ChatSelection"
           }
         ],
         "reliant.v1.WorkflowExecution": [
@@ -6515,6 +6642,7 @@
         "reliant.v1.CancelQueuedAgentMessageResponse": "reliant/v1/chat.proto",
         "reliant.v1.Chat": "reliant/v1/chat.proto",
         "reliant.v1.ChatPlan": "reliant/v1/chat.proto",
+        "reliant.v1.ChatSelection": "reliant/v1/chat.proto",
         "reliant.v1.ChatUpdate": "reliant/v1/chat.proto",
         "reliant.v1.CompactChatRequest": "reliant/v1/chat.proto",
         "reliant.v1.CompactChatResponse": "reliant/v1/chat.proto",
@@ -6554,6 +6682,7 @@
         "reliant.v1.Message": "reliant/v1/chat.proto",
         "reliant.v1.PauseChatRequest": "reliant/v1/chat.proto",
         "reliant.v1.PauseChatResponse": "reliant/v1/chat.proto",
+        "reliant.v1.ProviderPolicy": "reliant/v1/chat.proto",
         "reliant.v1.QueuedAgentMessage": "reliant/v1/chat.proto",
         "reliant.v1.ResumeChatRequest": "reliant/v1/chat.proto",
         "reliant.v1.ResumeChatResponse": "reliant/v1/chat.proto",
@@ -6574,6 +6703,8 @@
         "reliant.v1.TerminateChatResponse": "reliant/v1/chat.proto",
         "reliant.v1.UnadoptChatRequest": "reliant/v1/chat.proto",
         "reliant.v1.UnadoptChatResponse": "reliant/v1/chat.proto",
+        "reliant.v1.UpdateChatProviderPolicyRequest": "reliant/v1/chat.proto",
+        "reliant.v1.UpdateChatProviderPolicyResponse": "reliant/v1/chat.proto",
         "reliant.v1.UpdateChatRequest": "reliant/v1/chat.proto",
         "reliant.v1.UpdateChatResponse": "reliant/v1/chat.proto",
         "reliant.v1.UpdateChatStateRequest": "reliant/v1/chat.proto",
@@ -6630,6 +6761,11 @@
           "PLAN_STATUS_IN_PROGRESS",
           "PLAN_STATUS_COMPLETED",
           "PLAN_STATUS_CANCELLED"
+        ],
+        "reliant.v1.ProviderPolicy.OnLimit": [
+          "ON_LIMIT_UNSPECIFIED",
+          "ON_LIMIT_WAIT",
+          "ON_LIMIT_FALLBACK"
         ],
         "reliant.v1.RecoveryType": [
           "RECOVERY_TYPE_UNSPECIFIED",
@@ -6717,6 +6853,11 @@
           3,
           4
         ],
+        "reliant.v1.ProviderPolicy.OnLimit": [
+          0,
+          1,
+          2
+        ],
         "reliant.v1.RecoveryType": [
           0,
           1,
@@ -6779,6 +6920,10 @@
         "reliant.v1.PlanStatus": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "PlanStatus"
+        },
+        "reliant.v1.ProviderPolicy.OnLimit": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "ProviderPolicy_OnLimit"
         },
         "reliant.v1.RecoveryType": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -34884,5 +35029,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "8ce2704226dfcd8840af552b4334d61a200d31130030857bc8d02b73105fc886"
+  "source_hash": "b44ef718220e989edb9b5fa45a246913defce12d215142c5787e2b786ce7fd0c"
 }

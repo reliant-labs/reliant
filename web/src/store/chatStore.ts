@@ -3881,14 +3881,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // Initialize state for new chat
       get().initChatState(newChat);
 
-      // Copy workflow params from source chat to branched chat
-      const sourceParams = useChatParamsStore.getState().getChatParams(chatId);
-      if (Object.keys(sourceParams).length > 0) {
-        useChatParamsStore
-          .getState()
-          .setChatParams(newChat.id, sourceParams);
-      }
-
       // Select the new chat
       get().selectChat(newChat);
 
@@ -3918,12 +3910,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     seedChatDetail(newChat);
     upsertChatInListCache(newChat.projectId, newChat);
     get().initChatState(newChat);
-
-    // Same params as the source: the conversation continues, minus the machine.
-    const sourceParams = useChatParamsStore.getState().getChatParams(chatId);
-    if (Object.keys(sourceParams).length > 0) {
-      useChatParamsStore.getState().setChatParams(newChat.id, sourceParams);
-    }
 
     get().selectChat(newChat);
     get()._navigateToBranchedChat(newChat, newChat.worktreeId);
@@ -3970,14 +3956,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
       // Initialize state for new chat
       get().initChatState(newChat);
-
-      // Copy workflow params from source chat to branched chat
-      const sourceParams = useChatParamsStore.getState().getChatParams(chatId);
-      if (Object.keys(sourceParams).length > 0) {
-        useChatParamsStore
-          .getState()
-          .setChatParams(newChat.id, sourceParams);
-      }
 
       // Select the new chat
       get().selectChat(newChat);

@@ -13,7 +13,7 @@ import { notifyManager } from "@tanstack/react-query";
 import { UserStreamingService } from "../api/streaming-grpc";
 import type { UserUpdate, ChatUpdate, ConnectionStatus, ContextUsageInfo, MessagePaginationInfo } from "../types/streaming";
 import { useChatStore, initGlobalUpdatesStoreRef } from "./chatStore";
-import { ChatState } from "../gen/reliant/v1/chat_pb";
+import { ChatState, type ChatSelection } from "../gen/reliant/v1/chat_pb";
 import type { Chat } from "../types/chat";
 import { useActivityStore, ChatActivity } from "./activityStore";
 import { BackgroundProcessStatus } from "../gen/reliant/v1/common_pb";
@@ -30,7 +30,8 @@ import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
 import { invalidateDaemonList, reconcileDaemonHeartbeat } from "../hooks/useDaemonStatus";
 import { useGlobalDataStore } from "./globalDataStore";
-import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat } from "../hooks/chat-queries";
+import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat, setChatSelection } from "../hooks/chat-queries";
+import { isNewerSelection, selectionFromPayload, type SelectionPayload } from "../lib/chatSelection";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalKeys } from "../hooks/approval-queries";
 import { runKeys, runsInvalidatingUpdate } from "../hooks/run-queries";
@@ -897,6 +898,7 @@ function handleChatConfigChanged(update: UserUpdate) {
     // SetChatDaemon: "Connect a machine" clears no_machine in the same write.
     active_daemon_id?: string;
     no_machine?: boolean;
+    selection?: SelectionPayload;
     updated_at: string;
   };
 
@@ -907,6 +909,15 @@ function handleChatConfigChanged(update: UserUpdate) {
 
   const projectId =
     update.project_id || useProjectStore.getState().currentProject?.id;
+
+  // The composer's server-side selection changed (another device, or a model
+  // the server moved): the composer on this device adopts it.
+  if (data.selection) {
+    const incoming = selectionFromPayload(data.selection);
+    if (isNewerSelection(queryClient.getQueryData<ChatSelection | null>(chatKeys.selection(chat_id)), incoming)) {
+      setChatSelection(chat_id, incoming);
+    }
+  }
 
   const patch: Partial<Chat> = {};
   if (data.workflow_name !== undefined) {

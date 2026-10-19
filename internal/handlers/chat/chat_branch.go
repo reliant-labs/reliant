@@ -235,10 +235,15 @@ func (s *Service) BranchChat(
 		WorkflowID:     &branchWorkflowID, // Root workflow ID = chat ID for UI identification
 		ActiveDaemonID: activeDaemonID,    // Pin to the worktree's owning daemon
 		NoMachine:      noMachine,
-		CreatedAt:      time.Now().UTC(),
-		UpdatedAt:      time.Now().UTC(),
-		LastActive:     time.Now().UTC(),
-		LastMessageAt:  sourceChat.LastMessageAt, // Inherit from source chat
+		// The branch starts on what the chat it was branched from was set to:
+		// its presets here, its selection (model, mode, ...) in the
+		// transaction below. Without them the branch's first message ran on
+		// the preset's default tier, whatever the user had picked.
+		SelectedPresets: copyPresets(fromChat.SelectedPresets),
+		CreatedAt:       time.Now().UTC(),
+		UpdatedAt:       time.Now().UTC(),
+		LastActive:      time.Now().UTC(),
+		LastMessageAt:   sourceChat.LastMessageAt, // Inherit from source chat
 	}
 
 	// Determine workflow name - inherit from source chat or use user's default
@@ -313,6 +318,10 @@ func (s *Service) BranchChat(
 			return fmt.Errorf("failed to create workflow fork: %w", err)
 		}
 
+		if err := s.selections().Copy(txCtx, fromChat.ID, branchChatID, userID); err != nil {
+			return fmt.Errorf("failed to copy the chat's selection to the branch: %w", err)
+		}
+
 		// Copy plan and tasks from source chat to branched thread
 		if err := s.copyPlanAndTasks(txCtx, sourceChatID, branchWorkflowID); err != nil {
 			return fmt.Errorf("failed to copy plan to branched chat: %w", err)
@@ -368,7 +377,7 @@ func (s *Service) BranchChat(
 		s.abandonMachineWait(ctx, fromChat)
 	}
 	return connect.NewResponse(&reliantv1.BranchChatResponse{
-		Chat: chatToProto(committed),
+		Chat: s.chatToProtoWithSelection(ctx, committed),
 	}), nil
 }
 
@@ -771,4 +780,16 @@ func (s *Service) ListBranches(
 		Branches: branches,
 		Total:    int32(len(branches)),
 	}), nil
+}
+
+// copyPresets is a preset selection the branch can own; nil for none.
+func copyPresets(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for key, name := range in {
+		out[key] = name
+	}
+	return out
 }

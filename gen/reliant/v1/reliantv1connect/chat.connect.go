@@ -99,6 +99,9 @@ const (
 	// ChatServiceUpdateWorkflowParamsProcedure is the fully-qualified name of the ChatService's
 	// UpdateWorkflowParams RPC.
 	ChatServiceUpdateWorkflowParamsProcedure = "/reliant.v1.ChatService/UpdateWorkflowParams"
+	// ChatServiceUpdateChatProviderPolicyProcedure is the fully-qualified name of the ChatService's
+	// UpdateChatProviderPolicy RPC.
+	ChatServiceUpdateChatProviderPolicyProcedure = "/reliant.v1.ChatService/UpdateChatProviderPolicy"
 	// ChatServiceGetChatUpdatesProcedure is the fully-qualified name of the ChatService's
 	// GetChatUpdates RPC.
 	ChatServiceGetChatUpdatesProcedure = "/reliant.v1.ChatService/GetChatUpdates"
@@ -225,6 +228,8 @@ type ChatServiceClient interface {
 	// UpdateWorkflowParams updates workflow parameters for a running chat
 	// This signals the running workflow to update its inputs (e.g., mode, temperature)
 	UpdateWorkflowParams(context.Context, *connect.Request[v1.UpdateWorkflowParamsRequest]) (*connect.Response[v1.UpdateWorkflowParamsResponse], error)
+	// UpdateChatProviderPolicy sets what the chat does when its provider is rate-limited.
+	UpdateChatProviderPolicy(context.Context, *connect.Request[v1.UpdateChatProviderPolicyRequest]) (*connect.Response[v1.UpdateChatProviderPolicyResponse], error)
 	// GetChatUpdates fetches chat updates since a sequence number
 	GetChatUpdates(context.Context, *connect.Request[v1.GetChatUpdatesRequest]) (*connect.Response[v1.GetChatUpdatesResponse], error)
 	// ListChatPlans lists plans associated with a chat
@@ -414,6 +419,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceMethods.ByName("UpdateWorkflowParams")),
 			connect.WithClientOptions(opts...),
 		),
+		updateChatProviderPolicy: connect.NewClient[v1.UpdateChatProviderPolicyRequest, v1.UpdateChatProviderPolicyResponse](
+			httpClient,
+			baseURL+ChatServiceUpdateChatProviderPolicyProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("UpdateChatProviderPolicy")),
+			connect.WithClientOptions(opts...),
+		),
 		getChatUpdates: connect.NewClient[v1.GetChatUpdatesRequest, v1.GetChatUpdatesResponse](
 			httpClient,
 			baseURL+ChatServiceGetChatUpdatesProcedure,
@@ -481,6 +492,7 @@ type chatServiceClient struct {
 	branchChat               *connect.Client[v1.BranchChatRequest, v1.BranchChatResponse]
 	listBranches             *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
 	updateWorkflowParams     *connect.Client[v1.UpdateWorkflowParamsRequest, v1.UpdateWorkflowParamsResponse]
+	updateChatProviderPolicy *connect.Client[v1.UpdateChatProviderPolicyRequest, v1.UpdateChatProviderPolicyResponse]
 	getChatUpdates           *connect.Client[v1.GetChatUpdatesRequest, v1.GetChatUpdatesResponse]
 	listChatPlans            *connect.Client[v1.ListChatPlansRequest, v1.ListChatPlansResponse]
 	getWorkflowExecutions    *connect.Client[v1.GetWorkflowExecutionsRequest, v1.GetWorkflowExecutionsResponse]
@@ -619,6 +631,11 @@ func (c *chatServiceClient) UpdateWorkflowParams(ctx context.Context, req *conne
 	return c.updateWorkflowParams.CallUnary(ctx, req)
 }
 
+// UpdateChatProviderPolicy calls reliant.v1.ChatService.UpdateChatProviderPolicy.
+func (c *chatServiceClient) UpdateChatProviderPolicy(ctx context.Context, req *connect.Request[v1.UpdateChatProviderPolicyRequest]) (*connect.Response[v1.UpdateChatProviderPolicyResponse], error) {
+	return c.updateChatProviderPolicy.CallUnary(ctx, req)
+}
+
 // GetChatUpdates calls reliant.v1.ChatService.GetChatUpdates.
 func (c *chatServiceClient) GetChatUpdates(ctx context.Context, req *connect.Request[v1.GetChatUpdatesRequest]) (*connect.Response[v1.GetChatUpdatesResponse], error) {
 	return c.getChatUpdates.CallUnary(ctx, req)
@@ -755,6 +772,8 @@ type ChatServiceHandler interface {
 	// UpdateWorkflowParams updates workflow parameters for a running chat
 	// This signals the running workflow to update its inputs (e.g., mode, temperature)
 	UpdateWorkflowParams(context.Context, *connect.Request[v1.UpdateWorkflowParamsRequest]) (*connect.Response[v1.UpdateWorkflowParamsResponse], error)
+	// UpdateChatProviderPolicy sets what the chat does when its provider is rate-limited.
+	UpdateChatProviderPolicy(context.Context, *connect.Request[v1.UpdateChatProviderPolicyRequest]) (*connect.Response[v1.UpdateChatProviderPolicyResponse], error)
 	// GetChatUpdates fetches chat updates since a sequence number
 	GetChatUpdates(context.Context, *connect.Request[v1.GetChatUpdatesRequest]) (*connect.Response[v1.GetChatUpdatesResponse], error)
 	// ListChatPlans lists plans associated with a chat
@@ -940,6 +959,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceMethods.ByName("UpdateWorkflowParams")),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceUpdateChatProviderPolicyHandler := connect.NewUnaryHandler(
+		ChatServiceUpdateChatProviderPolicyProcedure,
+		svc.UpdateChatProviderPolicy,
+		connect.WithSchema(chatServiceMethods.ByName("UpdateChatProviderPolicy")),
+		connect.WithHandlerOptions(opts...),
+	)
 	chatServiceGetChatUpdatesHandler := connect.NewUnaryHandler(
 		ChatServiceGetChatUpdatesProcedure,
 		svc.GetChatUpdates,
@@ -1030,6 +1055,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceListBranchesHandler.ServeHTTP(w, r)
 		case ChatServiceUpdateWorkflowParamsProcedure:
 			chatServiceUpdateWorkflowParamsHandler.ServeHTTP(w, r)
+		case ChatServiceUpdateChatProviderPolicyProcedure:
+			chatServiceUpdateChatProviderPolicyHandler.ServeHTTP(w, r)
 		case ChatServiceGetChatUpdatesProcedure:
 			chatServiceGetChatUpdatesHandler.ServeHTTP(w, r)
 		case ChatServiceListChatPlansProcedure:
@@ -1153,6 +1180,10 @@ func (UnimplementedChatServiceHandler) ListBranches(context.Context, *connect.Re
 
 func (UnimplementedChatServiceHandler) UpdateWorkflowParams(context.Context, *connect.Request[v1.UpdateWorkflowParamsRequest]) (*connect.Response[v1.UpdateWorkflowParamsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.UpdateWorkflowParams is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) UpdateChatProviderPolicy(context.Context, *connect.Request[v1.UpdateChatProviderPolicyRequest]) (*connect.Response[v1.UpdateChatProviderPolicyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.UpdateChatProviderPolicy is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) GetChatUpdates(context.Context, *connect.Request[v1.GetChatUpdatesRequest]) (*connect.Response[v1.GetChatUpdatesResponse], error) {

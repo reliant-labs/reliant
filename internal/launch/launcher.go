@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -406,6 +407,9 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		if err := l.repo.CreateChat(txCtx, chat); err != nil {
 			return fmt.Errorf("failed to create chat: %w", err)
 		}
+		if err := l.recordStartSelection(txCtx, userID, chat, workflowName, spec.Params); err != nil {
+			return err
+		}
 
 		if err := l.repo.UpdateTriggerEventOutcome(txCtx, eventRow.ID, core.TriggerEventLaunched, "", &chatID); err != nil {
 			return fmt.Errorf("failed to attach chat to trigger event: %w", err)
@@ -653,6 +657,10 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 			if err := l.repo.UpdateChat(txCtx, cur); err != nil {
 				return fmt.Errorf("failed to update chat: %w", err)
 			}
+		}
+
+		if err := l.recordStartSelection(txCtx, userID, cur, workflowName, spec.Params); err != nil {
+			return err
 		}
 
 		// The branch's thread was forked by BranchChat; the seed messages
@@ -942,9 +950,7 @@ func (l *Launcher) buildInputs(
 	presets map[string]string,
 	params map[string]*structpb.Value,
 ) (map[string]interface{}, error) {
-	// Use worktree path if chat is in a worktree, otherwise project path
-	checkout := l.GetEffectiveCheckout(ctx, chat)
-	initialData := l.BuildWorkflowInputs(ctx, userID, checkout, chat.ProjectID, workflowName, presets, params)
+	initialData := l.BuildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, params)
 
 	// Validate resolved inputs (catches empty model after defaults resolution)
 	if validationErrors := l.ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
@@ -1227,4 +1233,19 @@ func LoadChatTrigger(ctx context.Context, repo interface {
 		return &v2.TriggerInfo{Kind: string(core.TriggerEventKindChatStart)}
 	}
 	return TriggerInfoFromEvent(row)
+}
+
+// recordStartSelection makes a start's params the chat's selection, so the
+// follow-up sends of a chat that was started on a model keep running on it. It
+// layers the start over what the chat already holds (a branch's copy of its
+// source), and writes nothing for a start that carries no params.
+func (l *Launcher) recordStartSelection(ctx context.Context, userID string, chat *db.Chat, workflowName string, params map[string]*structpb.Value) error {
+	patch := l.SelectionPatch(ctx, userID, chat.ProjectID, workflowName, params)
+	if len(patch) == 0 {
+		return nil
+	}
+	if _, err := chatselection.New(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
+		return fmt.Errorf("failed to record the chat's selection: %w", err)
+	}
+	return nil
 }

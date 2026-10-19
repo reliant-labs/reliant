@@ -67,16 +67,21 @@ func (s *Service) UpdateWorkflowParams(
 		}
 	}
 
-	// Build state update through the same path as SendMessage —
-	// this ensures schema defaults and validation are applied.
 	workflowName := ""
 	if chat.WorkflowName != nil {
 		workflowName = *chat.WorkflowName
 	}
+	threadScoped := req.Msg.ThreadId != nil && *req.Msg.ThreadId != ""
+
+	// The update is exactly the keys the client sent. A key it did not send is
+	// unchanged to the run: the old expansion to the full preset+default set
+	// reset a live run's model to the preset's tier on a Mode toggle, and
+	// overwrote a sub-agent's model, tools and skills with the root's preset.
 	stateUpdate := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, workflowName, nil, req.Msg.Params)
 
-	// Validate model selectors in the updated params before signaling the workflow
-	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, stateUpdate); len(validationErrors) > 0 {
+	// Validate the run as it would be after the update (model selectors,
+	// required inputs) before anything is stored or signalled.
+	if validationErrors := s.launcher().ValidateStateUpdate(ctx, userID, chat, workflowName, chat.SelectedPresets, stateUpdate); len(validationErrors) > 0 {
 		errMsgs := make([]string, len(validationErrors))
 		for i, e := range validationErrors {
 			errMsgs[i] = e.Error()
@@ -84,41 +89,92 @@ func (s *Service) UpdateWorkflowParams(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
 	}
 
-	// Add thread scope to signal payload so the handler updates the correct thread's inputs
-	if req.Msg.ThreadId != nil && *req.Msg.ThreadId != "" {
+	if threadScoped {
+		// A thread's params are that run's state, not the chat's choice: they
+		// are signalled and remembered by the run, never stored as the
+		// selection (which would hand the sub-agent's model to the next root run).
 		stateUpdate["__thread"] = *req.Msg.ThreadId
+		if err := s.signalParamUpdate(ctx, req.Msg.ChatId, workflowID, runID, req.Msg.ThreadId, stateUpdate); err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&reliantv1.UpdateWorkflowParamsResponse{
+			Success: true,
+			Message: "Workflow parameters updated",
+		}), nil
 	}
 
-	// Signal the root workflow with the parameter updates
-	err = s.deps.Temporal.SignalWorkflow(
-		ctx,
-		workflowID,
-		runID,
-		"update_workflow_state",
-		stateUpdate,
-	)
+	// The chat's own edit. Whether or not a run is live to receive it, it is
+	// the chat's choice from now on, so it is stored: the next send from any
+	// device, and the next run, start from it. A live run is moved off a
+	// provider that cannot serve it first, exactly as a send moves it, so what
+	// is stored is what runs.
+	live := s.rootRunIsLive(ctx, workflowID)
+	var moves []launch.ModelSubstitution
+	if live {
+		moves = s.moveUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, stateUpdate)
+	}
+	sel, err := s.recordSelection(ctx, userID, chat, workflowName, req.Msg.Params, stateUpdate, moves, req.Msg.GetExpectedVersion())
 	if err != nil {
-		if stale := staleWorkflowSignalError(err); stale != nil {
-			return nil, stale
+		return nil, versionConflictError()
+	}
+	if sel == nil {
+		sel, _ = s.selections().Get(ctx, chat.ID)
+	}
+
+	if live && len(stateUpdate) > 0 {
+		// A move is news only when it changes what the run already uses.
+		news := make([]launch.ModelSubstitution, 0, len(moves))
+		for _, sub := range moves {
+			if s.checkParamsActuallyChanged(ctx, workflowID, runID, map[string]interface{}{topLevelInput(sub.Input): stateUpdate[topLevelInput(sub.Input)]}) {
+				news = append(news, sub)
+			}
 		}
-		logging.Error("Failed to signal workflow for param update",
-			"chatID", req.Msg.ChatId,
-			"workflowID", workflowID,
-			"threadID", req.Msg.ThreadId,
-			"error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow params"))
+		s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, workflowID, news)
+		if err := s.signalParamUpdate(ctx, req.Msg.ChatId, workflowID, runID, nil, stateUpdate); err != nil {
+			return nil, err
+		}
 	}
 
 	logging.Debug("Updated workflow params",
 		"chatID", req.Msg.ChatId,
 		"workflowID", workflowID,
-		"threadID", req.Msg.ThreadId,
+		"live", live,
 		"paramCount", len(stateUpdate))
 
 	return connect.NewResponse(&reliantv1.UpdateWorkflowParamsResponse{
-		Success: true,
-		Message: "Workflow parameters updated",
+		Success:   true,
+		Message:   "Workflow parameters updated",
+		Selection: selectionToProto(sel),
 	}), nil
+}
+
+// rootRunIsLive reports whether the chat's root run is executing or paused, so
+// a param update has a run to signal. A pending, completed or failed run has
+// none: the update is stored and the next run starts from it.
+func (s *Service) rootRunIsLive(ctx context.Context, workflowID string) bool {
+	wf, err := s.deps.Repo.GetWorkflow(ctx, workflowID)
+	if err != nil || wf == nil {
+		return false
+	}
+	return wf.Status == db.Active() || wf.Status == db.Paused()
+}
+
+// signalParamUpdate delivers an input update to the chat's run. Thread-scoped
+// updates ride in the payload under __thread.
+func (s *Service) signalParamUpdate(ctx context.Context, chatID, workflowID, runID string, threadID *string, update map[string]interface{}) error {
+	err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, runID, "update_workflow_state", update)
+	if err == nil {
+		return nil
+	}
+	if stale := staleWorkflowSignalError(err); stale != nil {
+		return stale
+	}
+	logging.Error("Failed to signal workflow for param update",
+		"chatID", chatID,
+		"workflowID", workflowID,
+		"threadID", threadID,
+		"error", err)
+	return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow params"))
 }
 
 // threadAcceptsParamUpdate reports whether thread-scoped params can be applied

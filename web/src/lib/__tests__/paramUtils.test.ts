@@ -2,13 +2,16 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  adoptServerParams,
   flatToNestedParams,
+  groupNamesOf,
   hasDefaultValue,
   isModelInputRequired,
+  nestChangedParams,
   nestedToFlatParams,
   paramValuesEqual,
   currentThinkingLevel,
-  reconcileParamsWithServer,
+  unsyncedParams,
   repairLegacyPresetSelections,
   repairLegacyWorkflowParams,
   threadParamsAcceptChanges,
@@ -16,80 +19,42 @@ import {
 } from "../paramUtils";
 import { buildWorkflowInputsFromProto } from "../../components/Chat/ChatInput";
 
+const GROUPS = new Set(["agent", "implementer"]);
+
 describe("flatToNestedParams", () => {
-  it("converts flat dot-notation keys to nested structure", () => {
-    const flat = {
-      "agent.model": { id: "claude-3-5-sonnet-latest" },
-      "agent.temperature": 0.7,
-      "mode": "fast",
-    };
-
-    const nested = flatToNestedParams(flat);
-
-    expect(nested).toEqual({
-      agent: {
-        model: { id: "claude-3-5-sonnet-latest" },
-        temperature: 0.7,
-      },
+  it("nests a known group's flat keys", () => {
+    expect(
+      flatToNestedParams(
+        {
+          "agent.model": { id: "claude-3-5-sonnet-latest" },
+          "agent.temperature": 0.7,
+          mode: "fast",
+        },
+        GROUPS
+      )
+    ).toEqual({
+      agent: { model: { id: "claude-3-5-sonnet-latest" }, temperature: 0.7 },
       mode: "fast",
     });
   });
 
-  it("handles top-level params without dots", () => {
-    const flat = {
-      mode: "fast",
-      debug: true,
-    };
-
-    const nested = flatToNestedParams(flat);
-
-    expect(nested).toEqual({
-      mode: "fast",
-      debug: true,
-    });
-  });
-
-  it("handles multiple groups", () => {
-    const flat = {
-      "agent.model": { id: "claude" },
-      "agent.temperature": 0.5,
-      "implementer.model": { id: "gpt-4" },
-      "implementer.max_tokens": 4000,
-    };
-
-    const nested = flatToNestedParams(flat);
-
-    expect(nested).toEqual({
-      agent: {
-        model: { id: "claude" },
-        temperature: 0.5,
-      },
-      implementer: {
-        model: { id: "gpt-4" },
-        max_tokens: 4000,
-      },
-    });
-  });
-
-  it("handles empty input", () => {
-    const flat = {};
-    const nested = flatToNestedParams(flat);
-    expect(nested).toEqual({});
-  });
-
-  it("handles already-nested values (passes through)", () => {
-    // If params are already nested, they should pass through
-    const alreadyNested = {
+  it("handles several groups, and empty input", () => {
+    expect(
+      flatToNestedParams(
+        { "agent.model": { id: "claude" }, "implementer.model": { id: "gpt-4" }, "implementer.max_tokens": 4000 },
+        GROUPS
+      )
+    ).toEqual({
       agent: { model: { id: "claude" } },
-      mode: "fast",
-    };
+      implementer: { model: { id: "gpt-4" }, max_tokens: 4000 },
+    });
+    expect(flatToNestedParams({}, GROUPS)).toEqual({});
+  });
 
-    const result = flatToNestedParams(alreadyNested);
-
-    // Top-level keys without dots are kept as-is
-    expect(result).toEqual({
-      agent: { model: { id: "claude" } },
-      mode: "fast",
+  it("leaves a dotted key that is not under a known group alone, for the send boundary to refuse", () => {
+    expect(flatToNestedParams({ "default.model": "x", "agent.model": "y" }, GROUPS)).toEqual({
+      "default.model": "x",
+      agent: { model: "y" },
     });
   });
 });
@@ -238,16 +203,10 @@ describe("buildWorkflowInputsFromProto", () => {
 });
 
 describe("nestedToFlatParams", () => {
-  it("converts nested groups to flat dot-notation keys", () => {
-    const nested = {
-      agent: {
-        model: { id: "claude-5-sonnet" },
-        temperature: 0.7,
-      },
-      mode: "fast",
-    };
-
-    expect(nestedToFlatParams(nested)).toEqual({
+  it("flattens a schema group into flat keys", () => {
+    expect(
+      nestedToFlatParams({ agent: { model: { id: "claude-5-sonnet" }, temperature: 0.7 }, mode: "fast" }, GROUPS)
+    ).toEqual({
       "agent.model": { id: "claude-5-sonnet" },
       "agent.temperature": 0.7,
       mode: "fast",
@@ -255,19 +214,55 @@ describe("nestedToFlatParams", () => {
   });
 
   it("round-trips with flatToNestedParams", () => {
-    const flat = {
-      "agent.model": { tags: ["moderate"] },
-      "agent.thinking_level": "high",
-      mode: "fast",
-    };
+    const flat = { "agent.model": { tags: ["moderate"] }, "agent.thinking_level": "high", mode: "fast" };
+    expect(nestedToFlatParams(flatToNestedParams(flat, GROUPS), GROUPS)).toEqual(flat);
+  });
 
-    expect(nestedToFlatParams(flatToNestedParams(flat))).toEqual(flat);
+  it("keeps a top-level model selector whole: it is a value, not a group", () => {
+    // The bug this guards: {model: {id}} flattened to "model.id", a key no input
+    // is named, so the composer could never adopt the model a run was using.
+    expect(
+      nestedToFlatParams({ mode: "auto", model: { id: "claude-5.5-opus@claude", thinking_level: "low" } }, new Set())
+    ).toEqual({ mode: "auto", model: { id: "claude-5.5-opus@claude", thinking_level: "low" } });
   });
 
   it("leaves arrays as whole values rather than flattening them", () => {
-    expect(nestedToFlatParams({ skills: ["a", "b"] })).toEqual({
-      skills: ["a", "b"],
+    expect(nestedToFlatParams({ skills: ["a", "b"] }, GROUPS)).toEqual({ skills: ["a", "b"] });
+  });
+});
+
+describe("groupNamesOf", () => {
+  it("reads the group names out of the flattened input schema", () => {
+    expect(
+      groupNamesOf({ mode: {}, model: {}, "Agent A.model": {}, "Agent A.tools": {}, "Agent B.model": {} })
+    ).toEqual(new Set(["Agent A", "Agent B"]));
+    expect(groupNamesOf(null)).toEqual(new Set());
+  });
+});
+
+describe("nestChangedParams", () => {
+  it("sends a changed group whole, so the run and the selection do not lose its other params", () => {
+    const all = { mode: "plan", "agent.model": { id: "b" }, "agent.temperature": 0.7, "implementer.model": { id: "z" } };
+    expect(nestChangedParams({ "agent.model": { id: "b" } }, all, GROUPS)).toEqual({
+      agent: { model: { id: "b" }, temperature: 0.7 },
     });
+  });
+
+  it("sends top-level keys as they are", () => {
+    expect(nestChangedParams({ mode: "plan" }, { mode: "plan", "agent.model": { id: "a" } }, GROUPS)).toEqual({
+      mode: "plan",
+    });
+  });
+});
+
+describe("unsyncedParams", () => {
+  it("is the keys that differ from the baseline, by value", () => {
+    expect(
+      unsyncedParams(
+        { mode: "plan", model: { id: "a" }, tools: ["x"] },
+        { mode: "auto", model: { id: "a" } }
+      )
+    ).toEqual({ mode: "plan", tools: ["x"] });
   });
 });
 
@@ -298,54 +293,53 @@ describe("paramValuesEqual", () => {
   });
 });
 
-describe("reconcileParamsWithServer", () => {
-  it("adopts the server value when it disagrees with what was sent", () => {
-    // The bug this guards: the UI displayed the user's typed value forever,
-    // even when the running workflow held something else.
-    const { params, changed } = reconcileParamsWithServer(
-      { "agent.model": { tags: ["moderate"] } },
-      { "agent.model": { tags: ["moderate"] } },
-      { "agent.model": { id: "claude-5-sonnet", tags: ["moderate"] } }
+describe("adoptServerParams", () => {
+  it("takes the server's value for a key the user has not edited", () => {
+    // The chat's pick was made on another device, or the server moved the model
+    // off a provider that cannot serve it: the pill must show what runs.
+    const { params, synced } = adoptServerParams(
+      { model: { id: "gpt-5.6-sol@codex" } },
+      { model: { id: "gpt-5.6-sol@codex" } },
+      { model: { id: "claude-5.5-opus@claude" } }
     );
-
-    expect(changed).toBe(true);
-    expect(params["agent.model"]).toEqual({
-      id: "claude-5-sonnet",
-      tags: ["moderate"],
-    });
+    expect(params.model).toEqual({ id: "claude-5.5-opus@claude" });
+    expect(synced.model).toEqual({ id: "claude-5.5-opus@claude" });
   });
 
-  it("reports no change when the server agrees", () => {
-    const { params, changed } = reconcileParamsWithServer(
-      { "agent.thinking_level": "high" },
-      { "agent.thinking_level": "high" },
-      { "agent.thinking_level": "high" }
+  it("keeps an edit not yet pushed, and its baseline, so the next push carries it", () => {
+    const { params, synced } = adoptServerParams(
+      { mode: "plan" }, // typed here
+      { mode: "auto" }, // last known on the server
+      { mode: "manual" } // changed elsewhere meanwhile
     );
-
-    expect(changed).toBe(false);
-    expect(params).toEqual({ "agent.thinking_level": "high" });
+    expect(params.mode).toBe("plan");
+    expect(synced.mode).toBe("auto");
+    expect(unsyncedParams(params, synced)).toEqual({ mode: "plan" });
   });
 
-  it("keeps a user edit made while the sync was in flight", () => {
-    const { params, changed } = reconcileParamsWithServer(
-      { "agent.thinking_level": "xhigh" }, // user moved on
-      { "agent.thinking_level": "high" }, // what we pushed
-      { "agent.thinking_level": "high" } // what the server confirms
+  it("adopts keys only the server has, and drops ones it no longer holds", () => {
+    const { params } = adoptServerParams(
+      { stale: 1, mode: "auto" },
+      { stale: 1, mode: "auto" },
+      { mode: "auto", tools: ["read"] }
     );
-
-    expect(changed).toBe(false);
-    expect(params["agent.thinking_level"]).toBe("xhigh");
+    expect(params).toEqual({ mode: "auto", tools: ["read"] });
   });
 
-  it("ignores server keys the params panel does not surface", () => {
-    const { params, changed } = reconcileParamsWithServer(
-      { mode: "fast" },
-      { mode: "fast" },
-      { mode: "fast", prompt: "runtime-injected", thread: "abc" }
-    );
+  it("opening a chat (empty baseline, empty draft) shows exactly the server and pushes nothing", () => {
+    const server = { model: { id: "a" }, mode: "plan" };
+    const { params, synced } = adoptServerParams({}, {}, server);
+    expect(params).toEqual(server);
+    expect(unsyncedParams(params, synced)).toEqual({});
+  });
 
-    expect(changed).toBe(false);
-    expect(params).toEqual({ mode: "fast" });
+  it("treats a value-equal server object as unchanged, not as a pending edit", () => {
+    const { params, synced } = adoptServerParams(
+      { model: { id: "a" } },
+      { model: { id: "a" } },
+      { model: { id: "a" } }
+    );
+    expect(unsyncedParams(params, synced)).toEqual({});
   });
 });
 

@@ -146,7 +146,13 @@ func (s *Service) saveIncomingMessages(
 
 // liveRunStateUpdate builds the input update a send carries to the chat's run
 // and validates it, returning a refusal for the caller to return as-is. Nil
-// when the send carries no params or presets.
+// when the send carries no params and no changed presets.
+//
+// The update is exactly the keys the send sent (normalized), plus the params of
+// a preset only when the send CHANGED the chat's presets (newPresets): a key the
+// client did not send is unchanged to the run, not "fill from preset and schema
+// default". It is validated as the run would hold it afterwards — the chat's
+// presets, its selection and the update over them.
 //
 // Every caller runs it BEFORE the send writes anything, because a refused send
 // has to be one that did not happen. Prod chat 66a045ce (2026-10-10) answered
@@ -163,20 +169,21 @@ func (s *Service) saveIncomingMessages(
 // a model it would move is not a validation error.
 //
 // chat.SelectedPresets must already hold this send's presets (see
-// applyRequestPresets), so the update is built from the presets the run will
-// actually get.
+// applyRequestPresets), so the update is validated against the presets the run
+// will actually get.
 func (s *Service) liveRunStateUpdate(
 	ctx context.Context,
 	userID string,
 	chat *db.Chat,
 	workflowName string,
 	req *connect.Request[reliantv1.SendMessageRequest],
+	newPresets map[string]string,
 ) (map[string]interface{}, error) {
-	if len(req.Msg.WorkflowParams) == 0 && len(req.Msg.SelectedPresets) == 0 {
+	if len(req.Msg.WorkflowParams) == 0 && len(newPresets) == 0 {
 		return nil, nil
 	}
-	stateUpdate := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, workflowName, req.Msg.SelectedPresets, req.Msg.WorkflowParams)
-	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, stateUpdate); len(validationErrors) > 0 {
+	stateUpdate := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, workflowName, newPresets, req.Msg.WorkflowParams)
+	if validationErrors := s.launcher().ValidateStateUpdate(ctx, userID, chat, workflowName, chat.SelectedPresets, stateUpdate); len(validationErrors) > 0 {
 		return nil, inputValidationError(validationErrors)
 	}
 	return stateUpdate, nil
@@ -387,9 +394,6 @@ func (s *Service) resurrectGhostWorkflow(
 	}
 
 	// Step 2: Build workflow inputs (with presets and model defaults)
-	// Use worktree path if available, otherwise project path
-	checkout := s.launcher().GetEffectiveCheckout(ctx, chat)
-
 	// Merge presets: existing chat presets + any new ones from the request
 	effectivePresets := make(map[string]string)
 	for k, v := range chat.SelectedPresets {
@@ -403,7 +407,7 @@ func (s *Service) resurrectGhostWorkflow(
 		}
 	}
 
-	initialData := s.launcher().BuildWorkflowInputs(ctx, userID, checkout, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	initialData := s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, effectivePresets, req.Msg.WorkflowParams)
 
 	// Validate workflow inputs before starting, and before anything of the
 	// send is written — a refused send leaves nothing behind (see
@@ -423,7 +427,9 @@ func (s *Service) resurrectGhostWorkflow(
 		logging.Error("[Ghost Recovery] Failed to save messages", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData, nil)
+	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
+		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
+	s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
 	// Step 4: Build execution context - inheriting existing thread
 	// We use ThreadModeInherit because we're continuing an existing conversation
@@ -682,8 +688,9 @@ func (s *Service) SendMessage(
 			case db.Paused():
 				// Refuse bad params before anything is written; see
 				// liveRunStateUpdate.
+				newPresets := changedPresets(chat.SelectedPresets, req.Msg.SelectedPresets)
 				presetsChanged := applyRequestPresets(chat, req.Msg.SelectedPresets)
-				stateUpdate, err := s.liveRunStateUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, req)
+				stateUpdate, err := s.liveRunStateUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, req, newPresets)
 				if err != nil {
 					return nil, err
 				}
@@ -747,7 +754,8 @@ func (s *Service) SendMessage(
 				// moved off a provider that cannot serve it (#685) — even
 				// when this send carries no model at all (resumeInputUpdate).
 				runInputs := s.runInputsForSend(ctx, workflowID, runID)
-				inputUpdate, modelNotices := s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, stateUpdate, runInputs)
+				inputUpdate, modelNotices, modelMoves := s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID,
+					s.underSelection(ctx, chat.ID, existingWorkflow.WorkflowName, stateUpdate), runInputs)
 
 				// Only add "params changed" message if params actually changed from current workflow state
 				if len(inputUpdate) > 0 && (runInputs == nil || inputsDiffer(runInputs, inputUpdate)) {
@@ -789,6 +797,7 @@ func (s *Service) SendMessage(
 				// Told only now: the run that has the moved models is awake.
 				// A fresh run (above) makes and announces its own.
 				s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
+				s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
 
 				// The run is awake. Correct the DB status now that the
 				// authoritative step has succeeded. Best-effort on purpose: if
@@ -838,8 +847,9 @@ func (s *Service) SendMessage(
 
 				// Refuse bad params before anything is written or queued; see
 				// liveRunStateUpdate.
+				newPresets := changedPresets(chat.SelectedPresets, req.Msg.SelectedPresets)
 				presetsChanged := applyRequestPresets(chat, req.Msg.SelectedPresets)
-				stateUpdate, err := s.liveRunStateUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, req)
+				stateUpdate, err := s.liveRunStateUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, req, newPresets)
 				if err != nil {
 					return nil, err
 				}
@@ -908,9 +918,10 @@ func (s *Service) SendMessage(
 					if chat.RunID != nil {
 						runID = *chat.RunID
 					}
-					s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
+					modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
 						return s.checkParamsActuallyChanged(ctx, workflowID, runID, map[string]interface{}{input: stateUpdate[input]})
 					})
+					s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, stateUpdate, modelMoves, 0)
 
 					// Only add "params changed" message if params actually changed from current workflow state
 					if s.checkParamsActuallyChanged(ctx, workflowID, runID, stateUpdate) {
@@ -1008,8 +1019,9 @@ func (s *Service) SendMessage(
 				// first; see liveRunStateUpdate. The run they restart gets the
 				// same inputs, so the same check applies (in memory only: the
 				// new-run path below persists the presets once it starts).
+				newPresets := changedPresets(chat.SelectedPresets, req.Msg.SelectedPresets)
 				applyRequestPresets(chat, req.Msg.SelectedPresets)
-				stateUpdate, err := s.liveRunStateUpdate(ctx, userID, chat, activeWorkflowNameForResume(chat, existingWorkflow), req)
+				stateUpdate, err := s.liveRunStateUpdate(ctx, userID, chat, activeWorkflowNameForResume(chat, existingWorkflow), req, newPresets)
 				if err != nil {
 					return nil, err
 				}
@@ -1021,10 +1033,10 @@ func (s *Service) SendMessage(
 				// moves (resumeInputUpdate) — never reaches it. The coarse
 				// restart below builds its own inputs from this send.
 				var inputUpdate map[string]interface{}
-				var modelNotices []launch.ModelSubstitution
+				var modelNotices, modelMoves []launch.ModelSubstitution
 				if inspection.Recoverable {
-					inputUpdate, modelNotices = s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID,
-						stateUpdate, s.runInputsForSend(ctx, workflowID, ""))
+					inputUpdate, modelNotices, modelMoves = s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID,
+						s.underSelection(ctx, chat.ID, activeWorkflowNameForResume(chat, existingWorkflow), stateUpdate), s.runInputsForSend(ctx, workflowID, ""))
 				}
 
 				// A run that died parked on an unanswered ask_question wakes on
@@ -1044,6 +1056,7 @@ func (s *Service) SendMessage(
 					resp, resumed, presavedID := s.resumeFailedQuestionWorkflow(ctx, req, chat, existingWorkflow, pendingQuestion, targetThread, userID, userContent, systemMessages, inputUpdate)
 					if resumed {
 						s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
+						s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
 						return resp, nil
 					}
 					// Guard-exhausted / not reset-resumable: the question is already
@@ -1088,6 +1101,7 @@ func (s *Service) SendMessage(
 					}
 					if outcome.Kind == runs.OutcomeResumed {
 						s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
+						s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
 						workflowStatus := fmt.Sprintf("%d", db.Active())
 						go s.trackMessageSent(ctx, userID, chat, presavedID, targetThread, userContent, len(req.Msg.Attachments))
 						return connect.NewResponse(&reliantv1.SendMessageResponse{
@@ -1177,11 +1191,10 @@ func (s *Service) SendMessage(
 		}
 	}
 
-	// Resolve path for preset loading and workflow validation - use worktree if available
-	checkout := s.launcher().GetEffectiveCheckout(ctx, chat)
-
-	// Build workflow inputs from merged presets and user params
-	initialData := s.launcher().BuildWorkflowInputs(ctx, userID, checkout, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	// Build workflow inputs: presets, then the chat's stored selection, then
+	// this send's params. A send that carries no params still runs the model
+	// and mode the chat was set to, from any device.
+	initialData := s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, effectivePresets, req.Msg.WorkflowParams)
 
 	// Validate workflow inputs before starting — and before the messages are
 	// saved below. This catches missing required inputs, unknown models and a
@@ -1252,7 +1265,11 @@ func (s *Service) SendMessage(
 		savedMessageID = saved
 	}
 
-	s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData, nil)
+	// A move is announced once: the chat's selection records the moved model,
+	// so a composer still sending the original pin does not repeat the notice.
+	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
+		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
+	s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
 	// Inject session daemon if set on chat
 	launch.InjectSessionDaemonID(initialData, chat)
@@ -1680,6 +1697,7 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 	// This run answers a person, not whatever launched the chat.
 	delete(inputs, v2.InputKeyLaunchRun)
 	v2.DropActingIdentity(inputs)
+	inputs = s.overSelection(ctx, chat.ID, *chat.WorkflowName, inputs)
 	launch.InjectSessionDaemonID(inputs, chat)
 
 	if _, err := s.deps.Repo.ReviveThread(ctx, threadID); err != nil {

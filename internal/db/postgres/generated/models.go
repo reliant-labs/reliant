@@ -153,6 +153,16 @@ type Chat struct {
 	PausedForMachineAt   sql.NullTime   `json:"paused_for_machine_at"`
 }
 
+type ChatSelection struct {
+	ChatID         string          `json:"chat_id"`
+	UserID         string          `json:"user_id"`
+	WorkflowName   string          `json:"workflow_name"`
+	Params         json.RawMessage `json:"params"`
+	ProviderPolicy json.RawMessage `json:"provider_policy"`
+	Version        int64           `json:"version"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+}
+
 type ChatUpdate struct {
 	ID             string    `json:"id"`
 	ChatID         string    `json:"chat_id"`

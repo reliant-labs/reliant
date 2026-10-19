@@ -268,6 +268,9 @@ service ChatService {
   // UpdateWorkflowParams updates workflow parameters for a running chat
   // This signals the running workflow to update its inputs (e.g., mode, temperature)
   rpc UpdateWorkflowParams(UpdateWorkflowParamsRequest) returns (UpdateWorkflowParamsResponse) {}
+
+  // UpdateChatProviderPolicy sets what the chat does when its provider is rate-limited.
+  rpc UpdateChatProviderPolicy(UpdateChatProviderPolicyRequest) returns (UpdateChatProviderPolicyResponse) {}
   
   // GetChatUpdates fetches chat updates since a sequence number
   rpc GetChatUpdates(GetChatUpdatesRequest) returns (GetChatUpdatesResponse) {}
@@ -347,6 +350,36 @@ message Chat {
   // True when the provider named no reset, so usage_limit_resumes_at is only the
   // next probe, not a promise.
   bool usage_limit_probing = 39;
+  // The composer's server-side choice for this chat (model, mode, tools, ...) and
+  // its provider policy. Set by GetChat; unset when the chat has none yet.
+  ChatSelection selection = 40;
+}
+
+// ChatSelection is the server-side record of what the composer chose for a chat.
+// Every run-building path layers it under a send's own params (presets -> selection
+// -> the send), so the pick survives a second device, a restart, a branch and an
+// API message. Written by StartChat, SendMessage and UpdateWorkflowParams with the
+// values the run actually got, after any unservable-model move.
+message ChatSelection {
+  string workflow_name = 1;
+  // Nested workflow params, as a run's inputs are shaped (no dotted keys).
+  google.protobuf.Struct params = 2;
+  ProviderPolicy provider_policy = 3;
+  // Optimistic-concurrency token; pass it back as expected_version.
+  int64 version = 4;
+  string updated_at = 5; // RFC 3339 UTC
+}
+
+// ProviderPolicy is what a chat does when its provider is rate-limited. Stored
+// and returned; acting on it is the provider-routing work.
+message ProviderPolicy {
+  enum OnLimit {
+    ON_LIMIT_UNSPECIFIED = 0; // inherit the Settings default
+    ON_LIMIT_WAIT = 1;
+    ON_LIMIT_FALLBACK = 2;
+  }
+  OnLimit on_limit = 1;
+  optional string fallback_model = 2; // "<model>@<driver>"
 }
 
 // ArchivedChat includes worktree information for archived chats
@@ -936,12 +969,27 @@ message UpdateWorkflowParamsRequest {
   string chat_id = 1;
   map<string, google.protobuf.Value> params = 2;  // Workflow parameters to update (e.g., mode, temperature)
   optional string thread_id = 3;  // Optional: target a specific thread's workflow instead of root
+  // The ChatSelection.version this edit was made against. A stale version is
+  // refused with ABORTED and the client refetches. Unset writes unconditionally.
+  optional int64 expected_version = 4;
 }
 
 // UpdateWorkflowParamsResponse confirms the update
 message UpdateWorkflowParamsResponse {
   bool success = 1;
   string message = 2;
+  // The chat's selection after the write; unset for a thread-scoped update.
+  ChatSelection selection = 3;
+}
+
+message UpdateChatProviderPolicyRequest {
+  string chat_id = 1 [(buf.validate.field).required = true];
+  ProviderPolicy provider_policy = 2;
+  optional int64 expected_version = 3;
+}
+
+message UpdateChatProviderPolicyResponse {
+  ChatSelection selection = 1;
 }
 
 // ChatUpdate represents a single update event

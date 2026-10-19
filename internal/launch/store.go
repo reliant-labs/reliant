@@ -4,6 +4,7 @@ package launch
 import (
 	"context"
 
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -70,9 +71,16 @@ type Transactor interface {
 	RunTx(ctx context.Context, f func(ctx context.Context) error) error
 }
 
+// ChatSelections is the chat selection store: the layer between a chat's
+// presets and a send's params, and where a start records its first choice.
+type ChatSelections interface {
+	chatselection.Store
+}
+
 // Store is everything a Launcher needs from the database. *db.Repo satisfies it.
 type Store interface {
 	ChatWriter
+	ChatSelections
 	TriggerEventStore
 	WorkflowStore
 	WorkflowResolver

@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { api, type Message } from "../api/client";
 import { queryClient } from "../lib/query-client";
-import { chatKeys } from "./chat-queries";
+import { chatKeys, seedChatDetail } from "./chat-queries";
 
 // ── Query key factory ───────────────────────────────────────────────────────
 
@@ -516,7 +516,11 @@ export function useBranchChat() {
       title?: string;
       worktreeId?: string;
     }) => api.chatsV2.branch(chatId, { messageId, title, worktreeId }),
-    onSuccess: () => {
+    onSuccess: ({ chat }) => {
+      // The branch response carries the selection the server copied from the
+      // source chat; seeding it lets the branch's composer open on the same
+      // model without a fetch.
+      seedChatDetail(chat);
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
     },
   });

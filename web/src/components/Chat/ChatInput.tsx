@@ -48,18 +48,30 @@ import { chatGrpc, QUEUED_SENDER_KIND_HUMAN } from "../../api/chat-grpc";
 import { useProjectStore } from "../../store/projectStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
 import { useChatStore } from "../../store/chatStore";
-import { useChat, getChatFromCache, patchChatCaches } from "../../hooks/chat-queries";
+import {
+  useChat,
+  useChatSelection,
+  getChatFromCache,
+  patchChatCaches,
+  refetchChatSelection,
+} from "../../hooks/chat-queries";
+import { clearLegacyChatParams, peekLegacyChatParams } from "../../lib/legacyChatParams";
+import { pushChatParams } from "../../lib/chatSelection";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { answerQuestion, usePendingQuestion } from "../../hooks/approval-queries";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
 import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
 import {
+  adoptServerParams,
   currentThinkingLevel,
+  flatToNestedParams,
+  groupNamesOf,
   nestedToFlatParams,
   paramValuesEqual,
-  reconcileParamsWithServer,
   threadParamsAcceptChanges,
+  unsyncedParams,
   withThinkingLevel,
 } from "../../lib/paramUtils";
 import { askUserQuestionItems } from "./askUserUtils";
@@ -326,20 +338,38 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     );
     const showAskOnly = hasPendingQuestion && !!askUserQuestion;
 
-    // Initialize workflowParams from persisted storage for existing chats
-    // For new chats (no chatId), start empty so workflow defaults are used
+    // The composer's params. For an existing chat they are the chat's
+    // server-side selection, adopted by an effect below (chatParamsStore holds
+    // only this session's in-memory draft, shown until the server answers); a
+    // new chat starts empty so workflow defaults are used.
     const [workflowParams, setWorkflowParams] = useState<
       Record<string, unknown>
-    >(() => {
-      if (chatId) {
-        return { ...useChatParamsStore.getState().getChatParams(chatId) };
-      }
-      // New chats start fresh - workflow defaults will be applied via preset loading
-      return {};
-    });
+    >(() =>
+      chatId ? { ...useChatParamsStore.getState().getChatParams(chatId) } : {}
+    );
+    // The params last known to be on the server — the baseline an edit is
+    // measured against. A ref mirrors the state so the adoption effect and async
+    // pushes read the latest without re-running on every change.
     const [syncedParams, setSyncedParams] = useState<Record<string, unknown>>(
       {}
-    ); // Last params synced to server
+    );
+    const syncedRef = useRef<Record<string, unknown>>({});
+    const commitSynced = useCallback((next: Record<string, unknown>) => {
+      syncedRef.current = next;
+      setSyncedParams(next);
+    }, []);
+    // The chat the baseline above belongs to, once the server's selection has
+    // been adopted. Nothing is pushed before then: an unadopted baseline would
+    // read the whole composer as an edit.
+    const [adoptedFor, setAdoptedFor] = useState<string | null>(null);
+    const adoptedKeyRef = useRef<string | null>(null);
+    // A chat the server holds no selection for, seeded from what an older build
+    // kept in this browser; its local copy is deleted once the server has it.
+    const legacyPendingRef = useRef<string | null>(null);
+    const selectionQuery = useChatSelection(chatId);
+    const selection = chatId ? selectionQuery.data : undefined;
+    const selectionRef = useRef(selection);
+    selectionRef.current = selection;
     const [settingsPage, setSettingsPage] = useState<'main' | 'model' | 'preset' | 'params' | null>(null);
     useEffect(() => {
       if (settingsPage !== null) {
@@ -487,7 +517,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
           // The backend returns nested structure like { agent: { model: {...} } }
           // but the params panel expects flat keys like "agent.model".
-          const flatValues = nestedToFlatParams(result.inputs);
+          const flatValues = nestedToFlatParams(result.inputs, groupNamesOf(inputs));
 
           setThreadParamsOverride({
             workflowName: result.workflowName,
@@ -560,7 +590,9 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       prevWorkflowNameRef.current = workflowName;
 
       setWorkflowParams({ ...persistedParams });
-      setSyncedParams({});
+      // An existing chat's baseline belongs to the adoption effect; a new
+      // chat has no server copy to measure against.
+      if (!chatId) commitSynced({});
       setSelectedPresets(persistedPresets);
 
       // Load default preset for this workflow (only if no preset is already selected)
@@ -589,6 +621,12 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           });
           return;
         }
+
+        // A chat's defaults are the server's to apply: it runs the chat's presets
+        // and the workflow's defaults itself. Writing them here would push them
+        // back as if the user had picked them, over a pick made on another
+        // device that has not loaded yet. Only a new chat has no server copy.
+        if (chatId) return;
 
         // Get all default presets for this workflow (one RPC, cached across
         // chat opens alongside the definition and preset list).
@@ -641,7 +679,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       };
 
       loadDefaultPresets();
-    }, [workflowName, chatId, currentProjectFromStore?.id, presets, workflowTagInfo]);
+    }, [workflowName, chatId, currentProjectFromStore?.id, presets, workflowTagInfo, commitSynced]);
 
     // Per-tag model preferences (Settings → Model) are resolved server-side
     // in resolveLLMCall, so the composer no longer merges them into the model value.
@@ -841,110 +879,125 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       workflowParamsRef.current = workflowParams;
     }, [workflowParams]);
 
-    // Read the running workflow's actual inputs back from Temporal and adopt
-    // them as the displayed values.
-    //
-    // Without this the popover only ever shows what the user typed: the params
-    // are seeded from chatParamsStore (a local, persisted cache) and a sync
-    // that the server rejected, clamped, or normalized would still display the
-    // rejected value. Querying the root thread returns what the workflow is
-    // really running with.
-    //
-    // A param the user edited while the request was in flight is left alone —
-    // their newer edit wins, and the debounced sync will push it next.
-    const reconcileRootParamsFromServer = useCallback(
-      async (sentParams: Record<string, unknown>) => {
-        if (!chatId) return;
+    const groupNames = useMemo(() => groupNamesOf(workflowInputs), [workflowInputs]);
+    const groupNamesRef = useRef(groupNames);
+    groupNamesRef.current = groupNames;
 
-        let serverValues: Record<string, unknown>;
-        try {
-          const result = await chatGrpc.getThreadWorkflowInputs(chatId, chatId);
-          // Only a running workflow holds live inputs; a finished one reports
-          // defaults that would clobber the user's staged params.
-          if (!result.isRunning) return;
-          serverValues = nestedToFlatParams(result.inputs);
-        } catch (error) {
-          logger.warn("[ChatInput] Failed to read back workflow params", {
-            error,
-            chatId,
-          });
-          return;
-        }
+    // Take in the chat's server-side selection: what runs, and what every device
+    // shows. It is adopted when the chat is opened (the baseline is the server's,
+    // never "nothing", so opening a chat pushes nothing), and again whenever the
+    // selection changes under us — another device's pick, or a model the server
+    // moved off a provider that cannot serve it. A param edited here and not yet
+    // pushed is kept; the next push carries it.
+    const schemaReady = !!workflowInputs;
+    useEffect(() => {
+      if (!chatId) {
+        setAdoptedFor(null);
+        adoptedKeyRef.current = null;
+        return;
+      }
+      if (selection === undefined || !schemaReady) return;
 
-        const { params: reconciled, changed } = reconcileParamsWithServer(
-          workflowParamsRef.current,
-          sentParams,
-          serverValues
-        );
+      const key = `${chatId}:${workflowName}`;
+      const opened = adoptedKeyRef.current !== key;
+      const forThisWorkflow =
+        selection !== null && selection.workflowName === workflowName && !!selection.params;
+      const serverFlat = forThisWorkflow
+        ? nestedToFlatParams(selection!.params as Record<string, unknown>, groupNames)
+        : {};
 
-        if (changed) {
-          logger.info("[ChatInput] Reconciled params from server", {
-            chatId,
-            reconciled,
-          });
-          handleWorkflowParamsChange(reconciled);
-        }
+      // The draft is what this session showed. On open it is only the first
+      // paint; the server's copy replaces it.
+      const local = opened ? {} : workflowParamsRef.current;
+      let adopted = adoptServerParams(local, opened ? {} : syncedRef.current, serverFlat);
 
-        // Track server truth as the sync baseline either way, so a value the
-        // server normalized doesn't read as a pending local edit and retrigger
-        // the debounced sync in a loop.
-        setSyncedParams((previous) => {
-          const next = { ...previous };
-          for (const key of Object.keys(sentParams)) {
-            if (key in serverValues) next[key] = serverValues[key];
-          }
-          return next;
-        });
-      },
-      [chatId, handleWorkflowParamsChange]
-    );
-
-    // Check if there are unsaved param changes
-    // Only show sync button when chat is active (has a running workflow)
-    const hasUnsyncedChanges = useMemo(() => {
-      if (!chatId) return false; // No chat = nothing to sync
-      if (!isChatBusy) return false; // No active workflow = can't sync (params applied on next send)
-
-      for (const [key, value] of Object.entries(workflowParams)) {
-        // Value equality, not reference: syncedParams holds values read back
-        // from the server, which are structurally equal but distinct objects.
-        if (!paramValuesEqual(syncedParams[key], value)) {
-          return true;
+      // A chat the server has no selection for may hold one an older build kept
+      // in this browser. It becomes the chat's selection on the next push, and
+      // is forgotten once the server has it.
+      if (opened && selection === null) {
+        const legacy = peekLegacyChatParams(chatId);
+        if (legacy) {
+          adopted = { params: legacy, synced: {} };
+          legacyPendingRef.current = chatId;
         }
       }
-      return false;
-    }, [chatId, isChatBusy, workflowParams, syncedParams]);
+      adoptedKeyRef.current = key;
 
-    // Sync workflow params to server
+      commitSynced(adopted.synced);
+      // On open the ref still holds the previous chat's params, so equality
+      // against it proves nothing: always set.
+      if (opened || !paramValuesEqual(adopted.params, workflowParamsRef.current)) {
+        setWorkflowParams(adopted.params);
+        useChatParamsStore.getState().setChatParams(chatId, adopted.params);
+      }
+      setAdoptedFor(key);
+    }, [chatId, workflowName, selection, schemaReady, groupNames, commitSynced]);
+
+    // An edit still inside the push debounce when the user leaves the chat (or
+    // closes the tab) is pushed on the way out, so it is not lost.
+    useEffect(() => {
+      if (!chatId) return;
+      const key = `${chatId}:${workflowName}`;
+      return () => {
+        if (adoptedKeyRef.current !== key) return;
+        void pushChatParams(chatId, workflowParamsRef.current, syncedRef.current, groupNamesRef.current).catch(
+          (error) => logger.warn("[ChatInput] Failed to push params on leaving the chat", { error, chatId })
+        );
+      };
+    }, [chatId, workflowName]);
+
+    // Anything the server holds but this composer was never shown is not
+    // "unsynced"; only keys that differ from the baseline are.
+    const hasUnsyncedChanges = useMemo(() => {
+      if (!chatId || adoptedFor !== `${chatId}:${workflowName}`) return false;
+      return Object.keys(unsyncedParams(workflowParams, syncedParams)).length > 0;
+    }, [chatId, adoptedFor, workflowName, workflowParams, syncedParams]);
+
+    // Push the composer's unsynced params to the chat's selection. The server
+    // stores them whether or not a run is live (and signals a live one), so an
+    // edit made between turns is not lost to "no active workflow".
     const handleSyncParams = useCallback(async () => {
       if (!chatId || isSyncing) return;
 
-      const changedParams: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(workflowParams)) {
-        if (!paramValuesEqual(syncedParams[key], value)) {
-          changedParams[key] = value;
-        }
-      }
-
-      if (Object.keys(changedParams).length === 0) return;
-
       setIsSyncing(true);
+      const sentFrom = workflowParamsRef.current;
       try {
-        logger.info("[ChatInput] Syncing workflow params", {
-          chatId,
-          changedParams,
-        });
-        await api.chatsV2.updateWorkflowParams(chatId, changedParams);
-        // Optimistic baseline; reconcile below replaces it with server truth.
-        setSyncedParams({ ...syncedParams, ...changedParams });
-        logger.info("[ChatInput] Params synced successfully");
-        await reconcileRootParamsFromServer(changedParams);
+        logger.info("[ChatInput] Syncing workflow params", { chatId });
+        const result = await pushChatParams(chatId, sentFrom, syncedRef.current, groupNamesRef.current);
+        if (!result) return;
+        if (legacyPendingRef.current === chatId) {
+          clearLegacyChatParams(chatId);
+          legacyPendingRef.current = null;
+        }
+        commitSynced({ ...syncedRef.current, ...result.pushed });
+        // The server's copy is the truth: it may have moved a model off a
+        // provider that cannot serve it. Adopt that, keeping any edit made
+        // while the request was in flight.
+        if (result.selection) {
+          const serverFlat = nestedToFlatParams(
+            (result.selection.params ?? {}) as Record<string, unknown>,
+            groupNamesRef.current
+          );
+          const adopted = adoptServerParams(workflowParamsRef.current, syncedRef.current, serverFlat);
+          commitSynced(adopted.synced);
+          if (!paramValuesEqual(adopted.params, workflowParamsRef.current)) {
+            handleWorkflowParamsChange(adopted.params);
+          }
+        }
       } catch (error) {
-        logger.error("[ChatInput] Failed to sync params", { error, chatId });
+        if (error instanceof ConnectError && error.code === Code.Aborted) {
+          // Another device changed the selection first. Take its version and let
+          // the adoption effect merge: this device's edit is still unsynced, so
+          // the next push carries it on top of the new version.
+          logger.info("[ChatInput] Chat selection changed elsewhere; refetching", { chatId });
+          await refetchChatSelection(chatId);
+        } else {
+          logger.error("[ChatInput] Failed to sync params", { error, chatId });
+        }
       } finally {
         setIsSyncing(false);
       }
-    }, [chatId, workflowParams, syncedParams, isSyncing, reconcileRootParamsFromServer]);
+    }, [chatId, isSyncing, commitSynced, handleWorkflowParamsChange]);
 
     // Thread-specific param change handler (receives full values map from WorkflowParamsPanel)
     const handleThreadParamsChange = useCallback(
@@ -1246,8 +1299,12 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         // Relying on backend defaults here is brittle (and has caused fallbacks to Agent).
         const workflowToSend = selectedWorkflow ?? workflowName;
 
+        // The composer holds a group's params flat ("<group>.<param>"); a send
+        // and the server's selection nest them.
         const paramsToSend =
-          Object.keys(workflowParams).length > 0 ? workflowParams : undefined;
+          Object.keys(workflowParams).length > 0
+            ? flatToNestedParams(workflowParams, groupNames)
+            : undefined;
 
         // Filter selectedPresets to only include valid targets for current workflow
         // This prevents stale presets from a different workflow from being sent
@@ -1291,10 +1348,13 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         // any changes the user made right before sending (like switching models).
         // The current workflowParams state is the source of truth.
 
-        // Update syncedParams to match what was sent - this clears the sync button
-        // The params we just sent are now "synced" with the backend
+        // The send carried these params and the server recorded them as the
+        // chat's selection: they are now the baseline.
         if (paramsToSend && chatId) {
-          setSyncedParams({ ...paramsToSend });
+          commitSynced({ ...syncedRef.current, ...workflowParams });
+          // The send is a write to the chat's selection; without its new version
+          // the next edit would be refused as stale.
+          void refetchChatSelection(chatId);
         }
       } else if (hasSomethingToSend && effectiveStreaming) {
         // ChatTextArea decided "not streaming, send" at keydown time, but
