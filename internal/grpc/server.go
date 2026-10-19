@@ -352,10 +352,11 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("project service: %w", err)
 	}
-	// RELIANT_WORKTREE_AUTO_ARCHIVE: "on" (default) archives an active worktree
-	// its daemon reports finished (clean, merged or pushed, idle over 24h, not in
-	// use, no live chat) so the ordinary removal reaches it; "dry-run" logs the
-	// candidates and archives nothing; "off" never asks.
+	// RELIANT_WORKTREE_AUTO_ARCHIVE: "dry-run" (default) logs the active
+	// worktrees its daemon reports finished (clean, merged or pushed, idle over
+	// 24h, not in use) and archives nothing; read the finished= count in the
+	// "[WorktreeSweep] auto-archive" line, then set "on" to archive them so the
+	// ordinary removal reaches them; "off" never asks.
 	worktreeSweeper := worktreesweep.New(database, router).
 		WithKeepFiles(worktreesweep.KeepSetting{R: database}).
 		WithAutoArchive(worktreesweep.ParseAutoArchiveMode(os.Getenv("RELIANT_WORKTREE_AUTO_ARCHIVE")), database,

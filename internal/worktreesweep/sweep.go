@@ -112,14 +112,16 @@ const (
 	AutoArchiveOn AutoArchiveMode = "on"
 )
 
-// ParseAutoArchiveMode reads the config value; empty means the default, on.
-// An unrecognized value is off: a typo must not start archiving.
+// ParseAutoArchiveMode reads the config value; empty means the default,
+// dry-run: the candidates are logged and nothing is archived until someone has
+// read the count and set "on". An unrecognized value is off: a typo must not
+// start archiving.
 func ParseAutoArchiveMode(v string) AutoArchiveMode {
 	switch AutoArchiveMode(strings.ToLower(strings.TrimSpace(v))) {
-	case "", AutoArchiveOn, "true", "1":
-		return AutoArchiveOn
-	case AutoArchiveDryRun, "dryrun", "dry_run":
+	case "", AutoArchiveDryRun, "dryrun", "dry_run":
 		return AutoArchiveDryRun
+	case AutoArchiveOn, "true", "1":
+		return AutoArchiveOn
 	}
 	return AutoArchiveOff
 }

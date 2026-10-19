@@ -348,9 +348,16 @@ func TestAutoArchive_KeepEverythingUserIsNeverProbed(t *testing.T) {
 	assert.Empty(t, store.archived, `"Keep everything" means nothing is archived on the user's behalf`)
 }
 
+func TestParseAutoArchiveMode_DefaultNeverArchives(t *testing.T) {
+	store, _, s := autoEnv(t, ParseAutoArchiveMode(""), nil)
+	require.NoError(t, s.Sweep(context.Background()))
+	assert.Empty(t, store.archived, "an unset switch must only report candidates")
+	assert.EqualValues(t, 1, s.candidates.Load())
+}
+
 func TestParseAutoArchiveMode(t *testing.T) {
 	for in, want := range map[string]AutoArchiveMode{
-		"": AutoArchiveOn, "on": AutoArchiveOn, " ON ": AutoArchiveOn, "dry-run": AutoArchiveDryRun,
+		"": AutoArchiveDryRun, "on": AutoArchiveOn, " ON ": AutoArchiveOn, "dry-run": AutoArchiveDryRun,
 		"off": AutoArchiveOff, "false": AutoArchiveOff, "onn": AutoArchiveOff, "0": AutoArchiveOff,
 	} {
 		assert.Equal(t, want, ParseAutoArchiveMode(in), "%q", in)
