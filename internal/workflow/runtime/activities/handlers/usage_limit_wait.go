@@ -71,7 +71,7 @@ func (a *UsageLimitWaitActivity) Execute(ctx context.Context, input UsageLimitWa
 			key = "provider-switch-" + activity.GetInfo(ctx).ActivityID + "-" + input.Thread
 		}
 		postNotice(ctx, a.repo, input.ChatID, input.Thread, input.WorkflowID, key,
-			providerSwitchNotice(input.Provider, input.Model, until))
+			providerSwitchNotice(input.Provider, input.Model, until, input.Probing))
 		return UsageLimitWaitOutput{Success: true}, nil
 	}
 	if input.Clear {

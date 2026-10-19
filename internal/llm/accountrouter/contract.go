@@ -42,10 +42,11 @@ type Service interface {
 	Assign(ctx context.Context, req Request) (Result, error)
 
 	// Alternatives reports, as if exclude had just been benched, whether any
-	// other account could serve req now. When none can, earliestReset is the
-	// soonest any of the driver's accounts stops being limited (zero when no
-	// reset is known).
-	Alternatives(ctx context.Context, req Request, exclude string) (available bool, earliestReset time.Time, err error)
+	// other account could serve req now. When none can, earliest is the
+	// soonest any of the driver's accounts stops being limited (zero At when
+	// no time is known); Probe says that time is only a recheck of an account
+	// whose reset is unknown, not a promise.
+	Alternatives(ctx context.Context, req Request, exclude string) (available bool, earliest Earliest, err error)
 }
 
 // Store is the storage the router reads and writes. It is declared here, where
@@ -137,12 +138,23 @@ type Result struct {
 	Changed bool
 }
 
+// Earliest is when a driver's limited accounts next change state.
+type Earliest struct {
+	At time.Time
+	// Probe is true when At is the end of a probe bench: the provider named no
+	// reset for that account, so At is when to look again.
+	Probe bool
+}
+
 // ErrAllLimited means every account that could serve the model is limited.
 type ErrAllLimited struct {
 	Driver models.DriverID
 	// EarliestReset is the soonest any of the driver's accounts stops being
 	// limited.
 	EarliestReset time.Time
+	// ResetIsProbe is true when EarliestReset is only a probe bench's end: no
+	// reset is known (see Earliest.Probe).
+	ResetIsProbe bool
 	// Window names the limit that account hit; empty when unknown.
 	Window string
 }

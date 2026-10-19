@@ -27,6 +27,10 @@ type UsageLimitFacts struct {
 	// ProviderEarliestReset is the soonest any of the provider's accounts
 	// stops being limited; zero when an alternative exists or none is known.
 	ProviderEarliestReset time.Time `json:"provider_earliest_reset,omitzero"`
+	// ProviderResetIsProbe is true when ProviderEarliestReset is only the next
+	// rung of the probe ladder: the provider named no reset, so the time is
+	// when to look again, not when the limit lifts.
+	ProviderResetIsProbe bool `json:"provider_reset_is_probe,omitempty"`
 	// FallbackModel is "<model>@<driver>" when the chat's policy allows a
 	// cross-provider fallback and that model is servable now; empty
 	// otherwise. Cross-provider fallback is opt-in, so empty is the default.

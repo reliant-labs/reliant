@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -151,7 +152,7 @@ func TestGenerateCompactionSummary_UsesStandardRequestEnvelope(t *testing.T) {
 			compactActivity := NewCompactActivity(nil, capturingCompactionResolver(driver, captured))
 
 			chat := &db.Chat{ID: "chat-1", UserID: "user-1"}
-			summary, err := compactActivity.generateCompactionSummary(context.Background(), chat, "", "", toolBearingConversation(), nil)
+			summary, err := compactActivity.generateCompactionSummary(context.Background(), chat, "", "", types.FailoverPolicy{}, toolBearingConversation(), nil)
 			require.NoError(t, err)
 			assert.Equal(t, "Mock response", summary)
 

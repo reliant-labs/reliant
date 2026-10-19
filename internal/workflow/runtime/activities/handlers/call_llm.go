@@ -1926,6 +1926,11 @@ streamLoop:
 		return nil, fmt.Errorf("heartbeat RPC cancelled the LLM stream: %w", context.Cause(ctx))
 	}
 
+	// The provider served the turn, so a chat that was returning to it is back.
+	if !streamInterrupted {
+		a.announceReturn(ctx, chat, thread, rtx, resolved)
+	}
+
 	// Combine all text parts
 	responseText := strings.Join(streamState.textParts, "")
 

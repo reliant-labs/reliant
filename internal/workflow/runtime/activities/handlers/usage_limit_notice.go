@@ -65,8 +65,13 @@ func noticeWindowName(window string) string {
 	return window
 }
 
+// noticeClock is a time inside a notice's text: an RFC 3339 UTC instant in a
+// <time:...> token. The worker does not know the reader's time zone (it runs in
+// UTC), so it stores the instant and the web renders it in the reader's zone
+// (web/src/lib/providerNotice.ts). Read as plain text, as the model reads it,
+// the token is still an unambiguous time.
 func noticeClock(t time.Time) string {
-	return t.Local().Format("3:04 PM")
+	return "<time:" + t.UTC().Format(time.RFC3339) + ">"
 }
 
 // accountMoveNotice is "Claude account alice@acme.com reached its 5-hour limit
@@ -117,14 +122,24 @@ func accountName(c models.AccountConfig) string {
 
 // providerSwitchNotice is the cross-provider fallback: every account of the
 // provider is limited and the chat allows (or the user asked for) another.
-func providerSwitchNotice(provider, model string, until time.Time) string {
+// probing says until is only when the stay next checks the provider, because no
+// reset time is known.
+func providerSwitchNotice(provider, model string, until time.Time, probing bool) string {
 	msg := fmt.Sprintf("%s is rate-limited on all your accounts", noticeProviderName(provider))
-	if !until.IsZero() {
+	switch {
+	case until.IsZero():
+	case probing:
+		msg += "; no reset time was given, checking again at " + noticeClock(until)
+	default:
 		msg += " until " + noticeClock(until)
 	}
 	msg += fmt.Sprintf(". Continuing on **%s** as this chat allows", noticeModelName(model))
 	if provider != "" {
-		msg += fmt.Sprintf("; returning to %s after the reset", noticeProviderName(provider))
+		if probing {
+			msg += fmt.Sprintf("; returning to %s once its limit lifts", noticeProviderName(provider))
+		} else {
+			msg += fmt.Sprintf("; returning to %s after the reset", noticeProviderName(provider))
+		}
 	}
 	return msg + "."
 }
@@ -163,27 +178,38 @@ func postNotice(ctx context.Context, repo db.Repository, chatID, thread, workflo
 	}
 }
 
-// announceRouting saves the notices a resolved call owes the transcript: the
-// thread moved to another account of its provider, or the chat is back on its
-// own model after a stay on a fallback. Both are posted before the stream
-// starts, keyed to the step so a retried activity does not repeat them.
-func (a *CallLLMActivity) announceRouting(ctx context.Context, chat *db.Chat, thread string, rtx types.RuntimeContext, resolved *resolvedLLMCall) {
-	stepKey := rtx.MessageIdempotencyKey
-	if stepKey == "" {
-		stepKey = rtx.WorkflowID + "-" + rtx.StepID
+// noticeStepKey keys a step's notices so a retried activity writes each once.
+func noticeStepKey(rtx types.RuntimeContext) string {
+	if rtx.MessageIdempotencyKey != "" {
+		return rtx.MessageIdempotencyKey
 	}
+	return rtx.WorkflowID + "-" + rtx.StepID
+}
+
+// announceRouting saves the notice a resolved call owes the transcript before
+// its stream starts: the thread moved to another account of its provider.
+func (a *CallLLMActivity) announceRouting(ctx context.Context, chat *db.Chat, thread string, rtx types.RuntimeContext, resolved *resolvedLLMCall) {
 	if resolved.Account != nil {
 		a.routing.announceAccountMove(ctx, func(text string) {
 			postNotice(ctx, a.repo, chat.ID, thread, rtx.WorkflowID,
-				stepKey+"-account-"+resolved.Account.Config.AccountID, text)
+				noticeStepKey(rtx)+"-account-"+resolved.Account.Config.AccountID, text)
 		}, chat.UserID, resolved.Account)
 	}
-	if ret := rtx.FallbackReturn; ret != nil && rtx.FallbackModel == "" {
-		own := resolved.ProviderDriver
-		if resolved.Definition != nil {
-			own = resolved.Definition.ID + "@" + resolved.ProviderDriver
-		}
-		postNotice(ctx, a.repo, chat.ID, thread, rtx.WorkflowID, stepKey+"-return",
-			providerReturnNotice(ret.Provider, own))
+}
+
+// announceReturn says the chat is back on its own provider after a stay on a
+// fallback. It is posted only once the turn has been served by it: the stay's
+// end is a time to look again, not proof the limit lifted, and a turn that the
+// provider refuses is the stay going on, not a return.
+func (a *CallLLMActivity) announceReturn(ctx context.Context, chat *db.Chat, thread string, rtx types.RuntimeContext, resolved *resolvedLLMCall) {
+	ret := rtx.FallbackReturn
+	if ret == nil || rtx.FallbackModel != "" {
+		return
 	}
+	own := resolved.ProviderDriver
+	if resolved.Definition != nil {
+		own = resolved.Definition.ID + "@" + resolved.ProviderDriver
+	}
+	postNotice(ctx, a.repo, chat.ID, thread, rtx.WorkflowID, noticeStepKey(rtx)+"-return",
+		providerReturnNotice(ret.Provider, own))
 }

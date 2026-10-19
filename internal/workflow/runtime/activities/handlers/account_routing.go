@@ -131,6 +131,11 @@ type allAccountsLimited struct {
 	*ratelimit.UsageLimitError
 	Driver  models.DriverID
 	ModelID string
+	// Earliest is when the accounts next change state, and Probe says it is
+	// only a probe bench's end. The embedded error's ResetAt is left zero for
+	// a probe: no reset has been given, so none is announced.
+	Earliest time.Time
+	Probe    bool
 }
 
 func (e *allAccountsLimited) Error() string { return e.UsageLimitError.Error() }
@@ -159,15 +164,21 @@ func routeAccount(ctx context.Context, spec llmCallSpec, avail models.AvailableD
 	})
 	var all *accountrouter.ErrAllLimited
 	if errors.As(err, &all) {
+		resetAt := all.EarliestReset
+		if all.ResetIsProbe {
+			resetAt = time.Time{}
+		}
 		return nil, &allAccountsLimited{
 			UsageLimitError: &ratelimit.UsageLimitError{
 				Provider:   models.ProviderDisplayName(providerDriver),
 				StatusCode: 429,
-				ResetAt:    all.EarliestReset,
+				ResetAt:    resetAt,
 				Window:     all.Window,
 			},
-			Driver:  driver,
-			ModelID: modelID,
+			Driver:   driver,
+			ModelID:  modelID,
+			Earliest: all.EarliestReset,
+			Probe:    all.ResetIsProbe,
 		}
 	}
 	if err != nil {
@@ -195,7 +206,8 @@ func (r *AccountRouting) announceAccountMove(ctx context.Context, post func(text
 		if limits, err := r.Store.ListAccountLimits(ctx, userID); err == nil {
 			if ls, ok := limits[acct.Change.Previous.AccountID]; ok {
 				window = ls.LimitedWindow
-				if ls.LimitedUntil != nil {
+				// A probe bench's end is when to look again, not a reset.
+				if ls.LimitedUntil != nil && ls.LimitedProbes == 0 {
 					resetAt = *ls.LimitedUntil
 				}
 			}
@@ -253,7 +265,7 @@ func (r *AccountRouting) usageLimitFailure(ctx context.Context, err error, uc us
 	switch {
 	case synthetic:
 		// Every account is already benched; nothing was refused by a provider.
-		facts.ProviderEarliestReset = resetAt
+		facts.ProviderEarliestReset, facts.ProviderResetIsProbe = all.Earliest, all.Probe
 	case r.active() && uc.Account != nil && uc.Account.Config.AccountID != "":
 		benched := true
 		if r.Recorder != nil {
@@ -276,7 +288,7 @@ func (r *AccountRouting) usageLimitFailure(ctx context.Context, err error, uc us
 		case available && benched:
 			facts.AlternativeAccount = true
 		case !available:
-			facts.ProviderEarliestReset = earliest
+			facts.ProviderEarliestReset, facts.ProviderResetIsProbe = earliest.At, earliest.Probe
 		}
 	}
 	if !facts.AlternativeAccount {

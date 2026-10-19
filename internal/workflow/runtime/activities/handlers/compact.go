@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
 )
@@ -156,7 +157,7 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 	a.emitThreadUpdate(ctx, rtx.ChatID, thread, "active", "Compact")
 
 	// Generate summary of messages to be compacted
-	summary, err := a.generateCompactionSummary(ctx, chat, thread, rtx.FallbackModel, currentContextMessages, summarizeWith)
+	summary, err := a.generateCompactionSummary(ctx, chat, thread, rtx.FallbackModel, rtx.Failover, currentContextMessages, summarizeWith)
 	if err != nil {
 		return CompactOutput{}, fmt.Errorf("failed to generate compaction summary: %w", err)
 	}
@@ -372,7 +373,7 @@ var compactionModelTier = []models.ModelID{
 // selection, tool-less history sanitization — flows through the same
 // request-construction path as a normal CallLLM turn (resolveLLMCall +
 // prepareHistoryForLLM), so provider constraints are handled in one place.
-func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *db.Chat, thread, fallbackModel string, messages []message.Message, summarizeWith *reliantv1.ModelSelector) (string, error) {
+func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *db.Chat, thread, fallbackModel string, failover types.FailoverPolicy, messages []message.Message, summarizeWith *reliantv1.ModelSelector) (string, error) {
 	if len(messages) == 0 {
 		return "", fmt.Errorf("no messages to summarize")
 	}
@@ -387,6 +388,7 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 		// the thread's account.
 		ThreadID: thread,
 		Routing:  a.routing,
+		Failover: failover,
 	}
 
 	// Pick the summarization model. With an injected resolver (tests) the
@@ -441,7 +443,7 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 	if err != nil {
 		return "", a.routing.usageLimitFailure(ctx, fmt.Errorf("failed to generate summary: %w", err), usageLimitContext{
 			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
-			ModelID: definitionID(resolved.Definition), Account: resolved.Account,
+			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: failover,
 		})
 	}
 

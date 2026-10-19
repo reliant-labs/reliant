@@ -23,7 +23,7 @@ import (
 type MockService struct {
 	contractkit.Recorder
 	AssignFunc       func(context.Context, Request) (Result, error)
-	AlternativesFunc func(context.Context, Request, string) (bool, time.Time, error)
+	AlternativesFunc func(context.Context, Request, string) (bool, Earliest, error)
 }
 
 // Assign records the call and delegates to AssignFunc when set.
@@ -36,12 +36,12 @@ func (m *MockService) Assign(ctx context.Context, req Request) (Result, error) {
 }
 
 // Alternatives records the call and delegates to AlternativesFunc when set.
-func (m *MockService) Alternatives(ctx context.Context, req Request, exclude string) (bool, time.Time, error) {
+func (m *MockService) Alternatives(ctx context.Context, req Request, exclude string) (bool, Earliest, error) {
 	m.Recorder.Record("Alternatives", ctx, req, exclude)
 	if m.AlternativesFunc != nil {
 		return m.AlternativesFunc(ctx, req, exclude)
 	}
-	return false, *new(time.Time), contractkit.MockNotSet("MockService", "Alternatives")
+	return false, *new(Earliest), contractkit.MockNotSet("MockService", "Alternatives")
 }
 
 // Compile-time check.

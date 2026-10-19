@@ -68,6 +68,7 @@ that shape.
 | `2026-10-10-panic-wedges-workflow-task` | `workflow_panic_healed.json`: a run whose panic wedged its workflow task on `60d63966` (two failed attempts, `yield during panic unwinding`), then picked up and failed cleanly by the fixed worker | `panicFailsRunChangeID` (`runtime/workflow_panic.go`) |
 | `2026-10-18-usage-limit-pauses-run` | Every fixture at the commit before usage-limit waiting: a provider usage limit stops the sub-agent (or pauses the root) with no wait marker or timer | `usageLimitWaitChangeID` (`runtime/usage_limit_wait.go`) |
 | `2026-10-19-usage-limit-no-failover` | `usage_limit_wait.json` at the commit before account failover: a usage limit waits for its own reset whatever the activity reports about the provider's other accounts | `usageLimitFailoverChangeID` (`runtime/usage_limit_wait.go`) |
+| `2026-10-19-usage-limit-no-stay` | `usage_limit_wait.json` at the commit before the stay refinements: a probe bench is read as a reset, and a fallback stay lapses at its first end | `usageLimitStayChangeID` (`runtime/usage_limit_wait.go`) |
 | `2026-10-11-integration-action-approval` | `action_approval.json` at `14f6aff7`: an attended turn's mutating integration action asks first (`ApprovalCreate`, a timer, `signal.approval.*`), is denied, and `ExecuteTools` refuses it — the prompt #664 removed | `actionApprovalRemovedChangeID` (`runtime/action_approval_legacy.go`) |
 
 Retire a set only together with its gate, once no run older than the gate's

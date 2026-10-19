@@ -33,6 +33,15 @@ const usageLimitWaitChangeID = "usage-limit-wait"
 // the activity now reports.
 const usageLimitFailoverChangeID = "usage-limit-failover"
 
+// usageLimitStayChangeID gates two refinements of acting on a usage limit,
+// consulted in usageLimitWaiter.wait right after usage-limit-failover: a probe
+// bench is a recheck time and not a reset (types.UsageLimitFacts.
+// ProviderResetIsProbe), and a stay on a fallback model survives a refused
+// attempt to return, instead of lapsing and being re-announced at every rung.
+// A history recorded before it has no marker there and keeps the old
+// behaviour.
+const usageLimitStayChangeID = "usage-limit-stay"
+
 // UsageLimitRetrySignalName is the signal behind "Retry now": it wakes every
 // thread parked on a usage limit, so each retries its step at once instead of at
 // the reset. A signal sent to a run that is not waiting is dropped on the next
@@ -164,8 +173,15 @@ func decideOnUsageLimit(limit usageLimit, facts types.UsageLimitFacts, state usa
 
 // usageLimitUntil is when the provider is expected to serve again: the
 // earliest reset across its accounts when the activity reported one, else this
-// failure's own reset, else the next rung of the probe ladder.
+// failure's own reset, else the next rung of the probe ladder. When the only
+// time the activity knows is a probe bench's end, that is the next look.
 func usageLimitUntil(limit usageLimit, facts types.UsageLimitFacts, state usageLimitState, now time.Time, jitter time.Duration) (until time.Time, probing bool) {
+	// A bench with no reset behind it ends at a recheck time. That is when to
+	// look again, not when the limit lifts, so it takes no margin and is
+	// reported as a probe.
+	if facts.ProviderResetIsProbe && facts.ProviderEarliestReset.After(now) {
+		return facts.ProviderEarliestReset.Add(jitter), true
+	}
 	for _, reset := range []time.Time{facts.ProviderEarliestReset, limit.ResetAt} {
 		if reset.After(now) {
 			return reset.Add(usageLimitMargin + jitter), false
@@ -255,6 +271,10 @@ type fallbackLease struct {
 	Model    string
 	Provider string
 	Until    time.Time
+	// Returning is true from the first turn after Until, which tries the
+	// chat's own model again. A refused attempt extends the stay; the next
+	// turn after one that was not refused ends it.
+	Returning bool
 }
 
 // usageLimitWaiter holds a run's steps for usage-limit resets. One per run,
@@ -277,6 +297,9 @@ type usageLimitWaiter struct {
 	useModelEpoch int
 	// leases are the threads currently on a fallback model.
 	leases map[string]*fallbackLease
+	// keepStays is the usage-limit-stay version of this run: a lease outlives
+	// the first turn after its end until that turn is not refused.
+	keepStays bool
 }
 
 func newUsageLimitWaiter(pauser *pauseCoordinator, tracker *ChildWorkflowTracker, chatID, workflowID, workflowName string) *usageLimitWaiter {
@@ -347,9 +370,15 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 	// a history recorded before failover took the wait path whatever the facts
 	// said.
 	failover := workflow.GetVersion(ctx, usageLimitFailoverChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
+	// The refinements of the decision are gated on their own: a history that
+	// recorded the failover gate before them keeps the old behaviour.
+	w.keepStays = failover && workflow.GetVersion(ctx, usageLimitStayChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
 	facts := limit.Facts
 	if !failover {
 		facts = types.UsageLimitFacts{}
+	}
+	if !w.keepStays {
+		facts.ProviderResetIsProbe = false
 	}
 	if now.Sub(probe.last) > usageLimitSwitchQuiet {
 		probe.switches = 0
@@ -367,11 +396,16 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 		probe.switches = 0
 	}
 	probe.last = now
+	// A refused attempt to return is not a return: the stay goes on (or the
+	// wait below starts), and the attempt is made again afterwards.
+	if lease := w.leases[req.Thread]; lease != nil && w.keepStays {
+		lease.Returning = false
+	}
 	switch decision.Action {
 	case usageLimitRetryNow:
 		return w.continueNow(ctx, req, pc, limit, "another account of the same provider can serve it; retrying now")
 	case usageLimitSwitchModel:
-		w.startLease(ctx, req.Thread, limit, facts, decision.Model, decision.Until)
+		w.startLease(ctx, req.Thread, limit, facts, decision.Model, decision.Until, decision.Probing)
 		return w.continueNow(ctx, req, pc, limit, "continuing on "+decision.Model+" until the provider resets")
 	}
 
@@ -422,7 +456,7 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 	// "Use <model> now" answers the wait with a stay on that model until the
 	// wait's own end instead of a retry on the same provider.
 	if failover && w.useModel != "" && w.useModelEpoch > startEpoch && decision.Until.After(workflow.Now(ctx)) {
-		w.startLease(ctx, req.Thread, limit, facts, w.useModel, decision.Until)
+		w.startLease(ctx, req.Thread, limit, facts, w.useModel, decision.Until, decision.Probing)
 	}
 	// A message that cut the wait short is read by the step retried below (its
 	// call_llm drains the mailbox), so it is not owed another turn.
@@ -466,7 +500,16 @@ func (w *usageLimitWaiter) continueNow(ctx workflow.Context, req usageLimitWaitR
 // startLease puts thread on model until `until` and tells the user. The lease
 // is workflow state: call_llm reads it back through fallbackFor, so a replay
 // derives the same model for the same step.
-func (w *usageLimitWaiter) startLease(ctx workflow.Context, thread string, limit usageLimit, facts types.UsageLimitFacts, model string, until time.Time) {
+//
+// A thread already on a stay on model (the attempt to return was refused, or
+// the stay's end has not been acted on yet) goes on with it: the user was told
+// at the switch and nothing has changed since, so the stay is extended and not
+// announced again. probing says until is the next recheck, not a reset.
+func (w *usageLimitWaiter) startLease(ctx workflow.Context, thread string, limit usageLimit, facts types.UsageLimitFacts, model string, until time.Time, probing bool) {
+	if lease := w.leases[thread]; lease != nil && w.keepStays && lease.Model == model {
+		lease.Until, lease.Returning = until, false
+		return
+	}
 	provider := facts.Provider
 	if provider == "" {
 		provider = limit.Provider
@@ -480,6 +523,7 @@ func (w *usageLimitWaiter) startLease(ctx workflow.Context, thread string, limit
 		"provider":    provider,
 		"model":       model,
 		"resume_at":   until.UTC().Format(time.RFC3339),
+		"probing":     probing,
 	}).Get(ctx, nil)
 	if err != nil && !errors.Is(err, workflow.ErrCanceled) {
 		workflow.GetLogger(ctx).Warn("[UsageLimit] Could not post the fallback notice; continuing anyway",
@@ -487,19 +531,32 @@ func (w *usageLimitWaiter) startLease(ctx workflow.Context, thread string, limit
 	}
 }
 
-// fallbackFor is the thread's stay on a fallback model: the model and when the
-// stay ends while it is live, or — once, on the first turn after it — what the
-// chat just returned from, so that turn can say so.
-func (w *usageLimitWaiter) fallbackFor(ctx workflow.Context, thread string) (model string, until time.Time, ret *types.FallbackReturn) {
+// fallbackFor is the thread's stay on a fallback model: the model while it is
+// live, or — on the first turn after it — what the chat is returning from, so
+// that turn can say so once it has gone through on its own model.
+//
+// The stay does not end at that turn. If the turn is refused (the limit is
+// still there; for an unknown reset the end was only a recheck) wait() puts
+// the stay back, and the attempt is made again at its next end. It ends at the
+// next turn that finds the attempt not refused.
+func (w *usageLimitWaiter) fallbackFor(ctx workflow.Context, thread string) (model string, ret *types.FallbackReturn) {
 	lease := w.leases[thread]
 	if lease == nil {
-		return "", time.Time{}, nil
+		return "", nil
 	}
 	if workflow.Now(ctx).Before(lease.Until) {
-		return lease.Model, lease.Until, nil
+		return lease.Model, nil
 	}
-	delete(w.leases, thread)
-	return "", time.Time{}, &types.FallbackReturn{Provider: lease.Provider, Model: lease.Model}
+	if !w.keepStays {
+		delete(w.leases, thread)
+		return "", &types.FallbackReturn{Provider: lease.Provider, Model: lease.Model}
+	}
+	if lease.Returning {
+		delete(w.leases, thread)
+		return "", nil
+	}
+	lease.Returning = true
+	return "", &types.FallbackReturn{Provider: lease.Provider, Model: lease.Model}
 }
 
 // markerContext returns a context the marker write survives the run's
@@ -545,22 +602,31 @@ func (w *usageLimitWaiter) clearMarker(ctx workflow.Context, thread string) {
 }
 
 // liveFallback is the model the thread is on while its fallback lease lasts,
-// without consuming the lease's end the way fallbackFor does.
+// without consuming the lease's end the way fallbackFor does. A stay whose
+// return attempt went through is over by the time anything else asks.
 func (pc *PauseController) liveFallback(ctx workflow.Context, thread string) string {
 	if pc == nil || pc.UsageLimit == nil {
 		return ""
 	}
-	if lease := pc.UsageLimit.leases[thread]; lease != nil && workflow.Now(ctx).Before(lease.Until) {
+	w := pc.UsageLimit
+	lease := w.leases[thread]
+	if lease == nil {
+		return ""
+	}
+	if workflow.Now(ctx).Before(lease.Until) {
 		return lease.Model
+	}
+	if w.keepStays && lease.Returning {
+		delete(w.leases, thread)
 	}
 	return ""
 }
 
 // fallbackFor is usageLimitWaiter.fallbackFor, nil-safe like every
 // PauseController method.
-func (pc *PauseController) fallbackFor(ctx workflow.Context, thread string) (string, time.Time, *types.FallbackReturn) {
+func (pc *PauseController) fallbackFor(ctx workflow.Context, thread string) (string, *types.FallbackReturn) {
 	if pc == nil || pc.UsageLimit == nil {
-		return "", time.Time{}, nil
+		return "", nil
 	}
 	return pc.UsageLimit.fallbackFor(ctx, thread)
 }

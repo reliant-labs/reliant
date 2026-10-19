@@ -762,7 +762,7 @@ func TestAlternatives(t *testing.T) {
 		ok, reset, err := r.Alternatives(ctx, req("th", acct("a", 0), acct("b", 1)), "a")
 		require.NoError(t, err)
 		assert.True(t, ok)
-		assert.True(t, reset.IsZero())
+		assert.True(t, reset.At.IsZero())
 	})
 
 	t.Run("the only other account is limited", func(t *testing.T) {
@@ -770,7 +770,8 @@ func TestAlternatives(t *testing.T) {
 		ok, reset, err := r.Alternatives(ctx, req("th", acct("a", 0), acct("b", 1)), "a")
 		require.NoError(t, err)
 		assert.False(t, ok)
-		assert.Equal(t, t0.Add(2*time.Hour), reset)
+		assert.Equal(t, t0.Add(2*time.Hour), reset.At)
+		assert.False(t, reset.Probe)
 	})
 
 	t.Run("the excluded account counts as limited even before its bench is stored", func(t *testing.T) {
@@ -778,7 +779,7 @@ func TestAlternatives(t *testing.T) {
 		ok, reset, err := r.Alternatives(ctx, req("th", acct("a", 0), acct("b", 1)), "a")
 		require.NoError(t, err)
 		assert.False(t, ok)
-		assert.Equal(t, t0.Add(time.Hour), reset, "earliest across all the driver's accounts, the excluded one included")
+		assert.Equal(t, t0.Add(time.Hour), reset.At, "earliest across all the driver's accounts, the excluded one included")
 	})
 
 	t.Run("excluded account with no stored bench", func(t *testing.T) {
@@ -786,7 +787,23 @@ func TestAlternatives(t *testing.T) {
 		ok, reset, err := r.Alternatives(ctx, req("th", acct("a", 0)), "a")
 		require.NoError(t, err)
 		assert.False(t, ok)
-		assert.True(t, reset.IsZero(), "no reset is known")
+		assert.True(t, reset.At.IsZero(), "no reset is known")
+	})
+
+	t.Run("a probe bench is reported as a probe, not a reset", func(t *testing.T) {
+		probeEnd := t0.Add(5 * time.Minute)
+		s.limits = map[string]LimitState{"a": {AccountID: "a", LimitedUntil: &probeEnd, LimitedProbes: 1}}
+		ok, reset, err := r.Alternatives(ctx, req("th", acct("a", 0)), "a")
+		require.NoError(t, err)
+		assert.False(t, ok)
+		assert.Equal(t, Earliest{At: probeEnd, Probe: true}, reset)
+
+		// A known reset on another account is not a probe, and wins when sooner.
+		known := t0.Add(2 * time.Minute)
+		s.limits["b"] = benched("b", known, "5h")
+		_, reset, err = r.Alternatives(ctx, req("th", acct("a", 0), acct("b", 1)), "a")
+		require.NoError(t, err)
+		assert.Equal(t, Earliest{At: known}, reset)
 	})
 
 	t.Run("accounts that cannot serve the model are not alternatives", func(t *testing.T) {
@@ -796,4 +813,22 @@ func TestAlternatives(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})
+}
+
+func TestAssign_AllLimitedFlagsAProbeReset(t *testing.T) {
+	s := newStore()
+	probeEnd := t0.Add(15 * time.Minute)
+	s.limits["a"] = LimitState{AccountID: "a", LimitedUntil: &probeEnd, LimitedProbes: 2}
+	r := newRouter(t, s, first)
+
+	_, err := r.Assign(context.Background(), req("th", acct("a", 0)))
+	var all *ErrAllLimited
+	require.ErrorAs(t, err, &all)
+	assert.True(t, all.ResetIsProbe)
+	assert.Equal(t, probeEnd, all.EarliestReset)
+
+	s.limits["a"] = benched("a", probeEnd, "5h")
+	_, err = r.Assign(context.Background(), req("th", acct("a", 0)))
+	require.ErrorAs(t, err, &all)
+	assert.False(t, all.ResetIsProbe, "a bench with a reset behind it is a reset")
 }

@@ -272,6 +272,7 @@ func (s *Service) UpdateChatProviderPolicy(
 	if sel != nil && (before == nil || before.Version != sel.Version) {
 		s.announceSelection(ctx, userID, chat, sel)
 		s.signalProviderPolicy(ctx, userID, chat)
+		s.wakeUsageLimitWait(ctx, chat, sel.Policy.OnLimit == chatselection.OnLimitFallback)
 	}
 	return connect.NewResponse(&reliantv1.UpdateChatProviderPolicyResponse{Selection: selectionToProto(sel)}), nil
 }

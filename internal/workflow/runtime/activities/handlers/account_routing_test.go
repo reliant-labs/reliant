@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -452,4 +453,80 @@ func TestFailureSurvivesTheTemporalBoundary(t *testing.T) {
 	assert.Equal(t, "five_hour", gotWindow)
 	var appErr *temporal.ApplicationError
 	assert.False(t, errors.As(err, &appErr))
+}
+
+// Compaction is refused by the same limit call_llm is, so it must decide the
+// same way: with the chat's opt-in on and every Claude account limited, its
+// failure offers the fallback and the workflow does not wait for the reset.
+func TestCompaction_FollowsTheChatsFallbackPolicy(t *testing.T) {
+	codex := models.AccountConfig{
+		DriverConfig: models.DriverConfig{DriverID: "codex", AccountID: "cx", AccountEmail: "c@x.com", Enabled: true, APIKey: "k"},
+		Status:       models.AccountAvailable,
+	}
+	withAvailableDrivers(t, driversWith(claudeAccount("a", "alice@acme.com", 0), codex))
+	env := newRoutingEnv(t)
+	env.store.bench("a", time.Now().Add(2*time.Hour), "five_hour")
+	chat := &db.Chat{ID: "chat-1", UserID: "u1"}
+	activity := NewCompactActivity(nil, nil).WithAccountRouting(env.routing)
+
+	failure := func(t *testing.T, policy types.FailoverPolicy) *types.UsageLimitFailure {
+		t.Helper()
+		_, err := activity.generateCompactionSummary(context.Background(), chat, "thread-1", "", policy, toolBearingConversation(), nil)
+		var f *types.UsageLimitFailure
+		require.ErrorAs(t, err, &f)
+		return f
+	}
+
+	t.Run("opted in: the fallback is offered", func(t *testing.T) {
+		f := failure(t, types.FailoverPolicy{FallbackModel: routeFallback})
+		assert.Equal(t, routeFallback, f.Facts.FallbackModel)
+	})
+	t.Run("not opted in: it waits, as before", func(t *testing.T) {
+		f := failure(t, types.FailoverPolicy{})
+		assert.Empty(t, f.Facts.FallbackModel)
+		assert.False(t, f.Facts.ProviderEarliestReset.IsZero(), "the reset the wait targets")
+	})
+}
+
+// A probe bench is not a reset: the facts say so, and the refusal announces no
+// reset time, so nothing downstream can show the recheck as one.
+func TestRouting_ProbeBenchIsNotReportedAsAReset(t *testing.T) {
+	withAvailableDrivers(t, driversWith(claudeAccount("a", "alice@acme.com", 0)))
+	env := newRoutingEnv(t)
+	probeEnd := time.Now().Add(5 * time.Minute).UTC().Truncate(time.Second)
+	env.store.mu.Lock()
+	env.store.limits["a"] = accountrouter.LimitState{AccountID: "a", LimitedUntil: &probeEnd, LimitedProbes: 1}
+	env.store.mu.Unlock()
+
+	res, err := resolveOnClaude(t, env, "thread-1", types.FailoverPolicy{})
+	require.Nil(t, res)
+	var failure *types.UsageLimitFailure
+	require.ErrorAs(t, err, &failure)
+	assert.True(t, failure.Facts.ProviderResetIsProbe)
+	assert.True(t, failure.Facts.ProviderEarliestReset.Equal(probeEnd), "the recheck time rides along for the ladder")
+	assert.True(t, failure.Facts.ResetAt.IsZero(), "but no reset is stated")
+	var ule *ratelimit.UsageLimitError
+	require.ErrorAs(t, err, &ule)
+	assert.True(t, ule.ResetAt.IsZero())
+	assert.NotContains(t, err.Error(), probeEnd.Format(time.RFC3339), "the marker carries no reset time")
+}
+
+// The account-move notice says when the old account resets only when a reset
+// was given; a probe bench's end is not one.
+func TestAnnounceAccountMove_ProbeBenchGivesNoResetTime(t *testing.T) {
+	withAvailableDrivers(t, driversWith(claudeAccount("a", "alice@acme.com", 0), claudeAccount("b", "bob@acme.com", 1)))
+	env := newRoutingEnv(t)
+	probeEnd := time.Now().Add(5 * time.Minute).UTC()
+	env.store.mu.Lock()
+	env.store.limits["a"] = accountrouter.LimitState{AccountID: "a", LimitedUntil: &probeEnd, LimitedWindow: "five_hour", LimitedProbes: 1}
+	env.store.mu.Unlock()
+	a, b := claudeAccount("a", "alice@acme.com", 0), claudeAccount("b", "bob@acme.com", 1)
+	moved := &routedAccount{Config: b, Change: &accountrouter.Result{Account: b, Previous: &a, Reason: accountrouter.ReasonLimited, Changed: true}}
+
+	var notices []string
+	env.routing.announceAccountMove(context.Background(), func(s string) { notices = append(notices, s) }, "u1", moved)
+	require.Len(t, notices, 1)
+	assert.Contains(t, notices[0], "reached its 5-hour limit")
+	assert.NotContains(t, notices[0], "resets")
+	assert.NotContains(t, notices[0], "<time:")
 }

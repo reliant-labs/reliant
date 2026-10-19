@@ -163,3 +163,34 @@ func (c *usageLimitPayloadClient) SignalWorkflow(_ context.Context, _, _, _ stri
 	c.payloads = append(c.payloads, arg)
 	return nil
 }
+
+// Turning cross-provider fallback on while the run is parked on a limit wakes
+// it, so it re-decides under the new policy instead of sitting until the reset.
+// Anything that cannot change the answer (choosing to wait, a chat that is not
+// waiting) leaves the wait alone.
+func TestUpdateChatProviderPolicy_WakesAWaitingRun(t *testing.T) {
+	ctx, fx, repo, temporal, service := selectionFixture(t, db.Active())
+	now := time.Now().UTC()
+	require.NoError(t, repo.RecordUsageLimitWait(ctx, fx.chatID, fx.rootThreadID, "Anthropic", false, now.Add(time.Hour), now))
+
+	retries := func() int {
+		n := 0
+		for _, sig := range temporal.signals {
+			if sig.Name == v2.UsageLimitRetrySignalName {
+				n++
+			}
+		}
+		return n
+	}
+
+	setPolicy(t, ctx, service, fx.chatID, reliantv1.ProviderPolicy_ON_LIMIT_WAIT, "")
+	assert.Zero(t, retries(), "choosing to wait changes nothing, so the wait is left alone")
+
+	setPolicy(t, ctx, service, fx.chatID, reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK, codexOnlyModel)
+	assert.Equal(t, 1, retries(), "opting in wakes the parked run to re-decide")
+
+	require.NoError(t, repo.ClearUsageLimitWait(ctx, fx.chatID, "", time.Now()))
+	setPolicy(t, ctx, service, fx.chatID, reliantv1.ProviderPolicy_ON_LIMIT_WAIT, "")
+	setPolicy(t, ctx, service, fx.chatID, reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK, codexOnlyModel)
+	assert.Equal(t, 1, retries(), "a run that is not waiting is not woken")
+}

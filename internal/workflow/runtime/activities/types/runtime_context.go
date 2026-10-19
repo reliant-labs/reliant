@@ -1,8 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 package types
 
-import "time"
-
 // RuntimeContext contains fields injected by the workflow engine at execution time.
 // This is a pure Go struct serialized as JSON over Temporal.
 //
@@ -96,13 +94,12 @@ type RuntimeContext struct {
 	// limited (see FailoverPolicy). Set on call_llm nodes only.
 	Failover FailoverPolicy `json:"failover,omitzero"`
 
-	// FallbackModel, while workflow time is before FallbackUntil, replaces the
-	// chat's model selector: the run is continuing on another provider until
-	// the original one resets. The workflow sets both from its lease and
-	// clears them at the lease's end, which is deterministic because the
-	// comparison is made in the workflow. Set on call_llm nodes only.
-	FallbackModel string    `json:"fallback_model,omitempty"`
-	FallbackUntil time.Time `json:"fallback_until,omitzero"`
+	// FallbackModel replaces the chat's model selector: the run is continuing
+	// on another provider until the original one is back. The workflow sets
+	// it from its lease and clears it at the lease's end, which is
+	// deterministic because the comparison is made in the workflow. Set on
+	// call_llm nodes only.
+	FallbackModel string `json:"fallback_model,omitempty"`
 
 	// FallbackReturn is set on the first call_llm after a fallback lease
 	// ended, so the transcript can say the chat is back on its own model.

@@ -76,7 +76,9 @@ type accountView struct {
 	state         accountState
 	limitedUntil  time.Time
 	limitedWindow string
-	limits        *LimitState
+	// limitedProbe is true when limitedUntil is a probe bench's end.
+	limitedProbe bool
+	limits       *LimitState
 }
 
 // classify states each of req.Accounts at now. exclude, when set, is treated
@@ -96,9 +98,11 @@ func classify(req Request, limits map[string]LimitState, now time.Time, exclude 
 			if v.limits != nil && v.limits.LimitedUntil != nil && v.limits.LimitedUntil.After(now) {
 				v.limitedUntil = *v.limits.LimitedUntil
 				v.limitedWindow = v.limits.LimitedWindow
+				v.limitedProbe = v.limits.LimitedProbes > 0
 			}
 			if cfg.LimitedUntil.After(v.limitedUntil) {
 				v.limitedUntil = cfg.LimitedUntil
+				v.limitedProbe = false
 			}
 			if v.limitedUntil.After(now) || (exclude != "" && cfg.AccountID == exclude) {
 				v.state = stateLimited
@@ -186,17 +190,17 @@ func (r *router) Assign(ctx context.Context, req Request) (Result, error) {
 	return res, nil
 }
 
-func (r *router) Alternatives(ctx context.Context, req Request, exclude string) (bool, time.Time, error) {
+func (r *router) Alternatives(ctx context.Context, req Request, exclude string) (bool, Earliest, error) {
 	now := r.now()
 	views := classify(req, r.loadLimits(ctx, req.UserID), now, exclude)
-	var earliest time.Time
+	var earliest Earliest
 	for _, v := range views {
 		switch v.state {
 		case stateOK:
-			return true, time.Time{}, nil
+			return true, Earliest{}, nil
 		case stateLimited:
-			if !v.limitedUntil.IsZero() && (earliest.IsZero() || v.limitedUntil.Before(earliest)) {
-				earliest = v.limitedUntil
+			if !v.limitedUntil.IsZero() && (earliest.At.IsZero() || v.limitedUntil.Before(earliest.At)) {
+				earliest = Earliest{At: v.limitedUntil, Probe: v.limitedProbe}
 			}
 		}
 	}
@@ -227,6 +231,7 @@ func (r *router) choose(ctx context.Context, req Request, views []accountView, n
 			if all.EarliestReset.IsZero() || v.limitedUntil.Before(all.EarliestReset) {
 				all.EarliestReset = v.limitedUntil
 				all.Window = v.limitedWindow
+				all.ResetIsProbe = v.limitedProbe
 			}
 		}
 		return accountView{}, false, all

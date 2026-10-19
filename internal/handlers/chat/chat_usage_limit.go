@@ -9,6 +9,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -38,6 +39,14 @@ func usableFallbackModel(ctx context.Context, userID, modelAtDriver string) (str
 	return modelAtDriver, nil
 }
 
+// isWaitingOnUsageLimit reports that the chat's run is parked until a provider's
+// limit resets and can be signalled.
+func isWaitingOnUsageLimit(chat *db.Chat) bool {
+	return chat.Activity != nil &&
+		reliantv1.ChatActivity(*chat.Activity) == reliantv1.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT &&
+		chat.WorkflowID != nil && *chat.WorkflowID != ""
+}
+
 // RetryUsageLimitWait is "Retry now" on a run parked until a provider's usage
 // limit resets: it signals the run, which wakes every thread waiting on a limit
 // and retries their steps at once. If the limit is still enforced the step fails
@@ -59,10 +68,7 @@ func (s *Service) RetryUsageLimitWait(
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
-	if chat.Activity == nil || reliantv1.ChatActivity(*chat.Activity) != reliantv1.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT {
-		return connect.NewResponse(&reliantv1.RetryUsageLimitWaitResponse{Woken: false}), nil
-	}
-	if chat.WorkflowID == nil || *chat.WorkflowID == "" {
+	if !isWaitingOnUsageLimit(chat) {
 		return connect.NewResponse(&reliantv1.RetryUsageLimitWaitResponse{Woken: false}), nil
 	}
 	signal := v2.UsageLimitRetrySignal{}

@@ -85,6 +85,30 @@ func TestDecideOnUsageLimit_Failover(t *testing.T) {
 	})
 }
 
+// A bench with no reset behind it ends at a recheck time. That time is the
+// next look, so it is a probe: no stated reset, no margin.
+func TestDecideOnUsageLimit_ProbeBenchIsNotAReset(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	recheck := now.Add(15 * time.Minute)
+	facts := types.UsageLimitFacts{ProviderEarliestReset: recheck, ProviderResetIsProbe: true}
+
+	d := decideOnUsageLimit(usageLimit{}, facts, usageLimitState{Probes: 1}, now, 4*time.Second)
+	require.Equal(t, usageLimitWaitUntil, d.Action)
+	require.True(t, d.Probing, "the footer must say it is checking again, not that it resumes")
+	require.Equal(t, recheck.Add(4*time.Second), d.Until)
+
+	facts.FallbackModel = "gpt-5.6-sol@codex"
+	d = decideOnUsageLimit(usageLimit{}, facts, usageLimitState{}, now, 0)
+	require.Equal(t, usageLimitSwitchModel, d.Action)
+	require.True(t, d.Probing, "a lease on an unknown reset is a lease until the next look")
+
+	facts.ProviderResetIsProbe = false
+	d = decideOnUsageLimit(usageLimit{}, facts, usageLimitState{}, now, 0)
+	require.False(t, d.Probing)
+	require.Equal(t, recheck.Add(usageLimitMargin), d.Until, "the same time with a reset behind it is a reset")
+}
+
 func TestParseUsageLimit_ReadsTheFacts(t *testing.T) {
 	t.Parallel()
 	reset := time.Date(2026, 10, 18, 15, 42, 0, 0, time.UTC)
@@ -203,7 +227,6 @@ func (s *UsageLimitFailoverSuite) TestFallbackLease_RunsOnTheFallbackThenReturns
 	notices := append([]map[string]interface{}(nil), e.notices...)
 	e.mu.Unlock()
 	s.Equal("gpt-5.6-sol@codex", rt2.FallbackModel)
-	s.False(rt2.FallbackUntil.Before(leaseEnd), "the lease runs to the provider's reset")
 	s.Nil(rt2.FallbackReturn)
 
 	s.Require().Len(notices, 1, "one notice at the switch")
@@ -243,7 +266,6 @@ func (s *UsageLimitFailoverSuite) TestUseModelNow_TurnsTheWaitIntoALease() {
 	rt2 := e.callRuntime["parent#2"]
 	e.mu.Unlock()
 	s.Equal("gpt-5.6-sol@codex", rt2.FallbackModel, "the retry runs on the model the person picked")
-	s.True(rt2.FallbackUntil.After(start.Add(3*time.Hour)), "until the original reset")
 }
 
 // A plain "Retry now" (no model) is unchanged: no lease.
@@ -307,4 +329,55 @@ func (s *UsageLimitFailoverSuite) TestLeaseEnd_ReturnsToTheChatsOwnModel() {
 	s.Require().NotNil(rt3.FallbackReturn, "and the turn says it just returned")
 	s.Equal("claude", rt3.FallbackReturn.Provider)
 	s.Equal("gpt-5.6-sol@codex", rt3.FallbackReturn.Model)
+}
+
+// With no reset known, a stay's end is only a recheck. The attempt to go back
+// to the chat's own provider is refused again, and that is the stay going on:
+// the same fallback model with no second "switching" notice and no "limit has
+// reset" notice, until an attempt is not refused.
+func (s *UsageLimitFailoverSuite) TestUnknownReset_StayOutlivesARefusedReturn() {
+	env := s.NewTestWorkflowEnvironment()
+	env.SetTestTimeout(30 * time.Second)
+	input := spawnE2EWorkflowInput("chat-failover-stay")
+	e := newSubAgentFailureEnv(s.T(), env, input.ExecContext.Thread)
+
+	start := env.Now()
+	const fallback = "gpt-5.6-sol@codex"
+	e.parentTurn = func(turn int) ([]map[string]interface{}, error) {
+		switch turn {
+		case 1:
+			// Claude is limited with no reset: the stay runs to the first recheck.
+			return nil, limitWithFacts(time.Time{}, types.UsageLimitFacts{
+				Provider: "claude", FallbackModel: fallback,
+				ProviderEarliestReset: start.Add(5 * time.Minute), ProviderResetIsProbe: true})
+		case 2:
+			// The fallback is limited past the recheck, so the thread waits it out.
+			return nil, limitWithFacts(start.Add(20*time.Minute), types.UsageLimitFacts{Provider: "codex"})
+		case 3:
+			// Back on Claude after the stay's end: still limited.
+			return nil, limitWithFacts(time.Time{}, types.UsageLimitFacts{
+				Provider: "claude", FallbackModel: fallback,
+				ProviderEarliestReset: start.Add(45 * time.Minute), ProviderResetIsProbe: true})
+		}
+		return nil, nil
+	}
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+
+	s.Require().True(env.IsWorkflowCompleted())
+	s.Require().NoError(env.GetWorkflowError())
+	s.Equal(4, e.turns(e.parentThread))
+	e.mu.Lock()
+	rt2, rt3, rt4 := e.callRuntime["parent#2"], e.callRuntime["parent#3"], e.callRuntime["parent#4"]
+	notices := append([]map[string]interface{}(nil), e.notices...)
+	e.mu.Unlock()
+
+	s.Equal(fallback, rt2.FallbackModel)
+	s.Empty(rt3.FallbackModel, "the stay's end tries the chat's own provider")
+	s.NotNil(rt3.FallbackReturn)
+	s.Equal(fallback, rt4.FallbackModel, "refused again, so the stay goes on")
+	s.Nil(rt4.FallbackReturn, "no return is announced for a refused attempt")
+
+	s.Require().Len(notices, 1, "one switch notice for the whole stay, not one per recheck")
+	s.Equal(true, notices[0]["probing"], "the notice is told the time is a recheck, not a reset")
+	s.True(rt4.FallbackModel != "" && rt3.FallbackModel == "", "the refused attempt is retried on the fallback at once")
 }

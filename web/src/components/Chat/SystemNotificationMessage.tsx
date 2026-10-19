@@ -2,7 +2,7 @@ import { cn } from '../../lib/utils';
 import { Info, AlertTriangle, ArrowLeftRight, CheckCircle, Undo2 } from 'lucide-react';
 import type { Message } from '../../api/client';
 import { ContentBlockType, DisplayStyle } from '../../gen/reliant/v1/chat_pb';
-import { boldSegments, providerNoticeKind } from '../../lib/providerNotice';
+import { boldSegments, localizeNoticeTimes, providerNoticeKind } from '../../lib/providerNotice';
 
 interface SystemNotificationMessageProps {
   message: Message;
@@ -86,7 +86,7 @@ export function SystemNotificationMessage({ message }: SystemNotificationMessage
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs leading-tight text-foreground">
               {noticeKind
-                ? boldSegments(content).map((seg, i) =>
+                ? boldSegments(localizeNoticeTimes(content)).map((seg, i) =>
                     seg.bold ? (
                       <strong key={i} className="font-semibold">{seg.text}</strong>
                     ) : (
