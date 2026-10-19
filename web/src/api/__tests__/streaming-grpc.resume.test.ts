@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
   RESUME_LIVENESS_GRACE_MS,
+  RESUME_REPLACE_AFTER_HIDDEN_MS,
+  RESUME_REPLACE_MIN_INTERVAL_MS,
   RESUME_STALE_AFTER_MS,
   UserStreamingService,
   isConnectionLevelFailure,
@@ -95,6 +97,110 @@ describe("returning to the tab with a 'connected' stream", () => {
     vi.advanceTimersByTime(RESUME_LIVENESS_GRACE_MS);
 
     expect(connectSpy).not.toHaveBeenCalled();
+    service.stop();
+  });
+});
+
+function setVisibility(state: "visible" | "hidden") {
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+describe("returning after the page was hidden for a while", () => {
+  afterEach(() => {
+    delete (document as unknown as Record<string, unknown>).visibilityState;
+  });
+
+  it("replaces a stream that is still delivering as far as it knows, without waiting out the silence threshold", () => {
+    const { service, internals, connectSpy, onStatusChange } = makeService();
+    internals.isConnected_ = true;
+
+    setVisibility("hidden");
+    vi.advanceTimersByTime(RESUME_REPLACE_AFTER_HIDDEN_MS + 1_000);
+    // The frozen page's last event is recent as far as its own clock goes.
+    internals.lastEventAt = Date.now();
+    setVisibility("visible");
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    expect(onStatusChange).toHaveBeenCalledWith("disconnected");
+    service.stop();
+  });
+
+  it("keeps a stream that was hidden only briefly", () => {
+    const { service, internals, connectSpy } = makeService();
+    internals.isConnected_ = true;
+
+    setVisibility("hidden");
+    vi.advanceTimersByTime(RESUME_REPLACE_AFTER_HIDDEN_MS - 1_000);
+    internals.lastEventAt = Date.now();
+    setVisibility("visible");
+    vi.advanceTimersByTime(RESUME_LIVENESS_GRACE_MS);
+
+    expect(connectSpy).not.toHaveBeenCalled();
+    service.stop();
+  });
+
+  it("replaces once for a burst of resume signals", () => {
+    const { service, internals, connectSpy } = makeService();
+    internals.isConnected_ = true;
+
+    setVisibility("hidden");
+    vi.advanceTimersByTime(60_000);
+    setVisibility("visible");
+    // reconnectNow flipped it off; the new connection comes up and the browser
+    // fires pageshow + online in the same wake.
+    internals.isConnected_ = true;
+    window.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
+    window.dispatchEvent(new Event("online"));
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    service.stop();
+  });
+
+  it("replaces again for a later, separate resume", () => {
+    const { service, internals, connectSpy } = makeService();
+    internals.isConnected_ = true;
+
+    setVisibility("hidden");
+    vi.advanceTimersByTime(60_000);
+    setVisibility("visible");
+    internals.isConnected_ = true;
+    vi.advanceTimersByTime(RESUME_REPLACE_MIN_INTERVAL_MS + 1);
+    setVisibility("hidden");
+    vi.advanceTimersByTime(60_000);
+    setVisibility("visible");
+
+    expect(connectSpy).toHaveBeenCalledTimes(2);
+    service.stop();
+  });
+
+  it("replaces a connected stream when restored from the back/forward cache", () => {
+    const { service, internals, connectSpy } = makeService();
+    internals.isConnected_ = true;
+
+    window.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    service.stop();
+  });
+
+  it("ignores a pageshow that is an ordinary load", () => {
+    const { service, internals, connectSpy } = makeService();
+    internals.isConnected_ = true;
+
+    window.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: false }));
+
+    expect(connectSpy).not.toHaveBeenCalled();
+    service.stop();
+  });
+
+  it("replaces a connected stream when the network comes back", () => {
+    const { service, internals, connectSpy } = makeService();
+    internals.isConnected_ = true;
+
+    window.dispatchEvent(new Event("online"));
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
     service.stop();
   });
 });

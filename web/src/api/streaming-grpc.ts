@@ -137,6 +137,17 @@ const WATCHDOG_TICK_MS = 15_000;
 export const RESUME_LIVENESS_GRACE_MS = 2_000;
 export const RESUME_STALE_AFTER_MS = 40_000;
 
+// A page hidden longer than this has had its sockets at the mercy of the
+// browser: a phone suspends them without closing them, so the stream can read
+// "connected" and be dead, and silence is not yet measurable against the 40s
+// threshold above. Past this, never trust the stream — replace it and resume
+// from the cursor (a replay of nothing when it was in fact alive). Short hides
+// (app switcher peek, notification shade) keep the cheaper silence check.
+export const RESUME_REPLACE_AFTER_HIDDEN_MS = 10_000;
+// Resume signals arrive in bursts (visibilitychange, pageshow, online, focus
+// within one wake); replace the stream at most once per burst.
+export const RESUME_REPLACE_MIN_INTERVAL_MS = 5_000;
+
 /**
  * Whether a stream failure means the network connection under it died (as
  * opposed to the server ending the stream with a status). Every request
@@ -517,6 +528,8 @@ export class UserStreamingService {
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
   private lastEventAt = 0;
   private wakeHandlersBound = false;
+  private hiddenAt: number | null = null;
+  private lastResumeReplaceAt = 0;
 
   constructor(callbacks: GlobalWebSocketCallbacks) {
     this.callbacks = callbacks;
@@ -528,21 +541,75 @@ export class UserStreamingService {
   // the backoff and retry immediately instead of making the user wait out a
   // timer (or reload the page).
   private handleOnline = (): void => {
-    if (this.isIntentionallyClosed || this.isConnected_) return;
+    if (this.isIntentionallyClosed) return;
+    // The network just changed under a stream that still reads "connected":
+    // its socket belongs to the old network and will not say so.
+    if (this.isConnected_) {
+      this.replaceStreamOnResume("online");
+      return;
+    }
     logger.info(`${LOG_PREFIX_STREAM} Network back online — reconnecting now`);
     this.reconnectNow("online");
   };
 
   private handleVisibilityChange = (): void => {
-    if (document.visibilityState !== "visible") return;
+    if (document.visibilityState !== "visible") {
+      this.hiddenAt ??= Date.now();
+      return;
+    }
+    const hiddenFor = this.hiddenAt === null ? 0 : Date.now() - this.hiddenAt;
+    this.hiddenAt = null;
     if (this.isIntentionallyClosed) return;
     if (this.isConnected_) {
+      if (hiddenFor >= RESUME_REPLACE_AFTER_HIDDEN_MS) {
+        this.replaceStreamOnResume("visible", { hiddenForMs: hiddenFor });
+        return;
+      }
       this.scheduleResumeLivenessCheck();
       return;
     }
     logger.info(`${LOG_PREFIX_STREAM} Tab visible again — reconnecting now`);
     this.reconnectNow("visible");
   };
+
+  // Restored from the back/forward cache: the page was frozen, whatever the
+  // stream says.
+  private handlePageShow = (event: PageTransitionEvent): void => {
+    if (!event.persisted || this.isIntentionallyClosed) return;
+    this.hiddenAt = null;
+    if (this.isConnected_) {
+      this.replaceStreamOnResume("visible", { restoredFromCache: true });
+    } else {
+      this.reconnectNow("visible");
+    }
+  };
+
+  /**
+   * Replace a stream that claims to be connected without waiting to see
+   * whether it is. Idempotent across a burst of resume signals, and bounded:
+   * at most one replacement per RESUME_REPLACE_MIN_INTERVAL_MS, so a page that
+   * flaps visible/hidden cannot turn into a reconnect storm.
+   */
+  private replaceStreamOnResume(
+    reason: "visible" | "online",
+    detail: Record<string, unknown> = {},
+  ): void {
+    const now = Date.now();
+    if (now - this.lastResumeReplaceAt < RESUME_REPLACE_MIN_INTERVAL_MS) return;
+    this.lastResumeReplaceAt = now;
+    if (this.resumeCheckTimer !== null) {
+      clearTimeout(this.resumeCheckTimer);
+      this.resumeCheckTimer = null;
+    }
+    logger.warn(
+      `${LOG_PREFIX_STREAM} Page resumed (${reason}) with a 'connected' stream — replacing it`,
+      detail,
+    );
+    pageActivity().noteConnectionLost();
+    this.isConnected_ = false;
+    this.callbacks.onStatusChange("disconnected");
+    this.reconnectNow(reason);
+  }
 
   private resumeCheckTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -568,6 +635,7 @@ export class UserStreamingService {
     if (this.wakeHandlersBound || typeof window === "undefined") return;
     window.addEventListener("online", this.handleOnline);
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
+    window.addEventListener("pageshow", this.handlePageShow);
     this.wakeHandlersBound = true;
   }
 
@@ -578,6 +646,8 @@ export class UserStreamingService {
       "visibilitychange",
       this.handleVisibilityChange,
     );
+    window.removeEventListener("pageshow", this.handlePageShow);
+    this.hiddenAt = null;
     this.wakeHandlersBound = false;
   }
 

@@ -26,9 +26,10 @@
  * ## 2. A project must be selected
  *
  * The desktop app selects a project from the URL (`/project/$projectId`) or a
- * restored workspace. Mobile has no project route yet, so it falls back to the
- * user's first project — enough for iteration 1, where the list is scoped to a
- * single project.
+ * restored workspace. Mobile has no project route, so it restores the last
+ * project (`restoreLastProject`, the desktop's own path) and falls back to the
+ * user's first. A chat screen then moves to its chat's own project if that
+ * differs (see MobileChatScreen).
  *
  * ## 3. Top-level navigation
  *
@@ -55,7 +56,7 @@
  * module comment there has the measurements.
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Outlet, useNavigate } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { MobileLayout } from "./MobileLayout";
@@ -95,14 +96,27 @@ export function MobileShell() {
     if (projects.length === 0) void loadProjects();
   }, [needsOnboarding, projects.length, loadProjects]);
 
-  // Fall back to the first project so the chat list has something to query
-  // on first load. Guarded on `currentProject` being unset, so an explicit
-  // selection via `/m/projects` (which sets it before this effect re-runs)
-  // always sticks rather than being overwritten back to projects[0].
+  // Pick the project the way the desktop shell does: restore the last one the
+  // user had open, and only then fall back to the first. Phone browsers discard
+  // and reload tabs constantly, so "no project selected yet" is the normal
+  // state on mobile, and landing on projects[0] each time put the update stream
+  // on the wrong project. Guarded on `currentProject` being unset, so an
+  // explicit selection via `/m/projects` always sticks, and attempted once so
+  // a failed restore cannot loop.
+  const restoreLastProject = useProjectStore((s) => s.restoreLastProject);
+  const initialSelectionAttempted = useRef(false);
   useEffect(() => {
     if (currentProject || projects.length === 0) return;
-    void selectProject(projects[0]);
-  }, [currentProject, projects, selectProject]);
+    if (initialSelectionAttempted.current) return;
+    initialSelectionAttempted.current = true;
+    void (async () => {
+      if (await restoreLastProject()) return;
+      if (useProjectStore.getState().currentProject) return;
+      // The fallback is not a choice the user made: do not let it replace the
+      // remembered project.
+      await selectProject(projects[0]!, { skipWorkspaceStateSave: true });
+    })();
+  }, [currentProject, projects, selectProject, restoreLastProject]);
 
   const chatsLoaded = useChatStore((s) => s.hasLoaded);
   useUpdateStreamConnection(currentProject?.id, chatsLoaded);

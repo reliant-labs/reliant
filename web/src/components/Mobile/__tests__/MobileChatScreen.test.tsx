@@ -5,8 +5,8 @@
  * their own test files.
  */
 
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@tanstack/react-router", () => ({
@@ -16,7 +16,7 @@ vi.mock("@tanstack/react-router", () => ({
   useParams: () => ({ chatId: "chat-1" }),
 }));
 
-let chatMock: { title?: string; worktreeId?: string } | undefined = {
+let chatMock: { title?: string; worktreeId?: string; projectId?: string } | undefined = {
   title: "My chat",
   worktreeId: "wt-1",
 };
@@ -25,9 +25,18 @@ vi.mock("../../../store/chatStoreHooks", () => ({
   useChat: () => chatMock,
 }));
 
+const projectState = vi.hoisted(() => ({
+  currentProject: { id: "p1", path: "/repo" } as { id: string; path: string } | null,
+  projects: [] as Array<{ id: string; path: string }>,
+  loadProjects: vi.fn(async () => {}),
+  selectProject: vi.fn(async () => {}),
+}));
+
 vi.mock("../../../store/projectStore", () => ({
-  useProjectStore: (selector: (s: unknown) => unknown) =>
-    selector({ currentProject: { id: "p1", path: "/repo" } }),
+  useProjectStore: Object.assign(
+    (selector: (s: unknown) => unknown) => selector(projectState),
+    { getState: () => projectState },
+  ),
 }));
 
 vi.mock("../../../store/worktreeStore", () => ({
@@ -84,5 +93,48 @@ describe("MobileChatScreen", () => {
     render(<MobileChatScreen />);
     expect(screen.getByRole("button", { name: "Open workspace" })).toBeInTheDocument();
     chatMock = { title: "My chat", worktreeId: "wt-1" };
+  });
+});
+
+describe("MobileChatScreen project alignment", () => {
+  const p1 = { id: "p1", path: "/repo" };
+  const p2 = { id: "p2", path: "/other" };
+
+  beforeEach(() => {
+    projectState.currentProject = p1;
+    projectState.projects = [p1, p2];
+    projectState.loadProjects.mockClear();
+    projectState.selectProject.mockClear();
+    chatMock = { title: "My chat", worktreeId: "wt-1", projectId: "p1" };
+  });
+
+  it("switches to the chat's own project when it differs from the current one", async () => {
+    chatMock = { title: "My chat", worktreeId: "wt-1", projectId: "p2" };
+    render(<MobileChatScreen />);
+    await waitFor(() => expect(projectState.selectProject).toHaveBeenCalledWith(p2));
+    expect(projectState.selectProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads projects first when the chat's project is not known yet", async () => {
+    chatMock = { title: "My chat", worktreeId: "wt-1", projectId: "p2" };
+    projectState.projects = [p1];
+    projectState.loadProjects.mockImplementationOnce(async () => {
+      projectState.projects = [p1, p2];
+    });
+    render(<MobileChatScreen />);
+    await waitFor(() => expect(projectState.selectProject).toHaveBeenCalledWith(p2));
+    expect(projectState.loadProjects).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the project alone when the chat is already in it", () => {
+    render(<MobileChatScreen />);
+    expect(projectState.selectProject).not.toHaveBeenCalled();
+  });
+
+  it("does not select anything for a chat whose project the user cannot see", async () => {
+    chatMock = { title: "My chat", worktreeId: "wt-1", projectId: "gone" };
+    render(<MobileChatScreen />);
+    await waitFor(() => expect(projectState.loadProjects).toHaveBeenCalled());
+    expect(projectState.selectProject).not.toHaveBeenCalled();
   });
 });

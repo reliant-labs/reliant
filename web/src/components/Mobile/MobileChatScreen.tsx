@@ -13,7 +13,7 @@
  * because an expanded diff is unreadable in a phone viewport.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { ChevronLeft, FolderGit2 } from "lucide-react";
 import { ChatContainer } from "../Chat/ChatContainer";
@@ -35,6 +35,27 @@ export function MobileChatScreen() {
   const worktrees = useWorktreeStore((s) => s.worktrees);
   const loadWorktrees = useWorktreeStore((s) => s.loadWorktrees);
   const [showWorkspace, setShowWorkspace] = useState(false);
+
+  // A deep link or notification can open a chat that is not in the project the
+  // shell selected. Everything the chat screen reads — worktrees, the update
+  // stream's project scope, the chat list — follows the current project, so
+  // move it to the chat's own. Once per chat: a user who then picks another
+  // project on purpose is not pulled back.
+  const alignedFor = useRef<string | null>(null);
+  const chatProjectId = chat?.projectId;
+  useEffect(() => {
+    if (!chatId || !chatProjectId || alignedFor.current === chatId) return;
+    alignedFor.current = chatId;
+    if (useProjectStore.getState().currentProject?.id === chatProjectId) return;
+    void (async () => {
+      if (!useProjectStore.getState().projects.some((p) => p.id === chatProjectId)) {
+        await useProjectStore.getState().loadProjects();
+      }
+      const project = useProjectStore.getState().projects.find((p) => p.id === chatProjectId);
+      if (!project) return;
+      await useProjectStore.getState().selectProject(project);
+    })();
+  }, [chatId, chatProjectId]);
 
   // A chat with no worktreeId runs against the project's main checkout — the
   // same default MobileNewChat resolves to when creating a chat. Without

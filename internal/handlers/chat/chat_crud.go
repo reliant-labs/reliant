@@ -702,7 +702,7 @@ func (s *Service) ListMessages(
 		messages, hasMore, err = s.listThreadMessages(ctx, threadsSvc, threadID, beforeSeq, recentLimit)
 		if err != nil {
 			logging.Error("Failed to load thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load messages"))
+			return nil, loadMessagesError(ctx, err)
 		}
 		// The display count, not the LLM one: listThreadMessages reads the
 		// transcript (which crosses compaction boundaries), so a total that
@@ -711,7 +711,7 @@ func (s *Service) ListMessages(
 		totalCount, err = threadsSvc.CountDisplayMessages(ctx, threadID)
 		if err != nil {
 			logging.Error("Failed to count thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load messages"))
+			return nil, loadMessagesError(ctx, err)
 		}
 		if len(messages) > 0 {
 			oldestSeq = messages[0].Seq
@@ -722,7 +722,7 @@ func (s *Service) ListMessages(
 			ctx, threadsSvc, req.Msg.ChatId, mainThreadID, beforeSeq, recentLimit)
 		if err != nil {
 			logging.Error("Failed to load bounded messages", "error", err, "chatID", req.Msg.ChatId)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load messages"))
+			return nil, loadMessagesError(ctx, err)
 		}
 	default:
 		// No page size given: the caller wants the whole chat (e.g. the cold
@@ -731,7 +731,7 @@ func (s *Service) ListMessages(
 		messages, totalCount, err = s.listMessagesUnbounded(ctx, threadsSvc, req.Msg.ChatId, mainThreadID)
 		if err != nil {
 			logging.Error("Failed to resolve messages", "error", err, "chatID", req.Msg.ChatId)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load messages"))
+			return nil, loadMessagesError(ctx, err)
 		}
 
 		var page messagePage
@@ -750,7 +750,7 @@ func (s *Service) ListMessages(
 	allBlocks, err := s.deps.Repo.ListContentBlocksForMessages(ctx, messageIDs)
 	if err != nil {
 		logging.Error("Failed to batch list content blocks", "error", err, "chatID", req.Msg.ChatId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load messages"))
+		return nil, loadMessagesError(ctx, err)
 	}
 	blocksByMessageID := make(map[string][]*db.MessageContentBlock, len(messages))
 	for _, block := range allBlocks {
@@ -1779,4 +1779,19 @@ func paginateBySeq(messages []*db.Message, beforeSeq int64, recentLimit int, mai
 		OldestSeq: oldest,
 		HasMore:   oldest > chatOldestSeq,
 	}
+}
+
+// loadMessagesError maps a failed message read to its rpc error. A read the
+// client abandoned (tab closed, page resumed, navigation) fails with the
+// request's own cancellation; that is the caller's doing, not a server fault,
+// and reporting it as internal made every phone-browser suspend look like an
+// outage.
+func loadMessagesError(ctx context.Context, err error) error {
+	switch {
+	case errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled):
+		return connect.NewError(connect.CodeCanceled, errors.New("request canceled"))
+	case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return connect.NewError(connect.CodeDeadlineExceeded, errors.New("loading messages timed out"))
+	}
+	return connect.NewError(connect.CodeInternal, errors.New("failed to load messages"))
 }

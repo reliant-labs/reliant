@@ -4,6 +4,7 @@ package streaming
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -82,7 +83,7 @@ func (s *Service) StreamUserUpdates(
 	sinceSeq := req.Msg.SinceSeq
 	subscribeChatID := req.Msg.GetSubscribeChatId()
 	chatSinceSeq := req.Msg.ChatSinceSeq
-	projectID := req.Msg.GetProjectId() // empty string if not set
+	filter := newUserUpdateFilter(s.deps.Repo, req.Msg.GetProjectId(), subscribeChatID)
 
 	// --- User-level initialization ---
 	latestSeq, err := s.deps.Repo.GetLatestUserUpdateSequence(ctx, userID)
@@ -116,7 +117,7 @@ func (s *Service) StreamUserUpdates(
 	// subscription has delivered up to; the live loop continues from it.
 	lastUserSeq := sinceSeq
 	if latestSeq > sinceSeq {
-		if err := s.sendUserUpdateBatches(ctx, userID, sinceSeq, latestSeq, projectID, stream); err != nil {
+		if err := s.sendUserUpdateBatches(ctx, userID, sinceSeq, latestSeq, filter, stream); err != nil {
 			logging.Error(LOG_PREFIX_STREAM_USER+" Failed to send updates", "error", err, "userID", userID)
 			return err
 		}
@@ -246,7 +247,7 @@ func (s *Service) StreamUserUpdates(
 			// and never moving lastUserSeq — they are not in user_updates, so a
 			// cursor that counted them would point at nothing.
 			if isEphemeralUserUpdate(event.SequenceNumber) {
-				if !userUpdateMatchesProject(&event.Payload, projectID) {
+				if !filter.matches(ctx, &event.Payload) {
 					continue
 				}
 				if err := s.sendSingleUserUpdate(event.Payload, lastUserSeq, stream); err != nil {
@@ -265,7 +266,7 @@ func (s *Service) StreamUserUpdates(
 			// the hole from the DB here, in order, before the event that
 			// revealed it. The client never infers loss from a skip.
 			if event.SequenceNumber > lastUserSeq+1 {
-				if err := s.sendUserUpdateBatches(ctx, userID, lastUserSeq, event.SequenceNumber-1, projectID, stream); err != nil {
+				if err := s.sendUserUpdateBatches(ctx, userID, lastUserSeq, event.SequenceNumber-1, filter, stream); err != nil {
 					logging.Error(LOG_PREFIX_STREAM_USER+" Failed to backfill dropped updates", "error", err,
 						"userID", userID, "fromSeq", lastUserSeq, "toSeq", event.SequenceNumber-1)
 					return err
@@ -274,7 +275,7 @@ func (s *Service) StreamUserUpdates(
 			lastUserSeq = event.SequenceNumber
 			// A filtered event is not sent; the next batch's latest_sequence
 			// carries the cursor past it.
-			if !userUpdateMatchesProject(&event.Payload, projectID) {
+			if !filter.matches(ctx, &event.Payload) {
 				continue
 			}
 			if err := s.sendSingleUserUpdate(event.Payload, lastUserSeq, stream); err != nil {
@@ -1202,7 +1203,7 @@ func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.
 // the last one, with no updates — its only content is the cursor, and without
 // it a client whose project saw nothing new would resume from a stale cursor
 // and re-read the same rows on every reconnect.
-func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, startSeq, latestSeq int64, projectID string, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, startSeq, latestSeq int64, filter *userUpdateFilter, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
 	currentSeq := startSeq
 
 	for currentSeq < latestSeq {
@@ -1227,7 +1228,7 @@ func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, star
 			if update.UpdateType == db.UserUpdateRefetch {
 				continue
 			}
-			if !userUpdateMatchesProject(&update, projectID) {
+			if !filter.matches(ctx, &update) {
 				continue
 			}
 			protoUpdates = append(protoUpdates, s.userUpdateToProto(update))
@@ -1255,6 +1256,85 @@ func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, star
 	}
 
 	return nil
+}
+
+// userUpdateFilter decides which user updates one stream delivers.
+//
+// A stream is scoped to the client's current project, but a chat the stream
+// explicitly subscribes to (subscribe_chat_id) is the client's focus no matter
+// which project it belongs to. A deep link or notification can open a chat
+// outside the project the client last selected; without the exemption that
+// chat's status, activity and run state were all dropped, and so were the
+// chats an agent started from it (agent.start_run), because both are
+// project-filtered user updates.
+type userUpdateFilter struct {
+	projectID       string
+	subscribeChatID string
+	// parentOf returns the chat that started chatID through agent.start_run,
+	// or "" when chatID was not started that way. A non-nil error means the
+	// answer is unknown, not "none".
+	parentOf func(ctx context.Context, chatID string) (string, error)
+	// childOfSubscribed memoizes parentOf(chat) == subscribeChatID per chat.
+	childOfSubscribed map[string]bool
+}
+
+func newUserUpdateFilter(repo db.Repository, projectID, subscribeChatID string) *userUpdateFilter {
+	f := &userUpdateFilter{projectID: projectID, subscribeChatID: subscribeChatID}
+	if subscribeChatID != "" && repo != nil {
+		f.childOfSubscribed = map[string]bool{}
+		f.parentOf = func(ctx context.Context, chatID string) (string, error) {
+			ev, err := repo.GetTriggerEventByChat(ctx, core.TriggerEventKindAgentStartRun, chatID)
+			if errors.Is(err, core.ErrTriggerEventNotFound) {
+				return "", nil
+			}
+			if err != nil {
+				return "", err
+			}
+			parent, _ := ev.Payload["parent_chat_id"].(string)
+			return parent, nil
+		}
+	}
+	return f
+}
+
+// matches reports whether the stream should receive the update. A stream is
+// used by one goroutine, so the memo needs no lock.
+func (f *userUpdateFilter) matches(ctx context.Context, update *db.UserUpdate) bool {
+	if userUpdateMatchesProject(update, f.projectID) {
+		return true
+	}
+	chatID := userUpdateChatID(update)
+	if chatID == "" || f.subscribeChatID == "" {
+		return false
+	}
+	if chatID == f.subscribeChatID {
+		return true
+	}
+	if f.parentOf == nil {
+		return false
+	}
+	child, ok := f.childOfSubscribed[chatID]
+	if !ok {
+		parent, err := f.parentOf(ctx, chatID)
+		if err != nil {
+			// Unknown: drop this update, ask again for the next one.
+			return false
+		}
+		child = parent == f.subscribeChatID
+		f.childOfSubscribed[chatID] = child
+	}
+	return child
+}
+
+// userUpdateChatID is the chat a chat-scoped update is about, or "".
+func userUpdateChatID(update *db.UserUpdate) string {
+	if update.ChatID != nil {
+		return *update.ChatID
+	}
+	if update.EntityType == db.EntityTypeChat {
+		return update.EntityID
+	}
+	return ""
 }
 
 // userUpdateMatchesProject reports whether a project-scoped subscriber should

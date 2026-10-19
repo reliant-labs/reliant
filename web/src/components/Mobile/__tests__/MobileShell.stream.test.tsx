@@ -9,7 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 
 type MockService = {
@@ -68,6 +68,7 @@ import { MobileShell } from "../MobileShell";
 import { useChatStore } from "../../../store/chatStore";
 import { useGlobalUpdatesStore } from "../../../store/globalUpdatesStore";
 import { useProjectStore } from "../../../store/projectStore";
+import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
 import type { Project } from "../../../types";
 
 const CHAT_ID = "aaaaaaaa-1111-2222-3333-444444444444";
@@ -158,5 +159,40 @@ describe("MobileShell update stream", () => {
 
     expect(services[0]!.stop).toHaveBeenCalled();
     expect(useGlobalUpdatesStore.getState().wsService).toBeNull();
+  });
+});
+
+describe("MobileShell initial project", () => {
+  const other = { id: "proj-2", name: "backoffice", path: "/q" } as unknown as Project;
+
+  beforeEach(() => {
+    useProjectStore.setState({ projects: [project, other], currentProject: null });
+    useWorkspaceStateStore.setState({ lastProjectId: null });
+  });
+
+  it("restores the last project the user had open instead of the first one", async () => {
+    useWorkspaceStateStore.setState({ lastProjectId: "proj-2" });
+    const selectProject = vi.fn(async (p: Project) => useProjectStore.setState({ currentProject: p }));
+    useProjectStore.setState({ selectProject });
+
+    await act(async () => {
+      render(<MobileShell />);
+    });
+
+    await waitFor(() => expect(useProjectStore.getState().currentProject?.id).toBe("proj-2"));
+    expect(selectProject).toHaveBeenCalledTimes(1);
+    expect(selectProject).toHaveBeenCalledWith(other, { skipWorkspaceStateSave: true });
+  });
+
+  it("falls back to the first project without remembering it as the user's choice", async () => {
+    const selectProject = vi.fn(async (p: Project) => useProjectStore.setState({ currentProject: p }));
+    useProjectStore.setState({ selectProject });
+
+    await act(async () => {
+      render(<MobileShell />);
+    });
+
+    await waitFor(() => expect(useProjectStore.getState().currentProject?.id).toBe("proj-1"));
+    expect(selectProject).toHaveBeenCalledWith(project, { skipWorkspaceStateSave: true });
   });
 });
