@@ -1,0 +1,477 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/dashboard/v1;dashboardv1";
+
+// === DashboardService ===
+//
+// Native dashboards (console v3, decision DB). A HYBRID of two kinds:
+//
+//   - RELEASE dashboards (source GENERATED or REPO) are the ones a promoted
+//     release's bundle carries: forge generates some, the project declares
+//     others under deploy/observability/dashboards. They are code, so they are
+//     READ-ONLY here; SaveAsCopy forks one into the workspace.
+//   - WORKSPACE dashboards are authored in the console: saved in place,
+//     versioned (author, message, history, restore), starred and viewed per
+//     user. PromoteDashboardToCode turns one into the file a repo would hold.
+//   - TEMPLATES (source TEMPLATE) are a built-in gallery to start from:
+//     SaveAsCopy instantiates one.
+//
+// THE SPEC IS FORGE'S, NOT THIS API'S. `spec` is one forge.dashboards/v1
+// dashboard object (id, title, description, filters, annotations, panels), the
+// exact document a release bundle or a repo file holds, carried as a JSON
+// object. The server validates it with forge's rules on every write and stores
+// it in forge's canonical form, so a stored version can always be promoted to
+// code unchanged. The panels it holds are run with
+// ObservabilityService.QueryPanel.
+//
+// ORG-SCOPED, AND THE ORG IS A REQUEST FIELD THAT IS NEVER TRUSTED (the rules
+// of AlertingService). Every RPC carries org_id; the handler verifies the
+// caller's membership before anything else. Authoring (SaveDashboard,
+// SaveAsCopy, RestoreDashboardVersion, ArchiveDashboard,
+// PromoteDashboardToCode) needs the admin role; reads and the per-user
+// conveniences (Star, Unstar, RecordDashboardView) need membership. Machine
+// credentials are refused.
+//
+// ERRORS: InvalidArgument (a malformed spec names every problem with its path),
+// PermissionDenied (not a member / not an admin), NotFound (also for another
+// org's dashboard), AlreadyExists (slug taken), Aborted with reason
+// "version_conflict" (base_version is stale: re-read and retry),
+// FailedPrecondition (a release dashboard or template cannot be written),
+// Unavailable (not configured on this server).
+service DashboardService {
+  option (forge.v1.service) = {
+    name: "DashboardService"
+    version: "1.0.0"
+    description: "Native dashboards: release dashboards (read-only), versioned workspace dashboards, stars, templates"
+  };
+
+  // ListDashboards is the merged index: release dashboards (with the release
+  // that shipped them), then workspace dashboards (author, version, edited),
+  // each marked `starred` and carrying `last_viewed_at` for the caller. Filter
+  // by source, owner, environment and free text; every filter is optional.
+  rpc ListDashboards(ListDashboardsRequest) returns (ListDashboardsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetDashboard returns one dashboard's spec: a release dashboard (optionally
+  // as shipped in an earlier release), a workspace dashboard (optionally an
+  // older version), or a template.
+  rpc GetDashboard(GetDashboardRequest) returns (GetDashboardResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // SaveDashboard creates (base_version 0) or updates (base_version = the
+  // version the caller edited) a workspace dashboard and returns the new
+  // version. Optimistic: a stale base_version is Aborted (version_conflict)
+  // and writes nothing.
+  rpc SaveDashboard(SaveDashboardRequest) returns (SaveDashboardResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // SaveAsCopy forks a release dashboard, a template or another workspace
+  // dashboard into a NEW workspace dashboard (version 1, forked_from set).
+  rpc SaveAsCopy(SaveAsCopyRequest) returns (SaveAsCopyResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // ListDashboardVersions is a dashboard's history, newest first. For a
+  // workspace dashboard these are its saved versions; for a release dashboard,
+  // the releases in which its content changed.
+  rpc ListDashboardVersions(ListDashboardVersionsRequest) returns (ListDashboardVersionsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // RestoreDashboardVersion saves an old version's spec as the NEW current
+  // version (history is append-only; nothing is rewritten).
+  rpc RestoreDashboardVersion(RestoreDashboardVersionRequest) returns (RestoreDashboardVersionResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // ArchiveDashboard hides a workspace dashboard and frees its slug. Its
+  // versions are kept.
+  rpc ArchiveDashboard(ArchiveDashboardRequest) returns (ArchiveDashboardResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // StarDashboard / UnstarDashboard mark a dashboard for the CALLER only. Both
+  // are idempotent.
+  rpc StarDashboard(StarDashboardRequest) returns (StarDashboardResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  rpc UnstarDashboard(UnstarDashboardRequest) returns (UnstarDashboardResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // RecordDashboardView notes that the caller opened a dashboard, for
+  // "recently viewed". The server keeps the caller's most recent 50.
+  rpc RecordDashboardView(RecordDashboardViewRequest) returns (RecordDashboardViewResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListDashboardTemplates is the gallery: templates derived from what forge
+  // generates (service RED, workloads, releases, frontend) and, for the
+  // platform's own org, the platform's selfmon dashboards. SaveAsCopy
+  // instantiates one.
+  rpc ListDashboardTemplates(ListDashboardTemplatesRequest) returns (ListDashboardTemplatesResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // PromoteDashboardToCode returns the file a repo would hold for a workspace
+  // dashboard (bytes, exactly as forge writes it) and where it goes. The
+  // GitHub pull-request path is not wired yet: pr_url stays empty, and the
+  // console offers the download.
+  rpc PromoteDashboardToCode(PromoteDashboardToCodeRequest) returns (PromoteDashboardToCodeResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+}
+
+// DashboardSource says where a dashboard lives and who owns it. The first two
+// are release dashboards: either one addresses the same thing in a
+// DashboardRef (the server resolves which it is).
+enum DashboardSource {
+  DASHBOARD_SOURCE_UNSPECIFIED = 0;
+  // Generated by forge from the project's services. Read-only.
+  DASHBOARD_SOURCE_GENERATED = 1;
+  // Declared by the project in deploy/observability/dashboards. Read-only.
+  DASHBOARD_SOURCE_REPO = 2;
+  // Authored in the console. Editable.
+  DASHBOARD_SOURCE_WORKSPACE = 3;
+  // A built-in starting point. Read-only; SaveAsCopy instantiates it.
+  DASHBOARD_SOURCE_TEMPLATE = 4;
+}
+
+// DashboardRef addresses one dashboard.
+message DashboardRef {
+  // GENERATED and REPO both mean a release dashboard.
+  DashboardSource source = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // The forge project ("" = project-less). Ignored for a template.
+  string project_id = 2 [(buf.validate.field).string.max_len = 128];
+  // A release dashboard's id (the spec's own id, e.g. "service-admin-server"),
+  // a workspace dashboard's slug, a template's id.
+  string key = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+}
+
+message DashboardUser {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+}
+
+message DashboardReleaseInfo {
+  // The release whose bundle carried it (the newest promotion that did).
+  string release_version = 1;
+  google.protobuf.Timestamp shipped_at = 2;
+  // REPO only: where the file lives in the repo.
+  string file_path = 3;
+  // The environments whose CURRENT release carries it.
+  repeated string env_ids = 4;
+}
+
+message DashboardWorkspaceInfo {
+  int32 version = 1;
+  DashboardUser created_by = 2;
+  DashboardUser updated_by = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+  // "release:<id>", "template:<id>" or "workspace:<slug>"; empty when started
+  // blank.
+  string forked_from = 6;
+  // Set once the promote-to-code pull request exists (not wired yet).
+  string promoted_pr_url = 7;
+  // The environments it is about. Empty = every environment.
+  repeated string env_ids = 8;
+}
+
+// DashboardSummary is one row of the index. It never carries a full spec.
+message DashboardSummary {
+  DashboardRef ref = 1;
+  string title = 2;
+  string description = 3;
+  DashboardSource source = 4;
+  // True for everything but a workspace dashboard.
+  bool read_only = 5;
+  // Per caller.
+  bool starred = 6;
+  // Per caller; unset when never viewed.
+  google.protobuf.Timestamp last_viewed_at = 7;
+  int32 panel_count = 8;
+  // Up to 3 headline panels (forge panel objects) a card can draw as
+  // sparklines through QueryPanel: number and line panels first.
+  repeated google.protobuf.Struct preview_panels = 9;
+  // Set for a release dashboard.
+  DashboardReleaseInfo release = 10;
+  // Set for a workspace dashboard.
+  DashboardWorkspaceInfo workspace = 11;
+  // Templates: "generated" (derived from what forge generates) or "platform".
+  string category = 12;
+}
+
+message DashboardVersionInfo {
+  // A workspace dashboard's version number; 0 for a release entry.
+  int32 version = 1;
+  // A release entry: the release in which the content last changed.
+  string release_version = 2;
+  DashboardUser author = 3;
+  string message = 4;
+  google.protobuf.Timestamp created_at = 5;
+  bool current = 6;
+}
+
+message ListDashboardsRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  // Narrow to one forge project ("" = the project-less one).
+  optional string project_id = 2 [(buf.validate.field).string.max_len = 128];
+  // Narrow to dashboards of one environment: a workspace dashboard scoped to
+  // it or to all, and the release dashboards its current release carries.
+  optional string env_id = 3 [(buf.validate.field).string.max_len = 128];
+  optional DashboardSource source = 4 [(buf.validate.field).enum.defined_only = true];
+  // Workspace dashboards created by this user. Release dashboards are code and
+  // have no owner, so setting this leaves them out.
+  optional string owner_user_id = 5 [(buf.validate.field).string.max_len = 128];
+  // Case-insensitive match on title, description and key.
+  optional string search = 6 [(buf.validate.field).string.max_len = 200];
+}
+
+message ListDashboardsResponse {
+  repeated DashboardSummary dashboards = 1;
+  // Whether the caller may author (admin): the console disables New/Save when
+  // false.
+  bool can_write = 2;
+}
+
+message GetDashboardRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  DashboardRef ref = 2 [(buf.validate.field).required = true];
+  // Workspace: an older version (default current).
+  optional int32 version = 3 [(buf.validate.field).int32.gte = 1];
+  // Release: the dashboard as shipped in this release (default: the newest
+  // release that carries it).
+  optional string release_version = 4 [(buf.validate.field).string.max_len = 200];
+}
+
+message GetDashboardResponse {
+  DashboardSummary summary = 1;
+  // One forge.dashboards/v1 dashboard object, canonical.
+  google.protobuf.Struct spec = 2;
+  // The version of the spec returned: a workspace dashboard's; 0 otherwise.
+  int32 version = 3;
+  bool can_write = 4;
+}
+
+// EnvScope is the environments a dashboard is about. A message rather than a
+// repeated field so "every environment" (present, empty) and "unchanged"
+// (absent) are different things on an update.
+message EnvScope {
+  // Empty = every environment.
+  repeated string env_ids = 1 [(buf.validate.field).repeated.max_items = 50];
+}
+
+message SaveDashboardRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  // The forge project the dashboard belongs to ("" = project-less). Fixed at
+  // creation.
+  string project_id = 2 [(buf.validate.field).string.max_len = 128];
+  // The URL and, once promoted, the file name. Lowercase letters, digits and
+  // '-'. Fixed at creation.
+  string slug = 3 [(buf.validate.field).string.pattern = "^[a-z0-9][a-z0-9-]{0,62}$"];
+  // The dashboard. Its id is set to the slug; its title is the dashboard's.
+  google.protobuf.Struct spec = 4 [(buf.validate.field).required = true];
+  // Environments it is about. Absent = unchanged on an update, every
+  // environment on a create; present with no ids = every environment.
+  EnvScope env_scope = 5;
+  // 0 creates (AlreadyExists if the slug is live); N>=1 updates and must equal
+  // the current version.
+  int32 base_version = 6 [(buf.validate.field).int32.gte = 0];
+  // Like a commit message. Max 500 characters.
+  string message = 7 [(buf.validate.field).string.max_len = 500];
+}
+
+message SaveDashboardResponse {
+  DashboardSummary summary = 1;
+  // The version just written.
+  DashboardVersionInfo version = 2;
+}
+
+message SaveAsCopyRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  // What to fork: a release dashboard, a template or a workspace dashboard.
+  DashboardRef from = 2 [(buf.validate.field).required = true];
+  // The project the copy belongs to ("" = project-less). Unset = the source's
+  // project (a template has none).
+  optional string project_id = 3 [(buf.validate.field).string.max_len = 128];
+  // Empty = derived from the source's key, made unique with a numeric suffix.
+  string slug = 4 [(buf.validate.field).string.pattern = "^$|^[a-z0-9][a-z0-9-]{0,62}$"];
+  // Empty = the source's title.
+  string title = 5 [(buf.validate.field).string.max_len = 200];
+  // Absent or empty = every environment.
+  EnvScope env_scope = 6;
+  string message = 7 [(buf.validate.field).string.max_len = 500];
+}
+
+message SaveAsCopyResponse {
+  DashboardSummary summary = 1;
+  DashboardVersionInfo version = 2;
+}
+
+message ListDashboardVersionsRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  DashboardRef ref = 2 [(buf.validate.field).required = true];
+  // Default 50, max 200.
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 4;
+}
+
+message ListDashboardVersionsResponse {
+  repeated DashboardVersionInfo versions = 1;
+  string next_page_token = 2;
+}
+
+message RestoreDashboardVersionRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  DashboardRef ref = 2 [(buf.validate.field).required = true];
+  // The version whose spec becomes the new current one.
+  int32 version = 3 [(buf.validate.field).int32.gte = 1];
+  // The current version the caller saw; stale is Aborted (version_conflict).
+  int32 base_version = 4 [(buf.validate.field).int32.gte = 1];
+}
+
+message RestoreDashboardVersionResponse {
+  DashboardSummary summary = 1;
+  DashboardVersionInfo version = 2;
+}
+
+message ArchiveDashboardRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  DashboardRef ref = 2 [(buf.validate.field).required = true];
+}
+
+message ArchiveDashboardResponse {}
+
+message StarDashboardRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  DashboardRef ref = 2 [(buf.validate.field).required = true];
+}
+
+message StarDashboardResponse {}
+
+message UnstarDashboardRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  DashboardRef ref = 2 [(buf.validate.field).required = true];
+}
+
+message UnstarDashboardResponse {}
+
+message RecordDashboardViewRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  DashboardRef ref = 2 [(buf.validate.field).required = true];
+}
+
+message RecordDashboardViewResponse {}
+
+message ListDashboardTemplatesRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message ListDashboardTemplatesResponse {
+  // Summaries with source TEMPLATE; GetDashboard returns a template's spec.
+  repeated DashboardSummary templates = 1;
+}
+
+message PromoteDashboardToCodeRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  DashboardRef ref = 2 [(buf.validate.field).required = true];
+  // Default current.
+  optional int32 version = 3 [(buf.validate.field).int32.gte = 1];
+}
+
+message DashboardFile {
+  // Where it goes in the repo: deploy/observability/dashboards/<slug>.json.
+  string path = 1;
+  // The bytes, exactly as forge writes a dashboard file.
+  bytes content = 2;
+}
+
+message PromoteDashboardToCodeResponse {
+  DashboardFile file = 1;
+  // The pull request that adds the file. Empty until the GitHub path is
+  // wired; use `file`.
+  string pr_url = 2;
+  // Things worth saying before the file is committed: e.g. that its name
+  // replaces a generated dashboard of a release (a repo file named
+  // <project>-<id>.json overrides <project>-<id>_gen.json).
+  repeated string warnings = 3;
+}
