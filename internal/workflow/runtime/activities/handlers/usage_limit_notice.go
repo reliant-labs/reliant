@@ -93,12 +93,6 @@ func accountMoveNotice(res accountrouter.Result, window string, resetAt time.Tim
 		if !resetAt.IsZero() {
 			why += " (resets " + noticeClock(resetAt) + ")"
 		}
-	case accountrouter.ReasonPaused:
-		why = "was paused"
-	case accountrouter.ReasonNeedsReauth:
-		why = "needs sign-in"
-	case accountrouter.ReasonRemoved:
-		why = "was removed"
 	case accountrouter.ReasonUnserved:
 		why = "cannot serve this model"
 	default:

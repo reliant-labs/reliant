@@ -28,6 +28,7 @@ type Store interface {
 	GetChatWithUserCheck(ctx context.Context, id, userID string) (*db.Chat, error)
 	GetRootThread(ctx context.Context, chatID string) (*db.Thread, error)
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
+	LatestServingAccount(ctx context.Context, threadID string) (string, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 }
 

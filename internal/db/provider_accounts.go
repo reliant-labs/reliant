@@ -166,6 +166,13 @@ func (r *Repo) ClaimUsageFetch(ctx context.Context, accountID string, now time.T
 	return r.accounts.ClaimUsageFetch(ctx, accountID, now, floor)
 }
 
+// LatestServingAccount returns the account that served the thread's newest assistant message
+// that names one, or "" when none does. Not part of core.ProviderAccountStore: only the
+// account-management handler reads it.
+func (r *Repo) LatestServingAccount(ctx context.Context, threadID string) (string, error) {
+	return r.accounts.LatestServingAccount(ctx, threadID)
+}
+
 // ListThreadAssignments returns the thread's sticky account per provider, most recent first. Not
 // part of core.ProviderAccountStore: only the account-management handler reads it.
 func (r *Repo) ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error) {

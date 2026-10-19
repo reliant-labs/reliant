@@ -1025,6 +1025,20 @@ func (s *AccountStore) GetThreadAssignment(ctx context.Context, threadID, provid
 	return &a, nil
 }
 
+// LatestServingAccount returns the account that served the thread's newest assistant message
+// that names one, or "" when none does. Unlike a sticky assignment it follows the provider the
+// thread last ran on, so it is right after a cross-provider fallback returns.
+func (s *AccountStore) LatestServingAccount(ctx context.Context, threadID string) (string, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx, `SELECT provider_account_id FROM messages
+		WHERE thread_id = $1 AND provider_account_id IS NOT NULL
+		ORDER BY seq DESC LIMIT 1`, threadID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
 // ListThreadAssignments returns the thread's sticky account for every provider it has used,
 // most recently assigned first.
 func (s *AccountStore) ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error) {

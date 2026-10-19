@@ -528,7 +528,6 @@ func newStoreWith(from *fakeStore) *fakeStore {
 func TestPreferredInstanceIsIgnoredWhenNotUsable(t *testing.T) {
 	cases := map[string]func(s *fakeStore, accounts []models.AccountConfig){
 		"limited": func(s *fakeStore, _ []models.AccountConfig) { s.put(benched("b", t0.Add(time.Hour), "5h")) },
-		"paused":  func(_ *fakeStore, a []models.AccountConfig) { a[1].Status = models.AccountPaused },
 		"unknown": func(_ *fakeStore, a []models.AccountConfig) { a[1].AccountID = "zzz" },
 	}
 	for name, mutate := range cases {
@@ -594,36 +593,13 @@ func TestLimitedUntilOnTheConfigAlsoLimits(t *testing.T) {
 	assert.Equal(t, "b", res.Account.AccountID)
 }
 
-func TestPausedAndNeedsSignInAreNeverPicked(t *testing.T) {
-	paused, needs := acct("a", 0), acct("b", 1)
-	paused.Status = models.AccountPaused
-	needs.Status = models.AccountNeedsSignIn
-	ok := acct("c", 2)
-	s := newStore()
-	s.put(usage("c", window("5h", 0.99, time.Hour, 5*time.Hour)))
-	for _, mode := range []RoutingMode{RoutingBalance, RoutingPriority} {
-		rq := req("th-"+string(mode), paused, needs, ok)
-		rq.Mode = mode
-		res, err := newRouter(t, s, first).Assign(context.Background(), rq)
-		require.NoError(t, err)
-		assert.Equal(t, "c", res.Account.AccountID, "mode %s", mode)
-	}
-}
-
 func TestNoUsableAccountIsProviderUnavailableNotAllLimited(t *testing.T) {
-	paused := acct("a", 0)
-	paused.Status = models.AccountPaused
-
-	for name, accounts := range map[string][]models.AccountConfig{"none": nil, "paused": {paused}} {
-		t.Run(name, func(t *testing.T) {
-			_, err := newRouter(t, newStore(), first).Assign(context.Background(), req("th", accounts...))
-			var unavailable *models.ProviderUnavailableError
-			require.ErrorAs(t, err, &unavailable)
-			assert.Equal(t, []string{"claude"}, unavailable.Providers)
-			var all *ErrAllLimited
-			assert.False(t, errors.As(err, &all))
-		})
-	}
+	_, err := newRouter(t, newStore(), first).Assign(context.Background(), req("th"))
+	var unavailable *models.ProviderUnavailableError
+	require.ErrorAs(t, err, &unavailable)
+	assert.Equal(t, []string{"claude"}, unavailable.Providers)
+	var all *ErrAllLimited
+	assert.False(t, errors.As(err, &all))
 }
 
 func TestAccountsThatDoNotServeTheModelAreSkipped(t *testing.T) {
@@ -651,10 +627,6 @@ func TestStickyThreadLeavesForTheReasonItsAccountBecameUnusable(t *testing.T) {
 	limited := acct("a", 0)
 	limited.Status = models.AccountLimited
 	limited.LimitedUntil = t0.Add(time.Hour)
-	paused := acct("a", 0)
-	paused.Status = models.AccountPaused
-	needs := acct("a", 0)
-	needs.Status = models.AccountNeedsSignIn
 	healthy := acct("b", 1)
 
 	cases := []struct {
@@ -664,8 +636,6 @@ func TestStickyThreadLeavesForTheReasonItsAccountBecameUnusable(t *testing.T) {
 		previous string
 	}{
 		{"limited", []models.AccountConfig{limited, healthy}, ReasonLimited, "label-a"},
-		{"paused", []models.AccountConfig{paused, healthy}, ReasonPaused, "label-a"},
-		{"needs_reauth", []models.AccountConfig{needs, healthy}, ReasonNeedsReauth, "label-a"},
 		{"removed", []models.AccountConfig{healthy}, ReasonRemoved, ""},
 	}
 	for _, c := range cases {
@@ -817,14 +787,6 @@ func TestAlternatives(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, ok)
 		assert.True(t, reset.IsZero(), "no reset is known")
-	})
-
-	t.Run("paused accounts are not alternatives", func(t *testing.T) {
-		paused := acct("b", 1)
-		paused.Status = models.AccountPaused
-		ok, _, err := r.Alternatives(ctx, req("th", acct("a", 0), paused), "a")
-		require.NoError(t, err)
-		assert.False(t, ok)
 	})
 
 	t.Run("accounts that cannot serve the model are not alternatives", func(t *testing.T) {

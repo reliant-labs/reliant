@@ -372,6 +372,23 @@ func TestOnDemandRefreshOfAnotherUsersAccountIsNotFound(t *testing.T) {
 	assert.Zero(t, fx.doer.count())
 }
 
+func TestRefreshOfAnotherUsersAccountLeavesTheOwnersScheduleAlone(t *testing.T) {
+	fx := newFixture(t, "claude")
+	next := fx.clock.Now().Add(10 * time.Minute)
+	require.NoError(t, fx.store.ScheduleUsagePoll(context.Background(), "a1", next, 2, "earlier failure"))
+	before := len(fx.store.schedules)
+
+	_, err := fx.f.RefreshUsage(context.Background(), "someone-else", "a1")
+	require.ErrorIs(t, err, core.ErrProviderAccountNotFound)
+
+	assert.Len(t, fx.store.schedules, before, "a foreign refresh must not write the schedule")
+	l := fx.store.limit("a1")
+	require.NotNil(t, l.UsageAPINextAt, "the owner's poll must stay scheduled")
+	assert.True(t, l.UsageAPINextAt.Equal(next))
+	assert.Equal(t, 2, l.UsageAPIFailures)
+	assert.Zero(t, fx.doer.count())
+}
+
 func TestTokenComesFromTheTokenSourceForTheRightAccount(t *testing.T) {
 	fx := newFixture(t, "claude")
 	fx.tokens.token = "freshly-refreshed"

@@ -9,8 +9,8 @@
 //
 // A thread keeps the account it was first given (prompt cache and reasoning
 // envelopes are per account) and moves only when that account stops being
-// usable: limited, paused, needing sign-in, removed, or unable to serve the
-// model. A thread that has no account yet is placed by the provider's routing
+// usable: limited, removed (which includes paused and needing sign-in, since
+// those accounts are not offered to the router), or unable to serve the model. A thread that has no account yet is placed by the provider's routing
 // mode: Balance (the default) takes the least-used account, choosing at random
 // within a near-equal band and discounting accounts that just received many
 // threads; In order takes the account with the lowest priority number.
@@ -114,13 +114,11 @@ type Request struct {
 
 // Why a thread got the account it did (Result.Reason).
 const (
-	ReasonInitial     = "initial"      // the thread had no account yet
-	ReasonLimited     = "limited"      // its account is limited
-	ReasonPaused      = "paused"       // its account was paused
-	ReasonRemoved     = "removed"      // its account is gone, or unusable for a reason the caller did not report
-	ReasonNeedsReauth = "needs_reauth" // its account needs signing in again
-	ReasonUnserved    = "unserved"     // its account's catalog does not include the model
-	ReasonPinned      = "pinned"       // the caller's preferred account
+	ReasonInitial  = "initial"  // the thread had no account yet
+	ReasonLimited  = "limited"  // its account is limited
+	ReasonRemoved  = "removed"  // its account is gone, or unusable for a reason the caller did not report
+	ReasonUnserved = "unserved" // its account's catalog does not include the model
+	ReasonPinned   = "pinned"   // the caller's preferred account
 )
 
 // Result is the account chosen for a thread.

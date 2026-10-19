@@ -68,8 +68,6 @@ type accountState int
 const (
 	stateOK accountState = iota
 	stateLimited
-	statePaused
-	stateNeedsSignIn
 	stateUnserved
 )
 
@@ -92,10 +90,6 @@ func classify(req Request, limits map[string]LimitState, now time.Time, exclude 
 			v.limits = &ls
 		}
 		switch {
-		case cfg.Status == models.AccountPaused:
-			v.state = statePaused
-		case cfg.Status == models.AccountNeedsSignIn:
-			v.state = stateNeedsSignIn
 		case cfg.Serves != nil && !cfg.Serves(req.ModelID):
 			v.state = stateUnserved
 		default:
@@ -332,10 +326,6 @@ func leaveReason(prev *accountView) string {
 	switch prev.state {
 	case stateLimited:
 		return ReasonLimited
-	case statePaused:
-		return ReasonPaused
-	case stateNeedsSignIn:
-		return ReasonNeedsReauth
 	case stateUnserved:
 		return ReasonUnserved
 	}

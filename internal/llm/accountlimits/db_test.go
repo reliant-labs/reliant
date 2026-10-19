@@ -330,6 +330,32 @@ func TestDBRefreshUsageEndToEnd(t *testing.T) {
 	assert.ErrorIs(t, err, core.ErrProviderAccountNotFound)
 }
 
+// Another user's refresh of an account id must leave the owner's poll schedule exactly as it was.
+func TestDBRefreshByAnotherUserLeavesTheOwnersScheduleAlone(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	a := upsert(t, repo, "owner", "claude", "alice")
+	next := time.Now().UTC().Add(25 * time.Minute).Truncate(time.Millisecond)
+	require.NoError(t, repo.ScheduleUsagePoll(ctx, a.ID, next, 3, "429"))
+
+	doer := doerFunc(func(*http.Request) (*http.Response, error) {
+		t.Error("the usage API must not be called for another user's account")
+		return nil, fmt.Errorf("unexpected call")
+	})
+	f := &accountlimits.Fetcher{Store: repo, Doer: doer, Tokens: accountlimits.StoredTokens{Store: repo}}
+
+	_, err := f.RefreshUsage(ctx, "intruder", a.ID)
+	assert.ErrorIs(t, err, core.ErrProviderAccountNotFound)
+
+	l, err := repo.ListAccountLimits(ctx, "owner")
+	require.NoError(t, err)
+	require.NotNil(t, l[a.ID].UsageAPINextAt, "the owner's poll stays scheduled")
+	assert.True(t, l[a.ID].UsageAPINextAt.Equal(next))
+	assert.Equal(t, 3, l[a.ID].UsageAPIFailures)
+	assert.Equal(t, "429", l[a.ID].UsageAPIError)
+}
+
 // The poller runs on the per-account refresh coordinator: for an account whose access token has
 // expired it gets a refreshed token (and the rotation is persisted), where StoredTokens would
 // have given up and left the account without polled numbers.

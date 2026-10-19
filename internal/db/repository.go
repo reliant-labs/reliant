@@ -354,6 +354,9 @@ type Repository interface {
 	core.ProviderAccountStore
 	// ListThreadAssignments returns a thread's sticky account per provider, newest first.
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
+	// LatestServingAccount is the account that served a thread's newest assistant message that
+	// names one ("" when none does).
+	LatestServingAccount(ctx context.Context, threadID string) (string, error)
 	// GetAccountLimits, ClaimUsageFetch and EnsureUsagePollScheduled are the usage poller's and
 	// on-demand refresh's reads and claims (internal/llm/accountlimits).
 	GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error)

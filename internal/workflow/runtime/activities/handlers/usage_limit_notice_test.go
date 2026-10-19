@@ -29,16 +29,14 @@ func TestAccountMoveNotice(t *testing.T) {
 		accountMoveNotice(accountrouter.Result{Account: b, Previous: &a, Reason: accountrouter.ReasonLimited}, "seven_day", time.Time{}))
 
 	for reason, want := range map[string]string{
-		accountrouter.ReasonPaused:      "Claude account **alice@acme.com** was paused. Continuing on **bob@acme.com**.",
-		accountrouter.ReasonNeedsReauth: "Claude account **alice@acme.com** needs sign-in. Continuing on **bob@acme.com**.",
-		accountrouter.ReasonRemoved:     "Claude account **alice@acme.com** was removed. Continuing on **bob@acme.com**.",
+		accountrouter.ReasonRemoved: "Claude account **alice@acme.com** is no longer available. Continuing on **bob@acme.com**.",
 	} {
 		assert.Equal(t, want, accountMoveNotice(accountrouter.Result{Account: b, Previous: &a, Reason: reason}, "", time.Time{}), reason)
 	}
 
 	// A removed account is no longer in the list: the notice still reads.
 	gone := models.AccountConfig{DriverConfig: models.DriverConfig{DriverID: "claude", AccountID: "x"}}
-	assert.Equal(t, "Claude account **an account** was removed. Continuing on **bob@acme.com**.",
+	assert.Equal(t, "Claude account **an account** is no longer available. Continuing on **bob@acme.com**.",
 		accountMoveNotice(accountrouter.Result{Account: b, Previous: &gone, Reason: accountrouter.ReasonRemoved}, "", time.Time{}))
 }
 

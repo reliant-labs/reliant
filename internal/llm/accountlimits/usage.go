@@ -173,7 +173,10 @@ func (f *Fetcher) poll(ctx context.Context, userID, accountID string, leased boo
 	}
 	acct, err := f.Store.GetProviderAccountWithSecrets(ctx, userID, accountID)
 	if err != nil {
-		if errors.Is(err, core.ErrProviderAccountNotFound) {
+		// Only a lease proves the account is gone: its user came from the limits row. A user's
+		// refresh of an id that is not theirs says nothing about the account, so it must not
+		// touch the owner's poll schedule.
+		if leased && errors.Is(err, core.ErrProviderAccountNotFound) {
 			f.unschedule(ctx, accountID)
 		}
 		return Result{Outcome: OutcomeSkipped, Err: err}

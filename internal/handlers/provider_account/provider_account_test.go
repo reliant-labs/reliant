@@ -313,6 +313,54 @@ func TestGetChatProviderAccount(t *testing.T) {
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
+// A chat that fell back to Codex and came back runs on Claude again, though its newest sticky
+// assignment is still the Codex one: the chip follows the account that served the last reply.
+func TestGetChatProviderAccountFollowsTheAccountThatServedTheLastReply(t *testing.T) {
+	e := newEnv(t)
+	const user = "u-chip"
+	ctx := as(user)
+	claude := e.oauthAccount(user, "claude", "alice")
+	codex := e.oauthAccount(user, "codex", "carol")
+	chat, root := seedChat(t, e.repo, user)
+
+	cw, err := e.repo.CreateContextWindow(ctx, &db.ContextWindow{ID: "cw-" + chat, ThreadID: root, Sequence: 1, CreatedAt: time.Now().UTC()})
+	require.NoError(t, err)
+	reply := func(id, accountID string) {
+		t.Helper()
+		_, err := e.repo.SaveMessageAtomic(ctx, db.AtomicMessageWrite{
+			MessageID: id, ChatID: chat, ThreadID: root, ContextWindowID: cw.ID,
+			Role: pb.MessageRole_MESSAGE_ROLE_ASSISTANT, CreatedAt: time.Now().UTC(), ProviderAccountID: ptr(accountID),
+			ChatUpdateData: func(_, _, _ int64) (string, error) { return "{}", nil },
+		})
+		require.NoError(t, err)
+	}
+	chipAccount := func() string {
+		t.Helper()
+		resp, err := e.svc.GetChatProviderAccount(ctx, connect.NewRequest(&pb.GetChatProviderAccountRequest{ChatId: chat}))
+		require.NoError(t, err)
+		return resp.Msg.GetAccount().GetId()
+	}
+
+	_, err = e.repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "claude", AccountID: claude.ID, AssignedAt: time.Now().Add(-2 * time.Hour), Reason: "initial"}, "")
+	require.NoError(t, err)
+	reply("m-claude-1", claude.ID)
+	assert.Equal(t, claude.ID, chipAccount())
+
+	_, err = e.repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "codex", AccountID: codex.ID, AssignedAt: time.Now().Add(-time.Hour), Reason: "limited"}, "")
+	require.NoError(t, err)
+	reply("m-codex-1", codex.ID)
+	assert.Equal(t, codex.ID, chipAccount(), "on the fallback provider")
+
+	// Claude resets and the chat returns: the sticky Claude assignment is reused, so the Codex
+	// one stays the newest, but the reply came from Claude.
+	reply("m-claude-2", claude.ID)
+	assert.Equal(t, claude.ID, chipAccount(), "back on Claude")
+
+	// The serving account was deleted: fall back to the newest sticky assignment still standing.
+	require.NoError(t, e.repo.DeleteProviderAccount(ctx, user, claude.ID))
+	assert.Equal(t, codex.ID, chipAccount())
+}
+
 func ptr[T any](v T) *T { return &v }
 
 // seedChat creates a chat for user with the root thread every real chat has (its id is the chat's).
