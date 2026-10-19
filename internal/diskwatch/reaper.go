@@ -40,6 +40,12 @@ import (
 //     because the cache budget is the real control and pressure only appears
 //     once the disk is nearly full.
 //
+// Each scheduled or pressure pass first trims the caches forge does not own —
+// npm, the Go module cache above its ceiling, killed builds' go-build work
+// dirs — to budgets derived from their volume (cachetrim.go), in the same
+// single-flight. Watcher.TrimCaches runs both at once for a caller that needs
+// space now.
+//
 // The cadence is anchored on forge's own record of its last pass
 // (last-auto-gc.json, beside the policy), not on process memory: a restarting
 // daemon, several daemons on one machine and a `forge env up` all share one
@@ -226,6 +232,10 @@ func (w *Watcher) reaperTick(ctx context.Context) (ran bool) {
 		return false
 	}
 	defer w.releaseReaper()
+	// The caches forge does not own (npm, the module cache's ceiling, killed
+	// builds' work dirs) on the same cadence; under pressure, to the urgent
+	// budgets.
+	w.trimNativeCaches(ctx, trigger == "pressure", false, trigger)
 	w.reaperPass(ctx, policy, trigger)
 	return true
 }

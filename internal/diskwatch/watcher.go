@@ -58,6 +58,11 @@ type Watcher struct {
 
 	// reaper is the scheduled storage-reaper routine (reaper.go).
 	reaper reaperState
+	// trim is the native cache trim (cachetrim.go), guarded by mu.
+	trim cacheTrimState
+	// systemEnv: the watcher reads the daemon's own environment, so its
+	// caches are this machine's real ones (never trimmed from a test).
+	systemEnv bool
 
 	// changed receives one token when something a heartbeat should carry at
 	// once changed: a pressure flip, a finished scan, a no-space failure, a
@@ -68,7 +73,8 @@ type Watcher struct {
 // New creates a Watcher. It does nothing until Run, but Report-free calls
 // (ExplainNoSpace, ClearCaches) work without Run too.
 func New(opts Options) *Watcher {
-	if opts.Env.Getenv == nil {
+	systemEnv := opts.Env.Getenv == nil
+	if systemEnv {
 		opts.Env = SystemEnvironment()
 	}
 	if opts.Interval <= 0 {
@@ -91,6 +97,8 @@ func New(opts Options) *Watcher {
 	}
 	return &Watcher{
 		reaper:    reaperState{sem: make(chan struct{}, 1), run: opts.reaper},
+		trim:      cacheTrimState{cfg: DefaultCacheTrimConfig()},
+		systemEnv: systemEnv,
 		env:       opts.Env,
 		interval:  opts.Interval,
 		now:       opts.Now,

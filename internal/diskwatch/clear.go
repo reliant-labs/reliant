@@ -15,7 +15,9 @@ import (
 // running build produces "link: cannot open file …/go-build/…-d", and whose
 // unlink burst detached a virtiofs volume on 2026-10-09), unused docker images
 // and build cache, never a volume, a worktree or a repo checkout. The Go module
-// cache, the npm cache and XDG caches are reported but never cleared from here.
+// cache, the npm cache and XDG caches are reported but never cleared from here;
+// the schedule keeps npm and the module cache inside their size budgets
+// (cachetrim.go).
 const clearBudget = 30 * time.Minute
 
 // ClearCachesCommand is the daemon command that runs ClearCaches on the
