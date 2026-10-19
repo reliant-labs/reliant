@@ -80,6 +80,11 @@ import {
 import { MobileModelPreferences } from "./MobileModelPreferences";
 import { MOBILE_ROW, MobileCardGroup, MobileRowIcon } from "./MobileChrome";
 import { MobileToggleRow } from "./MobileSettingsRow";
+import {
+  AccountList,
+  accountProviderIds,
+  useAccountsSection,
+} from "../Settings/providers/AccountList";
 
 interface ProviderStatus {
   provider: string;
@@ -384,6 +389,15 @@ export function MobileAIProvidersPanel({
       p.hasApiKey &&
       VISIBLE_PROVIDERS.includes(p.provider as (typeof VISIBLE_PROVIDERS)[number]),
   );
+  // Non-null once the server serves provider accounts. Until then (loading, or
+  // a server that answers Unimplemented) the single-credential rows below are
+  // today's view, unchanged. A configured provider the accounts RPC does not
+  // cover keeps its row, so none disappears.
+  const accounts = useAccountsSection();
+  const accountProviders = accounts ? accountProviderIds(accounts) : null;
+  const legacyProviders = accountProviders
+    ? configuredProviders.filter((p) => !accountProviders.has(p.provider))
+    : configuredProviders;
   const reliantConfigured = configuredProviders.some((p) => p.provider === "reliant");
   const canOfferReliant = cloudEligibility.eligible && !reliantConfigured;
 
@@ -519,10 +533,16 @@ export function MobileAIProvidersPanel({
         </p>
       </div>
 
-      {configuredProviders.length > 0 && (
+      {accounts && (
         <div className="px-4">
-          <MobileCardGroup label="Connected">
-            {configuredProviders.map((provider) => (
+          <AccountList accounts={accounts} variant="mobile" />
+        </div>
+      )}
+
+      {legacyProviders.length > 0 && (
+        <div className={cn("px-4", accounts && "mt-4")}>
+          <MobileCardGroup label={accounts ? "Other providers" : "Connected"}>
+            {legacyProviders.map((provider) => (
               <ConfiguredProviderRow
                 key={provider.provider}
                 provider={provider}

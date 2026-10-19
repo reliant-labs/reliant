@@ -75,6 +75,16 @@ const EXPECTED_CODES: ReadonlySet<Code> = new Set([
   Code.ResourceExhausted,
 ]);
 
+/**
+ * Services whose RPCs a server may legitimately not serve yet, and whose
+ * caller probes them and falls back (Settings → Providers asks
+ * ProviderAccountService and keeps the single-credential view on
+ * Unimplemented). For these ANY Unimplemented is the answer the caller is
+ * waiting for, not a defect: the route may be unmounted (the app is newer than
+ * the server, so not version skew) or mounted as forge's scaffold stub.
+ */
+const PROBED_SERVICES: ReadonlySet<string> = new Set(["reliant.v1.ProviderAccountService"]);
+
 /** The services this app's own API serves. Other backends version separately. */
 const RELIANT_API_SERVICE_PREFIX = "reliant.v1.";
 
@@ -106,6 +116,9 @@ export function classifyRpcFailure(error: unknown, ctx: RpcFailureContext): RpcF
     return "account-required";
   }
   if (EXPECTED_CODES.has(error.code)) return "expected";
+  if (error.code === Code.Unimplemented && PROBED_SERVICES.has(ctx.serviceTypeName)) {
+    return "expected";
+  }
   if (error.code === Code.Unavailable && isDaemonConnectingError(error)) {
     return "machine-wait";
   }

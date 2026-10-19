@@ -38,6 +38,19 @@ describe("classifyRpcFailure", () => {
     ).toBe("report");
   });
 
+  it("treats Unimplemented from the probed ProviderAccountService as expected, not skew or a report", () => {
+    const probed = { serviceTypeName: "reliant.v1.ProviderAccountService", signalAborted: false };
+    // App newer than server: the route is not mounted yet.
+    expect(classifyRpcFailure(new ConnectError("HTTP 404", Code.Unimplemented), probed)).toBe("expected");
+    // Server mounted forge's scaffold stub (Unimplemented on the wire).
+    expect(classifyRpcFailure(new ConnectError("handler not yet implemented", Code.Unimplemented), probed)).toBe(
+      "expected",
+    );
+    // Other services still report, and a real failure on the probed service still reports.
+    expect(classifyRpcFailure(new ConnectError("nope", Code.Unimplemented), reliant)).toBe("report");
+    expect(classifyRpcFailure(new ConnectError("boom", Code.Internal), probed)).toBe("report");
+  });
+
   it("reads the server's DeadlineExceeded as a deadline, not a report", () => {
     // 2026-10-10: a saturated cloud machine answered file-tree polls after
     // the rpc deadline; each one was an exception.

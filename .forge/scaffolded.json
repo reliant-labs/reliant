@@ -510,6 +510,27 @@
     "internal/handlers/project/handlers_scaffold_update_project_test.go": {
       "scaffolded_at": "2026-10-14T18:21:44Z"
     },
+    "internal/handlers/provider_account/handlers_scaffold_add_provider_api_key_test.go": {
+      "scaffolded_at": "2026-10-19T03:59:40Z"
+    },
+    "internal/handlers/provider_account/handlers_scaffold_delete_provider_account_test.go": {
+      "scaffolded_at": "2026-10-19T03:59:40Z"
+    },
+    "internal/handlers/provider_account/handlers_scaffold_get_chat_provider_account_test.go": {
+      "scaffolded_at": "2026-10-19T03:59:40Z"
+    },
+    "internal/handlers/provider_account/handlers_scaffold_list_provider_accounts_test.go": {
+      "scaffolded_at": "2026-10-19T03:59:40Z"
+    },
+    "internal/handlers/provider_account/handlers_scaffold_refresh_provider_account_usage_test.go": {
+      "scaffolded_at": "2026-10-19T03:59:40Z"
+    },
+    "internal/handlers/provider_account/handlers_scaffold_reorder_provider_accounts_test.go": {
+      "scaffolded_at": "2026-10-19T03:59:40Z"
+    },
+    "internal/handlers/provider_account/handlers_scaffold_update_provider_account_test.go": {
+      "scaffolded_at": "2026-10-19T03:59:40Z"
+    },
     "internal/handlers/question/handlers_scaffold_get_pending_question_test.go": {
       "scaffolded_at": "2026-10-13T07:28:55Z"
     },

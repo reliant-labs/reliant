@@ -5,6 +5,7 @@ import { CombinedGeneralSettings } from "./CombinedGeneralSettings";
 import { ToolPreferences } from "./ToolPreferences";
 import { LocalModelsSection } from "./LocalModelsSection";
 import { reliantAIAvailable } from "../../services/controlPlane/reliantAI";
+import { ProviderAccountsSection, accountProviderIds, useAccountsSection } from "./providers/AccountList";
 
 // ReliantAISection is code-split out of the main settings chunk — it's only
 // fetched when the user opens the "Reliant AI" tab. The named export is adapted
@@ -38,6 +39,10 @@ type AITab = "providers" | "local" | "tools" | "reliant";
  */
 export function AISettings({ providers, onProvidersUpdate }: AISettingsProps) {
   const [tab, setTab] = useState<AITab>("providers");
+  // Non-null once the server answers ProviderAccountService with accounts. Until
+  // then — loading, a server that does not serve the RPCs yet (Unimplemented),
+  // or no accounts — the single-credential list below is today's view, unchanged.
+  const accounts = useAccountsSection();
 
   // The providers tab preserves the old settings-card look: a narrow card with
   // injected heading styles so CombinedGeneralSettings' h2/h3 render as they did
@@ -50,6 +55,10 @@ export function AISettings({ providers, onProvidersUpdate }: AISettingsProps) {
         onOpenReliantAI={
           reliantAIAvailable ? () => setTab("reliant") : undefined
         }
+        configuredProvidersSlot={
+          accounts ? <ProviderAccountsSection accounts={accounts} /> : undefined
+        }
+        accountProviders={accounts ? accountProviderIds(accounts) : undefined}
       />
     </div>
   );

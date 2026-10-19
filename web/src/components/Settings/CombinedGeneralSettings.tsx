@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import {
   Loader2,
   AlertCircle,
@@ -58,6 +58,18 @@ interface CombinedGeneralSettingsProps {
    * undefined the "Manage AI keys & spend" CTA is hidden.
    */
   onOpenReliantAI?: () => void;
+  /**
+   * Replaces the single-credential "Configured Providers" list. Provided by
+   * {@link AISettings} when the server serves provider accounts; absent, the
+   * list below (today's connect/disconnect view) renders unchanged.
+   */
+  configuredProvidersSlot?: ReactNode;
+  /**
+   * Provider ids the slot already lists. Their rows are dropped from the
+   * single-credential list; any configured provider the accounts RPC does not
+   * cover (yet) keeps its row there, so no connected provider disappears.
+   */
+  accountProviders?: ReadonlySet<string>;
 }
 
 // Providers visible in the manual-entry UI (other providers are hidden but implementations remain).
@@ -363,6 +375,8 @@ export function CombinedGeneralSettings({
   providers,
   onProvidersUpdate,
   onOpenReliantAI,
+  configuredProvidersSlot,
+  accountProviders,
 }: CombinedGeneralSettingsProps) {
   // Add Provider State
   const [selectedProvider, setSelectedProvider] = useState<string>("");
@@ -426,6 +440,9 @@ export function CombinedGeneralSettings({
       )
   );
   const reliantConfigured = configuredProviders.some((p) => p.provider === "reliant");
+  const legacyProviders = accountProviders
+    ? configuredProviders.filter((p) => !accountProviders.has(p.provider))
+    : configuredProviders;
   // Gated on LLM FUNDING (wallet balance), not compute eligibility.
   //
   // This used to read useCloudEligibility(), which answers "may this account
@@ -988,11 +1005,14 @@ export function CombinedGeneralSettings({
       )}
 
       {/* Configured Providers List */}
-      {configuredProviders.length > 0 && (
+      {configuredProvidersSlot}
+      {legacyProviders.length > 0 && (
         <div>
-          <h3 className="text-lg font-semibold mb-4">Configured Providers</h3>
+          <h3 className="text-lg font-semibold mb-4">
+            {configuredProvidersSlot ? "Other providers" : "Configured Providers"}
+          </h3>
           <div className="space-y-3">
-            {configuredProviders.map((provider) => {
+            {legacyProviders.map((provider) => {
               const config =
                 providerConfigs[
                   provider.provider as ProviderId

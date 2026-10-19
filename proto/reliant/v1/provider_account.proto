@@ -1,0 +1,176 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// ProviderAccountService manages the LLM accounts a user has connected: one
+// row per credential (a Claude or Codex subscription sign-in, an API key, a
+// device-flow login, a managed key), several per provider. It is what
+// Settings → Providers lists, orders, pauses and renames, and what the account
+// router reads when it picks which account serves a chat.
+//
+// Every rpc is scoped to the caller. An account id that belongs to another
+// user answers NotFound (never PermissionDenied), so ids cannot be enumerated.
+//
+// OAuth sign-in is not here: it stays on SettingsService (the Complete*OAuth
+// rpcs), which gain account semantics (connect another account / reconnect)
+// separately.
+service ProviderAccountService {
+  // ListProviderAccounts returns every account of the caller, grouped by
+  // provider and ordered by priority, each with its derived status and latest
+  // usage windows.
+  // forge:custom — scoped to the caller; joins the latest limit state onto each account
+  rpc ListProviderAccounts(ListProviderAccountsRequest) returns (ListProviderAccountsResponse) {}
+  // UpdateProviderAccount renames an account and/or pauses it. Unset fields
+  // are left alone. An empty label restores the default (the detected email).
+  // forge:custom — only label and paused are client-writable; status is derived
+  rpc UpdateProviderAccount(UpdateProviderAccountRequest) returns (UpdateProviderAccountResponse) {}
+  // ReorderProviderAccounts sets the priority order of one provider's
+  // accounts. account_ids must be exactly that provider's accounts.
+  rpc ReorderProviderAccounts(ReorderProviderAccountsRequest) returns (ReorderProviderAccountsResponse) {}
+  // DeleteProviderAccount removes an account and its stored credential.
+  // forge:custom — also revokes the sealed credential and reassigns threads pinned to it
+  rpc DeleteProviderAccount(DeleteProviderAccountRequest) returns (DeleteProviderAccountResponse) {}
+  // AddProviderAPIKey adds an API-key account to a provider. A key that is
+  // already stored for that provider is not added twice (created = false).
+  rpc AddProviderAPIKey(AddProviderAPIKeyRequest) returns (AddProviderAPIKeyResponse) {}
+  // RefreshProviderAccountUsage re-reads one account's usage from the
+  // provider. The server throttles it: a refresh inside the throttle window
+  // returns the stored state with throttled = true.
+  rpc RefreshProviderAccountUsage(RefreshProviderAccountUsageRequest) returns (RefreshProviderAccountUsageResponse) {}
+  // GetChatProviderAccount returns the account the chat's root thread is
+  // currently using for its provider; unset when none is assigned yet.
+  rpc GetChatProviderAccount(GetChatProviderAccountRequest) returns (GetChatProviderAccountResponse) {}
+}
+
+// ProviderAccountStatus is derived, never stored. Precedence:
+// NEEDS_SIGN_IN > PAUSED > LIMITED > AVAILABLE.
+enum ProviderAccountStatus {
+  PROVIDER_ACCOUNT_STATUS_UNSPECIFIED = 0;
+  PROVIDER_ACCOUNT_STATUS_AVAILABLE = 1;
+  // Refused by the provider until limited_until.
+  PROVIDER_ACCOUNT_STATUS_LIMITED = 2;
+  PROVIDER_ACCOUNT_STATUS_PAUSED = 3;
+  PROVIDER_ACCOUNT_STATUS_NEEDS_SIGN_IN = 4;
+}
+
+enum ProviderAuthKind {
+  PROVIDER_AUTH_KIND_UNSPECIFIED = 0;
+  PROVIDER_AUTH_KIND_OAUTH = 1;
+  PROVIDER_AUTH_KIND_API_KEY = 2;
+  PROVIDER_AUTH_KIND_DEVICE = 3;
+  PROVIDER_AUTH_KIND_MANAGED = 4;
+}
+
+// UsageSource says where an account's usage windows came from.
+enum UsageSource {
+  USAGE_SOURCE_UNSPECIFIED = 0;
+  // Rate-limit headers on a response the account served.
+  USAGE_SOURCE_HEADERS = 1;
+  // The provider's usage endpoint.
+  USAGE_SOURCE_USAGE_API = 2;
+  // Inferred from a usage-limit error.
+  USAGE_SOURCE_LIMIT_ERROR = 3;
+}
+
+message UsageWindow {
+  // "5h", "7d", "7d_opus", "primary", …
+  string name = 1;
+  // Display label: "5-hour", "Weekly", "Weekly · Opus".
+  string label = 2;
+  // 0..1. Unset when the provider did not report it.
+  optional double used_fraction = 3;
+  // RFC 3339 UTC. Unset when the reset time is unknown.
+  optional string resets_at = 4;
+  int64 length_seconds = 5;
+}
+
+message ProviderAccount {
+  string id = 1;
+  // Driver id: "claude", "codex", "anthropic", …
+  string provider = 2;
+  string provider_display_name = 3;
+  ProviderAuthKind auth_kind = 4;
+  // What the UI shows: the user's label, else the detected email, else a
+  // masked key.
+  string label = 5;
+  optional string email = 6;
+  optional string organization_name = 7;
+  // Normalized plan: "max_20x", "pro", "plus", …
+  optional string plan = 8;
+  // Display form: "Max 20×".
+  optional string plan_display = 9;
+  // "sk-…a1b2"; API-key accounts only.
+  optional string masked_key = 10;
+  // 0 is first. Orders the accounts of one provider.
+  int32 priority = 11;
+  ProviderAccountStatus status = 12;
+  // RFC 3339 UTC; set while status is LIMITED.
+  optional string limited_until = 13;
+  // The window that benched the account, e.g. "5h".
+  optional string limited_window = 14;
+  optional string needs_sign_in_reason = 15;
+  repeated UsageWindow windows = 16;
+  // RFC 3339 UTC; when `windows` was last observed.
+  optional string usage_observed_at = 17;
+  UsageSource usage_source = 18;
+  // Why usage is unavailable, when the last read failed.
+  optional string usage_error = 19;
+  // RFC 3339 UTC.
+  string created_at = 20;
+}
+
+message ListProviderAccountsRequest {}
+message ListProviderAccountsResponse {
+  repeated ProviderAccount accounts = 1;
+}
+
+message UpdateProviderAccountRequest {
+  string account_id = 1;
+  optional string label = 2;
+  optional bool paused = 3;
+}
+message UpdateProviderAccountResponse {
+  ProviderAccount account = 1;
+}
+
+message ReorderProviderAccountsRequest {
+  string provider = 1;
+  repeated string account_ids = 2;
+}
+message ReorderProviderAccountsResponse {
+  // The provider's accounts in their new order.
+  repeated ProviderAccount accounts = 1;
+}
+
+message DeleteProviderAccountRequest {
+  string account_id = 1;
+}
+message DeleteProviderAccountResponse {}
+
+message AddProviderAPIKeyRequest {
+  string provider = 1;
+  string api_key = 2;
+  optional string label = 3;
+}
+message AddProviderAPIKeyResponse {
+  ProviderAccount account = 1;
+  bool created = 2;
+}
+
+message RefreshProviderAccountUsageRequest {
+  string account_id = 1;
+}
+message RefreshProviderAccountUsageResponse {
+  ProviderAccount account = 1;
+  bool throttled = 2;
+}
+
+message GetChatProviderAccountRequest {
+  string chat_id = 1;
+}
+message GetChatProviderAccountResponse {
+  optional ProviderAccount account = 1;
+}

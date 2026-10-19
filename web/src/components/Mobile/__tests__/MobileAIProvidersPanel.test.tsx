@@ -6,7 +6,8 @@
  * interactive element falls under the 44px touch-target floor.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import { renderWithQuery as render } from "../../../test/renderWithQuery";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -134,8 +135,8 @@ describe("MobileAIProvidersPanel", () => {
     const user = userEvent.setup();
     const { onProvidersUpdate } = renderPanel();
 
-    await user.click(screen.getByText("Anthropic"));
-    const input = await screen.findByPlaceholderText(/enter your anthropic api key/i);
+    await user.click(screen.getByText("Anthropic API"));
+    const input = await screen.findByPlaceholderText(/enter your anthropic api api key/i);
     await user.type(input, "sk-ant-test-key");
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
@@ -152,8 +153,8 @@ describe("MobileAIProvidersPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    await user.click(screen.getByText("Anthropic"));
-    const input = await screen.findByPlaceholderText(/enter your anthropic api key/i);
+    await user.click(screen.getByText("Anthropic API"));
+    const input = await screen.findByPlaceholderText(/enter your anthropic api api key/i);
     await user.type(input, "sk-ant-test-key");
     await user.click(screen.getByRole("button", { name: /test connection/i }));
 
@@ -230,8 +231,8 @@ describe("MobileAIProvidersPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    await user.click(screen.getByText("Claude Code"));
-    await user.click(await screen.findByRole("button", { name: /login with claude code/i }));
+    await user.click(screen.getByText("Claude subscription"));
+    await user.click(await screen.findByRole("button", { name: /login with claude subscription/i }));
 
     await waitFor(() => expect(mocks.claudeStart).toHaveBeenCalled());
   });

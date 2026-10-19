@@ -145,7 +145,7 @@ describe('Settings → Providers: one provider at a time', () => {
     renderSettings()
 
     await user.selectOptions(await screen.findByRole('combobox'), 'claude')
-    await user.click(await screen.findByRole('button', { name: 'Login with Claude Code' }))
+    await user.click(await screen.findByRole('button', { name: 'Login with Claude subscription' }))
 
     await waitFor(() => expect(mocks.claudeStart).toHaveBeenCalledTimes(1))
     // The success path ran to its end (models refetched after the sign-in).

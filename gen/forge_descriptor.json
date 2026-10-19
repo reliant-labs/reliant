@@ -21961,6 +21961,553 @@
       }
     },
     {
+      "Name": "ProviderAccountService",
+      "Package": "reliant.v1",
+      "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+      "PkgName": "reliantv1",
+      "Methods": [
+        {
+          "Name": "ListProviderAccounts",
+          "InputType": "ListProviderAccountsRequest",
+          "OutputType": "ListProviderAccountsResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "InputTypeFQ": "reliant.v1.ListProviderAccountsRequest",
+          "OutputTypeFQ": "reliant.v1.ListProviderAccountsResponse",
+          "InputProtoFile": "reliant/v1/provider_account.proto",
+          "OutputProtoFile": "reliant/v1/provider_account.proto"
+        },
+        {
+          "Name": "UpdateProviderAccount",
+          "InputType": "UpdateProviderAccountRequest",
+          "OutputType": "UpdateProviderAccountResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "InputTypeFQ": "reliant.v1.UpdateProviderAccountRequest",
+          "OutputTypeFQ": "reliant.v1.UpdateProviderAccountResponse",
+          "InputProtoFile": "reliant/v1/provider_account.proto",
+          "OutputProtoFile": "reliant/v1/provider_account.proto"
+        },
+        {
+          "Name": "ReorderProviderAccounts",
+          "InputType": "ReorderProviderAccountsRequest",
+          "OutputType": "ReorderProviderAccountsResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.ReorderProviderAccountsRequest",
+          "OutputTypeFQ": "reliant.v1.ReorderProviderAccountsResponse",
+          "InputProtoFile": "reliant/v1/provider_account.proto",
+          "OutputProtoFile": "reliant/v1/provider_account.proto"
+        },
+        {
+          "Name": "DeleteProviderAccount",
+          "InputType": "DeleteProviderAccountRequest",
+          "OutputType": "DeleteProviderAccountResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "InputTypeFQ": "reliant.v1.DeleteProviderAccountRequest",
+          "OutputTypeFQ": "reliant.v1.DeleteProviderAccountResponse",
+          "InputProtoFile": "reliant/v1/provider_account.proto",
+          "OutputProtoFile": "reliant/v1/provider_account.proto"
+        },
+        {
+          "Name": "AddProviderAPIKey",
+          "InputType": "AddProviderAPIKeyRequest",
+          "OutputType": "AddProviderAPIKeyResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.AddProviderAPIKeyRequest",
+          "OutputTypeFQ": "reliant.v1.AddProviderAPIKeyResponse",
+          "InputProtoFile": "reliant/v1/provider_account.proto",
+          "OutputProtoFile": "reliant/v1/provider_account.proto"
+        },
+        {
+          "Name": "RefreshProviderAccountUsage",
+          "InputType": "RefreshProviderAccountUsageRequest",
+          "OutputType": "RefreshProviderAccountUsageResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.RefreshProviderAccountUsageRequest",
+          "OutputTypeFQ": "reliant.v1.RefreshProviderAccountUsageResponse",
+          "InputProtoFile": "reliant/v1/provider_account.proto",
+          "OutputProtoFile": "reliant/v1/provider_account.proto"
+        },
+        {
+          "Name": "GetChatProviderAccount",
+          "InputType": "GetChatProviderAccountRequest",
+          "OutputType": "GetChatProviderAccountResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.GetChatProviderAccountRequest",
+          "OutputTypeFQ": "reliant.v1.GetChatProviderAccountResponse",
+          "InputProtoFile": "reliant/v1/provider_account.proto",
+          "OutputProtoFile": "reliant/v1/provider_account.proto"
+        }
+      ],
+      "ProtoFile": "reliant/v1/provider_account.proto",
+      "ModulePath": "",
+      "Messages": {
+        "AddProviderAPIKeyRequest": [
+          {
+            "Name": "provider",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "api_key",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "label",
+            "ProtoType": "string",
+            "IsOptional": true
+          }
+        ],
+        "AddProviderAPIKeyResponse": [
+          {
+            "Name": "account",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ProviderAccount"
+          },
+          {
+            "Name": "created",
+            "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "DeleteProviderAccountRequest": [
+          {
+            "Name": "account_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "DeleteProviderAccountResponse": null,
+        "GetChatProviderAccountRequest": [
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetChatProviderAccountResponse": [
+          {
+            "Name": "account",
+            "ProtoType": "message",
+            "IsOptional": true,
+            "MessageType": "reliant.v1.ProviderAccount"
+          }
+        ],
+        "ListProviderAccountsRequest": null,
+        "ListProviderAccountsResponse": [
+          {
+            "Name": "accounts",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ProviderAccount"
+          }
+        ],
+        "RefreshProviderAccountUsageRequest": [
+          {
+            "Name": "account_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "RefreshProviderAccountUsageResponse": [
+          {
+            "Name": "account",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ProviderAccount"
+          },
+          {
+            "Name": "throttled",
+            "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "ReorderProviderAccountsRequest": [
+          {
+            "Name": "provider",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "account_ids",
+            "ProtoType": "[]string",
+            "IsOptional": false
+          }
+        ],
+        "ReorderProviderAccountsResponse": [
+          {
+            "Name": "accounts",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ProviderAccount"
+          }
+        ],
+        "UpdateProviderAccountRequest": [
+          {
+            "Name": "account_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "label",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "paused",
+            "ProtoType": "bool",
+            "IsOptional": true
+          }
+        ],
+        "UpdateProviderAccountResponse": [
+          {
+            "Name": "account",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ProviderAccount"
+          }
+        ]
+      },
+      "Schemas": {
+        "reliant.v1.AddProviderAPIKeyRequest": [
+          {
+            "name": "provider",
+            "kind": "string"
+          },
+          {
+            "name": "api_key",
+            "kind": "string"
+          },
+          {
+            "name": "label",
+            "kind": "string",
+            "optional": true
+          }
+        ],
+        "reliant.v1.AddProviderAPIKeyResponse": [
+          {
+            "name": "account",
+            "kind": "message",
+            "type_name": "reliant.v1.ProviderAccount"
+          },
+          {
+            "name": "created",
+            "kind": "bool"
+          }
+        ],
+        "reliant.v1.DeleteProviderAccountRequest": [
+          {
+            "name": "account_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.DeleteProviderAccountResponse": [],
+        "reliant.v1.GetChatProviderAccountRequest": [
+          {
+            "name": "chat_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.GetChatProviderAccountResponse": [
+          {
+            "name": "account",
+            "kind": "message",
+            "type_name": "reliant.v1.ProviderAccount",
+            "optional": true
+          }
+        ],
+        "reliant.v1.ListProviderAccountsRequest": [],
+        "reliant.v1.ListProviderAccountsResponse": [
+          {
+            "name": "accounts",
+            "kind": "message",
+            "type_name": "reliant.v1.ProviderAccount",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.ProviderAccount": [
+          {
+            "name": "id",
+            "kind": "string"
+          },
+          {
+            "name": "provider",
+            "kind": "string"
+          },
+          {
+            "name": "provider_display_name",
+            "kind": "string"
+          },
+          {
+            "name": "auth_kind",
+            "kind": "enum",
+            "type_name": "reliant.v1.ProviderAuthKind"
+          },
+          {
+            "name": "label",
+            "kind": "string"
+          },
+          {
+            "name": "email",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "organization_name",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "plan",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "plan_display",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "masked_key",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "priority",
+            "kind": "int32"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "type_name": "reliant.v1.ProviderAccountStatus"
+          },
+          {
+            "name": "limited_until",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "limited_window",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "needs_sign_in_reason",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "windows",
+            "kind": "message",
+            "type_name": "reliant.v1.UsageWindow",
+            "repeated": true
+          },
+          {
+            "name": "usage_observed_at",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "usage_source",
+            "kind": "enum",
+            "type_name": "reliant.v1.UsageSource"
+          },
+          {
+            "name": "usage_error",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "created_at",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.RefreshProviderAccountUsageRequest": [
+          {
+            "name": "account_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.RefreshProviderAccountUsageResponse": [
+          {
+            "name": "account",
+            "kind": "message",
+            "type_name": "reliant.v1.ProviderAccount"
+          },
+          {
+            "name": "throttled",
+            "kind": "bool"
+          }
+        ],
+        "reliant.v1.ReorderProviderAccountsRequest": [
+          {
+            "name": "provider",
+            "kind": "string"
+          },
+          {
+            "name": "account_ids",
+            "kind": "string",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.ReorderProviderAccountsResponse": [
+          {
+            "name": "accounts",
+            "kind": "message",
+            "type_name": "reliant.v1.ProviderAccount",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.UpdateProviderAccountRequest": [
+          {
+            "name": "account_id",
+            "kind": "string"
+          },
+          {
+            "name": "label",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "paused",
+            "kind": "bool",
+            "optional": true
+          }
+        ],
+        "reliant.v1.UpdateProviderAccountResponse": [
+          {
+            "name": "account",
+            "kind": "message",
+            "type_name": "reliant.v1.ProviderAccount"
+          }
+        ],
+        "reliant.v1.UsageWindow": [
+          {
+            "name": "name",
+            "kind": "string"
+          },
+          {
+            "name": "label",
+            "kind": "string"
+          },
+          {
+            "name": "used_fraction",
+            "kind": "double",
+            "optional": true
+          },
+          {
+            "name": "resets_at",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "length_seconds",
+            "kind": "int64"
+          }
+        ]
+      },
+      "SchemaFiles": {
+        "reliant.v1.AddProviderAPIKeyRequest": "reliant/v1/provider_account.proto",
+        "reliant.v1.AddProviderAPIKeyResponse": "reliant/v1/provider_account.proto",
+        "reliant.v1.DeleteProviderAccountRequest": "reliant/v1/provider_account.proto",
+        "reliant.v1.DeleteProviderAccountResponse": "reliant/v1/provider_account.proto",
+        "reliant.v1.GetChatProviderAccountRequest": "reliant/v1/provider_account.proto",
+        "reliant.v1.GetChatProviderAccountResponse": "reliant/v1/provider_account.proto",
+        "reliant.v1.ListProviderAccountsRequest": "reliant/v1/provider_account.proto",
+        "reliant.v1.ListProviderAccountsResponse": "reliant/v1/provider_account.proto",
+        "reliant.v1.ProviderAccount": "reliant/v1/provider_account.proto",
+        "reliant.v1.RefreshProviderAccountUsageRequest": "reliant/v1/provider_account.proto",
+        "reliant.v1.RefreshProviderAccountUsageResponse": "reliant/v1/provider_account.proto",
+        "reliant.v1.ReorderProviderAccountsRequest": "reliant/v1/provider_account.proto",
+        "reliant.v1.ReorderProviderAccountsResponse": "reliant/v1/provider_account.proto",
+        "reliant.v1.UpdateProviderAccountRequest": "reliant/v1/provider_account.proto",
+        "reliant.v1.UpdateProviderAccountResponse": "reliant/v1/provider_account.proto",
+        "reliant.v1.UsageWindow": "reliant/v1/provider_account.proto"
+      },
+      "Enums": {
+        "reliant.v1.ProviderAccountStatus": [
+          "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
+          "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
+          "PROVIDER_ACCOUNT_STATUS_LIMITED",
+          "PROVIDER_ACCOUNT_STATUS_PAUSED",
+          "PROVIDER_ACCOUNT_STATUS_NEEDS_SIGN_IN"
+        ],
+        "reliant.v1.ProviderAuthKind": [
+          "PROVIDER_AUTH_KIND_UNSPECIFIED",
+          "PROVIDER_AUTH_KIND_OAUTH",
+          "PROVIDER_AUTH_KIND_API_KEY",
+          "PROVIDER_AUTH_KIND_DEVICE",
+          "PROVIDER_AUTH_KIND_MANAGED"
+        ],
+        "reliant.v1.UsageSource": [
+          "USAGE_SOURCE_UNSPECIFIED",
+          "USAGE_SOURCE_HEADERS",
+          "USAGE_SOURCE_USAGE_API",
+          "USAGE_SOURCE_LIMIT_ERROR"
+        ]
+      },
+      "EnumNumbers": {
+        "reliant.v1.ProviderAccountStatus": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "reliant.v1.ProviderAuthKind": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "reliant.v1.UsageSource": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "EnumGoRefs": {
+        "reliant.v1.ProviderAccountStatus": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "ProviderAccountStatus"
+        },
+        "reliant.v1.ProviderAuthKind": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "ProviderAuthKind"
+        },
+        "reliant.v1.UsageSource": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "UsageSource"
+        }
+      }
+    },
+    {
       "Name": "QuestionService",
       "Package": "reliant.v1",
       "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -34337,5 +34884,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "bd31aeea72eb33cc9d190923d7d233868b913c42a6073887566dde5b16a12bef"
+  "source_hash": "8ce2704226dfcd8840af552b4334d61a200d31130030857bc8d02b73105fc886"
 }
