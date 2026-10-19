@@ -185,7 +185,7 @@ Every change ships as its own **small PR** that leaves everything that works tod
 - As of 2026-10-12 this sandbox has no dev Postgres (no `postgres_data` volume, no k3d cluster); only prod kube contexts exist, and they are untouched. The dev stacks rebuild their DB on next `forge env up`.
 - Reliant pins forge `f3fd8c02` (reliant #938).
 
-Research inputs, all in this dir: `02-contracts-classification.md` (P6), `03-config-census.md` (P4), `04-p5a-cutover-runbook.md` (P5a), `05-p3a-handler-map.md` (P3a/P3b).
+Research inputs, all in this dir: `02-contracts-classification.md` (P6), `03-config-census.md` (P4), `04-p5a-cutover-runbook.md` (P5a), `05-p3a-handler-map.md` (P3a/P3b), `08-p5b-spike.md` (P5b spike: findings, F12 items, lane plan).
 
 ### The P1 slice, as separate PRs
 
