@@ -11,11 +11,13 @@ import (
 // This is forge's worktree policy (forge/internal/storage/worktrees.go,
 // DefaultWorktreeRebuildable and the never-list), copied rather than shared so
 // reliant and forge agree on what an ignored file in a worktree is worth
-// without importing each other. Keep the two in step.
+// without importing each other. Keep the two in step. Reliant is ahead of forge
+// on forge's own .forge/tmp and .forge/generate-cache.json, the .tools/
+// convention and the checkout's tmp/, which forge should adopt.
 
 // defaultRebuildable lists ignored paths that a build recreates. An entry is
 // one or more path segments (globs allowed per segment) matched anywhere in the
-// ignored path.
+// ignored path, or, with a leading "/", only from the checkout's root.
 var defaultRebuildable = []string{
 	"node_modules", "dist", "bin", ".gocache", ".next", ".next-prod", ".turbo",
 	"coverage", "coverage.out", "*.tsbuildinfo", "next-env.d.ts",
@@ -23,8 +25,16 @@ var defaultRebuildable = []string{
 	"kcl.mod.lock", "go.work", "go.work.sum",
 	".forge/generating-build", ".forge/forge.lock", ".forge/render",
 	".forge/logs", ".forge/workspace-base.tag",
+	// forge's own scratch and its generate fixed-point cache.
+	".forge/tmp", ".forge/generate-cache.json",
 	// Non-JS build and tool caches, the same additions forge is making.
 	"target", ".venv", "venv", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".gradle",
+	// Pinned tools a project installs into its checkout (bin, stamps, tmp,
+	// pre-commit's hook clones): `task tools` puts them back.
+	"/.tools",
+	// The checkout's scratch directory. A git repository inside it is still a
+	// nested repository (see toolClone), and data under it is still data.
+	"/tmp",
 }
 
 // neverRebuildable are paths that hold application data. They hold a worktree
@@ -80,7 +90,11 @@ func matchesRun(segments []string, pattern string) bool {
 	if len(want) == 0 {
 		return false
 	}
-	for start := 0; start+len(want) <= len(segments); start++ {
+	last := len(segments) - len(want)
+	if strings.HasPrefix(pattern, "/") {
+		last = min(last, 0) // anchored: only a run starting at the root
+	}
+	for start := 0; start <= last; start++ {
 		ok := true
 		for i, w := range want {
 			if m, err := path.Match(w, segments[start+i]); err != nil || !m {

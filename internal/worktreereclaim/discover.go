@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -34,7 +35,8 @@ type scan struct {
 
 // scanWorkspace walks root without following symlinks. It does not skip any
 // directory by name: a repository inside node_modules or an ignored tmp/ holds
-// history that exists nowhere else.
+// history that exists nowhere else. The one exception is a clone a tool made
+// and makes again (toolClone), which is dropped from Repos after the walk.
 func scanWorkspace(ctx context.Context, root string) scan {
 	ctx, cancel := context.WithTimeout(ctx, scanBudget)
 	defer cancel()
@@ -68,8 +70,56 @@ func scanWorkspace(ctx context.Context, root string) scan {
 		}
 		return nil
 	})
+	out.Repos = withoutToolClones(ctx, out.Repos)
 	sort.Strings(out.Repos)
 	return out
+}
+
+// toolCloneDirs are directories, relative to a checkout's root, whose direct
+// children are git clones a tool made and can make again from their remote.
+// pre-commit clones each hook repository at a pinned rev into
+// $PRE_COMMIT_HOME/repo*, and control-plane's CI gate points PRE_COMMIT_HOME
+// at <checkout>/.tools/pre-commit. Anything else with a .git inside a
+// checkout stays a nested repository: its history may exist nowhere else.
+var toolCloneDirs = []string{".tools/pre-commit"}
+
+func withoutToolClones(ctx context.Context, repos []string) []string {
+	out := repos[:0:0]
+	for _, r := range repos {
+		if !toolClone(ctx, r, repos) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// toolClone reports whether repo is a direct child of a toolCloneDirs entry of
+// the repository that contains it, AND that repository's git ignores it. Both
+// are required: a tracked or unignored clone is the user's.
+func toolClone(ctx context.Context, repo string, repos []string) bool {
+	owner := "" // the innermost other repository containing repo
+	for _, p := range repos {
+		if p != repo && within(p, repo) && (owner == "" || within(owner, p)) {
+			owner = p
+		}
+	}
+	if owner == "" {
+		return false
+	}
+	rel := relTo(owner, repo)
+	segs := splitSegments(rel)
+	listed := false
+	for _, dir := range toolCloneDirs {
+		want := splitSegments(dir)
+		if len(segs) == len(want)+1 && strings.Join(segs[:len(want)], "/") == strings.Join(want, "/") {
+			listed = true
+		}
+	}
+	if !listed {
+		return false
+	}
+	_, err := git(ctx, owner, nil, "check-ignore", "-q", "--", rel)
+	return err == nil
 }
 
 func underAny(repos []string, p string) bool {
