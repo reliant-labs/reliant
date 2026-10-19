@@ -102,6 +102,7 @@ const PLANS = [
     structuredLimits: {
       allowedDaemonSizes: ["small"],
       daemonComputeIncludedMinutes: 1200,
+      includedSmallDaemonHours: 20n,
       daemonOveragePerMinuteCents: 0.25,
     },
   },

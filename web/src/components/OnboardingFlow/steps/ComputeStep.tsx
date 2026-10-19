@@ -8,6 +8,7 @@ import { Check, CheckCircle2, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   PlanTileRow,
+  PlanFinePrint,
   describeIncludedHours,
   type ComputePlanOption,
 } from "@/components/Billing/PlanTiles";
@@ -451,7 +452,7 @@ export function ComputeStep({
             covered={option.planId === coveredPlanId}
             // Spec and price on every row; the cost breakdown only on the
             // picked one. Six rows of two-line breakdowns is most of a screen.
-            showFacts="selected"
+            showFacts="always"
             onSelect={() => {
               // Picking a hosted size is also picking "hosted", so it
               // closes the free row's expanded instructions. Without
@@ -735,23 +736,19 @@ export function ComputeStep({
                       "The paid machines are ours: nothing to install, and we start one for you, ready in a few minutes. Setup continues while it boots."
                     : "Paid machines run in Reliant Cloud, and allow access from any device, including mobile."}
               </p>
-              {/* The hours, said ONCE — for the same reason the burst ceiling
-                  below is said once. The allowance does not vary by size, so
-                  it is a property of hosted machines rather than of any row,
-                  and a per-row copy was reading as "a bigger machine buys more
-                  hours". Sized from a real plan so it still tracks the
-                  catalog. */}
+              {/* Show the chosen plan's allowance, not the obsolete flat minute grant. */}
               {!plansQ.isLoading && planOptions.length > 0 && (
                 <p
                   className="text-xs leading-relaxed text-muted-foreground"
                   data-testid="compute-step-hours-note"
                 >
                   {describeIncludedHours(
-                    planOptions[0],
+                    planOptions.find((p) => p.planId === plan.computePlanId) ?? planOptions[0],
                     plansQ.data?.daemonPricing,
                   )}
                 </p>
               )}
+              {planOptions.length > 0 && <PlanFinePrint plan={planOptions.find((p) => p.planId === plan.computePlanId) ?? planOptions[0]} />}
               {/* The burst ceiling, said once for the same reason the hours
                   are: it does not vary by size, so it is a property of hosted
                   machines rather than of any row. Reserved figures are what

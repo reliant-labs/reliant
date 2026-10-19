@@ -335,6 +335,10 @@ describe("create-machine size prices", () => {
     expect(within(medium).getByTestId("size-price-medium")).toHaveTextContent("$0.41/hr");
     // The burn rate the price is paired with, from the same row.
     expect(medium).toHaveTextContent(/uses included hours 2× as fast/i);
+    expect(small).toHaveTextContent('25 GiB disk · $6.25/mo while suspended');
+    expect(medium).toHaveTextContent('50 GiB disk · $12.50/mo while suspended');
+    expect(within(modal).getByTestId('size-pricing-note')).toHaveTextContent('billed until deleted');
+    expect(within(modal).getByTestId('size-pricing-note')).toHaveTextContent('unless you enable overage');
     // The flat plan rate is not restated under per-size prices.
     expect(within(modal).queryByText(/\/min/)).not.toBeInTheDocument();
     expect(within(modal).getByTestId("size-pricing-note")).not.toHaveTextContent(/provisional/i);

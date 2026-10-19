@@ -158,6 +158,25 @@ export function hourlyPriceShort(pricing: DaemonPricingLike | undefined, size: s
   return `${centsDecimalToDollars(row.hourlyPriceCents)}/hr`;
 }
 
+/** Running time and retained disks have separate meters. */
+export const MACHINE_BILLING_POLICY = "Running machines use included hours, even when idle. Suspended machines use no hours but keep their disk, billed until deleted.";
+export const MACHINE_PRICING_NOTE = "Included hours are shared across machines; larger sizes use them faster. Machines pause when hours run out unless you enable overage at the size’s hourly price. The standard disk is included while running; extra disk is billed separately.";
+
+/** DaemonDisk stays in DATA GiB, including after whole-disk billing (#1000).
+ * The server price list minus included data gives the allowance: zero before
+ * cutover, the configured docker/cache allowance after it. Never hardcode it.
+ */
+export function diskAllowanceGib(pricing: DaemonPricingLike | undefined, size: string, includedGib: number): number | null {
+  const row = pricing?.sizes.find((s) => s.size === size);
+  return row && includedGib > 0 ? Math.max(0, Number(row.storageGib) - includedGib) : null;
+}
+
+export function provisionedDiskGib(pricing: DaemonPricingLike | undefined, size: string, disk: { capacityGib: number; includedGib: number } | undefined): number | null {
+  if (!disk || disk.capacityGib <= 0) return null;
+  const allowance = diskAllowanceGib(pricing, size, disk.includedGib);
+  return allowance === null ? null : disk.capacityGib + allowance;
+}
+
 /** One size's picker facts: price, burn rate, disk, and its suspended fee. */
 export interface SizeFacts {
   hourlyPriceLabel: string;

@@ -34,6 +34,8 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }))
 
+vi.mock('@/hooks/useCloudBillingQueries', () => ({ usePlans: () => ({ data: { daemonPricing: { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }, { size: 'large', multiplier: 4, hourlyPriceCents: '52', storageGib: 180 }], suspendedDiskCentsPerGibMonth: '25', placeholder: false } } }) }));
+
 vi.mock('@/services/controlPlane/billing', () => ({
   getComputeEligibility: mocks.getComputeEligibility,
 }))
@@ -115,7 +117,7 @@ const suspended = (over: Record<string, unknown> = {}) =>
 function showMachine(row: Record<string, unknown>) {
   mocks.listDaemons.mockResolvedValue({ daemons: [row] })
   mocks.getDaemon.mockResolvedValue({
-    daemon: { id: row.daemonId, storageSize: '40Gi', idleTimeout: '30m' },
+    daemon: { id: row.daemonId, storageSize: '40Gi', idleTimeout: '30m', disk: { capacityGib: 200, includedGib: 80, requestedGib: 200 } },
     workspaceBaseDomain: '',
   })
 }
@@ -245,6 +247,10 @@ describe('machine detail — resize', () => {
     await waitFor(() => expect(within(dialog).getByTestId('resize-size-small')).toBeEnabled())
     expect(within(dialog).queryByTestId('resize-disk-note')).not.toBeInTheDocument()
     await user.click(within(dialog).getByTestId('resize-size-small'))
-    expect(within(dialog).getByTestId('resize-disk-note')).toHaveTextContent(/40Gi/)
+    expect(within(dialog).getByTestId('resize-disk-note')).toHaveTextContent(/above the new size's standard is billed while running/i)
+    const small = within(dialog).getByTestId('resize-size-small');
+    expect(small).toHaveTextContent('$0.13/hr');
+    expect(small).toHaveTextContent('300 GiB disk · $75.00/mo while suspended');
+    expect(small).toHaveTextContent('$45.00/mo extra disk while running');
   })
 })

@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 
 import {
   includedHoursSentence,
+  MACHINE_BILLING_POLICY,
   type DaemonPricingLike,
   type SizeFacts,
 } from "./daemonUsage";
@@ -194,27 +195,7 @@ export function PlanTileRow({
             : "border-border bg-background hover:border-primary/40 hover:bg-muted/50",
       )}
     >
-      {/* The row names the MACHINE, what it reserves, and its price. Nothing
-          else — and specifically not an hours figure.
-      
-          It used to carry "N hours included each month" under the size, and
-          that line was wrong in the way a per-row number always is when the
-          quantity does not vary per row: every compute plan in the catalog
-          grants the same 9600 minutes (see daemon_compute_included_minutes in
-          control-plane's plans.yaml — 9600 at small, medium, large and xl
-          alike). Printing it four times implied four allowances and invited
-          exactly the reading it got, that a bigger machine buys more hours. It
-          does not; it buys a bigger machine.
-      
-          The figures on screen were worse than merely redundant. They came
-          from a dev database still seeded with migration 00054's superseded
-          per-plan values (1000/2500/5000/-1), so the rows read 17/42/83 hours
-          and Unlimited — three wrong numbers and one wrong claim, all rendered
-          faithfully from stale data. A uniform fact stated per row is a
-          standing invitation for drift like that to show up as product copy.
-      
-          Where the hours belong is once, beside the other things true of every
-          hosted machine — which is what the caller does. */}
+      {/* Compare plan allowance, machine costs and retained disk before buying. */}
       <span className="min-w-0">
         <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
           {plan.label}
@@ -237,6 +218,7 @@ export function PlanTileRow({
             absent when the server sent none. */}
         {plan.facts && factsVisible && (
           <span className="block text-xs text-muted-foreground" data-testid="plan-row-size-facts">
+            {plan.includedSmallDaemonHours !== undefined && `${plan.includedSmallDaemonHours} small-daemon-hours/month · `}
             {plan.facts.burnRateLabel} · {plan.facts.hourlyPriceLabel} · {plan.facts.diskLabel}
             {plan.facts.suspendedFeeLabel && <> · {plan.facts.suspendedFeeLabel} while suspended</>}
           </span>
@@ -259,131 +241,51 @@ export function PlanTileRow({
   );
 }
 
-/**
- * The included hours, as one sentence to sit ONCE beneath a list of machines.
- *
- * Replaces the per-row `describeIncluded`. The allowance is the same at every
- * size, so a per-row figure said the same thing four times while implying it
- * varied — and, being fed straight from the catalog, printed four DIFFERENT
- * stale numbers the moment a dev database lagged the config.
- *
- * Still read from the plan rather than hardcoded: 9600 is control-plane's
- * value to change, and this must follow it. It takes the plan whose row is
- * selected, and callers render it only where the whole list shares that
- * allowance — the uniformity is the caller's fact to know, not this
- * function's.
- */
+/** The chosen plan's server-supplied small-daemon-hour allowance. */
 export function describeIncludedHours(
   plan: ComputePlanOption,
   pricing?: DaemonPricingLike,
 ): string {
-  if (plan.includedMinutes < 0) return "Unlimited machine hours are included.";
-  // Per-daemon billing (design §6.2): the allowance is SMALL-DAEMON-HOURS,
-  // which a bigger machine burns faster — "on every size" stopped being true.
-  // Every number in the sentence is the server's.
-  return includedHoursSentence(
-    plan.includedSmallDaemonHours ?? Math.round(plan.includedMinutes / 60),
-    pricing,
-  );
+  if (plan.includedSmallDaemonHours === undefined) return "Included hours unavailable.";
+  return includedHoursSentence(plan.includedSmallDaemonHours, pricing);
 }
 
-/**
- * What the hours actually mean — the owner's "just loading up vs not".
- *
- * ── Every claim here was read out of the enforcement code ─────────────
- *
- * "A machine uses its hours whenever it's connected" —
- * `ConnectionBillingSweeper` bills each CONNECTED managed daemon every 30s
- * "whether or not it did any work". Idle-but-connected is billable, and saying
- * only "17 hours included" invites a user to assume otherwise.
- *
- * "Startup time isn't counted" — a daemon cannot appear in the liveness cache
- * until the gateway accepts its stream, so image pull and VM boot are never
- * billed. Worth stating because the previous sentence sounds worse than the
- * policy actually is.
- *
- * "machines pause" — this is the part that must not be guessed at, and it is
- * NOT the unsubscribed-org suspension path. `enforcement.Check` returns early on
- * `isPaid(sub)`, so ENFORCEMENT_SUSPEND_ON_OVERAGE never touches a paying
- * subscriber. Paid plans are gated in `svcdaemon`: included minutes, then any
- * coupon grant, and then `if !sub.OverageEnabled` the request is DENIED with
- * "enable overage billing to continue". Subscriptions are created with
- * `OverageEnabled: false`, so pausing is the DEFAULT and being billed overage
- * is a deliberate opt-in.
- *
- * That is why this says "pause… unless you turn on overage billing" and not
- * "you'll be billed $0.004/min". The rate is real and worth showing, but a
- * user who reads it as automatic would expect a bill they will never get —
- * and, worse, would not understand why their machine stopped.
- */
+/** The per-daemon meter bills running pods, not gateway connections.
+ * Suspension stops the hours meter, never the retained-disk meter. */
 export function PlanFinePrint({
   plan,
   rateVariesBySize,
 }: {
   plan: ComputePlanOption;
   /**
-   * True when this sits beneath a LIST of machines rather than beside one.
-   *
-   * The included hours are uniform across the catalog — 9600 minutes at every
-   * size — which is what lets everything else here be said once. The OVERAGE
-   * RATE is not: control-plane prices it per plan (0.25 / 0.6 / 1.0 / 1.7
-   * cents per minute up the ladder). So naming one plan's rate under a list of
-   * four machines states a uniformity that does not exist, and it would do it
-   * in the currency the user is about to be charged in.
-   *
-   * With no machine chosen there is no rate to name, so the policy is stated
-   * WITHOUT a number. The figure appears in the checkout, where exactly one
-   * machine is selected and the rate quoted is that machine's own.
+   * True beneath a list: each card quotes its own hourly rate.
+   * False beside a chosen machine: quote that machine's server-derived rate.
    */
   rateVariesBySize?: boolean;
 }) {
   return (
     <ul className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
       <li>
-        A machine uses its included hours whenever it&apos;s connected — whether
-        or not you&apos;re actively working. Startup time isn&apos;t counted,
-        and stopping a machine stops the clock.
+        {MACHINE_BILLING_POLICY} The standard disk is included while running; grown disk above it costs extra. By default, machines auto-suspend after 30 idle minutes.
       </li>
       <li>
-        {plan.includedMinutes < 0 ? (
-          <>Hours are unlimited on this plan.</>
-        ) : rateVariesBySize ? (
+        {rateVariesBySize ? (
           <>
-            If you use all {Math.round(plan.includedMinutes / 60)} hours, new
-            machines pause until next month — unless you turn on overage
+            If your included hours run out, machines pause until next month — unless you turn on overage
             billing, which keeps them running at that machine&apos;s
             per-hour rate. Overage is off unless you switch it on, and you can
             set a monthly cap.
           </>
-        ) : plan.overageCentsPerMinute > 0 ? (
-          <>
-            If you use all {Math.round(plan.includedMinutes / 60)} hours, new
-            machines pause until next month — unless you turn on overage
-            billing, which keeps them running at{" "}
-            {formatOverageRate(plan.overageCentsPerMinute)}. Overage is off
-            unless you switch it on, and you can set a monthly cap.
-          </>
         ) : (
           <>
-            If you use all {Math.round(plan.includedMinutes / 60)} hours, new
-            machines pause until next month.
+            If your included hours run out, machines pause until next month — unless you turn on overage
+            billing, which keeps them running at{" "}
+            {plan.facts?.hourlyPriceLabel ?? "the machine’s per-hour rate (price unavailable)"}. Overage is off
+            unless you switch it on, and you can set a monthly cap.
           </>
         )}
       </li>
       <li>Change or cancel any time from billing settings.</li>
     </ul>
   );
-}
-
-/**
- * The overage rate, per hour rather than per minute.
- *
- * The catalog stores cents-per-minute, and the numbers are small enough that
- * printing them directly gives "$0.004/min" — which reads as noise and is hard
- * to compare against a monthly price. Hours are the unit the rest of this page
- * already uses for compute.
- */
-function formatOverageRate(centsPerMinute: number): string {
-  const centsPerHour = centsPerMinute * 60;
-  return `${formatCentsAsDollars(Math.round(centsPerHour))}/hour`;
 }

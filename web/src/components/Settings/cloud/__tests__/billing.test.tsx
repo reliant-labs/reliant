@@ -241,7 +241,7 @@ describe('BillingSection', () => {
       renderSection()
 
       expect(screen.getByText(/coupon minutes/i)).toBeInTheDocument()
-      expect(screen.getByText('120 min (2 h)')).toBeInTheDocument()
+      expect(screen.getByText('2 small-machine-hours')).toBeInTheDocument()
       // The distinction from included minutes has to be legible, not implied.
       expect(screen.getByText(/does not renew/i)).toBeInTheDocument()
     })
@@ -253,7 +253,7 @@ describe('BillingSection', () => {
       fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
 
       expect(screen.getByText(/coupon minutes remaining/i)).toBeInTheDocument()
-      expect(screen.getByText('90 min (1.5 h)')).toBeInTheDocument()
+      expect(screen.getByText('1.5 small-machine-hours')).toBeInTheDocument()
       // Included stays the plan's own 600 min / 10 h — the grant is not folded in.
       expect(screen.getByText('10 h')).toBeInTheDocument()
     })
@@ -338,10 +338,10 @@ describe('BillingSection', () => {
       fireEvent.click(screen.getByRole('button', { name: /^redeem$/i }))
 
       expect(
-        await screen.findByText(/added 120 machine minutes \(2 hours\)/i),
+        await screen.findByText(/added 2 small-machine-hours/i),
       ).toBeInTheDocument()
       expect(
-        screen.getByText(/180 machine minutes \(3 hours\) available/i),
+        screen.getByText(/3 small-machine-hours available/i),
       ).toBeInTheDocument()
     })
 

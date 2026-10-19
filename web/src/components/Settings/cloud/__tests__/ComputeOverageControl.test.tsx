@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   ComputeOverageControl,
   choiceFromState,
-  limitAsMinutes,
   suggestedLimitCents,
 } from '@/components/Settings/cloud/ComputeOverageControl'
 
@@ -16,7 +15,7 @@ import {
 
 const defaults = {
   enabled: false,
-  overageCentsPerMinute: 40, // $0.40/min
+  pricing: { sizes: [{ size: 'small', hourlyPriceCents: '13', multiplier: 1, storageGib: 120 }], suspendedDiskCentsPerGibMonth: '25', placeholder: false },
   overageSpentCents: 0,
   monthlyPriceCents: 4000, // $40/mo
   onSave: vi.fn(),
@@ -45,18 +44,6 @@ describe('choiceFromState', () => {
 
   it('reads overage-off as off regardless of any stored cap', () => {
     expect(choiceFromState(false, 2000n)).toBe('off')
-  })
-})
-
-describe('limitAsMinutes', () => {
-  it('converts a dollar limit to extra minutes at the plan rate', () => {
-    // $20 at $0.40/min is 50 minutes. Users reason in machine time and are
-    // billed in dollars; the control shows both.
-    expect(limitAsMinutes(2000, 40)).toBe(50)
-  })
-
-  it('returns null when the plan has no overage rate, rather than dividing by zero', () => {
-    expect(limitAsMinutes(2000, 0)).toBeNull()
   })
 })
 
@@ -142,10 +129,11 @@ describe('ComputeOverageControl', () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
-  it('shows the dollar limit as extra minutes at the plan rate', () => {
+  it('shows per-size server hourly rates, never a flat minute estimate', () => {
     renderControl({ enabled: true, budgetCents: 2000n })
-
-    expect(screen.getByText(/≈ 50 extra minutes/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/small: \$0.13\/hr/)).toHaveLength(2)
+    expect(screen.queryByText(/extra minutes/)).not.toBeInTheDocument()
+    expect(screen.getByText(/billed until deleted/)).toBeInTheDocument()
   })
 
   it('shows overage spend against the cap so the ceiling and the distance to it are one glance', () => {
@@ -158,10 +146,8 @@ describe('ComputeOverageControl', () => {
     expect(screen.getByText('$15.00 of $20.00')).toBeInTheDocument()
   })
 
-  it('offers no control at all on a plan with no overage rate', () => {
-    renderControl({ overageCentsPerMinute: 0 })
-
-    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
-    expect(screen.getByText(/doesn't offer extra time/i)).toBeInTheDocument()
+  it('says prices are unavailable rather than inventing a rate', () => {
+    renderControl({ pricing: undefined })
+    expect(screen.getAllByText(/prices unavailable/)).toHaveLength(2)
   })
 })

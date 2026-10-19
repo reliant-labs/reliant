@@ -121,11 +121,11 @@ export type DiskGrowStatus =
  * A usable size of zero means unknown, for example a pod built before the
  * operator recorded it, and is never read as a disk the guest cannot use.
  */
-export function diskGrowStatus(disk: DiskLike | undefined, running: boolean): DiskGrowStatus | null {
+export function diskGrowStatus(disk: DiskLike | undefined, running: boolean, allowanceGib = 0): DiskGrowStatus | null {
   if (!disk) return null;
-  if (disk.state === DaemonDiskState.EXPANDING) return { kind: "expanding", targetGib: disk.requestedGib };
+  if (disk.state === DaemonDiskState.EXPANDING) return { kind: "expanding", targetGib: disk.requestedGib + allowanceGib };
   if (disk.state === DaemonDiskState.FAILED) {
-    return { kind: "failed", targetGib: disk.requestedGib, message: disk.message };
+    return { kind: "failed", targetGib: disk.requestedGib + allowanceGib, message: disk.message };
   }
   if (running && disk.usableGib > 0 && disk.capacityGib > disk.usableGib) {
     return { kind: "restart-to-use", extraGib: disk.capacityGib - disk.usableGib };

@@ -27,7 +27,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Cpu, Wallet } from "lucide-react";
-import { remainingHeadline } from "@/components/Billing/daemonUsage";
+import { remainingHeadline, sizeFacts } from "@/components/Billing/daemonUsage";
 import {
   useComputeSubscription,
   useComputeUsage,
@@ -233,10 +233,12 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
             monthlyPriceCents: d.monthlyPriceCents,
             includedMinutes: d.includedMinutes,
             overageCentsPerMinute: d.overageCentsPerMinute,
+            includedSmallDaemonHours: Number(plan.structuredLimits?.includedSmallDaemonHours ?? 0),
+            facts: sizeFacts(plansQ.data?.daemonPricing, d.allowedSizes.at(-1) ?? "small") ?? undefined,
           },
         ];
       }),
-    [purchasablePlans],
+    [purchasablePlans, plansQ.data?.daemonPricing],
   );
 
   /**

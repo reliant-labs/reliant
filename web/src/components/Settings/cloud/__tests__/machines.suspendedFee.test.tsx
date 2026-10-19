@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   caps: { cloudDaemons: true },
   listDaemons: vi.fn(async () => ({ daemons: [] })),
   getComputeSubscription: vi.fn(async () => ({})),
+  getDaemon: vi.fn(async () => ({ daemon: { disk: { capacityGib: 200, requestedGib: 240, includedGib: 80 } } })),
   getComputeEligibility: vi.fn(async () => ({
     eligible: true,
     reason: 0,
@@ -39,7 +40,7 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
       daemonPricing: {
         sizes: [
           { size: 'small', multiplier: 1n, hourlyPriceCents: '13.0000', storageGib: 25n },
-          { size: 'large', multiplier: 4n, hourlyPriceCents: '52.0000', storageGib: 100n },
+          { size: 'large', multiplier: 4n, hourlyPriceCents: '52.0000', storageGib: 180n },
         ],
         suspendedDiskCentsPerGibMonth: '25.0000',
         placeholder: true,
@@ -107,7 +108,7 @@ vi.mock('@/services/controlPlane/environments', () => ({
   listDaemons: mocks.listDaemons,
   getComputeSubscription: mocks.getComputeSubscription,
   listDaemonTokens: mocks.listDaemonTokens,
-  getDaemon: vi.fn(),
+  getDaemon: mocks.getDaemon,
   createEnvironment: vi.fn(),
   deleteDaemon: vi.fn(),
   suspendDaemon: vi.fn(),
@@ -184,7 +185,8 @@ describe('MachinesSection — suspended disk fee (J)', () => {
     const fees = screen.getAllByTestId('machine-suspended-fee')
     // 100 GiB × $0.25/GiB-month = $25.00/mo — only the suspended one.
     expect(fees).toHaveLength(1)
-    expect(fees[0]).toHaveTextContent('$25.00/mo while suspended')
+    expect(await screen.findByText(/300 GiB disk · \$75.00\/mo while suspended until deleted/)).toBeInTheDocument()
+    expect(fees[0]).toHaveTextContent('$75.00/mo while suspended')
     const row = screen.getByText('parked-large').closest('tr')!
     expect(within(row).getByTestId('machine-suspended-fee')).toBeInTheDocument()
   })

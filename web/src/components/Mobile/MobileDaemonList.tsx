@@ -36,6 +36,10 @@ import {
   MobileScreenHeader,
 } from "./MobileChrome";
 import { machineDisplayName } from "@/lib/machineName";
+import { usePlans } from "@/hooks/useCloudBillingQueries";
+import { sizeFacts, MACHINE_BILLING_POLICY, MACHINE_PRICING_NOTE } from "@/components/Billing/daemonUsage";
+import { formatMachineSpec } from "@/components/Billing/machineSpecs";
+import { MachineCost } from "@/components/Billing/MachineCost";
 
 /** Matches the desktop daemon poll so the shared cache entry stays fresh. */
 const POLL_INTERVAL_MS = 5_000;
@@ -47,10 +51,11 @@ const MOBILE_SECONDARY_ACTION =
   "flex min-h-[44px] items-center justify-center rounded-lg border border-border px-4 text-sm font-medium text-foreground active:bg-foreground/5 disabled:opacity-60";
 
 const SIZE_OPTIONS = [
-  { value: DaemonSize.DAEMON_SIZE_SMALL, label: "Small", specs: "1 CPU · 2GB RAM" },
-  { value: DaemonSize.DAEMON_SIZE_MEDIUM, label: "Medium", specs: "2 CPU · 4GB RAM" },
-  { value: DaemonSize.DAEMON_SIZE_LARGE, label: "Large", specs: "4 CPU · 8GB RAM" },
-  { value: DaemonSize.DAEMON_SIZE_XL, label: "XL", specs: "8 CPU · 16GB RAM" },
+  { value: DaemonSize.DAEMON_SIZE_SMALL, label: "Small", name: "small" },
+  { value: DaemonSize.DAEMON_SIZE_MEDIUM, label: "Medium", name: "medium" },
+  { value: DaemonSize.DAEMON_SIZE_LARGE, label: "Large", name: "large" },
+  { value: DaemonSize.DAEMON_SIZE_XL, label: "XL", name: "xl" },
+  { value: DaemonSize.DAEMON_SIZE_2XL, label: "2XL", name: "2xl" },
 ] as const;
 
 const IDLE_TIMEOUT_OPTIONS = [
@@ -83,6 +88,7 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
   const [gitBranch, setGitBranch] = useState("main");
   const [error, setError] = useState("");
 
+  const pricing = usePlans().data?.daemonPricing;
   const create = useCreateDaemon();
   const accountGate = useAccountGate();
   const busy = create.isPending;
@@ -178,6 +184,7 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
             <div className="grid grid-cols-2 gap-2">
               {SIZE_OPTIONS.map((option) => {
                 const selected = option.value === size;
+                const facts = sizeFacts(pricing, option.name);
                 return (
                   <button
                     key={option.value}
@@ -192,7 +199,8 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
                     )}
                   >
                     <p className="text-sm font-medium text-foreground">{option.label}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{option.specs}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{formatMachineSpec(option.name)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{facts ? `${facts.hourlyPriceLabel} · ${facts.diskLabel} · ${facts.suspendedFeeLabel} while suspended` : "Machine prices unavailable"}</p>
                   </button>
                 );
               })}
@@ -219,7 +227,7 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
               ))}
             </select>
             <p className="mt-1 text-xs text-muted-foreground">
-              Suspended machines are not billed.
+              {MACHINE_BILLING_POLICY} {MACHINE_PRICING_NOTE}
             </p>
           </div>
 
@@ -337,6 +345,7 @@ function DaemonRow({ daemon }: { daemon: Daemon }) {
 
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
       </Link>
+      {daemon.daemonType === "managed" && <MachineCost daemonId={daemon.daemonId} size={daemon.size} />}
     </div>
   );
 }

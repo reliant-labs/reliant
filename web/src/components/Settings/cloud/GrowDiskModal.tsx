@@ -22,7 +22,7 @@ import { Minus, Plus } from "lucide-react";
 
 import { Modal } from "@/components/ui/Modal";
 import { CardInset } from "@/components/forge-ui/card";
-import type { DaemonPricingLike } from "@/components/Billing/daemonUsage";
+import { suspendedFeeLabel, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui";
 import { DISK_CEILING_GIB, DISK_GROW_STEP_GIB, diskGrowPrice, diskGrowRange, type DiskGrowStatus } from "./diskGrow";
@@ -43,8 +43,12 @@ export interface GrowDiskModalProps {
   machineName: string;
   /** The disk's current data size: DaemonDisk.requested_gib. */
   currentGib: number;
+  provisionedGib: number | null;
   /** The disk the machine size's hourly price includes: DaemonDisk.included_gib. */
   includedGib: number;
+  /** Server price-list standard less included DATA; null when unknown. */
+  allowanceGib: number | null;
+  hourlyLabel: string | null;
   /** The plan's limit (eligibility max_daemon_storage_gib); 0 while loading. */
   maxGib: number;
   limitLoading: boolean;
@@ -67,7 +71,10 @@ export function GrowDiskModal({
   open,
   machineName,
   currentGib,
+  provisionedGib,
   includedGib,
+  allowanceGib,
+  hourlyLabel,
   maxGib,
   limitLoading,
   running,
@@ -99,7 +106,8 @@ export function GrowDiskModal({
   }, [open]);
 
   const chosen = range ? Math.min(Math.max(target ?? range.min, range.min), range.max) : null;
-  const price = chosen !== null ? diskGrowPrice(pricing, { currentGib, targetGib: chosen, includedGib }) : null;
+  const whole = (dataGib: number) => allowanceGib === null ? `${dataGib} GiB data (whole disk unavailable)` : `${dataGib + allowanceGib} GiB`;
+  const price = chosen !== null && allowanceGib !== null && provisionedGib !== null ? diskGrowPrice(pricing, { currentGib: provisionedGib, targetGib: chosen + allowanceGib, includedGib: includedGib + allowanceGib }) : null;
   const restartNow = running && restartable && restart;
   const atCeiling = maxGib >= DISK_CEILING_GIB;
   const step = (delta: number) => range && chosen !== null && setTarget(chosen + delta);
@@ -108,7 +116,8 @@ export function GrowDiskModal({
     <Modal isOpen={open} onClose={() => !isPending && onClose()} title="Grow disk" size="md">
       <div className="flex flex-col gap-4" data-testid="grow-disk-dialog">
         <p className="text-sm text-muted-foreground">
-          <span className="font-semibold text-foreground">{machineName}</span>&apos;s disk holds {currentGib} GiB.
+          <span className="font-semibold text-foreground">{machineName}</span>&apos;s disk is {provisionedGib === null ? "not yet measured" : `${provisionedGib} GiB`}. Requested size: {whole(currentGib)}. {hourlyLabel && `${hourlyLabel} past included hours.`}
+          {provisionedGib !== null && ` ${suspendedFeeLabel(pricing, provisionedGib) ?? "Fee unavailable"} while suspended until deleted.`}
         </p>
 
         {limitLoading ? (
@@ -137,7 +146,7 @@ export function GrowDiskModal({
                 value={chosen}
                 disabled={isPending || range.min === range.max}
                 onChange={(e) => setTarget(Number(e.target.value))}
-                aria-valuetext={`${chosen} GiB`}
+                aria-valuetext={`${whole(chosen)}`}
                 className="min-w-0 flex-1 accent-primary"
               />
               <Button
@@ -150,16 +159,16 @@ export function GrowDiskModal({
                 <Plus className="h-4 w-4" />
               </Button>
               <span className="w-20 shrink-0 text-right text-sm font-semibold tabular-nums text-foreground" data-testid="grow-disk-target">
-                {chosen} GiB
+                {whole(chosen)}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              +{chosen - currentGib} GiB · your plan allows up to {range.max} GiB
+              +{chosen - currentGib} GiB · your plan allows up to {whole(range.max)}
             </p>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground" data-testid="grow-disk-at-limit">
-            This disk is already {currentGib} GiB, the largest your plan allows.
+            This disk is already {whole(currentGib)}, the largest your plan allows.
             {!atCeiling && (
               <>
                 {" "}Larger disks need a bigger compute plan.{" "}
@@ -175,8 +184,8 @@ export function GrowDiskModal({
           <CardInset className="text-sm" data-testid="grow-disk-price">
             <p className="font-medium text-foreground">Adds {price.added}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Running: {price.running} for the {price.runningGib} GiB above the {includedGib} GiB the hourly price
-              includes. Stopped: {price.stopped} for the whole {chosen} GiB disk.
+              Running: {price.running} for the {price.runningGib} GiB above the {whole(includedGib)} the hourly price
+              includes. Suspended: {price.stopped} for the whole {whole(chosen)} disk until deleted.
               {pricing?.placeholder && " These prices are provisional."}
             </p>
           </CardInset>

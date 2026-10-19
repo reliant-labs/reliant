@@ -47,7 +47,7 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
   usePlans: () => ({
     data: {
       plans: [],
-      daemonPricing: { sizes: [], suspendedDiskCentsPerGibMonth: '25.0000', placeholder: false },
+      daemonPricing: { sizes: [{ size: 'xl', multiplier: 8n, hourlyPriceCents: '104', storageGib: 260n }], suspendedDiskCentsPerGibMonth: '25.0000', placeholder: false },
     },
   }),
 }))
@@ -174,7 +174,7 @@ describe('machine detail — grow disk', () => {
     showMachine(machine())
     renderDetail()
 
-    expect(await screen.findByText('160 GiB')).toBeInTheDocument()
+    expect(await screen.findByText('260 GiB disk')).toBeInTheDocument()
     await waitFor(() => expect(mocks.getComputeEligibility).toHaveBeenCalled())
     expect(screen.queryByRole('button', { name: /^grow$/i })).not.toBeInTheDocument()
   })
@@ -185,16 +185,16 @@ describe('machine detail — grow disk', () => {
     renderDetail()
     const dialog = await openGrow(user)
 
-    expect(within(dialog).getByTestId('grow-disk-target')).toHaveTextContent('170 GiB')
+    expect(within(dialog).getByTestId('grow-disk-target')).toHaveTextContent('270 GiB')
     expect(within(dialog).getByRole('button', { name: /10 GiB smaller/i })).toBeDisabled()
-    expect(within(dialog).getByText(/up to 320 GiB/i)).toBeInTheDocument()
+    expect(within(dialog).getByText(/up to 420 GiB/i)).toBeInTheDocument()
     expect(within(dialog).getByTestId('grow-disk-price')).toHaveTextContent('Adds +$2.50/mo')
 
     await user.click(within(dialog).getByRole('button', { name: /10 GiB larger/i }))
-    expect(within(dialog).getByTestId('grow-disk-target')).toHaveTextContent('180 GiB')
+    expect(within(dialog).getByTestId('grow-disk-target')).toHaveTextContent('280 GiB')
     expect(within(dialog).getByTestId('grow-disk-price')).toHaveTextContent('Adds +$5.00/mo')
     // Stopped, the whole disk bills: 180 GiB × 25¢.
-    expect(within(dialog).getByTestId('grow-disk-price')).toHaveTextContent('$45.00/mo for the whole 180 GiB disk')
+    expect(within(dialog).getByTestId('grow-disk-price')).toHaveTextContent('$70.00/mo for the whole 280 GiB disk until deleted')
 
     const confirm = within(dialog).getByRole('button', { name: /^grow disk$/i })
     expect(confirm).toBeDisabled()
@@ -284,7 +284,7 @@ describe('machine detail — grow disk', () => {
     renderDetail()
     const dialog = await openGrow(user)
 
-    expect(within(dialog).getByTestId('grow-disk-at-limit')).toHaveTextContent(/already 320 GiB/i)
+    expect(within(dialog).getByTestId('grow-disk-at-limit')).toHaveTextContent(/already 420 GiB/i)
     expect(within(dialog).getByRole('button', { name: /see plans/i })).toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: /^grow disk$/i })).not.toBeInTheDocument()
   })
@@ -292,14 +292,14 @@ describe('machine detail — grow disk', () => {
   it('shows a grow in progress', async () => {
     showMachine(machine(), { requestedGib: 200, state: DaemonDiskState.EXPANDING })
     renderDetail()
-    expect(await screen.findByTestId('disk-grow-notice')).toHaveTextContent('Growing the disk to 200 GiB…')
+    expect(await screen.findByTestId('disk-grow-notice')).toHaveTextContent('Growing the disk to 300 GiB…')
   })
 
   it('shows why a grow failed, and that nothing extra is billed', async () => {
     showMachine(machine(), { requestedGib: 200, state: DaemonDiskState.FAILED, message: 'The cloud disk could not be resized.' })
     renderDetail()
     const notice = await screen.findByTestId('disk-grow-notice')
-    expect(notice).toHaveTextContent(/couldn't grow the disk to 200 GiB/i)
+    expect(notice).toHaveTextContent(/couldn't grow the disk to 300 GiB/i)
     expect(notice).toHaveTextContent('The cloud disk could not be resized.')
     expect(notice).toHaveTextContent(/nothing extra is billed/i)
   })
