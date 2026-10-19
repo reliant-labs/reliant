@@ -1291,7 +1291,7 @@ function PlansTab() {
                 className="text-xs leading-relaxed text-muted-foreground"
                 data-testid="plans-hours-note"
               >
-                {describeIncludedHours(planOptions[0], plansQ.data?.daemonPricing)}
+                {describeIncludedHours(planOptions.find(option => option.planId === currentPlanId) ?? planOptions[0], plansQ.data?.daemonPricing)}
               </p>
               {/* The burst ceiling. Rows print the RESERVED figures, which
                   undersell a machine that compiles on four times the cores it

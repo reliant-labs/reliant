@@ -89,7 +89,8 @@ export function deriveMachineOptions<T extends MachineCatalogPlan>(
         plan.structuredLimits?.includedSmallDaemonHours !== undefined
           ? Number(plan.structuredLimits.includedSmallDaemonHours)
           : undefined,
-      facts: sizeFacts(pricing, size) ?? undefined,
+      facts: sizeFacts(pricing, size, plan.structuredLimits?.includedSmallDaemonHours === undefined ? undefined : Number(plan.structuredLimits.includedSmallDaemonHours)) ?? undefined,
+      allowedSizes: plan.structuredLimits?.allowedDaemonSizes,
     });
   }
   return options;

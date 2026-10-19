@@ -122,8 +122,9 @@ function selectComputeUsage(
   return { ...data, grantedMinutesRemaining: Number(data.grantedMinutesRemaining) };
 }
 
-export function useComputeUsage(period: "current" | "previous") {
+export function useComputeUsage(period: "current" | "previous", { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
+    enabled,
     queryKey: cloudBillingKeys.computeUsage(period),
     queryFn: () => billingClient().getCurrentUserComputeUsage({ period }),
     select: selectComputeUsage,

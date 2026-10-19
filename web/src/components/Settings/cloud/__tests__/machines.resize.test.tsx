@@ -34,7 +34,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }))
 
-vi.mock('@/hooks/useCloudBillingQueries', () => ({ usePlans: () => ({ data: { daemonPricing: { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }, { size: 'large', multiplier: 4, hourlyPriceCents: '52', storageGib: 180 }], suspendedDiskCentsPerGibMonth: '25', placeholder: false } } }) }));
+vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { includedSmallDaemonSeconds: 576000n, remainingSmallDaemonSeconds: 3600n } }), usePlans: () => ({ data: { daemonPricing: { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }, { size: 'large', multiplier: 4, hourlyPriceCents: '52', storageGib: 180 }], suspendedDiskCentsPerGibMonth: '25', placeholder: false } } }) }));
 
 vi.mock('@/services/controlPlane/billing', () => ({
   getComputeEligibility: mocks.getComputeEligibility,
@@ -166,8 +166,9 @@ describe('machine detail — resize', () => {
     await waitFor(() => expect(within(dialog).getByTestId('resize-size-large')).toBeEnabled())
     expect(within(dialog).getByTestId('resize-size-medium')).toBeDisabled()
     expect(within(dialog).getByTestId('resize-size-medium')).toHaveTextContent(/current/i)
-    expect(within(dialog).getByTestId('resize-size-xl')).toBeDisabled()
-    expect(within(dialog).getByTestId('resize-size-xl')).toHaveTextContent(/not on your plan/i)
+    expect(within(dialog).queryByTestId('resize-size-xl')).not.toBeInTheDocument()
+    expect(within(dialog).getByTestId('resize-size-large')).toHaveTextContent('40 Large hours/month included')
+    expect(dialog).not.toHaveTextContent(/×|uses included hours|burn/i)
     // Nothing is chosen until the user chooses.
     expect(within(dialog).getByRole('button', { name: /^resize$/i })).toBeDisabled()
   })

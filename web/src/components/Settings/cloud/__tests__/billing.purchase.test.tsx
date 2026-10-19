@@ -348,7 +348,7 @@ describe("the machine list", () => {
 
     for (const size of ["Small", "Medium", "Large"]) {
       expect(machineRow(size)).not.toHaveTextContent(/hours/i);
-      expect(machineRow(size)).not.toHaveTextContent(/included/i);
+      expect(machineRow(size)).toHaveTextContent(/Included runtime, hourly price and disk cost unavailable/i);
     }
   });
 
@@ -365,7 +365,8 @@ describe("the machine list", () => {
 
     const note = screen.getByTestId("plans-hours-note");
     // 1200 min = 20 h, from the fixture's own catalog — not a constant.
-    expect(note).toHaveTextContent(/20 small-daemon-hours each month/i);
+    expect(note).toHaveTextContent(/Included runtime unavailable/i);
+    expect(note).toHaveTextContent(/shared across your machines/i);
     expect(note).not.toHaveTextContent(/every size/i);
     expect(screen.getAllByTestId("plans-hours-note")).toHaveLength(1);
   });

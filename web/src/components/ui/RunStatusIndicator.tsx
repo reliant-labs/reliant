@@ -13,7 +13,7 @@
  */
 
 import Badge from "../forge-ui/badge";
-import StatusDot from "../forge-ui/status_dot";
+import Status from "../forge-ui/status";
 import { cn } from "../../lib/utils";
 import type { RunStatusDisplay } from "../../lib/runStatus";
 
@@ -60,8 +60,8 @@ export function RunStatusDot({
       role="img"
       aria-label={status.label}
     >
-      <StatusDot
-        variant={status.dotVariant}
+      <Status
+        tone={status.dotVariant}
         size={size}
         pulse={status.pulse}
         label={showLabel ? status.label : undefined}

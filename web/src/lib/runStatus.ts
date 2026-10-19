@@ -24,15 +24,13 @@ import {
   WorkflowStopReason,
 } from "../gen/reliant/v1/chat_pb";
 import { RunDisplayState } from "../gen/reliant/v1/run_pb";
+import type { StatusTone } from "../components/forge-ui/status";
 
-/** forge-ui StatusDot variants (components/forge-ui/status_dot.tsx). */
-export type RunStatusDotVariant =
-  | "active"
-  | "paused"
-  | "pending"
-  | "error"
-  | "warning"
-  | "neutral";
+/**
+ * forge-ui Status tones (components/forge-ui/status.tsx). The accent is never
+ * a status, so "queued" and "waiting" are neutral; only running pulses.
+ */
+export type RunStatusDotVariant = StatusTone;
 
 /** forge-ui Badge variants (components/forge-ui/badge.tsx). */
 export type RunStatusBadgeVariant = "success" | "warning" | "error" | "info" | "neutral";
@@ -85,13 +83,13 @@ export interface RunStatusInput {
 }
 
 const LIFECYCLE_ROWS: Record<RunLifecycleKey, RunStatusDisplay> = {
-  queued: { key: "queued", label: "Queued", dotVariant: "pending", badgeVariant: "info", pulse: false },
-  running: { key: "running", label: "Running", dotVariant: "active", badgeVariant: "info", pulse: true },
+  queued: { key: "queued", label: "Queued", dotVariant: "neutral", badgeVariant: "info", pulse: false },
+  running: { key: "running", label: "Running", dotVariant: "success", badgeVariant: "info", pulse: true },
   needs_you: { key: "needs_you", label: "Needs you", dotVariant: "warning", badgeVariant: "warning", pulse: false },
-  paused: { key: "paused", label: "Paused", dotVariant: "paused", badgeVariant: "warning", pulse: false },
+  paused: { key: "paused", label: "Paused", dotVariant: "warning", badgeVariant: "warning", pulse: false },
   completed: { key: "completed", label: "Completed", dotVariant: "neutral", badgeVariant: "success", pulse: false },
   succeeded: { key: "succeeded", label: "Succeeded", dotVariant: "neutral", badgeVariant: "success", pulse: false },
-  failed: { key: "failed", label: "Failed", dotVariant: "error", badgeVariant: "error", pulse: false },
+  failed: { key: "failed", label: "Failed", dotVariant: "danger", badgeVariant: "error", pulse: false },
   cancelled: { key: "cancelled", label: "Cancelled", dotVariant: "neutral", badgeVariant: "neutral", pulse: false },
   unknown: { key: "unknown", label: "Unknown", dotVariant: "neutral", badgeVariant: "neutral", pulse: false },
 };
@@ -100,7 +98,7 @@ const OVERLAY_ROWS: Record<RunStatusOverlayKey, RunStatusDisplay> = {
   waiting_for_machine: {
     key: "waiting_for_machine",
     label: "Waiting for machine",
-    dotVariant: "pending",
+    dotVariant: "neutral",
     badgeVariant: "warning",
     pulse: false,
   },
@@ -110,7 +108,7 @@ const OVERLAY_ROWS: Record<RunStatusOverlayKey, RunStatusDisplay> = {
   queued_for_machine: {
     key: "queued_for_machine",
     label: "Queued for machine",
-    dotVariant: "pending",
+    dotVariant: "neutral",
     badgeVariant: "warning",
     pulse: false,
   },

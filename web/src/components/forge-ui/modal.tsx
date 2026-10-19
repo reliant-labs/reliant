@@ -57,9 +57,7 @@ export default function Modal({
   useEffect(() => {
     if (!open) return;
     const previouslyFocused =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
     const panel = panelRef.current;
     const initial = panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
@@ -147,11 +145,7 @@ export default function Modal({
                   strokeWidth={2}
                   stroke="currentColor"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>

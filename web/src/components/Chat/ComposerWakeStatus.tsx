@@ -41,7 +41,7 @@
 import type { ReactNode } from "react";
 import { DaemonStatus, type DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
-import StatusDot from "../forge-ui/status_dot";
+import Status from "../forge-ui/status";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { machineDisplayName } from "@/lib/machineName";
 import { CANT_REACH_RELIANT, classifyDaemonWait, WAITING_FOR_MACHINE } from "@/lib/daemon-wait";
@@ -256,7 +256,7 @@ function StatusLine({
       <div className="mx-auto max-w-[1200px]">
         <div className="forge-ui flex flex-wrap items-center gap-x-3 gap-y-0.5 px-1 pb-1.5 text-xs text-muted-foreground">
           <p role="status" aria-label={label} className="flex items-center gap-2" data-testid="composer-wake-status">
-            <StatusDot variant={variant} pulse={pulse} size="sm" />
+            <Status tone={variant === "error" ? "danger" : "neutral"} pulse={pulse} size="sm" />
             <span>{children}</span>
           </p>
           {continueWithoutMachine}

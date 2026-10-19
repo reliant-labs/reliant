@@ -22,7 +22,7 @@ import { CommitHistory } from "../Git/CommitHistory";
 import { Button } from "../ui/Button";
 import { Tooltip } from "../ui/Tooltip";
 import Badge from "../forge-ui/badge";
-import StatusDot from "../forge-ui/status_dot";
+import Status from "../forge-ui/status";
 import Card, { CardHeader, CardInset } from "../forge-ui/card";
 import EmptyState from "../forge-ui/empty_state";
 import { DeleteWorktreeModal } from "./DeleteWorktreeModal";
@@ -178,7 +178,7 @@ function WorkspaceDetail({
                 )}
                 {treeState && (
                   <Tooltip content={treeState.detail} delay={300} wrapperClassName="inline-flex">
-                    <StatusDot variant={treeState.variant} label={treeState.label} size="sm" />
+                    <Status tone={treeState.variant} label={treeState.label} size="sm" />
                   </Tooltip>
                 )}
               </div>
@@ -433,7 +433,7 @@ function LifecycleMenu({ worktree }: { worktree: Worktree }) {
         onClick={() => setOpen((value) => !value)}
         rightIcon={<ChevronDown className="h-3 w-3" />}
       >
-        <StatusDot variant={current.variant} size="sm" />
+        <Status tone={current.variant} size="sm" />
         {current.label}
       </Button>
 
@@ -461,7 +461,7 @@ function LifecycleMenu({ worktree }: { worktree: Worktree }) {
                 className="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-muted focus:bg-muted focus:outline-none"
               >
                 <span className="mt-1.5">
-                  <StatusDot variant={option.variant} size="sm" />
+                  <Status tone={option.variant} size="sm" />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm text-foreground">{option.label}</span>

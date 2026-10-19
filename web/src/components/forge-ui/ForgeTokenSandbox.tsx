@@ -19,7 +19,7 @@ import Badge from "./badge";
 import DataTable from "./data_table";
 import EmptyState from "./empty_state";
 import StatGrid from "./stat_grid";
-import StatusDot from "./status_dot";
+import Status from "./status";
 
 const SCHEMES = [
   "professional-blue",
@@ -113,9 +113,9 @@ export default function ForgeTokenSandbox() {
           <Badge variant="danger" label="Failed" />
           <Badge variant="info" label="Queued" />
           <Badge variant="neutral" label="Unknown" />
-          <StatusDot variant="active" label="healthy" />
-          <StatusDot variant="warning" label="degraded" />
-          <StatusDot variant="error" label="down" />
+          <Status tone="success" label="healthy" />
+          <Status tone="warning" label="degraded" />
+          <Status tone="danger" label="down" />
         </div>
 
         <DataTable<Row>

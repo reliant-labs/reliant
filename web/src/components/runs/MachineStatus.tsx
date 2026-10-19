@@ -31,7 +31,7 @@ import { useTriggers } from "@/hooks/trigger-queries";
 import { isQuotaResumeError, formatResumeError } from "@/lib/daemon-resume";
 import { cn } from "@/lib/utils";
 import { useActivityStore } from "@/store/activityStore";
-import StatusDot from "../forge-ui/status_dot";
+import Status from "../forge-ui/status";
 import { machineDisplayName } from "@/lib/machineName";
 
 type MachineState = "suspended" | "starting" | "offline" | "deleted" | "online" | "unknown";
@@ -99,7 +99,7 @@ export function MachineStatus({ daemonId, automation, className }: MachineStatus
       body = (
         <p className="flex items-center gap-2 text-sm text-foreground">
           <span data-testid="machine-status-starting-dot">
-            <StatusDot variant="pending" pulse />
+            <Status tone="neutral" pulse />
           </span>
           <span>
             <span className="font-semibold">{name}</span> is starting…

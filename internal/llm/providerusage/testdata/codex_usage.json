@@ -1,0 +1,27 @@
+{
+  "plan_type": "plus",
+  "rate_limit": {
+    "allowed": true,
+    "limit_reached": false,
+    "primary_window": {"used_percent": 25, "limit_window_seconds": 18000, "reset_after_seconds": 900, "reset_at": 1790000900},
+    "secondary_window": {"used_percent": 61, "limit_window_seconds": 604800, "reset_after_seconds": 86400, "reset_at": 1790086400}
+  },
+  "additional_rate_limits": [
+    {
+      "limit_name": "GPT-5.3-Codex-Spark",
+      "metered_feature": "codex_bengalfox",
+      "normal_model_slug": "gpt-5.3-codex",
+      "rate_limit": {
+        "allowed": true,
+        "limit_reached": false,
+        "primary_window": {"used_percent": 3, "limit_window_seconds": 18000, "reset_after_seconds": 1000, "reset_at": 1790001000},
+        "secondary_window": null
+      }
+    },
+    {"limit_name": "Broken", "metered_feature": "", "rate_limit": null}
+  ],
+  "credits": {"has_credits": false, "unlimited": false, "balance": "0"},
+  "rate_limit_reached_type": null,
+  "account_id": "acct-fixture-0001",
+  "user_id": "user-fixture-0001"
+}

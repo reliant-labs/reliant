@@ -1,12 +1,22 @@
 import React, { useState } from "react";
 
-interface Column<T> {
+import Link from "./link";
+
+export interface DataTableColumn<T> {
   key: string;
-  /** Header text. Use `srHeader` for a column whose header is visually empty (row actions). */
+  /** Header text, sentence case. Use `srHeader` for a column whose header is visually empty (row actions). */
   header: string;
   render?: (value: unknown, row: T) => React.ReactNode;
   sortable?: boolean;
   width?: string;
+  /** A figure: right-aligned, tabular numerals, header aligned to match. */
+  numeric?: boolean;
+  /**
+   * The cell holds its own controls (a menu, a button). In a table with
+   * `getRowHref` the whole row is a link; an interactive cell is lifted above
+   * it so its controls keep their own clicks.
+   */
+  interactive?: boolean;
   /** Extra classes for this column's cells (alignment, truncation). */
   className?: string;
   /** Extra classes for this column's header cell. */
@@ -20,8 +30,8 @@ export type DataTableRowProps = {
   className?: string;
 } & { [dataAttribute: `data-${string}`]: string | undefined };
 
-interface DataTableProps<T extends Record<string, unknown>> {
-  columns: Column<T>[];
+export interface DataTableProps<T extends Record<string, unknown>> {
+  columns: DataTableColumn<T>[];
   data: T[];
   onSort?: (key: string, direction: "asc" | "desc") => void;
   onPageChange?: (page: number) => void;
@@ -31,23 +41,26 @@ interface DataTableProps<T extends Record<string, unknown>> {
   pageSize?: number;
   totalItems?: number;
   loading?: boolean;
-  emptyMessage?: string;
+  emptyMessage?: React.ReactNode;
   selectable?: boolean;
   /**
    * Whether to render the pagination footer.
    *
    * Defaults to whether the caller wired EITHER paging handler, because a
-   * footer without one is not merely decorative — it actively misinforms. The
-   * footer previously rendered unconditionally, so a table showing a complete
-   * finite set (every workload in a cluster; every member of a team) displayed
-   * "Rows per page: 10" above sixteen rows, with dead Previous/Next buttons. A
-   * reader who believes that chrome concludes the list is truncated and goes
-   * looking for page two.
+   * footer without one is not merely decorative — it actively misinforms. A
+   * table showing a complete finite set that displays "Rows per page: 10" with
+   * dead Previous/Next buttons tells the reader the list is truncated.
    *
-   * Pass it explicitly to override in either direction: `false` to suppress the
-   * footer on a paged table, `true` to keep it on an uncontrolled one.
+   * Pass it explicitly to override in either direction.
    */
   paginated?: boolean;
+  /**
+   * Make each row a link to this href. The WHOLE row is the target — the
+   * first column's content is the anchor (so its text is the link's name) and
+   * a pseudo-element stretches it across the row. Return undefined for a row
+   * that goes nowhere. Mark columns holding their own controls `interactive`.
+   */
+  getRowHref?: (row: T, index: number) => string | undefined;
   /**
    * A stable key per row. Defaults to the row index, which is wrong for any
    * list that re-sorts or filters: React then reuses one row's DOM (and its
@@ -62,22 +75,28 @@ interface DataTableProps<T extends Record<string, unknown>> {
    * Give each column a `width` (one may be left to take the remainder).
    */
   layout?: "auto" | "fixed";
-  /** Tighter cell padding, for dense lists. */
+  /** 32px rows instead of 40px, for a long list in a narrow panel. */
   compact?: boolean;
+  /**
+   * Drop the table's own border and radius, to sit flush inside a <Card> that
+   * already frames it (title above, table to the edges). Never nest a framed
+   * table in a card: that is a card in a card.
+   */
+  flush?: boolean;
   /** The table's accessible name. */
   ariaLabel?: string;
 }
 
-function SkeletonRow({ cols }: { cols: number }) {
+function SkeletonRow({ cols, height }: { cols: number; height: string }) {
   return (
     <tr>
       <td colSpan={cols} className="p-0">
         <span className="sr-only">Loading…</span>
-        <div aria-hidden="true" className="flex items-center gap-4 px-4 py-3">
+        <div aria-hidden="true" className={`flex items-center gap-4 px-4 ${height}`}>
           {Array.from({ length: cols }).map((_, i) => (
             <div
               key={i}
-              className="h-4 flex-1 animate-pulse rounded bg-surface-muted"
+              className="h-3 flex-1 animate-pulse motion-reduce:animate-none rounded bg-ink/5"
             />
           ))}
         </div>
@@ -86,6 +105,22 @@ function SkeletonRow({ cols }: { cols: number }) {
   );
 }
 
+/**
+ * DataTable — the list every console page is made of.
+ *
+ * Density is the point: 36px header, 40px rows, `px-4` cells, hairline row
+ * dividers, no zebra, no header fill. Headers are sentence case in
+ * `text-xs text-ink-muted` — never `uppercase tracking-wider`. Figures are
+ * right-aligned in tabular numerals (`numeric`). A column that holds the same
+ * value on every row belongs in the page's meta line, not in the table.
+ *
+ *   <DataTable
+ *     columns={[{ key: "name", header: "Name" }, { key: "p95", header: "p95", numeric: true }]}
+ *     data={services}
+ *     getRowKey={(s) => s.name}
+ *     getRowHref={(s) => `/services/${s.name}`}
+ *   />
+ */
 export default function DataTable<T extends Record<string, unknown>>({
   columns,
   data,
@@ -97,16 +132,18 @@ export default function DataTable<T extends Record<string, unknown>>({
   pageSize = 10,
   totalItems,
   loading = false,
-  emptyMessage = "No data available",
+  emptyMessage = "Nothing here yet",
   selectable = false,
   paginated,
+  getRowHref,
   getRowKey,
   getRowProps,
   layout = "auto",
   compact = false,
+  flush = false,
   ariaLabel,
 }: DataTableProps<T>) {
-  const cellPadding = compact ? "px-4 py-2" : "px-4 py-3";
+  const rowHeight = compact ? "h-8" : "h-10";
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -149,17 +186,20 @@ export default function DataTable<T extends Record<string, unknown>>({
   // true. Default to showing it only when paging is actually wired up.
   const showPagination = paginated ?? (!!onPageChange || !!onPageSizeChange);
 
+  const pagerButton =
+    "inline-flex h-8 items-center rounded-md border border-border px-3 text-sm font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50";
+
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-surface">
+    <div className={flush ? "" : "overflow-hidden rounded-lg border border-border bg-surface"}>
       <div className="overflow-x-auto">
         <table
-          className={`min-w-full divide-y divide-border ${layout === "fixed" ? "w-full table-fixed" : ""}`}
+          className={`min-w-full border-collapse ${layout === "fixed" ? "w-full table-fixed" : ""}`}
           aria-label={ariaLabel}
         >
-          <thead className="bg-surface-muted">
-            <tr>
+          <thead>
+            <tr className="border-b border-border">
               {selectable && (
-                <th className={`w-10 ${cellPadding}`}>
+                <th className="h-9 w-10 px-4">
                   <input
                     type="checkbox"
                     aria-label="Select all rows"
@@ -173,70 +213,97 @@ export default function DataTable<T extends Record<string, unknown>>({
                 <th
                   key={col.key}
                   scope="col"
-                  className={`${cellPadding} text-left text-xs font-semibold uppercase tracking-wider text-ink-muted ${
-                    col.sortable
-                      ? "cursor-pointer select-none hover:text-ink-muted"
-                      : ""
+                  aria-sort={
+                    col.sortable && sortKey === col.key
+                      ? sortDir === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : undefined
+                  }
+                  className={`h-9 whitespace-nowrap px-4 text-xs font-medium text-ink-muted ${
+                    col.numeric ? "text-right" : "text-left"
                   } ${col.headerClassName ?? ""}`}
                   style={col.width ? { width: col.width } : undefined}
-                  onClick={() => col.sortable && handleSort(col.key)}
                 >
-                  <span className={col.srHeader ? "sr-only" : "inline-flex items-center gap-1"}>
-                    {col.header}
-                    {col.sortable && sortKey === col.key && (
-                      <span className="text-accent">
-                        {sortDir === "asc" ? "↑" : "↓"}
+                  {col.srHeader ? (
+                    <span className="sr-only">{col.header}</span>
+                  ) : col.sortable ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSort(col.key)}
+                      className="inline-flex items-center gap-1 rounded hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    >
+                      {col.header}
+                      <span aria-hidden="true" className="w-3 text-ink">
+                        {sortKey === col.key ? (sortDir === "asc" ? "↑" : "↓") : ""}
                       </span>
-                    )}
-                  </span>
+                    </button>
+                  ) : (
+                    col.header
+                  )}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
+          <tbody>
             {loading ? (
               Array.from({ length: pageSize }).map((_, i) => (
-                <SkeletonRow key={i} cols={allCols} />
+                <SkeletonRow key={i} cols={allCols} height={rowHeight} />
               ))
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={allCols} className="px-4 py-12 text-center">
-                  <p className="text-sm text-ink-muted">{emptyMessage}</p>
+                <td colSpan={allCols} className="px-4 py-12 text-center text-sm text-ink-muted">
+                  {emptyMessage}
                 </td>
               </tr>
             ) : (
               data.map((row, i) => {
                 const { className: rowClassName, ...rowAttributes } = getRowProps?.(row, i) ?? {};
+                const href = getRowHref?.(row, i);
                 return (
-                <tr
-                  key={getRowKey ? getRowKey(row, i) : i}
-                  {...rowAttributes}
-                  className={`transition-colors hover:bg-surface-muted ${
-                    selected.has(i) ? "bg-accent-surface" : ""
-                  } ${rowClassName ?? ""}`}
-                >
-                  {selectable && (
-                    <td className={cellPadding}>
-                      <input
-                        type="checkbox"
-                        aria-label={`Select row ${i + 1}`}
-                        checked={selected.has(i)}
-                        onChange={() => toggleRow(i)}
-                        className="h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
-                      />
-                    </td>
-                  )}
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={`whitespace-nowrap ${cellPadding} text-sm text-ink-muted ${col.className ?? ""}`}
-                    >
-                      {col.render
+                  <tr
+                    key={getRowKey ? getRowKey(row, i) : i}
+                    {...rowAttributes}
+                    className={`border-t border-border/70 first:border-t-0 ${
+                      href ? "relative cursor-pointer hover:bg-ink/5" : ""
+                    } ${selected.has(i) ? "bg-accent-surface" : ""} ${rowClassName ?? ""}`}
+                  >
+                    {selectable && (
+                      <td className={`${rowHeight} relative z-10 px-4`}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select row ${i + 1}`}
+                          checked={selected.has(i)}
+                          onChange={() => toggleRow(i)}
+                          className="h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
+                        />
+                      </td>
+                    )}
+                    {columns.map((col, ci) => {
+                      const content = col.render
                         ? col.render(row[col.key], row)
-                        : String(row[col.key] ?? "")}
-                    </td>
-                  ))}
-                </tr>
+                        : String(row[col.key] ?? "");
+                      return (
+                        <td
+                          key={col.key}
+                          className={`${rowHeight} whitespace-nowrap px-4 text-sm text-ink ${
+                            col.numeric ? "text-right tabular-nums" : ""
+                          } ${col.interactive ? "relative z-10" : ""} ${col.className ?? ""}`}
+                        >
+                          {href && ci === 0 ? (
+                            <Link
+                              href={href}
+                              className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent"
+                            >
+                              {content}
+                            </Link>
+                          ) : (
+                            content
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
                 );
               })
             )}
@@ -246,43 +313,45 @@ export default function DataTable<T extends Record<string, unknown>>({
 
       {/* Pagination — only when the caller can actually page. */}
       {showPagination && (
-      <div className="flex items-center justify-between border-t border-border bg-surface px-4 py-3">
-        <div className="flex items-center gap-2 text-sm text-ink-muted">
-          <span>Rows per page:</span>
-          <select
-            value={pageSize}
-            onChange={(e) => onPageSizeChange?.(Number(e.target.value))}
-            className="rounded border border-border-strong bg-surface px-2 py-1 text-sm focus:border-accent-border focus:outline-none focus:ring-1 focus:ring-accent"
-          >
-            {[10, 25, 50, 100].map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-ink-muted">
-            Page {page} of {totalPages}
-          </span>
-          <div className="flex gap-1">
-            <button
-              onClick={() => onPageChange?.(page - 1)}
-              disabled={page <= 1}
-              className="rounded-lg border border-border-strong px-3 py-1.5 text-sm font-medium text-ink-muted transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
+        <div className="flex items-center justify-between border-t border-border px-4 py-2">
+          <label className="flex items-center gap-2 text-xs text-ink-muted">
+            Rows per page
+            <select
+              value={pageSize}
+              onChange={(e) => onPageSizeChange?.(Number(e.target.value))}
+              className="h-7 rounded-md border border-border bg-surface px-2 text-xs text-ink focus:border-accent-border focus:outline-none focus:ring-1 focus:ring-accent"
             >
-              Previous
-            </button>
-            <button
-              onClick={() => onPageChange?.(page + 1)}
-              disabled={page >= totalPages}
-              className="rounded-lg border border-border-strong px-3 py-1.5 text-sm font-medium text-ink-muted transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Next
-            </button>
+              {[10, 25, 50, 100].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex items-center gap-3">
+            <span className="text-xs tabular-nums text-ink-muted">
+              Page {page} of {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => onPageChange?.(page - 1)}
+                disabled={page <= 1}
+                className={pagerButton}
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={() => onPageChange?.(page + 1)}
+                disabled={page >= totalPages}
+                className={pagerButton}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
-      </div>
       )}
     </div>
   );

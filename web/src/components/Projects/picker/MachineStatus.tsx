@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 
-import StatusDot from "@/components/forge-ui/status_dot";
+import Status from "@/components/forge-ui/status";
 import Badge from "@/components/forge-ui/badge";
 import {
   DaemonStatus,
@@ -37,17 +37,17 @@ import { machineDisplayName } from "@/lib/machineName";
  * docs/findings/add-github-project-2026-09-30.md.
  */
 
-type StatusDotVariant = "active" | "paused" | "pending" | "error" | "warning" | "neutral";
+type StatusTone = "success" | "warning" | "danger" | "neutral";
 
-// cloudDaemonStatusLabel's vocabulary → StatusDot's. Colour carries the
+// cloudDaemonStatusLabel's vocabulary → Status tones. Colour carries the
 // meaning; the label names it.
-const STATUS_DOT_VARIANT: Record<string, StatusDotVariant> = {
-  active: "active",
-  starting: "pending",
-  resuming: "pending",
+const STATUS_DOT_VARIANT: Record<string, StatusTone> = {
+  active: "success",
+  starting: "neutral",
+  resuming: "neutral",
   suspended: "neutral",
   disconnected: "warning",
-  failed: "error",
+  failed: "danger",
 };
 
 function machineKindLabel(daemonType: string | undefined): string {
@@ -77,7 +77,7 @@ export function MachineStatusStrip({
   const [connectOpen, setConnectOpen] = useState(false);
   return (
     <div className={STRIP} data-testid="machine-status-strip">
-      <StatusDot variant="active" size="md" />
+      <Status tone="success" size="md" />
       <div className="flex min-w-0 flex-1 items-center gap-2 text-sm">
         <span className="truncate font-medium text-ink">{name || "Machine"}</span>
         <Badge label={machineKindLabel(daemonType)} variant="neutral" size="sm" />
@@ -102,7 +102,7 @@ export function MachineStatusStrip({
 export function MachineStatusPending({ message }: { message: string }) {
   return (
     <div className={STRIP} role="status">
-      <StatusDot variant="pending" size="md" pulse />
+      <Status tone="neutral" size="md" pulse />
       <span className="text-sm text-ink-muted">{message}</span>
     </div>
   );
@@ -219,8 +219,8 @@ export function NoActiveMachinePanel() {
     >
       <div className="flex flex-wrap items-start justify-between gap-3 p-4">
         <div className="flex min-w-0 items-start gap-3">
-          <StatusDot
-            variant={allFailed ? "error" : "warning"}
+          <Status
+            tone={allFailed ? "danger" : "warning"}
             size="md"
             className="mt-1.5"
           />
@@ -274,8 +274,8 @@ export function NoActiveMachinePanel() {
                 className="flex items-center gap-3 px-4 py-2.5"
                 data-testid={failed ? `failed-daemon-${daemon.daemonId}` : `machine-row-${daemon.daemonId}`}
               >
-                <StatusDot
-                  variant={STATUS_DOT_VARIANT[statusLabel] ?? "neutral"}
+                <Status
+                  tone={STATUS_DOT_VARIANT[statusLabel] ?? "neutral"}
                   pulse={statusLabel === "starting" || statusLabel === "resuming"}
                 />
                 <div className="min-w-0 flex-1">

@@ -23,7 +23,7 @@ describe('machine pricing disclosure', () => {
   it('quotes server hourly pricing, hours only while running, and disk until deletion', () => {
     render(<PlanFinePrint plan={plan} />);
     expect(screen.getByText(/Running machines use included hours/)).toHaveTextContent(MACHINE_BILLING_POLICY);
-    expect(screen.getByText(/If your included hours run out/)).toHaveTextContent('$0.13/h past your included hours');
+    expect(screen.getByText(/If your included hours run out/)).toHaveTextContent('$0.13/h after included hours, with overage enabled');
     expect(screen.getByText(/If your included hours run out/)).toHaveTextContent('Overage is off');
     expect(screen.queryByText(/connected|stops the clock|599.40/)).not.toBeInTheDocument();
     expect(MACHINE_PRICING_NOTE).toContain('standard disk is included while running');

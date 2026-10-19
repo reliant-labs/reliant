@@ -35,6 +35,7 @@ local dev stack.`,
 
 	root.AddCommand(newWorkflowCmd())
 	root.AddCommand(newModelsCmd())
+	root.AddCommand(newProviderUsageCmd())
 
 	return root
 }

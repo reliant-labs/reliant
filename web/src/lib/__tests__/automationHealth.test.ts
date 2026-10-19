@@ -86,12 +86,12 @@ describe("automationHealth: every server status × enabled × never fired", () =
   it("uses the §7.2 dot variants", () => {
     const dot = (h: TriggerHealth, enabled = true, lastEvent: TriggerEvent | undefined = EVENT) =>
       automationHealth({ enabled, health: h, lastEvent }).dotVariant;
-    expect(dot(health("healthy"))).toBe("active");
-    expect(dot(health("failing", { consecutiveFailures: 2 }))).toBe("error");
+    expect(dot(health("healthy"))).toBe("success");
+    expect(dot(health("failing", { consecutiveFailures: 2 }))).toBe("danger");
     expect(dot(health("degraded", { consecutiveSkips: 5 }))).toBe("warning");
     expect(dot(health("degraded", { consecutiveFailures: 1 }))).toBe("warning");
     expect(dot(health("unknown"), true, undefined)).toBe("neutral");
-    expect(dot(health("healthy"), false)).toBe("paused");
+    expect(dot(health("healthy"), false)).toBe("warning");
   });
 
   it("carries the server's failure detail for a tooltip", () => {
@@ -170,7 +170,7 @@ describe("automationHealth: broken activations", () => {
     expect(display.key).toBe("broken");
     expect(display.label).toBe("Broken");
     expect(display.detail).toBe(reason);
-    expect(display.dotVariant).toBe("error");
+    expect(display.dotVariant).toBe("danger");
     expect(display.badgeVariant).toBe("error");
     expect(display.needsAttention).toBe(true);
     expect(display.severity).toBeLessThan(automationHealth({ enabled: true, health: health("failing", { consecutiveFailures: 9 }) }).severity);

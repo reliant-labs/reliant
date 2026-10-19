@@ -93,7 +93,7 @@ func (c *AnthropicClient) SendMessages(ctx context.Context, prompts []string, me
 	}
 	logging.Debug("=== Anthropic: Sending messages ===", logFields...)
 
-	anthropicResponse, err := c.client.Messages.New(ctx, preparedMessages)
+	anthropicResponse, err := c.newMessage(ctx, preparedMessages)
 	if err != nil {
 		logging.Error("Error in Anthropic API call", "error", err)
 		observability.LLMRequestsTotal.WithLabelValues("anthropic", "error").Inc()

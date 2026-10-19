@@ -19,7 +19,7 @@ import { Link } from "@tanstack/react-router";
 import { AlertOctagon, CalendarClock, CircleHelp, Plug, Webhook, Workflow } from "lucide-react";
 import { toast } from "sonner";
 
-import StatusDot from "../forge-ui/status_dot";
+import Status from "../forge-ui/status";
 import { Toggle } from "../ui/Toggle";
 import { Tooltip } from "../ui/Tooltip";
 import { RunStatusBadge } from "../ui/RunStatusIndicator";
@@ -179,7 +179,7 @@ function KindIcon({ trigger }: { trigger: Trigger }) {
 export function HealthIndicator({ health }: { health: AutomationHealthDisplay }) {
   const indicator = (
     <span className="forge-ui inline-flex items-center" data-health-dot={health.dotVariant}>
-      <StatusDot variant={health.dotVariant} size="md" label={health.label} className="text-xs" />
+      <Status tone={health.dotVariant} size="md" label={health.label} className="text-xs" />
     </span>
   );
   if (!health.detail) return indicator;

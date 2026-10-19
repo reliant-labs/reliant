@@ -40,7 +40,7 @@ function worktree(overrides: Partial<Worktree>): Worktree {
 
 describe("workingTreeState", () => {
   it("reports a clean, in-sync tree as clean", () => {
-    expect(workingTreeState(cleanStatus)).toMatchObject({ variant: "active", label: "Clean" });
+    expect(workingTreeState(cleanStatus)).toMatchObject({ variant: "success", label: "Clean" });
   });
 
   it("puts uncommitted changes ahead of commits to push, since cleanup loses them", () => {
@@ -59,7 +59,7 @@ describe("workingTreeState", () => {
 
   it("reports commits ahead of upstream on a clean tree", () => {
     const state = workingTreeState({ ...cleanStatus, ahead: 2 });
-    expect(state).toMatchObject({ variant: "pending", label: "2 ahead" });
+    expect(state).toMatchObject({ variant: "neutral", label: "2 ahead" });
     expect(state.detail).toContain("2 commits not yet pushed");
   });
 });
@@ -73,7 +73,7 @@ describe("hasCheckout", () => {
 
   it("gives every lifecycle state a label, including the ones the old UI called Unknown", () => {
     expect(lifecycleOf(WorktreeStatus.CREATING).label).toBe("Creating");
-    expect(lifecycleOf(WorktreeStatus.FAILED).variant).toBe("error");
+    expect(lifecycleOf(WorktreeStatus.FAILED).variant).toBe("danger");
   });
 });
 

@@ -36,7 +36,9 @@ vi.mock("../../../store/mobileDrawerStore", () => ({
     selector({ open: vi.fn() }),
 }));
 
-vi.mock('@/hooks/useCloudBillingQueries', () => ({ usePlans: () => ({ data: { daemonPricing: { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }], suspendedDiskCentsPerGibMonth: '25', placeholder: false } } }) }));
+vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { includedSmallDaemonSeconds: 576000n } }), usePlans: () => ({ data: { daemonPricing: { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }], suspendedDiskCentsPerGibMonth: '25', placeholder: false } } }) }));
+
+vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQuery: () => ({ data: { allowedDaemonSizes: ['small'] } }) }));
 
 const { MobileDaemonList } = await import("../MobileDaemonList");
 
@@ -77,7 +79,7 @@ describe("MobileDaemonList", () => {
 
     const [headerAction] = screen.getAllByRole("button", { name: /new machine/i });
     await user.click(headerAction!);
-    expect(screen.getByText(/\$0.13\/h past your included hours · 120 GiB disk · \$30.00\/mo while suspended/)).toBeInTheDocument();
+    expect(screen.getByText(/\$0.13\/h after included hours, with overage enabled · 120 GiB disk · \$30.00\/mo while suspended/)).toBeInTheDocument();
     expect(screen.getByText(/billed until deleted/)).toBeInTheDocument();
     await user.clear(screen.getByLabelText(/^name$/i));
     await user.type(screen.getByLabelText(/^name$/i), "phone-box");

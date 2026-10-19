@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
+  useComputeUsage: () => ({ data: undefined }),
   usePlans: () => ({ data: { plans: [] }, isLoading: false }),
 }))
 vi.mock('@/services/controlPlane/billing', () => ({

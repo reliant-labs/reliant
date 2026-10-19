@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
 // section to render at all.
 // The server's per-daemon price list (ListPlans daemon_pricing).
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
+  useComputeUsage: () => ({ data: undefined }),
   usePlans: () => ({
     data: {
       plans: [],

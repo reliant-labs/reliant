@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Badge from "../forge-ui/badge";
-import StatusDot from "../forge-ui/status_dot";
+import Status from "../forge-ui/status";
 import { Tooltip } from "../ui/Tooltip";
 import { cn } from "../../lib/utils";
 import { formatAbsoluteTime, formatRelativeTime } from "../../lib/relativeTime";
@@ -187,13 +187,13 @@ function GitStateLabel({
   pulse,
 }: {
   worktreeId: string;
-  variant: Parameters<typeof StatusDot>[0]["variant"];
+  variant: Parameters<typeof Status>[0]["tone"];
   label: string;
   pulse?: boolean;
 }) {
   return (
     <span className="inline-flex items-center gap-1.5" data-testid={`git-state-${worktreeId}`}>
-      <StatusDot variant={variant} size="sm" pulse={pulse} />
+      <Status tone={variant} size="sm" pulse={pulse} />
       <span className="sr-only whitespace-nowrap text-xs text-muted-foreground @lg:not-sr-only">
         {label}
       </span>

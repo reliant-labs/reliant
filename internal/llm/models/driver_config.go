@@ -1,7 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 package models
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // DriverID represents a unique identifier for a driver implementation
 // Examples: "openai", "anthropic", "openrouter", "bedrock"
@@ -24,6 +28,61 @@ type DriverConfig struct {
 	OrganizationUUID string            // Optional: Claude OAuth organization UUID
 	RefreshToken     string            // Optional: Claude OAuth refresh token for auto-refresh
 	TokenExpiresAt   time.Time         // Optional: when the access token expires
+
+	AccountID    string // provider_accounts.id; "" only for local / test drivers
+	AccountLabel string // the account's display label, for notices and logs (never a secret)
+}
+
+// ProviderRef names a driver, optionally one instance of it: "claude",
+// "claude:<account-id>", "claude:alice@example.com", "local:<daemonID>".
+type ProviderRef struct {
+	Driver   DriverID
+	Instance string // account id, account email/label, or daemon id; "" = any
+}
+
+// ParseProviderRef splits s on its FIRST ':' and validates the driver id.
+// Everything after the colon is the instance, kept verbatim (an instance may
+// itself contain ':').
+func ParseProviderRef(s string) (ProviderRef, error) {
+	s = strings.TrimSpace(s)
+	driver, instance, hasInstance := strings.Cut(s, ":")
+	if _, ok := ProviderPriority[driver]; !ok {
+		return ProviderRef{}, fmt.Errorf("unknown provider %q in provider reference %q", driver, s)
+	}
+	if hasInstance && instance == "" {
+		return ProviderRef{}, fmt.Errorf("provider reference %q has an empty instance", s)
+	}
+	return ProviderRef{Driver: DriverID(driver), Instance: instance}, nil
+}
+
+// String is the reference ParseProviderRef reads back.
+func (r ProviderRef) String() string {
+	if r.Instance == "" {
+		return string(r.Driver)
+	}
+	return string(r.Driver) + ":" + r.Instance
+}
+
+// AccountStatus is an account's derived state. needs_sign_in outranks paused,
+// which outranks limited.
+type AccountStatus string
+
+const (
+	AccountAvailable   AccountStatus = "available"
+	AccountLimited     AccountStatus = "limited"
+	AccountPaused      AccountStatus = "paused"
+	AccountNeedsSignIn AccountStatus = "needs_sign_in"
+)
+
+// AccountConfig is one connected account of a driver.
+type AccountConfig struct {
+	DriverConfig
+	Priority     int
+	Status       AccountStatus
+	LimitedUntil time.Time
+	// Serves reports whether this account's own catalog includes the model
+	// (Codex plus vs pro). Nil means everything the driver serves.
+	Serves func(modelID string) bool
 }
 
 // IsConfigured returns true if the driver has the required configuration.
@@ -43,7 +102,16 @@ func (c DriverConfig) IsConfigured() bool {
 // AvailableDrivers represents the set of configured drivers that can be used
 type AvailableDrivers struct {
 	// Map of driver ID to its configuration
+	// Each driver's DEFAULT account: highest priority, not paused, not needing
+	// sign-in. For one-shot callers with no thread (image/video, key
+	// validation, catalog, probes).
 	Drivers map[DriverID]DriverConfig
+
+	// Accounts holds every usable account per driver in priority order.
+	// Paused and needs-sign-in accounts are excluded; LIMITED ones are
+	// included, because being limited is the account router's business, not
+	// resolution's.
+	Accounts map[DriverID][]AccountConfig
 
 	// Availability reports per-(driver, model) availability for the account that
 	// owns these drivers (e.g. a Copilot model policy=disabled). Nil means every

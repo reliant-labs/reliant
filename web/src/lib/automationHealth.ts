@@ -67,8 +67,8 @@ export const SKIPPING_STREAK = 3;
 type Row = Omit<AutomationHealthDisplay, "label" | "detail"> & { label: string };
 
 const ROWS: Record<AutomationHealthKey, Row> = {
-  broken: { key: "broken", label: "Broken", dotVariant: "error", badgeVariant: "error", needsAttention: true, severity: -1 },
-  failing: { key: "failing", label: "Failing", dotVariant: "error", badgeVariant: "error", needsAttention: true, severity: 0 },
+  broken: { key: "broken", label: "Broken", dotVariant: "danger", badgeVariant: "error", needsAttention: true, severity: -1 },
+  failing: { key: "failing", label: "Failing", dotVariant: "danger", badgeVariant: "error", needsAttention: true, severity: 0 },
   waiting_for_machine: {
     key: "waiting_for_machine",
     label: "Waiting for machine",
@@ -81,8 +81,8 @@ const ROWS: Record<AutomationHealthKey, Row> = {
   degraded: { key: "degraded", label: "Degraded", dotVariant: "warning", badgeVariant: "warning", needsAttention: true, severity: 3 },
   no_result: { key: "no_result", label: "No result yet", dotVariant: "neutral", badgeVariant: "neutral", needsAttention: false, severity: 4 },
   new: { key: "new", label: "New", dotVariant: "neutral", badgeVariant: "neutral", needsAttention: false, severity: 4 },
-  healthy: { key: "healthy", label: "Healthy", dotVariant: "active", badgeVariant: "success", needsAttention: false, severity: 5 },
-  paused: { key: "paused", label: "Paused", dotVariant: "paused", badgeVariant: "neutral", needsAttention: false, severity: 6 },
+  healthy: { key: "healthy", label: "Healthy", dotVariant: "success", badgeVariant: "success", needsAttention: false, severity: 5 },
+  paused: { key: "paused", label: "Paused", dotVariant: "warning", badgeVariant: "neutral", needsAttention: false, severity: 6 },
 };
 
 export interface AutomationHealthInput {

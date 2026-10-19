@@ -65,6 +65,7 @@ export interface ComputePlanOption {
    * from an older server.
    */
   includedSmallDaemonHours?: number;
+  allowedSizes?: string[];
   /**
    * This size's price, burn rate, disk and suspended fee, from ListPlans'
    * daemon_pricing (design §6.2). Absent when the server sent no price list.
@@ -212,15 +213,16 @@ export function PlanTileRow({
           </span>
         )}
         {/* What this size COSTS to run and to keep (design §6.2): the
-            per-hour price past included hours, how fast it burns them, its
+            concrete monthly runtime, qualified overage price, its
             disk, and the fee while suspended — so keeping a machine's cost is
             visible before it is created. All from the server's price list;
             absent when the server sent none. */}
+        {!plan.facts && factsVisible && <span className="block text-xs text-muted-foreground">Included runtime, hourly price and disk cost unavailable.</span>}
         {plan.facts && factsVisible && (
           <span className="block text-xs text-muted-foreground" data-testid="plan-row-size-facts">
-            {plan.includedSmallDaemonHours !== undefined && `${plan.includedSmallDaemonHours} small-daemon-hours/month · `}
-            {plan.facts.burnRateLabel} · {plan.facts.hourlyPriceLabel} · {plan.facts.diskLabel}
-            {plan.facts.suspendedFeeLabel && <> · {plan.facts.suspendedFeeLabel} while suspended</>}
+            <span className="block font-medium text-foreground">{plan.facts.includedRuntimeLabel}</span>
+            <span className="block">{plan.facts.hourlyPriceLabel}</span>
+            <span className="block">{plan.facts.diskLabel}{plan.facts.suspendedFeeLabel && <> · {plan.facts.suspendedFeeLabel} while suspended</>}</span>
           </span>
         )}
       </span>
@@ -247,7 +249,7 @@ export function describeIncludedHours(
   pricing?: DaemonPricingLike,
 ): string {
   if (plan.includedSmallDaemonHours === undefined) return "Included hours unavailable.";
-  return includedHoursSentence(plan.includedSmallDaemonHours, pricing);
+  return includedHoursSentence(plan.includedSmallDaemonHours, pricing, plan.allowedSizes ?? (plan.size ? [plan.size] : []));
 }
 
 /** The per-daemon meter bills running pods, not gateway connections.
@@ -266,7 +268,7 @@ export function PlanFinePrint({
   return (
     <ul className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
       <li>
-        {MACHINE_BILLING_POLICY} The standard disk is included while running; grown disk above it costs extra. By default, machines auto-suspend after 30 idle minutes.
+        Included runtime is shared across your machines, not a separate allowance for each size. {MACHINE_BILLING_POLICY} The standard disk is included while running; grown disk above it costs extra. By default, machines auto-suspend after 30 idle minutes.
       </li>
       <li>
         {rateVariesBySize ? (

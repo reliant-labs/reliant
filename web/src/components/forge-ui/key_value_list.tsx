@@ -31,18 +31,13 @@ export default function KeyValueList({
     setTimeout(() => setCopied(null), 2000);
   }
 
-  const gridCls =
-    columns === 3 ? "md:grid-cols-3" : columns === 2 ? "md:grid-cols-2" : "";
+  const gridCls = columns === 3 ? "md:grid-cols-3" : columns === 2 ? "md:grid-cols-2" : "";
 
   return (
     <div className="space-y-6">
       {groups.map((group, gi) => (
         <div key={gi}>
-          {group.title && (
-            <h3 className="mb-3 text-sm font-semibold text-ink">
-              {group.title}
-            </h3>
-          )}
+          {group.title && <h3 className="mb-3 text-sm font-semibold text-ink">{group.title}</h3>}
           <dl
             className={`grid grid-cols-1 ${gridCls} ${
               variant === "bordered"
@@ -56,14 +51,10 @@ export default function KeyValueList({
               <div
                 key={fi}
                 className={`flex items-start justify-between gap-4 px-4 py-3 ${
-                  variant === "striped" && fi % 2 === 0
-                    ? "bg-surface-muted"
-                    : ""
+                  variant === "striped" && fi % 2 === 0 ? "bg-surface-muted" : ""
                 } ${variant === "plain" ? "py-2" : ""}`}
               >
-                <dt className="text-sm font-medium text-ink-muted min-w-[120px]">
-                  {field.label}
-                </dt>
+                <dt className="text-sm font-medium text-ink-muted min-w-[120px]">{field.label}</dt>
                 <dd
                   className={`flex items-center gap-2 text-sm text-ink text-right ${
                     field.mono ? "font-mono" : ""
@@ -72,9 +63,7 @@ export default function KeyValueList({
                   {field.value}
                   {field.copyable && typeof field.value === "string" && (
                     <button
-                      onClick={() =>
-                        handleCopy(field.value as string, field.label)
-                      }
+                      onClick={() => handleCopy(field.value as string, field.label)}
                       className="flex-shrink-0 text-ink-subtle hover:text-ink-muted"
                       title="Copy to clipboard"
                     >

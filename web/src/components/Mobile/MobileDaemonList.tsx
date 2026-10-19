@@ -36,7 +36,9 @@ import {
   MobileScreenHeader,
 } from "./MobileChrome";
 import { machineDisplayName } from "@/lib/machineName";
-import { usePlans } from "@/hooks/useCloudBillingQueries";
+import { useComputeUsage, usePlans } from "@/hooks/useCloudBillingQueries";
+import { useQuery } from "@tanstack/react-query";
+import { getComputeEligibility } from "@/services/controlPlane/billing";
 import { sizeFacts, MACHINE_BILLING_POLICY, MACHINE_PRICING_NOTE } from "@/components/Billing/daemonUsage";
 import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { MachineCost } from "@/components/Billing/MachineCost";
@@ -89,13 +91,18 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState("");
 
   const pricing = usePlans().data?.daemonPricing;
+  const usage = useComputeUsage("current").data;
+  const includedHours = usage?.includedSmallDaemonSeconds === undefined ? undefined : Number(usage.includedSmallDaemonSeconds) / 3600;
+  const eligibility = useQuery({ queryKey: ["cp", "environments", "computeEligibility"], queryFn: getComputeEligibility, staleTime: 30_000 });
+  const options = SIZE_OPTIONS.filter(option => eligibility.data?.allowedDaemonSizes.includes(option.name));
+  const effectiveSize = options.find(option => option.value === size)?.value ?? options[0]?.value;
   const create = useCreateDaemon();
   const accountGate = useAccountGate();
   const busy = create.isPending;
 
   const submit = async () => {
     const trimmedName = name.trim();
-    if (!trimmedName || busy) return;
+    if (!trimmedName || busy || effectiveSize === undefined) return;
     setError("");
     await accountGate.run(() => doCreate(trimmedName));
   };
@@ -105,7 +112,7 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
       await create.mutateAsync({
         name: trimmedName,
         daemonType: DaemonType.MANAGED,
-        size,
+        size: effectiveSize,
         idleTimeout,
         gitRepo: gitRepo.trim() || undefined,
         gitBranch: gitBranch.trim() || "main",
@@ -182,9 +189,9 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
               Size
             </p>
             <div className="grid grid-cols-2 gap-2">
-              {SIZE_OPTIONS.map((option) => {
-                const selected = option.value === size;
-                const facts = sizeFacts(pricing, option.name);
+              {options.map((option) => {
+                const selected = option.value === effectiveSize;
+                const facts = sizeFacts(pricing, option.name, includedHours);
                 return (
                   <button
                     key={option.value}
@@ -200,6 +207,7 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
                   >
                     <p className="text-sm font-medium text-foreground">{option.label}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{formatMachineSpec(option.name)}</p>
+                    <p className="mt-1 text-xs font-medium text-foreground">{facts?.includedRuntimeLabel ?? "Included runtime unavailable"}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{facts ? `${facts.hourlyPriceLabel} · ${facts.diskLabel} · ${facts.suspendedFeeLabel} while suspended` : "Machine prices unavailable"}</p>
                   </button>
                 );
@@ -275,7 +283,7 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
             </button>
             <button
               type="submit"
-              disabled={!name.trim() || busy}
+              disabled={!name.trim() || busy || effectiveSize === undefined}
               className={cn(MOBILE_PRIMARY_ACTION, "flex-1")}
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}

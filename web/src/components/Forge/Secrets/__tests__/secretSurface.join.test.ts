@@ -131,7 +131,7 @@ describe("joinSecretRows when this console could NOT read the store", () => {
     const [row] = joinSecretRows(hosted([{ name: "DATABASE_URL" }]), [], false);
     expect(row.origin).toBe("declared-unread");
     expect(rowStatusLabel(row)).toBe("Not known");
-    expect(rowStatusVariant(row)).not.toBe("error");
+    expect(rowStatusVariant(row)).not.toBe("danger");
     expect(tallyRows([row])).toMatchObject({ unset: 0, unknown: 1 });
   });
 
@@ -170,7 +170,7 @@ describe("joinSecretRows when this console could NOT read the store", () => {
 describe("rowStatusVariant", () => {
   it("reserves the error variant for declared-unset, the only deploy-blocking state", () => {
     const [unset] = joinSecretRows(report("none", ["NEEDED"]), []);
-    expect(rowStatusVariant(unset)).toBe("error");
+    expect(rowStatusVariant(unset)).toBe("danger");
 
     // A soft delete is a deliberate act with an undo. Painting it the same red
     // as a genuine blocker would flatten the one distinction that matters.

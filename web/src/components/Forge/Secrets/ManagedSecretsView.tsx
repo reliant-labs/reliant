@@ -54,7 +54,7 @@ import { ArrowLeft, ExternalLink, KeyRound, Plus } from "lucide-react";
  */
 const SECRETS_DOCS_URL = "https://docs.reliantlabs.io/features/secrets";
 
-import StatusDot from "@/components/forge-ui/status_dot";
+import Status from "@/components/forge-ui/status";
 import { cn } from "@/lib/utils";
 import type { ForgeSecretsReport } from "@/services/forge/secrets";
 import type { ManagedSecretSummary, ManagedStoreAvailability } from "@/services/forge/secretStore";
@@ -375,9 +375,9 @@ function SecretList({
               {/* Mono: a secret name is an identifier. */}
               <td className="px-4 py-2.5 font-mono text-sm text-foreground">{row.name}</td>
               <td className="px-4 py-2.5">
-                <StatusDot
+                <Status
                   size="sm"
-                  variant={rowStatusVariant(row)}
+                  tone={rowStatusVariant(row)}
                   label={<span className="text-xs">{rowStatusLabel(row)}</span>}
                 />
               </td>
@@ -480,9 +480,9 @@ function SecretDetail({
           {/* The secret name is the page's subject AND an identifier: mono. */}
           <h2 className="font-mono text-base font-semibold text-foreground">{row.name}</h2>
           <div className="flex items-center gap-2.5">
-            <StatusDot
+            <Status
               size="sm"
-              variant={rowStatusVariant(row)}
+              tone={rowStatusVariant(row)}
               label={<span className="text-xs">{rowStatusLabel(row)}</span>}
             />
             <span className="font-mono text-xs text-muted-foreground">{env}</span>

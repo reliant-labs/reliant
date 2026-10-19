@@ -577,7 +577,7 @@ func (c *ClaudeCodeClient) SendMessages(ctx context.Context, prompts []string, m
 	}
 	logging.Debug("=== ClaudeCode: Sending messages ===", logFields...)
 
-	anthropicResponse, err := c.client.Messages.New(ctx, preparedMessages)
+	anthropicResponse, err := c.newMessage(ctx, preparedMessages)
 	if err != nil {
 		logging.Error("Error in ClaudeCode API call", "error", err)
 		observability.LLMRequestsTotal.WithLabelValues(string(ClaudeFamily), "error").Inc()

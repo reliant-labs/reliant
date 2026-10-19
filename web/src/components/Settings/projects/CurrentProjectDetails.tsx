@@ -4,7 +4,7 @@ import { ExternalLink, Folder, RefreshCw, Terminal } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
 import Card from "@/components/forge-ui/card";
-import StatusDot from "@/components/forge-ui/status_dot";
+import Status from "@/components/forge-ui/status";
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { projectGrpc } from "@/api/project-grpc";
@@ -270,10 +270,10 @@ function GitFacts({ project, loading, failed, info }: GitFactsProps) {
           // and saying so beats a spinner that never resolves.
           <span className="text-muted-foreground">Unavailable — is your machine connected?</span>
         ) : changeCount === 0 ? (
-          <StatusDot variant="active" size="sm" label="Clean" />
+          <Status tone="success" size="sm" label="Clean" />
         ) : (
-          <StatusDot
-            variant="warning"
+          <Status
+            tone="warning"
             size="sm"
             label={`${changeCount} uncommitted ${changeCount === 1 ? "change" : "changes"}`}
           />

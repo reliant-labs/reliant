@@ -48,10 +48,7 @@ export default function StatGrid({ stats, columns = 4 }: StatGridProps) {
   return (
     <div className={`grid gap-6 ${columnClasses[columns]}`}>
       {stats.map((stat) => (
-        <div
-          key={stat.label}
-          className="rounded-xl border border-border bg-surface p-6"
-        >
+        <div key={stat.label} className="rounded-xl border border-border bg-surface p-6">
           <div className="flex items-center justify-between">
             {stat.icon && (
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-surface text-accent">
@@ -60,9 +57,7 @@ export default function StatGrid({ stats, columns = 4 }: StatGridProps) {
             )}
             {stat.trend && <TrendIndicator trend={stat.trend} />}
           </div>
-          <p className="mt-4 text-3xl font-bold tracking-tight text-ink">
-            {stat.value}
-          </p>
+          <p className="mt-4 text-3xl font-bold tracking-tight text-ink">{stat.value}</p>
           <p className="mt-1 text-sm text-ink-muted">{stat.label}</p>
         </div>
       ))}
