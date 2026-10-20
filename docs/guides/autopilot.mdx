@@ -37,6 +37,8 @@ PR review needs no machine, so choose **No machine** for it. The other three wor
 
 Alert triage also shows a **webhook URL and token, once**, when you enable it. See [Wiring Alertmanager](#wiring-alertmanager).
 
+Autopilot workflows only start from their triggers, so the chat composer's workflow picker never offers them, and its helper workflows (leases, labels, the restricted agent loop) are listed nowhere. Their runs stay out of your chat list: each appears under **Workflows → Runs**, named by the automation that fired it. A run that finishes successfully archives itself and stays in Runs marked **Archived**; one that fails or is waiting on you stays unarchived. See [Where runs go](/automations/overview#where-runs-go).
+
 ## Settings
 
 These are the workflows' inputs, so they appear in the Enable dialog with their defaults. Each activation has its own values, which is how two projects can run the same workflow on different repositories.
