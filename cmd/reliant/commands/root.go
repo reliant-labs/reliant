@@ -45,7 +45,6 @@ Reliant server components.`,
 	root.AddCommand(newServerCmd())
 	root.AddCommand(newDaemonCmd())
 	root.AddCommand(newAuthCmd())
-	root.AddCommand(newOpenCmd())
 	root.AddCommand(newProjectCmd())
 	root.AddCommand(newWorkflowCmd())
 	root.AddCommand(newTriggerCmd())

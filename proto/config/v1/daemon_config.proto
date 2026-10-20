@@ -40,7 +40,7 @@ message DaemonInstanceConfig {
   string account = 2 [(forge.v1.config) = {
     env_var: "RELIANT_INSTANCE_ACCOUNT"
     flag: "account"
-    description: "Account (Supabase subject) this daemon runs as; selects among several accounts on one server"
+    description: "Account (user id) this daemon runs as; selects among several accounts on one server"
   }];
 
   // Unset: the git worktree root of the current directory, else the current
@@ -261,6 +261,6 @@ message DaemonRegisterConfig {
   string account = 1 [(forge.v1.config) = {
     env_var: "RELIANT_INSTANCE_ACCOUNT"
     flag: "account"
-    description: "Account (Supabase subject) to register; separate accounts on one server keep separate credentials"
+    description: "Account (user id) to register; separate accounts on one server keep separate credentials"
   }];
 }

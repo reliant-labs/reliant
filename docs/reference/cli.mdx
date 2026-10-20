@@ -249,7 +249,6 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge tools install`](#reliant-forge-tools-install) | Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports), or the named tools (golangci-lint, buf) |
 | [`reliant forge tools pins`](#reliant-forge-tools-pins) | Print the tool versions this forge pins (golangci-lint, buf, …), for CI to read |
 | [`reliant forge version`](#reliant-forge-version) | Print the forge version and build identity |
-| [`reliant open`](#reliant-open) | Open a project in Reliant |
 | [`reliant preview-url`](#reliant-preview-url) | Print the shareable preview URL for a local port |
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
@@ -540,7 +539,7 @@ reliant daemon logs [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--account` | `string` | - | Account (Supabase subject) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--account` | `string` | - | Account (user id) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
 | `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--follow`, `-f` | `bool` | `true` | Follow log output |
 | `--lines`, `-n` | `int` | `50` | Number of lines to show |
@@ -577,8 +576,9 @@ Register this machine as a daemon
 
 Registers this machine to connect to the Reliant cloud platform as a daemon.
 
-If not already logged in, opens your browser for OAuth authentication.
-Creates a long-lived access token for the daemon and stores it locally.
+Opens your browser to sign in and approve a long-lived daemon credential, which
+is stored locally. This is its own login: a 'reliant auth login' session is a
+different credential and is not reused.
 
 After registering, run 'reliant daemon start' to connect.
 
@@ -590,7 +590,7 @@ reliant daemon register [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--account` | `string` | - | Account (Supabase subject) to register; separate accounts on one server keep separate credentials [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--account` | `string` | - | Account (user id) to register; separate accounts on one server keep separate credentials [env: RELIANT_INSTANCE_ACCOUNT] |
 
 ---
 
@@ -598,22 +598,24 @@ reliant daemon register [flags]
 
 Start the tools daemon
 
-Starts the tools daemon in the foreground (default) or background.
+Starts the tools daemon in the foreground. It runs until interrupted
+(Ctrl+C) or stopped with 'reliant daemon stop'; to keep it running after the
+terminal closes, run it under your OS's service manager, tmux, or nohup.
 
 The daemon connects to the Reliant cloud platform and provides local tool
 execution capabilities.
 
 Credential resolution order:
-  1. Daemon credentials file (created by 'reliant daemon register')
-  2. If logged in but not registered, auto-registers and creates credentials
-  3. If not logged in, prompts for login and then auto-registers — unless
-     --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE) is set, in which
-     case the daemon never opens a browser or runs the login flow itself. It
-     instead stays resident and idle, publishing "awaiting_credentials" in its
-     runtime state, and polls for a credentials file to appear on disk (see
-     'reliant daemon status' and internal/toolexec/daemonstate). This is the
-     mode Electron spawns in: its own login page owns interactive sign-in, and
-     the daemon must never pop a second one.
+  1. --token: a daemon token read from stdin (mint one in the app).
+  2. The stored daemon credential in ~/.reliant/daemon.json (written by an
+     earlier 'daemon start' or 'reliant daemon register').
+  3. Otherwise a browser login of its own that mints a daemon credential.
+     This is a separate credential from 'reliant auth login', which is never
+     reused here. With --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE)
+     the daemon never opens a browser: it stays resident and idle, publishing
+     "awaiting_credentials" in its runtime state (see 'reliant daemon
+     status'), and polls for a credential to appear on disk. Electron spawns
+     the daemon this way: its own login page owns interactive sign-in.
 
 One machine can serve several accounts. Each account keeps its own daemon
 identity (under ~/.reliant/instances/`<server>`/`<account>`/`<workspace>`/): with
@@ -631,8 +633,7 @@ reliant daemon start [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--account` | `string` | - | Account (Supabase subject) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
-| `--background` | `bool` | - | Run daemon in background (detached) |
+| `--account` | `string` | - | Account (user id) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
 | `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--grpc-url` | `string` | - | Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port) [env: DAEMON_GRPC_URL] |
 | `--listen-port` | `int32` | `9190` | Port to listen on in server mode [env: DAEMON_LISTEN_PORT] |
@@ -668,7 +669,7 @@ reliant daemon status [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--account` | `string` | - | Account (Supabase subject) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--account` | `string` | - | Account (user id) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
 | `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--workspace` | `string` | - | Workspace this daemon serves (defaults to the git worktree root of the current directory) [env: RELIANT_INSTANCE_WORKSPACE] |
 
@@ -687,6 +688,12 @@ record in place. A daemon reported as stopped while it is still running keeps
 its gateway registration, and the next 'daemon start' then registers a second
 daemon under the same identity — the two evict each other until one is killed.
 
+Stop refuses two daemons outright, --force included: the one this command is
+running inside (an agent's shell is a descendant of the daemon running the
+agent, so stopping it ends the session that asked), and a managed daemon —
+a cloud machine's, which Reliant runs and restarts. Restart a cloud machine from
+Settings → Machines in the Reliant app.
+
 ```
 reliant daemon stop [flags]
 ```
@@ -695,7 +702,7 @@ reliant daemon stop [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--account` | `string` | - | Account (Supabase subject) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--account` | `string` | - | Account (user id) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
 | `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--force` | `bool` | - | Force kill (SIGKILL) instead of graceful shutdown |
 | `--workspace` | `string` | - | Workspace this daemon serves (defaults to the git worktree root of the current directory) [env: RELIANT_INSTANCE_WORKSPACE] |
@@ -8750,34 +8757,6 @@ reliant forge version
 
 ---
 
-## reliant open
-
-Open a project in Reliant
-
-Opens a project in the Reliant cloud platform. This is the primary command
-for starting a Reliant session:
-
-  1. Detects the project from the given path (defaults to current directory)
-  2. Ensures you are authenticated (runs login flow if needed)
-  3. Registers the project with the cloud API
-  4. Starts the tools daemon for local tool execution
-  5. Opens the Reliant web UI in your browser
-
-This is the "reliant ." command.
-
-```
-reliant open [path] [flags]
-```
-
-**Flags:**
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--background` | `bool` | - | Start daemon in background and return to shell |
-| `--no-daemon` | `bool` | - | Skip starting the tools daemon |
-
----
-
 ## reliant preview-url
 
 Print the shareable preview URL for a local port
@@ -9654,8 +9633,8 @@ Exit codes:
   2  the command ran fine and the run did NOT succeed — Outcome FAILURE, or a
      failed/cancelled/expired lifecycle
 
-Use 'workflow ps' for every live run at once, with time-in-state and suspected
-stalls; use 'workflow watch' to block on live boundaries instead.
+Use 'workflow watch' to block on live boundaries instead, or 'workflow follow'
+for a machine-readable event stream.
 
 ```
 reliant workflow status <execution-id> [flags]

@@ -479,8 +479,8 @@ Exit codes:
   2  the command ran fine and the run did NOT succeed — Outcome FAILURE, or a
      failed/cancelled/expired lifecycle
 
-Use 'workflow ps' for every live run at once, with time-in-state and suspected
-stalls; use 'workflow watch' to block on live boundaries instead.`,
+Use 'workflow watch' to block on live boundaries instead, or 'workflow follow'
+for a machine-readable event stream.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runWorkflowStatus(cmd, args[0], jsonOut)

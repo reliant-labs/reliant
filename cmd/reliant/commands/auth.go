@@ -151,8 +151,8 @@ Purely local: no network call.`,
 				if jsonOutput {
 					_ = writeJSON(out, info)
 				} else {
-					fmt.Fprintf(out, "Not logged in (%v)\n  Server: %s\nRun 'reliant auth login%s' to authenticate\n",
-						err, target.describeServer(), target.serverFlagHint())
+					fmt.Fprintf(out, "%s\n  Server: %s\nRun 'reliant auth login%s' to authenticate\n",
+						notLoggedInHeadline(err), target.describeServer(), target.serverFlagHint())
 				}
 				return fmt.Errorf("not authenticated")
 			}
@@ -178,6 +178,24 @@ Purely local: no network call.`,
 
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	return cmd
+}
+
+// notLoggedInHeadline is `auth status`'s first line when there is no usable
+// login. The reason is added only when it says more than "not logged in" — an
+// expired login, or a credentials file that could not be read.
+func notLoggedInHeadline(err error) string {
+	return "Not logged in" + notLoggedInReason(err)
+}
+
+// notLoggedInReason is " (<why>)" when err says more than cliauth's bare "not
+// logged in", else "" — so no message reads "not logged in (not logged in)".
+func notLoggedInReason(err error) string {
+	reason := strings.TrimPrefix(err.Error(), cliauth.ErrNotLoggedIn.Error())
+	reason = strings.TrimPrefix(reason, ": ")
+	if reason == "" {
+		return ""
+	}
+	return " (" + reason + ")"
 }
 
 func writeJSON(w io.Writer, v any) error {

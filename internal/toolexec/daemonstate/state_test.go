@@ -11,7 +11,7 @@ import (
 
 func TestInitRecordsProcessAndBinaryIdentity(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, Init(dir, "http://localhost:29190", "h2c", false))
+	require.NoError(t, Init(dir, Startup{GatewayURL: "http://localhost:29190", TLSMode: "h2c"}))
 
 	state, err := Read(dir)
 	require.NoError(t, err)
@@ -30,7 +30,7 @@ func TestInitRecordsProcessAndBinaryIdentity(t *testing.T) {
 
 func TestInitInServerModeStartsListening(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, Init(dir, "", "", true))
+	require.NoError(t, Init(dir, Startup{ServerMode: true}))
 
 	state, err := Read(dir)
 	require.NoError(t, err)
@@ -38,11 +38,28 @@ func TestInitInServerModeStartsListening(t *testing.T) {
 	require.False(t, state.Stream.Established())
 }
 
+// A managed daemon says so in its record, and a stream transition keeps it:
+// `daemon stop` reads it to refuse stopping a cloud machine's daemon.
+func TestInitRecordsAManagedDaemon(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, Init(dir, Startup{GatewayURL: "https://gateway.example", Managed: true}))
+	require.NoError(t, SetStream(dir, StreamConnected, ""))
+
+	state, err := Read(dir)
+	require.NoError(t, err)
+	require.True(t, state.Managed)
+
+	require.NoError(t, Init(dir, Startup{GatewayURL: "https://gateway.example"}))
+	state, err = Read(dir)
+	require.NoError(t, err)
+	require.False(t, state.Managed)
+}
+
 // ConnectedAt is the discriminator between "flapping" and "never came up" —
 // the question an operator staring at a silent daemon actually has.
 func TestSetStreamTracksConnectedAtAndPreservesIdentity(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, Init(dir, "http://localhost:29190", "h2c", false))
+	require.NoError(t, Init(dir, Startup{GatewayURL: "http://localhost:29190", TLSMode: "h2c"}))
 
 	require.NoError(t, SetStream(dir, StreamDisconnected, "write envelope: EOF"))
 	down, err := Read(dir)
@@ -73,7 +90,7 @@ func TestSetStreamTracksConnectedAtAndPreservesIdentity(t *testing.T) {
 // pre-flight that pronounced a known-bad daemon safe for a 30-minute run.
 func TestSetStreamRecordsFlapHistory(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, Init(dir, "http://localhost:29190", "h2c", false))
+	require.NoError(t, Init(dir, Startup{GatewayURL: "http://localhost:29190", TLSMode: "h2c"}))
 
 	require.NoError(t, SetStream(dir, StreamConnected, ""))
 	first, err := Read(dir)
@@ -104,7 +121,7 @@ func TestSetStreamRecordsFlapHistory(t *testing.T) {
 // Re-asserting the state the record already holds is not a new session.
 func TestSetStreamDoesNotCountRepeatedConnectedAsANewSession(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, Init(dir, "http://localhost:29190", "h2c", false))
+	require.NoError(t, Init(dir, Startup{GatewayURL: "http://localhost:29190", TLSMode: "h2c"}))
 	require.NoError(t, SetStream(dir, StreamConnected, ""))
 	require.NoError(t, SetStream(dir, StreamConnected, ""))
 
@@ -122,7 +139,7 @@ func TestStableRequiresAnEstablishedStream(t *testing.T) {
 
 func TestClearRemovesRecord(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, Init(dir, "http://localhost:29190", "h2c", false))
+	require.NoError(t, Init(dir, Startup{GatewayURL: "http://localhost:29190", TLSMode: "h2c"}))
 	require.NoError(t, Clear(dir))
 
 	_, err := Read(dir)
@@ -136,7 +153,7 @@ func TestClearRemovesRecord(t *testing.T) {
 // An empty data dir means "nowhere to publish"; recording must be inert rather
 // than failing a daemon boot.
 func TestNoDataDirIsInert(t *testing.T) {
-	require.NoError(t, Init("", "http://localhost:29190", "h2c", false))
+	require.NoError(t, Init("", Startup{GatewayURL: "http://localhost:29190", TLSMode: "h2c"}))
 	require.NoError(t, SetStream("", StreamConnected, ""))
 	require.NoError(t, Clear(""))
 }

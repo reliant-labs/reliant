@@ -84,7 +84,7 @@ func TestAcquireIsPerDataDir(t *testing.T) {
 // running and the next `start` created a second one.
 func TestClaimSurvivesTheRuntimeRecordBeingDeleted(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, Init(dir, "http://localhost:29190", "h2c", false))
+	require.NoError(t, Init(dir, Startup{GatewayURL: "http://localhost:29190", TLSMode: "h2c"}))
 
 	held, err := Acquire(dir)
 	require.NoError(t, err)

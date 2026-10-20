@@ -191,14 +191,12 @@ func newWorkflowListCmd() *cobra.Command {
 
 			// Collect builtin workflows
 			if !projectOnly {
-				if builtinDir := findBuiltinDir(); builtinDir != "" {
-					files, err := workflowFilesIn(builtinDir)
-					if err != nil {
-						return err
-					}
-					for _, f := range files {
-						workflows = append(workflows, parseWorkflowInfo(f, "builtin"))
-					}
+				files, err := builtinWorkflowFiles()
+				if err != nil {
+					return err
+				}
+				for _, f := range files {
+					workflows = append(workflows, workflowInfoFrom(f.name, f.data, "builtin"))
 				}
 			}
 
@@ -244,15 +242,17 @@ type workflowListInfo struct {
 }
 
 func parseWorkflowInfo(path, source string) workflowListInfo {
-	info := workflowListInfo{
-		File:   filepath.Base(path),
-		Source: source,
-	}
-
 	data, err := os.ReadFile(path)
 	if err != nil {
-		info.Name = info.File
-		return info
+		return workflowListInfo{Name: filepath.Base(path), File: filepath.Base(path), Source: source}
+	}
+	return workflowInfoFrom(filepath.Base(path), data, source)
+}
+
+func workflowInfoFrom(file string, data []byte, source string) workflowListInfo {
+	info := workflowListInfo{
+		File:   file,
+		Source: source,
 	}
 
 	wf, err := wfyaml.ParseWorkflow(data)
@@ -524,14 +524,12 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 		files = append(files, f...)
 	}
 
-	// Include builtins
+	// Builtins come from the binary, not from a source checkout.
+	var builtins []embeddedWorkflow
 	if includeBuiltins {
-		if builtinDir := findBuiltinDir(); builtinDir != "" {
-			f, err := workflowFilesIn(builtinDir)
-			if err != nil {
-				return err
-			}
-			files = append(files, f...)
+		var err error
+		if builtins, err = builtinWorkflowFiles(); err != nil {
+			return err
 		}
 	}
 
@@ -541,7 +539,8 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 		return err
 	}
 
-	if len(files) == 0 {
+	total := len(files) + len(builtins)
+	if total == 0 {
 		if jsonOut {
 			fmt.Println("[]")
 			return nil
@@ -551,17 +550,15 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 	}
 
 	if !jsonOut {
-		fmt.Printf("Validating %d workflow(s)\n\n", len(files))
+		fmt.Printf("Validating %d workflow(s)\n\n", total)
 	}
 
 	var results []validateResult
 	hasErrors := false
 
-	for _, file := range files {
-		result := validateWorkflowFileIn(file, dir, layout)
-		dryRunTriggers(&result, file, sample)
+	// record reports one result and says whether to stop (--fail-fast).
+	record := func(result validateResult) (stop bool) {
 		results = append(results, result)
-
 		if !jsonOut {
 			if verbose {
 				printVerboseValidateResult(result)
@@ -569,13 +566,28 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 				printCompactValidateResult(result)
 			}
 		}
-
 		if !result.Valid {
 			hasErrors = true
-			if failFast {
-				break
-			}
+			return failFast
 		}
+		return false
+	}
+
+	stopped := false
+	for _, file := range files {
+		result := validateWorkflowFileIn(file, dir, layout)
+		dryRunTriggers(&result, file, sample)
+		if stopped = record(result); stopped {
+			break
+		}
+	}
+	for _, b := range builtins {
+		if stopped {
+			break
+		}
+		result := validateWorkflowYAML(b.data, b.name, nil, layout)
+		dryRunTriggersOn(&result, b.data, sample)
+		stopped = record(result)
 	}
 
 	if jsonOut {
@@ -619,16 +631,33 @@ func workflowFilesIn(dir string) ([]string, error) {
 	return files, nil
 }
 
-func findBuiltinDir() string {
-	cwd, err := os.Getwd()
+// embeddedWorkflow is a builtin workflow file as the binary carries it.
+type embeddedWorkflow struct {
+	name string // file name, e.g. "agent.yaml"
+	data []byte
+}
+
+// builtinWorkflowFiles returns the builtin workflows embedded in this binary
+// (internal/workflow/builtin), in file-name order. They are read from the
+// binary, never from disk, so they are the same workflows the app runs
+// wherever the CLI is invoked.
+func builtinWorkflowFiles() ([]embeddedWorkflow, error) {
+	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
 	if err != nil {
-		return ""
+		return nil, fmt.Errorf("reading embedded builtin workflows: %w", err)
 	}
-	path := filepath.Join(cwd, "internal", "workflow", "builtin")
-	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		return path
+	files := make([]embeddedWorkflow, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		data, err := builtin.BuiltinWorkflowsFS.ReadFile(e.Name())
+		if err != nil {
+			return nil, fmt.Errorf("reading embedded builtin workflow %s: %w", e.Name(), err)
+		}
+		files = append(files, embeddedWorkflow{name: e.Name(), data: data})
 	}
-	return ""
+	return files, nil
 }
 
 // projectWorkflowLoader resolves refs exactly as the app does
@@ -679,14 +708,32 @@ func validateWorkflowFile(path string, workflowDir string) validateResult {
 }
 
 func validateWorkflowFileIn(path, workflowDir string, layout *workflowref.Layout) validateResult {
-	result := validateResult{
-		File: filepath.Base(path),
-	}
-
 	data, err := os.ReadFile(path)
 	if err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("failed to read file: %v", err))
-		return result
+		return validateResult{
+			File:   filepath.Base(path),
+			Errors: []string{fmt.Sprintf("failed to read file: %v", err)},
+		}
+	}
+
+	// A file the project index cannot address — its name: is another file's
+	// too, or crosses another file's file name — fails here, as every ref to
+	// it would. (A missing name: is the validator's own "name is required".)
+	var addressProblem error
+	if rel, relErr := filepath.Rel(workflowDir, path); relErr == nil {
+		if entry := layout.Workflows.EntryAt(filepath.ToSlash(rel)); entry != nil && entry.Name != "" && entry.Problem != nil {
+			addressProblem = entry.Problem
+		}
+	}
+	return validateWorkflowYAML(data, filepath.Base(path), addressProblem, layout)
+}
+
+// validateWorkflowYAML validates one workflow definition, shown as file,
+// resolving its refs against layout's project workflows. addressProblem is why
+// the project index cannot address the file, if it cannot.
+func validateWorkflowYAML(data []byte, file string, addressProblem error, layout *workflowref.Layout) validateResult {
+	result := validateResult{
+		File: file,
 	}
 
 	// Parse without validation to extract metadata
@@ -700,13 +747,8 @@ func validateWorkflowFileIn(path, workflowDir string, layout *workflowref.Layout
 	result.Nodes = len(wf.GetNodes())
 	result.Edges = len(wf.GetEdges())
 
-	// A file the project index cannot address — its name: is another file's
-	// too, or crosses another file's file name — fails here, as every ref to
-	// it would. (A missing name: is the validator's own "name is required".)
-	if rel, relErr := filepath.Rel(workflowDir, path); relErr == nil {
-		if entry := layout.Workflows.EntryAt(filepath.ToSlash(rel)); entry != nil && entry.Name != "" && entry.Problem != nil {
-			result.Errors = append(result.Errors, entry.Problem.Error())
-		}
+	if addressProblem != nil {
+		result.Errors = append(result.Errors, addressProblem.Error())
 	}
 
 	// Run full validation with the app's ref resolution, which follows refs
@@ -1145,10 +1187,15 @@ func runWorkflowScenarios(_ *cobra.Command, args []string, dir string, verbose, 
 	if err != nil {
 		return err
 	}
+	workflows = filterScenarios(workflows, filter)
 
 	if len(workflows) == 0 {
 		if jsonOut {
 			fmt.Println("[]")
+			return nil
+		}
+		if filter != "" {
+			fmt.Printf("No scenarios match --filter %q\n", filter)
 			return nil
 		}
 		fmt.Println("No workflows with scenarios found")
@@ -1208,11 +1255,6 @@ func runWorkflowScenarios(_ *cobra.Command, args []string, dir string, verbose, 
 				break
 			}
 
-			// Apply filter
-			if filter != "" && !strings.Contains(scenario.Name, filter) {
-				continue
-			}
-
 			if !jsonOut && verbose && !printedHeader {
 				fmt.Printf("\u2500\u2500\u2500 %s (%s) \u2500\u2500\u2500\n", wf.WorkflowName, wf.Source)
 				printedHeader = true
@@ -1264,6 +1306,29 @@ func runWorkflowScenarios(_ *cobra.Command, args []string, dir string, verbose, 
 		return fmt.Errorf("scenarios failed")
 	}
 	return nil
+}
+
+// filterScenarios keeps the scenarios whose name contains filter, and the
+// workflows left with any. It runs before anything is counted or run, so the
+// "Running N scenario(s)" line and the run agree.
+func filterScenarios(workflows []workflowWithScenarios, filter string) []workflowWithScenarios {
+	if filter == "" {
+		return workflows
+	}
+	var kept []workflowWithScenarios
+	for _, wf := range workflows {
+		var matching []*wfscenario.Scenario
+		for _, s := range wf.Scenarios {
+			if strings.Contains(s.Name, filter) {
+				matching = append(matching, s)
+			}
+		}
+		if len(matching) > 0 {
+			wf.Scenarios = matching
+			kept = append(kept, wf)
+		}
+	}
+	return kept
 }
 
 func runWorkflowScenarioList(_ *cobra.Command, args []string, dir string, jsonOut, includeBuiltins bool) error {

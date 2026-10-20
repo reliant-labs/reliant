@@ -31,7 +31,7 @@ type DaemonCredentials struct {
 	ServerURL    string    `json:"server_url"`
 	GatewayURL   string    `json:"gateway_url,omitempty"`
 	RegisteredAt time.Time `json:"registered_at"`
-	// Sub is the Supabase subject the PAT was minted for. It is part of the
+	// Sub is the account (user id) the PAT was minted for. It is part of the
 	// store key, not a passenger: two accounts signed in against one origin
 	// each keep their own PAT instead of overwriting each other. It is
 	// repeated inside the entry so a credential carries its own identity when
@@ -62,7 +62,7 @@ const DefaultAccount = "_default"
 // The origin is the server URL collapsed to `scheme://host:port` (see
 // endpointKey), which lets one machine hold credentials for dev, staging and
 // prod — and for several worktrees on distinct dynamic localhost ports — at
-// once. The account is the Supabase subject the PAT was minted for, which lets
+// once. The account is the account (user id) the PAT was minted for, which lets
 // two people (or one person's two accounts) share a machine against ONE origin:
 // keyed by origin alone, the second `daemon start` overwrote the first's PAT.
 type daemonCredentialsStore struct {

@@ -43,7 +43,7 @@ Next steps:
       ↳ applies migrations, seeds demo rows, prints your URLs
 ```
 
-Forge's own hints name the command the way you ran it (`reliant forge scaffold`, not `forge scaffold`), so you can copy them as printed. To generate and build, the scaffold also needs Go and `buf` on your `PATH`, plus Node if you add a frontend. If one is missing, the project is still created, and Forge warns and prints the command to run once you have installed it (`reliant forge generate && reliant forge build`).
+Forge's own hints name the command the way you ran it (`reliant forge scaffold`, not `forge scaffold`), so you can copy them as printed. To generate and build, the scaffold also needs Go and `buf` on your `PATH`, plus Node if you add a frontend. If one is missing, the project is still created, and Forge warns and prints the command to run once you have installed it (`reliant forge generate && reliant forge build`). The command still exits `0` in that case, so a script that creates a project should not treat a zero exit as proof that the project builds: run `reliant forge generate` afterwards and check its exit code.
 
 ## Signed in as you
 

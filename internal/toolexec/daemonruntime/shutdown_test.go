@@ -89,7 +89,7 @@ func TestStartRefusesWhenAnotherDaemonHoldsTheDataDir(t *testing.T) {
 	incumbent, err := daemonstate.Acquire(dir)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = incumbent.Release() })
-	require.NoError(t, daemonstate.Init(dir, "http://localhost:29190", "h2c", false))
+	require.NoError(t, daemonstate.Init(dir, daemonstate.Startup{GatewayURL: "http://localhost:29190", TLSMode: "h2c"}))
 
 	// The guard must fire before anything dials. The deadline is only so this
 	// test reports a failed assertion rather than wedging the binary when the

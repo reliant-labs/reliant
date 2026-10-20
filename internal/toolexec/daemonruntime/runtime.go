@@ -265,12 +265,12 @@ func Start(ctx context.Context, opts StartOptions) error {
 			gatewayURL = normalized
 		}
 	}
-	if stateErr := daemonstate.Init(
-		opts.BootstrapConfig.DataDir,
-		gatewayURL,
-		string(opts.BootstrapConfig.TLSMode),
-		opts.BootstrapConfig.ServerMode,
-	); stateErr != nil {
+	if stateErr := daemonstate.Init(opts.BootstrapConfig.DataDir, daemonstate.Startup{
+		GatewayURL: gatewayURL,
+		TLSMode:    string(opts.BootstrapConfig.TLSMode),
+		ServerMode: opts.BootstrapConfig.ServerMode,
+		Managed:    opts.Host.Managed(),
+	}); stateErr != nil {
 		logging.Warn(logPrefix+" Failed to write daemon runtime state", "error", stateErr)
 	}
 	defer func() {

@@ -98,6 +98,14 @@ type State struct {
 	TLSMode    string `json:"tls_mode,omitempty"`
 	ServerMode bool   `json:"server_mode,omitempty"`
 
+	// Managed marks a daemon the platform runs: a cloud workspace's daemon,
+	// started and restarted by the workspace operator. `reliant daemon stop`
+	// refuses one. Every shell on that machine inherits the daemon's
+	// DAEMON_DATA_DIR, so a bare `daemon stop` there resolves to exactly this
+	// record. That is how an agent's `daemon stop` once took a cloud
+	// machine's daemon down, and the agent and the machine with it.
+	Managed bool `json:"managed,omitempty"`
+
 	// Instance names the daemon instance this record belongs to: the
 	// "<origin>/<sub>/<workspace>" slug from internal/daemoninstance. It is
 	// what makes the record self-describing, so a reader that expects one
@@ -227,14 +235,24 @@ func resolveThroughSymlinks(path string) string {
 	}
 }
 
+// Startup is what a daemon declares about itself when it starts.
+type Startup struct {
+	GatewayURL string
+	TLSMode    string
+	ServerMode bool
+	// Managed is true for a daemon the platform runs (a cloud workspace),
+	// whose lifecycle is the platform's and not the CLI's; see State.Managed.
+	Managed bool
+}
+
 // Init stamps the process and binary identity and marks the stream as not yet
 // established. It is called once, at daemon startup, before the first dial.
-func Init(dataDir, gatewayURL, tlsMode string, serverMode bool) error {
+func Init(dataDir string, s Startup) error {
 	if dataDir == "" {
 		return nil
 	}
 	stream := StreamConnecting
-	if serverMode {
+	if s.ServerMode {
 		stream = StreamListening
 	}
 	now := time.Now().UTC()
@@ -251,9 +269,10 @@ func Init(dataDir, gatewayURL, tlsMode string, serverMode bool) error {
 		BinaryModTime:   exeModTime,
 		Revision:        revision,
 		Dirty:           dirty,
-		GatewayURL:      gatewayURL,
-		TLSMode:         tlsMode,
-		ServerMode:      serverMode,
+		GatewayURL:      s.GatewayURL,
+		TLSMode:         s.TLSMode,
+		ServerMode:      s.ServerMode,
+		Managed:         s.Managed,
 		Stream:          stream,
 		StreamChangedAt: now,
 	})

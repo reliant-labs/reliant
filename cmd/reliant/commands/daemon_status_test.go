@@ -5,11 +5,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/daemoninstance"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 )
 
@@ -31,7 +33,7 @@ func runDaemonStatus(t *testing.T, dataDir string) (string, error) {
 // command reports the gateway stream.
 func writeRecord(t *testing.T, dataDir string, mutate func(*daemonstate.State)) {
 	t.Helper()
-	require.NoError(t, daemonstate.Init(dataDir, "http://localhost:29190", "h2c", false))
+	require.NoError(t, daemonstate.Init(dataDir, daemonstate.Startup{GatewayURL: "http://localhost:29190", TLSMode: "h2c"}))
 	state, err := daemonstate.Read(dataDir)
 	require.NoError(t, err)
 	require.Equal(t, os.Getpid(), state.PID)
@@ -39,6 +41,34 @@ func writeRecord(t *testing.T, dataDir string, mutate func(*daemonstate.State)) 
 		mutate(&state)
 	}
 	require.NoError(t, daemonstate.SetStream(dataDir, state.Stream, state.StreamDetail))
+}
+
+// The read-only daemon commands only look. `daemon status` used to create the
+// instance directory it was asked about, so `daemon ls` then listed an
+// instance that had never run.
+func TestDaemonReadCommandsDoNotCreateTheInstanceDir(t *testing.T) {
+	for _, args := range [][]string{
+		{"daemon", "status"},
+		{"daemon", "stop"},
+		{"daemon", "logs", "--follow=false"},
+	} {
+		t.Run(args[1], func(t *testing.T) {
+			isolateInstanceEnv(t)
+			t.Setenv("RELIANT_SERVER_URL", testServerURL)
+			root := NewRootCmd()
+			var out bytes.Buffer
+			root.SetOut(&out)
+			root.SetErr(&out)
+			root.SetArgs(append(args, "--workspace", "never-started"))
+			_ = root.Execute()
+
+			instances, err := daemoninstance.InstancesDir()
+			require.NoError(t, err)
+			_, statErr := os.Stat(instances)
+			require.True(t, os.IsNotExist(statErr),
+				"`reliant %s` created %s; output:\n%s", strings.Join(args, " "), instances, out.String())
+		})
+	}
 }
 
 // A daemon that never established its gateway stream serves nothing: tool
