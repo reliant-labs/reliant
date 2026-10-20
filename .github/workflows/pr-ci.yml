@@ -119,6 +119,9 @@ jobs:
     outputs:
       backend: ${{ steps.lanes.outputs.backend }}
       generated: ${{ steps.lanes.outputs.generated }}
+      # The selector's forge-generate lane: the diff touches something
+      # `forge generate` reads or writes (rules.go, forgeInputs).
+      forge_generate: ${{ steps.lanes.outputs.forge_generate }}
       web: ${{ steps.lanes.outputs.web }}
       playwright: ${{ steps.lanes.outputs.playwright }}
       electron: ${{ steps.lanes.outputs.electron }}
@@ -245,6 +248,7 @@ jobs:
             echo "why each Go package runs:"
             jq -r '.go.reasons[]?, (.go.why // {} | to_entries[] | "  \(.key): \(.value)")' "${plan}" | head -200
           fi
+          out forge_generate "$(jq -r .forge_generate.full "${plan}")"
           module="$(go list -m)"
           all="$(go list ./... | grep -vxF "${module}/e2e")"
           if [ "$(jq -r .go.full "${plan}")" = true ]; then
@@ -296,6 +300,7 @@ jobs:
             echo "| vitest | $( [ "$(jq -r .web.full "${plan}")" = true ] && echo all || echo "$(grep -c . <<< "${vitest_files}" || true) file(s)") |"
             echo "| lint, e2e stories | ${backend} |"
             echo "| codegen drift | ${generated} |"
+            echo "| forge generate check | $(jq -r .forge_generate.full "${plan}") |"
             echo "| web build | ${web} |"
             echo "| Playwright | ${playwright} |"
             echo "| electron package | ${electron} |"
@@ -473,11 +478,15 @@ jobs:
   # research/dev-docs or CI plumbing cannot move a generator's input (the two
   # web/src paths generators WRITE still count). A forge bump "only" touches
   # go.mod but changes codegen output (cli.md at minimum), and go.mod is not in
-  # the skip list, so it runs.
+  # the skip list, so it runs. On a PR the forge check runs only when the diff
+  # touches a forge input (test-affected's forge-generate lane: protos,
+  # migrations, contract.go/doc.go, handlers, *_gen.go, gen/, deploy/, the
+  # pins); its one blind spot, a `//forge:` directive in another Go file, is
+  # caught by main's run, which always checks the whole tree.
   generated:
     name: Generated code is up to date
     needs: changes
-    if: needs.changes.outputs.generated == 'true'
+    if: needs.changes.outputs.generated == 'true' || needs.changes.outputs.forge_generate == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -606,7 +615,7 @@ jobs:
       # FORGE: the cached binary; the check refuses it unless it reports the
       # pinned version.
       - name: forge generate is a no-op
-        if: ${{ !cancelled() && steps.generate-all.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.generate-all.outcome == 'success' && needs.changes.outputs.forge_generate == 'true' }}
         run: FORGE="$HOME/go/bin/forge" make forge-generate-check FORGE_CHECK_FLAGS=--github
 
       # Saves: main only, and after the checks — whatever they found, the tools
@@ -768,9 +777,17 @@ jobs:
       # ripgrep is a genuine RUNTIME dependency of this job: internal/llm/tools
       # shells out to `rg`, and requireRipgrep() SKIPS those tests when it is
       # missing — so without it the job goes green having silently not run
-      # them. ubuntu-latest does not ship it.
+      # them. ubuntu-latest does not ship it. A pinned, checksum-verified static
+      # release build: `apt-get update && apt-get install` cost ~15s a job.
       - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
+        run: |
+          set -euo pipefail
+          v=14.1.1; f="ripgrep-${v}-x86_64-unknown-linux-musl"
+          curl -fsSL -o "${RUNNER_TEMP}/rg.tgz" "https://github.com/BurntSushi/ripgrep/releases/download/${v}/${f}.tar.gz"
+          echo "4cf9f2741e6c465ffdb7c26f38056a59e2a2544b51f7cc128ef28337eeae4d8e  ${RUNNER_TEMP}/rg.tgz" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/rg.tgz" -C "${RUNNER_TEMP}" "${f}/rg"
+          sudo install -m 0755 "${RUNNER_TEMP}/${f}/rg" /usr/local/bin/rg
+          rg --version
 
       # The tier flag is the ONLY difference between the tiers, and it is
       # decided here, from RELIANT_TEST_TIER, nowhere else. An unknown tier is
@@ -906,8 +923,15 @@ jobs:
           restore-keys: |
             go-build-backend-
 
+      # Same pinned build as the backend shards (see there).
       - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
+        run: |
+          set -euo pipefail
+          v=14.1.1; f="ripgrep-${v}-x86_64-unknown-linux-musl"
+          curl -fsSL -o "${RUNNER_TEMP}/rg.tgz" "https://github.com/BurntSushi/ripgrep/releases/download/${v}/${f}.tar.gz"
+          echo "4cf9f2741e6c465ffdb7c26f38056a59e2a2544b51f7cc128ef28337eeae4d8e  ${RUNNER_TEMP}/rg.tgz" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/rg.tgz" -C "${RUNNER_TEMP}" "${f}/rg"
+          sudo install -m 0755 "${RUNNER_TEMP}/${f}/rg" /usr/local/bin/rg
 
       - name: Run each new or changed test three times
         env:
