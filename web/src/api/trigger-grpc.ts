@@ -20,8 +20,7 @@
  * renaming a webhook trigger cannot turn it into an empty schedule.
  */
 
-import { create, toJson, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
-import { StructSchema } from "@bufbuild/protobuf/wkt";
+import { create, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { grpcClient } from "./grpc-client";
@@ -126,7 +125,7 @@ export interface ReplayCandidate {
   /** The event's kind as ReplayEvent.kind names it ("integration", "webhook", ...). */
   kind: string;
   /** The recorded payload, to show and edit. */
-  payload: Record<string, unknown>;
+  payload: JsonObject;
 }
 
 const REPLAY_KINDS: Partial<Record<TriggerEventKind, string>> = {
@@ -829,7 +828,7 @@ export const triggerGrpc = {
       triggerName: candidate.triggerName,
       event: eventFromProto(candidate.event!),
       kind: eventKindToWire(candidate.event?.kind ?? TriggerEventKind.UNSPECIFIED),
-      payload: (candidate.event?.payload ? (toJson(StructSchema, candidate.event.payload) as JsonObject) : {}) as Record<string, unknown>,
+      payload: candidate.event?.payload ?? {},
     }));
   },
 

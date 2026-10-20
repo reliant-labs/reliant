@@ -39,8 +39,6 @@ import {
   WorkflowTriggerSchema,
 } from "@/gen/reliant/v1/trigger_pb";
 import { jsToProtoValue } from "@/api/proto-utils";
-import { fromJson } from "@bufbuild/protobuf";
-import { StructSchema } from "@bufbuild/protobuf/wkt";
 import { WORKFLOW_LIST, getWorkflowByName, presetsResponse, worktreesResponse } from "./runFormFixtures";
 
 const listWorkflows = vi.fn();
@@ -134,7 +132,7 @@ function protoCandidate(options: { id: string; trigger: string; at: string; numb
       kind: TriggerEventKind.INTEGRATION,
       occurredAt: options.at,
       outcome: TriggerEventOutcome.SKIPPED,
-      payload: fromJson(StructSchema, { data: { issue: { number: options.number } } }),
+      payload: { data: { issue: { number: options.number } } },
       sender: create(TriggerSenderSchema, { kind: "github", id: "42", displayName: options.login, verified: true }),
     }),
   });
@@ -342,14 +340,14 @@ describe("RunNowDialog", () => {
       const request = runNow.mock.calls[0]![0];
       expect(request.message).toBe("Triage #7.");
       expect(request.replay).toMatchObject({ triggerName: "new-issue", eventId: "ev-2", kind: "integration" });
-      expect(request.replay.payload.fields.data).toBeDefined();
+      expect(request.replay.payload).toEqual({ data: { issue: { number: 7 } } });
       expect(request.inputs.label.kind).toEqual({ case: "stringValue", value: "bug" });
     });
 
     it("re-maps when the payload is edited, and sends the edited payload", async () => {
-      previewReplay.mockImplementation(async (request: { replay: { payload: { fields: Record<string, unknown> } } }) =>
+      previewReplay.mockImplementation(async (request: { replay: { payload: Record<string, unknown> } }) =>
         create(PreviewReplayResponseSchema, {
-          inputs: { label: jsToProtoValue(`n=${JSON.stringify(request.replay.payload.fields.number ? "set" : "unset")}`) },
+          inputs: { label: jsToProtoValue(`n=${JSON.stringify(request.replay.payload.number ? "set" : "unset")}`) },
           prompt: "p",
         }),
       );
@@ -367,7 +365,7 @@ describe("RunNowDialog", () => {
 
       await user.click(screen.getByRole("button", { name: "Run now" }));
       await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
-      expect(runNow.mock.calls[0]![0].replay.payload.fields.number.kind).toEqual({ case: "numberValue", value: 99 });
+      expect(runNow.mock.calls[0]![0].replay.payload).toEqual({ number: 99 });
       // A hand-written event has no recorded id.
       expect(runNow.mock.calls[0]![0].replay.eventId).toBe("");
     });
