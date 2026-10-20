@@ -3,6 +3,7 @@ syntax = "proto3";
 package controlplane.v1;
 
 import "buf/validate/validate.proto";
+import "controlplane/v1/deploy.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -701,6 +702,12 @@ message ListWorkloadsResponse {
   repeated Workload workloads = 1;
   // True when more than 500 workloads matched.
   bool truncated = 2;
+  // Finished and running Jobs (migrations, provisioning) in the window, newest
+  // first, at most 200. Read from the Kubernetes Job events the cluster
+  // collector already delivers (see WorkloadJob). True in jobs_truncated when
+  // more matched.
+  repeated WorkloadJob jobs = 3;
+  bool jobs_truncated = 4;
 }
 
 message Workload {
@@ -720,6 +727,140 @@ message Workload {
   repeated WorkloadContainer containers = 8;
   // The most recent Kubernetes event of type Warning in the window.
   WorkloadEvent latest_warning = 9;
+
+  // How the workload runs, from the environment's recorded bundle (the
+  // telemetry carries no kind). UNSPECIFIED when the environment has no
+  // recorded bundle or the bundle does not declare the workload.
+  WorkloadKind kind = 10;
+  // ONE server-side verdict per workload, so the list, the detail page and the
+  // nav badge cannot disagree. Rules: see WorkloadHealth.
+  WorkloadHealth health = 11;
+  // One line saying why: "2 of 3 replicas ready", "restarted 14x, last exit
+  // OOMKilled". Empty for HEALTHY.
+  string health_reason = 12;
+  // Ready and desired replicas. ready: the deploy ledger's observed ready
+  // count when it observes the workload, else replicas_observed (pods
+  // reporting). desired: the ledger's desired count, else the bundle's
+  // declared replicas; unset when neither is known (then render ready alone).
+  optional int32 ready_replicas = 13;
+  optional int32 desired_replicas = 14;
+  // The release this workload is running, e.g. "v1.7.44". Empty when it cannot
+  // be established; release_basis says how it was.
+  string release_version = 15;
+  WorkloadReleaseBasis release_basis = 16;
+  // GetWorkload only (the list leaves it empty): this workload's pods in the
+  // window, running first.
+  repeated WorkloadPod pods = 17;
+  // GetWorkload only (the list leaves it unset): what the environment's recorded
+  // bundle declares for the workload, the same message DeployService.GetBundle
+  // returns. Unset when the environment has no recorded bundle or the bundle
+  // does not declare it.
+  DeclaredWorkload declared = 18;
+}
+
+// WorkloadHealth is computed once, on the server, from the deploy ledger's
+// rollout verdict and observation, the replica counts, and the restarts in the
+// window. The first rule that matches wins:
+//
+//   SUSPENDED      the owner stopped it (declared or observed suspended), or
+//                  it is declared at zero replicas.
+//   CRASH_LOOPING  3 or more restarts in the window and no replica ready, or a
+//                  Kubernetes BackOff warning with a restart in the window
+//                  while fewer replicas are ready than desired.
+//   DEGRADED       the ledger says degraded or the workload is gone; fewer
+//                  replicas ready than desired once the rollout settled; or 3
+//                  or more restarts in the window.
+//   PENDING        a rollout is in flight (pending / progressing / converging),
+//                  or nothing is ready and nothing has restarted yet.
+//   UNKNOWN        the ledger has a row for it that was never observed (or the
+//                  observation is stale) and telemetry has nothing either.
+//   HEALTHY        otherwise. One or two restarts with every replica ready are
+//                  shown (restarts, last exit) but do not degrade it.
+enum WorkloadHealth {
+  WORKLOAD_HEALTH_UNSPECIFIED = 0;
+  WORKLOAD_HEALTH_HEALTHY = 1;
+  WORKLOAD_HEALTH_DEGRADED = 2;
+  WORKLOAD_HEALTH_CRASH_LOOPING = 3;
+  WORKLOAD_HEALTH_PENDING = 4;
+  WORKLOAD_HEALTH_SUSPENDED = 5;
+  WORKLOAD_HEALTH_UNKNOWN = 6;
+}
+
+// How release_version was established.
+enum WorkloadReleaseBasis {
+  WORKLOAD_RELEASE_BASIS_UNSPECIFIED = 0;
+  // The observed image digest equals the digest a promotion pinned for the
+  // workload's artifact: verified.
+  WORKLOAD_RELEASE_BASIS_DIGEST = 1;
+  // No digest was observed; this is the newest promotion that moved the
+  // workload. Declared, not verified.
+  WORKLOAD_RELEASE_BASIS_PROMOTION = 2;
+}
+
+enum WorkloadPodState {
+  WORKLOAD_POD_STATE_UNSPECIFIED = 0;
+  // Reported within 5 minutes of the workload's latest sample.
+  WORKLOAD_POD_STATE_RUNNING = 1;
+  // Reported earlier in the window and has since stopped: replaced, evicted or
+  // finished.
+  WORKLOAD_POD_STATE_GONE = 2;
+}
+
+// WorkloadPod is one pod's aggregate over the window, from node-derived
+// telemetry (k8s.pod.name / k8s.pod.uid).
+message WorkloadPod {
+  string name = 1;
+  string uid = 2;
+  WorkloadPodState state = 3;
+  // Restarts across the pod's containers in the window.
+  int64 restarts = 4;
+  // k8s.container.last_terminated_reason of the pod's latest restart.
+  string last_exit_reason = 5;
+  google.protobuf.Timestamp last_exit_at = 6;
+  // k8s.node.name; empty until the node agent delivers it (agents older than
+  // this release strip it).
+  string node = 7;
+  // First and last sample in the window. Age is last_seen - first_seen (or
+  // now - first_seen while RUNNING); when first_seen is the window's start the
+  // pod is older than the window and age_is_lower_bound says so.
+  google.protobuf.Timestamp first_seen = 8;
+  google.protobuf.Timestamp last_seen = 9;
+  bool age_is_lower_bound = 10;
+  // The latest Kubernetes Warning event naming this pod (BackOff, Unhealthy,
+  // Evicted, ...) among the events GetWorkload returns. Unset when none.
+  WorkloadEvent latest_warning = 11;
+}
+
+enum WorkloadJobResult {
+  WORKLOAD_JOB_RESULT_UNSPECIFIED = 0;
+  WORKLOAD_JOB_RESULT_RUNNING = 1;
+  WORKLOAD_JOB_RESULT_SUCCEEDED = 2;
+  WORKLOAD_JOB_RESULT_FAILED = 3;
+}
+
+// WorkloadJob is one Kubernetes Job run, built from the Job's own events
+// (SuccessfulCreate, Completed, BackoffLimitExceeded, DeadlineExceeded) that
+// the cluster collector delivers. The receiver only emits events newer than
+// its start, so a run whose terminal event fell in a collector restart shows
+// RUNNING with no finish; that is the one known gap of this source.
+message WorkloadJob {
+  string env_id = 1;
+  string env_name = 2;
+  // The Job's name, e.g. control-plane-migrate-b9e1b9d6de.
+  string name = 3;
+  // The declared workload it belongs to: the name without the spec hash or
+  // cron timestamp (control-plane-migrate).
+  string workload = 4;
+  WorkloadJobResult result = 5;
+  // BackoffLimitExceeded, DeadlineExceeded, ... for a FAILED run.
+  string reason = 6;
+  // The release in effect when the run started (newest promotion that moved
+  // the workload at or before started_at). Empty when unknown.
+  string release_version = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp finished_at = 9;
+  // finished_at - started_at; 0 while running or when either is unknown.
+  int64 duration_seconds = 10;
 }
 
 message WorkloadContainer {
@@ -797,6 +938,9 @@ message GetWorkloadResponse {
   int32 step_seconds = 5;
   // True when a cap (200 series, 500 events, 200 changes) cut the result.
   bool truncated = 6;
+  // One summary per environment in scope that reports the workload: kind,
+  // health, release_version, pods and the declared config (see Workload).
+  repeated Workload workloads = 7;
 }
 
 enum WorkloadMetric {

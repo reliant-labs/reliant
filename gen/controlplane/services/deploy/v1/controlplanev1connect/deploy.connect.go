@@ -91,6 +91,9 @@ const (
 	// DeployServiceSetEnvironmentRunStateProcedure is the fully-qualified name of the DeployService's
 	// SetEnvironmentRunState RPC.
 	DeployServiceSetEnvironmentRunStateProcedure = "/controlplane.v1.DeployService/SetEnvironmentRunState"
+	// DeployServiceRestartWorkloadProcedure is the fully-qualified name of the DeployService's
+	// RestartWorkload RPC.
+	DeployServiceRestartWorkloadProcedure = "/controlplane.v1.DeployService/RestartWorkload"
 	// DeployServiceGetStatusProcedure is the fully-qualified name of the DeployService's GetStatus RPC.
 	DeployServiceGetStatusProcedure = "/controlplane.v1.DeployService/GetStatus"
 	// DeployServiceStreamLogsProcedure is the fully-qualified name of the DeployService's StreamLogs
@@ -233,6 +236,25 @@ type DeployServiceClient interface {
 	// refused with the billing reason instead. ADMIN, like Scale and
 	// DeleteEnvironment.
 	SetEnvironmentRunState(context.Context, *connect.Request[v1.SetEnvironmentRunStateRequest]) (*connect.Response[v1.SetEnvironmentRunStateResponse], error)
+	// RestartWorkload asks the platform to restart one workload's pods, one at a
+	// time behind their readiness gates (a rolling restart). The release and the
+	// declared spec do NOT change, and nothing here scales: replicas are declared
+	// in code, so changing them is a pull request, never a console action.
+	//
+	// HOSTED ENVIRONMENTS ONLY (console decision D6, hosted first). A
+	// self-managed or local environment is FailedPrecondition: the platform does
+	// not run its pods, and there is no daemon path with an authorization story
+	// yet.
+	//
+	// The request NAMES THE ENVIRONMENT, and the response echoes it, so a client
+	// can show "Restart in prod" and a log line can never be read as having
+	// restarted a different environment's workload. ADMIN, like Scale: restarting
+	// a production workload is a write to it. Recorded in the audit trail as
+	// action workload.restart with the environment and the workload.
+	//
+	// Idempotent within a second: a repeat returns the same request time rather
+	// than rolling the pods twice.
+	RestartWorkload(context.Context, *connect.Request[v1.RestartWorkloadRequest]) (*connect.Response[v1.RestartWorkloadResponse], error)
 	// GetStatus returns the deployment with BOTH halves — declared and
 	// observed — plus the derived drift the UI badges. The 15s poll on the
 	// /deploy detail page calls this.
@@ -579,6 +601,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("SetEnvironmentRunState")),
 			connect.WithClientOptions(opts...),
 		),
+		restartWorkload: connect.NewClient[v1.RestartWorkloadRequest, v1.RestartWorkloadResponse](
+			httpClient,
+			baseURL+DeployServiceRestartWorkloadProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("RestartWorkload")),
+			connect.WithClientOptions(opts...),
+		),
 		getStatus: connect.NewClient[v1.GetDeploymentStatusRequest, v1.GetDeploymentStatusResponse](
 			httpClient,
 			baseURL+DeployServiceGetStatusProcedure,
@@ -729,6 +757,7 @@ type deployServiceClient struct {
 	promote                *connect.Client[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse]
 	scale                  *connect.Client[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse]
 	setEnvironmentRunState *connect.Client[v1.SetEnvironmentRunStateRequest, v1.SetEnvironmentRunStateResponse]
+	restartWorkload        *connect.Client[v1.RestartWorkloadRequest, v1.RestartWorkloadResponse]
 	getStatus              *connect.Client[v1.GetDeploymentStatusRequest, v1.GetDeploymentStatusResponse]
 	streamLogs             *connect.Client[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse]
 	cutRelease             *connect.Client[v1.CutReleaseRequest, v1.CutReleaseResponse]
@@ -845,6 +874,11 @@ func (c *deployServiceClient) Scale(ctx context.Context, req *connect.Request[v1
 // SetEnvironmentRunState calls controlplane.v1.DeployService.SetEnvironmentRunState.
 func (c *deployServiceClient) SetEnvironmentRunState(ctx context.Context, req *connect.Request[v1.SetEnvironmentRunStateRequest]) (*connect.Response[v1.SetEnvironmentRunStateResponse], error) {
 	return c.setEnvironmentRunState.CallUnary(ctx, req)
+}
+
+// RestartWorkload calls controlplane.v1.DeployService.RestartWorkload.
+func (c *deployServiceClient) RestartWorkload(ctx context.Context, req *connect.Request[v1.RestartWorkloadRequest]) (*connect.Response[v1.RestartWorkloadResponse], error) {
+	return c.restartWorkload.CallUnary(ctx, req)
 }
 
 // GetStatus calls controlplane.v1.DeployService.GetStatus.
@@ -1035,6 +1069,25 @@ type DeployServiceHandler interface {
 	// refused with the billing reason instead. ADMIN, like Scale and
 	// DeleteEnvironment.
 	SetEnvironmentRunState(context.Context, *connect.Request[v1.SetEnvironmentRunStateRequest]) (*connect.Response[v1.SetEnvironmentRunStateResponse], error)
+	// RestartWorkload asks the platform to restart one workload's pods, one at a
+	// time behind their readiness gates (a rolling restart). The release and the
+	// declared spec do NOT change, and nothing here scales: replicas are declared
+	// in code, so changing them is a pull request, never a console action.
+	//
+	// HOSTED ENVIRONMENTS ONLY (console decision D6, hosted first). A
+	// self-managed or local environment is FailedPrecondition: the platform does
+	// not run its pods, and there is no daemon path with an authorization story
+	// yet.
+	//
+	// The request NAMES THE ENVIRONMENT, and the response echoes it, so a client
+	// can show "Restart in prod" and a log line can never be read as having
+	// restarted a different environment's workload. ADMIN, like Scale: restarting
+	// a production workload is a write to it. Recorded in the audit trail as
+	// action workload.restart with the environment and the workload.
+	//
+	// Idempotent within a second: a repeat returns the same request time rather
+	// than rolling the pods twice.
+	RestartWorkload(context.Context, *connect.Request[v1.RestartWorkloadRequest]) (*connect.Response[v1.RestartWorkloadResponse], error)
 	// GetStatus returns the deployment with BOTH halves — declared and
 	// observed — plus the derived drift the UI badges. The 15s poll on the
 	// /deploy detail page calls this.
@@ -1377,6 +1430,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("SetEnvironmentRunState")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceRestartWorkloadHandler := connect.NewUnaryHandler(
+		DeployServiceRestartWorkloadProcedure,
+		svc.RestartWorkload,
+		connect.WithSchema(deployServiceMethods.ByName("RestartWorkload")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceGetStatusHandler := connect.NewUnaryHandler(
 		DeployServiceGetStatusProcedure,
 		svc.GetStatus,
@@ -1543,6 +1602,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceScaleHandler.ServeHTTP(w, r)
 		case DeployServiceSetEnvironmentRunStateProcedure:
 			deployServiceSetEnvironmentRunStateHandler.ServeHTTP(w, r)
+		case DeployServiceRestartWorkloadProcedure:
+			deployServiceRestartWorkloadHandler.ServeHTTP(w, r)
 		case DeployServiceGetStatusProcedure:
 			deployServiceGetStatusHandler.ServeHTTP(w, r)
 		case DeployServiceStreamLogsProcedure:
@@ -1668,6 +1729,10 @@ func (UnimplementedDeployServiceHandler) Scale(context.Context, *connect.Request
 
 func (UnimplementedDeployServiceHandler) SetEnvironmentRunState(context.Context, *connect.Request[v1.SetEnvironmentRunStateRequest]) (*connect.Response[v1.SetEnvironmentRunStateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.SetEnvironmentRunState is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) RestartWorkload(context.Context, *connect.Request[v1.RestartWorkloadRequest]) (*connect.Response[v1.RestartWorkloadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.RestartWorkload is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) GetStatus(context.Context, *connect.Request[v1.GetDeploymentStatusRequest]) (*connect.Response[v1.GetDeploymentStatusResponse], error) {

@@ -1661,6 +1661,63 @@ message DeployBundle {
   google.protobuf.Struct snapshot = 14;
 }
 
+// WorkloadKind is how a declared workload runs, as the recorded bundle
+// declares it. The node agent's telemetry carries no kind, so the console reads
+// it here.
+enum WorkloadKind {
+  WORKLOAD_KIND_UNSPECIFIED = 0;
+  WORKLOAD_KIND_DEPLOYMENT = 1;
+  WORKLOAD_KIND_STATEFUL_SET = 2;
+  WORKLOAD_KIND_DAEMON_SET = 3;
+  WORKLOAD_KIND_CRON_JOB = 4;
+  WORKLOAD_KIND_JOB = 5;
+}
+
+// DeclaredWorkload is what one recorded bundle declares for one workload: the
+// declared half of "declared vs observed", read from the bundle the control
+// plane already holds, never from the cluster or a daemon.
+//
+// NAMES AND NUMBERS ONLY. Environment variables are reported by NAME; their
+// values (a literal, a secret reference) never leave the bundle through this
+// message.
+message DeclaredWorkload {
+  string name = 1;
+  WorkloadKind kind = 2;
+  // True when the bundle carries the workload's spec (a snapshot), so the
+  // fields below are the declaration. False for a bundle recorded before
+  // snapshots: only name, kind and replicas are known, and an absent value
+  // there means "not recorded", never "not declared".
+  bool spec_recorded = 3;
+  // The declared replica count; unset when the declaration has none.
+  optional int32 replicas = 4;
+  // CPU in millicores and memory in bytes; 0 = not declared.
+  int64 cpu_request_millicores = 5;
+  int64 cpu_limit_millicores = 6;
+  int64 memory_request_bytes = 7;
+  int64 memory_limit_bytes = 8;
+  repeated DeclaredPort ports = 9;
+  // Environment variable NAMES, sorted and deduplicated. Never values.
+  repeated string env_names = 10;
+  // The image the declaration names (repository@digest when it is pinned).
+  string image = 11;
+  // Where the declaration lives, by forge convention (deploy/kcl/<env>/main.k).
+  // The bundle records no per-workload source line, so this is the
+  // environment's entry point, not a line number.
+  string source_path = 12;
+  // The repository and commit the bundle was rendered from, so a client can
+  // open a pull request against the declaration. Empty when not recorded.
+  string source_repo = 13;
+  string source_commit = 14;
+  string bundle_id = 15;
+}
+
+message DeclaredPort {
+  string name = 1;
+  int32 port = 2;
+  // tcp | udp.
+  string protocol = 3;
+}
+
 // DeployConvergence is the control plane's own OBSERVATION that an environment
 // did, or did not, reach the bundle its intent names.
 //
