@@ -98,6 +98,21 @@ describe("resolveBuild", () => {
     expect(argValue(calls[0], "--tag")).toBe("v1.7.11");
   });
 
+  // forge injects its frontend BUILD ID (a content hash such as 657f69e51d5e)
+  // into VITE_APP_VERSION — the variable telemetry reads service.version from.
+  // It is not a release tag; handing it to --tag made release-identity.sh
+  // refuse every forge-driven prod build.
+  it("does not mistake forge's VITE_APP_VERSION build id for a release tag", () => {
+    const { deps, calls } = fakeDeps("1.8.3-dev+431baca5");
+    const { info } = resolveBuild(
+      { VITE_APP_VERSION: "657f69e51d5e", FORGE_SOURCE_COMMIT: SHA } as NodeJS.ProcessEnv,
+      deps,
+    );
+    expect(calls[0]).not.toContain("--tag");
+    expect(argValue(calls[0], "--commit")).toBe(SHA);
+    expect(info.version).toBe("1.8.3-dev+431baca5");
+  });
+
   it("never reports a detached HEAD as the ref", () => {
     const { deps } = fakeDeps("1.8.2-dev+10c676b6", { "rev-parse --abbrev-ref HEAD": "HEAD" });
     expect(resolveBuild({} as NodeJS.ProcessEnv, deps).info.ref).toBe("unknown");

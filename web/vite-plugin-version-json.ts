@@ -30,8 +30,13 @@ import { UNKNOWN, type BuildInfo } from "./src/lib/releaseIdentity";
  *                                            it shallow with no tags, so a
  *                                            tag-pinned build learns its tag here.
  *   FORGE_RELEASE                            the forge release shipping the bundle.
- *   RELEASE_VERSION / VITE_APP_VERSION       an explicit tag, for a build driven
+ *   RELEASE_VERSION                          an explicit tag, for a build driven
  *                                            by something else.
+ *
+ * VITE_APP_VERSION is deliberately NOT read here. forge's Firebase deploy
+ * fills it with its frontend build id (a content hash, e.g. 657f69e51d5e) so
+ * telemetry's service.version matches the uploaded source maps. Reading it as
+ * a tag made release-identity.sh refuse every forge-driven prod build.
  *
  * GITHUB_SHA is deliberately NOT read: control-plane's CI builds this bundle
  * from a sibling checkout, where GITHUB_SHA names control-plane's commit.
@@ -108,7 +113,9 @@ export function resolveBuild(
   const commit = env.FORGE_SOURCE_COMMIT || deps.git(["rev-parse", "HEAD"]);
 
   const args = ["--repo", REPO_ROOT];
-  const tag = env.RELEASE_VERSION || env.VITE_APP_VERSION;
+  // VITE_APP_VERSION is NOT a tag source: forge injects its frontend build id
+  // (a content hash) there, for telemetry's service.version (src/lib/telemetry.ts).
+  const tag = env.RELEASE_VERSION;
   if (tag) args.push("--tag", tag);
   if (env.FORGE_SOURCE_REF) args.push("--ref", env.FORGE_SOURCE_REF);
   // Only a commit the ENVIRONMENT named is passed on: naming one skips the
