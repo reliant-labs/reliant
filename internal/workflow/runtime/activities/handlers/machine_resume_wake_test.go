@@ -147,7 +147,7 @@ func TestMachineResumeWake_SliceEndsWhileTheMachineIsStillComingUp(t *testing.T)
 func TestPreflight_ARunResumeWakesThroughTheRunDoor(t *testing.T) {
 	for _, runResume := range []bool{true, false} {
 		router := newRunWakeRouter()
-		router.waitFakeRouter.online.Store(false)
+		router.online.Store(false)
 		a, _, chatID := newWaitFixture(t, false, router)
 
 		_, _ = runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, RunResume: runResume})
