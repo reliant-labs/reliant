@@ -253,7 +253,7 @@ export default function ConsolePrimitivesPreview() {
         }
         navItems={items}
         footerItems={footer}
-        user={{ name: "sean", email: "sean@reliantlabs.io" }}
+        user={{ name: "ada", email: "ada@example.com" }}
         collapsed={rail}
         onToggle={() => void navigate({ to: BASE, search: rail ? { page } : { page, rail: "1" } })}
         headerContent={

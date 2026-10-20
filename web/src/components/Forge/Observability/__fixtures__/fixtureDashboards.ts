@@ -40,7 +40,7 @@ export interface DashboardFixtureOptions {
 
 type Call = <T>(rpc: string, request: unknown, answer: () => T) => Promise<T>;
 
-const SEAN: DashboardUser = { id: "u-sean", name: "sean", email: "sean@reliant.dev" };
+const SEAN: DashboardUser = { id: "u-ada", name: "ada", email: "ada@example.com" };
 const ROBOT: DashboardUser = { id: "u-reliant-01", name: "reliant-01", email: "reliant-01@reliant.dev" };
 const YOU: DashboardUser = { id: "u-you", name: "you", email: "you@reliant.dev" };
 
