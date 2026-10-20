@@ -105,9 +105,6 @@ message FieldOptions {
   // Mark this field as the primary key.
   bool pk = 1;
 
-  // Field number 2 is reserved (a removed annotation); never reuse it.
-  reserved 2;
-
   // How to store complex or non-scalar types in the database.
   StoreAs store = 3;
 
@@ -211,8 +208,14 @@ message ServiceOptions {
   // Authentication configuration for the service.
   AuthConfig auth = 6;
 
-  // Field number 7 is reserved (a removed annotation); never reuse it.
-  reserved 7;
+  // The trust domain whose callers this service serves: "user" (the
+  // default, when empty) for the product's own signed-in users, or a name
+  // the project chooses for another kind of caller ("daemon", "operator").
+  // A serverkit.Listener refuses to start when it mounts a service whose
+  // audience differs from its chain's Authenticator.Audience(), so a
+  // listener authenticating one kind of caller can never serve another
+  // kind's RPCs.
+  string audience = 7;
 }
 
 // ServiceVisibility determines how a service is exposed.
@@ -273,10 +276,6 @@ message MethodOptions {
   // The list is informational at runtime today; future work may enforce
   // that handlers can only return declared codes.
   repeated string errors = 6;
-
-  // Field numbers 7, 8 and 9 are reserved (removed annotations); never
-  // reuse them.
-  reserved 7, 8, 9;
 }
 
 // =============================================================================
@@ -298,6 +297,8 @@ message MethodOptions {
 //   }
 message ConfigFieldOptions {
   // Environment variable name to read this field from (e.g., "DATABASE_URL").
+  // A variable set to "" counts as unset, whatever the field's type: the file
+  // or default value stands. An explicitly empty value is a flag's to set.
   string env_var = 1;
 
   // CLI flag name, without leading dashes (e.g., "database-url").
@@ -373,6 +374,49 @@ message ConfigFieldOptions {
   // are direct contradictions and forge rejects the pair rather than
   // silently picking one.
   bool optional = 10;
+
+  // EnvVarAliases are further environment variables the field is read from,
+  // in order, when env_var is unset: the first one set wins, and a variable
+  // set to "" counts as unset, exactly as for env_var. A flag still beats
+  // all of them.
+  //
+  //   string environment = 1 [(forge.v1.config) = {
+  //     env_var: "RELIANT_ENV"
+  //     env_var_aliases: [{name: "NODE_ENV"}]
+  //   }];
+  //   int32 port = 2 [(forge.v1.config) = {
+  //     env_var: "DAEMON_LISTEN_PORT"
+  //     env_var_aliases: [{name: "TOOLS_DAEMON_PORT", deprecated: true}]
+  //   }];
+  //
+  // An alias is for a SETTER forge does not control: a convention another
+  // tool owns (NODE_ENV), or an older name a deployment elsewhere still
+  // exports. forge's own setters use env_var alone — the KCL env map and the
+  // secret store key name only the primary — so every manifest forge renders
+  // converges on one name. A flag's --help lists env_var and the permanent
+  // aliases; a deprecated alias is never advertised.
+  //
+  // Aliases need env_var, are read only from the environment, and must not
+  // repeat any env var or alias another field of the same process reads;
+  // `forge generate` refuses each of those. A frontend config field takes
+  // no aliases: its values come from the rendered config document, not
+  // from an environment.
+  repeated EnvVarAlias env_var_aliases = 11;
+}
+
+// EnvVarAlias is one fallback environment variable of a config field. See
+// ConfigFieldOptions.env_var_aliases.
+message EnvVarAlias {
+  // Name is the environment variable, e.g. "NODE_ENV".
+  string name = 1;
+
+  // Deprecated marks a name kept only so existing setters keep working
+  // while they move to env_var. A process that finds it set prints one
+  // line to stderr at load naming env_var, whether the alias supplied the
+  // value or was shadowed by an earlier name. A permanent alias (the
+  // default) is read silently: NODE_ENV is somebody else's convention, not
+  // a migration in flight, and a notice at every start would be noise.
+  bool deprecated = 2;
 }
 
 // BinaryConfigOptions binds a config message to the BINARY that loads it,
@@ -400,12 +444,46 @@ message ConfigFieldOptions {
 //
 // A project that annotates NOTHING is unchanged: its single AppConfig stays
 // the one config every binary loads. Per-binary config is opt-in.
+//
+// ONE BINARY, SEVERAL PROCESSES. A binary whose subcommands are different
+// processes (`reliant server api`, `reliant server worker`, `reliant
+// daemon`) scopes a config to a subcommand with `command`, so each process
+// carries only what it reads — the api's credentials never reach the
+// worker's Deployment. The binding is keyed on (binary, command):
+//
+//   - The ROOT config (no `command`) is the binary-wide surface: every
+//     process of the binary loads it, and its flags register as PERSISTENT
+//     flags on the binary's root command, so every subcommand inherits them.
+//   - A COMMAND config is loaded by exactly the process running that
+//     subcommand. Its leaves — composed blocks included — register as LOCAL
+//     flags on that subcommand, and its loader refuses to load from any
+//     other command.
+//
+// A process therefore reads the root config plus the ONE config declared for
+// its exact command path; command configs do not nest (a config for
+// ["server"] is not inherited by `server api`). The root config and a command
+// config of the same binary may not declare the same env var or flag: one
+// process would read the value twice, from two declarations that can drift.
 message BinaryConfigOptions {
   // Binary is the cmd/<name> leaf whose process loads this config — the same
   // name `forge scaffold binary` creates and the deploy layer names its
   // workload after. A message annotated with a binary that has no cmd/<name>
   // directory is a generate-time error, not a silently unused config.
   string binary = 1;
+
+  // Command is the cobra command path BELOW the binary whose process loads
+  // this config, one command name per element: ["server", "api"] for
+  // `reliant server api`. Empty binds the binary's root config. Two
+  // messages may not bind the same (binary, command).
+  //
+  // forge validates the SHAPE at generate time (each element one command
+  // name: non-empty, no whitespace, not a flag) but cannot prove the path
+  // exists there: a cobra tree is assembled at runtime by AddCommand calls in
+  // any package, from `Use` strings that may be computed, so a static scan
+  // would be a guess that is wrong in both directions — and a wrong refusal
+  // blocks generate. The exact check runs where the tree is real: the
+  // generated Load<Msg>(cmd) refuses a command whose path is not this one.
+  repeated string command = 2;
 }
 
 // FrontendConfigOptions binds a config message to the FRONTEND that loads

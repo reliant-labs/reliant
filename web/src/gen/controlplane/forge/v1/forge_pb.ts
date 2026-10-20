@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file forge/v1/forge.proto.
  */
 export const file_forge_v1_forge: GenFile = /*@__PURE__*/
-  fileDesc("ChRmb3JnZS92MS9mb3JnZS5wcm90bxIIZm9yZ2UudjEigAEKDUVudGl0eU9wdGlvbnMSDQoFdGFibGUYASABKAkSEwoLc29mdF9kZWxldGUYAiABKAgSEgoKdGltZXN0YW1wcxgDIAEoCBIjCgdpbmRleGVzGAQgAygLMhIuZm9yZ2UudjEuSW5kZXhEZWYSEgoKbWlkZGxld2FyZRgFIAMoCSI4CghJbmRleERlZhIMCgRuYW1lGAEgASgJEg4KBmZpZWxkcxgCIAMoCRIOCgZ1bmlxdWUYAyABKAgi0wEKDEZpZWxkT3B0aW9ucxIKCgJwaxgBIAEoCBIgCgVzdG9yZRgDIAEoDjIRLmZvcmdlLnYxLlN0b3JlQXMSCwoDcmVmGAQgASgJEg4KBnVuaXF1ZRgFIAEoCBINCgVpbmRleBgGIAEoCBIVCg1kZWZhdWx0X3ZhbHVlGAcgASgJEgwKBHNraXAYCCABKAgSKwoIdmFsaWRhdGUYCSABKAsyGS5mb3JnZS52MS5WYWxpZGF0aW9uUnVsZXMSEQoJaW1tdXRhYmxlGAogASgISgQIAhADIq4BCg9WYWxpZGF0aW9uUnVsZXMSEAoIcmVxdWlyZWQYASABKAgSEgoKbWluX2xlbmd0aBgCIAEoBRISCgptYXhfbGVuZ3RoGAMgASgFEg8KB3BhdHRlcm4YBCABKAkSDgoGZm9ybWF0GAUgASgJEgsKA21pbhgGIAEoARILCgNtYXgYByABKAESFgoOYWxsb3dlZF92YWx1ZXMYCCADKAkSDgoGY3VzdG9tGAkgASgJIrUBCg5TZXJ2aWNlT3B0aW9ucxIMCgRuYW1lGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSLwoKdmlzaWJpbGl0eRgEIAEoDjIbLmZvcmdlLnYxLlNlcnZpY2VWaXNpYmlsaXR5EhQKDGRlcGVuZGVuY2llcxgFIAMoCRIiCgRhdXRoGAYgASgLMhQuZm9yZ2UudjEuQXV0aENvbmZpZ0oECAcQCCI6CgpBdXRoQ29uZmlnEhUKDWF1dGhfcmVxdWlyZWQYASABKAgSFQoNYXV0aF9wcm92aWRlchgCIAEoCSK4AQoNTWV0aG9kT3B0aW9ucxIaCg1hdXRoX3JlcXVpcmVkGAEgASgISACIAQESEgoKaWRlbXBvdGVudBgDIAEoCBIqCgd0aW1lb3V0GAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhcKD2lkZW1wb3RlbmN5X2tleRgFIAEoCBIOCgZlcnJvcnMYBiADKAlCEAoOX2F1dGhfcmVxdWlyZWRKBAgHEAhKBAgIEAlKBAgJEAoi6QEKEkNvbmZpZ0ZpZWxkT3B0aW9ucxIPCgdlbnZfdmFyGAEgASgJEgwKBGZsYWcYAiABKAkSFQoNZGVmYXVsdF92YWx1ZRgDIAEoCRIQCghyZXF1aXJlZBgEIAEoCBITCgtkZXNjcmlwdGlvbhgFIAEoCRIRCglzZW5zaXRpdmUYBiABKAgSEAoIY2F0ZWdvcnkYByABKAkSJwoEcm9sZRgIIAEoDjIZLmZvcmdlLnYxLkNvbmZpZ0ZpZWxkUm9sZRIWCg5hbGxvd2VkX3ZhbHVlcxgJIAMoCRIQCghvcHRpb25hbBgKIAEoCCIlChNCaW5hcnlDb25maWdPcHRpb25zEg4KBmJpbmFyeRgBIAEoCSIpChVGcm9udGVuZENvbmZpZ09wdGlvbnMSEAoIZnJvbnRlbmQYASABKAkqcQoHU3RvcmVBcxIYChRTVE9SRV9BU19VTlNQRUNJRklFRBAAEhIKDlNUT1JFX0FTX0pTT05CEAESEQoNU1RPUkVfQVNfVEVYVBACEhEKDVNUT1JFX0FTX0JMT0IQAxISCg5TVE9SRV9BU19UQUJMRRAEKnQKEVNlcnZpY2VWaXNpYmlsaXR5EiIKHlNFUlZJQ0VfVklTSUJJTElUWV9VTlNQRUNJRklFRBAAEhoKFlNFUlZJQ0VfVklTSUJJTElUWV9BUEkQARIfChtTRVJWSUNFX1ZJU0lCSUxJVFlfSU5URVJOQUwQAirhAQoPQ29uZmlnRmllbGRSb2xlEiEKHUNPTkZJR19GSUVMRF9ST0xFX1VOU1BFQ0lGSUVEEAASGgoWQ09ORklHX0ZJRUxEX1JPTEVfTU9ERRABEh4KGkNPTkZJR19GSUVMRF9ST0xFX1RMU19DRVJUEAISHQoZQ09ORklHX0ZJRUxEX1JPTEVfVExTX0tFWRADEiIKHkNPTkZJR19GSUVMRF9ST0xFX0NPUlNfT1JJR0lOUxAEEiwKKENPTkZJR19GSUVMRF9ST0xFX0NPUlNfQUxMT1dfQ1JFREVOVElBTFMQBTpSCgZlbnRpdHkSHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMYmIgDIAEoCzIXLmZvcmdlLnYxLkVudGl0eU9wdGlvbnNSBmVudGl0eTplCg1iaW5hcnlfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJmIAyABKAsyHS5mb3JnZS52MS5CaW5hcnlDb25maWdPcHRpb25zUgxiaW5hcnlDb25maWc6awoPZnJvbnRlbmRfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJqIAyABKAsyHy5mb3JnZS52MS5Gcm9udGVuZENvbmZpZ09wdGlvbnNSDmZyb250ZW5kQ29uZmlnOk0KBWZpZWxkEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxj8iAMgASgLMhYuZm9yZ2UudjEuRmllbGRPcHRpb25zUgVmaWVsZDpVCgZjb25maWcSHS5nb29nbGUucHJvdG9idWYuRmllbGRPcHRpb25zGOCJAyABKAsyHC5mb3JnZS52MS5Db25maWdGaWVsZE9wdGlvbnNSBmNvbmZpZzpVCgdzZXJ2aWNlEh8uZ29vZ2xlLnByb3RvYnVmLlNlcnZpY2VPcHRpb25zGNCGAyABKAsyGC5mb3JnZS52MS5TZXJ2aWNlT3B0aW9uc1IHc2VydmljZTpRCgZtZXRob2QSHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxi0hwMgASgLMhcuZm9yZ2UudjEuTWV0aG9kT3B0aW9uc1IGbWV0aG9kQo4BCgxjb20uZm9yZ2UudjFCCkZvcmdlUHJvdG9QAVoxZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvZm9yZ2UvcGtnL2ZvcmdlcGI7Zm9yZ2VwYqICA0ZYWKoCCEZvcmdlLlYxygIIRm9yZ2VcVjHiAhRGb3JnZVxWMVxHUEJNZXRhZGF0YeoCCUZvcmdlOjpWMWIGcHJvdG8z", [file_google_protobuf_descriptor, file_google_protobuf_duration]);
+  fileDesc("ChRmb3JnZS92MS9mb3JnZS5wcm90bxIIZm9yZ2UudjEigAEKDUVudGl0eU9wdGlvbnMSDQoFdGFibGUYASABKAkSEwoLc29mdF9kZWxldGUYAiABKAgSEgoKdGltZXN0YW1wcxgDIAEoCBIjCgdpbmRleGVzGAQgAygLMhIuZm9yZ2UudjEuSW5kZXhEZWYSEgoKbWlkZGxld2FyZRgFIAMoCSI4CghJbmRleERlZhIMCgRuYW1lGAEgASgJEg4KBmZpZWxkcxgCIAMoCRIOCgZ1bmlxdWUYAyABKAgizQEKDEZpZWxkT3B0aW9ucxIKCgJwaxgBIAEoCBIgCgVzdG9yZRgDIAEoDjIRLmZvcmdlLnYxLlN0b3JlQXMSCwoDcmVmGAQgASgJEg4KBnVuaXF1ZRgFIAEoCBINCgVpbmRleBgGIAEoCBIVCg1kZWZhdWx0X3ZhbHVlGAcgASgJEgwKBHNraXAYCCABKAgSKwoIdmFsaWRhdGUYCSABKAsyGS5mb3JnZS52MS5WYWxpZGF0aW9uUnVsZXMSEQoJaW1tdXRhYmxlGAogASgIIq4BCg9WYWxpZGF0aW9uUnVsZXMSEAoIcmVxdWlyZWQYASABKAgSEgoKbWluX2xlbmd0aBgCIAEoBRISCgptYXhfbGVuZ3RoGAMgASgFEg8KB3BhdHRlcm4YBCABKAkSDgoGZm9ybWF0GAUgASgJEgsKA21pbhgGIAEoARILCgNtYXgYByABKAESFgoOYWxsb3dlZF92YWx1ZXMYCCADKAkSDgoGY3VzdG9tGAkgASgJIsEBCg5TZXJ2aWNlT3B0aW9ucxIMCgRuYW1lGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSLwoKdmlzaWJpbGl0eRgEIAEoDjIbLmZvcmdlLnYxLlNlcnZpY2VWaXNpYmlsaXR5EhQKDGRlcGVuZGVuY2llcxgFIAMoCRIiCgRhdXRoGAYgASgLMhQuZm9yZ2UudjEuQXV0aENvbmZpZxIQCghhdWRpZW5jZRgHIAEoCSI6CgpBdXRoQ29uZmlnEhUKDWF1dGhfcmVxdWlyZWQYASABKAgSFQoNYXV0aF9wcm92aWRlchgCIAEoCSKmAQoNTWV0aG9kT3B0aW9ucxIaCg1hdXRoX3JlcXVpcmVkGAEgASgISACIAQESEgoKaWRlbXBvdGVudBgDIAEoCBIqCgd0aW1lb3V0GAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhcKD2lkZW1wb3RlbmN5X2tleRgFIAEoCBIOCgZlcnJvcnMYBiADKAlCEAoOX2F1dGhfcmVxdWlyZWQimQIKEkNvbmZpZ0ZpZWxkT3B0aW9ucxIPCgdlbnZfdmFyGAEgASgJEgwKBGZsYWcYAiABKAkSFQoNZGVmYXVsdF92YWx1ZRgDIAEoCRIQCghyZXF1aXJlZBgEIAEoCBITCgtkZXNjcmlwdGlvbhgFIAEoCRIRCglzZW5zaXRpdmUYBiABKAgSEAoIY2F0ZWdvcnkYByABKAkSJwoEcm9sZRgIIAEoDjIZLmZvcmdlLnYxLkNvbmZpZ0ZpZWxkUm9sZRIWCg5hbGxvd2VkX3ZhbHVlcxgJIAMoCRIQCghvcHRpb25hbBgKIAEoCBIuCg9lbnZfdmFyX2FsaWFzZXMYCyADKAsyFS5mb3JnZS52MS5FbnZWYXJBbGlhcyIvCgtFbnZWYXJBbGlhcxIMCgRuYW1lGAEgASgJEhIKCmRlcHJlY2F0ZWQYAiABKAgiNgoTQmluYXJ5Q29uZmlnT3B0aW9ucxIOCgZiaW5hcnkYASABKAkSDwoHY29tbWFuZBgCIAMoCSIpChVGcm9udGVuZENvbmZpZ09wdGlvbnMSEAoIZnJvbnRlbmQYASABKAkqcQoHU3RvcmVBcxIYChRTVE9SRV9BU19VTlNQRUNJRklFRBAAEhIKDlNUT1JFX0FTX0pTT05CEAESEQoNU1RPUkVfQVNfVEVYVBACEhEKDVNUT1JFX0FTX0JMT0IQAxISCg5TVE9SRV9BU19UQUJMRRAEKnQKEVNlcnZpY2VWaXNpYmlsaXR5EiIKHlNFUlZJQ0VfVklTSUJJTElUWV9VTlNQRUNJRklFRBAAEhoKFlNFUlZJQ0VfVklTSUJJTElUWV9BUEkQARIfChtTRVJWSUNFX1ZJU0lCSUxJVFlfSU5URVJOQUwQAirhAQoPQ29uZmlnRmllbGRSb2xlEiEKHUNPTkZJR19GSUVMRF9ST0xFX1VOU1BFQ0lGSUVEEAASGgoWQ09ORklHX0ZJRUxEX1JPTEVfTU9ERRABEh4KGkNPTkZJR19GSUVMRF9ST0xFX1RMU19DRVJUEAISHQoZQ09ORklHX0ZJRUxEX1JPTEVfVExTX0tFWRADEiIKHkNPTkZJR19GSUVMRF9ST0xFX0NPUlNfT1JJR0lOUxAEEiwKKENPTkZJR19GSUVMRF9ST0xFX0NPUlNfQUxMT1dfQ1JFREVOVElBTFMQBTpSCgZlbnRpdHkSHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMYmIgDIAEoCzIXLmZvcmdlLnYxLkVudGl0eU9wdGlvbnNSBmVudGl0eTplCg1iaW5hcnlfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJmIAyABKAsyHS5mb3JnZS52MS5CaW5hcnlDb25maWdPcHRpb25zUgxiaW5hcnlDb25maWc6awoPZnJvbnRlbmRfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJqIAyABKAsyHy5mb3JnZS52MS5Gcm9udGVuZENvbmZpZ09wdGlvbnNSDmZyb250ZW5kQ29uZmlnOk0KBWZpZWxkEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxj8iAMgASgLMhYuZm9yZ2UudjEuRmllbGRPcHRpb25zUgVmaWVsZDpVCgZjb25maWcSHS5nb29nbGUucHJvdG9idWYuRmllbGRPcHRpb25zGOCJAyABKAsyHC5mb3JnZS52MS5Db25maWdGaWVsZE9wdGlvbnNSBmNvbmZpZzpVCgdzZXJ2aWNlEh8uZ29vZ2xlLnByb3RvYnVmLlNlcnZpY2VPcHRpb25zGNCGAyABKAsyGC5mb3JnZS52MS5TZXJ2aWNlT3B0aW9uc1IHc2VydmljZTpRCgZtZXRob2QSHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxi0hwMgASgLMhcuZm9yZ2UudjEuTWV0aG9kT3B0aW9uc1IGbWV0aG9kQo4BCgxjb20uZm9yZ2UudjFCCkZvcmdlUHJvdG9QAVoxZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvZm9yZ2UvcGtnL2ZvcmdlcGI7Zm9yZ2VwYqICA0ZYWKoCCEZvcmdlLlYxygIIRm9yZ2VcVjHiAhRGb3JnZVxWMVxHUEJNZXRhZGF0YeoCCUZvcmdlOjpWMWIGcHJvdG8z", [file_google_protobuf_descriptor, file_google_protobuf_duration]);
 
 /**
  * EntityOptions defines how a protobuf message maps to a database table.
@@ -315,6 +315,19 @@ export type ServiceOptions = Message<"forge.v1.ServiceOptions"> & {
    * @generated from field: forge.v1.AuthConfig auth = 6;
    */
   auth?: AuthConfig | undefined;
+
+  /**
+   * The trust domain whose callers this service serves: "user" (the
+   * default, when empty) for the product's own signed-in users, or a name
+   * the project chooses for another kind of caller ("daemon", "operator").
+   * A serverkit.Listener refuses to start when it mounts a service whose
+   * audience differs from its chain's Authenticator.Audience(), so a
+   * listener authenticating one kind of caller can never serve another
+   * kind's RPCs.
+   *
+   * @generated from field: string audience = 7;
+   */
+  audience: string;
 };
 
 /**
@@ -438,6 +451,8 @@ export const MethodOptionsSchema: GenMessage<MethodOptions> = /*@__PURE__*/
 export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
   /**
    * Environment variable name to read this field from (e.g., "DATABASE_URL").
+   * A variable set to "" counts as unset, whatever the field's type: the file
+   * or default value stands. An explicitly empty value is a flag's to set.
    *
    * @generated from field: string env_var = 1;
    */
@@ -552,6 +567,38 @@ export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
    * @generated from field: bool optional = 10;
    */
   optional: boolean;
+
+  /**
+   * EnvVarAliases are further environment variables the field is read from,
+   * in order, when env_var is unset: the first one set wins, and a variable
+   * set to "" counts as unset, exactly as for env_var. A flag still beats
+   * all of them.
+   *
+   *   string environment = 1 [(forge.v1.config) = {
+   *     env_var: "RELIANT_ENV"
+   *     env_var_aliases: [{name: "NODE_ENV"}]
+   *   }];
+   *   int32 port = 2 [(forge.v1.config) = {
+   *     env_var: "DAEMON_LISTEN_PORT"
+   *     env_var_aliases: [{name: "TOOLS_DAEMON_PORT", deprecated: true}]
+   *   }];
+   *
+   * An alias is for a SETTER forge does not control: a convention another
+   * tool owns (NODE_ENV), or an older name a deployment elsewhere still
+   * exports. forge's own setters use env_var alone — the KCL env map and the
+   * secret store key name only the primary — so every manifest forge renders
+   * converges on one name. A flag's --help lists env_var and the permanent
+   * aliases; a deprecated alias is never advertised.
+   *
+   * Aliases need env_var, are read only from the environment, and must not
+   * repeat any env var or alias another field of the same process reads;
+   * `forge generate` refuses each of those. A frontend config field takes
+   * no aliases: its values come from the rendered config document, not
+   * from an environment.
+   *
+   * @generated from field: repeated forge.v1.EnvVarAlias env_var_aliases = 11;
+   */
+  envVarAliases: EnvVarAlias[];
 };
 
 /**
@@ -560,6 +607,40 @@ export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
  */
 export const ConfigFieldOptionsSchema: GenMessage<ConfigFieldOptions> = /*@__PURE__*/
   messageDesc(file_forge_v1_forge, 7);
+
+/**
+ * EnvVarAlias is one fallback environment variable of a config field. See
+ * ConfigFieldOptions.env_var_aliases.
+ *
+ * @generated from message forge.v1.EnvVarAlias
+ */
+export type EnvVarAlias = Message<"forge.v1.EnvVarAlias"> & {
+  /**
+   * Name is the environment variable, e.g. "NODE_ENV".
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * Deprecated marks a name kept only so existing setters keep working
+   * while they move to env_var. A process that finds it set prints one
+   * line to stderr at load naming env_var, whether the alias supplied the
+   * value or was shadowed by an earlier name. A permanent alias (the
+   * default) is read silently: NODE_ENV is somebody else's convention, not
+   * a migration in flight, and a notice at every start would be noise.
+   *
+   * @generated from field: bool deprecated = 2;
+   */
+  deprecated: boolean;
+};
+
+/**
+ * Describes the message forge.v1.EnvVarAlias.
+ * Use `create(EnvVarAliasSchema)` to create a new message.
+ */
+export const EnvVarAliasSchema: GenMessage<EnvVarAlias> = /*@__PURE__*/
+  messageDesc(file_forge_v1_forge, 8);
 
 /**
  * BinaryConfigOptions binds a config message to the BINARY that loads it,
@@ -588,6 +669,26 @@ export const ConfigFieldOptionsSchema: GenMessage<ConfigFieldOptions> = /*@__PUR
  * A project that annotates NOTHING is unchanged: its single AppConfig stays
  * the one config every binary loads. Per-binary config is opt-in.
  *
+ * ONE BINARY, SEVERAL PROCESSES. A binary whose subcommands are different
+ * processes (`reliant server api`, `reliant server worker`, `reliant
+ * daemon`) scopes a config to a subcommand with `command`, so each process
+ * carries only what it reads — the api's credentials never reach the
+ * worker's Deployment. The binding is keyed on (binary, command):
+ *
+ *   - The ROOT config (no `command`) is the binary-wide surface: every
+ *     process of the binary loads it, and its flags register as PERSISTENT
+ *     flags on the binary's root command, so every subcommand inherits them.
+ *   - A COMMAND config is loaded by exactly the process running that
+ *     subcommand. Its leaves — composed blocks included — register as LOCAL
+ *     flags on that subcommand, and its loader refuses to load from any
+ *     other command.
+ *
+ * A process therefore reads the root config plus the ONE config declared for
+ * its exact command path; command configs do not nest (a config for
+ * ["server"] is not inherited by `server api`). The root config and a command
+ * config of the same binary may not declare the same env var or flag: one
+ * process would read the value twice, from two declarations that can drift.
+ *
  * @generated from message forge.v1.BinaryConfigOptions
  */
 export type BinaryConfigOptions = Message<"forge.v1.BinaryConfigOptions"> & {
@@ -600,6 +701,24 @@ export type BinaryConfigOptions = Message<"forge.v1.BinaryConfigOptions"> & {
    * @generated from field: string binary = 1;
    */
   binary: string;
+
+  /**
+   * Command is the cobra command path BELOW the binary whose process loads
+   * this config, one command name per element: ["server", "api"] for
+   * `reliant server api`. Empty binds the binary's root config. Two
+   * messages may not bind the same (binary, command).
+   *
+   * forge validates the SHAPE at generate time (each element one command
+   * name: non-empty, no whitespace, not a flag) but cannot prove the path
+   * exists there: a cobra tree is assembled at runtime by AddCommand calls in
+   * any package, from `Use` strings that may be computed, so a static scan
+   * would be a guess that is wrong in both directions — and a wrong refusal
+   * blocks generate. The exact check runs where the tree is real: the
+   * generated Load<Msg>(cmd) refuses a command whose path is not this one.
+   *
+   * @generated from field: repeated string command = 2;
+   */
+  command: string[];
 };
 
 /**
@@ -607,7 +726,7 @@ export type BinaryConfigOptions = Message<"forge.v1.BinaryConfigOptions"> & {
  * Use `create(BinaryConfigOptionsSchema)` to create a new message.
  */
 export const BinaryConfigOptionsSchema: GenMessage<BinaryConfigOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 8);
+  messageDesc(file_forge_v1_forge, 9);
 
 /**
  * FrontendConfigOptions binds a config message to the FRONTEND that loads
@@ -664,7 +783,7 @@ export type FrontendConfigOptions = Message<"forge.v1.FrontendConfigOptions"> & 
  * Use `create(FrontendConfigOptionsSchema)` to create a new message.
  */
 export const FrontendConfigOptionsSchema: GenMessage<FrontendConfigOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 9);
+  messageDesc(file_forge_v1_forge, 10);
 
 /**
  * StoreAs controls how complex or non-scalar protobuf types are persisted
