@@ -395,7 +395,9 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 	}
 
 	return &resolvedLLMCall{
-		Driver:         driver,
+		// Every model call this activity makes is a gen_ai span, the parent of
+		// the driver's HTTP spans.
+		Driver:         llm.Traced(driver, providerDriver),
 		Model:          legacyModel,
 		ModelID:        modelIDForDriver,
 		Definition:     definition,
