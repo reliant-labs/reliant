@@ -48,6 +48,11 @@ func runIsolated(m *testing.M) int {
 		return 1
 	}
 	defer os.RemoveAll(root)
+	// Resolved, so the shared HOME is the path git reports (macOS's /var
+	// is /private/var) and tests can compare it with git's output.
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
 	testRoot = root
 
 	home := filepath.Join(root, "home")
