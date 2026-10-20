@@ -814,7 +814,7 @@ func (a *WorkflowStatusActivity) emitThreadUpdate(ctx context.Context, input Wor
 	return a.repo.CreateChatUpdate(ctx, input.ChatID, db.UpdateTypeThread, input.WorkflowID, string(updateDataJSON))
 }
 
-// trackAnalytics sends workflow analytics events to Statsig
+// trackAnalytics records workflow product events (internal/analytics).
 // Only tracks root workflows to reduce event volume - child workflow data
 // can be derived from root workflow metrics if needed
 func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input WorkflowStatusInput) {
@@ -857,7 +857,7 @@ func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input Workf
 		IsChild:      false, // Always false now since we skip children
 	}
 
-	analyticsClient := analytics.GetClientForUser(ctx, userID)
+	analyticsClient := analytics.ForUser(ctx, userID)
 	switch input.Status {
 	case "started":
 		analyticsClient.TrackWorkflowStarted(metrics)

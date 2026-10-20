@@ -1,952 +1,347 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// Leaf utility package: the exported surface is concrete helpers over the
-// stdlib or the OS, with no collaborator to fake and no second implementation.
-// An interface here would have exactly one implementor and one caller shape,
-// which is indirection without a seam.
-//
-//forge:lint-disable-next-line forge-exclude-contract-multi-impl: AnalyticsClient already IS the seam (Client vs NoopClient chosen at startup); moving it into contract.go changes nothing without forge codegen; tracked in H-RELIANT-CI-lint follow-ups
-//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the batch uploader POSTs to the analytics endpoint; converting to an adapter contract is deferred (reliant is not forge-generated, so a contract.go yields no mock/decorator); tracked in H-RELIANT-CI-lint follow-ups
-//forge:exclude-contract: the product analytics client (PostHog-style batcher) plus its no-op twin, selected once at startup
+//forge:exclude-contract: the product-event emitter: one concrete Client over the process logger, installed once at startup; tests read what it writes through a slog handler, so there is no collaborator to fake
 package analytics
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
+	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/denisbrodbeck/machineid"
-	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/runenv"
 	"github.com/reliant-labs/reliant/internal/version"
 )
 
+// Product events ride the telemetry the process already ships: each one is a
+// single INFO record through the process logger, named product.<event>. On a
+// server that line is collected from stdout into ClickStack's otel_logs (and,
+// where OTLP log export is switched on, leaves as an OTel log record instead),
+// so a funnel is a ClickHouse query over LogAttributes['event.name'] and
+// LogAttributes['user.id']. dev-docs/product-events.md has the shape, the
+// reasons for it and an example query.
 const (
-	defaultStatsigEndpoint = "https://events.statsigapi.net/v1/log_event"
-	maxBatchSize           = 100
-	flushInterval          = 30 * time.Second
-	maxRetries             = 3
-	retryBackoff           = 2 * time.Second
+	// EventNamePrefix starts every product event's name.
+	EventNamePrefix = "product."
+
+	// AttrEventName, AttrUserID and AttrAppVersion are the attributes every
+	// event carries. Typed fields are AttrFieldPrefix + their snake_case name.
+	AttrEventName   = "event.name"
+	AttrUserID      = "user.id"
+	AttrAppVersion  = "app.version"
+	AttrFieldPrefix = "product."
 )
 
-// statsigKeyEnv names the setting that supplies the key events are sent
-// with (Settings.StatsigKey), for the operator-facing messages.
-const statsigKeyEnv = "STATSIG_CLIENT_KEY"
+// dedupWindow is how long an identical event for the same user is suppressed:
+// long enough to absorb a double-fired effect or a retried RPC, short enough
+// never to hide a real repeat.
+const dedupWindow = 5 * time.Second
 
-// Settings is where a process sends analytics events: its AnalyticsConfig.
+// Settings is a server role's AnalyticsConfig.
 type Settings struct {
-	// Disabled turns every event off (RELIANT_ANALYTICS_DISABLED).
+	// Disabled turns every product event off (RELIANT_ANALYTICS_DISABLED).
 	Disabled bool
-	// StatsigKey is the key events are sent with (STATSIG_CLIENT_KEY); empty
-	// turns Statsig sending off, said once.
-	StatsigKey string
-	// SupabaseURL and SupabaseAnonKey name the Supabase project events are
-	// also written to.
-	SupabaseURL     string
-	SupabaseAnonKey string
-	// AppDataDir is a writable app data directory to cache the device id in
-	// (RELIANT_APP_DATA_DIR); empty caches nothing.
-	AppDataDir string
 }
 
-// errStatsigKeyRejected is a 401 or 403 from Statsig: the key is missing,
-// wrong or revoked, and no retry or later batch will be accepted with it.
-var errStatsigKeyRejected = errors.New("statsig rejected the API key")
-
-var (
-	statsigEndpoint   = defaultStatsigEndpoint
-	statsigEndpointMu sync.RWMutex
-)
-
-var (
-	instance   AnalyticsClient
-	instanceMu sync.RWMutex
-)
-
-// Client implements AnalyticsClient for Statsig
+// Client emits product events. A process has at most one, installed by
+// Start; without one every Tracker is silent.
 type Client struct {
-	apiKey       string
-	deviceID     string       // Stable machine identifier (never changes)
-	userID       string       // Account identifier (anonymous or authenticated)
-	userJWT      string       // Raw JWT for authenticated Supabase REST calls
-	userIDMu     sync.RWMutex // Protects userID and userJWT for concurrent updates
-	httpClient   *http.Client
-	eventQueue   []Event
-	mu           sync.Mutex
-	flushTimer   *time.Timer
-	ctx          context.Context
-	cancel       context.CancelFunc
-	wg           sync.WaitGroup
-	sessionID    string
-	sessionStart time.Time
+	consent PrivacyChecker
+	// logger is where events are written; nil means slog.Default() at the
+	// moment of each event, so the process logger may be installed (or
+	// replaced) after Start.
+	logger *slog.Logger
+	now    func() time.Time
 
-	// GTM event sink (opt-in, configured via env vars)
-	gtmURL    string // SUPABASE_URL e.g. https://xxx.supabase.co
-	gtmAPIKey string // SUPABASE_ANON_KEY (public, safe to ship)
-
-	// Deduplication: track recently sent events to avoid duplicates
-	recentEvents   map[string]time.Time // eventKey -> timestamp
-	recentEventsMu sync.Mutex
-
-	// statsigOff is set when there is no key, or Statsig refused the one we
-	// have. Nothing sent with that key will ever be accepted, so the process
-	// stops sending (until restart) instead of being rejected, and logging
-	// it, once per batch.
-	statsigOff atomic.Bool
-
-	// sleep waits out the retry backoff. nil means time.Sleep; a test
-	// replaces it to record the backoff schedule instead of sleeping it.
-	sleep func(time.Duration)
+	mu     sync.Mutex
+	recent map[string]time.Time // dedup key -> when it was last emitted
 }
 
-const (
-	// dedupWindow is the time window for deduplicating identical events
-	dedupWindow = 5 * time.Second
-)
-
-// Ensure Client implements AnalyticsClient
-var _ AnalyticsClient = (*Client)(nil)
-var _ AnalyticsClient = (*NoopClient)(nil)
-
-func getStatsigEndpoint() string {
-	statsigEndpointMu.RLock()
-	defer statsigEndpointMu.RUnlock()
-	return statsigEndpoint
+// NewClient returns a Client that reads each user's analytics consent from
+// consent and writes events to logger (nil: the process logger).
+func NewClient(consent PrivacyChecker, logger *slog.Logger) *Client {
+	return &Client{consent: consent, logger: logger, now: time.Now, recent: make(map[string]time.Time)}
 }
 
-func setStatsigEndpoint(endpoint string) {
-	statsigEndpointMu.Lock()
-	defer statsigEndpointMu.Unlock()
-	statsigEndpoint = endpoint
-}
+var installed atomic.Pointer[Client]
 
-// NewClientFromSettings creates a new analytics client based on the process's
-// analytics settings and the user's privacy settings. Returns a NoopClient if
-// analytics is disabled, otherwise returns a real Client.
-func NewClientFromSettings(ctx context.Context, userID string, analyticsEnabled bool, settings Settings) AnalyticsClient {
-	if settings.Disabled {
-		logging.Info("[Analytics] Analytics disabled by RELIANT_ANALYTICS_DISABLED")
-		return NewNoopClient()
-	}
-
-	// Disable Statsig analytics in non-production environments
-	if !runenv.IsProd() {
-		logging.Info("[Analytics] Statsig analytics disabled in non-production environment", "env", runenv.Get())
-		return NewNoopClient()
-	}
-
-	if !analyticsEnabled {
-		logging.Info("[Analytics] Analytics disabled by user privacy settings")
-		return NewNoopClient()
-	}
-
-	// If no userID provided, leave empty (Statsig treats empty as anonymous)
-	// userID will be set when user authenticates
-
-	clientCtx, cancel := context.WithCancel(ctx)
-	client := &Client{
-		apiKey:       settings.StatsigKey,
-		deviceID:     getDeviceID(settings.AppDataDir),
-		userID:       userID,
-		httpClient:   &http.Client{Timeout: 10 * time.Second},
-		eventQueue:   make([]Event, 0, maxBatchSize),
-		ctx:          clientCtx,
-		cancel:       cancel,
-		sessionID:    uuid.New().String(),
-		sessionStart: time.Now(),
-		recentEvents: make(map[string]time.Time),
-		gtmURL:       settings.SupabaseURL,
-		gtmAPIKey:    settings.SupabaseAnonKey,
-	}
-	if client.apiKey == "" {
-		client.stopStatsig(statsigKeyEnv + " is not set")
-	}
-
-	client.startBackgroundFlusher()
-	return client
-}
-
-// stopStatsig turns event sending off for the life of the process, saying
-// why once. WARN, not ERROR: analytics is not the product, and the ERROR
-// level forwards to Sentry.
-func (c *Client) stopStatsig(reason string) {
-	if c.statsigOff.CompareAndSwap(false, true) {
-		logging.Warn("[Statsig] Event sending is off until restart: set "+statsigKeyEnv+" to a valid Statsig key",
-			"reason", reason, "env_var", statsigKeyEnv)
-	}
-}
-
-// SetClient sets the global analytics client instance
-// This allows dynamic switching between real and no-op clients
-func SetClient(client AnalyticsClient) {
-	instanceMu.Lock()
-	defer instanceMu.Unlock()
-
-	// Shutdown old client if it exists
-	if instance != nil {
-		instance.Shutdown()
-	}
-	instance = client
-}
-
-// GetClient returns the global analytics client instance
-func GetClient() AnalyticsClient {
-	instanceMu.RLock()
-	defer instanceMu.RUnlock()
-
-	if instance == nil {
-		return NewNoopClient()
-	}
-	return instance
-}
-
-// SetUserID updates the default user ID on the global analytics client
-// This should be called when a user logs in/out to ensure all events
-// are tracked with the correct user ID
-func SetUserID(userID string) {
-	instanceMu.RLock()
-	defer instanceMu.RUnlock()
-
-	if instance == nil {
+// Start installs the process's product-event client. With s.Disabled nothing
+// is installed and every event is dropped.
+func Start(s Settings, consent PrivacyChecker) {
+	if s.Disabled {
+		logging.Info("[Analytics] Product events disabled by RELIANT_ANALYTICS_DISABLED")
+		installed.Store(nil)
 		return
 	}
-	instance.SetUserID(userID)
+	installed.Store(NewClient(consent, nil))
 }
 
-// GetUserID returns the current default user ID
-func GetUserID() string {
-	instanceMu.RLock()
-	defer instanceMu.RUnlock()
+// ForUser is the installed client's Tracker for userID (Client.ForUser).
+func ForUser(ctx context.Context, userID string) Tracker {
+	return installed.Load().ForUser(ctx, userID)
+}
 
-	if instance == nil {
-		return ""
+func (c *Client) log() *slog.Logger {
+	if c.logger != nil {
+		return c.logger
 	}
-	return instance.GetUserID()
+	return slog.Default()
 }
 
-// SetUserJWT updates the JWT on the global analytics client
-// This should be called from auth middleware when a user authenticates
-func SetUserJWT(token string) {
-	instanceMu.RLock()
-	defer instanceMu.RUnlock()
-
-	if instance == nil {
-		return
+// emit writes one event unless an identical one (same name, user and
+// identity) was written within dedupWindow. identity names the event
+// instance; empty means every field.
+func (c *Client) emit(ctx context.Context, userID string, event EventType, identity string, fields []slog.Attr) {
+	name := EventNamePrefix + string(event)
+	if identity == "" {
+		identity = attrsKey(fields)
 	}
-	instance.SetUserJWT(token)
-}
-
-// Shutdown is a package-level function that shuts down the analytics client
-func Shutdown() {
-	if instance != nil {
-		instance.Shutdown()
-	}
-}
-
-func (c *Client) Track(eventType EventType, metadata map[string]interface{}) {
-	c.TrackWithUser("", eventType, metadata)
-}
-
-// TrackWithUser tracks an event with a specific user ID
-// If userID is empty, uses the client's default user ID
-func (c *Client) TrackWithUser(userID string, eventType EventType, metadata map[string]interface{}) {
-	c.TrackWithUserInfo(UserInfo{UserID: userID}, eventType, metadata)
-}
-
-// SetUserID updates the default user ID for this client
-// This should be called when a user logs in or out
-func (c *Client) SetUserID(userID string) {
-	c.userIDMu.Lock()
-	oldUserID := c.userID
-	c.userID = userID
-	c.userIDMu.Unlock()
-	_ = oldUserID // avoid unused variable warning
-}
-
-// GetUserID returns the current default user ID
-func (c *Client) GetUserID() string {
-	c.userIDMu.RLock()
-	defer c.userIDMu.RUnlock()
-	return c.userID
-}
-
-// SetUserJWT stores the raw JWT for authenticated Supabase REST API calls
-func (c *Client) SetUserJWT(token string) {
-	c.userIDMu.Lock()
-	defer c.userIDMu.Unlock()
-	c.userJWT = token
-}
-
-// TrackWithUserInfo tracks an event with full user information
-// This method allows passing email, IP, user agent, and other user properties
-func (c *Client) TrackWithUserInfo(userInfo UserInfo, eventType EventType, metadata map[string]interface{}) {
-	if metadata == nil {
-		metadata = make(map[string]interface{})
-	}
-
-	// Use provided userID or fall back to client's default
-	if userInfo.UserID == "" {
-		c.userIDMu.RLock()
-		userInfo.UserID = c.userID
-		c.userIDMu.RUnlock()
-	}
-
-	c.addStandardMetadata(userInfo, metadata)
-
-	// Check for duplicate events within the dedup window
-	eventKey := c.computeEventKey(eventType, metadata)
-	if c.isDuplicateEvent(eventKey) {
+	if c.duplicate(name + "\x00" + userID + "\x00" + identity) {
 		return
 	}
 
-	// Set app version if not provided
-	if userInfo.AppVersion == "" {
-		userInfo.AppVersion = version.Version
+	attrs := make([]slog.Attr, 0, len(fields)+3)
+	attrs = append(attrs, slog.String(AttrEventName, name))
+	if userID != "" {
+		attrs = append(attrs, slog.String(AttrUserID, userID))
 	}
-
-	// Set stableID for device tracking (Statsig's standard field)
-	userInfo.StableID = c.deviceID
-
-	// Initialize custom map if nil
-	if userInfo.Custom == nil {
-		userInfo.Custom = make(map[string]interface{})
+	attrs = append(attrs, slog.String(AttrAppVersion, version.Version))
+	for _, f := range fields {
+		f.Key = AttrFieldPrefix + f.Key
+		attrs = append(attrs, f)
 	}
+	c.log().LogAttrs(ctx, slog.LevelInfo, name, attrs...)
+}
 
-	// Add system info to custom fields
-	userInfo.Custom["os"] = runtime.GOOS
-	userInfo.Custom["arch"] = runtime.GOARCH
-	userInfo.Custom["sessionID"] = c.sessionID
-
-	event := Event{
-		Name:      string(eventType),
-		User:      userInfo,
-		Metadata:  metadata,
-		Timestamp: time.Now().UnixMilli(),
-	}
-
+func (c *Client) duplicate(key string) bool {
+	now := c.now()
 	c.mu.Lock()
-	c.eventQueue = append(c.eventQueue, event)
-	queueLen := len(c.eventQueue)
-	shouldFlush := queueLen >= maxBatchSize
-	c.mu.Unlock()
-
-	if shouldFlush {
-		go c.flush()
-	}
-}
-
-func (c *Client) addStandardMetadata(userInfo UserInfo, metadata map[string]interface{}) {
-	envTier := "development"
-	switch runenv.Get() {
-	case runenv.Prod:
-		envTier = "production"
-	case runenv.Test:
-		envTier = "test"
-	}
-
-	authState := "anonymous"
-	if userInfo.UserID != "" {
-		authState = "authenticated"
-	}
-
-	putIfAbsent := func(key string, value interface{}) {
-		if _, exists := metadata[key]; !exists {
-			metadata[key] = value
-		}
-	}
-
-	putIfAbsent("event_version", "v1")
-	putIfAbsent("app_version", version.Version)
-	putIfAbsent("platform", "backend")
-	putIfAbsent("env_tier", envTier)
-	putIfAbsent("session_id", c.sessionID)
-	putIfAbsent("auth_state", authState)
-	putIfAbsent("is_first_seen", false)
-	putIfAbsent("stable_id", c.deviceID)
-	if userInfo.UserID != "" {
-		putIfAbsent("user_id", userInfo.UserID)
-	}
-}
-
-// computeEventKey generates a unique key for an event based on type and key metadata fields
-func (c *Client) computeEventKey(eventType EventType, metadata map[string]interface{}) string {
-	// Build key from event type and identifying metadata
-	key := string(eventType)
-
-	// Add identifying fields based on event type
-	switch eventType {
-	case EventWorkflowStarted, EventWorkflowEnded:
-		if wfID, ok := metadata["workflowId"].(string); ok {
-			key += ":" + wfID
-		}
-		key += ":" + fmt.Sprintf("%v", metadata["success"])
-	case EventMessageSent:
-		if messageID, ok := metadata["messageId"].(string); ok {
-			key += ":" + messageID
-		}
-	case EventPageVisited:
-		if page, ok := metadata["pageName"].(string); ok {
-			key += ":" + page
-		}
-	case EventProjectOpened:
-		if projectID, ok := metadata["projectId"].(string); ok {
-			key += ":" + projectID
-		}
-	case EventWorkflowDraftSaved:
-		if slug, ok := metadata["workflowSlug"].(string); ok {
-			key += ":" + slug
-		}
-	case EventWorkflowDraftCreated:
-		if slug, ok := metadata["workflowSlug"].(string); ok {
-			key += ":" + slug
-		}
-	case EventPreferencesUpdated:
-		if data, err := json.Marshal(metadata["changedKeys"]); err == nil {
-			key += ":" + string(data)
-		}
-	case EventProviderSettingsUpdate:
-		if provider, ok := metadata["provider"].(string); ok {
-			key += ":" + provider
-		}
-		if action, ok := metadata["action"].(string); ok {
-			key += ":" + action
-		}
-	default:
-		// For other events, use JSON representation of metadata
-		if data, err := json.Marshal(metadata); err == nil {
-			key += ":" + string(data)
-		}
-	}
-
-	return key
-}
-
-// isDuplicateEvent checks if an event was recently sent and should be deduplicated
-func (c *Client) isDuplicateEvent(eventKey string) bool {
-	now := time.Now()
-
-	c.recentEventsMu.Lock()
-	defer c.recentEventsMu.Unlock()
-
-	// Lazy initialization for backwards compatibility with tests
-	if c.recentEvents == nil {
-		c.recentEvents = make(map[string]time.Time)
-	}
-
-	// Clean up old entries periodically (every 100 checks or so, when map gets large)
-	if len(c.recentEvents) > 100 {
-		for k, t := range c.recentEvents {
-			if now.Sub(t) > dedupWindow {
-				delete(c.recentEvents, k)
+	defer c.mu.Unlock()
+	if len(c.recent) > 1000 {
+		for k, at := range c.recent {
+			if now.Sub(at) >= dedupWindow {
+				delete(c.recent, k)
 			}
 		}
 	}
-
-	// Check if this event was recently sent
-	if lastSent, exists := c.recentEvents[eventKey]; exists {
-		if now.Sub(lastSent) < dedupWindow {
-			return true // Duplicate
-		}
+	if at, ok := c.recent[key]; ok && now.Sub(at) < dedupWindow {
+		return true
 	}
-
-	// Record this event
-	c.recentEvents[eventKey] = now
+	c.recent[key] = now
 	return false
 }
 
-func (c *Client) TrackSessionStart() {
-
-	metadata := map[string]interface{}{
-		"sessionId": c.sessionID,
-		"startTime": c.sessionStart.Format(time.RFC3339),
+func attrsKey(fields []slog.Attr) string {
+	var b strings.Builder
+	for _, f := range fields {
+		fmt.Fprintf(&b, "%s=%v;", f.Key, f.Value.Any())
 	}
-
-	c.Track(EventSessionStart, metadata)
+	return b.String()
 }
 
-func (c *Client) TrackMessageSent(metrics MessageSentMetrics) {
-	metadata := map[string]interface{}{
-		"messageId":      metrics.MessageID,
-		"chatId":         metrics.ChatID,
-		"projectId":      metrics.ProjectID,
-		"hasAttachments": metrics.HasAttachments,
-		"contentLength":  metrics.ContentLength,
-	}
-	if metrics.WorkflowID != "" {
-		metadata["workflowId"] = metrics.WorkflowID
-	}
-	if metrics.ThreadID != "" {
-		metadata["threadId"] = metrics.ThreadID
-	}
-	if metrics.WorkflowName != "" {
-		metadata["workflowName"] = metrics.WorkflowName
-	}
-	if metrics.WorkflowType != "" {
-		metadata["workflowType"] = metrics.WorkflowType
-	}
-	metadata["isFirstInChat"] = metrics.IsFirstInChat
-	c.Track(EventMessageSent, metadata)
+// Tracker records product events about one user. The zero Tracker — no
+// client installed, analytics disabled, or a user who opted out — records
+// nothing, so callers never check.
+type Tracker struct {
+	c *Client
+	// ctx is the request the event happened in. It is only read for the
+	// trace and span ids the logger stamps on the record, which join a
+	// backend event to the browser request that caused it.
+	ctx    context.Context
+	userID string
 }
 
-func (c *Client) TrackProjectOpened(metrics ProjectOpenedMetrics) {
-	metadata := map[string]interface{}{
-		"projectId": metrics.ProjectID,
-		"isGitRepo": metrics.IsGitRepo,
-	}
-	c.Track(EventProjectOpened, metadata)
-}
-
-func (c *Client) TrackWorkflowStarted(metrics WorkflowMetrics) {
-	metadata := map[string]interface{}{
-		"workflowId":   metrics.WorkflowID,
-		"workflowName": metrics.WorkflowName,
-		"workflowType": metrics.WorkflowType,
-		"chatId":       metrics.ChatID,
-		"isWorkspace":  metrics.IsWorkspace,
-		"isChild":      metrics.IsChild,
-	}
-	if len(metrics.Presets) > 0 {
-		metadata["presets"] = metrics.Presets
-	}
-	if metrics.ModelID != "" {
-		metadata["modelId"] = metrics.ModelID
-	}
-	if len(metrics.Providers) > 0 {
-		metadata["providers"] = metrics.Providers
-	}
-	if metrics.ProjectID != "" {
-		metadata["projectId"] = metrics.ProjectID
-	}
-	if len(metrics.PresetTypes) > 0 {
-		metadata["presetTypes"] = metrics.PresetTypes
-	}
-	c.Track(EventWorkflowStarted, metadata)
-}
-
-func (c *Client) TrackWorkflowEnded(metrics WorkflowMetrics) {
-	metadata := map[string]interface{}{
-		"workflowId":   metrics.WorkflowID,
-		"workflowName": metrics.WorkflowName,
-		"workflowType": metrics.WorkflowType,
-		"chatId":       metrics.ChatID,
-		"duration":     metrics.Duration.Milliseconds(),
-		"success":      metrics.Success,
-		"isWorkspace":  metrics.IsWorkspace,
-		"isChild":      metrics.IsChild,
-	}
-	if len(metrics.Presets) > 0 {
-		metadata["presets"] = metrics.Presets
-	}
-	if metrics.ModelID != "" {
-		metadata["modelId"] = metrics.ModelID
-	}
-	if len(metrics.Providers) > 0 {
-		metadata["providers"] = metrics.Providers
-	}
-	if metrics.ProjectID != "" {
-		metadata["projectId"] = metrics.ProjectID
-	}
-	if len(metrics.PresetTypes) > 0 {
-		metadata["presetTypes"] = metrics.PresetTypes
-	}
-	if metrics.ErrorMessage != "" {
-		metadata["errorMessage"] = metrics.ErrorMessage
-	}
-	if metrics.Iterations > 0 {
-		metadata["iterations"] = metrics.Iterations
-	}
-	c.Track(EventWorkflowEnded, metadata)
-}
-
-func (c *Client) TrackWorkflowDraftSaved(metrics WorkflowDraftSavedMetrics) {
-	metadata := map[string]interface{}{
-		"workflowSlug": metrics.WorkflowSlug,
-		"workflowName": metrics.WorkflowName,
-		"isNew":        metrics.IsNew,
-		"isValid":      metrics.IsValid,
-		"status":       metrics.Status,
-	}
-	c.Track(EventWorkflowDraftSaved, metadata)
-}
-
-func (c *Client) TrackWorkflowDraftCreated(metrics WorkflowDraftCreatedMetrics) {
-	metadata := map[string]interface{}{
-		"workflowSlug": metrics.WorkflowSlug,
-		"workflowName": metrics.WorkflowName,
-	}
-	if metrics.ProjectID != "" {
-		metadata["projectId"] = metrics.ProjectID
-	}
-	c.Track(EventWorkflowDraftCreated, metadata)
-}
-
-func (c *Client) TrackPreferencesUpdated(metrics PreferencesUpdatedMetrics) {
-	metadata := map[string]interface{}{}
-	if len(metrics.ChangedKeys) > 0 {
-		metadata["changedKeys"] = metrics.ChangedKeys
-	}
-	metadata["modelProviderSettingsChanged"] = metrics.ModelProviderSettingsChanged
-	c.Track(EventPreferencesUpdated, metadata)
-}
-
-func (c *Client) TrackProviderSettingsUpdated(metrics ProviderSettingsUpdatedMetrics) {
-	metadata := map[string]interface{}{
-		"provider": metrics.Provider,
-		"action":   metrics.Action,
-	}
-	if metrics.AuthMethod != "" {
-		metadata["authMethod"] = metrics.AuthMethod
-	}
-	c.Track(EventProviderSettingsUpdate, metadata)
-}
-
-func (c *Client) TrackPageVisited(metrics PageVisitedMetrics) {
-	metadata := map[string]interface{}{
-		"pageName": metrics.PageName,
-	}
-	if metrics.PreviousPage != "" {
-		metadata["previousPage"] = metrics.PreviousPage
-	}
-	c.Track(EventPageVisited, metadata)
-}
-
-func (c *Client) TrackLLMCallCompleted(metrics LLMCallMetrics) {
-	metadata := map[string]interface{}{
-		"provider":     metrics.Provider,
-		"model":        metrics.Model,
-		"inputTokens":  metrics.InputTokens,
-		"outputTokens": metrics.OutputTokens,
-		"latencyMs":    metrics.LatencyMs,
-		"success":      metrics.Success,
-		"isStreaming":  metrics.IsStreaming,
-	}
-	if metrics.ErrorType != "" {
-		metadata["errorType"] = metrics.ErrorType
-	}
-	if metrics.WorkflowID != "" {
-		metadata["workflowId"] = metrics.WorkflowID
-	}
-	if metrics.ChatID != "" {
-		metadata["chatId"] = metrics.ChatID
-	}
-	if metrics.StepName != "" {
-		metadata["stepName"] = metrics.StepName
-	}
-	if metrics.CacheReadTokens > 0 {
-		metadata["cacheReadTokens"] = metrics.CacheReadTokens
-	}
-	if metrics.CacheWriteTokens > 0 {
-		metadata["cacheWriteTokens"] = metrics.CacheWriteTokens
-	}
-	c.Track(EventLLMCallCompleted, metadata)
-}
-
-func (c *Client) TrackAPIKeyConfigured(metrics APIKeyConfiguredMetrics) {
-	metadata := map[string]interface{}{
-		"provider":       metrics.Provider,
-		"authMethod":     metrics.AuthMethod,
-		"isFirstKey":     metrics.IsFirstKey,
-		"totalProviders": metrics.TotalProviders,
-	}
-	c.Track(EventAPIKeyConfigured, metadata)
-}
-
-func (c *Client) TrackFirstMessageSent(metrics FirstMessageSentMetrics) {
-	metadata := map[string]interface{}{
-		"chatId":       metrics.ChatID,
-		"projectId":    metrics.ProjectID,
-		"workflowName": metrics.WorkflowName,
-		"workflowType": metrics.WorkflowType,
-	}
-	if metrics.Provider != "" {
-		metadata["provider"] = metrics.Provider
-	}
-	c.Track(EventFirstMessageSent, metadata)
-}
-
-func (c *Client) TrackOnboardingEvent(eventType EventType, metrics OnboardingMetrics) {
-	metadata := map[string]interface{}{
-		"totalSteps":     metrics.TotalSteps,
-		"stepsCompleted": metrics.StepsCompleted,
-		"stepsSkipped":   metrics.StepsSkipped,
-	}
-	if metrics.StepID != "" {
-		metadata["stepId"] = metrics.StepID
-	}
-	if metrics.StepName != "" {
-		metadata["stepName"] = metrics.StepName
-	}
-	c.Track(eventType, metadata)
-}
-
-func (c *Client) Shutdown() {
-	// Stop the background flusher timer first
-	c.mu.Lock()
-	if c.flushTimer != nil {
-		c.flushTimer.Stop()
-	}
-	c.mu.Unlock()
-
-	// Flush pending events BEFORE canceling context
-	// This ensures the HTTP requests can complete
-	c.flush()
-
-	// Now cancel the context to stop background workers
-	c.cancel()
-
-	// Wait for background workers to finish
-	c.wg.Wait()
-}
-
-func (c *Client) startBackgroundFlusher() {
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		ticker := time.NewTicker(flushInterval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-c.ctx.Done():
-				return
-			case <-ticker.C:
-				c.flush()
-				c.cleanupDedupMap()
-			}
-		}
-	}()
-}
-
-// cleanupDedupMap removes expired entries from the deduplication map
-func (c *Client) cleanupDedupMap() {
-	now := time.Now()
-
-	c.recentEventsMu.Lock()
-	defer c.recentEventsMu.Unlock()
-
-	for k, t := range c.recentEvents {
-		if now.Sub(t) > dedupWindow {
-			delete(c.recentEvents, k)
-		}
-	}
-}
-
-func (c *Client) flush() {
-	c.mu.Lock()
-	if len(c.eventQueue) == 0 {
-		c.mu.Unlock()
+func (t Tracker) emit(event EventType, identity string, fields ...slog.Attr) {
+	if t.c == nil {
 		return
 	}
-
-	events := make([]Event, len(c.eventQueue))
-	copy(events, c.eventQueue)
-	c.eventQueue = c.eventQueue[:0]
-	c.mu.Unlock()
-
-	// A batch Statsig did not take is dropped, never written to disk: a
-	// server's root filesystem is read-only, and nothing ever read the files
-	// back. sendEvents has already retried what a retry could fix.
-	if !c.statsigOff.Load() {
-		payload := map[string]interface{}{
-			"events": events,
-		}
-		if err := c.sendEvents(payload); errors.Is(err, errStatsigKeyRejected) {
-			c.stopStatsig(err.Error())
-		} else if err != nil {
-			logging.Warn("[Statsig] Failed to send events; batch dropped", "error", err, "eventCount", len(events))
-		}
+	ctx := t.ctx
+	if ctx == nil {
+		ctx = context.Background()
 	}
-
-	// Write qualifying events to GTM (non-blocking, failures don't affect Statsig)
-	if c.gtmEnabled() {
-		c.writeToGTM(events)
-	}
+	t.c.emit(ctx, t.userID, event, identity, fields)
 }
 
-func (c *Client) sendEvents(payload map[string]interface{}) error {
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal events: %w", err)
-	}
-
-	sleep := c.sleep
-	if sleep == nil {
-		sleep = time.Sleep
-	}
-
-	var lastErr error
-	for i := 0; i < maxRetries; i++ {
-		if i > 0 {
-			sleep(retryBackoff * time.Duration(i))
-		}
-
-		req, err := http.NewRequestWithContext(c.ctx, "POST", getStatsigEndpoint(), bytes.NewReader(data))
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("statsig-api-key", c.apiKey)
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		body, _ := io.ReadAll(resp.Body)
-		if err := resp.Body.Close(); err != nil {
-			logging.Warn("[Statsig] Failed to close response body", "error", err)
-		}
-
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return nil
-		}
-
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return fmt.Errorf("%w: status=%d", errStatsigKeyRejected, resp.StatusCode)
-		}
-		lastErr = fmt.Errorf("statsig API error: status=%d, body=%s", resp.StatusCode, string(body))
-
-		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-			return lastErr
-		}
-	}
-
-	return fmt.Errorf("failed after %d retries: %w", maxRetries, lastErr)
+// TrackSessionStart records the first authenticated request after a user was
+// idle (see the auth interceptor's session tracker).
+func (t Tracker) TrackSessionStart() {
+	t.emit(EventSessionStart, "")
 }
 
-// gtmEnabled returns true if the GTM event sink is configured.
-func (c *Client) gtmEnabled() bool {
-	return c.gtmURL != "" && c.gtmAPIKey != ""
+// TrackMessageSent records a message the user sent in a chat.
+func (t Tracker) TrackMessageSent(m MessageSentMetrics) {
+	fields := []slog.Attr{
+		slog.String("message_id", m.MessageID),
+		slog.String("chat_id", m.ChatID),
+		slog.String("project_id", m.ProjectID),
+		slog.Bool("has_attachments", m.HasAttachments),
+		slog.Int("content_length", m.ContentLength),
+		slog.Bool("is_first_in_chat", m.IsFirstInChat),
+	}
+	fields = appendNonEmpty(fields, "workflow_id", m.WorkflowID)
+	fields = appendNonEmpty(fields, "thread_id", m.ThreadID)
+	fields = appendNonEmpty(fields, "workflow_name", m.WorkflowName)
+	fields = appendNonEmpty(fields, "workflow_type", m.WorkflowType)
+	t.emit(EventMessageSent, m.MessageID, fields...)
 }
 
-// gtmEventTypes defines which events are forwarded to the GTM pipeline.
-var gtmEventTypes = map[string]bool{
-	"session_start":             true,
-	"message_sent":              true,
-	"workflow_started":          true,
-	"workflow_completed":        true,
-	"workflow_draft_created":    true,
-	"project_opened":            true,
-	"api_key_configured":        true,
-	"first_message_sent":        true,
-	"onboarding_completed":      true,
-	"onboarding_skipped":        true,
-	"llm_call_completed":        true,
-	"provider_settings_updated": true,
+// TrackProjectOpened records the user opening a project.
+func (t Tracker) TrackProjectOpened(m ProjectOpenedMetrics) {
+	t.emit(EventProjectOpened, m.ProjectID,
+		slog.String("project_id", m.ProjectID),
+		slog.Bool("is_git_repo", m.IsGitRepo))
 }
 
-// writeToGTM sends qualifying events to the Supabase REST API for the GTM pipeline.
-// This is non-blocking — failures are logged and skipped, never affecting Statsig delivery.
-func (c *Client) writeToGTM(events []Event) {
-	c.userIDMu.RLock()
-	jwt := c.userJWT
-	userID := c.userID
-	c.userIDMu.RUnlock()
-
-	// Need both user ID and JWT for authenticated writes
-	if jwt == "" || userID == "" {
-		return
-	}
-
-	for _, e := range events {
-		if !gtmEventTypes[e.Name] {
-			continue
-		}
-
-		idempotencyKey := fmt.Sprintf("app:%s:%s:%d", e.Name, userID, e.Timestamp)
-
-		body, err := json.Marshal(map[string]interface{}{
-			"idempotency_key": idempotencyKey,
-			"source":          "app",
-			"event_type":      e.Name,
-			"user_id":         userID,
-			"payload":         e.Metadata,
-		})
-		if err != nil {
-			continue
-		}
-
-		req, err := http.NewRequestWithContext(c.ctx, "POST",
-			c.gtmURL+"/rest/v1/events",
-			bytes.NewReader(body))
-		if err != nil {
-			continue
-		}
-
-		req.Header.Set("apikey", c.gtmAPIKey)
-		req.Header.Set("Authorization", "Bearer "+jwt)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Prefer", "return=minimal")
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			// Non-fatal: Statsig delivery is unaffected
-			continue
-		}
-		resp.Body.Close()
-
-		// 201 = created, 409 = conflict on idempotency_key = already exists = fine
-		if resp.StatusCode != 201 && resp.StatusCode != 409 {
-			logging.Warn("[GTM] Event write failed (non-fatal)",
-				"event", e.Name, "status", resp.StatusCode)
-		}
-	}
+// TrackWorkflowStarted records a workflow execution starting.
+func (t Tracker) TrackWorkflowStarted(m WorkflowMetrics) {
+	t.emit(EventWorkflowStarted, m.WorkflowID, workflowFields(m)...)
 }
 
-// analyticsDataDir is where analytics caches state on disk, or "" when there
-// is nowhere to write. Only a configured app data directory counts
-// (Settings.AppDataDir): a server container sets none, and its root
-// filesystem is read-only, so guessing a platform default there produced an
-// error on every write.
-func analyticsDataDir(appDataDir string) string {
-	if appDataDir == "" {
-		return ""
+// TrackWorkflowEnded records a workflow execution finishing.
+func (t Tracker) TrackWorkflowEnded(m WorkflowMetrics) {
+	fields := append(workflowFields(m),
+		slog.Int64("duration_ms", m.Duration.Milliseconds()),
+		slog.Bool("success", m.Success))
+	fields = appendNonEmpty(fields, "error_message", m.ErrorMessage)
+	if m.Iterations > 0 {
+		fields = append(fields, slog.Int("iterations", m.Iterations))
 	}
-	dataDir := filepath.Join(appDataDir, "analytics")
-	if err := os.MkdirAll(dataDir, 0700); err != nil {
-		logging.Warn("[Statsig] Analytics data directory is not writable; the device ID will not be cached",
-			"dir", dataDir, "error", err)
-		return ""
-	}
-	return dataDir
+	t.emit(EventWorkflowEnded, fmt.Sprintf("%s:%t", m.WorkflowID, m.Success), fields...)
 }
 
-// getDeviceID is this machine's stable analytics id, cached in the analytics
-// data directory when there is one. Without one it is derived again each
-// start — the same value wherever the OS has a machine id — and never
-// written.
-func getDeviceID(appDataDir string) string {
-	userIDFile := ""
-	if dataDir := analyticsDataDir(appDataDir); dataDir != "" {
-		userIDFile = filepath.Join(dataDir, "userid")
-		// #nosec G304 -- userIDFile is derived from internal analytics data directory
-		if data, err := os.ReadFile(userIDFile); err == nil && len(data) > 0 {
-			return string(data)
-		}
+func workflowFields(m WorkflowMetrics) []slog.Attr {
+	fields := []slog.Attr{
+		slog.String("workflow_id", m.WorkflowID),
+		slog.String("workflow_name", m.WorkflowName),
+		slog.String("workflow_type", m.WorkflowType),
+		slog.String("chat_id", m.ChatID),
+		slog.Bool("is_workspace", m.IsWorkspace),
+		slog.Bool("is_child", m.IsChild),
 	}
+	fields = appendNonEmpty(fields, "project_id", m.ProjectID)
+	fields = appendNonEmpty(fields, "model_id", m.ModelID)
+	fields = appendList(fields, "presets", m.Presets)
+	fields = appendList(fields, "preset_types", m.PresetTypes)
+	fields = appendList(fields, "providers", m.Providers)
+	return fields
+}
 
-	id, err := machineid.ProtectedID("reliant")
-	if err != nil {
-		id = uuid.New().String()
+// TrackWorkflowDraftSaved records a workflow draft being saved.
+func (t Tracker) TrackWorkflowDraftSaved(m WorkflowDraftSavedMetrics) {
+	t.emit(EventWorkflowDraftSaved, m.WorkflowSlug,
+		slog.String("workflow_slug", m.WorkflowSlug),
+		slog.String("workflow_name", m.WorkflowName),
+		slog.Bool("is_new", m.IsNew),
+		slog.Bool("is_valid", m.IsValid),
+		slog.String("status", m.Status))
+}
+
+// TrackWorkflowDraftCreated records a new workflow draft.
+func (t Tracker) TrackWorkflowDraftCreated(m WorkflowDraftCreatedMetrics) {
+	fields := []slog.Attr{
+		slog.String("workflow_slug", m.WorkflowSlug),
+		slog.String("workflow_name", m.WorkflowName),
 	}
-	if userIDFile != "" {
-		if err := os.WriteFile(userIDFile, []byte(id), 0600); err != nil {
-			logging.Warn("[Statsig] Failed to save device ID", "error", err)
-		}
+	fields = appendNonEmpty(fields, "project_id", m.ProjectID)
+	t.emit(EventWorkflowDraftCreated, m.WorkflowSlug, fields...)
+}
+
+// TrackPreferencesUpdated records the user changing their preferences.
+func (t Tracker) TrackPreferencesUpdated(m PreferencesUpdatedMetrics) {
+	fields := appendList(nil, "changed_keys", m.ChangedKeys)
+	fields = append(fields, slog.Bool("model_provider_settings_changed", m.ModelProviderSettingsChanged))
+	t.emit(EventPreferencesUpdated, "", fields...)
+}
+
+// TrackProviderSettingsUpdated records a provider credential being
+// connected, changed or removed.
+func (t Tracker) TrackProviderSettingsUpdated(m ProviderSettingsUpdatedMetrics) {
+	fields := []slog.Attr{
+		slog.String("provider", m.Provider),
+		slog.String("action", m.Action),
 	}
-	return id
+	fields = appendNonEmpty(fields, "auth_method", m.AuthMethod)
+	t.emit(EventProviderSettingsUpdate, m.Provider+":"+m.Action, fields...)
+}
+
+// TrackPageVisited records the user navigating to a page or panel.
+func (t Tracker) TrackPageVisited(m PageVisitedMetrics) {
+	fields := []slog.Attr{slog.String("page_name", m.PageName)}
+	fields = appendNonEmpty(fields, "previous_page", m.PreviousPage)
+	t.emit(EventPageVisited, m.PageName, fields...)
+}
+
+// TrackLLMCallCompleted records one model call finishing.
+func (t Tracker) TrackLLMCallCompleted(m LLMCallMetrics) {
+	fields := []slog.Attr{
+		slog.String("provider", m.Provider),
+		slog.String("model", m.Model),
+		slog.Int("input_tokens", m.InputTokens),
+		slog.Int("output_tokens", m.OutputTokens),
+		slog.Int64("latency_ms", m.LatencyMs),
+		slog.Bool("success", m.Success),
+		slog.Bool("is_streaming", m.IsStreaming),
+	}
+	fields = appendNonEmpty(fields, "error_type", m.ErrorType)
+	fields = appendNonEmpty(fields, "workflow_id", m.WorkflowID)
+	fields = appendNonEmpty(fields, "chat_id", m.ChatID)
+	fields = appendNonEmpty(fields, "step_name", m.StepName)
+	if m.CacheReadTokens > 0 {
+		fields = append(fields, slog.Int("cache_read_tokens", m.CacheReadTokens))
+	}
+	if m.CacheWriteTokens > 0 {
+		fields = append(fields, slog.Int("cache_write_tokens", m.CacheWriteTokens))
+	}
+	t.emit(EventLLMCallCompleted, "", fields...)
+}
+
+// TrackAPIKeyConfigured records a provider API key being configured.
+func (t Tracker) TrackAPIKeyConfigured(m APIKeyConfiguredMetrics) {
+	t.emit(EventAPIKeyConfigured, "",
+		slog.String("provider", m.Provider),
+		slog.String("auth_method", m.AuthMethod),
+		slog.Bool("is_first_key", m.IsFirstKey),
+		slog.Int("total_providers", m.TotalProviders))
+}
+
+// TrackFirstMessageSent records the user's first message ever.
+func (t Tracker) TrackFirstMessageSent(m FirstMessageSentMetrics) {
+	fields := []slog.Attr{
+		slog.String("chat_id", m.ChatID),
+		slog.String("project_id", m.ProjectID),
+		slog.String("workflow_name", m.WorkflowName),
+		slog.String("workflow_type", m.WorkflowType),
+	}
+	fields = appendNonEmpty(fields, "provider", m.Provider)
+	t.emit(EventFirstMessageSent, "", fields...)
+}
+
+// TrackOnboardingEvent records an onboarding step; eventType is one of the
+// EventOnboarding* events.
+func (t Tracker) TrackOnboardingEvent(eventType EventType, m OnboardingMetrics) {
+	fields := []slog.Attr{
+		slog.Int("total_steps", m.TotalSteps),
+		slog.Int("steps_completed", m.StepsCompleted),
+		slog.Int("steps_skipped", m.StepsSkipped),
+	}
+	fields = appendNonEmpty(fields, "step_id", m.StepID)
+	fields = appendNonEmpty(fields, "step_name", m.StepName)
+	t.emit(eventType, "", fields...)
+}
+
+func appendNonEmpty(fields []slog.Attr, key, value string) []slog.Attr {
+	if value == "" {
+		return fields
+	}
+	return append(fields, slog.String(key, value))
+}
+
+func appendList(fields []slog.Attr, key string, values []string) []slog.Attr {
+	if len(values) == 0 {
+		return fields
+	}
+	return append(fields, slog.Any(key, values))
 }

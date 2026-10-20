@@ -65,10 +65,6 @@ vi.mock("@/lib/supabase", () => ({
   supabase: { auth: { getSession: vi.fn(async () => ({ data: { session: null } })) } },
 }));
 vi.mock("@/lib/sentry", () => ({ initSentry: vi.fn(async () => undefined) }));
-vi.mock("@/lib/analytics", () => ({
-  identifyUser: vi.fn(),
-  resetUser: vi.fn(async () => undefined),
-}));
 vi.mock("@/services/settingsSync", () => ({
   settingsSync: {
     initialize: vi.fn(async () => undefined),

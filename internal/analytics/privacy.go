@@ -3,60 +3,40 @@ package analytics
 
 import (
 	"context"
-	"sync"
 
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// PrivacyChecker is an interface for checking user privacy settings
+// PrivacyChecker reads a user's analytics consent (the privacy settings
+// toggle).
 type PrivacyChecker interface {
 	GetAnalyticsEnabled(ctx context.Context, userID string) (bool, error)
 }
 
-var (
-	privacyChecker   PrivacyChecker
-	privacyCheckerMu sync.RWMutex
-)
-
-// SetPrivacyChecker sets the privacy checker used to determine if analytics is enabled per user
-func SetPrivacyChecker(checker PrivacyChecker) {
-	privacyCheckerMu.Lock()
-	defer privacyCheckerMu.Unlock()
-	privacyChecker = checker
-}
-
-// GetClientForUser returns the appropriate analytics client based on user's privacy settings
-// If user has disabled analytics, returns NoopClient
-// If privacy checker is not set or user not found, returns the global client (respects default behavior)
-func GetClientForUser(ctx context.Context, userID string) AnalyticsClient {
-	// If no user ID provided, return global client
-	if userID == "" {
-		return GetClient()
+// ForUser returns the Tracker for events about userID, which happen in ctx.
+//
+// An event that names a user is recorded only when that user's consent was
+// read and is on. A user who opted out, a consent read that failed, and a
+// client with nowhere to read consent from all get the zero Tracker, which
+// records nothing. An event with no user (userID "") names nobody and needs
+// no consent.
+func (c *Client) ForUser(ctx context.Context, userID string) Tracker {
+	if c == nil {
+		return Tracker{}
 	}
-
-	// Check if we have a privacy checker configured
-	privacyCheckerMu.RLock()
-	checker := privacyChecker
-	privacyCheckerMu.RUnlock()
-
-	if checker == nil {
-		// No privacy checker configured, fall back to global client
-		return GetClient()
+	if userID != "" {
+		if c.consent == nil {
+			return Tracker{}
+		}
+		enabled, err := c.consent.GetAnalyticsEnabled(ctx, userID)
+		if err != nil {
+			logging.WarnContext(ctx, "[Analytics] Could not read the user's analytics consent; recording nothing",
+				"userID", userID, "error", err)
+			return Tracker{}
+		}
+		if !enabled {
+			return Tracker{}
+		}
 	}
-
-	// Check user's privacy settings
-	enabled, err := checker.GetAnalyticsEnabled(ctx, userID)
-	if err != nil {
-		// Error checking settings, log warning and fall back to global client
-		logging.Warn("[Analytics] Failed to check privacy settings for user", "userID", userID, "error", err)
-		return GetClient()
-	}
-
-	if !enabled {
-		// User has disabled analytics, return no-op client
-		return NewNoopClient()
-	}
-
-	// Analytics enabled, return global client
-	return GetClient()
+	return Tracker{c: c, ctx: ctx, userID: userID}
 }

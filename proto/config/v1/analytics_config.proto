@@ -6,40 +6,20 @@ import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
 
-// AnalyticsConfig is where the API server and the worker send product
-// analytics events. Only a prod-tier process sends any (internal/runenv). The
-// rules every config here follows are in config.proto's header.
+// AnalyticsConfig governs the product events the API server and the worker
+// record. Each event is one structured log record (dev-docs/product-events.md),
+// so it ships wherever the process's logs ship; there is no vendor key. A
+// user's analytics opt-out is honoured per event regardless. The rules every
+// config here follows are in config.proto's header.
 message AnalyticsConfig {
-  // A kill switch, independent of the tier.
+  // Statsig (2), the Supabase event sink (3, 4) and the device-id cache (5)
+  // are gone.
+  reserved 2, 3, 4, 5;
+  reserved "statsig_key", "supabase_url", "supabase_anon_key", "app_data_dir";
+
+  // A kill switch for every product event.
   bool disabled = 1 [(forge.v1.config) = {
     env_var: "RELIANT_ANALYTICS_DISABLED"
-    description: "Send no analytics events"
-  }];
-
-  // The Statsig key events are sent with (control-plane stores the server
-  // key under this name). Unset: Statsig sending is off, said once.
-  string statsig_key = 2 [(forge.v1.config) = {
-    env_var: "STATSIG_CLIENT_KEY"
-    sensitive: true
-    optional: true
-    description: "Statsig key analytics events are sent with"
-  }];
-
-  // The Supabase project events are also written to. The anon key is a
-  // publishable key, not a secret.
-  string supabase_url = 3 [(forge.v1.config) = {
-    env_var: "SUPABASE_URL"
-    description: "Supabase project URL analytics events are also written to"
-  }];
-  string supabase_anon_key = 4 [(forge.v1.config) = {
-    env_var: "SUPABASE_ANON_KEY"
-    description: "Supabase publishable (anon) key for analytics writes"
-  }];
-
-  // Where analytics caches its device id. Unset — every server container —
-  // caches nothing: its root filesystem is read-only.
-  string app_data_dir = 5 [(forge.v1.config) = {
-    env_var: "RELIANT_APP_DATA_DIR"
-    description: "Writable app data directory analytics caches its device id in"
+    description: "Record no product analytics events"
   }];
 }

@@ -59,7 +59,6 @@ const LOOPBACK_URI = 'http://127.0.0.1:52111/auth/callback'
 
 const asDesktop = () => {
   ;(window as Window & { electronAPI?: unknown }).electronAPI = {
-    analyticsTrack: vi.fn(),
     startOAuthRedirect: startOAuthRedirectMock,
   }
 }
@@ -162,9 +161,7 @@ describe.each(['google', 'github', 'apple'] as const)('%s sign-in', (provider) =
   it('falls back to the hosted callback in builds with no desktop bridge', async () => {
     // Every build shipped before the loopback receiver existed: electronAPI is
     // present but startOAuthRedirect is undefined.
-    ;(window as Window & { electronAPI?: unknown }).electronAPI = {
-      analyticsTrack: vi.fn(),
-    }
+    ;(window as Window & { electronAPI?: unknown }).electronAPI = {}
 
     await call(provider)
 

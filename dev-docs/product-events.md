@@ -1,0 +1,105 @@
+# Product events
+
+Product events (funnels, retention, feature use) ride the telemetry pipeline
+Reliant already ships. There is no third-party analytics product: Statsig was
+removed (owner decision, 2026-10-20), and so was the Supabase "GTM" event
+sink that no server role was ever configured to write.
+
+There are two producers, one per tier, and both land in ClickStack.
+
+## Backend: one structured log record per event
+
+`internal/analytics` keeps the typed event vocabulary (`events.go`) and the
+per-user opt-out. Each `Track*` call writes **one INFO record through the
+process logger** (`log/slog`, which `internal/logging` installs). The record's
+message is `product.<event>` and its attributes are:
+
+| Attribute | Value |
+| --- | --- |
+| `event.name` | `product.<event>`, e.g. `product.message_sent` (the same string as the message) |
+| `user.id` | the user the event is about; absent only for an event with no user |
+| `app.version` | Reliant build version |
+| `product.<field>` | the event's typed fields, snake_case: `product.chat_id`, `product.input_tokens`, ... |
+| `trace_id`, `span_id` | stamped by the trace handler when the request carries a span |
+
+Why a log record and not an OTel span or an OTel Logs API record:
+
+- **It reaches ClickStack in every deployed environment without new config.**
+  Server stdout is collected by the node agent (`filelog` →
+  `json_parser` → ClickStack `otel_logs`, see control-plane
+  `deploy/kcl/lib/otel_agent.k`), and the JSON attributes become
+  `LogAttributes`. Forge's OTLP *logs* exporter is off by default, so a record
+  written through the OTel Logs API would be dropped; switching it on would
+  ship every log line twice.
+- **Spans can be sampled and are only exported where an OTLP endpoint is
+  set.** A product event must not disappear because its request's trace was
+  not sampled.
+- **When OTLP log export is switched on** (`OTEL_LOGS_EXPORTER=otlp`), forge
+  tees the process logger into the OTel logs bridge, so the same record leaves
+  as an OTel log record instead. Exactly one shipping path either way.
+
+Opt-out: `analytics.ForUser(ctx, userID)` reads the user's
+`privacy.analytics_enabled` setting. A user who opted out, or whose setting
+cannot be read, gets a tracker that emits nothing (fail closed).
+`RELIANT_ANALYTICS_DISABLED=true` turns every backend event off.
+
+Duplicate suppression: an identical event for the same user within 5 seconds
+is dropped (React StrictMode double effects, retried RPCs).
+
+## Web: `trackEvent` → ClickStack span (and Sentry while it is on)
+
+`web/src/lib/analytics.ts` `trackEvent(name, props)` sends to the sinks
+`telemetrySinks.ts` selects:
+
+- **ClickStack**: forge web runtime `track("product.<name>", props)` — one span
+  from the browser SDK's `custom-action` tracer, on the same session as the
+  page's errors and replay. Props are snake_cased and bounded by the runtime.
+  The user is the `userId` attribute set by `setTelemetryUserId`.
+- **Sentry**, while web Sentry is still enabled (until
+  `research/frontend-observability/DESIGN.md` §6.6): a breadcrumb per event
+  and a message for the funnel-marker events the alert rules match on.
+
+The user's in-app analytics toggle gates both. The ClickStack sink is live only
+in a build that sets `VITE_OTEL_ENDPOINT`; until a deploy sets it, web events
+reach Sentry alone.
+
+## Retention
+
+Product events keep the retention of the table they land in: backend events
+are INFO log records, kept 14 days in `otel_logs`; web events are spans, kept 7
+days in `otel_traces` (control-plane `internal/obstenant/schema`, `LogsInfoDays`
+and `TracesDays`). That covers funnels over days, not retention cohorts over
+months. Longer retention needs its own table (a materialized view of the
+`product.%` rows with a longer TTL), and a matching change to the privacy
+page's retention table, which currently says "Up to 14 days".
+
+## Querying
+
+Backend events (ClickStack tenant zero, `otel_logs`):
+
+```sql
+-- Users who configured a provider key and then sent a first message within
+-- a day, over the last 30 days.
+SELECT level, count() AS users
+FROM (
+    SELECT LogAttributes['user.id'] AS user_id,
+           windowFunnel(86400)(
+               Timestamp,
+               LogAttributes['event.name'] = 'product.api_key_configured',
+               LogAttributes['event.name'] = 'product.first_message_sent'
+           ) AS level
+    FROM otel_logs
+    WHERE Timestamp > now() - INTERVAL 30 DAY
+      AND LogAttributes['event.name'] LIKE 'product.%'
+      AND LogAttributes['user.id'] != ''
+    GROUP BY user_id
+)
+GROUP BY level
+ORDER BY level;
+```
+
+Web events (`otel_traces`): `SpanName LIKE 'product.%'`, user in
+`SpanAttributes['userId']`, browser session in
+`SpanAttributes['rum.sessionId']`. A backend event logged during a request
+carries that request's `TraceId`, which joins it to the browser span (and so
+the browser session) that made the call.

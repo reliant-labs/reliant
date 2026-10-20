@@ -94,7 +94,7 @@ func TestWithReporting_UserErrorsAreInfoAndNeverReachSentry(t *testing.T) {
 
 	logger.Error("[TerminalWS] create terminal session failed", "error", fmt.Errorf("create terminal session: %w", machineOffline))
 	logger.Error("[StepExecutor] Activity failed after retry exhaustion", "error", fmt.Errorf("activity error: %w", usageLimit))
-	logger.Error("[Statsig] Failed to get analytics directory", "error", errors.New("mkdir /.config: read-only file system"))
+	logger.Error("[Cache] Failed to create cache directory", "error", errors.New("mkdir /.config: read-only file system"))
 
 	require.Eventually(t, func() bool { return len(reporter.captured()) > 0 }, 2*time.Second, 5*time.Millisecond,
 		"the server error must still reach Sentry")
@@ -109,7 +109,7 @@ func TestWithReporting_UserErrorsAreInfoAndNeverReachSentry(t *testing.T) {
 		assert.Equal(t, "user", line["error_class"], msg)
 		assert.NotEmpty(t, line["error"], "a user error must still carry its error: %s", msg)
 	}
-	server := lineFor(t, &buf, "[Statsig] Failed to get analytics directory")
+	server := lineFor(t, &buf, "[Cache] Failed to create cache directory")
 	assert.Equal(t, "ERROR", server["level"])
 	assert.Equal(t, "server", server["error_class"])
 }

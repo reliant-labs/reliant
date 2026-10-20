@@ -311,7 +311,7 @@ func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.
 		metrics.WorkflowID = *chat.WorkflowID
 	}
 
-	analyticsClient := analytics.GetClientForUser(ctx, userID)
+	analyticsClient := analytics.ForUser(ctx, userID)
 	analyticsClient.TrackMessageSent(metrics)
 
 	// Check if this is the user's first-ever message across all chats

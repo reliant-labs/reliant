@@ -62,7 +62,7 @@ func (s *Service) AddProviderAPIKey(
 	if all, err := s.deps.Store.ListProviderAccounts(ctx, userID); err == nil {
 		total = len(all)
 	}
-	client := analytics.GetClientForUser(ctx, userID)
+	client := analytics.ForUser(ctx, userID)
 	client.TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{Provider: provider, Action: "connected", AuthMethod: "api_key"})
 	client.TrackAPIKeyConfigured(analytics.APIKeyConfiguredMetrics{Provider: provider, AuthMethod: "api_key", IsFirstKey: total <= 1, TotalProviders: total})
 

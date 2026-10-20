@@ -59,19 +59,6 @@ const STRIPE_FRAMES = ["https://js.stripe.com", "https://hooks.stripe.com"];
  */
 const MONACO_CDN = "https://cdn.jsdelivr.net";
 
-/**
- * Statsig's SDK resolves these at runtime from inside the vendored client, so
- * they appear in the built bundle rather than in our source. Confirmed by
- * grepping dist/assets for external hosts — which is also why they are listed
- * explicitly instead of trusted to a wildcard.
- */
-const STATSIG_HOSTS = [
-  "https://statsigapi.net",
-  "https://featureassets.org",
-  "https://prodregistryv2.org",
-  "https://api.statsigcdn.com",
-];
-
 /** Icon CDNs used by the MCP server avatars (`Settings/mcpAvatar.tsx`). */
 const ICON_HOSTS = ["https://cdn.simpleicons.org", "https://cdn.jsdelivr.net"];
 
@@ -159,7 +146,7 @@ export function buildCSP(
 
     // blob: is required for Monaco's web workers, which it instantiates from
     // generated blob URLs rather than files.
-    "script-src": ["'self'", ...hashes, STRIPE_SCRIPT, MONACO_CDN, "https://api.statsigcdn.com", "blob:"],
+    "script-src": ["'self'", ...hashes, STRIPE_SCRIPT, MONACO_CDN, "blob:"],
 
     // 'unsafe-inline' is unavoidable for styles and is NOT the risk that
     // 'unsafe-inline' poses for scripts: Monaco injects <style> elements at
@@ -179,7 +166,6 @@ export function buildCSP(
       ...apiOrigins,
       ...secureSockets,
       ...LOOPBACK,
-      ...STATSIG_HOSTS,
       MONACO_CDN,
       sentryOrigin(env.VITE_SENTRY_DSN),
       // Sentry tunnels envelopes to the project's ingest subdomain; the DSN

@@ -36,7 +36,7 @@
 // CI never hits this because a fresh runner has none of them set; locally it is
 // the DEFAULT case. So each key is assigned unconditionally.
 //
-// Secrets (Sentry DSN, Statsig key) are deliberately NOT here. They come from
+// Secrets (the Sentry DSN) are deliberately NOT here. They come from
 // GitHub Actions secrets in CI and are simply absent locally, which leaves
 // telemetry inert in a local build.
 

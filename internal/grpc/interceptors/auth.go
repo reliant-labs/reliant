@@ -160,12 +160,12 @@ func NewAuthInterceptor(settings auth.Settings, publicProcedures map[string]stru
 	}
 }
 
-// authenticateRequest validates the auth token and returns the authenticated context, claims, and raw token.
+// authenticateRequest validates the auth token and returns the authenticated context and claims.
 // Returns an error if authentication fails.
-func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure string, header func(string) string) (context.Context, *auth.JWTClaims, string, error) {
+func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure string, header func(string) string) (context.Context, *auth.JWTClaims, error) {
 	// Check if this method is public
 	if _, public := i.publicProcedures[procedure]; public {
-		return ctx, nil, "", nil
+		return ctx, nil, nil
 	}
 
 	// Extract token from Authorization header
@@ -175,7 +175,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	if authHeader == "" {
 		logging.DebugContext(ctx, "[gRPC Auth] Missing authorization token",
 			"procedure", procedure)
-		return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
+		return nil, nil, connect.NewError(connect.CodeUnauthenticated,
 			fmt.Errorf("missing authorization token"))
 	}
 
@@ -183,7 +183,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	if tokenString == authHeader {
 		logging.DebugContext(ctx, "[gRPC Auth] Invalid authorization header format",
 			"procedure", procedure)
-		return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
+		return nil, nil, connect.NewError(connect.CodeUnauthenticated,
 			fmt.Errorf("invalid authorization header format"))
 	}
 
@@ -199,7 +199,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		if i.accessTokens == nil {
 			logging.WarnContext(ctx, "[gRPC Auth] access token presented but access-token auth is not enabled",
 				"procedure", procedure)
-			return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
+			return nil, nil, connect.NewError(connect.CodeUnauthenticated,
 				fmt.Errorf("invalid or expired token"))
 		}
 		claims, principal, err = auth.ClaimsForAPIToken(ctx, i.accessTokens, tokenString)
@@ -217,13 +217,13 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 			logging.ErrorContext(ctx, "[gRPC Auth] Token verification unavailable",
 				"error", err,
 				"procedure", procedure)
-			return nil, nil, "", connect.NewError(connect.CodeUnavailable,
+			return nil, nil, connect.NewError(connect.CodeUnavailable,
 				fmt.Errorf("token verification unavailable: %w", err))
 		}
 		logging.DebugContext(ctx, "[gRPC Auth] Invalid token",
 			"error", err,
 			"procedure", procedure)
-		return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
+		return nil, nil, connect.NewError(connect.CodeUnauthenticated,
 			fmt.Errorf("invalid or expired token"))
 	}
 
@@ -245,7 +245,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		"role", claims.Role,
 		"procedure", procedure)
 
-	return ctx, claims, tokenString, nil
+	return ctx, claims, nil
 }
 
 // AuthenticateHTTP authenticates a plain HTTP request (not a Connect RPC) and
@@ -265,7 +265,7 @@ func (i *AuthInterceptor) AuthenticateHTTP(r *http.Request) (string, error) {
 		}
 		return r.Header.Get(key)
 	}
-	ctx, _, _, err := i.authenticateRequest(r.Context(), "http:"+r.URL.Path, header)
+	ctx, _, err := i.authenticateRequest(r.Context(), "http:"+r.URL.Path, header)
 	if err != nil {
 		return "", err
 	}
@@ -277,34 +277,21 @@ func (i *AuthInterceptor) AuthenticateHTTP(r *http.Request) (string, error) {
 }
 
 // trackSession handles analytics session tracking for authenticated users
-func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClaims, rawToken string) {
+func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClaims) {
 	if claims == nil {
 		return
 	}
 
-	// Update analytics client userID and Sentry user context on first authentication
+	// Update the Sentry user context on first authentication
 	if i.sessionTracker.isFirstTimeSeen(claims.Sub) {
-		analytics.SetUserID(claims.Sub)
 		telemetry.GetReporter().SetUser(claims.Sub, claims.Email)
-		logging.InfoContext(ctx, "[Analytics] User authenticated, updated analytics client",
-			"userID", claims.Sub)
 	}
-
-	// Always update the JWT (it refreshes on each request). Access tokens are
-	// never stored where a JWT is expected.
-	if rawToken != "" && !auth.IsAccessTokenFormat(rawToken) {
-		analytics.SetUserJWT(rawToken)
-	}
-
-	// Get client that respects user's privacy settings
-	analyticsClient := analytics.GetClientForUser(ctx, claims.Sub)
 
 	// Track session if new (first request in 30 minutes)
 	if i.sessionTracker.isNewSession(claims.Sub) {
 		i.sessionTracker.updateSession(claims.Sub)
-		analyticsClient.TrackSessionStart()
-		logging.InfoContext(ctx, "[Analytics] New session started",
-			"userID", claims.Sub)
+		// ForUser reads the user's consent, so only on a new session.
+		analytics.ForUser(ctx, claims.Sub).TrackSessionStart()
 	} else {
 		// Just update the last seen time without logging event
 		i.sessionTracker.updateSession(claims.Sub)
@@ -316,12 +303,12 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		procedure := req.Spec().Procedure
 
-		ctx, claims, rawToken, err := i.authenticateRequest(ctx, procedure, req.Header().Get)
+		ctx, claims, err := i.authenticateRequest(ctx, procedure, req.Header().Get)
 		if err != nil {
 			return nil, err
 		}
 
-		i.trackSession(ctx, claims, rawToken)
+		i.trackSession(ctx, claims)
 
 		// Stash x-daemon-last-seen header in context for downstream daemon router.
 		if v := req.Header().Get("x-daemon-last-seen"); v != "" {
@@ -343,12 +330,12 @@ func (i *AuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		procedure := conn.Spec().Procedure
 
-		ctx, claims, rawToken, err := i.authenticateRequest(ctx, procedure, conn.RequestHeader().Get)
+		ctx, claims, err := i.authenticateRequest(ctx, procedure, conn.RequestHeader().Get)
 		if err != nil {
 			return err
 		}
 
-		i.trackSession(ctx, claims, rawToken)
+		i.trackSession(ctx, claims)
 
 		return next(ctx, conn)
 	}

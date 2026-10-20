@@ -35743,71 +35743,14 @@
           "Flag": "",
           "DefaultValue": "",
           "Required": false,
-          "Description": "Send no analytics events",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/analytics_config.proto"
-        },
-        {
-          "Name": "statsig_key",
-          "GoName": "StatsigKey",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "STATSIG_CLIENT_KEY",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Statsig key analytics events are sent with",
-          "Sensitive": true,
-          "Category": "",
-          "Optional": true,
-          "ProtoFile": "config/v1/analytics_config.proto"
-        },
-        {
-          "Name": "supabase_url",
-          "GoName": "SupabaseUrl",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "SUPABASE_URL",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Supabase project URL analytics events are also written to",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/analytics_config.proto"
-        },
-        {
-          "Name": "supabase_anon_key",
-          "GoName": "SupabaseAnonKey",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "SUPABASE_ANON_KEY",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Supabase publishable (anon) key for analytics writes",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/analytics_config.proto"
-        },
-        {
-          "Name": "app_data_dir",
-          "GoName": "AppDataDir",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "RELIANT_APP_DATA_DIR",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Writable app data directory analytics caches its device id in",
+          "Description": "Record no product analytics events",
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "config/v1/analytics_config.proto"
         }
       ],
       "ProtoFile": "config/v1/analytics_config.proto",
-      "Line": 12
+      "Line": 14
     },
     {
       "Name": "ControlPlaneConfig",
@@ -38195,5 +38138,5 @@
       "Line": 20
     }
   ],
-  "source_hash": "afaf63231a4e1f7afac087c60e4d6d4666259e6e950394bcc957c4593faec4f6"
+  "source_hash": "c29ccaa659c458209851aef82779512487afaeec4866b0919a790b174c2acb9e"
 }

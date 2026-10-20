@@ -465,7 +465,7 @@ func (s *Service) GetPreferences(ctx context.Context, req *connect.Request[relia
 // UpdatePreferences updates user preferences
 func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[reliantv1.UpdatePreferencesRequest]) (*connect.Response[reliantv1.UpdatePreferencesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
-	analyticsClient := analytics.GetClientForUser(ctx, userID)
+	analyticsClient := analytics.ForUser(ctx, userID)
 	changedKeys := make([]string, 0, 8)
 	modelProviderSettingsChanged := false
 	markChanged := func(key string) {
@@ -1242,7 +1242,7 @@ func (s *Service) TrackPageVisited(ctx context.Context, req *connect.Request[rel
 	userID := auth.MustGetUserID(ctx)
 
 	// Get analytics client that respects user's privacy settings
-	analyticsClient := analytics.GetClientForUser(ctx, userID)
+	analyticsClient := analytics.ForUser(ctx, userID)
 
 	metrics := analytics.PageVisitedMetrics{
 		PageName: req.Msg.PageName,
@@ -1263,7 +1263,7 @@ func (s *Service) TrackPageVisited(ctx context.Context, req *connect.Request[rel
 //
 // func (s *Service) TrackOnboardingEvent(ctx context.Context, req *connect.Request[reliantv1.TrackOnboardingEventRequest]) (*connect.Response[reliantv1.TrackOnboardingEventResponse], error) {
 // 	userID := auth.MustGetUserID(ctx)
-// 	analyticsClient := analytics.GetClientForUser(ctx, userID)
+// 	analyticsClient := analytics.ForUser(ctx, userID)
 //
 // 	eventType := analytics.EventType(req.Msg.EventType)
 // 	// Validate event type

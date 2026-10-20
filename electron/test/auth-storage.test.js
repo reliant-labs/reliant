@@ -207,12 +207,12 @@ test('a failure found by an earlier read is still reportable to the renderer', (
   storage.saveAuth(validSession());
   safeStorage.rotateKey('key-B');
 
-  // Main process reads first (Statsig user id at startup) and clears the blob.
+  // Main process reads first (the daemon PAT mint at startup) and clears the blob.
   assert.equal(storage.loadStoredAuth(), null);
 
   // The renderer's later auth:load sees a clean `empty`, so without the latch
   // the incident would be invisible to it — exactly the read ordering in the
-  // captured log, where the decrypt failure is logged during Statsig init.
+  // captured log, where the decrypt failure is logged during that startup read.
   assert.equal(storage.readStoredAuth().status, AUTH_LOAD_EMPTY);
 
   const failure = storage.takeLoadFailure();

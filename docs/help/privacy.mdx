@@ -53,7 +53,7 @@ A local daemon connects outbound to our gateway; it doesn't open any inbound por
 | Integration credentials (GitHub, Gmail, Slack, Twilio) | No | Yes, encrypted at the application layer | No. The results of integration actions are sent, like any other tool output |
 | Secrets in your files or command output | Yes | **Yes, if the agent reads or prints them** | **Yes, if the agent reads or prints them** |
 | Your Reliant sign-in tokens (desktop) | Yes, in storage encrypted by your OS | No | No |
-| Analytics and crash reports | No | Sent to Statsig and Sentry (on by default; see [Telemetry](#telemetry)) | No |
+| Analytics and crash reports | No | Analytics events are stored in our own telemetry store; crash reports go to Sentry (both on by default; see [Telemetry](#telemetry)) | No |
 
 <Warning>
 Secrets get no special handling. If the agent opens a `.env` file, prints an environment variable, or runs a command that echoes a token, that text becomes tool output. It is stored with your chat and sent to your model provider. Keep secrets out of the agent's reach, use approval modes for commands you haven't reviewed, and store deployment secrets with [Secrets](/features/secrets). If a key has been exposed, rotate it.
@@ -111,7 +111,7 @@ Both kinds of telemetry are **on by default**. To turn them off, go to **Setting
 
 | Toggle | Sent to | What's included |
 | --- | --- | --- |
-| **Analytics and Usage Data** | Statsig | Product-usage events such as message sent, model call completed (model, token counts, latency) and project opened, tied to a device ID, your account ID and a session ID. Events record what you did, not what you wrote: a "message sent" event records the message's length, not its text. |
+| **Analytics and Usage Data** | Our own telemetry store (we run it; no third-party analytics service). In the web and desktop app, also Sentry, attached to error reports, while crash reporting is on | Product-usage events such as message sent, model call completed (model, token counts, latency) and project opened, tied to your account ID. Events from the app also carry its session ID. Events record what you did, not what you wrote: a "message sent" event records the message's length, not its text. |
 | **Crash and Error Reporting** | Sentry | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. You're identified by an internal user ID, not your email or name. Request bodies, console output and custom data are removed, and error messages are cut to one short line with known credential formats redacted. That short line can still contain a fragment of text. Web session replays mask all on-screen text and form inputs, and block images, media and canvas. |
 
 Crash reports contain error details and stack traces; we don't upload memory dumps.
@@ -160,7 +160,8 @@ Go to **Settings → Account → Delete account**, or email support@reliantlabs.
 | Hosted app databases | Until you delete them. **They are not backed up** |
 | Database backups | Nightly backups are kept for 7 days. Backups taken on demand, for example before maintenance, are deleted when they're no longer needed |
 | Server logs and metrics | 30 days |
-| Crash, error and analytics data (Sentry, Statsig) | According to each vendor's retention settings for our account |
+| Analytics events | Up to 14 days |
+| Crash and error data (Sentry) | According to Sentry's retention settings for our account |
 | Billing records, including refunds made at deletion | As long as tax and accounting law requires, typically 7 years |
 
 The [Privacy Policy](https://reliantlabs.io/privacy#retention) has the complete list.

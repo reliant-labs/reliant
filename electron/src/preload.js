@@ -332,7 +332,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPrivacySettings: () => ipcRenderer.invoke('get-privacy-settings'),
 
   // Analytics
-  analyticsTrack: (payload) => ipcRenderer.invoke('analytics:track', payload),
 
   // Browser API
   browser: {
