@@ -25,13 +25,20 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v0.1.47-0.20261020131546-09b648be1b39
+forge_version: v0.1.47-0.20261020200820-9b0fc5e1adb5
 harness: reliant
 config:
     # Every process setting is typed config (proto/config/v1, read through
     # pkg/config). A direct environment read outside pkg/config fails lint;
     # one that is not configuration takes a scoped //nolint:forbidigo.
     enforce_typed_access: error
+lint:
+    rules:
+        # forge's D3 rule ships hard-ERROR with no rollout default, and reliant
+        # has 189 mutating rpcs with no `(forge.v1.method).activity`
+        # declaration. Warn while the declarations are written; this goes back
+        # to error (delete the entry) once the D3 declarations land.
+        forgeconv-activity-declared: warn
 generate:
     hooks:
         # sqlc until the forge ORM replaces it (P5b). `make sqlc` runs the

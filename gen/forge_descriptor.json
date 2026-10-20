@@ -17,7 +17,10 @@
           "InputTypeFQ": "reliant.v1.PreviewAccountDeletionRequest",
           "OutputTypeFQ": "reliant.v1.PreviewAccountDeletionResponse",
           "InputProtoFile": "reliant/v1/account.proto",
-          "OutputProtoFile": "reliant/v1/account.proto"
+          "OutputProtoFile": "reliant/v1/account.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeleteAccount",
@@ -30,7 +33,10 @@
           "InputTypeFQ": "reliant.v1.DeleteAccountRequest",
           "OutputTypeFQ": "reliant.v1.DeleteAccountResponse",
           "InputProtoFile": "reliant/v1/account.proto",
-          "OutputProtoFile": "reliant/v1/account.proto"
+          "OutputProtoFile": "reliant/v1/account.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/account.proto",
@@ -255,7 +261,10 @@
           "InputTypeFQ": "reliant.v1.ListApprovalsByChatRequest",
           "OutputTypeFQ": "reliant.v1.ListApprovalsByChatResponse",
           "InputProtoFile": "reliant/v1/approval.proto",
-          "OutputProtoFile": "reliant/v1/approval.proto"
+          "OutputProtoFile": "reliant/v1/approval.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "Approve",
@@ -268,7 +277,10 @@
           "InputTypeFQ": "reliant.v1.ApproveRequest",
           "OutputTypeFQ": "reliant.v1.ApproveResponse",
           "InputProtoFile": "reliant/v1/approval.proto",
-          "OutputProtoFile": "reliant/v1/approval.proto"
+          "OutputProtoFile": "reliant/v1/approval.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "Deny",
@@ -281,7 +293,10 @@
           "InputTypeFQ": "reliant.v1.DenyRequest",
           "OutputTypeFQ": "reliant.v1.DenyResponse",
           "InputProtoFile": "reliant/v1/approval.proto",
-          "OutputProtoFile": "reliant/v1/approval.proto"
+          "OutputProtoFile": "reliant/v1/approval.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "BatchApprove",
@@ -294,7 +309,10 @@
           "InputTypeFQ": "reliant.v1.BatchApproveRequest",
           "OutputTypeFQ": "reliant.v1.BatchApproveResponse",
           "InputProtoFile": "reliant/v1/approval.proto",
-          "OutputProtoFile": "reliant/v1/approval.proto"
+          "OutputProtoFile": "reliant/v1/approval.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "BatchDeny",
@@ -307,7 +325,10 @@
           "InputTypeFQ": "reliant.v1.BatchDenyRequest",
           "OutputTypeFQ": "reliant.v1.BatchDenyResponse",
           "InputProtoFile": "reliant/v1/approval.proto",
-          "OutputProtoFile": "reliant/v1/approval.proto"
+          "OutputProtoFile": "reliant/v1/approval.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/approval.proto",
@@ -710,7 +731,10 @@
           "InputTypeFQ": "reliant.v1.UploadAttachmentRequest",
           "OutputTypeFQ": "reliant.v1.UploadAttachmentResponse",
           "InputProtoFile": "reliant/v1/attachment.proto",
-          "OutputProtoFile": "reliant/v1/attachment.proto"
+          "OutputProtoFile": "reliant/v1/attachment.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CreateFileReference",
@@ -723,7 +747,10 @@
           "InputTypeFQ": "reliant.v1.CreateFileReferenceRequest",
           "OutputTypeFQ": "reliant.v1.CreateFileReferenceResponse",
           "InputProtoFile": "reliant/v1/attachment.proto",
-          "OutputProtoFile": "reliant/v1/attachment.proto"
+          "OutputProtoFile": "reliant/v1/attachment.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetAttachment",
@@ -737,7 +764,10 @@
           "InputTypeFQ": "reliant.v1.GetAttachmentRequest",
           "OutputTypeFQ": "reliant.v1.GetAttachmentResponse",
           "InputProtoFile": "reliant/v1/attachment.proto",
-          "OutputProtoFile": "reliant/v1/attachment.proto"
+          "OutputProtoFile": "reliant/v1/attachment.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "DeleteAttachment",
@@ -751,7 +781,10 @@
           "InputTypeFQ": "reliant.v1.DeleteAttachmentRequest",
           "OutputTypeFQ": "reliant.v1.DeleteAttachmentResponse",
           "InputProtoFile": "reliant/v1/attachment.proto",
-          "OutputProtoFile": "reliant/v1/attachment.proto"
+          "OutputProtoFile": "reliant/v1/attachment.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/attachment.proto",
@@ -992,7 +1025,10 @@
           "InputTypeFQ": "reliant.v1.ListBackgroundProcessesRequest",
           "OutputTypeFQ": "reliant.v1.ListBackgroundProcessesResponse",
           "InputProtoFile": "reliant/v1/background.proto",
-          "OutputProtoFile": "reliant/v1/background.proto"
+          "OutputProtoFile": "reliant/v1/background.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetProcessOutput",
@@ -1005,7 +1041,10 @@
           "InputTypeFQ": "reliant.v1.GetProcessOutputRequest",
           "OutputTypeFQ": "reliant.v1.GetProcessOutputResponse",
           "InputProtoFile": "reliant/v1/background.proto",
-          "OutputProtoFile": "reliant/v1/background.proto"
+          "OutputProtoFile": "reliant/v1/background.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "KillProcess",
@@ -1018,7 +1057,10 @@
           "InputTypeFQ": "reliant.v1.KillProcessRequest",
           "OutputTypeFQ": "reliant.v1.KillProcessResponse",
           "InputProtoFile": "reliant/v1/background.proto",
-          "OutputProtoFile": "reliant/v1/background.proto"
+          "OutputProtoFile": "reliant/v1/background.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "StreamProcessOutput",
@@ -1031,7 +1073,10 @@
           "InputTypeFQ": "reliant.v1.StreamProcessOutputRequest",
           "OutputTypeFQ": "reliant.v1.ProcessOutputEvent",
           "InputProtoFile": "reliant/v1/background.proto",
-          "OutputProtoFile": "reliant/v1/background.proto"
+          "OutputProtoFile": "reliant/v1/background.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/background.proto",
@@ -1418,7 +1463,10 @@
           "InputTypeFQ": "reliant.v1.ListIntegrationsRequest",
           "OutputTypeFQ": "reliant.v1.ListIntegrationsResponse",
           "InputProtoFile": "reliant/v1/connection.proto",
-          "OutputProtoFile": "reliant/v1/connection.proto"
+          "OutputProtoFile": "reliant/v1/connection.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListConnections",
@@ -1432,7 +1480,10 @@
           "InputTypeFQ": "reliant.v1.ListConnectionsRequest",
           "OutputTypeFQ": "reliant.v1.ListConnectionsResponse",
           "InputProtoFile": "reliant/v1/connection.proto",
-          "OutputProtoFile": "reliant/v1/connection.proto"
+          "OutputProtoFile": "reliant/v1/connection.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetConnection",
@@ -1446,7 +1497,10 @@
           "InputTypeFQ": "reliant.v1.GetConnectionRequest",
           "OutputTypeFQ": "reliant.v1.GetConnectionResponse",
           "InputProtoFile": "reliant/v1/connection.proto",
-          "OutputProtoFile": "reliant/v1/connection.proto"
+          "OutputProtoFile": "reliant/v1/connection.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "CreateApiKeyConnection",
@@ -1459,7 +1513,10 @@
           "InputTypeFQ": "reliant.v1.CreateApiKeyConnectionRequest",
           "OutputTypeFQ": "reliant.v1.CreateApiKeyConnectionResponse",
           "InputProtoFile": "reliant/v1/connection.proto",
-          "OutputProtoFile": "reliant/v1/connection.proto"
+          "OutputProtoFile": "reliant/v1/connection.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "StartOAuth",
@@ -1472,7 +1529,10 @@
           "InputTypeFQ": "reliant.v1.StartOAuthRequest",
           "OutputTypeFQ": "reliant.v1.StartOAuthResponse",
           "InputProtoFile": "reliant/v1/connection.proto",
-          "OutputProtoFile": "reliant/v1/connection.proto"
+          "OutputProtoFile": "reliant/v1/connection.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CompleteOAuth",
@@ -1485,7 +1545,10 @@
           "InputTypeFQ": "reliant.v1.CompleteOAuthRequest",
           "OutputTypeFQ": "reliant.v1.CompleteOAuthResponse",
           "InputProtoFile": "reliant/v1/connection.proto",
-          "OutputProtoFile": "reliant/v1/connection.proto"
+          "OutputProtoFile": "reliant/v1/connection.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "TestConnection",
@@ -1498,7 +1561,10 @@
           "InputTypeFQ": "reliant.v1.TestConnectionRequest",
           "OutputTypeFQ": "reliant.v1.TestConnectionResponse",
           "InputProtoFile": "reliant/v1/connection.proto",
-          "OutputProtoFile": "reliant/v1/connection.proto"
+          "OutputProtoFile": "reliant/v1/connection.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RenameConnection",
@@ -1511,7 +1577,10 @@
           "InputTypeFQ": "reliant.v1.RenameConnectionRequest",
           "OutputTypeFQ": "reliant.v1.RenameConnectionResponse",
           "InputProtoFile": "reliant/v1/connection.proto",
-          "OutputProtoFile": "reliant/v1/connection.proto"
+          "OutputProtoFile": "reliant/v1/connection.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "SetDefaultConnection",
@@ -1524,7 +1593,10 @@
           "InputTypeFQ": "reliant.v1.SetDefaultConnectionRequest",
           "OutputTypeFQ": "reliant.v1.SetDefaultConnectionResponse",
           "InputProtoFile": "reliant/v1/connection.proto",
-          "OutputProtoFile": "reliant/v1/connection.proto"
+          "OutputProtoFile": "reliant/v1/connection.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeleteConnection",
@@ -1538,7 +1610,15 @@
           "InputTypeFQ": "reliant.v1.DeleteConnectionRequest",
           "OutputTypeFQ": "reliant.v1.DeleteConnectionResponse",
           "InputProtoFile": "reliant/v1/connection.proto",
-          "OutputProtoFile": "reliant/v1/connection.proto"
+          "OutputProtoFile": "reliant/v1/connection.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "connection",
+            "Implied": true,
+            "Writer": "INTERCEPTOR"
+          }
         },
         {
           "Name": "ListConnectionEvents",
@@ -1552,7 +1632,10 @@
           "InputTypeFQ": "reliant.v1.ListConnectionEventsRequest",
           "OutputTypeFQ": "reliant.v1.ListConnectionEventsResponse",
           "InputProtoFile": "reliant/v1/connection.proto",
-          "OutputProtoFile": "reliant/v1/connection.proto"
+          "OutputProtoFile": "reliant/v1/connection.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/connection.proto",
@@ -2287,7 +2370,10 @@
           "InputTypeFQ": "reliant.v1.ListModelsRequest",
           "OutputTypeFQ": "reliant.v1.ListModelsResponse",
           "InputProtoFile": "reliant/v1/catalog.proto",
-          "OutputProtoFile": "reliant/v1/catalog.proto"
+          "OutputProtoFile": "reliant/v1/catalog.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListModelsByProvider",
@@ -2300,7 +2386,10 @@
           "InputTypeFQ": "reliant.v1.ListModelsByProviderRequest",
           "OutputTypeFQ": "reliant.v1.ListModelsByProviderResponse",
           "InputProtoFile": "reliant/v1/catalog.proto",
-          "OutputProtoFile": "reliant/v1/catalog.proto"
+          "OutputProtoFile": "reliant/v1/catalog.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListAvailableModels",
@@ -2313,7 +2402,10 @@
           "InputTypeFQ": "reliant.v1.ListAvailableModelsRequest",
           "OutputTypeFQ": "reliant.v1.ListAvailableModelsResponse",
           "InputProtoFile": "reliant/v1/catalog.proto",
-          "OutputProtoFile": "reliant/v1/catalog.proto"
+          "OutputProtoFile": "reliant/v1/catalog.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListTools",
@@ -2326,7 +2418,10 @@
           "InputTypeFQ": "reliant.v1.ListToolsRequest",
           "OutputTypeFQ": "reliant.v1.ListToolsResponse",
           "InputProtoFile": "reliant/v1/catalog.proto",
-          "OutputProtoFile": "reliant/v1/catalog.proto"
+          "OutputProtoFile": "reliant/v1/catalog.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListNodes",
@@ -2339,7 +2434,10 @@
           "InputTypeFQ": "reliant.v1.ListNodesRequest",
           "OutputTypeFQ": "reliant.v1.ListNodesResponse",
           "InputProtoFile": "reliant/v1/catalog.proto",
-          "OutputProtoFile": "reliant/v1/catalog.proto"
+          "OutputProtoFile": "reliant/v1/catalog.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetCELCompletions",
@@ -2352,7 +2450,10 @@
           "InputTypeFQ": "reliant.v1.GetCELCompletionsRequest",
           "OutputTypeFQ": "reliant.v1.GetCELCompletionsResponse",
           "InputProtoFile": "reliant/v1/catalog.proto",
-          "OutputProtoFile": "reliant/v1/catalog.proto"
+          "OutputProtoFile": "reliant/v1/catalog.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "SearchCatalog",
@@ -2365,7 +2466,10 @@
           "InputTypeFQ": "reliant.v1.SearchCatalogRequest",
           "OutputTypeFQ": "reliant.v1.SearchCatalogResponse",
           "InputProtoFile": "reliant/v1/catalog.proto",
-          "OutputProtoFile": "reliant/v1/catalog.proto"
+          "OutputProtoFile": "reliant/v1/catalog.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetCatalogEntry",
@@ -2378,7 +2482,10 @@
           "InputTypeFQ": "reliant.v1.GetCatalogEntryRequest",
           "OutputTypeFQ": "reliant.v1.GetCatalogEntryResponse",
           "InputProtoFile": "reliant/v1/catalog.proto",
-          "OutputProtoFile": "reliant/v1/catalog.proto"
+          "OutputProtoFile": "reliant/v1/catalog.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListCatalogIntegrations",
@@ -2391,7 +2498,10 @@
           "InputTypeFQ": "reliant.v1.ListCatalogIntegrationsRequest",
           "OutputTypeFQ": "reliant.v1.ListCatalogIntegrationsResponse",
           "InputProtoFile": "reliant/v1/catalog.proto",
-          "OutputProtoFile": "reliant/v1/catalog.proto"
+          "OutputProtoFile": "reliant/v1/catalog.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/catalog.proto",
@@ -3575,7 +3685,15 @@
           "InputTypeFQ": "reliant.v1.CreateWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.CreateWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "worktree",
+            "Implied": true,
+            "Writer": "INTERCEPTOR"
+          }
         },
         {
           "Name": "ListWorktrees",
@@ -3589,7 +3707,10 @@
           "InputTypeFQ": "reliant.v1.ListWorktreesRequest",
           "OutputTypeFQ": "reliant.v1.ListWorktreesResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListArchivedWorktrees",
@@ -3603,7 +3724,10 @@
           "InputTypeFQ": "reliant.v1.ListArchivedWorktreesRequest",
           "OutputTypeFQ": "reliant.v1.ListArchivedWorktreesResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetWorktree",
@@ -3617,7 +3741,10 @@
           "InputTypeFQ": "reliant.v1.GetWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.GetWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdateWorktree",
@@ -3631,7 +3758,10 @@
           "InputTypeFQ": "reliant.v1.UpdateWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.UpdateWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeleteWorktree",
@@ -3645,7 +3775,10 @@
           "InputTypeFQ": "reliant.v1.DeleteWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.DeleteWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ArchiveWorktree",
@@ -3658,7 +3791,10 @@
           "InputTypeFQ": "reliant.v1.ArchiveWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.ArchiveWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "UnarchiveWorktree",
@@ -3671,7 +3807,10 @@
           "InputTypeFQ": "reliant.v1.UnarchiveWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.UnarchiveWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ImportWorktree",
@@ -3684,7 +3823,10 @@
           "InputTypeFQ": "reliant.v1.ImportWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.ImportWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DiscoverWorktrees",
@@ -3697,7 +3839,10 @@
           "InputTypeFQ": "reliant.v1.DiscoverWorktreesRequest",
           "OutputTypeFQ": "reliant.v1.DiscoverWorktreesResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "PruneWorktrees",
@@ -3710,7 +3855,10 @@
           "InputTypeFQ": "reliant.v1.PruneWorktreesRequest",
           "OutputTypeFQ": "reliant.v1.PruneWorktreesResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RecreateWorktree",
@@ -3723,7 +3871,10 @@
           "InputTypeFQ": "reliant.v1.RecreateWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.RecreateWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetWorktreeChanges",
@@ -3736,7 +3887,10 @@
           "InputTypeFQ": "reliant.v1.GetWorktreeChangesRequest",
           "OutputTypeFQ": "reliant.v1.GetWorktreeChangesResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetWorktreeGitStatus",
@@ -3749,7 +3903,10 @@
           "InputTypeFQ": "reliant.v1.GetWorktreeGitStatusRequest",
           "OutputTypeFQ": "reliant.v1.GetWorktreeGitStatusResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetWorktreeCommits",
@@ -3762,7 +3919,10 @@
           "InputTypeFQ": "reliant.v1.GetWorktreeCommitsRequest",
           "OutputTypeFQ": "reliant.v1.GetWorktreeCommitsResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListWorktreeRepoStatuses",
@@ -3775,7 +3935,10 @@
           "InputTypeFQ": "reliant.v1.ListWorktreeRepoStatusesRequest",
           "OutputTypeFQ": "reliant.v1.ListWorktreeRepoStatusesResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "StageFiles",
@@ -3788,7 +3951,10 @@
           "InputTypeFQ": "reliant.v1.StageFilesRequest",
           "OutputTypeFQ": "reliant.v1.StageFilesResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "UnstageFiles",
@@ -3801,7 +3967,10 @@
           "InputTypeFQ": "reliant.v1.UnstageFilesRequest",
           "OutputTypeFQ": "reliant.v1.UnstageFilesResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RevertFiles",
@@ -3814,7 +3983,10 @@
           "InputTypeFQ": "reliant.v1.RevertFilesRequest",
           "OutputTypeFQ": "reliant.v1.RevertFilesResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CommitWorktree",
@@ -3827,7 +3999,10 @@
           "InputTypeFQ": "reliant.v1.CommitWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.CommitWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "PushWorktree",
@@ -3840,7 +4015,10 @@
           "InputTypeFQ": "reliant.v1.PushWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.PushWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "PullWorktree",
@@ -3853,7 +4031,10 @@
           "InputTypeFQ": "reliant.v1.PullWorktreeRequest",
           "OutputTypeFQ": "reliant.v1.PullWorktreeResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetWorktreePR",
@@ -3866,7 +4047,10 @@
           "InputTypeFQ": "reliant.v1.GetWorktreePRRequest",
           "OutputTypeFQ": "reliant.v1.GetWorktreePRResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "CreateWorktreePR",
@@ -3879,7 +4063,10 @@
           "InputTypeFQ": "reliant.v1.CreateWorktreePRRequest",
           "OutputTypeFQ": "reliant.v1.CreateWorktreePRResponse",
           "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/worktree.proto",
@@ -5767,7 +5954,10 @@
           "InputTypeFQ": "reliant.v1.StartChatRequest",
           "OutputTypeFQ": "reliant.v1.StartChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RunNow",
@@ -5780,7 +5970,10 @@
           "InputTypeFQ": "reliant.v1.RunNowRequest",
           "OutputTypeFQ": "reliant.v1.RunNowResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "AdoptChat",
@@ -5793,7 +5986,10 @@
           "InputTypeFQ": "reliant.v1.AdoptChatRequest",
           "OutputTypeFQ": "reliant.v1.AdoptChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "UnadoptChat",
@@ -5806,7 +6002,10 @@
           "InputTypeFQ": "reliant.v1.UnadoptChatRequest",
           "OutputTypeFQ": "reliant.v1.UnadoptChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListChats",
@@ -5820,7 +6019,10 @@
           "InputTypeFQ": "reliant.v1.ListChatsRequest",
           "OutputTypeFQ": "reliant.v1.ListChatsResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetChat",
@@ -5834,7 +6036,10 @@
           "InputTypeFQ": "reliant.v1.GetChatRequest",
           "OutputTypeFQ": "reliant.v1.GetChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdateChat",
@@ -5848,7 +6053,10 @@
           "InputTypeFQ": "reliant.v1.UpdateChatRequest",
           "OutputTypeFQ": "reliant.v1.UpdateChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeleteChat",
@@ -5862,7 +6070,10 @@
           "InputTypeFQ": "reliant.v1.DeleteChatRequest",
           "OutputTypeFQ": "reliant.v1.DeleteChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "SearchChats",
@@ -5875,7 +6086,10 @@
           "InputTypeFQ": "reliant.v1.SearchChatsRequest",
           "OutputTypeFQ": "reliant.v1.SearchChatsResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListArchivedChats",
@@ -5888,7 +6102,10 @@
           "InputTypeFQ": "reliant.v1.ListArchivedChatsRequest",
           "OutputTypeFQ": "reliant.v1.ListArchivedChatsResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "SendMessage",
@@ -5901,7 +6118,10 @@
           "InputTypeFQ": "reliant.v1.SendMessageRequest",
           "OutputTypeFQ": "reliant.v1.SendMessageResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "SendAgentMessage",
@@ -5914,7 +6134,10 @@
           "InputTypeFQ": "reliant.v1.SendAgentMessageRequest",
           "OutputTypeFQ": "reliant.v1.SendAgentMessageResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListQueuedAgentMessages",
@@ -5927,7 +6150,10 @@
           "InputTypeFQ": "reliant.v1.ListQueuedAgentMessagesRequest",
           "OutputTypeFQ": "reliant.v1.ListQueuedAgentMessagesResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "CancelQueuedAgentMessage",
@@ -5940,7 +6166,10 @@
           "InputTypeFQ": "reliant.v1.CancelQueuedAgentMessageRequest",
           "OutputTypeFQ": "reliant.v1.CancelQueuedAgentMessageResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "InterruptThread",
@@ -5953,7 +6182,10 @@
           "InputTypeFQ": "reliant.v1.InterruptThreadRequest",
           "OutputTypeFQ": "reliant.v1.InterruptThreadResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListMessages",
@@ -5967,7 +6199,10 @@
           "InputTypeFQ": "reliant.v1.ListMessagesRequest",
           "OutputTypeFQ": "reliant.v1.ListMessagesResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdateChatState",
@@ -5980,7 +6215,10 @@
           "InputTypeFQ": "reliant.v1.UpdateChatStateRequest",
           "OutputTypeFQ": "reliant.v1.UpdateChatStateResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "TerminateChat",
@@ -5993,7 +6231,10 @@
           "InputTypeFQ": "reliant.v1.TerminateChatRequest",
           "OutputTypeFQ": "reliant.v1.TerminateChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "PauseChat",
@@ -6006,7 +6247,10 @@
           "InputTypeFQ": "reliant.v1.PauseChatRequest",
           "OutputTypeFQ": "reliant.v1.PauseChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ResumeChat",
@@ -6019,7 +6263,10 @@
           "InputTypeFQ": "reliant.v1.ResumeChatRequest",
           "OutputTypeFQ": "reliant.v1.ResumeChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RetryUsageLimitWait",
@@ -6032,7 +6279,10 @@
           "InputTypeFQ": "reliant.v1.RetryUsageLimitWaitRequest",
           "OutputTypeFQ": "reliant.v1.RetryUsageLimitWaitResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DismissChat",
@@ -6045,7 +6295,10 @@
           "InputTypeFQ": "reliant.v1.DismissChatRequest",
           "OutputTypeFQ": "reliant.v1.DismissChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "MarkUnreadChat",
@@ -6058,7 +6311,10 @@
           "InputTypeFQ": "reliant.v1.MarkUnreadChatRequest",
           "OutputTypeFQ": "reliant.v1.MarkUnreadChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CompactChat",
@@ -6071,7 +6327,10 @@
           "InputTypeFQ": "reliant.v1.CompactChatRequest",
           "OutputTypeFQ": "reliant.v1.CompactChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "BranchChat",
@@ -6084,7 +6343,10 @@
           "InputTypeFQ": "reliant.v1.BranchChatRequest",
           "OutputTypeFQ": "reliant.v1.BranchChatResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListBranches",
@@ -6097,7 +6359,10 @@
           "InputTypeFQ": "reliant.v1.ListBranchesRequest",
           "OutputTypeFQ": "reliant.v1.ListBranchesResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdateWorkflowParams",
@@ -6110,7 +6375,10 @@
           "InputTypeFQ": "reliant.v1.UpdateWorkflowParamsRequest",
           "OutputTypeFQ": "reliant.v1.UpdateWorkflowParamsResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "UpdateChatProviderPolicy",
@@ -6123,7 +6391,10 @@
           "InputTypeFQ": "reliant.v1.UpdateChatProviderPolicyRequest",
           "OutputTypeFQ": "reliant.v1.UpdateChatProviderPolicyResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetChatUpdates",
@@ -6136,7 +6407,10 @@
           "InputTypeFQ": "reliant.v1.GetChatUpdatesRequest",
           "OutputTypeFQ": "reliant.v1.GetChatUpdatesResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListChatPlans",
@@ -6149,7 +6423,10 @@
           "InputTypeFQ": "reliant.v1.ListChatPlansRequest",
           "OutputTypeFQ": "reliant.v1.ListChatPlansResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetWorkflowExecutions",
@@ -6162,7 +6439,10 @@
           "InputTypeFQ": "reliant.v1.GetWorkflowExecutionsRequest",
           "OutputTypeFQ": "reliant.v1.GetWorkflowExecutionsResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListStepExecutions",
@@ -6176,7 +6456,10 @@
           "InputTypeFQ": "reliant.v1.ListStepExecutionsRequest",
           "OutputTypeFQ": "reliant.v1.ListStepExecutionsResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetThreadWorkflowInputs",
@@ -6189,7 +6472,10 @@
           "InputTypeFQ": "reliant.v1.GetThreadWorkflowInputsRequest",
           "OutputTypeFQ": "reliant.v1.GetThreadWorkflowInputsResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "SetChatDaemon",
@@ -6202,7 +6488,10 @@
           "InputTypeFQ": "reliant.v1.SetChatDaemonRequest",
           "OutputTypeFQ": "reliant.v1.SetChatDaemonResponse",
           "InputProtoFile": "reliant/v1/chat.proto",
-          "OutputProtoFile": "reliant/v1/chat.proto"
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/chat.proto",
@@ -9426,7 +9715,15 @@
           "InputTypeFQ": "reliant.v1.CreateConnectorRequest",
           "OutputTypeFQ": "reliant.v1.CreateConnectorResponse",
           "InputProtoFile": "reliant/v1/connector.proto",
-          "OutputProtoFile": "reliant/v1/connector.proto"
+          "OutputProtoFile": "reliant/v1/connector.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "connector",
+            "Implied": true,
+            "Writer": "INTERCEPTOR"
+          }
         },
         {
           "Name": "ListConnectors",
@@ -9439,7 +9736,10 @@
           "InputTypeFQ": "reliant.v1.ListConnectorsRequest",
           "OutputTypeFQ": "reliant.v1.ListConnectorsResponse",
           "InputProtoFile": "reliant/v1/connector.proto",
-          "OutputProtoFile": "reliant/v1/connector.proto"
+          "OutputProtoFile": "reliant/v1/connector.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "RevokeConnector",
@@ -9452,7 +9752,10 @@
           "InputTypeFQ": "reliant.v1.RevokeConnectorRequest",
           "OutputTypeFQ": "reliant.v1.RevokeConnectorResponse",
           "InputProtoFile": "reliant/v1/connector.proto",
-          "OutputProtoFile": "reliant/v1/connector.proto"
+          "OutputProtoFile": "reliant/v1/connector.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListConnectorActivity",
@@ -9465,7 +9768,10 @@
           "InputTypeFQ": "reliant.v1.ListConnectorActivityRequest",
           "OutputTypeFQ": "reliant.v1.ListConnectorActivityResponse",
           "InputProtoFile": "reliant/v1/connector.proto",
-          "OutputProtoFile": "reliant/v1/connector.proto"
+          "OutputProtoFile": "reliant/v1/connector.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListAvailableTools",
@@ -9478,7 +9784,10 @@
           "InputTypeFQ": "reliant.v1.ListAvailableToolsRequest",
           "OutputTypeFQ": "reliant.v1.ListAvailableToolsResponse",
           "InputProtoFile": "reliant/v1/connector.proto",
-          "OutputProtoFile": "reliant/v1/connector.proto"
+          "OutputProtoFile": "reliant/v1/connector.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "AuthorizeClient",
@@ -9491,7 +9800,10 @@
           "InputTypeFQ": "reliant.v1.AuthorizeClientRequest",
           "OutputTypeFQ": "reliant.v1.AuthorizeClientResponse",
           "InputProtoFile": "reliant/v1/connector.proto",
-          "OutputProtoFile": "reliant/v1/connector.proto"
+          "OutputProtoFile": "reliant/v1/connector.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListAuthorizedClients",
@@ -9504,7 +9816,10 @@
           "InputTypeFQ": "reliant.v1.ListAuthorizedClientsRequest",
           "OutputTypeFQ": "reliant.v1.ListAuthorizedClientsResponse",
           "InputProtoFile": "reliant/v1/connector.proto",
-          "OutputProtoFile": "reliant/v1/connector.proto"
+          "OutputProtoFile": "reliant/v1/connector.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "RevokeClientAuthorization",
@@ -9517,7 +9832,10 @@
           "InputTypeFQ": "reliant.v1.RevokeClientAuthorizationRequest",
           "OutputTypeFQ": "reliant.v1.RevokeClientAuthorizationResponse",
           "InputProtoFile": "reliant/v1/connector.proto",
-          "OutputProtoFile": "reliant/v1/connector.proto"
+          "OutputProtoFile": "reliant/v1/connector.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/connector.proto",
@@ -10049,7 +10367,10 @@
           "InputTypeFQ": "reliant.v1.StartOAuthFlowRequest",
           "OutputTypeFQ": "reliant.v1.StartOAuthFlowResponse",
           "InputProtoFile": "reliant/v1/daemon.proto",
-          "OutputProtoFile": "reliant/v1/daemon.proto"
+          "OutputProtoFile": "reliant/v1/daemon.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "OpenOAuthHelper",
@@ -10062,7 +10383,10 @@
           "InputTypeFQ": "reliant.v1.OpenOAuthHelperRequest",
           "OutputTypeFQ": "reliant.v1.OpenOAuthHelperResponse",
           "InputProtoFile": "reliant/v1/daemon.proto",
-          "OutputProtoFile": "reliant/v1/daemon.proto"
+          "OutputProtoFile": "reliant/v1/daemon.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CloseOAuthHelper",
@@ -10075,7 +10399,10 @@
           "InputTypeFQ": "reliant.v1.CloseOAuthHelperRequest",
           "OutputTypeFQ": "reliant.v1.CloseOAuthHelperResponse",
           "InputProtoFile": "reliant/v1/daemon.proto",
-          "OutputProtoFile": "reliant/v1/daemon.proto"
+          "OutputProtoFile": "reliant/v1/daemon.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/daemon.proto",
@@ -10214,7 +10541,10 @@
           "InputTypeFQ": "reliant.v1.DaemonMessage",
           "OutputTypeFQ": "reliant.v1.ServerMessage",
           "InputProtoFile": "reliant/v1/tools_daemon.proto",
-          "OutputProtoFile": "reliant/v1/tools_daemon.proto"
+          "OutputProtoFile": "reliant/v1/tools_daemon.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ConnectGateway",
@@ -10227,7 +10557,10 @@
           "InputTypeFQ": "reliant.v1.ServerMessage",
           "OutputTypeFQ": "reliant.v1.DaemonMessage",
           "InputProtoFile": "reliant/v1/tools_daemon.proto",
-          "OutputProtoFile": "reliant/v1/tools_daemon.proto"
+          "OutputProtoFile": "reliant/v1/tools_daemon.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ReportToolResult",
@@ -10240,7 +10573,10 @@
           "InputTypeFQ": "reliant.v1.ReportToolResultRequest",
           "OutputTypeFQ": "reliant.v1.ReportToolResultResponse",
           "InputProtoFile": "reliant/v1/tools_daemon.proto",
-          "OutputProtoFile": "reliant/v1/tools_daemon.proto"
+          "OutputProtoFile": "reliant/v1/tools_daemon.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "WhoAmI",
@@ -10253,7 +10589,10 @@
           "InputTypeFQ": "reliant.v1.WhoAmIRequest",
           "OutputTypeFQ": "reliant.v1.WhoAmIResponse",
           "InputProtoFile": "reliant/v1/tools_daemon.proto",
-          "OutputProtoFile": "reliant/v1/tools_daemon.proto"
+          "OutputProtoFile": "reliant/v1/tools_daemon.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/tools_daemon.proto",
@@ -11968,7 +12307,10 @@
           "InputTypeFQ": "reliant.v1.ListDaemonsRequest",
           "OutputTypeFQ": "reliant.v1.ListDaemonsResponse",
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
-          "OutputProtoFile": "reliant/v1/daemon_registry.proto"
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetDaemon",
@@ -11981,7 +12323,10 @@
           "InputTypeFQ": "reliant.v1.GetDaemonRequest",
           "OutputTypeFQ": "reliant.v1.GetDaemonResponse",
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
-          "OutputProtoFile": "reliant/v1/daemon_registry.proto"
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ResolveDaemon",
@@ -11994,7 +12339,10 @@
           "InputTypeFQ": "reliant.v1.ResolveDaemonRequest",
           "OutputTypeFQ": "reliant.v1.ResolveDaemonResponse",
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
-          "OutputProtoFile": "reliant/v1/daemon_registry.proto"
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ResumeDaemon",
@@ -12007,7 +12355,10 @@
           "InputTypeFQ": "reliant.v1.ResumeDaemonRequest",
           "OutputTypeFQ": "reliant.v1.ResumeDaemonResponse",
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
-          "OutputProtoFile": "reliant/v1/daemon_registry.proto"
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RefreshLocalModels",
@@ -12020,7 +12371,10 @@
           "InputTypeFQ": "reliant.v1.RefreshLocalModelsRequest",
           "OutputTypeFQ": "reliant.v1.RefreshLocalModelsResponse",
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
-          "OutputProtoFile": "reliant/v1/daemon_registry.proto"
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "SetLocalModelEndpoints",
@@ -12033,7 +12387,10 @@
           "InputTypeFQ": "reliant.v1.SetLocalModelEndpointsRequest",
           "OutputTypeFQ": "reliant.v1.SetLocalModelEndpointsResponse",
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
-          "OutputProtoFile": "reliant/v1/daemon_registry.proto"
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ClearMachineCaches",
@@ -12046,7 +12403,10 @@
           "InputTypeFQ": "reliant.v1.ClearMachineCachesRequest",
           "OutputTypeFQ": "reliant.v1.ClearMachineCachesResponse",
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
-          "OutputProtoFile": "reliant/v1/daemon_registry.proto"
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/daemon_registry.proto",
@@ -12754,7 +13114,10 @@
           "InputTypeFQ": "reliant.v1.GetFileTreeRequest",
           "OutputTypeFQ": "reliant.v1.GetFileTreeResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetFileContent",
@@ -12767,7 +13130,10 @@
           "InputTypeFQ": "reliant.v1.GetFileContentRequest",
           "OutputTypeFQ": "reliant.v1.GetFileContentResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "SaveFileContent",
@@ -12780,7 +13146,10 @@
           "InputTypeFQ": "reliant.v1.SaveFileContentRequest",
           "OutputTypeFQ": "reliant.v1.SaveFileContentResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetFileMetadata",
@@ -12793,7 +13162,10 @@
           "InputTypeFQ": "reliant.v1.GetFileMetadataRequest",
           "OutputTypeFQ": "reliant.v1.GetFileMetadataResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetFilePreviewInfo",
@@ -12806,7 +13178,10 @@
           "InputTypeFQ": "reliant.v1.GetFilePreviewInfoRequest",
           "OutputTypeFQ": "reliant.v1.GetFilePreviewInfoResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetFilePreview",
@@ -12819,7 +13194,10 @@
           "InputTypeFQ": "reliant.v1.GetFilePreviewRequest",
           "OutputTypeFQ": "reliant.v1.GetFilePreviewResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "CreateFileOrFolder",
@@ -12832,7 +13210,10 @@
           "InputTypeFQ": "reliant.v1.CreateFileOrFolderRequest",
           "OutputTypeFQ": "reliant.v1.CreateFileOrFolderResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeleteFileOrFolder",
@@ -12845,7 +13226,10 @@
           "InputTypeFQ": "reliant.v1.DeleteFileOrFolderRequest",
           "OutputTypeFQ": "reliant.v1.DeleteFileOrFolderResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CopyFile",
@@ -12858,7 +13242,10 @@
           "InputTypeFQ": "reliant.v1.CopyFileRequest",
           "OutputTypeFQ": "reliant.v1.CopyFileResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "SearchFiles",
@@ -12871,7 +13258,10 @@
           "InputTypeFQ": "reliant.v1.SearchFilesRequest",
           "OutputTypeFQ": "reliant.v1.SearchFilesResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ReplaceInFiles",
@@ -12884,7 +13274,10 @@
           "InputTypeFQ": "reliant.v1.ReplaceInFilesRequest",
           "OutputTypeFQ": "reliant.v1.ReplaceInFilesResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListDirectory",
@@ -12897,7 +13290,10 @@
           "InputTypeFQ": "reliant.v1.ListDirectoryRequest",
           "OutputTypeFQ": "reliant.v1.ListDirectoryResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "CreateDirectory",
@@ -12910,7 +13306,10 @@
           "InputTypeFQ": "reliant.v1.CreateDirectoryRequest",
           "OutputTypeFQ": "reliant.v1.CreateDirectoryResponse",
           "InputProtoFile": "reliant/v1/filesystem.proto",
-          "OutputProtoFile": "reliant/v1/filesystem.proto"
+          "OutputProtoFile": "reliant/v1/filesystem.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/filesystem.proto",
@@ -14128,7 +14527,10 @@
           "InputTypeFQ": "reliant.v1.GetForgeTopologyRequest",
           "OutputTypeFQ": "reliant.v1.GetForgeTopologyResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
+          "OutputProtoFile": "reliant/v1/forge.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "VerifyEnv",
@@ -14141,7 +14543,10 @@
           "InputTypeFQ": "reliant.v1.VerifyForgeEnvRequest",
           "OutputTypeFQ": "reliant.v1.VerifyForgeEnvResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
+          "OutputProtoFile": "reliant/v1/forge.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListSecrets",
@@ -14154,7 +14559,10 @@
           "InputTypeFQ": "reliant.v1.ListForgeSecretsRequest",
           "OutputTypeFQ": "reliant.v1.ListForgeSecretsResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
+          "OutputProtoFile": "reliant/v1/forge.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetEnvStatus",
@@ -14167,7 +14575,10 @@
           "InputTypeFQ": "reliant.v1.GetForgeEnvStatusRequest",
           "OutputTypeFQ": "reliant.v1.GetForgeEnvStatusResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
+          "OutputProtoFile": "reliant/v1/forge.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetEnvShape",
@@ -14180,7 +14591,10 @@
           "InputTypeFQ": "reliant.v1.GetForgeEnvShapeRequest",
           "OutputTypeFQ": "reliant.v1.GetForgeEnvShapeResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
+          "OutputProtoFile": "reliant/v1/forge.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "PlanPromote",
@@ -14193,7 +14607,10 @@
           "InputTypeFQ": "reliant.v1.PlanForgePromoteRequest",
           "OutputTypeFQ": "reliant.v1.PlanForgePromoteResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
+          "OutputProtoFile": "reliant/v1/forge.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ApplyPromote",
@@ -14206,7 +14623,10 @@
           "InputTypeFQ": "reliant.v1.PromoteForgeEnvRequest",
           "OutputTypeFQ": "reliant.v1.PromoteForgeEnvResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
+          "OutputProtoFile": "reliant/v1/forge.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "PlanDeploy",
@@ -14219,7 +14639,10 @@
           "InputTypeFQ": "reliant.v1.PlanForgeDeployRequest",
           "OutputTypeFQ": "reliant.v1.PlanForgeDeployResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
+          "OutputProtoFile": "reliant/v1/forge.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "StartDeployPlan",
@@ -14232,7 +14655,10 @@
           "InputTypeFQ": "reliant.v1.StartForgeDeployPlanRequest",
           "OutputTypeFQ": "reliant.v1.StartForgeDeployResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
+          "OutputProtoFile": "reliant/v1/forge.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "StartDeploy",
@@ -14245,7 +14671,10 @@
           "InputTypeFQ": "reliant.v1.StartForgeDeployRequest",
           "OutputTypeFQ": "reliant.v1.StartForgeDeployResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
+          "OutputProtoFile": "reliant/v1/forge.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetDeployStatus",
@@ -14258,7 +14687,10 @@
           "InputTypeFQ": "reliant.v1.GetForgeDeployStatusRequest",
           "OutputTypeFQ": "reliant.v1.GetForgeDeployStatusResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
-          "OutputProtoFile": "reliant/v1/forge.proto"
+          "OutputProtoFile": "reliant/v1/forge.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/forge.proto",
@@ -15190,7 +15622,10 @@
           "InputTypeFQ": "reliant.v1.StartRunRequest",
           "OutputTypeFQ": "reliant.v1.StartRunResponse",
           "InputProtoFile": "reliant/v1/run.proto",
-          "OutputProtoFile": "reliant/v1/run.proto"
+          "OutputProtoFile": "reliant/v1/run.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "SignalRun",
@@ -15203,7 +15638,10 @@
           "InputTypeFQ": "reliant.v1.SignalRunRequest",
           "OutputTypeFQ": "reliant.v1.SignalRunResponse",
           "InputProtoFile": "reliant/v1/run.proto",
-          "OutputProtoFile": "reliant/v1/run.proto"
+          "OutputProtoFile": "reliant/v1/run.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetRun",
@@ -15216,7 +15654,10 @@
           "InputTypeFQ": "reliant.v1.GetRunRequest",
           "OutputTypeFQ": "reliant.v1.GetRunResponse",
           "InputProtoFile": "reliant/v1/run.proto",
-          "OutputProtoFile": "reliant/v1/run.proto"
+          "OutputProtoFile": "reliant/v1/run.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListRuns",
@@ -15229,7 +15670,10 @@
           "InputTypeFQ": "reliant.v1.ListRunsRequest",
           "OutputTypeFQ": "reliant.v1.ListRunsResponse",
           "InputProtoFile": "reliant/v1/run.proto",
-          "OutputProtoFile": "reliant/v1/run.proto"
+          "OutputProtoFile": "reliant/v1/run.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "LastRunPerWorkflow",
@@ -15242,7 +15686,10 @@
           "InputTypeFQ": "reliant.v1.LastRunPerWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.LastRunPerWorkflowResponse",
           "InputProtoFile": "reliant/v1/run.proto",
-          "OutputProtoFile": "reliant/v1/run.proto"
+          "OutputProtoFile": "reliant/v1/run.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "PauseRun",
@@ -15255,7 +15702,10 @@
           "InputTypeFQ": "reliant.v1.PauseRunRequest",
           "OutputTypeFQ": "reliant.v1.PauseRunResponse",
           "InputProtoFile": "reliant/v1/run.proto",
-          "OutputProtoFile": "reliant/v1/run.proto"
+          "OutputProtoFile": "reliant/v1/run.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ResumeRun",
@@ -15268,7 +15718,10 @@
           "InputTypeFQ": "reliant.v1.ResumeRunRequest",
           "OutputTypeFQ": "reliant.v1.ResumeRunResponse",
           "InputProtoFile": "reliant/v1/run.proto",
-          "OutputProtoFile": "reliant/v1/run.proto"
+          "OutputProtoFile": "reliant/v1/run.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CancelRun",
@@ -15281,7 +15734,10 @@
           "InputTypeFQ": "reliant.v1.CancelRunRequest",
           "OutputTypeFQ": "reliant.v1.CancelRunResponse",
           "InputProtoFile": "reliant/v1/run.proto",
-          "OutputProtoFile": "reliant/v1/run.proto"
+          "OutputProtoFile": "reliant/v1/run.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "InterruptRun",
@@ -15294,7 +15750,10 @@
           "InputTypeFQ": "reliant.v1.InterruptRunRequest",
           "OutputTypeFQ": "reliant.v1.InterruptRunResponse",
           "InputProtoFile": "reliant/v1/run.proto",
-          "OutputProtoFile": "reliant/v1/run.proto"
+          "OutputProtoFile": "reliant/v1/run.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/run.proto",
@@ -16146,7 +16605,15 @@
           "InputTypeFQ": "reliant.v1.CreateTriggerRequest",
           "OutputTypeFQ": "reliant.v1.CreateTriggerResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "trigger",
+            "Implied": true,
+            "Writer": "INTERCEPTOR"
+          }
         },
         {
           "Name": "GetTrigger",
@@ -16160,7 +16627,10 @@
           "InputTypeFQ": "reliant.v1.GetTriggerRequest",
           "OutputTypeFQ": "reliant.v1.GetTriggerResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListTriggers",
@@ -16174,7 +16644,10 @@
           "InputTypeFQ": "reliant.v1.ListTriggersRequest",
           "OutputTypeFQ": "reliant.v1.ListTriggersResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdateTrigger",
@@ -16188,7 +16661,10 @@
           "InputTypeFQ": "reliant.v1.UpdateTriggerRequest",
           "OutputTypeFQ": "reliant.v1.UpdateTriggerResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeleteTrigger",
@@ -16202,7 +16678,15 @@
           "InputTypeFQ": "reliant.v1.DeleteTriggerRequest",
           "OutputTypeFQ": "reliant.v1.DeleteTriggerResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "trigger",
+            "Implied": true,
+            "Writer": "INTERCEPTOR"
+          }
         },
         {
           "Name": "SetTriggerEnabled",
@@ -16215,7 +16699,10 @@
           "InputTypeFQ": "reliant.v1.SetTriggerEnabledRequest",
           "OutputTypeFQ": "reliant.v1.SetTriggerEnabledResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "FireTrigger",
@@ -16228,7 +16715,10 @@
           "InputTypeFQ": "reliant.v1.FireTriggerRequest",
           "OutputTypeFQ": "reliant.v1.FireTriggerResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListTriggerEvents",
@@ -16242,7 +16732,10 @@
           "InputTypeFQ": "reliant.v1.ListTriggerEventsRequest",
           "OutputTypeFQ": "reliant.v1.ListTriggerEventsResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetLaunchEvent",
@@ -16255,7 +16748,10 @@
           "InputTypeFQ": "reliant.v1.GetLaunchEventRequest",
           "OutputTypeFQ": "reliant.v1.GetLaunchEventResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "RotateWebhookToken",
@@ -16268,7 +16764,10 @@
           "InputTypeFQ": "reliant.v1.RotateWebhookTokenRequest",
           "OutputTypeFQ": "reliant.v1.RotateWebhookTokenResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "EnableWorkflow",
@@ -16281,7 +16780,10 @@
           "InputTypeFQ": "reliant.v1.EnableWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.EnableWorkflowResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DisableWorkflow",
@@ -16294,7 +16796,10 @@
           "InputTypeFQ": "reliant.v1.DisableWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.DisableWorkflowResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ResolveTriggerSenders",
@@ -16307,7 +16812,10 @@
           "InputTypeFQ": "reliant.v1.ResolveTriggerSendersRequest",
           "OutputTypeFQ": "reliant.v1.ResolveTriggerSendersResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListReplayEvents",
@@ -16320,7 +16828,10 @@
           "InputTypeFQ": "reliant.v1.ListReplayEventsRequest",
           "OutputTypeFQ": "reliant.v1.ListReplayEventsResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "PreviewReplay",
@@ -16333,7 +16844,10 @@
           "InputTypeFQ": "reliant.v1.PreviewReplayRequest",
           "OutputTypeFQ": "reliant.v1.PreviewReplayResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
-          "OutputProtoFile": "reliant/v1/trigger.proto"
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/trigger.proto",
@@ -17880,7 +18394,10 @@
           "InputTypeFQ": "reliant.v1.ListInboxRequest",
           "OutputTypeFQ": "reliant.v1.ListInboxResponse",
           "InputProtoFile": "reliant/v1/inbox.proto",
-          "OutputProtoFile": "reliant/v1/inbox.proto"
+          "OutputProtoFile": "reliant/v1/inbox.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "CleanupStorage",
@@ -17893,7 +18410,10 @@
           "InputTypeFQ": "reliant.v1.CleanupStorageRequest",
           "OutputTypeFQ": "reliant.v1.CleanupStorageResponse",
           "InputProtoFile": "reliant/v1/inbox.proto",
-          "OutputProtoFile": "reliant/v1/inbox.proto"
+          "OutputProtoFile": "reliant/v1/inbox.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DismissInboxItem",
@@ -17906,7 +18426,10 @@
           "InputTypeFQ": "reliant.v1.DismissInboxItemRequest",
           "OutputTypeFQ": "reliant.v1.DismissInboxItemResponse",
           "InputProtoFile": "reliant/v1/inbox.proto",
-          "OutputProtoFile": "reliant/v1/inbox.proto"
+          "OutputProtoFile": "reliant/v1/inbox.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RestoreInboxItem",
@@ -17919,7 +18442,10 @@
           "InputTypeFQ": "reliant.v1.RestoreInboxItemRequest",
           "OutputTypeFQ": "reliant.v1.RestoreInboxItemResponse",
           "InputProtoFile": "reliant/v1/inbox.proto",
-          "OutputProtoFile": "reliant/v1/inbox.proto"
+          "OutputProtoFile": "reliant/v1/inbox.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/inbox.proto",
@@ -18579,7 +19105,10 @@
           "InputTypeFQ": "reliant.v1.ListServersRequest",
           "OutputTypeFQ": "reliant.v1.ListServersResponse",
           "InputProtoFile": "reliant/v1/mcp.proto",
-          "OutputProtoFile": "reliant/v1/mcp.proto"
+          "OutputProtoFile": "reliant/v1/mcp.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetServer",
@@ -18593,7 +19122,10 @@
           "InputTypeFQ": "reliant.v1.GetServerRequest",
           "OutputTypeFQ": "reliant.v1.GetServerResponse",
           "InputProtoFile": "reliant/v1/mcp.proto",
-          "OutputProtoFile": "reliant/v1/mcp.proto"
+          "OutputProtoFile": "reliant/v1/mcp.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetServerTools",
@@ -18606,7 +19138,10 @@
           "InputTypeFQ": "reliant.v1.GetServerToolsRequest",
           "OutputTypeFQ": "reliant.v1.GetServerToolsResponse",
           "InputProtoFile": "reliant/v1/mcp.proto",
-          "OutputProtoFile": "reliant/v1/mcp.proto"
+          "OutputProtoFile": "reliant/v1/mcp.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "InstallServer",
@@ -18619,7 +19154,10 @@
           "InputTypeFQ": "reliant.v1.InstallServerRequest",
           "OutputTypeFQ": "reliant.v1.InstallServerResponse",
           "InputProtoFile": "reliant/v1/mcp.proto",
-          "OutputProtoFile": "reliant/v1/mcp.proto"
+          "OutputProtoFile": "reliant/v1/mcp.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "UninstallServer",
@@ -18632,7 +19170,10 @@
           "InputTypeFQ": "reliant.v1.UninstallServerRequest",
           "OutputTypeFQ": "reliant.v1.UninstallServerResponse",
           "InputProtoFile": "reliant/v1/mcp.proto",
-          "OutputProtoFile": "reliant/v1/mcp.proto"
+          "OutputProtoFile": "reliant/v1/mcp.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RestartServer",
@@ -18645,7 +19186,10 @@
           "InputTypeFQ": "reliant.v1.RestartServerRequest",
           "OutputTypeFQ": "reliant.v1.RestartServerResponse",
           "InputProtoFile": "reliant/v1/mcp.proto",
-          "OutputProtoFile": "reliant/v1/mcp.proto"
+          "OutputProtoFile": "reliant/v1/mcp.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListRecommended",
@@ -18658,7 +19202,10 @@
           "InputTypeFQ": "reliant.v1.ListRecommendedRequest",
           "OutputTypeFQ": "reliant.v1.ListRecommendedResponse",
           "InputProtoFile": "reliant/v1/mcp.proto",
-          "OutputProtoFile": "reliant/v1/mcp.proto"
+          "OutputProtoFile": "reliant/v1/mcp.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdateServerConfig",
@@ -18671,7 +19218,10 @@
           "InputTypeFQ": "reliant.v1.UpdateServerConfigRequest",
           "OutputTypeFQ": "reliant.v1.UpdateServerConfigResponse",
           "InputProtoFile": "reliant/v1/mcp.proto",
-          "OutputProtoFile": "reliant/v1/mcp.proto"
+          "OutputProtoFile": "reliant/v1/mcp.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "SetServerEnabled",
@@ -18684,7 +19234,10 @@
           "InputTypeFQ": "reliant.v1.SetServerEnabledRequest",
           "OutputTypeFQ": "reliant.v1.SetServerEnabledResponse",
           "InputProtoFile": "reliant/v1/mcp.proto",
-          "OutputProtoFile": "reliant/v1/mcp.proto"
+          "OutputProtoFile": "reliant/v1/mcp.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "MoveServerScope",
@@ -18697,7 +19250,10 @@
           "InputTypeFQ": "reliant.v1.MoveServerScopeRequest",
           "OutputTypeFQ": "reliant.v1.MoveServerScopeResponse",
           "InputProtoFile": "reliant/v1/mcp.proto",
-          "OutputProtoFile": "reliant/v1/mcp.proto"
+          "OutputProtoFile": "reliant/v1/mcp.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/mcp.proto",
@@ -19537,7 +20093,10 @@
           "InputTypeFQ": "reliant.v1.GetMessageRequest",
           "OutputTypeFQ": "reliant.v1.GetMessageResponse",
           "InputProtoFile": "reliant/v1/message.proto",
-          "OutputProtoFile": "reliant/v1/message.proto"
+          "OutputProtoFile": "reliant/v1/message.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/message.proto",
@@ -19905,7 +20464,10 @@
           "InputTypeFQ": "reliant.v1.ListModelEndpointsRequest",
           "OutputTypeFQ": "reliant.v1.ListModelEndpointsResponse",
           "InputProtoFile": "reliant/v1/model_endpoint.proto",
-          "OutputProtoFile": "reliant/v1/model_endpoint.proto"
+          "OutputProtoFile": "reliant/v1/model_endpoint.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "CreateModelEndpoint",
@@ -19919,7 +20481,15 @@
           "InputTypeFQ": "reliant.v1.CreateModelEndpointRequest",
           "OutputTypeFQ": "reliant.v1.CreateModelEndpointResponse",
           "InputProtoFile": "reliant/v1/model_endpoint.proto",
-          "OutputProtoFile": "reliant/v1/model_endpoint.proto"
+          "OutputProtoFile": "reliant/v1/model_endpoint.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "model_endpoint",
+            "Implied": true,
+            "Writer": "INTERCEPTOR"
+          }
         },
         {
           "Name": "UpdateModelEndpoint",
@@ -19933,7 +20503,10 @@
           "InputTypeFQ": "reliant.v1.UpdateModelEndpointRequest",
           "OutputTypeFQ": "reliant.v1.UpdateModelEndpointResponse",
           "InputProtoFile": "reliant/v1/model_endpoint.proto",
-          "OutputProtoFile": "reliant/v1/model_endpoint.proto"
+          "OutputProtoFile": "reliant/v1/model_endpoint.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeleteModelEndpoint",
@@ -19947,7 +20520,15 @@
           "InputTypeFQ": "reliant.v1.DeleteModelEndpointRequest",
           "OutputTypeFQ": "reliant.v1.DeleteModelEndpointResponse",
           "InputProtoFile": "reliant/v1/model_endpoint.proto",
-          "OutputProtoFile": "reliant/v1/model_endpoint.proto"
+          "OutputProtoFile": "reliant/v1/model_endpoint.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "model_endpoint",
+            "Implied": true,
+            "Writer": "INTERCEPTOR"
+          }
         },
         {
           "Name": "TestModelEndpoint",
@@ -19960,7 +20541,10 @@
           "InputTypeFQ": "reliant.v1.TestModelEndpointRequest",
           "OutputTypeFQ": "reliant.v1.TestModelEndpointResponse",
           "InputProtoFile": "reliant/v1/model_endpoint.proto",
-          "OutputProtoFile": "reliant/v1/model_endpoint.proto"
+          "OutputProtoFile": "reliant/v1/model_endpoint.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/model_endpoint.proto",
@@ -20369,7 +20953,10 @@
           "InputTypeFQ": "reliant.v1.ListPackageCommandsRequest",
           "OutputTypeFQ": "reliant.v1.ListPackageCommandsResponse",
           "InputProtoFile": "reliant/v1/package_commands.proto",
-          "OutputProtoFile": "reliant/v1/package_commands.proto"
+          "OutputProtoFile": "reliant/v1/package_commands.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "RunCommand",
@@ -20382,7 +20969,10 @@
           "InputTypeFQ": "reliant.v1.RunPackageCommandRequest",
           "OutputTypeFQ": "reliant.v1.RunPackageCommandResponse",
           "InputProtoFile": "reliant/v1/package_commands.proto",
-          "OutputProtoFile": "reliant/v1/package_commands.proto"
+          "OutputProtoFile": "reliant/v1/package_commands.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListProcesses",
@@ -20395,7 +20985,10 @@
           "InputTypeFQ": "reliant.v1.ListPackageProcessesRequest",
           "OutputTypeFQ": "reliant.v1.ListPackageProcessesResponse",
           "InputProtoFile": "reliant/v1/package_commands.proto",
-          "OutputProtoFile": "reliant/v1/package_commands.proto"
+          "OutputProtoFile": "reliant/v1/package_commands.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetProcess",
@@ -20408,7 +21001,10 @@
           "InputTypeFQ": "reliant.v1.GetPackageProcessRequest",
           "OutputTypeFQ": "reliant.v1.GetPackageProcessResponse",
           "InputProtoFile": "reliant/v1/package_commands.proto",
-          "OutputProtoFile": "reliant/v1/package_commands.proto"
+          "OutputProtoFile": "reliant/v1/package_commands.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetProcessLogs",
@@ -20421,7 +21017,10 @@
           "InputTypeFQ": "reliant.v1.GetPackageProcessLogsRequest",
           "OutputTypeFQ": "reliant.v1.GetPackageProcessLogsResponse",
           "InputProtoFile": "reliant/v1/package_commands.proto",
-          "OutputProtoFile": "reliant/v1/package_commands.proto"
+          "OutputProtoFile": "reliant/v1/package_commands.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "KillProcess",
@@ -20434,7 +21033,10 @@
           "InputTypeFQ": "reliant.v1.KillPackageProcessRequest",
           "OutputTypeFQ": "reliant.v1.KillPackageProcessResponse",
           "InputProtoFile": "reliant/v1/package_commands.proto",
-          "OutputProtoFile": "reliant/v1/package_commands.proto"
+          "OutputProtoFile": "reliant/v1/package_commands.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetCommandFavorites",
@@ -20447,7 +21049,10 @@
           "InputTypeFQ": "reliant.v1.GetCommandFavoritesRequest",
           "OutputTypeFQ": "reliant.v1.GetCommandFavoritesResponse",
           "InputProtoFile": "reliant/v1/package_commands.proto",
-          "OutputProtoFile": "reliant/v1/package_commands.proto"
+          "OutputProtoFile": "reliant/v1/package_commands.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "SetCommandFavorite",
@@ -20460,7 +21065,10 @@
           "InputTypeFQ": "reliant.v1.SetCommandFavoriteRequest",
           "OutputTypeFQ": "reliant.v1.SetCommandFavoriteResponse",
           "InputProtoFile": "reliant/v1/package_commands.proto",
-          "OutputProtoFile": "reliant/v1/package_commands.proto"
+          "OutputProtoFile": "reliant/v1/package_commands.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/package_commands.proto",
@@ -21023,7 +21631,15 @@
           "InputTypeFQ": "reliant.v1.CreateTaskRequest",
           "OutputTypeFQ": "reliant.v1.CreateTaskResponse",
           "InputProtoFile": "reliant/v1/task.proto",
-          "OutputProtoFile": "reliant/v1/task.proto"
+          "OutputProtoFile": "reliant/v1/task.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "task",
+            "Implied": true,
+            "Writer": "INTERCEPTOR"
+          }
         },
         {
           "Name": "GetTask",
@@ -21037,7 +21653,10 @@
           "InputTypeFQ": "reliant.v1.GetTaskRequest",
           "OutputTypeFQ": "reliant.v1.GetTaskResponse",
           "InputProtoFile": "reliant/v1/task.proto",
-          "OutputProtoFile": "reliant/v1/task.proto"
+          "OutputProtoFile": "reliant/v1/task.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListTasks",
@@ -21051,7 +21670,10 @@
           "InputTypeFQ": "reliant.v1.ListTasksRequest",
           "OutputTypeFQ": "reliant.v1.ListTasksResponse",
           "InputProtoFile": "reliant/v1/task.proto",
-          "OutputProtoFile": "reliant/v1/task.proto"
+          "OutputProtoFile": "reliant/v1/task.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdateTask",
@@ -21065,7 +21687,10 @@
           "InputTypeFQ": "reliant.v1.UpdateTaskRequest",
           "OutputTypeFQ": "reliant.v1.UpdateTaskResponse",
           "InputProtoFile": "reliant/v1/task.proto",
-          "OutputProtoFile": "reliant/v1/task.proto"
+          "OutputProtoFile": "reliant/v1/task.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeleteTask",
@@ -21079,7 +21704,10 @@
           "InputTypeFQ": "reliant.v1.DeleteTaskRequest",
           "OutputTypeFQ": "reliant.v1.DeleteTaskResponse",
           "InputProtoFile": "reliant/v1/task.proto",
-          "OutputProtoFile": "reliant/v1/task.proto"
+          "OutputProtoFile": "reliant/v1/task.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "AddTaskDependency",
@@ -21092,7 +21720,10 @@
           "InputTypeFQ": "reliant.v1.AddTaskDependencyRequest",
           "OutputTypeFQ": "reliant.v1.AddTaskDependencyResponse",
           "InputProtoFile": "reliant/v1/task.proto",
-          "OutputProtoFile": "reliant/v1/task.proto"
+          "OutputProtoFile": "reliant/v1/task.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RemoveTaskDependency",
@@ -21105,7 +21736,10 @@
           "InputTypeFQ": "reliant.v1.RemoveTaskDependencyRequest",
           "OutputTypeFQ": "reliant.v1.RemoveTaskDependencyResponse",
           "InputProtoFile": "reliant/v1/task.proto",
-          "OutputProtoFile": "reliant/v1/task.proto"
+          "OutputProtoFile": "reliant/v1/task.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListReadyTasks",
@@ -21118,7 +21752,10 @@
           "InputTypeFQ": "reliant.v1.ListReadyTasksRequest",
           "OutputTypeFQ": "reliant.v1.ListReadyTasksResponse",
           "InputProtoFile": "reliant/v1/task.proto",
-          "OutputProtoFile": "reliant/v1/task.proto"
+          "OutputProtoFile": "reliant/v1/task.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/task.proto",
@@ -21697,7 +22334,15 @@
           "InputTypeFQ": "reliant.v1.CreatePlanRequest",
           "OutputTypeFQ": "reliant.v1.CreatePlanResponse",
           "InputProtoFile": "reliant/v1/plan.proto",
-          "OutputProtoFile": "reliant/v1/plan.proto"
+          "OutputProtoFile": "reliant/v1/plan.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "plan",
+            "Implied": true,
+            "Writer": "INTERCEPTOR"
+          }
         },
         {
           "Name": "GetPlan",
@@ -21711,7 +22356,10 @@
           "InputTypeFQ": "reliant.v1.GetPlanRequest",
           "OutputTypeFQ": "reliant.v1.GetPlanResponse",
           "InputProtoFile": "reliant/v1/plan.proto",
-          "OutputProtoFile": "reliant/v1/plan.proto"
+          "OutputProtoFile": "reliant/v1/plan.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetPlanByChatId",
@@ -21724,7 +22372,10 @@
           "InputTypeFQ": "reliant.v1.GetPlanByChatIdRequest",
           "OutputTypeFQ": "reliant.v1.GetPlanByChatIdResponse",
           "InputProtoFile": "reliant/v1/plan.proto",
-          "OutputProtoFile": "reliant/v1/plan.proto"
+          "OutputProtoFile": "reliant/v1/plan.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdatePlan",
@@ -21738,7 +22389,10 @@
           "InputTypeFQ": "reliant.v1.UpdatePlanRequest",
           "OutputTypeFQ": "reliant.v1.UpdatePlanResponse",
           "InputProtoFile": "reliant/v1/plan.proto",
-          "OutputProtoFile": "reliant/v1/plan.proto"
+          "OutputProtoFile": "reliant/v1/plan.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeletePlan",
@@ -21752,7 +22406,10 @@
           "InputTypeFQ": "reliant.v1.DeletePlanRequest",
           "OutputTypeFQ": "reliant.v1.DeletePlanResponse",
           "InputProtoFile": "reliant/v1/plan.proto",
-          "OutputProtoFile": "reliant/v1/plan.proto"
+          "OutputProtoFile": "reliant/v1/plan.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListPlanTasks",
@@ -21765,7 +22422,10 @@
           "InputTypeFQ": "reliant.v1.ListPlanTasksRequest",
           "OutputTypeFQ": "reliant.v1.ListPlanTasksResponse",
           "InputProtoFile": "reliant/v1/plan.proto",
-          "OutputProtoFile": "reliant/v1/plan.proto"
+          "OutputProtoFile": "reliant/v1/plan.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListPlansByProject",
@@ -21778,7 +22438,10 @@
           "InputTypeFQ": "reliant.v1.ListPlansByProjectRequest",
           "OutputTypeFQ": "reliant.v1.ListPlansByProjectResponse",
           "InputProtoFile": "reliant/v1/plan.proto",
-          "OutputProtoFile": "reliant/v1/plan.proto"
+          "OutputProtoFile": "reliant/v1/plan.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/plan.proto",
@@ -22341,7 +23004,10 @@
           "InputTypeFQ": "reliant.v1.ListPresetsRequest",
           "OutputTypeFQ": "reliant.v1.ListPresetsResponse",
           "InputProtoFile": "reliant/v1/preset.proto",
-          "OutputProtoFile": "reliant/v1/preset.proto"
+          "OutputProtoFile": "reliant/v1/preset.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetPreset",
@@ -22354,7 +23020,10 @@
           "InputTypeFQ": "reliant.v1.GetPresetRequest",
           "OutputTypeFQ": "reliant.v1.GetPresetResponse",
           "InputProtoFile": "reliant/v1/preset.proto",
-          "OutputProtoFile": "reliant/v1/preset.proto"
+          "OutputProtoFile": "reliant/v1/preset.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListPresetsForWorkflow",
@@ -22367,7 +23036,10 @@
           "InputTypeFQ": "reliant.v1.ListPresetsForWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.ListPresetsForWorkflowResponse",
           "InputProtoFile": "reliant/v1/preset.proto",
-          "OutputProtoFile": "reliant/v1/preset.proto"
+          "OutputProtoFile": "reliant/v1/preset.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "CreatePreset",
@@ -22380,7 +23052,10 @@
           "InputTypeFQ": "reliant.v1.CreatePresetRequest",
           "OutputTypeFQ": "reliant.v1.CreatePresetResponse",
           "InputProtoFile": "reliant/v1/preset.proto",
-          "OutputProtoFile": "reliant/v1/preset.proto"
+          "OutputProtoFile": "reliant/v1/preset.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "UpdatePreset",
@@ -22393,7 +23068,10 @@
           "InputTypeFQ": "reliant.v1.UpdatePresetRequest",
           "OutputTypeFQ": "reliant.v1.UpdatePresetResponse",
           "InputProtoFile": "reliant/v1/preset.proto",
-          "OutputProtoFile": "reliant/v1/preset.proto"
+          "OutputProtoFile": "reliant/v1/preset.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeletePreset",
@@ -22406,7 +23084,10 @@
           "InputTypeFQ": "reliant.v1.DeletePresetRequest",
           "OutputTypeFQ": "reliant.v1.DeletePresetResponse",
           "InputProtoFile": "reliant/v1/preset.proto",
-          "OutputProtoFile": "reliant/v1/preset.proto"
+          "OutputProtoFile": "reliant/v1/preset.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "SetDefaultPreset",
@@ -22419,7 +23100,10 @@
           "InputTypeFQ": "reliant.v1.SetDefaultPresetRequest",
           "OutputTypeFQ": "reliant.v1.SetDefaultPresetResponse",
           "InputProtoFile": "reliant/v1/preset.proto",
-          "OutputProtoFile": "reliant/v1/preset.proto"
+          "OutputProtoFile": "reliant/v1/preset.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetDefaultPreset",
@@ -22432,7 +23116,10 @@
           "InputTypeFQ": "reliant.v1.GetDefaultPresetRequest",
           "OutputTypeFQ": "reliant.v1.GetDefaultPresetResponse",
           "InputProtoFile": "reliant/v1/preset.proto",
-          "OutputProtoFile": "reliant/v1/preset.proto"
+          "OutputProtoFile": "reliant/v1/preset.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetDefaultPresetsBatch",
@@ -22445,7 +23132,10 @@
           "InputTypeFQ": "reliant.v1.GetDefaultPresetsBatchRequest",
           "OutputTypeFQ": "reliant.v1.GetDefaultPresetsBatchResponse",
           "InputProtoFile": "reliant/v1/preset.proto",
-          "OutputProtoFile": "reliant/v1/preset.proto"
+          "OutputProtoFile": "reliant/v1/preset.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/preset.proto",
@@ -23073,7 +23763,15 @@
           "InputTypeFQ": "reliant.v1.CreateProjectRequest",
           "OutputTypeFQ": "reliant.v1.CreateProjectResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "project",
+            "Implied": true,
+            "Writer": "INTERCEPTOR"
+          }
         },
         {
           "Name": "ListProjects",
@@ -23087,7 +23785,10 @@
           "InputTypeFQ": "reliant.v1.ListProjectsRequest",
           "OutputTypeFQ": "reliant.v1.ListProjectsResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetProject",
@@ -23101,7 +23802,10 @@
           "InputTypeFQ": "reliant.v1.GetProjectRequest",
           "OutputTypeFQ": "reliant.v1.GetProjectResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdateProject",
@@ -23115,7 +23819,10 @@
           "InputTypeFQ": "reliant.v1.UpdateProjectRequest",
           "OutputTypeFQ": "reliant.v1.UpdateProjectResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeleteProject",
@@ -23129,7 +23836,10 @@
           "InputTypeFQ": "reliant.v1.DeleteProjectRequest",
           "OutputTypeFQ": "reliant.v1.DeleteProjectResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "TouchProject",
@@ -23142,7 +23852,10 @@
           "InputTypeFQ": "reliant.v1.TouchProjectRequest",
           "OutputTypeFQ": "reliant.v1.TouchProjectResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetProjectMetadata",
@@ -23155,7 +23868,10 @@
           "InputTypeFQ": "reliant.v1.GetProjectMetadataRequest",
           "OutputTypeFQ": "reliant.v1.GetProjectMetadataResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdateProjectMetadata",
@@ -23168,7 +23884,10 @@
           "InputTypeFQ": "reliant.v1.UpdateProjectMetadataRequest",
           "OutputTypeFQ": "reliant.v1.UpdateProjectMetadataResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetProjectGitInfo",
@@ -23181,7 +23900,10 @@
           "InputTypeFQ": "reliant.v1.GetProjectGitInfoRequest",
           "OutputTypeFQ": "reliant.v1.GetProjectGitInfoResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetProjectGitBranches",
@@ -23194,7 +23916,10 @@
           "InputTypeFQ": "reliant.v1.GetProjectGitBranchesRequest",
           "OutputTypeFQ": "reliant.v1.GetProjectGitBranchesResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetProjectInitStatus",
@@ -23207,7 +23932,10 @@
           "InputTypeFQ": "reliant.v1.GetProjectInitStatusRequest",
           "OutputTypeFQ": "reliant.v1.GetProjectInitStatusResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "InitializeProject",
@@ -23220,7 +23948,10 @@
           "InputTypeFQ": "reliant.v1.InitializeProjectRequest",
           "OutputTypeFQ": "reliant.v1.InitializeProjectResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetProjectChanges",
@@ -23233,7 +23964,10 @@
           "InputTypeFQ": "reliant.v1.GetProjectChangesRequest",
           "OutputTypeFQ": "reliant.v1.GetProjectChangesResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetProjectPrompts",
@@ -23246,7 +23980,10 @@
           "InputTypeFQ": "reliant.v1.GetProjectPromptsRequest",
           "OutputTypeFQ": "reliant.v1.GetProjectPromptsResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "SaveProjectPrompts",
@@ -23259,7 +23996,10 @@
           "InputTypeFQ": "reliant.v1.SaveProjectPromptsRequest",
           "OutputTypeFQ": "reliant.v1.SaveProjectPromptsResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "InitializeGitRepo",
@@ -23272,7 +24012,10 @@
           "InputTypeFQ": "reliant.v1.InitializeGitRepoRequest",
           "OutputTypeFQ": "reliant.v1.InitializeGitRepoResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListProjectDaemonsForDaemon",
@@ -23285,7 +24028,10 @@
           "InputTypeFQ": "reliant.v1.ListProjectDaemonsForDaemonRequest",
           "OutputTypeFQ": "reliant.v1.ListProjectDaemonsForDaemonResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ListProjectDaemons",
@@ -23299,7 +24045,10 @@
           "InputTypeFQ": "reliant.v1.ListProjectDaemonsRequest",
           "OutputTypeFQ": "reliant.v1.ListProjectDaemonsResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "MarkProjectInstalled",
@@ -23312,7 +24061,10 @@
           "InputTypeFQ": "reliant.v1.MarkProjectInstalledRequest",
           "OutputTypeFQ": "reliant.v1.MarkProjectInstalledResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CreateProjectFromRepo",
@@ -23325,7 +24077,10 @@
           "InputTypeFQ": "reliant.v1.CreateProjectFromRepoRequest",
           "OutputTypeFQ": "reliant.v1.CreateProjectFromRepoResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListRepositoriesForDaemon",
@@ -23338,7 +24093,10 @@
           "InputTypeFQ": "reliant.v1.ListRepositoriesForDaemonRequest",
           "OutputTypeFQ": "reliant.v1.ListRepositoriesForDaemonResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "PullProjectOnDaemon",
@@ -23351,7 +24109,10 @@
           "InputTypeFQ": "reliant.v1.PullProjectOnDaemonRequest",
           "OutputTypeFQ": "reliant.v1.PullProjectOnDaemonResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RemoveProjectFromDaemon",
@@ -23364,7 +24125,10 @@
           "InputTypeFQ": "reliant.v1.RemoveProjectFromDaemonRequest",
           "OutputTypeFQ": "reliant.v1.RemoveProjectFromDaemonResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RecloneProjectOnDaemon",
@@ -23377,7 +24141,10 @@
           "InputTypeFQ": "reliant.v1.RecloneProjectOnDaemonRequest",
           "OutputTypeFQ": "reliant.v1.RecloneProjectOnDaemonResponse",
           "InputProtoFile": "reliant/v1/project.proto",
-          "OutputProtoFile": "reliant/v1/project.proto"
+          "OutputProtoFile": "reliant/v1/project.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/project.proto",
@@ -24915,7 +25682,10 @@
           "InputTypeFQ": "reliant.v1.ListProviderAccountsRequest",
           "OutputTypeFQ": "reliant.v1.ListProviderAccountsResponse",
           "InputProtoFile": "reliant/v1/provider_account.proto",
-          "OutputProtoFile": "reliant/v1/provider_account.proto"
+          "OutputProtoFile": "reliant/v1/provider_account.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdateProviderAccount",
@@ -24929,7 +25699,10 @@
           "InputTypeFQ": "reliant.v1.UpdateProviderAccountRequest",
           "OutputTypeFQ": "reliant.v1.UpdateProviderAccountResponse",
           "InputProtoFile": "reliant/v1/provider_account.proto",
-          "OutputProtoFile": "reliant/v1/provider_account.proto"
+          "OutputProtoFile": "reliant/v1/provider_account.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ReorderProviderAccounts",
@@ -24942,7 +25715,10 @@
           "InputTypeFQ": "reliant.v1.ReorderProviderAccountsRequest",
           "OutputTypeFQ": "reliant.v1.ReorderProviderAccountsResponse",
           "InputProtoFile": "reliant/v1/provider_account.proto",
-          "OutputProtoFile": "reliant/v1/provider_account.proto"
+          "OutputProtoFile": "reliant/v1/provider_account.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeleteProviderAccount",
@@ -24956,7 +25732,10 @@
           "InputTypeFQ": "reliant.v1.DeleteProviderAccountRequest",
           "OutputTypeFQ": "reliant.v1.DeleteProviderAccountResponse",
           "InputProtoFile": "reliant/v1/provider_account.proto",
-          "OutputProtoFile": "reliant/v1/provider_account.proto"
+          "OutputProtoFile": "reliant/v1/provider_account.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "AddProviderAPIKey",
@@ -24969,7 +25748,10 @@
           "InputTypeFQ": "reliant.v1.AddProviderAPIKeyRequest",
           "OutputTypeFQ": "reliant.v1.AddProviderAPIKeyResponse",
           "InputProtoFile": "reliant/v1/provider_account.proto",
-          "OutputProtoFile": "reliant/v1/provider_account.proto"
+          "OutputProtoFile": "reliant/v1/provider_account.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RefreshProviderAccountUsage",
@@ -24982,7 +25764,10 @@
           "InputTypeFQ": "reliant.v1.RefreshProviderAccountUsageRequest",
           "OutputTypeFQ": "reliant.v1.RefreshProviderAccountUsageResponse",
           "InputProtoFile": "reliant/v1/provider_account.proto",
-          "OutputProtoFile": "reliant/v1/provider_account.proto"
+          "OutputProtoFile": "reliant/v1/provider_account.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetChatProviderAccount",
@@ -24995,7 +25780,10 @@
           "InputTypeFQ": "reliant.v1.GetChatProviderAccountRequest",
           "OutputTypeFQ": "reliant.v1.GetChatProviderAccountResponse",
           "InputProtoFile": "reliant/v1/provider_account.proto",
-          "OutputProtoFile": "reliant/v1/provider_account.proto"
+          "OutputProtoFile": "reliant/v1/provider_account.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/provider_account.proto",
@@ -25462,7 +26250,10 @@
           "InputTypeFQ": "reliant.v1.ResolveQuestionRequest",
           "OutputTypeFQ": "reliant.v1.ResolveQuestionResponse",
           "InputProtoFile": "reliant/v1/question.proto",
-          "OutputProtoFile": "reliant/v1/question.proto"
+          "OutputProtoFile": "reliant/v1/question.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetPendingQuestion",
@@ -25475,7 +26266,10 @@
           "InputTypeFQ": "reliant.v1.GetPendingQuestionRequest",
           "OutputTypeFQ": "reliant.v1.GetPendingQuestionResponse",
           "InputProtoFile": "reliant/v1/question.proto",
-          "OutputProtoFile": "reliant/v1/question.proto"
+          "OutputProtoFile": "reliant/v1/question.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/question.proto",
@@ -25619,7 +26413,10 @@
           "InputTypeFQ": "reliant.v1.DiscoverReposRequest",
           "OutputTypeFQ": "reliant.v1.DiscoverReposResponse",
           "InputProtoFile": "reliant/v1/repo.proto",
-          "OutputProtoFile": "reliant/v1/repo.proto"
+          "OutputProtoFile": "reliant/v1/repo.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListRepos",
@@ -25633,7 +26430,10 @@
           "InputTypeFQ": "reliant.v1.ListReposRequest",
           "OutputTypeFQ": "reliant.v1.ListReposResponse",
           "InputProtoFile": "reliant/v1/repo.proto",
-          "OutputProtoFile": "reliant/v1/repo.proto"
+          "OutputProtoFile": "reliant/v1/repo.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "AddRepo",
@@ -25646,7 +26446,10 @@
           "InputTypeFQ": "reliant.v1.AddRepoRequest",
           "OutputTypeFQ": "reliant.v1.AddRepoResponse",
           "InputProtoFile": "reliant/v1/repo.proto",
-          "OutputProtoFile": "reliant/v1/repo.proto"
+          "OutputProtoFile": "reliant/v1/repo.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "RemoveRepo",
@@ -25659,7 +26462,10 @@
           "InputTypeFQ": "reliant.v1.RemoveRepoRequest",
           "OutputTypeFQ": "reliant.v1.RemoveRepoResponse",
           "InputProtoFile": "reliant/v1/repo.proto",
-          "OutputProtoFile": "reliant/v1/repo.proto"
+          "OutputProtoFile": "reliant/v1/repo.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetRepoGitInfo",
@@ -25672,7 +26478,10 @@
           "InputTypeFQ": "reliant.v1.GetRepoGitInfoRequest",
           "OutputTypeFQ": "reliant.v1.GetRepoGitInfoResponse",
           "InputProtoFile": "reliant/v1/repo.proto",
-          "OutputProtoFile": "reliant/v1/repo.proto"
+          "OutputProtoFile": "reliant/v1/repo.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/repo.proto",
@@ -25997,7 +26806,10 @@
           "InputTypeFQ": "reliant.v1.ListScenariosRequest",
           "OutputTypeFQ": "reliant.v1.ListScenariosResponse",
           "InputProtoFile": "reliant/v1/scenario.proto",
-          "OutputProtoFile": "reliant/v1/scenario.proto"
+          "OutputProtoFile": "reliant/v1/scenario.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "CreateScenario",
@@ -26011,7 +26823,15 @@
           "InputTypeFQ": "reliant.v1.CreateScenarioRequest",
           "OutputTypeFQ": "reliant.v1.CreateScenarioResponse",
           "InputProtoFile": "reliant/v1/scenario.proto",
-          "OutputProtoFile": "reliant/v1/scenario.proto"
+          "OutputProtoFile": "reliant/v1/scenario.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "scenario",
+            "Implied": true,
+            "Writer": "INTERCEPTOR"
+          }
         },
         {
           "Name": "RunScenario",
@@ -26024,7 +26844,10 @@
           "InputTypeFQ": "reliant.v1.RunScenarioRequest",
           "OutputTypeFQ": "reliant.v1.RunScenarioResponse",
           "InputProtoFile": "reliant/v1/scenario.proto",
-          "OutputProtoFile": "reliant/v1/scenario.proto"
+          "OutputProtoFile": "reliant/v1/scenario.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeleteScenario",
@@ -26038,7 +26861,10 @@
           "InputTypeFQ": "reliant.v1.DeleteScenarioRequest",
           "OutputTypeFQ": "reliant.v1.DeleteScenarioResponse",
           "InputProtoFile": "reliant/v1/scenario.proto",
-          "OutputProtoFile": "reliant/v1/scenario.proto"
+          "OutputProtoFile": "reliant/v1/scenario.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "UploadScenario",
@@ -26051,7 +26877,10 @@
           "InputTypeFQ": "reliant.v1.UploadScenarioRequest",
           "OutputTypeFQ": "reliant.v1.UploadScenarioResponse",
           "InputProtoFile": "reliant/v1/scenario.proto",
-          "OutputProtoFile": "reliant/v1/scenario.proto"
+          "OutputProtoFile": "reliant/v1/scenario.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ExportScenario",
@@ -26064,7 +26893,10 @@
           "InputTypeFQ": "reliant.v1.ExportScenarioRequest",
           "OutputTypeFQ": "reliant.v1.ExportScenarioResponse",
           "InputProtoFile": "reliant/v1/scenario.proto",
-          "OutputProtoFile": "reliant/v1/scenario.proto"
+          "OutputProtoFile": "reliant/v1/scenario.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/scenario.proto",
@@ -26676,7 +27508,15 @@
           "InputTypeFQ": "reliant.v1.CreateSettingRequest",
           "OutputTypeFQ": "reliant.v1.CreateSettingResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "setting",
+            "Implied": true,
+            "Writer": "INTERCEPTOR"
+          }
         },
         {
           "Name": "ListSettings",
@@ -26690,7 +27530,10 @@
           "InputTypeFQ": "reliant.v1.ListSettingsRequest",
           "OutputTypeFQ": "reliant.v1.ListSettingsResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetSetting",
@@ -26704,7 +27547,10 @@
           "InputTypeFQ": "reliant.v1.GetSettingRequest",
           "OutputTypeFQ": "reliant.v1.GetSettingResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdateSetting",
@@ -26718,7 +27564,10 @@
           "InputTypeFQ": "reliant.v1.UpdateSettingRequest",
           "OutputTypeFQ": "reliant.v1.UpdateSettingResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DeleteSetting",
@@ -26732,7 +27581,10 @@
           "InputTypeFQ": "reliant.v1.DeleteSettingRequest",
           "OutputTypeFQ": "reliant.v1.DeleteSettingResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "BatchUpsertSettings",
@@ -26745,7 +27597,10 @@
           "InputTypeFQ": "reliant.v1.BatchUpsertSettingsRequest",
           "OutputTypeFQ": "reliant.v1.BatchUpsertSettingsResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetShortcuts",
@@ -26758,7 +27613,10 @@
           "InputTypeFQ": "reliant.v1.GetShortcutsRequest",
           "OutputTypeFQ": "reliant.v1.GetShortcutsResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdateShortcuts",
@@ -26771,7 +27629,10 @@
           "InputTypeFQ": "reliant.v1.UpdateShortcutsRequest",
           "OutputTypeFQ": "reliant.v1.UpdateShortcutsResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetPreferences",
@@ -26784,7 +27645,10 @@
           "InputTypeFQ": "reliant.v1.GetPreferencesRequest",
           "OutputTypeFQ": "reliant.v1.GetPreferencesResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdatePreferences",
@@ -26797,7 +27661,10 @@
           "InputTypeFQ": "reliant.v1.UpdatePreferencesRequest",
           "OutputTypeFQ": "reliant.v1.UpdatePreferencesResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "SetHiddenItem",
@@ -26810,7 +27677,10 @@
           "InputTypeFQ": "reliant.v1.SetHiddenItemRequest",
           "OutputTypeFQ": "reliant.v1.SetHiddenItemResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetPrompts",
@@ -26823,7 +27693,10 @@
           "InputTypeFQ": "reliant.v1.GetPromptsRequest",
           "OutputTypeFQ": "reliant.v1.GetPromptsResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "SavePrompts",
@@ -26836,7 +27709,10 @@
           "InputTypeFQ": "reliant.v1.SavePromptsRequest",
           "OutputTypeFQ": "reliant.v1.SavePromptsResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetProviderStatuses",
@@ -26849,7 +27725,10 @@
           "InputTypeFQ": "reliant.v1.GetProviderStatusesRequest",
           "OutputTypeFQ": "reliant.v1.GetProviderStatusesResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "ValidateProviderAPIKey",
@@ -26862,7 +27741,10 @@
           "InputTypeFQ": "reliant.v1.ValidateProviderAPIKeyRequest",
           "OutputTypeFQ": "reliant.v1.ValidateProviderAPIKeyResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "SyncReliantProvider",
@@ -26875,7 +27757,10 @@
           "InputTypeFQ": "reliant.v1.SyncReliantProviderRequest",
           "OutputTypeFQ": "reliant.v1.SyncReliantProviderResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CompleteCodexOAuth",
@@ -26888,7 +27773,10 @@
           "InputTypeFQ": "reliant.v1.CompleteCodexOAuthRequest",
           "OutputTypeFQ": "reliant.v1.CompleteCodexOAuthResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CompleteClaudeOAuth",
@@ -26901,7 +27789,10 @@
           "InputTypeFQ": "reliant.v1.CompleteClaudeOAuthRequest",
           "OutputTypeFQ": "reliant.v1.CompleteClaudeOAuthResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CompleteAntigravityOAuth",
@@ -26914,7 +27805,10 @@
           "InputTypeFQ": "reliant.v1.CompleteAntigravityOAuthRequest",
           "OutputTypeFQ": "reliant.v1.CompleteAntigravityOAuthResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "StartCopilotDeviceAuth",
@@ -26927,7 +27821,10 @@
           "InputTypeFQ": "reliant.v1.StartCopilotDeviceAuthRequest",
           "OutputTypeFQ": "reliant.v1.StartCopilotDeviceAuthResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "PollCopilotDeviceAuth",
@@ -26940,7 +27837,10 @@
           "InputTypeFQ": "reliant.v1.PollCopilotDeviceAuthRequest",
           "OutputTypeFQ": "reliant.v1.PollCopilotDeviceAuthResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetPrivacySettings",
@@ -26953,7 +27853,10 @@
           "InputTypeFQ": "reliant.v1.GetPrivacySettingsRequest",
           "OutputTypeFQ": "reliant.v1.GetPrivacySettingsResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "UpdatePrivacySettings",
@@ -26966,7 +27869,10 @@
           "InputTypeFQ": "reliant.v1.UpdatePrivacySettingsRequest",
           "OutputTypeFQ": "reliant.v1.UpdatePrivacySettingsResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "TrackPageVisited",
@@ -26979,7 +27885,10 @@
           "InputTypeFQ": "reliant.v1.TrackPageVisitedRequest",
           "OutputTypeFQ": "reliant.v1.TrackPageVisitedResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "TrackOnboardingEvent",
@@ -26992,7 +27901,10 @@
           "InputTypeFQ": "reliant.v1.TrackOnboardingEventRequest",
           "OutputTypeFQ": "reliant.v1.TrackOnboardingEventResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "InstallSkill",
@@ -27005,7 +27917,10 @@
           "InputTypeFQ": "reliant.v1.InstallSkillRequest",
           "OutputTypeFQ": "reliant.v1.InstallSkillResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListInstalledSkills",
@@ -27018,7 +27933,10 @@
           "InputTypeFQ": "reliant.v1.ListInstalledSkillsRequest",
           "OutputTypeFQ": "reliant.v1.ListInstalledSkillsResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "GetInstalledSkillDefinition",
@@ -27031,7 +27949,10 @@
           "InputTypeFQ": "reliant.v1.GetInstalledSkillDefinitionRequest",
           "OutputTypeFQ": "reliant.v1.GetInstalledSkillDefinitionResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "SetSkillEnabled",
@@ -27044,7 +27965,10 @@
           "InputTypeFQ": "reliant.v1.SetSkillEnabledRequest",
           "OutputTypeFQ": "reliant.v1.SetSkillEnabledResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListRecommendedSkills",
@@ -27057,7 +27981,10 @@
           "InputTypeFQ": "reliant.v1.ListRecommendedSkillsRequest",
           "OutputTypeFQ": "reliant.v1.ListRecommendedSkillsResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "DeleteGlobalSkill",
@@ -27070,7 +27997,10 @@
           "InputTypeFQ": "reliant.v1.DeleteGlobalSkillRequest",
           "OutputTypeFQ": "reliant.v1.DeleteGlobalSkillResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetConfigHealth",
@@ -27083,7 +28013,10 @@
           "InputTypeFQ": "reliant.v1.GetConfigHealthRequest",
           "OutputTypeFQ": "reliant.v1.GetConfigHealthResponse",
           "InputProtoFile": "reliant/v1/settings.proto",
-          "OutputProtoFile": "reliant/v1/settings.proto"
+          "OutputProtoFile": "reliant/v1/settings.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/settings.proto",
@@ -29791,7 +30724,10 @@
           "InputTypeFQ": "reliant.v1.StreamUserUpdatesRequest",
           "OutputTypeFQ": "reliant.v1.UserStreamEvent",
           "InputProtoFile": "reliant/v1/streaming.proto",
-          "OutputProtoFile": "reliant/v1/streaming.proto"
+          "OutputProtoFile": "reliant/v1/streaming.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/streaming.proto",
@@ -30887,7 +31823,10 @@
           "InputTypeFQ": "reliant.v1.HealthRequest",
           "OutputTypeFQ": "reliant.v1.HealthResponse",
           "InputProtoFile": "reliant/v1/system.proto",
-          "OutputProtoFile": "reliant/v1/system.proto"
+          "OutputProtoFile": "reliant/v1/system.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "Ready",
@@ -30900,7 +31839,10 @@
           "InputTypeFQ": "reliant.v1.ReadyRequest",
           "OutputTypeFQ": "reliant.v1.ReadyResponse",
           "InputProtoFile": "reliant/v1/system.proto",
-          "OutputProtoFile": "reliant/v1/system.proto"
+          "OutputProtoFile": "reliant/v1/system.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "Info",
@@ -30913,7 +31855,10 @@
           "InputTypeFQ": "reliant.v1.InfoRequest",
           "OutputTypeFQ": "reliant.v1.InfoResponse",
           "InputProtoFile": "reliant/v1/system.proto",
-          "OutputProtoFile": "reliant/v1/system.proto"
+          "OutputProtoFile": "reliant/v1/system.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "Version",
@@ -30926,7 +31871,10 @@
           "InputTypeFQ": "reliant.v1.VersionRequest",
           "OutputTypeFQ": "reliant.v1.VersionResponse",
           "InputProtoFile": "reliant/v1/system.proto",
-          "OutputProtoFile": "reliant/v1/system.proto"
+          "OutputProtoFile": "reliant/v1/system.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "StartOAuthSignIn",
@@ -30939,7 +31887,10 @@
           "InputTypeFQ": "reliant.v1.StartOAuthSignInRequest",
           "OutputTypeFQ": "reliant.v1.StartOAuthSignInResponse",
           "InputProtoFile": "reliant/v1/system.proto",
-          "OutputProtoFile": "reliant/v1/system.proto"
+          "OutputProtoFile": "reliant/v1/system.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DevAuthLoad",
@@ -30952,7 +31903,10 @@
           "InputTypeFQ": "reliant.v1.DevAuthLoadRequest",
           "OutputTypeFQ": "reliant.v1.DevAuthLoadResponse",
           "InputProtoFile": "reliant/v1/system.proto",
-          "OutputProtoFile": "reliant/v1/system.proto"
+          "OutputProtoFile": "reliant/v1/system.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DevAuthSave",
@@ -30965,7 +31919,10 @@
           "InputTypeFQ": "reliant.v1.DevAuthSaveRequest",
           "OutputTypeFQ": "reliant.v1.DevAuthSaveResponse",
           "InputProtoFile": "reliant/v1/system.proto",
-          "OutputProtoFile": "reliant/v1/system.proto"
+          "OutputProtoFile": "reliant/v1/system.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "DevAuthClear",
@@ -30978,7 +31935,10 @@
           "InputTypeFQ": "reliant.v1.DevAuthClearRequest",
           "OutputTypeFQ": "reliant.v1.DevAuthClearResponse",
           "InputProtoFile": "reliant/v1/system.proto",
-          "OutputProtoFile": "reliant/v1/system.proto"
+          "OutputProtoFile": "reliant/v1/system.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/system.proto",
@@ -31311,7 +32271,10 @@
           "InputTypeFQ": "reliant.v1.ListTerminalSessionsRequest",
           "OutputTypeFQ": "reliant.v1.ListTerminalSessionsResponse",
           "InputProtoFile": "reliant/v1/terminal.proto",
-          "OutputProtoFile": "reliant/v1/terminal.proto"
+          "OutputProtoFile": "reliant/v1/terminal.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "CloseSession",
@@ -31324,7 +32287,10 @@
           "InputTypeFQ": "reliant.v1.CloseTerminalSessionRequest",
           "OutputTypeFQ": "reliant.v1.CloseTerminalSessionResponse",
           "InputProtoFile": "reliant/v1/terminal.proto",
-          "OutputProtoFile": "reliant/v1/terminal.proto"
+          "OutputProtoFile": "reliant/v1/terminal.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "StreamTerminal",
@@ -31337,7 +32303,10 @@
           "InputTypeFQ": "reliant.v1.TerminalStreamInput",
           "OutputTypeFQ": "reliant.v1.TerminalStreamOutput",
           "InputProtoFile": "reliant/v1/terminal.proto",
-          "OutputProtoFile": "reliant/v1/terminal.proto"
+          "OutputProtoFile": "reliant/v1/terminal.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/terminal.proto",
@@ -31647,7 +32616,10 @@
           "InputTypeFQ": "reliant.v1.CreateTokenRequest",
           "OutputTypeFQ": "reliant.v1.CreateTokenResponse",
           "InputProtoFile": "reliant/v1/token.proto",
-          "OutputProtoFile": "reliant/v1/token.proto"
+          "OutputProtoFile": "reliant/v1/token.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ListTokens",
@@ -31660,7 +32632,10 @@
           "InputTypeFQ": "reliant.v1.ListTokensRequest",
           "OutputTypeFQ": "reliant.v1.ListTokensResponse",
           "InputProtoFile": "reliant/v1/token.proto",
-          "OutputProtoFile": "reliant/v1/token.proto"
+          "OutputProtoFile": "reliant/v1/token.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "RevokeToken",
@@ -31673,7 +32648,10 @@
           "InputTypeFQ": "reliant.v1.RevokeTokenRequest",
           "OutputTypeFQ": "reliant.v1.RevokeTokenResponse",
           "InputProtoFile": "reliant/v1/token.proto",
-          "OutputProtoFile": "reliant/v1/token.proto"
+          "OutputProtoFile": "reliant/v1/token.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "UpdateToken",
@@ -31686,7 +32664,10 @@
           "InputTypeFQ": "reliant.v1.UpdateTokenRequest",
           "OutputTypeFQ": "reliant.v1.UpdateTokenResponse",
           "InputProtoFile": "reliant/v1/token.proto",
-          "OutputProtoFile": "reliant/v1/token.proto"
+          "OutputProtoFile": "reliant/v1/token.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ExchangeToken",
@@ -31699,7 +32680,10 @@
           "InputTypeFQ": "reliant.v1.ExchangeTokenRequest",
           "OutputTypeFQ": "reliant.v1.ExchangeTokenResponse",
           "InputProtoFile": "reliant/v1/token.proto",
-          "OutputProtoFile": "reliant/v1/token.proto"
+          "OutputProtoFile": "reliant/v1/token.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetGitToken",
@@ -31712,7 +32696,10 @@
           "InputTypeFQ": "reliant.v1.GetGitTokenRequest",
           "OutputTypeFQ": "reliant.v1.GetGitTokenResponse",
           "InputProtoFile": "reliant/v1/token.proto",
-          "OutputProtoFile": "reliant/v1/token.proto"
+          "OutputProtoFile": "reliant/v1/token.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/token.proto",
@@ -32078,7 +33065,10 @@
           "InputTypeFQ": "reliant.v1.CancelToolCallRequest",
           "OutputTypeFQ": "reliant.v1.CancelToolCallResponse",
           "InputProtoFile": "reliant/v1/tool_call.proto",
-          "OutputProtoFile": "reliant/v1/tool_call.proto"
+          "OutputProtoFile": "reliant/v1/tool_call.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ConvertToBackground",
@@ -32091,7 +33081,10 @@
           "InputTypeFQ": "reliant.v1.ConvertToBackgroundRequest",
           "OutputTypeFQ": "reliant.v1.ConvertToBackgroundResponse",
           "InputProtoFile": "reliant/v1/tool_call.proto",
-          "OutputProtoFile": "reliant/v1/tool_call.proto"
+          "OutputProtoFile": "reliant/v1/tool_call.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/tool_call.proto",
@@ -32259,7 +33252,10 @@
           "InputTypeFQ": "reliant.v1.ListWorkflowsRequest",
           "OutputTypeFQ": "reliant.v1.ListWorkflowsResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
-          "OutputProtoFile": "reliant/v1/workflow.proto"
+          "OutputProtoFile": "reliant/v1/workflow.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "SaveWorkflow",
@@ -32272,7 +33268,10 @@
           "InputTypeFQ": "reliant.v1.SaveWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.SaveWorkflowResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
-          "OutputProtoFile": "reliant/v1/workflow.proto"
+          "OutputProtoFile": "reliant/v1/workflow.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "GetWorkflow",
@@ -32286,7 +33285,10 @@
           "InputTypeFQ": "reliant.v1.GetWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.GetWorkflowResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
-          "OutputProtoFile": "reliant/v1/workflow.proto"
+          "OutputProtoFile": "reliant/v1/workflow.proto",
+          "Activity": {
+            "Mutating": false
+          }
         },
         {
           "Name": "DeleteWorkflow",
@@ -32300,7 +33302,10 @@
           "InputTypeFQ": "reliant.v1.DeleteWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.DeleteWorkflowResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
-          "OutputProtoFile": "reliant/v1/workflow.proto"
+          "OutputProtoFile": "reliant/v1/workflow.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ValidateWorkflow",
@@ -32313,7 +33318,10 @@
           "InputTypeFQ": "reliant.v1.ValidateWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.ValidateWorkflowResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
-          "OutputProtoFile": "reliant/v1/workflow.proto"
+          "OutputProtoFile": "reliant/v1/workflow.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ImportWorkflow",
@@ -32326,7 +33334,10 @@
           "InputTypeFQ": "reliant.v1.ImportWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.ImportWorkflowResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
-          "OutputProtoFile": "reliant/v1/workflow.proto"
+          "OutputProtoFile": "reliant/v1/workflow.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "ExportWorkflow",
@@ -32339,7 +33350,10 @@
           "InputTypeFQ": "reliant.v1.ExportWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.ExportWorkflowResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
-          "OutputProtoFile": "reliant/v1/workflow.proto"
+          "OutputProtoFile": "reliant/v1/workflow.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "SetWorkflowVisibility",
@@ -32352,7 +33366,10 @@
           "InputTypeFQ": "reliant.v1.SetWorkflowVisibilityRequest",
           "OutputTypeFQ": "reliant.v1.SetWorkflowVisibilityResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
-          "OutputProtoFile": "reliant/v1/workflow.proto"
+          "OutputProtoFile": "reliant/v1/workflow.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CopyWorkflow",
@@ -32365,7 +33382,10 @@
           "InputTypeFQ": "reliant.v1.CopyWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.CopyWorkflowResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
-          "OutputProtoFile": "reliant/v1/workflow.proto"
+          "OutputProtoFile": "reliant/v1/workflow.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "CreateWorkflowDraft",
@@ -32378,7 +33398,10 @@
           "InputTypeFQ": "reliant.v1.CreateWorkflowDraftRequest",
           "OutputTypeFQ": "reliant.v1.CreateWorkflowDraftResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
-          "OutputProtoFile": "reliant/v1/workflow.proto"
+          "OutputProtoFile": "reliant/v1/workflow.proto",
+          "Activity": {
+            "Mutating": true
+          }
         },
         {
           "Name": "SetWorkflowStatus",
@@ -32391,7 +33414,10 @@
           "InputTypeFQ": "reliant.v1.SetWorkflowStatusRequest",
           "OutputTypeFQ": "reliant.v1.SetWorkflowStatusResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
-          "OutputProtoFile": "reliant/v1/workflow.proto"
+          "OutputProtoFile": "reliant/v1/workflow.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/workflow.proto",
@@ -36219,7 +37245,11 @@
           "Description": "Scheme of subdomain-routed preview URLs",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/preview_config.proto"
+          "ProtoFile": "config/v1/preview_config.proto",
+          "AllowedValues": [
+            "http",
+            "https"
+          ]
         },
         {
           "Name": "workspace_url_port",
@@ -36283,7 +37313,10 @@
           "Description": "Database driver (postgres)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "config/v1/server_config.proto",
+          "AllowedValues": [
+            "postgres"
+          ]
         },
         {
           "Name": "max_open_conns",
@@ -36773,7 +37806,10 @@
           "Description": "Streaming driver (nats)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "config/v1/api_server_config.proto",
+          "AllowedValues": [
+            "nats"
+          ]
         },
         {
           "Name": "cors_allowed_origins",
@@ -36801,7 +37837,11 @@
           "Description": "Auth mode: supabase (JWTs) or apikey (one shared bearer key)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "config/v1/api_server_config.proto",
+          "AllowedValues": [
+            "supabase",
+            "apikey"
+          ]
         },
         {
           "Name": "auth_api_key",
@@ -36886,7 +37926,12 @@
           "Description": "Worktree auto-archive: dry-run, on or off",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "config/v1/api_server_config.proto",
+          "AllowedValues": [
+            "dry-run",
+            "on",
+            "off"
+          ]
         },
         {
           "Name": "integrations",
@@ -37130,7 +38175,12 @@
           "Description": "Run forge's storage reaper on a schedule: auto (managed daemons only), on, or off",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/config.proto"
+          "ProtoFile": "config/v1/config.proto",
+          "AllowedValues": [
+            "auto",
+            "on",
+            "off"
+          ]
         },
         {
           "Name": "interval",
@@ -37285,7 +38335,13 @@
           "Description": "TLS mode for the gateway connection: tls, insecure_tls_skip_verify, h2c or disabled",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "config/v1/daemon_config.proto",
+          "AllowedValues": [
+            "tls",
+            "insecure_tls_skip_verify",
+            "h2c",
+            "disabled"
+          ]
         },
         {
           "Name": "tls_cert_file",
@@ -37369,7 +38425,11 @@
           "Description": "Daemon type the platform declares: managed (an operator-created workspace pod) or self_hosted",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "config/v1/daemon_config.proto",
+          "AllowedValues": [
+            "managed",
+            "self_hosted"
+          ]
         },
         {
           "Name": "working_dir",
@@ -37439,7 +38499,11 @@
           "Description": "Priority of agent-started commands: low or normal",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "config/v1/daemon_config.proto",
+          "AllowedValues": [
+            "low",
+            "normal"
+          ]
         },
         {
           "Name": "worktree_dir",
@@ -38040,7 +39104,10 @@
           "Description": "Streaming driver (nats)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/worker_config.proto"
+          "ProtoFile": "config/v1/worker_config.proto",
+          "AllowedValues": [
+            "nats"
+          ]
         },
         {
           "Name": "integrations",
