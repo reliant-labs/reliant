@@ -20,6 +20,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -271,6 +274,12 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 	// corrupts the rendered message (orphaned tool calls, stuck placeholders).
 	var pending *StreamingDelta
 
+	// One span per producer stream this subscriber receives, not one per
+	// delta: a span per token was 94% of the API server's spans and said
+	// nothing a count does not.
+	delivery := &deliverySpan{chatID: sub.chatID}
+	defer delivery.end()
+
 	for {
 		// Opportunistically flush a carried chunk the moment the consumer has
 		// room, without blocking the reader.
@@ -288,10 +297,6 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 			return
 		}
 
-		// Extract trace context from NATS message headers
-		carrierMsg := &nats.Msg{Header: msg.Headers()}
-		_, span := observability.StartNATSSpan(ctx, carrierMsg, "nats.consume.streaming.delta")
-
 		observability.NATSReceiveTotal.WithLabelValues("streaming.chat").Inc()
 
 		var delta StreamingDelta
@@ -300,16 +305,15 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 			logging.Warn("[NATSHub] Failed to unmarshal delta",
 				"chatID", sub.chatID[:min(8, len(sub.chatID))],
 				"error", err)
-			span.End()
 			continue
 		}
+		delivery.observe(ctx, msg.Headers(), delta)
 
 		// Fast path: consumer keeping up — hand the delta off without blocking.
 		// Only taken when nothing is carried, so ordering is preserved.
 		if pending == nil {
 			select {
 			case sub.events <- delta:
-				span.End()
 				continue
 			default:
 			}
@@ -323,21 +327,18 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 				pending = &merged
 				h.coalesceCount.Add(1)
 				observability.StreamingErrorsTotal.WithLabelValues("coalesced").Inc()
-				span.End()
 				continue
 			}
 			// A carried chunk for a different block/thread must land before this
 			// one — flush it (blocking) to preserve order, then carry the new one.
 			if pending != nil {
 				if !h.deliver(ctx, sub, *pending) {
-					span.End()
 					return
 				}
 				pending = nil
 			}
 			d := delta
 			pending = &d
-			span.End()
 			continue
 		}
 
@@ -346,16 +347,13 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 		// JetStream buffers upstream instead of dropping events.
 		if pending != nil {
 			if !h.deliver(ctx, sub, *pending) {
-				span.End()
 				return
 			}
 			pending = nil
 		}
 		if !h.deliver(ctx, sub, delta) {
-			span.End()
 			return
 		}
-		span.End()
 	}
 }
 
@@ -440,4 +438,55 @@ func (h *NATSHub) IsConnected() bool { return h.nc.IsConnected() }
 // Close shuts down the hub, draining the NATS connection gracefully.
 func (h *NATSHub) Close() error {
 	return h.nc.Drain()
+}
+
+// deliverySpan is the span for one producer stream — one LLM response — as a
+// subscriber receives it: a child of the producer's span (the trace context
+// every delta carries in its NATS headers), lasting from the first delta to
+// the last, with the number of deltas delivered. A stream ends at its
+// message_stop, when deltas start arriving from another producer span, or
+// when the subscription ends.
+type deliverySpan struct {
+	chatID   string
+	producer trace.SpanContext
+	span     trace.Span
+	deltas   int
+}
+
+func (d *deliverySpan) observe(ctx context.Context, headers nats.Header, delta StreamingDelta) {
+	parent := observability.ExtractTraceContext(ctx, &nats.Msg{Header: headers})
+	sc := trace.SpanContextFromContext(parent)
+	if !sc.IsValid() {
+		// A delta with no producer trace has nothing to be a child of; a
+		// root span per stream would be a one-span trace of its own.
+		d.end()
+		return
+	}
+	if d.span == nil || !sc.Equal(d.producer) {
+		d.end()
+		// Resolved per stream, not cached in a package var: a tracer taken
+		// from the global provider before it is installed stays a no-op once
+		// the provider has been replaced.
+		_, d.span = otel.Tracer("reliant.nats").Start(parent, "nats.consume.streaming",
+			trace.WithSpanKind(trace.SpanKindConsumer),
+			trace.WithAttributes(
+				attribute.String("messaging.system", "nats"),
+				attribute.String("messaging.destination.name", natsSubjectPfx+"*"),
+				attribute.String("chat_id", d.chatID),
+			))
+		d.producer = sc
+	}
+	d.deltas++
+	if delta.DeltaType == DeltaTypeMessageStop || delta.DeltaType == DeltaTypeStreamCancelled {
+		d.end()
+	}
+}
+
+func (d *deliverySpan) end() {
+	if d.span == nil {
+		return
+	}
+	d.span.SetAttributes(attribute.Int("streaming.deltas", d.deltas))
+	d.span.End()
+	d.span, d.producer, d.deltas = nil, trace.SpanContext{}, 0
 }
