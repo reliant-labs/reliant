@@ -138,7 +138,7 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
 function ArchivedTag() {
   return (
     <span
-      className="ml-1.5 inline-flex items-center gap-1 rounded border border-border/60 px-1 py-0.5 align-middle text-2xs font-medium uppercase leading-none tracking-wide text-muted-foreground"
+      className="ml-1.5 inline-flex items-center gap-1 rounded border border-border/60 px-1 py-0.5 align-middle text-xs font-medium uppercase leading-none tracking-wide text-muted-foreground"
       title="Archived. Successful automation runs are archived automatically."
     >
       <Archive className="h-2.5 w-2.5" aria-hidden="true" />

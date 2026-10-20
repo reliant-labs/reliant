@@ -256,7 +256,12 @@ message MethodOptions {
   // Whether this method is idempotent (safe to retry without side effects).
   bool idempotent = 3;
 
-  // Server-side timeout for this method. Zero means use the service default.
+  // Server-side deadline for this method. forge projects it into
+  // pkg/middleware/procedures_gen.go (ProcedureDeadlines), which the
+  // scaffolded chain hands its Deadline slot; that slot runs ahead of
+  // authentication, so the deadline bounds the credential lookup too. Unset
+  // or zero is the slot's default (serverkit.DefaultUnaryDeadline for a unary
+  // rpc, none for a stream); negative is no server deadline.
   google.protobuf.Duration timeout = 4;
 
   // Whether callers should supply an idempotency key for this method.
@@ -276,6 +281,97 @@ message MethodOptions {
   // The list is informational at runtime today; future work may enforce
   // that handlers can only return declared codes.
   repeated string errors = 6;
+
+  // Activity declares the typed activity event a successful call records:
+  // who (the caller) did what (verb) to which object (target), where (env)
+  // and through what (via). forge/pkg/activity's interceptor reads this
+  // option from the method descriptor and writes the event, so no handler
+  // writes one by hand; `forge lint` fails a mutating rpc that declares
+  // nothing (forgeconv-activity-declared). See ActivityOptions.
+  ActivityOptions activity = 7;
+}
+
+// ActivityOptions declares the activity event an rpc records, or that it
+// records none.
+//
+//   rpc PromoteRelease(PromoteReleaseRequest) returns (PromoteReleaseResponse) {
+//     option (forge.v1.method) = {
+//       activity: {
+//         verb: "promote"
+//         target: { kind: "release", id: "release_id", label: "response.release.version" }
+//         env: "to_env"
+//       }
+//     };
+//   }
+//
+// FIELD PATHS (target.id, target.label, env, scope, detail) are dotted proto
+// field names resolved against the REQUEST, or against the RESPONSE when
+// they start with "response." — a created object's id exists only in the
+// response. Every path must end on a scalar or an enum field.
+//
+// A Create<E>, Update<E> or Delete<E> rpc whose messages have forge's CRUD
+// shape needs no option: verb create/update/delete and target kind snake(E)
+// are implied (forge/pkg/activity.Resolve). An explicit option wins.
+message ActivityOptions {
+  // Verb is the action, a lower_snake token: "promote", "rotate",
+  // "restart". It is stored as written; the UI phrases it ("promoted").
+  string verb = 1;
+
+  // Target names the object the action was done to.
+  ActivityTarget target = 2;
+
+  // Env is the field path whose value is the environment the action
+  // happened in. Empty records a project-level event.
+  string env = 3;
+
+  // Scope is the field path whose value is the scope (an org, a project)
+  // reads are filtered by. Empty takes the interceptor's
+  // ScopeFrom default (the caller's org).
+  string scope = 4;
+
+  // Detail lists field paths copied into the event's detail map, keyed by
+  // each path's last segment.
+  repeated string detail = 5;
+
+  // Writer says who writes the event. The default, the interceptor, writes
+  // it after the handler succeeds. HANDLER means the handler calls
+  // activity.Record inside its own transaction, so the event commits or
+  // rolls back with the mutation.
+  ActivityWriter writer = 6;
+
+  // None records that this rpc changes nothing worth an activity event,
+  // and says why: `activity: { none: "dry run: computes a plan only" }`.
+  // It excludes every other field, and the reason must not be empty.
+  string none = 7;
+}
+
+// ActivityTarget names the object an activity event is about.
+message ActivityTarget {
+  // Kind is the target's type, a lower_snake literal: "release", "secret".
+  string kind = 1;
+
+  // Id is the field path of the target's id. Required.
+  string id = 2;
+
+  // Label is the field path of a human-readable label for the target.
+  // Empty falls back to the id.
+  string label = 3;
+}
+
+// ActivityWriter selects who writes a declared activity event.
+enum ActivityWriter {
+  // ACTIVITY_WRITER_UNSPECIFIED is the interceptor (the default).
+  ACTIVITY_WRITER_UNSPECIFIED = 0;
+
+  // ACTIVITY_WRITER_INTERCEPTOR: the activity interceptor writes the event
+  // after the handler returns successfully, best-effort.
+  ACTIVITY_WRITER_INTERCEPTOR = 1;
+
+  // ACTIVITY_WRITER_HANDLER: the handler calls activity.Record, normally
+  // inside its RunTx so the event is transactional with the mutation. If
+  // the handler succeeds without recording, the interceptor writes the
+  // event itself. Streaming rpcs must use this or `none`.
+  ACTIVITY_WRITER_HANDLER = 2;
 }
 
 // =============================================================================
@@ -307,7 +403,11 @@ message ConfigFieldOptions {
   // Default value as a string. Applied when neither env var nor flag is set.
   string default_value = 3;
 
-  // Whether this field must be provided. Startup fails if missing.
+  // Whether this field must be provided. Loading fails if no layer (default,
+  // config file, env var, flag) gives it a value. It is the ONE runtime
+  // presence check, for every field kind: `sensitive` does not imply it (see
+  // `optional` for why). A credential the process cannot run without says
+  // `required: true` alongside `sensitive: true`.
   bool required = 4;
 
   // Human-readable description shown in --help output and documentation.
@@ -317,7 +417,12 @@ message ConfigFieldOptions {
   // Kubernetes Secret (or equivalent) rather than a literal env-var, and
   // it is never written to forge.yaml inline. The deploy generator emits
   // a `secretKeyRef`-shaped EnvVar referencing a project-level Secret
-  // (default name: <project>-secrets, key: <env_var>).
+  // (default name: <project>-secrets, key: <env_var>), projected into a
+  // workload's env only when that workload names it in `config_secrets`.
+  // Sensitive says where a value comes from (a Secret, never a flag or an
+  // inline manifest value), not whether there must be one: that is
+  // `required`, at runtime, and the secret pre-flight for a ref a workload
+  // declares (see `optional`).
   bool sensitive = 6;
 
   // Category groups related fields for KCL emission. Fields with the same
@@ -334,7 +439,8 @@ message ConfigFieldOptions {
   ConfigFieldRole role = 8;
 
   // AllowedValues constrains a STRING field to a closed set of valid
-  // values, validated at startup by config.Validate. It is the
+  // values, enforced when the config loads (Load runs config.Validate, so
+  // an out-of-set value fails the load, naming the field). It is the
   // type/annotation-driven replacement for the old name-matched log-format
   // check ("json"/"text"): a string field carrying allowed_values is a
   // string ENUM, rejected when its resolved value is outside the set. The
@@ -344,15 +450,31 @@ message ConfigFieldOptions {
   // annotation.
   repeated string allowed_values = 9;
 
-  // Optional marks a field the application TOLERATES being unset, and it is
-  // the only way a `sensitive` field is allowed to have no value.
+  // Optional marks a field the application TOLERATES being unset. It acts
+  // at DEPLOY time; at runtime presence is `required`'s alone.
   //
-  // WHY sensitive IMPLIES REQUIRED BY DEFAULT. A sensitive field projects to
-  // a secret_ref, and forge validates every declared ref against the env's
-  // store before anything starts (secrets.ValidateDeclaredRefs). That check
-  // exists because the alternative — discovering a missing production
-  // credential at runtime — is the failure it was built to prevent, so
-  // "declared but absent" must be an error by default.
+  //   - sensitive: a secret_ref a workload declares (by naming the field in
+  //     its `config_secrets`) is validated against the env's store before
+  //     anything starts (secrets.ValidateDeclaredRefs), and a declared ref
+  //     with no value is an error by default: discovering a missing
+  //     production credential at runtime is the failure the pre-flight
+  //     exists to prevent. `optional: true` exempts the field from that
+  //     check and marks the rendered ref optional (secretKeyRef.optional /
+  //     managedSecret.optional), so the pod starts without it.
+  //   - not sensitive: the env projection omits the field while its value is
+  //     the schema default, so a knob only some environments set does not
+  //     churn every other environment's manifests.
+  //
+  // WHY sensitive DOES NOT IMPLY REQUIRED AT RUNTIME. Whether a credential
+  // must exist is a property of the WORKLOAD that reads it, not of the
+  // field: one config is loaded by several workloads, and each projects only
+  // the secrets its `config_secrets` names. A runtime check implied by
+  // `sensitive` would refuse to start every workload that deliberately does
+  // not read one (a worker sharing the API server's config, a key source the
+  // process uses only when another is unset), forcing a fake value into the
+  // store. So the deploy pre-flight checks what a workload declares, and a
+  // field the PROCESS cannot run without says so with `required: true`, the
+  // same way any other field does.
   //
   // But an OPTIONAL-BY-DESIGN credential is a real thing, and forge had no
   // way to say so. The case that forced this: a config block whose
@@ -365,10 +487,10 @@ message ConfigFieldOptions {
   // puts a real-looking credential in the store and defeats the check for
   // everyone.
   //
-  // So: `optional: true` says the absence is intended. The secret-store
-  // validation skips the field, and the runtime required-check skips it too.
-  // It is deliberately an OPT-IN — the safe default stays "a declared secret
-  // must have a value", and an author has to state the exception.
+  // So: `optional: true` says the absence is intended, and the secret-store
+  // validation skips the field. It is deliberately an OPT-IN — the safe
+  // default stays "a declared secret must have a value", and an author has
+  // to state the exception.
   //
   // It is an ERROR to set both `required: true` and `optional: true`; they
   // are direct contradictions and forge rejects the pair rather than

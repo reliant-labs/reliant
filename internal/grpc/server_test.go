@@ -44,20 +44,24 @@ func userChainInterceptors(t *testing.T) []connect.Interceptor {
 
 // The API listener's chain, outermost first: forge's layers (the trace span,
 // profile labels, recovery, request id, logging, tracing, metrics), the auth
-// slot, then reliant's domain whitelist and forge's stream drain innermost.
-// There is no error reporter: a failed RPC reaches Sentry once, as forge's
-// "rpc failed" log line.
+// slot, then reliant's domain whitelist, forge's activity stream and its
+// stream drain innermost. There is no error reporter: a failed RPC reaches
+// Sentry once, as forge's "rpc failed" log line.
 func TestUserChainOrder(t *testing.T) {
 	chain, err := NewUserChain(UserChainDeps{Auth: &testNamedInterceptor{}})
 	require.NoError(t, err)
 	require.Equal(t, serverkit.AudienceUser, chain.Audience())
 
 	got := chain.Interceptors()
-	require.Len(t, got, 10)
+	require.Len(t, got, 11)
 	require.IsType(t, &otelconnect.Interceptor{}, got[0], "the trace span opens outermost")
 	require.IsType(t, &interceptors.DomainWhitelistInterceptor{}, got[8], "the domain whitelist reads the user auth stashed")
-	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[9]),
+	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[10]),
 		"the stream drain is innermost, so logging records the status the client received")
+	for _, ic := range got {
+		require.NotEqual(t, reflect.TypeOf(serverkit.Deadline{}), reflect.TypeOf(ic),
+			"forge's Deadline slot (30s for every unary RPC) would undercut the Auth slot's per-procedure budgets")
+	}
 }
 
 // The per-RPC deadline wraps authentication, as it always has: an `rlat_`

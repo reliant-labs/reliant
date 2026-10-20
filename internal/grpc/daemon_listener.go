@@ -86,6 +86,10 @@ func NewDaemonChain(deps DaemonChainDeps) (*DaemonChain, error) {
 		// NewUserChain): a stream this listener ends because it is
 		// draining is an expected outcome, never an ERROR.
 		LogOptions: []observe.LogOption{observe.WithErrorClassifier(errclass.Library)},
+		// The watchdog and timeout below bound the daemon's unary RPCs, as
+		// they always have; forge's default Deadline slot would add a second
+		// watchdog that logs each slow call again.
+		Deadline: serverkit.NoDeadline,
 		Extras: []connect.Interceptor{
 			interceptors.NewSlowRPCWatchdogInterceptor(),
 			interceptors.NewTimeoutInterceptor().Interceptor(),

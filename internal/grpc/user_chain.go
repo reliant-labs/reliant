@@ -37,7 +37,8 @@ type UserChainDeps struct {
 // NewUserChain builds the API listener's chain. Outermost first:
 //
 //	trace → recovery → request-id → logging → metrics →
-//	[slow-RPC watchdog → timeout → auth] → domain whitelist → stream drain
+//	[slow-RPC watchdog → timeout → auth] → domain whitelist → activity →
+//	stream drain
 //
 // and, inside it, a mount's own options (machinewake on the worktree and
 // filesystem services, forgeAPIDisabled when the forge API is off).
@@ -50,7 +51,9 @@ type UserChainDeps struct {
 //     self-hosted token store's query and the analytics privacy lookup run
 //     inside the RPC's deadline, and a slow one is reported as a slow RPC.
 //     forge's chain runs Extras after Auth, so as Extras they would no
-//     longer bound it.
+//     longer bound it. forge's own Deadline slot, which sits in the same
+//     place, is dropped (NoDeadline): its 30s default for every unary RPC
+//     would undercut reliant's per-procedure budgets.
 //   - No audit layer. forge's default audits the forge claims an
 //     authenticator stashes (authn), and reliant's stashes its own
 //     (auth.WithUser), so every call would be audited as anonymous. The API
@@ -90,6 +93,11 @@ func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 		// failure Temporal carries as Benign — nobody has to act — logged at
 		// ERROR, error_class=server, and counted as a dead-end error.
 		LogOptions: []observe.LogOption{observe.WithErrorClassifier(errclass.Library)},
+		// The Auth slot above already bounds and watches every RPC; forge's
+		// default Deadline (30s for every unary RPC) would cut the longer
+		// budgets reliant grants — worktree operations, forge daemon
+		// commands, the unbounded OAuth flows — and log each slow call twice.
+		Deadline: serverkit.NoDeadline,
 		Extras: []connect.Interceptor{
 			interceptors.NewDomainWhitelistInterceptor(deps.AllowedEmailDomains),
 		},

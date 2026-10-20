@@ -1085,9 +1085,10 @@ Four rules:
   4. Under GitHub Actions the table is appended to $GITHUB_STEP_SUMMARY.
 
 Checks run concurrently. A check waits for the checks it names in `after`; a check that
-rewrites the tree (verify-generated, `mutates_tree`) runs alone, before the checks that
-read it; a heavy check holds one of the machine's heavy slots (`forge slot status`), and
-at most --jobs light checks run at once. Each check's output goes to
+rewrites the tree (an extra with `mutates_tree`) runs alone, before the checks that read
+it (verify-generated regenerates a scratch copy, so it is not one); a heavy check holds
+one of the machine's heavy slots (`forge slot status`), and at most --jobs light checks
+run at once. Each check's output goes to
 tmp/ci/`<lane>`/`<check>`.log; the console shows start and finish lines and a failure's tail.
 
 On a committed tree, a check that PASSED on this exact tree before (any worktree of the
@@ -1241,7 +1242,8 @@ reliant forge ci validate-kcl
 
 Verify generated code is pristine and up to date
 
-Three checks, all local to the checkout:
+Three checks of the working tree as it stands (tracked files plus untracked
+files git does not ignore — on a clean checkout, HEAD):
   1. Self-certification: every generated file's embedded forge:hash marker
      must verify (recompute vs embedded) — catches hand-edits that were
      committed without --force / forge project disown.
@@ -1253,6 +1255,11 @@ Three checks, all local to the checkout:
   3. Commit policy: no generated file is gitignored (check 2 cannot see an
      ignored file), and no machine-local state (.forge-kcl/, a frontend's
      dev public/config.js) is tracked.
+
+All three run against a scratch copy of the checkout, made beside the repository
+(`.<repo>.forge-verify-*`) and removed afterwards, so the checkout itself is never
+written: other readers of it can run at the same time, and an interrupted run
+leaves nothing behind. Every change it reports was made by forge generate.
 
 ```
 reliant forge ci verify-generated [flags]

@@ -3,6 +3,7 @@ package grpc
 
 import (
 	"net/http"
+	"reflect"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -67,4 +68,15 @@ func mountOne(path string, handler http.Handler, service string) serverkit.Route
 		mux.Handle(path, handler)
 		return []string{service}
 	})
+}
+
+// forge's Deadline slot is dropped on the daemon chain: its own watchdog and
+// timeout (Extras) bound the daemon's unary RPCs, and a second watchdog would
+// log every slow call twice.
+func TestDaemonChainHasNoForgeDeadline(t *testing.T) {
+	chain, err := NewDaemonChain(DaemonChainDeps{DaemonTokens: tokenauthority.NewMemory()})
+	require.NoError(t, err)
+	for _, ic := range chain.Interceptors() {
+		require.NotEqual(t, reflect.TypeOf(serverkit.Deadline{}), reflect.TypeOf(ic))
+	}
 }
