@@ -1,0 +1,116 @@
+---
+title: "Environments & deploys"
+description: "How a forge project declares its environments, and how releases, plans, promotion, rollback and scoped deploys work"
+---
+
+A forge project describes every place it runs as code. Each **environment** is a directory under `deploy/kcl/`, and a new project has three: `dev` runs on your machine, while `staging` and `prod` deploy to [Reliant hosting](/forge/hosting). Deploying is the same command for every environment and every target, so once you know how releases and plans work you know how to ship anywhere.
+
+## How an environment is declared
+
+Environments are written in KCL, a typed configuration language. Every deployable unit is declared once, in `deploy/kcl/workloads.k`, with the facts that are true wherever it runs: what to build, which subcommand to run, its ports, and which secrets it reads. Each environment's `deploy/kcl/<env>/main.k` then **binds** each workload to a runtime and states only its own values (replica counts, resources, config). A scaffolded `prod` looks like this:
+
+```python
+_workloads = [
+    _hosted(wl.migrate)   # the schema migration, run before anything it gates
+    _hosted(_api)         # the binary's `server`: every service and worker in one workload
+]
+```
+
+The runtimes are `forge.OnHost` (a local process, for `dev`), `forge.OnHosted` (Reliant hosting), `forge.OnCluster` (a Kubernetes cluster you operate) and `forge.OnCompose` (Docker Compose); frontends bind to a dev server, hosted static hosting, your own bucket (`forge.OnBucket`) or Firebase. There is no environment-wide mode: one environment can mix runtimes, so a hosted app can keep a Kubernetes operator on your own cluster.
+
+Commands that help you see what an environment is:
+
+| Command | What it shows |
+|---|---|
+| `forge env list` | The environments `deploy/kcl/` declares. |
+| `forge env render <env>` | Every object the environment renders and where it lands. Changes nothing. |
+| `forge env config <env>` | The configuration each workload receives (env vars, ports, secret references). |
+| `forge env diff` | What would change in each environment compared with what is deployed. Read-only. |
+| `forge env new preview --from staging` | Derive a new environment from an existing one. |
+
+## Releases
+
+Every deploy ships a **release**: an immutable record of one build of your project, holding the digest of every image and static bundle, the commit and tree it came from, and the dashboards and alert rules that belong to it. Releases are built once and promoted by digest, so the bytes that passed staging are the bytes prod runs.
+
+```bash
+forge env deploy staging                       # build this checkout, cut a release, deploy it
+forge env deploy prod --from staging           # deploy exactly the release staging runs
+forge env deploy prod 20261019.142210-3f2a9c1b7d4e   # deploy a release that already exists
+```
+
+With no version, `forge env deploy` builds the current checkout, pushes the images, cuts a release named after the time and the tree, and deploys it. If a release already holds this exact clean checkout, it says `reusing release …` and builds nothing. Deploying from a checkout with uncommitted changes to a shared environment asks first, because the release would describe no commit. Naming a version, or `--from`, builds nothing and deploys a release that already exists.
+
+`forge cloud releases` lists a hosted environment's releases, and `forge env status <env> --history` its promotions.
+
+## The plan, and approving it
+
+Nothing is written until you approve a **plan**. Forge compares the release the environment runs with the one it would move to, and prints every image that changes, the commits in between, and the direction. A move to an older release is labelled `BEHIND` and says so, because the newer release's migrations stay applied.
+
+How you approve depends on where you run:
+
+- **At a terminal** you are asked to confirm (the default is no).
+- **In CI**, `--yes` means "I read the plan". Without a terminal and without `--yes`, the deploy stops with exit code 5 having built and cut the release but deployed nothing, so approving it later needs no rebuild.
+- **With a human review step**, split the deploy in two. The first stage cuts the release and prints the plan with a digest; the second deploys only if the plan is still exactly that one:
+
+  ```bash
+  PLAN=$(forge env deploy prod --plan-only --json)
+  forge env deploy prod "$(jq -r .target.release <<<"$PLAN")" \
+    --approve "$(jq -r .deploy_plan.digest <<<"$PLAN")"
+  ```
+
+  If anything moved in between (another deploy landed, say), the second stage is refused with exit code 3 instead of shipping changes nobody reviewed. The first stage's JSON also carries the assembled second command as `next_step`.
+
+`--plan` prints the plan without building or writing anything. A plan that would destroy stateful data, such as deleting a database volume, also needs `--acknowledge-destructive` with the codes the plan names; `--yes` never covers those.
+
+Every deploy is also a compare-and-set: if someone else deploys to the same environment while you are reading the plan, yours is refused rather than overwriting theirs.
+
+## Waiting for health
+
+A deploy is not finished when it is recorded. `forge env deploy` waits until every workload is rolled out and healthy, so a successful exit means the release is live. Migrations run first: the scaffolded `migrate` job runs before any new pod serves, and if it fails nothing else changes and the old pods keep serving.
+
+`forge env status <env>` is the one view of an environment afterwards: the release it is bound to, whether the digests actually running match it, the rollout phase per workload, and recent gates. It exits non-zero when what runs does not match what was released, so CI can gate on `forge env status prod --wait`.
+
+The exit codes are designed for scripts: 0 deployed (or nothing to do), 1 failed, 2 could not determine (the control plane was unreachable), 3 the environment moved since the plan, 4 another rollout is still in progress (retry, or `--supersede`), 5 the plan was not confirmed, 7 queued on billing (see [Hosting](/forge/hosting#queued-deploys)), 8 the wait ran out while the rollout was still progressing.
+
+## Scoped deploys
+
+You can ship part of an environment from a release that already exists:
+
+```bash
+forge env deploy prod 20261019.142210-3f2a9c1b7d4e --target api        # one workload
+forge env deploy prod 20261019.142210-3f2a9c1b7d4e --frontends-only    # only the static frontends
+```
+
+Both need a version. A deploy with no version cuts a release covering every artifact, and a release that shipped only some of them would not describe what is running.
+
+## Rolling back
+
+There is no rollback command, deliberately: by the time you would run one, the release has applied its migrations and written data in the new shape. Recovery is rolling forward, by deploying a release with the fix. You can still deploy an older release when it is safe; it is an ordinary deploy, its plan says `BEHIND`, and you read it before confirming.
+
+In the app, **Apps → Releases** lists every release with the environments it ran in, its commit and its author. A release's page shows its changes, rollout, checks, artifacts and health before and after, and offers **Promote…** and, for an older release, **Roll back prod to this…**. Both go through the same plan.
+
+## Deploying from CI
+
+CI has no Reliant session, so it authenticates with an organization automation token:
+
+```bash
+forge cloud token create --env prod --name github-actions --scopes deploy:read,deploy:write
+```
+
+The secret is printed once. Store it as a CI secret named `FORGE_CONTROL_PLANE_TOKEN` (the variable a scaffolded environment declares), and deploy with `forge env deploy <env> --yes` or the two-stage form above. A new project's generated CI workflows already run `forge lint`, the tests and `forge ci verify-generated`. See [Forge sign-in](/forge/sign-in) for how forge picks a credential.
+
+## Hosting somewhere else
+
+Hosting is the default, not a requirement. The scaffolded `staging` and `prod` files include ready-made but unused binders for a Kubernetes cluster you operate (`_on_cluster`) and your own storage bucket for a frontend (`_on_bucket`). Fill in the cluster's details, change a workload's line from `_hosted(...)` to `_on_cluster(...)`, and forge deploys it there with the same releases, plans and promotion.
+
+A cluster you operate is registered once with the control plane, so it can converge deploys into it:
+
+```bash
+forge cluster connect acme-prod --context gke_acme_us-central1_prod --env prod
+```
+
+Or derive a new environment with some workloads moved: `forge env new cloud --from prod --bind api=cluster`, then `forge env new cloud --check` once its placeholders are filled. On a cluster you operate, forge checks before applying that every image and every referenced Secret key exists, and it applies only to the kubectl context the environment's KCL names, never whatever context your shell has selected.
+
+## Related topics
+
+[Hosting on Reliant](/forge/hosting) (billing and what hosting runs), [Secrets](/forge/secrets), [Custom domains](/forge/custom-domains), [Observability](/forge/observability). Agents can load the `deploy` skill and its sub-skills (`deploy/plan`, `deploy/hosting`, `deploy/cluster-connect`) for the full detail, and `forge env deploy --help` documents every flag.

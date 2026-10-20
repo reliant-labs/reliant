@@ -221,7 +221,6 @@ For advanced use cases, you can override default paths:
 | `RELIANT_WORKTREE_DIR` | `~/.reliant/worktrees/` | Git worktree storage |
 | `DATABASE_DRIVER` | `sqlite` | Backend DB driver (`sqlite` or `postgres`) |
 | `DATABASE_URL` | _(unset)_ | Required when `DATABASE_DRIVER=postgres` |
-| `RELIANT_FEATURE_SKILLS_ENABLED` | _(unset)_ | Optional env override for skills feature gate (`true`/`false`) |
 
 When using `DATABASE_DRIVER=postgres` in local development, `scripts/dev.sh` and `scripts/dev.ps1` now auto-provision a **per-worktree database** on the shared local Postgres server and export a worktree-specific `DATABASE_URL` (also written to `.dev-ports.sh`). This keeps Postgres behavior aligned with SQLite worktree isolation.
 

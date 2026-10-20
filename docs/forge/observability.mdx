@@ -1,0 +1,161 @@
+---
+title: "Observability"
+description: "Logs, traces, metrics, dashboards, alerts and browser telemetry for the apps you deploy with Forge, and what the platform keeps, for how long"
+---
+
+An app you deploy to Reliant hosting reports on itself from its first deploy, with no configuration: generated dashboards for every service and frontend, a set of default alerts, browser error tracking with source maps, and logs, traces and metrics linked to each other. Your services' logs, traces and metrics, your frontend's errors, page loads and sessions, and the platform's own view of each workload (restarts, memory against its limit, Kubernetes events) all land in a telemetry store that belongs to your organization. The **Apps** area of the Reliant app reads that store, and alerts evaluate against it. There is nothing to sign up for, no collector to run and no API key to paste into your code.
+
+This works because forge apps never learn where their telemetry goes. A forge service exports standard OpenTelemetry to whatever endpoint the platform hands it. On your machine, `forge env up` runs a local ClickStack (ClickHouse plus the HyperDX UI) and points your processes at it; on hosting, the platform injects its own endpoint and credential into every pod. The same build ships to both, so what you see locally in development is what you see in production, minus the platform-only data.
+
+## What is collected
+
+Each organization has its own isolated database in Reliant's ClickHouse-based store. Every environment you deploy writes into it, labelled with the environment's name, so one view can show all of them or one at a time.
+
+| Signal | Where it comes from |
+|---|---|
+| **Traces** | Every RPC, every call between your components, and every database query is a span, with no instrumentation to write. The hosted gateway keeps every trace that contains an error and samples the healthy ones, so request, error and latency figures come from metrics rather than from counting spans. |
+| **Metrics** | RPC rate, errors and latency per method, database pool and query metrics, Go runtime metrics, and any metric you declare in `internal/metrics/metrics.go`. |
+| **Logs** | Your services' structured JSON logs on stdout, collected by the platform's node agent. A line logged with a request's context carries its trace ID, so a log entry links to the trace that produced it. |
+| **Workload metadata** | Collected by the platform without your app's help: CPU and memory against each container's limits, restarts and the last exit reason, Kubernetes events, and the image each pod runs. |
+| **Browser telemetry** | Uncaught errors and unhandled rejections, `console` output, fetch and XHR calls, page loads, web vitals (LCP, INP, CLS) and sessions, from the HyperDX browser SDK forge scaffolds into every Next.js and Vite frontend. |
+| **Profiles** | Continuous CPU, heap and goroutine profiles. Off on hosting unless the environment opts in (below); on by default in the local stack. |
+| **Session replay** | Off unless you opt in, in two places (below). |
+
+Browser data travels to the store through your own site: the browser posts to `/_otel` on the origin that served the page, and the platform routes that path to its ingest. There is no third-party host for an ad blocker to block, no CORS preflight, and no secret in your JavaScript bundle.
+
+## Reading it in Apps
+
+Open **Apps** from the sidebar and pick a project. An environment picker in the top bar scopes every page to one environment or to all of them; it defaults to `prod` and is remembered per project. Observability has its own section in the Apps navigation:
+
+- **Observability** (the section's home) leads with requests, error rate, p95 latency and alerts firing, each compared with the previous window and marked with your releases. Below that, your services are sorted by what needs attention.
+- **Logs**, **Traces** and **Profiles** are the explorers. Search, filter by service, severity or any attribute, and open a trace's waterfall from a log line.
+- **Dashboards** and **Alerts** are described below.
+
+An environment's own page (**Environments → \<env\>**) also has an **Observability** tab: the same views, pinned to that environment. The **Overview** shows each workload's CPU, memory, restarts and recent events.
+
+A local environment has nothing here. `forge env up` keeps development telemetry in the ClickStack on your machine, and `forge env up` and `forge env status dev` print its HyperDX URL.
+
+## Dashboards
+
+Forge generates dashboards from your project's own shape every time you run `forge generate`: an overview of every service, one dashboard per service with a row for every RPC, a frontend dashboard (errors, sessions, page views, failed API calls, web vitals by route, errors by release), a workloads dashboard and a releases dashboard. They are cut into every release, so the console shows the set that belongs to the release an environment is running, and a rollback shows the older set.
+
+The **Dashboards** page lists three kinds, and the difference decides what you can do with each:
+
+| Kind | Where it comes from | Editing |
+|---|---|---|
+| **Generated** | Forge, from your services and frontends | Read-only. **Save as copy** makes an editable workspace copy. |
+| **Repo** | A dashboard file you committed under `deploy/observability/dashboards/` | Read-only in the console, because the file is the source. A repo file named like a generated dashboard replaces it. |
+| **Workspace** | Created in the console: blank, from a template, or by importing a forge dashboard file | Editable. Every save is a new version, with history and restore. |
+
+A workspace dashboard is edited in place. **Edit layout** lets you drag panels, set their width in quarters of the grid and remove them; **Add panel** opens a builder where you choose a visualization, a signal, series with an aggregation (count, p50/p95/p99, average, max, sum, distinct), filters, group-by and units, with a live preview over the dashboard's scope and a **Spec** tab holding the panel's JSON. Saving is checked against the version you opened, so two people editing at once cannot silently overwrite each other. When a workspace dashboard is worth keeping, **Promote to code** gives you the forge dashboard file to commit, and from then on it ships with your releases as a repo dashboard.
+
+Every dashboard has environment, service and time variables, compares against the previous period or the previous release, refreshes on an interval, can be shared as a link or shown full screen, and draws a marker for each release and a band wherever an alert was firing. Clicking into a chart drills down to the matching logs, traces or workload. Star a dashboard and it appears under **Dashboards** in the navigation.
+
+### Dashboards as code
+
+Panels are forge's dashboard spec, so a dashboard file in your repo and a panel built in the console are the same thing. Besides time series, numbers, tables and log searches, a panel can be a bar chart, a heatmap, a read-only ClickHouse `sql` query, a product funnel, a list of frontend issues or of browser sessions, and a line or number panel can plot a formula over its series (`A / B * 100`).
+
+To keep a dashboard in your repository, put its JSON in `deploy/observability/dashboards/` and commit it; the next release carries it. The quickest ways to get that JSON:
+
+- **Promote to code** on a workspace dashboard you built in the console.
+- Copy a generated file to change it: `cp <project>-overview_gen.json <project>-overview.json`, edit the copy, and forge stops generating the original while yours exists. Never edit a `*_gen.json` directly; the next `forge generate` refuses the drift.
+Metrics you declare in `internal/metrics/metrics.go` get a generated custom-metrics dashboard in every release without a file of your own. `forge observe dashboards check` validates the files and lists what the next release would carry. Agents can load the `observability/dashboards` skill for the full spec.
+
+## Alerts
+
+Alert rules are code. Forge generates a default set for every project, and you tune or disable each one per environment in `deploy/kcl/<env>/main.k`, so promoting a release applies its rules and rolling back restores the previous ones.
+
+| Default | Fires when |
+|---|---|
+| `ServiceErrorRateHigh` | A service's server-error rate passes 5% over 5 minutes (caller mistakes such as not-found or invalid input are not counted). |
+| `ServiceLatencyP95High` | A service's p95 latency passes 1 second over 5 minutes. |
+| `ServiceSilent` | A service that normally serves traffic has served nothing for 10 minutes. |
+| `FrontendJSErrorSpike` | Browser errors in the last 10 minutes run at more than three times the previous hour's rate. |
+| `FrontendLCPPoor` | Largest Contentful Paint at p75 passes 4 seconds. |
+| `WorkloadCrashLooping`, `WorkloadOOMKilled`, `WorkloadMemoryNearLimit`, `WorkloadImagePullFailed`, `WorkloadEvicted` | A container keeps restarting, is killed for memory, sits above 90% of its memory limit, cannot pull its image, or is evicted. |
+| `DeployFailed` | A promoted release fails to converge and stays failed for 5 minutes. |
+| `ObservabilityQuotaOver100`, `ObservabilityQuotaOver150` | Your organization passes its monthly observability allowance. |
+
+Each default has thresholds you can change, and your own rules are a ClickHouse `SELECT` where every returned row is a firing alert:
+
+```python
+observability = forge.Observability {
+    alerts = forge.Alerts {
+        defaults = {
+            "error-rate": forge.AlertDefault {params = {threshold = 0.02}}
+            "service-silent": forge.AlertDefault {enabled = False}
+        }
+        routes = [
+            forge.AlertRoute {match = {severity = "critical"}, receiver = "oncall", continue = True}
+            forge.AlertRoute {match = {}, receiver = "slack"}
+        ]
+    }
+}
+```
+
+`forge env render` refuses a malformed rule before anything ships, and `forge observe alerts check` evaluates your rules against the local stack. Agents can load the `observability/alerts` skill for the rule format and every default's parameters.
+
+A route sends alerts to a **receiver**, and a receiver is only a name in your code. What the name points at, a Slack channel, an email list, a webhook or a PagerDuty service, is set in **Observability → Alerts → Receivers**, because a webhook URL or a routing key does not belong in a repository. The built-in **In-app** receiver needs no setup. With no routes declared, alerts go to in-app notifications and then to a receiver named `slack`, and never to a pager until you route them there. The Receivers tab calls out a route that names a receiver you have not set up. Creating or changing receivers needs the organization admin role; their secrets are write-only.
+
+The same page shows what is **Firing**, the alert **History**, the declared **Rules** and **Silences**, which mute matching alerts for a while without changing code.
+
+## Frontend errors, issues and source maps
+
+The browser SDK reports an error with a stack from your minified bundle, which changes with every build. Forge builds every deployed frontend with source maps, moves the maps out of the files it serves, and files them privately with the release, so your users never download them. The platform resolves each new error stack through the maps of the build that produced it, so the same bug is recognised as one **issue** across releases, and tracks each issue per environment as new, unresolved or regressed. The `issues` panel on the frontend dashboard lists errors grouped by stack, most frequent first, with the page they happened on, the release, how often and since when, and a sample trace.
+
+Your frontend's `forge.Frontend` declaration can tune this:
+
+```python
+telemetry = forge.BrowserTelemetry {
+    console_capture = False                                  # do not ship console output
+    errors = forge.FrontendErrors {ignore = ["AbortError", "re:^Failed to fetch"]}
+    funnels = [forge.Funnel {
+        id = "onboarding"
+        steps = ["signup_started", "workspace_created", "first_chat"]
+        window = "7d"
+        by = "user"
+    }]
+}
+```
+
+An error matching `ignore` still reaches the store but is never raised as an issue. `sourcemaps = "public"` serves the maps instead of filing them, and `"off"` drops them. A **funnel** names events your frontend records with `track("signup_started")` from `@reliantlabs/forge-web-runtime`; forge draws each declared funnel as a panel on the frontend dashboard.
+
+## Session replay
+
+Session replay records what a user's browser displayed, so it is off unless you turn it on in two places: build the frontend with `VITE_OTEL_REPLAY=true` (Vite) or `NEXT_PUBLIC_OTEL_REPLAY=true` (Next.js), and opt the environment in with `signals = forge.ObservabilitySignals {replay = True}`. Until both are set, the platform drops replay data rather than storing it. When replay is on, all text and every input is masked and canvases are not recorded, and there is no setting that records unmasked. `replay_sample_rate` in `forge.BrowserTelemetry` records only a share of sessions. The `sessions` panel marks the sessions that have a recording.
+
+## Opting out
+
+Observability is on for every hosted environment. You can turn all of it off, or any category, per environment:
+
+```python
+observability = forge.Observability {enabled = False}        # everything
+
+observability = forge.Observability {                        # or by category
+    signals = forge.ObservabilitySignals {logs = False, metadata = False}
+}
+```
+
+The categories are `traces`, `metrics`, `logs`, `profiles` (set `profiles = True` to turn continuous profiling on), `metadata` (the platform's workload data), `browser` and `replay`. A switched-off category is stopped at its source and never stored, so it is never billed. The change takes effect with the environment's next deploy. When `metadata` is off, the five workload alerts are left out of the release, since nothing would feed them.
+
+You can also send an environment's telemetry to your own OpenTelemetry backend instead, by declaring a `destination`; agents can load the `observability/destination` skill for that.
+
+## Retention and usage
+
+The platform keeps telemetry for these periods:
+
+| Data | Kept for |
+|---|---|
+| Logs | 3 days at DEBUG, 14 days at INFO, 30 days at WARN and above |
+| Traces | 7 days |
+| Metrics | 30 days |
+| Profiles | 72 hours raw, 30 days aggregated |
+| Browser errors | 30 days |
+| Session replays | 14 days |
+| Product events (funnels) | 90 days |
+
+Each organization has an included monthly observability allowance, shared by all its projects. **Project settings → Usage** in Apps (and **Settings → Billing**) shows this month's stored telemetry against it, by signal, measured hourly. Past the allowance, an organization with a payment method keeps everything and pays per GB up to its spend cap; one without starts dropping debug logs and routine traces while keeping errors and metrics, and past 150% keeps only error logs, error spans and metrics until the month resets. The `ObservabilityQuotaOver100` and `ObservabilityQuotaOver150` alerts tell you when either threshold is crossed.
+
+## Related topics
+
+[Environments & deploys](/forge/environments-and-deploys) covers releases and promotion, and [Troubleshooting](/forge/troubleshooting#nothing-shows-up-in-observability) what to check when data is missing. Agents working in a forge project can load the `observability` skill for the local ClickStack, the environment variables forge renders, and how to query logs and traces directly.

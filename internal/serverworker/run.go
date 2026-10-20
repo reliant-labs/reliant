@@ -248,7 +248,8 @@ func Run(ctx context.Context, opts Options) error {
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
-	drivers.InstallReliantKeyHealer(ctx, repo, opts.ControlPlane.URL, opts.ControlPlane.InternalServiceSecret, 0)
+	// The healer only: the api role runs its background sweep.
+	_ = drivers.InstallReliantKeyHealer(repo, opts.ControlPlane.URL, opts.ControlPlane.InternalServiceSecret)
 
 	// -----------------------------------------------------------------
 	// 5. Temporal client

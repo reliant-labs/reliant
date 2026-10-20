@@ -1,0 +1,83 @@
+---
+title: "Project anatomy"
+description: "Where each kind of code goes in a forge project, and which files forge regenerates versus which are yours"
+---
+
+A forge project has two sources of truth, and almost everything else is derived from them:
+
+- **Proto is the API.** Services, RPCs and messages live in `proto/`. Forge generates the Go and TypeScript stubs, the handler wiring, the frontend's React Query hooks and the API dashboards from them.
+- **SQL migrations are the schema.** Tables live in `db/migrations/*.up.sql`. `forge generate` applies them to a real, throwaway Postgres and reads the schema back, then generates the Go structs and data access from what Postgres actually created. Anything Postgres accepts works: `JSONB`, arrays, generated columns, `CHECK` constraints.
+
+The two evolve independently. An **entity** exists where both halves exist (CRUD RPCs in the proto and a table with the same name), and generated code maps the fields the two have in common by name, so a database-only column never leaks onto the wire and a wire-only field never reaches the database.
+
+## The layout
+
+```
+proto/services/<svc>/v1/<svc>.proto   your API: services, RPCs, messages
+proto/config/v1/config.proto          your typed configuration: every setting, its env var and default
+db/migrations/                        your schema, as forward-only SQL migrations
+db/seeds/vocab.yaml                   words the dev-data seeder should use for your columns
+
+internal/handlers/<svc>/              one service, in one directory
+  service.go                            yours: its dependencies and constructor
+  rpc_<name>.go                         yours: one custom RPC per file — the logic goes here
+  handlers_crud.go                      yours: the CRUD methods, where access checks go
+  handlers_crud_ops_gen.go              generated: CRUD wiring and proto/DB conversion
+internal/<name>/                      yours: a domain package (`forge scaffold package`)
+  contract.go                           its interface and dependencies
+  mock_gen.go                           generated: a mock of every interface in contract.go
+internal/workers/<name>/              yours: background workers
+internal/db/                          generated structs and data access (<entity>_orm_gen.go), plus <entity>_repo_ext.go for your own queries
+internal/app/                         how the process is assembled: providers.go and compose.go are yours
+
+cmd/<binary>/                         entrypoints only
+frontends/<name>/                     a Next.js or Vite frontend
+deploy/kcl/workloads.k                every deployable unit, declared once
+deploy/kcl/<env>/main.k               one environment: where each unit runs, and its settings
+deploy/observability/                 generated dashboards and alert defaults, plus your own
+gen/                                  generated stubs and clients — never edit
+forge.yaml                            a deliberately tiny project manifest
+Taskfile.yml                          build, test and CI tasks
+```
+
+Forge discovers what your project contains from the code itself: a service is a proto file, a worker is a directory under `internal/workers/`. Nothing needs registering in `forge.yaml`, which holds only the project's identity and the occasional override.
+
+## Where logic goes
+
+An RPC's logic (validation, permission checks, database calls) goes in its method in `internal/handlers/<svc>/`. There is no separate service layer behind every handler: the methods on `*Service` are the handlers, and they reach the database and other collaborators through `s.deps`. Return errors through `svcerr.Wrap(err)`, which keeps any error text you did not write off the wire, so a database error can never leak a connection string to a caller.
+
+When logic outgrows one method (a state machine several RPCs share, a calculation worth testing on its own, work a background worker repeats), move it into a package with `forge scaffold package <name>` and give the handler that package's interface as a dependency. Declare interfaces where they are used, and keep them small.
+
+Schema changes are always a new migration (`forge db migration new <name>`), never an edit to a generated struct. A query the generated CRUD cannot express goes in `internal/db/<entity>_repo_ext.go`, which forge creates once and never touches again.
+
+Access control is your code. Every RPC requires a signed-in caller unless its proto says `auth_required: false`, but what a caller may see and change (which rows belong to whom) is a check you write in the handler. `forge project audit` reports RPCs that are authenticated but never look at who the caller is.
+
+## Generated files and yours
+
+Every file forge writes belongs to one of three groups, and it says which in its own header:
+
+| | Examples | What forge does |
+|---|---|---|
+| **Regenerated** | `gen/`, every `*_gen.go` (including `internal/db/<entity>_orm_gen.go`), every `*_gen.ts` frontend hook | Rewrites it on every `forge generate`. Never edit. |
+| **Written once, then yours** | migrations, `handlers_crud.go`, `internal/app/providers.go`, `<entity>_repo_ext.go`, frontend pages, `deploy/kcl/<env>/main.k` | Creates it if missing, then leaves it alone. |
+| **Purely yours** | `rpc_<name>.go`, a package's `contract.go`, `cmd/<binary>/main.go` | Never writes it. |
+
+A regenerated file carries `// Code generated by forge. DO NOT EDIT.` and a hash of its own contents. If you edit one by hand, the next `forge generate` stops instead of silently undoing your change. Move the change to the file beside it that is yours, or, if the generated form genuinely cannot express what you need, take the file over with `forge project disown <path> --reason "<why>"`. Deleting a written-once file is remembered too, and `forge project rescaffold <path>` brings it back.
+
+`internal/app/compose.go` is the one hybrid: it is yours, but `forge generate` adds the constructor and dependency entries for new components while leaving every line you wrote alone.
+
+## The frontend is a starting point
+
+The scaffolded frontend (a dashboard of entity tiles, a sidebar, a sign-in screen, and list, detail and edit pages per entity) exists to prove the stack is wired end to end. It is yours from the moment it is written, and replacing it with a real design is the expected next step. A deployed Next.js frontend is a static export, so pages use query parameters (`/bookmarks/view?id=…`) rather than dynamic `[id]` routes.
+
+## Finding things
+
+```bash
+forge project shapes --grep Bookmark   # every RPC, message, table, handler and hook named Bookmark, with file:line
+forge project map                      # the tree, with each file's ownership
+forge project audit                    # services, RPCs, entities, drift, unimplemented stubs
+```
+
+## Related topics
+
+[Adding a feature](/forge/adding-features) puts this layout to work. Agents can load the `architecture`, `api`, `db` and `proto` skills for the full conventions, which `forge lint` enforces.

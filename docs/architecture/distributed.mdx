@@ -23,16 +23,15 @@ reliant server gateway   # Daemon connection gateway
 
 ### API Server (`reliant server api`)
 
-The API server handles all client-facing HTTP REST and gRPC/ConnectRPC requests. It is entirely stateless—it stores nothing locally and derives all state from Postgres, Temporal, and NATS. This makes it safe to run as **N replicas** behind a load balancer with no session affinity required.
+The API server handles every client-facing request. It is entirely stateless—it stores nothing locally and derives all state from Postgres, Temporal, and NATS. This makes it safe to run as **N replicas** behind a load balancer with no session affinity required.
 
-On startup, the API server connects to Postgres for application data, to Temporal for workflow orchestration, and to NATS for both real-time event streaming and daemon tool routing. It forces the streaming driver to NATS even if configured otherwise, because an API server replica cannot receive cross-process events through an in-memory hub.
+On startup, the API server connects to Postgres for application data, to Temporal for workflow orchestration, and to NATS for both real-time event streaming and daemon tool routing. NATS is the only streaming driver: an API server replica cannot receive cross-process events through an in-memory hub.
 
-The server exposes four network endpoints:
+The server exposes three network endpoints:
 
-- **HTTP API** (default port 8080) — REST endpoints for the web frontend and external integrations.
-- **gRPC/ConnectRPC** (default port 9090) — Typed RPC services including chat, workflow management, streaming updates, and file system proxy operations.
-- **Health check** (default port 8081) — `/health` for liveness and `/ready` for readiness. The readiness check validates connectivity to Postgres, NATS, and the streaming hub before returning 200.
-- **pprof** (default port 6060, bound to 127.0.0.1) — Go profiling endpoints for debugging. Also exposes `/debug/db` for monitoring the write queue depth.
+- **ConnectRPC** (default port 9090) — Every typed service: chat, workflow management, projects, settings, streaming updates, and the browser's view of a daemon (`FileSystemService`, `BackgroundService`, `TerminalService`, `DaemonService`), which it reaches through NATS. A WebSocket endpoint at `/api/v2/terminal/ws` carries terminal I/O.
+- **Health check** (default port 8081) — `/health` for liveness and `/ready` for readiness. The readiness check validates connectivity to Postgres, NATS, and the streaming hub before returning 200, and turns 503 when the server begins draining for shutdown.
+- **pprof** (default port 6060) — Go profiling endpoints for debugging, plus `/debug/db` for the database write queue.
 
 When the API server needs to execute a tool on a developer's machine, it publishes the request to NATS via the `NATSDaemonRouter`. The gateway that holds the developer's daemon connection picks up the request and forwards it. This indirection is what allows the API server to remain stateless—it never holds daemon connections directly.
 
@@ -40,24 +39,24 @@ When the API server needs to execute a tool on a developer's machine, it publish
 
 | Flag | Env Var | Default | Description |
 |------|---------|---------|-------------|
-| `--api-port` | `API_PORT` | `8080` | HTTP API listen port |
-| `--grpc-port` | `GRPC_PORT` | `9090` | gRPC/ConnectRPC listen port |
+| `--grpc-port` | `GRPC_PORT` | `9090` | ConnectRPC listen port |
 | `--health-port` | `HEALTH_PORT` | `8081` | Health/readiness endpoint port |
 | `--pprof-port` | `PPROF_PORT` | `6060` | pprof debug server port |
 | `--bind-address` | `BIND_ADDRESS` | `0.0.0.0` | Network interface to bind to |
 | `--db-driver` | `DATABASE_DRIVER` | `postgres` | Database driver (`postgres` is the only supported value) |
-| `--db-url` | `DATABASE_URL` | — | Postgres connection string |
+| — | `DATABASE_URL` | — | Postgres connection string (required; environment only, because it carries a password) |
 | `--data-dir` | `DATA_DIR` | `./data` | Directory for logs, certs, and local data |
 | `--temporal-host` | `TEMPORAL_HOST` | `localhost` | Temporal server hostname |
 | `--temporal-port` | `TEMPORAL_PORT` | `7233` | Temporal server port |
 | `--temporal-namespace` | `TEMPORAL_NAMESPACE` | `reliant` | Temporal namespace |
-| `--nats-url` | `NATS_URL` | — | NATS server URL (required) |
-| `--streaming-driver` | `STREAMING_DRIVER` | `nats` | Streaming driver (`memory` or `nats`; forced to `nats` at runtime) |
+| — | `NATS_URL` | — | NATS server URL (required; environment only). `NATS_USER` / `NATS_PASSWORD` supply credentials out of band |
+| `--streaming-driver` | `STREAMING_DRIVER` | `nats` | Streaming driver (`nats` is the only value) |
 | `--tls-cert` | `TLS_CERT_FILE` | — | TLS certificate file path |
 | `--tls-key` | `TLS_KEY_FILE` | — | TLS private key file path |
 | `--disable-tls` | `DISABLE_TLS` | `false` | Disable TLS (plaintext HTTP) |
-| `--jwt-public-key` | `JWT_PUBLIC_KEY` | (none) | JWT public key PEM for token validation |
+| `--jwt-public-key` | `JWT_PUBLIC_KEY` | — | JWT public key PEM for token validation |
 | `--jwt-public-key-file` | `JWT_PUBLIC_KEY_FILE` | — | Path to JWT public key PEM file |
+| `--jwks-url` | `RELIANT_JWKS_URL` | — | JWKS endpoint for JWT validation, instead of a PEM key |
 | `--cors-origins` | `CORS_ALLOWED_ORIGINS` | `*` | Comma-separated allowed origins, or `*` for all |
 
 ### Worker (`reliant server worker`)
@@ -68,21 +67,22 @@ Like the API server, the worker is **stateless** and can run as **N replicas** f
 
 When a workflow activity needs to execute a tool on a developer's machine, the worker publishes the request to NATS using the same `NATSDaemonRouter` as the API server. It also uses NATS update hubs to publish real-time chat and user update events that API server replicas pick up and stream to connected clients.
 
-The worker runs server-side tool execution locally for tools annotated with `ToolRunsOnServer` or `ToolRunsAnywhere`, avoiding the NATS round-trip to a daemon for operations that don't require local filesystem or shell access.
+Each tool declares a placement: `daemon` (it needs the user's files or shell), `server` or `any`. The worker runs `server` and `any` tools itself, avoiding the NATS round-trip to a daemon for operations that don't need a machine.
 
 #### Configuration Reference
 
 | Flag | Env Var | Default | Description |
 |------|---------|---------|-------------|
 | `--db-driver` | `DATABASE_DRIVER` | `postgres` | Database driver |
-| `--db-url` | `DATABASE_URL` | — | Postgres connection string (required for `postgres`) |
+| — | `DATABASE_URL` | — | Postgres connection string (required; environment only) |
 | `--data-dir` | `DATA_DIR` | `./data` | Directory for logs and local data |
 | `--temporal-host` | `TEMPORAL_HOST` | `localhost` | Temporal server hostname |
 | `--temporal-port` | `TEMPORAL_PORT` | `7233` | Temporal server port |
 | `--temporal-namespace` | `TEMPORAL_NAMESPACE` | `reliant` | Temporal namespace |
-| `--nats-url` | `NATS_URL` | — | NATS server URL (required) |
-| `--streaming-driver` | `STREAMING_DRIVER` | `nats` | Streaming driver (forced to `nats` at runtime) |
+| — | `NATS_URL` | — | NATS server URL (required; environment only) |
+| `--streaming-driver` | `STREAMING_DRIVER` | `nats` | Streaming driver (`nats` is the only value) |
 | `--health-port` | `HEALTH_PORT` | `8081` | Health/readiness endpoint port |
+| `--pprof-port` | `PPROF_PORT` | `6060` | pprof debug server port (bound to 127.0.0.1) |
 
 ### Gateway (`reliant server gateway`)
 
@@ -90,31 +90,27 @@ The gateway manages persistent bidirectional gRPC streams to tools-daemon proces
 
 The gateway is **stateful**—each instance maintains active gRPC connections to whichever daemons have connected to it. This means it should be deployed as **few replicas** rather than freely scaled like the API server and worker. A gateway going down disconnects its daemons, which must reconnect (potentially to a different gateway instance).
 
-Internally, the gateway runs two components that bridge NATS to daemon connections:
+Internally, the gateway bridges NATS to its daemon connections with the **`NATSToolBridge`**. When a daemon connects, the bridge subscribes to that daemon's own subjects (`tools.request.{userID}.{daemonID}`, `daemon.command.{userID}.{daemonID}` and their siblings for cancellation, background processes, config and terminal streams) and unsubscribes when it disconnects. Because a subject names one daemon, exactly one gateway instance (the one holding that daemon's stream) receives each message, for fire-and-forget requests and request-reply alike. Commands sent while a daemon is offline are queued and delivered when it next connects.
 
-- **`NATSToolBridge`** — Subscribes to NATS subjects like `tools.request.{userID}` and `daemon.command.{userID}`. When a message arrives, it checks whether the target daemon is connected locally. For fire-and-forget operations (tool requests, cancellations, config reloads), it uses NATS queue groups so only one gateway instance processes each message. For request-reply operations (online checks, kill process, synchronous tool execution), every gateway instance receives the message but only the one holding the daemon's connection responds.
+The gateway serves only daemons. The browser's view of a daemon (file browsing, terminals, background processes) is served by the API server, which reaches the daemon through NATS.
 
-- **Frontend proxy services** — The gateway also exposes a gRPC server for browser-facing operations that need to reach a daemon: `FileSystemService`, `BackgroundService`, `TerminalService`, and `DaemonService`. These proxy services route requests through the `NATSDaemonRouter` to reach the correct daemon, regardless of which gateway instance holds the connection. A WebSocket endpoint at `/api/v2/terminal/ws` provides bidirectional terminal I/O for browser-based terminals.
-
-Daemon authentication uses Personal Access Tokens (PATs) validated against the database via `DBPATValidator`.
+Daemons authenticate with their `rlat_` access token, which the gateway resolves on every connection. Remote trace context from a daemon is never trusted: daemons run on user machines, so a daemon's `traceparent` is recorded only as a span link.
 
 #### Configuration Reference
 
 | Flag | Env Var | Default | Description |
 |------|---------|---------|-------------|
 | `--daemon-port` | `TOOLS_DAEMON_PORT` | `9190` | Daemon bidi-streaming gRPC listen port |
-| `--frontend-port` | `FRONTEND_PORT` | `9191` | Frontend proxy gRPC listen port |
 | `--health-port` | `HEALTH_PORT` | `8080` | Health/readiness endpoint port |
 | `--bind-address` | `BIND_ADDRESS` | `0.0.0.0` | Network interface to bind to |
 | `--db-driver` | `DATABASE_DRIVER` | `postgres` | Database driver |
-| `--db-url` | `DATABASE_URL` | — | Postgres connection string (required for `postgres`) |
+| — | `DATABASE_URL` | — | Postgres connection string (required; environment only) |
 | `--data-dir` | `DATA_DIR` | `./data` | Directory for logs, certs, and local data |
-| `--nats-url` | `NATS_URL` | — | NATS server URL (required) |
-| `--cors-origins` | `CORS_ALLOWED_ORIGINS` | `*` | Comma-separated allowed origins |
+| — | `NATS_URL` | — | NATS server URL (required; environment only) |
 | `--tls-cert` | `TLS_CERT_FILE` | — | TLS certificate file path |
 | `--tls-key` | `TLS_KEY_FILE` | — | TLS private key file path |
 | `--disable-tls` | `DISABLE_TLS` | `false` | Disable TLS |
-| `--jwt-public-key` | `JWT_PUBLIC_KEY` | — | JWT public key PEM for frontend auth |
+| `--pprof-addr` | `PPROF_ADDR` | — | pprof server address (`host:port`); unset, no pprof server |
 
 ## Infrastructure Requirements
 
@@ -124,63 +120,46 @@ Distributed mode depends on three external services that all server types connec
 
 **Temporal** orchestrates workflow execution. The API server uses the Temporal client to start and signal workflows. The worker registers with Temporal to process workflow tasks. Both connect via `temporal.NewExternalClient` using the configured host, port, and namespace. This can be a self-hosted Temporal deployment or Temporal Cloud—Reliant only needs a standard Temporal gRPC endpoint.
 
-**NATS** serves two distinct purposes. First, it acts as the real-time notification channel for update events (`NATSUpdateHub`). When a worker or API server writes a chat message to Postgres, it publishes an update event to NATS, and all API server replicas with connected clients receive it for streaming. Second, NATS is the transport layer for daemon tool routing (`NATSDaemonRouter` and `NATSToolBridge`), carrying tool execution requests between workers/API servers and gateways. Core NATS (not JetStream) is used intentionally—the events are already durable in Postgres, and NATS serves purely as the real-time delivery mechanism.
+**NATS** serves two distinct purposes. First, it acts as the real-time notification channel for update events (`NATSUpdateHub`). When a worker or API server writes a chat message to Postgres, it publishes an update event to NATS, and all API server replicas with connected clients receive it for streaming. Second, NATS is the transport layer for daemon tool routing (`NATSDaemonRouter` and `NATSToolBridge`), carrying tool execution requests between workers/API servers and gateways. NATS is a delivery mechanism, not a store: messages and events are durable in Postgres. JetStream is used where a short replay window matters: the streaming deltas a reconnecting client catches up on (in memory, kept for minutes), commands queued for a daemon that is offline, and daemon connection events.
 
 ## The Tools Daemon
 
-In distributed mode, the tools daemon runs as a separate process on the developer's machine rather than embedded in the application. It provides local tool execution capabilities — shell commands, file operations, MCP server management, terminal sessions — to the cloud platform via a persistent bidirectional gRPC stream to the gateway.
+The tools daemon runs as a separate `reliant daemon` process on a machine the user owns, or on a managed cloud machine. It provides local tool execution capabilities — shell commands, file operations, MCP server management, terminal sessions — to the cloud platform via a persistent bidirectional gRPC stream to the gateway. The desktop app starts one for you; this section is for running one by hand.
 
 ### Connecting a Daemon
 
-Register the machine (one-time), then start the daemon:
-
 ```bash
-# One-time: authenticate and create credentials
-reliant daemon register
-
-# Connect to the platform
-reliant daemon start
+reliant daemon register   # one-time: sign in and create the daemon's credential
+reliant daemon start      # connect (add --background to detach)
 ```
 
-`daemon register` opens a browser for authentication (email/password, Google, or GitHub), creates a long-lived Personal Access Token (PAT) on the server, and saves credentials locally:
-
-| Platform | Credentials file |
-|----------|------------------|
-| macOS | `~/Library/Application Support/reliant/auth/reliant-daemon.json` |
-| Linux | `~/.config/reliant/auth/reliant-daemon.json` |
-| Windows | `%APPDATA%\reliant\auth\reliant-daemon.json` |
-
-The PAT is scoped to the user and can be revoked independently of the user's main session.
-
-If the machine is already logged in (via `reliant auth login`) but not registered, `daemon start` will auto-register before connecting — no explicit `register` step needed.
+`daemon register` opens a browser to sign in if you are not already, creates a long-lived access token for the daemon, and stores it locally. The token is scoped to your user and can be revoked independently of your main session, in **Settings → Access Tokens**. Each daemon keeps its own identity under `~/.reliant/instances/<server>/<account>/<workspace>/`, so one machine can serve several accounts, and several workspaces, side by side.
 
 ### Credential Resolution
 
 `daemon start` resolves credentials in order:
 
-1. **Daemon credentials file** — created by `daemon register`
-2. **Auto-register** — if logged in but not registered, creates a PAT automatically
-3. **Manual flags** — `--token` / `--user-id` override all other sources (useful for CI or automation)
-4. **Error** — if nothing is available, exits with a message to run `daemon register`
+1. **The daemon's credentials file**, created by `daemon register`.
+2. **Auto-register**: if you are logged in (`reliant auth login`) but not registered, it creates a credential automatically.
+3. **Interactive login**: otherwise it opens a browser to sign in and then registers. With `--non-interactive` (how the desktop app starts it) it never opens a browser; it stays idle, reporting that it is awaiting credentials, until a credentials file appears.
+
+`--token` reads an access token from stdin and uses it instead, which is the form for automation.
 
 ### TLS
 
-TLS mode is inferred from the server URL (`https://` → TLS, `http://` → h2c). Override with `--tls-mode`:
-
-- `tls` — full TLS verification (production)
-- `insecure_tls_skip_verify` — TLS without certificate verification (self-signed certs)
-- `h2c` — plaintext HTTP/2 (local development)
+TLS mode is inferred from the gateway URL (`https://` → TLS, `http://` → h2c). Override with `--tls-mode`: `tls` (full verification), `insecure_tls_skip_verify` (self-signed certificates), `h2c` (plaintext HTTP/2, for local development) or `disabled`.
 
 ### Lifecycle
 
-Once connected, the daemon receives tool execution requests from the gateway and executes them locally. The server sends heartbeats every 30 seconds; daemons with no heartbeat for 2 minutes are marked disconnected. On disconnect, the daemon automatically reconnects with exponential backoff.
+Once connected, the daemon receives tool execution requests from the gateway and executes them locally. The gateway sends a heartbeat every 15 seconds and treats a stream it has heard nothing on for 90 seconds as dead. On disconnect, the daemon reconnects automatically with exponential backoff.
 
-Currently each user has one active daemon connection at a time. If a new daemon connects, it replaces the previous one.
+A user can have several daemons connected at once (one per machine or workspace); every request names the daemon it is for.
 
 ```bash
-reliant daemon status   # Check if running (via PID file)
-reliant daemon stop     # Graceful shutdown (--force for SIGKILL)
-reliant daemon logs     # Tail logs (--follow for real-time)
+reliant daemon status   # whether the daemon's gateway stream is established (exits non-zero if not)
+reliant daemon ls       # every daemon instance on this machine, and whether each is running
+reliant daemon stop     # graceful shutdown (--force for SIGKILL)
+reliant daemon logs     # tail logs (follows by default)
 ```
 
 ## Tool Routing Architecture
@@ -210,9 +189,9 @@ Tool execution in distributed mode involves multiple hops across NATS and gRPC. 
                                                   MCP, terminal
 ```
 
-1. A worker (or API server) needs to execute a tool on a developer's machine. It calls `NATSDaemonRouter.SendToolRequest()`, which publishes a JSON-encoded `ToolExecutionRequest` to the NATS subject `tools.request.{userID}`.
+1. A worker (or API server) needs to execute a tool on a developer's machine. It calls `NATSDaemonRouter.SendToolRequest()`, which publishes a JSON-encoded `ToolExecutionRequest` to the NATS subject `tools.request.{userID}.{daemonID}`.
 
-2. The `NATSToolBridge` running inside the gateway subscribes to `tools.request.>` with a queue group. It receives the message, extracts the user ID from the subject, and forwards the request to the local `ToolsDaemonService`.
+2. The `NATSToolBridge` in the gateway that holds that daemon's stream subscribed to the daemon's subjects when it connected. It receives the message and forwards the request to the local `ToolsDaemonService`.
 
 3. The `ToolsDaemonService` holds the daemon's bidirectional gRPC stream. It sends the tool execution request down the stream to the daemon.
 
@@ -220,12 +199,9 @@ Tool execution in distributed mode involves multiple hops across NATS and gRPC. 
 
 5. The response flows back: `ToolsDaemonService` → `NATSToolBridge` → NATS → the requesting worker or API server.
 
-For synchronous tool execution (used by `ToolRunsOnDaemon` tools), the worker uses `NATSDaemonRouter.SendToolRequestSync()`, which issues a NATS request-reply on `tools.request.sync.{userID}` and blocks until the daemon responds.
+For synchronous tool execution, the worker uses `NATSDaemonRouter.SendToolRequestSync()`, which issues a NATS request-reply on `tools.request.sync.{userID}.{daemonID}` and blocks until the daemon responds.
 
-NATS subjects are partitioned by user ID, ensuring that tool requests are routed to the correct daemon. The `NATSToolBridge` uses two patterns depending on the operation type:
-
-- **Queue subscriptions** for fire-and-forget operations (tool requests, cancellations, config loads). Only one gateway instance processes each message, preventing duplicate execution.
-- **Regular subscriptions** for request-reply operations (online checks, kill process, sync tool execution, daemon commands). Every gateway receives the message, but only the instance with the daemon connected locally responds. Instances without the daemon silently ignore the message.
+NATS subjects are partitioned by user and daemon, so a request reaches exactly the gateway that holds its daemon's stream, and no other gateway sees it. A large request or response is split into chunks and reassembled on the other side.
 
 ## Scaling Characteristics
 

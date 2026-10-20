@@ -43,9 +43,9 @@ Try signing out and back in (**Settings → Account → Sign out**). If a provid
 
 ## Models and providers
 
-### "Session expired. Please reconnect"
+### "Claude session expired. Please reconnect"
 
-A provider login (Claude Code, Codex, Antigravity or GitHub Copilot) has expired. Open **Settings → AI → Your providers**, choose the provider and sign in again.
+A provider login (Claude, Codex, Antigravity or GitHub Copilot) has expired, and the message names which one. Open **Settings → AI → Your providers**, choose the provider and sign in again.
 
 ### The login button doesn't appear (web app)
 
@@ -57,7 +57,7 @@ Check that the key is complete, belongs to the right provider, and hasn't been r
 
 ### Rate limit or quota errors
 
-These come from your model provider. Wait a few minutes, switch to another model or provider, or check your limits with the provider. If you use Reliant AI, an "account issue" message usually means your wallet balance is empty; add credit in **Settings → Billing**.
+These come from your model provider. When a provider's usage limit is hit, the chat waits for the reset and continues by itself; it shows the reset time with **Retry now** and **Stop**, and offers another connected provider's model when one can stand in. See [AI Providers](/settings/api-keys#rate-limits-and-usage-limits). If you use Reliant AI, an "account issue" message usually means your wallet balance is empty; add credit in **Settings → Billing**.
 
 ### A local model isn't listed or won't load
 
@@ -77,7 +77,7 @@ Runs that need a cloud machine or Reliant AI credit stop when there's nothing to
 
 ### I can't clone or open a pull request
 
-Open **Settings → GitHub**. If it says the token expired or needs reconnecting, use **Reconnect**. Cloning a repository onto a cloud machine, and pushing or opening pull requests, use that connection. On your own computer, pushes and pull requests also use the GitHub CLI (`gh`), so install it and run `gh auth login` there. See [Git Integration](/features/git-integration).
+Open **Settings → GitHub**. If it says the token expired or needs reconnecting, use **Reconnect**. Cloning a repository onto a cloud machine, and pushing from it, use that connection. On your own computer, pushes use the git credentials that computer already has. Opening a pull request uses the GitHub CLI (`gh`) on the chat's machine, so install it and run `gh auth login` there. See [Git Integration](/features/git-integration).
 
 ## Workflows
 

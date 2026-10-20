@@ -109,15 +109,17 @@ for (const [name, block] of [
   });
 }
 
-test("PR CI's web job runs on any change but a go.mod/go.sum-only one", () => {
-  assert.match(PR_WEB, /\n {4}if: needs\.changes\.outputs\.non_gomod == 'true'\n/);
+test("PR CI's web job runs on every change that can alter the bundle it verifies", () => {
+  assert.match(PR_WEB, /\n {4}if: needs\.changes\.outputs\.web == 'true'\n/);
 
   const changes = jobBlock(read(".github", "workflows", "pr-ci.yml"), "changes");
-  const m = /grep -qvE '([^']+)'; then\n\s+echo "non_gomod=true"/.exec(changes);
-  assert.ok(m, "the `changes` job no longer classifies non_gomod with `grep -qvE '<regex>'`; update this test");
-  const goModOnly = new RegExp(m[1]);
-  for (const path of [".github/scripts/verify-bundle.mjs", "electron/release.config.json", "web/src/App.tsx"]) {
-    assert.ok(!goModOnly.test(path), `a change to ${path} must run the web job`);
+  const m = /if grep -qE '([^']+)' <<< "\$\{changed\}"; then web=true; fi/.exec(changes);
+  assert.ok(m, "the `changes` job no longer classifies the web lane with `if grep -qE '<regex>' ...; then web=true; fi`; update this test");
+  const webLane = new RegExp(m[1]);
+  for (const path of [".github/scripts/verify-bundle.mjs", "electron/release.config.json", "web/src/App.tsx", "web/package-lock.json", "package.json"]) {
+    assert.ok(webLane.test(path), `a change to ${path} must run the web job`);
   }
-  assert.ok(goModOnly.test("go.mod") && goModOnly.test("go.sum"));
+  for (const path of ["go.mod", "internal/db/db.go", "docs/index.mdx"]) {
+    assert.ok(!webLane.test(path), `a change to ${path} alone cannot alter the bundle`);
+  }
 });

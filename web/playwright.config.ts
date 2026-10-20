@@ -17,14 +17,21 @@ export default defineConfig({
   testIgnore: ['**/debug-canvas.spec.ts', '**/workflow-builder-validation.spec.ts'],
   fullyParallel: true,
   forbidOnly: isCI,
-  retries: isCI ? 2 : 0,
+  // No retries, in CI either. A retry turns a flaky test into a green check:
+  // `retries: 2` hid onboarding.spec's "Local daemon" flake (a stateless
+  // ListProjects mock that lost the created project on a slow runner) as
+  // "1 flaky" in a passing run. A test that fails once is a defect to fix at
+  // the root, and it has to be red to get fixed.
+  retries: 0,
   workers: isCI ? 1 : undefined,
   reporter: isCI ? [['github'], ['html', { open: 'never' }]] : 'html',
   timeout: 30000,
 
   use: {
     baseURL,
-    trace: 'on-first-retry',
+    // With no retries there is no "first retry" to trace: keep the trace of
+    // any failed test instead.
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },

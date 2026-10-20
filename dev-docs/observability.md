@@ -1,5 +1,9 @@
 # Backend observability
 
+Internal note on how Reliant's own server binaries are instrumented. The
+public page on observability for apps users deploy is
+`docs/forge/observability.mdx`.
+
 Reliant backend binaries use `forge/pkg/observe` for OpenTelemetry traces and
 metrics. The application only knows a vendor-neutral OTLP/gRPC collector
 endpoint; ClickStack, HyperDX, and any other storage or UI remain deployment
@@ -73,8 +77,10 @@ HTTP clients use `otelhttp.NewTransport` over their existing transport.
 
 ## Known gaps
 
-- Temporal: no `ContextPropagator`/OTel interceptor, so API → workflow →
-  activity are separate traces.
-- NATS: only the inject/extract helpers in `internal/observability/nats.go`
-  exist; not every publisher/consumer uses them yet.
-- Logs carry no `trace_id`/`span_id` (no slog hook yet).
+- Temporal: the worker's `NewOTelWorkerInterceptor` (`internal/observability/temporal.go`)
+  makes workflow and activity spans, but there is no `ContextPropagator`, so
+  API → workflow → activity are still separate traces.
+- NATS: the inject/extract helpers in `internal/observability/nats.go` exist,
+  but no publisher or consumer calls them yet.
+- Only the daemon's logs carry `trace_id`/`span_id` (`observe.NewTraceHandler`
+  is installed with the daemon's identity fields); the server roles' logs do not.

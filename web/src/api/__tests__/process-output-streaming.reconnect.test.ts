@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // An API replica that is shutting down ends every stream it holds, with an
 // OK status, so a rollout is not held up waiting on them (serverkit's
-// drain; internal/grpc Server.Stop). A process-output stream ended that way has NOT
+// drain, run by the API role's APIListener). A process-output stream ended that way has NOT
 // reached the end of the output: the process is still running. Only a stream
 // that delivered the "complete" event is over.
 //

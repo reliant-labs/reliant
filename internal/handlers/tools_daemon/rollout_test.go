@@ -303,7 +303,7 @@ func TestRolloutLetsACallFinishOnItsOwnStreamDuringTheDrain(t *testing.T) {
 
 	// With nothing left in flight the daemon retires the old stream, and
 	// the replica's drain completes without waiting out its deadline: what
-	// the server's drain waits for (grpc.DaemonServer.Stop) is this replica
+	// the gateway's Listener drain waits for is this replica
 	// holding no stream.
 	streamA.hangUp()
 	require.Eventually(t, func() bool { return podA.GetActiveConnections() == 0 },

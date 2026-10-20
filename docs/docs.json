@@ -109,10 +109,16 @@
           {
             "group": "Build & host with Forge",
             "pages": [
-              "features/deploy-and-host",
-              "features/forge-sign-in",
-              "features/secrets",
-              "features/custom-domains"
+              "forge/overview",
+              "forge/project-anatomy",
+              "forge/adding-features",
+              "forge/environments-and-deploys",
+              "forge/hosting",
+              "forge/secrets",
+              "forge/custom-domains",
+              "forge/sign-in",
+              "forge/observability",
+              "forge/troubleshooting"
             ]
           },
           {
@@ -198,6 +204,28 @@
       "x": "https://x.com/reliantlabs"
     }
   },
+  "redirects": [
+    {
+      "source": "/features/deploy-and-host",
+      "destination": "/forge/overview"
+    },
+    {
+      "source": "/features/secrets",
+      "destination": "/forge/secrets"
+    },
+    {
+      "source": "/features/custom-domains",
+      "destination": "/forge/custom-domains"
+    },
+    {
+      "source": "/features/forge-sign-in",
+      "destination": "/forge/sign-in"
+    },
+    {
+      "source": "/observability",
+      "destination": "/forge/observability"
+    }
+  ],
   "seo": {
     "indexing": "navigable"
   }
