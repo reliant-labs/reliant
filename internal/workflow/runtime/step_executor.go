@@ -379,6 +379,13 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		threadInterruptEpoch = interrupt.Epoch()
 	}
 
+	// A machine step that follows a hold first makes sure the machine is
+	// awake (machine_resume_wake.go): the idle policy may have suspended it
+	// while the run waited, and the step's own calls never wake it.
+	if machine, toolNames, toolsKnown := machineStepTools(stepType, evalResult); machine {
+		e.pauseCtrl.WakeMachineBeforeStep(e.ctx, e.getActivityCtx(), toolNames, toolsKnown)
+	}
+
 	switch stepType {
 	case model.NodeTypeWorkflow:
 		// NOTE: workflow nodes are now handled inline by InlineWorkflowExecutor.
@@ -445,6 +452,9 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// Use StepID for event ID - it's unique within an iteration
 	eventID := fmt.Sprintf("event-%s", running.StepID)
 	stepEvent := e.handleActivityCompletion(running, eventID)
+	if machine, _, _ := machineStepTools(running.Node.GetType(), nil); machine {
+		e.pauseCtrl.MachineStepDone(e.ctx)
+	}
 
 	// Daemon-offline circuit breaker: observe the outcome AFTER save_message
 	// ran (inside handleActivityCompletion), so the failing tool results are

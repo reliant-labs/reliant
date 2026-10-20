@@ -1054,6 +1054,7 @@ var infrastructureActivities = []string{
 	"EmitStreamFinalized",
 	"EmitToolCallStatus",
 	"PreflightDaemonCheck",
+	"MachineResumeWake",
 	"ValidateThreadOwnership",
 	// QuestionCreate is NOT here: it resolves an ask_question node from the
 	// scenario and is registered explicitly below, like ApprovalCreate.

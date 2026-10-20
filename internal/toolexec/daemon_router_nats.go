@@ -64,6 +64,8 @@ type NATSDaemonRouter struct {
 	resolver    DaemonResolver          // optional: used to resolve daemonID for a user
 	resumer     DaemonResumer           // optional: wakes a suspended managed daemon (control plane)
 	credentials ControlPlaneCredentials // optional: token source for resumes
+	runResumer  RunResumer              // optional: wakes a resuming run's machine as the worker (daemon_router_run_wake.go)
+	runWakes    runWakeGate             // one control-plane wake per daemon for runs resuming together
 
 	// inflight remembers which daemon each tool request went to, so a cancel
 	// or background for it reaches THAT daemon rather than the user's default.

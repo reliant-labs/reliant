@@ -494,7 +494,7 @@ export const ChatPresenter = memo(function ChatPresenter({
     !noMachine &&
     pendingApprovals.length === 0 &&
     !hasPendingQuestion &&
-    (isAgentWorking || heldForMachine || sendingThisChat);
+    (isAgentWorking || heldForMachine || sendingThisChat || usageLimitWait !== undefined);
   const { data: daemons } = useDaemonList({ enabled: workWaitsOnMachine });
   const wakes = useWakingMachines();
   const chatMachineDaemon = workWaitsOnMachine ? resolveChatMachine(daemons, currentChat?.activeDaemonId) : undefined;
@@ -508,6 +508,8 @@ export const ChatPresenter = memo(function ChatPresenter({
         messageSentAt: Number.isFinite(unansweredSentAt) ? unansweredSentAt : undefined,
         sending: sendingThisChat,
         runWaitingForMachine: waitingOnMachine,
+        // A live run waiting off the machine wakes it itself on resume.
+        runHeld: usageLimitWait ? "usage_limit" : isAgentWorking ? "run" : undefined,
         wakeStartedAt: chatMachineWakeStartedAt,
       }),
     [
@@ -515,6 +517,8 @@ export const ChatPresenter = memo(function ChatPresenter({
       latestMessageUnanswered,
       sendingThisChat,
       waitingOnMachine,
+      usageLimitWait,
+      isAgentWorking,
       unansweredSentAt,
       chatMachineWakeStartedAt,
     ],
@@ -537,6 +541,17 @@ export const ChatPresenter = memo(function ChatPresenter({
   // on every render would re-render the whole transcript on each pass —
   // which, during streaming, is many times per second.
   const thinkingFooter = useMemo(() => {
+    if (machineNotice && usageLimitWait && chatId) {
+      // Held on a usage limit with the machine asleep: the limit is still
+      // what the run waits on (with its countdown and Retry now), and the
+      // machine line says it will wake by itself when the run resumes.
+      return (
+        <div className="flex flex-col gap-1.5">
+          <UsageLimitWaitNote chatId={chatId} wait={usageLimitWait} onStop={handleStopRun} />
+          <ChatMachineNoticeLine notice={machineNotice} />
+        </div>
+      );
+    }
     if (machineNotice) {
       return <ChatMachineNoticeLine notice={machineNotice} />;
     }

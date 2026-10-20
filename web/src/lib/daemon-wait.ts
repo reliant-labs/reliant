@@ -93,6 +93,14 @@ export const MACHINE_FAILED_TO_START = `Your ${MACHINE_NOUN} failed to start`;
 export const MACHINE_ASLEEP_STARTING = `Your ${MACHINE_NOUN} is asleep — starting it`;
 /** SUSPENDED, and nothing is waking it: the user is offered Start it. */
 export const MACHINE_ASLEEP = `Your ${MACHINE_NOUN} is asleep`;
+/**
+ * SUSPENDED while a live run waits off the machine — a provider usage limit, a
+ * sub-agent, a timer. The idle policy put it to sleep, as it should; the run
+ * wakes it by itself the moment it needs it again, so there is nothing to do.
+ */
+export const MACHINE_SLEPT_DURING_USAGE_LIMIT = `Your ${MACHINE_NOUN} went to sleep while waiting for the usage limit to reset`;
+export const MACHINE_SLEPT_DURING_RUN_WAIT = `Your ${MACHINE_NOUN} went to sleep while the run was waiting`;
+export const MACHINE_WAKES_ON_RESUME = `It will wake automatically when work resumes.`;
 
 /**
  * What the thinking indicator says once a run has shown nothing for

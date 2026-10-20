@@ -8,7 +8,10 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { create } from "@bufbuild/protobuf";
+
 import { ChatActivity, MessageRole } from "../../../gen/reliant/v1/chat_pb";
+import { DaemonInfoSchema, DaemonStatus } from "../../../gen/reliant/v1/daemon_registry_pb";
 import { useActivityStore } from "../../../store/activityStore";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
@@ -22,6 +25,7 @@ const state = vi.hoisted(() => ({
   models: [] as Array<Record<string, unknown>>,
   tiers: {} as Record<string, unknown>,
   accounts: [] as unknown[],
+  daemons: [] as unknown[],
 }));
 
 vi.mock("../../../hooks/chat-queries", () => ({
@@ -39,7 +43,7 @@ vi.mock("../../../api/client", async (importOriginal) => {
   return { ...actual, api: { ...actual.api, chatsV2: { ...actual.api.chatsV2, retryUsageLimitWait: state.retry } } };
 });
 vi.mock("@/hooks/useOnboardingQueries", () => ({
-  useDaemonList: () => ({ data: [], isLoading: false }),
+  useDaemonList: () => ({ data: state.daemons, isLoading: false }),
   useResumeDaemon: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("../../../hooks/queued-agent-messages", () => ({
@@ -100,6 +104,7 @@ beforeEach(() => {
   state.models = [];
   state.tiers = {};
   state.accounts = [];
+  state.daemons = [];
   state.chat = {
     id: "chat-1",
     workflowId: "chat-1",
@@ -113,6 +118,19 @@ beforeEach(() => {
 });
 
 describe("ChatPresenter: a run held for a usage limit", () => {
+  // The idle policy suspends the machine during a long hold; the run wakes it
+  // by itself when the limit resets. The footer keeps the limit (it is what
+  // the run waits on) and says the machine will wake on its own — no Start it.
+  it("says the machine went to sleep during the hold and will wake by itself", () => {
+    state.daemons = [create(DaemonInfoSchema, { daemonId: "d-1", hostname: "Cloud box", status: DaemonStatus.SUSPENDED })];
+    renderPresenter();
+    expect(screen.getByTestId("usage-limit-wait-note")).toHaveTextContent("Waiting for Anthropic usage limit");
+    const machine = screen.getByTestId("chat-machine-notice");
+    expect(machine).toHaveTextContent("Your machine went to sleep while waiting for the usage limit to reset");
+    expect(machine).toHaveTextContent("It will wake automatically when work resumes.");
+    expect(screen.queryByRole("button", { name: "Start it" })).toBeNull();
+  });
+
   it("says who it waits on and when it carries on, instead of thinking", () => {
     renderPresenter();
     const note = screen.getByTestId("usage-limit-wait-note");
