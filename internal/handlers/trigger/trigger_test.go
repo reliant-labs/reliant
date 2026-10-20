@@ -317,26 +317,51 @@ func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
 	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 }
 
-// TemporalBackend is what the server builds the backend with. A nil Temporal
-// client must produce a service whose nil checks actually fire — a nil
-// *triggers.Backend in an interface is NOT nil, and would panic here instead.
-// New reads one a composition passes itself the same way.
-func TestServiceWithoutTemporalDoesNotPanic(t *testing.T) {
+// A deployment without Temporal leaves Syncer and Fires nil, as nil
+// interfaces: TemporalBackend returns them for a nil client, and that is how
+// every composition builds them. The service then behaves as "no Temporal":
+// a schedule trigger is refused, a manual fire is Unavailable, and reading
+// or deleting a stored schedule trigger skips the backend rather than
+// panicking on it.
+func TestServiceWithoutTemporal(t *testing.T) {
 	env := setupTriggerTest(t)
 	syncer, fires := TemporalBackend(nil, env.repo, "", nil)
-	var noBackend *triggers.Backend
+	require.Nil(t, syncer, "TemporalBackend without a client must return a nil interface")
+	require.Nil(t, fires, "TemporalBackend without a client must return a nil interface")
+
 	for name, deps := range map[string]Deps{
+		"nil Syncer and Fires":             {Repo: env.repo},
 		"TemporalBackend without a client": {Repo: env.repo, Syncer: syncer, Fires: fires},
-		"a nil *triggers.Backend":          {Repo: env.repo, Syncer: noBackend, Fires: noBackend},
 	} {
 		t.Run(name, func(t *testing.T) {
+			// Stored while Temporal was available; served without it.
+			stored := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = name }))
 			svc := NewTestTrigger(t, WithTriggerDeps(deps))
+
 			_, err := svc.CreateTrigger(env.ctx,
 				connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "create a schedule trigger")
+
+			_, err = svc.FireTrigger(env.ctx,
+				connect.NewRequest(&reliantv1.FireTriggerRequest{Id: stored.GetId()}))
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "fire a schedule trigger")
+
+			got, err := svc.GetTrigger(env.ctx,
+				connect.NewRequest(&reliantv1.GetTriggerRequest{Id: stored.GetId()}))
+			require.NoError(t, err)
+			assert.Empty(t, got.Msg.GetTrigger().GetNextFireAt(), "no backend, no next fire time")
+
+			_, err = svc.DeleteTrigger(env.ctx,
+				connect.NewRequest(&reliantv1.DeleteTriggerRequest{Id: stored.GetId()}))
+			require.NoError(t, err)
 		})
 	}
+
+	env.backend.mu.Lock()
+	defer env.backend.mu.Unlock()
+	assert.Empty(t, env.backend.fires, "nothing fires without Temporal")
 }
 
 func TestGetTriggerHidesOtherUsersTriggers(t *testing.T) {

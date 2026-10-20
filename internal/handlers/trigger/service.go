@@ -108,7 +108,8 @@ type AutomationTokens interface {
 // A nil client, a deployment without Temporal, returns nil interfaces. That
 // is the point of building them here: a nil *triggers.Backend assigned to
 // Deps.Syncer is a non-nil interface holding a nil pointer, which passes
-// the handlers' nil checks and panics on the first write.
+// the handlers' nil checks and panics on the first write. New does not
+// unwrap one, so every composition builds Syncer and Fires through here.
 func TemporalBackend(temporalClient client.Client, repo db.Repository, taskQueue string, polled func(integration string) bool) (Syncer, FireStarter) {
 	if temporalClient == nil {
 		return nil, nil
@@ -150,14 +151,6 @@ type Service struct {
 func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
-	}
-	// The typed-nil guard TemporalBackend keeps, for a composition that
-	// builds the backend itself: a nil *triggers.Backend means no Temporal.
-	if b, ok := deps.Syncer.(*triggers.Backend); ok && b == nil {
-		deps.Syncer = nil
-	}
-	if b, ok := deps.Fires.(*triggers.Backend); ok && b == nil {
-		deps.Fires = nil
 	}
 	s := &Service{deps: deps}
 	if deps.ControlPlane != nil {
