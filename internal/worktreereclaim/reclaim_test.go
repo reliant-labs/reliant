@@ -50,7 +50,13 @@ func newFixture(t *testing.T) *fixture {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
-	base := t.TempDir()
+	// Canonical, because git reports canonical paths: on macOS t.TempDir() is
+	// under /var, a symlink to /private/var, and a fixture path compared with
+	// what git (or the repair report) says would never match.
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	f := &fixture{t: t, project: filepath.Join(base, "project"), origin: filepath.Join(base, "origin.git"), root: filepath.Join(base, "worktrees")}
 	run(t, base, "init", "-q", "--bare", "-b", "main", f.origin)
 	run(t, base, "init", "-q", "-b", "main", f.project)
