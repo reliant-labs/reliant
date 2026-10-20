@@ -93,7 +93,7 @@ describe('OAuth redirect target in a packaged Electron build', () => {
 
     // A packaged build DOES expose electronAPI — but without
     // getOAuthRedirectUrl, which is precisely the shipped 1.6.3 surface.
-    ;(window as TestWindow).electronAPI = { analyticsTrack: vi.fn(), openExternal: vi.fn() }
+    ;(window as TestWindow).electronAPI = { openExternal: vi.fn() }
 
     signInWithOAuthMock.mockResolvedValue({
       data: { url: 'https://accounts.google.com/o/oauth2/auth?example=1' },

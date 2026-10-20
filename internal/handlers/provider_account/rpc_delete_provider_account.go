@@ -35,7 +35,7 @@ func (s *Service) DeleteProviderAccount(
 	if acct.AuthKind == "api_key" {
 		method = "api_key"
 	}
-	analytics.GetClientForUser(ctx, userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
+	analytics.ForUser(ctx, userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
 		Provider: acct.Provider, Action: "disconnected", AuthMethod: method,
 	})
 	return connect.NewResponse(&pb.DeleteProviderAccountResponse{}), nil

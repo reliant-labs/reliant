@@ -22,23 +22,15 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// AnalyticsConfig is where the API server and the worker send product
-// analytics events. Only a prod-tier process sends any (internal/runenv). The
-// rules every config here follows are in config.proto's header.
+// AnalyticsConfig governs the product events the API server and the worker
+// record. Each event is one structured log record (dev-docs/product-events.md),
+// so it ships wherever the process's logs ship; there is no vendor key. A
+// user's analytics opt-out is honoured per event regardless. The rules every
+// config here follows are in config.proto's header.
 type AnalyticsConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// A kill switch, independent of the tier.
-	Disabled bool `protobuf:"varint,1,opt,name=disabled,proto3" json:"disabled,omitempty"`
-	// The Statsig key events are sent with (control-plane stores the server
-	// key under this name). Unset: Statsig sending is off, said once.
-	StatsigKey string `protobuf:"bytes,2,opt,name=statsig_key,json=statsigKey,proto3" json:"statsig_key,omitempty"`
-	// The Supabase project events are also written to. The anon key is a
-	// publishable key, not a secret.
-	SupabaseUrl     string `protobuf:"bytes,3,opt,name=supabase_url,json=supabaseUrl,proto3" json:"supabase_url,omitempty"`
-	SupabaseAnonKey string `protobuf:"bytes,4,opt,name=supabase_anon_key,json=supabaseAnonKey,proto3" json:"supabase_anon_key,omitempty"`
-	// Where analytics caches its device id. Unset — every server container —
-	// caches nothing: its root filesystem is read-only.
-	AppDataDir    string `protobuf:"bytes,5,opt,name=app_data_dir,json=appDataDir,proto3" json:"app_data_dir,omitempty"`
+	// A kill switch for every product event.
+	Disabled      bool `protobuf:"varint,1,opt,name=disabled,proto3" json:"disabled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -80,52 +72,14 @@ func (x *AnalyticsConfig) GetDisabled() bool {
 	return false
 }
 
-func (x *AnalyticsConfig) GetStatsigKey() string {
-	if x != nil {
-		return x.StatsigKey
-	}
-	return ""
-}
-
-func (x *AnalyticsConfig) GetSupabaseUrl() string {
-	if x != nil {
-		return x.SupabaseUrl
-	}
-	return ""
-}
-
-func (x *AnalyticsConfig) GetSupabaseAnonKey() string {
-	if x != nil {
-		return x.SupabaseAnonKey
-	}
-	return ""
-}
-
-func (x *AnalyticsConfig) GetAppDataDir() string {
-	if x != nil {
-		return x.AppDataDir
-	}
-	return ""
-}
-
 var File_config_v1_analytics_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_analytics_config_proto_rawDesc = "" +
 	"\n" +
-	" config/v1/analytics_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\"\xbe\x04\n" +
-	"\x0fAnalyticsConfig\x12V\n" +
-	"\bdisabled\x18\x01 \x01(\bB:\x82\xce\x186\n" +
-	"\x1aRELIANT_ANALYTICS_DISABLED*\x18Send no analytics eventsR\bdisabled\x12i\n" +
-	"\vstatsig_key\x18\x02 \x01(\tBH\x82\xce\x18D\n" +
-	"\x12STATSIG_CLIENT_KEY**Statsig key analytics events are sent with0\x01P\x01R\n" +
-	"statsigKey\x12p\n" +
-	"\fsupabase_url\x18\x03 \x01(\tBM\x82\xce\x18I\n" +
-	"\fSUPABASE_URL*9Supabase project URL analytics events are also written toR\vsupabaseUrl\x12y\n" +
-	"\x11supabase_anon_key\x18\x04 \x01(\tBM\x82\xce\x18I\n" +
-	"\x11SUPABASE_ANON_KEY*4Supabase publishable (anon) key for analytics writesR\x0fsupabaseAnonKey\x12{\n" +
-	"\fapp_data_dir\x18\x05 \x01(\tBY\x82\xce\x18U\n" +
-	"\x14RELIANT_APP_DATA_DIR*=Writable app data directory analytics caches its device id inR\n" +
-	"appDataDirB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
+	" config/v1/analytics_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\"\xc7\x01\n" +
+	"\x0fAnalyticsConfig\x12`\n" +
+	"\bdisabled\x18\x01 \x01(\bBD\x82\xce\x18@\n" +
+	"\x1aRELIANT_ANALYTICS_DISABLED*\"Record no product analytics eventsR\bdisabledJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06R\vstatsig_keyR\fsupabase_urlR\x11supabase_anon_keyR\fapp_data_dirB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 
 var (
 	file_config_v1_analytics_config_proto_rawDescOnce sync.Once

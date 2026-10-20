@@ -1,13 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// The condition under test is PRODUCTION'S CURRENT ONE: Sentry is live and
-// VITE_STATSIG_CLIENT_KEY is unset. Before this change that combination
-// discarded the entire onboarding funnel — every trackEvent call returned early
-// because there was no Statsig client to log to, so the fully-written
-// instrumentation in OnboardingFlow/analytics.ts produced nothing at all.
-//
-// These tests pin that the two sinks are independent: no Statsig key must still
-// mean the event reaches Sentry.
+// trackEvent reaches ClickStack (as a `product.<event>` span) and, while web
+// Sentry is on, Sentry. These tests pin that each sink is independent of the
+// other, and that the user's consent and dev mode gate both.
 
 vi.mock("@sentry/react", () => ({
   addBreadcrumb: vi.fn(),
@@ -28,10 +23,6 @@ vi.mock("../store/privacyStore", () => ({
 // isDev must be false or the whole pipe is intentionally inert.
 vi.mock("./constants", () => ({ isDev: false }));
 
-vi.mock("@statsig/js-client", () => ({
-  StatsigClient: vi.fn(),
-}));
-
 vi.mock("@reliantlabs/forge-web-runtime", () => ({
   track: vi.fn(),
 }));
@@ -40,11 +31,9 @@ import * as Sentry from "@sentry/react";
 import { track } from "@reliantlabs/forge-web-runtime";
 import { toSnakeCaseKey, trackEvent } from "./analytics";
 
-describe("trackEvent with no Statsig key (production's current state)", () => {
+describe("trackEvent to Sentry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Explicitly unset, which is what every environment has today.
-    vi.stubEnv("VITE_STATSIG_CLIENT_KEY", "");
   });
 
   it("still delivers the event to Sentry as a breadcrumb", () => {
@@ -106,7 +95,6 @@ describe("VITE_TELEMETRY_SINKS", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
-    vi.stubEnv("VITE_STATSIG_CLIENT_KEY", "");
   });
 
   afterEach(() => {
@@ -119,7 +107,7 @@ describe("VITE_TELEMETRY_SINKS", () => {
 
     trackEvent("onboarding_completed", { provider: "github" });
 
-    expect(track).toHaveBeenCalledWith("onboarding_completed", { provider: "github" });
+    expect(track).toHaveBeenCalledWith("product.onboarding_completed", { provider: "github" });
     expect(Sentry.addBreadcrumb).toHaveBeenCalled();
     expect(Sentry.captureMessage).toHaveBeenCalledWith("funnel: onboarding_completed", "info");
   });
@@ -130,7 +118,7 @@ describe("VITE_TELEMETRY_SINKS", () => {
 
     trackEvent("onboarding_completed");
 
-    expect(track).toHaveBeenCalledWith("onboarding_completed", {});
+    expect(track).toHaveBeenCalledWith("product.onboarding_completed", {});
     expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     expect(Sentry.captureMessage).not.toHaveBeenCalled();
   });
@@ -160,7 +148,7 @@ describe("VITE_TELEMETRY_SINKS", () => {
     });
 
     expect(() => trackEvent("onboarding_flow_started")).not.toThrow();
-    expect(track).toHaveBeenCalledWith("onboarding_flow_started", {});
+    expect(track).toHaveBeenCalledWith("product.onboarding_flow_started", {});
   });
 
   it("never throws when the runtime does", () => {
@@ -183,7 +171,6 @@ describe("ClickStack prop keys", () => {
     vi.clearAllMocks();
     vi.stubEnv("VITE_OTEL_ENDPOINT", "https://ingest.example.dev/k/rbk_x");
     vi.stubEnv("VITE_TELEMETRY_SINKS", "clickstack");
-    vi.stubEnv("VITE_STATSIG_CLIENT_KEY", "");
   });
 
   afterEach(() => {
@@ -193,7 +180,7 @@ describe("ClickStack prop keys", () => {
   it("snake_cases camelCase keys and keeps native value types", () => {
     trackEvent("tour_step_viewed", { stepId: "welcome", stepsCompleted: 2, hasAttachments: false });
 
-    expect(track).toHaveBeenCalledWith("tour_step_viewed", {
+    expect(track).toHaveBeenCalledWith("product.tour_step_viewed", {
       step_id: "welcome",
       steps_completed: 2,
       has_attachments: false,
@@ -203,7 +190,7 @@ describe("ClickStack prop keys", () => {
   it("leaves already-conforming keys alone", () => {
     trackEvent("onboarding_flow_step_completed", { step: "compute", duration_ms: 1234 });
 
-    expect(track).toHaveBeenCalledWith("onboarding_flow_step_completed", {
+    expect(track).toHaveBeenCalledWith("product.onboarding_flow_step_completed", {
       step: "compute",
       duration_ms: 1234,
     });

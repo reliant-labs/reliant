@@ -88,8 +88,8 @@ function shouldRestartBackendForAuthChange(previousSession, nextSession, options
  *           cleared?: boolean, recoverable?: boolean }} result
  *   from `authStorage.readStoredAuth()`.
  * @param {{ reason: string, cleared: boolean, recoverable: boolean }|null} [pending]
- *   a failure latched by an EARLIER main-process read (Statsig user id, daemon
- *   PAT mint). That read is usually the one that finds and clears the dead
+ *   a failure latched by an EARLIER main-process read (the daemon PAT
+ *   mint). That read is usually the one that finds and clears the dead
  *   blob, so by the time the renderer asks, `result` is a clean `empty` and
  *   this is the only remaining trace of the incident.
  * @returns {{ success: boolean, session: object|null,

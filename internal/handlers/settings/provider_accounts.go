@@ -104,7 +104,7 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 		}
 	}
 
-	analytics.GetClientForUser(ctx, in.userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
+	analytics.ForUser(ctx, in.userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
 		Provider: in.provider, Action: "connected", AuthMethod: "oauth",
 	})
 	if err := repo.EmitUserRefetch(ctx, in.userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {

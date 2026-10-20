@@ -73,8 +73,8 @@ test('buildAuthLoadReply: an unreadable read still reports success', () => {
 });
 
 test('buildAuthLoadReply: a failure found by an earlier read is still reported', () => {
-  // The main process reads auth before the renderer does (Statsig user id,
-  // daemon PAT mint). That read discovers and clears the dead blob, so the
+  // The main process reads auth before the renderer does (the daemon
+  // PAT mint). That read discovers and clears the dead blob, so the
   // renderer's own read is a clean `empty` — the latched failure is the only
   // remaining evidence, and dropping it loses the incident entirely.
   const reply = buildAuthLoadReply(

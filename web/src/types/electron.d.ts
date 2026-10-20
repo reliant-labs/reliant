@@ -184,9 +184,6 @@ export interface ElectronAPI {
   updateShortcutBindings?: (bindings: Record<string, string>) => Promise<{ success: boolean }>;
   getPrivacySettings: () => Promise<{ crashReportingEnabled: boolean; analyticsEnabled: boolean }>;
 
-  // Analytics
-  analyticsTrack: (payload: { eventName: string; metadata?: Record<string, unknown>; userID?: string }) => Promise<{ success: boolean; error?: string }>;
-
   // Browser API
   browser?: {
     createTab: (id: string, url: string) => Promise<{ success: boolean; error?: string }>;

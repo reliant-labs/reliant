@@ -2,464 +2,172 @@
 package analytics
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"sync"
+	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/version"
 )
 
-func TestTrackEvent(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "POST", r.Method)
-		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-		assert.Equal(t, "test-api-key", r.Header.Get("statsig-api-key"))
+// consent is a PrivacyChecker answering from a map; a user it does not know
+// is a read failure.
+type consent map[string]bool
 
-		var payload map[string]interface{}
-		err := json.NewDecoder(r.Body).Decode(&payload)
-		require.NoError(t, err)
-
-		events, ok := payload["events"].([]interface{})
-		require.True(t, ok)
-		require.Greater(t, len(events), 0)
-
-		event := events[0].(map[string]interface{})
-		assert.Equal(t, "test_event", event["eventName"])
-
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"success": true}`))
-	}))
-	defer server.Close()
-
-	// Override the endpoint
-	originalEndpoint := getStatsigEndpoint()
-	setStatsigEndpoint(server.URL)
-	defer func() { setStatsigEndpoint(originalEndpoint) }()
-
-	// Create test client
-	client := &Client{
-		apiKey:       "test-api-key",
-		userID:       "test-user",
-		httpClient:   &http.Client{Timeout: 5 * time.Second},
-		eventQueue:   make([]Event, 0, maxBatchSize),
-		sessionID:    "test-session",
-		sessionStart: time.Now(),
+func (c consent) GetAnalyticsEnabled(_ context.Context, userID string) (bool, error) {
+	enabled, ok := c[userID]
+	if !ok {
+		return false, errors.New("settings unavailable")
 	}
+	return enabled, nil
+}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	client.ctx = ctx
-	client.cancel = cancel
+// jsonClient is a Client writing JSON lines to the returned buffer: the exact
+// shape a server writes to stdout, which the node agent's json_parser turns
+// into ClickStack LogAttributes.
+func jsonClient(t *testing.T, c consent) (*Client, *bytes.Buffer) {
+	t.Helper()
+	var buf bytes.Buffer
+	return NewClient(c, slog.New(slog.NewJSONHandler(&buf, nil))), &buf
+}
 
-	// Track an event
-	client.Track("test_event", map[string]interface{}{
-		"test_key": "test_value",
+func records(t *testing.T, buf *bytes.Buffer) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	sc := bufio.NewScanner(bytes.NewReader(buf.Bytes()))
+	for sc.Scan() {
+		var rec map[string]any
+		require.NoError(t, json.Unmarshal(sc.Bytes(), &rec), sc.Text())
+		out = append(out, rec)
+	}
+	return out
+}
+
+func TestEmitsProductRecordWithUserAndTypedFields(t *testing.T) {
+	c, buf := jsonClient(t, consent{"user-1": true})
+
+	c.ForUser(context.Background(), "user-1").TrackMessageSent(MessageSentMetrics{
+		MessageID:     "msg-1",
+		ChatID:        "chat-1",
+		ProjectID:     "proj-1",
+		ContentLength: 42,
+		IsFirstInChat: true,
+		WorkflowName:  "default",
 	})
 
-	// Force flush
-	client.flush()
-
-	// Cleanup
-	client.Shutdown()
+	recs := records(t, buf)
+	require.Len(t, recs, 1)
+	rec := recs[0]
+	assert.Equal(t, "INFO", rec["level"])
+	assert.Equal(t, "product.message_sent", rec["msg"])
+	assert.Equal(t, "product.message_sent", rec[AttrEventName])
+	assert.Equal(t, "user-1", rec[AttrUserID])
+	assert.Equal(t, version.Version, rec[AttrAppVersion])
+	assert.Equal(t, "msg-1", rec["product.message_id"])
+	assert.Equal(t, "chat-1", rec["product.chat_id"])
+	assert.Equal(t, "proj-1", rec["product.project_id"])
+	assert.Equal(t, float64(42), rec["product.content_length"])
+	assert.Equal(t, true, rec["product.is_first_in_chat"])
+	assert.Equal(t, false, rec["product.has_attachments"])
+	assert.Equal(t, "default", rec["product.workflow_name"])
+	assert.NotContains(t, rec, "product.workflow_id", "an unset optional field is omitted, not written empty")
 }
 
-func TestTrackAddsSnakeCaseStandardMetadata(t *testing.T) {
-	var capturedMetadata map[string]interface{}
+func TestListFieldsAreJSONArrays(t *testing.T) {
+	c, buf := jsonClient(t, consent{"user-1": true})
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload map[string]interface{}
-		err := json.NewDecoder(r.Body).Decode(&payload)
-		require.NoError(t, err)
-
-		events, ok := payload["events"].([]interface{})
-		require.True(t, ok)
-		require.Greater(t, len(events), 0)
-
-		event := events[0].(map[string]interface{})
-		metadata, ok := event["metadata"].(map[string]interface{})
-		require.True(t, ok)
-		capturedMetadata = metadata
-
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"success": true}`))
-	}))
-	defer server.Close()
-
-	originalEndpoint := getStatsigEndpoint()
-	setStatsigEndpoint(server.URL)
-	defer func() { setStatsigEndpoint(originalEndpoint) }()
-
-	client := &Client{
-		apiKey:       "test-api-key",
-		userID:       "",
-		httpClient:   &http.Client{Timeout: 5 * time.Second},
-		eventQueue:   make([]Event, 0, maxBatchSize),
-		sessionID:    "test-session",
-		sessionStart: time.Now(),
-		deviceID:     "test-device",
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	client.ctx = ctx
-	client.cancel = cancel
-
-	client.TrackWithUser("test-user", EventType("test_event"), map[string]interface{}{"k": "v"})
-	client.flush()
-
-	require.NotNil(t, capturedMetadata)
-
-	// Standard snake_case metadata keys should exist.
-	assert.Equal(t, "v1", capturedMetadata["event_version"])
-	assert.NotEmpty(t, capturedMetadata["app_version"])
-	assert.Equal(t, "backend", capturedMetadata["platform"])
-	assert.Equal(t, "test-session", capturedMetadata["session_id"])
-	assert.Equal(t, "authenticated", capturedMetadata["auth_state"])
-	assert.Equal(t, false, capturedMetadata["is_first_seen"])
-	assert.Equal(t, "test-device", capturedMetadata["stable_id"])
-	assert.Equal(t, "test-user", capturedMetadata["user_id"])
-
-	// CamelCase variants should not be present in backend standard metadata.
-	assert.NotContains(t, capturedMetadata, "eventVersion")
-	assert.NotContains(t, capturedMetadata, "appVersion")
-	assert.NotContains(t, capturedMetadata, "envTier")
-	assert.NotContains(t, capturedMetadata, "sessionId")
-	assert.NotContains(t, capturedMetadata, "authState")
-	assert.NotContains(t, capturedMetadata, "isFirstSeen")
-	assert.NotContains(t, capturedMetadata, "stableId")
-	assert.NotContains(t, capturedMetadata, "userId")
-
-	client.Shutdown()
-}
-
-func TestTrackUsesClientUserIDForStandardMetadataFallback(t *testing.T) {
-	var capturedMetadata map[string]interface{}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload map[string]interface{}
-		err := json.NewDecoder(r.Body).Decode(&payload)
-		require.NoError(t, err)
-
-		events, ok := payload["events"].([]interface{})
-		require.True(t, ok)
-		require.Greater(t, len(events), 0)
-
-		event := events[0].(map[string]interface{})
-		metadata, ok := event["metadata"].(map[string]interface{})
-		require.True(t, ok)
-		capturedMetadata = metadata
-
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"success": true}`))
-	}))
-	defer server.Close()
-
-	originalEndpoint := getStatsigEndpoint()
-	setStatsigEndpoint(server.URL)
-	defer func() { setStatsigEndpoint(originalEndpoint) }()
-
-	client := &Client{
-		apiKey:       "test-api-key",
-		userID:       "fallback-user",
-		httpClient:   &http.Client{Timeout: 5 * time.Second},
-		eventQueue:   make([]Event, 0, maxBatchSize),
-		sessionID:    "test-session",
-		sessionStart: time.Now(),
-		deviceID:     "test-device",
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	client.ctx = ctx
-	client.cancel = cancel
-
-	// Track without explicit user ID to force fallback to client.userID.
-	client.Track(EventType("test_event_fallback"), map[string]interface{}{"k": "v"})
-	client.flush()
-
-	require.NotNil(t, capturedMetadata)
-	assert.Equal(t, "fallback-user", capturedMetadata["user_id"])
-	assert.Equal(t, "authenticated", capturedMetadata["auth_state"])
-
-	client.Shutdown()
-}
-
-func TestBatching(t *testing.T) {
-	var mu sync.Mutex
-	var receivedBatches [][]Event
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload map[string]interface{}
-		_ = json.NewDecoder(r.Body).Decode(&payload)
-
-		if events, ok := payload["events"].([]interface{}); ok {
-			var batch []Event
-			for _, e := range events {
-				eventBytes, _ := json.Marshal(e)
-				var event Event
-				_ = json.Unmarshal(eventBytes, &event)
-				batch = append(batch, event)
-			}
-
-			mu.Lock()
-			receivedBatches = append(receivedBatches, batch)
-			mu.Unlock()
-		}
-
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"success": true}`))
-	}))
-	defer server.Close()
-
-	// Override the endpoint
-	originalEndpoint := getStatsigEndpoint()
-	setStatsigEndpoint(server.URL)
-	defer func() { setStatsigEndpoint(originalEndpoint) }()
-
-	client := &Client{
-		apiKey:     "test-api-key",
-		userID:     "test-user",
-		httpClient: &http.Client{Timeout: 5 * time.Second},
-		eventQueue: make([]Event, 0, maxBatchSize),
-
-		sessionID:    "test-session",
-		sessionStart: time.Now(),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	client.ctx = ctx
-	client.cancel = cancel
-
-	// Track events to fill exactly one batch
-	for i := 0; i < maxBatchSize; i++ {
-		client.Track(EventType("test_event"), map[string]interface{}{
-			"index": i,
-		})
-	}
-
-	// Wait for the automatic flush. Polled rather than a fixed sleep: on a
-	// loaded machine the round trip outlived a 100ms sleep and the test failed.
-	require.Eventually(t, func() bool {
-		mu.Lock()
-		defer mu.Unlock()
-		total := 0
-		for _, batch := range receivedBatches {
-			total += len(batch)
-		}
-		return total >= maxBatchSize
-	}, 5*time.Second, 10*time.Millisecond)
-
-	mu.Lock()
-	assert.GreaterOrEqual(t, len(receivedBatches), 1)
-	totalEvents := 0
-	for _, batch := range receivedBatches {
-		totalEvents += len(batch)
-	}
-	assert.Equal(t, maxBatchSize, totalEvents)
-	mu.Unlock()
-
-	// Track one more event to trigger another batch
-	client.Track(EventType("test_event"), map[string]interface{}{
-		"index": maxBatchSize,
+	c.ForUser(context.Background(), "user-1").TrackWorkflowEnded(WorkflowMetrics{
+		WorkflowID: "wf-1",
+		Providers:  []string{"anthropic", "openai"},
+		Duration:   1500 * time.Millisecond,
+		Success:    true,
 	})
 
-	// Force flush the remaining event. The handler takes mu, so it must not be
-	// held here: holding it blocked the handler until the client's 5s timeout
-	// had fired on all three attempts (~21s), and the event was dropped.
-	client.flush()
-
-	// Should have at least one batch, possibly two
-	mu.Lock()
-	assert.GreaterOrEqual(t, len(receivedBatches), 1)
-	mu.Unlock()
-
-	client.Shutdown()
+	recs := records(t, buf)
+	require.Len(t, recs, 1)
+	assert.Equal(t, "product.workflow_ended", recs[0][AttrEventName])
+	assert.Equal(t, []any{"anthropic", "openai"}, recs[0]["product.providers"])
+	assert.Equal(t, float64(1500), recs[0]["product.duration_ms"])
 }
 
-func TestRetryLogic(t *testing.T) {
-	attemptCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		attemptCount++
-		if attemptCount < 3 {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"success": true}`))
-	}))
-	defer server.Close()
+func TestOptOutRecordsNothing(t *testing.T) {
+	c, buf := jsonClient(t, consent{"opted-out": false})
+	ctx := context.Background()
 
-	// Override the endpoint
-	originalEndpoint := getStatsigEndpoint()
-	setStatsigEndpoint(server.URL)
-	defer func() { setStatsigEndpoint(originalEndpoint) }()
+	opted := c.ForUser(ctx, "opted-out")
+	opted.TrackSessionStart()
+	opted.TrackMessageSent(MessageSentMetrics{MessageID: "m"})
+	opted.TrackLLMCallCompleted(LLMCallMetrics{Provider: "anthropic"})
+	// A consent read that fails records nothing either: no event is written
+	// for a user whose consent was not confirmed.
+	c.ForUser(ctx, "unknown-user").TrackSessionStart()
 
-	client := &Client{
-		apiKey:     "test-api-key",
-		userID:     "test-user",
-		httpClient: &http.Client{Timeout: 5 * time.Second},
-		eventQueue: make([]Event, 0, maxBatchSize),
-
-		sessionID:    "test-session",
-		sessionStart: time.Now(),
-	}
-	// Record the backoff instead of sleeping through it (2s + 4s).
-	var backoffs []time.Duration
-	client.sleep = func(d time.Duration) { backoffs = append(backoffs, d) }
-
-	ctx, cancel := context.WithCancel(context.Background())
-	client.ctx = ctx
-	client.cancel = cancel
-
-	// Track an event
-	client.Track("test_event", nil)
-
-	// Force flush
-	client.flush()
-
-	// Should have retried and eventually succeeded
-	assert.Equal(t, 3, attemptCount)
-	// ...backing off linearly before each retry, never before the first try.
-	assert.Equal(t, []time.Duration{retryBackoff, 2 * retryBackoff}, backoffs)
-
-	client.Shutdown()
+	assert.Empty(t, buf.String())
 }
 
-func TestConcurrentTracking(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"success": true}`))
-	}))
-	defer server.Close()
+func TestNoConsentSourceRecordsNoUserEvents(t *testing.T) {
+	var buf bytes.Buffer
+	c := NewClient(nil, slog.New(slog.NewJSONHandler(&buf, nil)))
 
-	// Override the endpoint
-	originalEndpoint := getStatsigEndpoint()
-	setStatsigEndpoint(server.URL)
-	defer func() { setStatsigEndpoint(originalEndpoint) }()
+	c.ForUser(context.Background(), "user-1").TrackSessionStart()
+	assert.Empty(t, buf.String())
 
-	client := &Client{
-		apiKey:     "test-api-key",
-		userID:     "test-user",
-		httpClient: &http.Client{Timeout: 5 * time.Second},
-		eventQueue: make([]Event, 0, maxBatchSize),
-
-		sessionID:    "test-session",
-		sessionStart: time.Now(),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	client.ctx = ctx
-	client.cancel = cancel
-
-	// Track events concurrently
-	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
-			client.Track(EventType("concurrent_event"), map[string]interface{}{
-				"index": index,
-			})
-		}(i)
-	}
-
-	wg.Wait()
-	client.flush()
-	client.Shutdown()
+	// An event about nobody needs no consent.
+	c.ForUser(context.Background(), "").TrackPageVisited(PageVisitedMetrics{PageName: "chat"})
+	recs := records(t, &buf)
+	require.Len(t, recs, 1)
+	assert.NotContains(t, recs[0], AttrUserID)
 }
 
-func TestSetUserID(t *testing.T) {
-	// Create test client
-	client := &Client{
-		apiKey:       "test-api-key",
-		userID:       "initial-user",
-		httpClient:   &http.Client{Timeout: 5 * time.Second},
-		eventQueue:   make([]Event, 0, maxBatchSize),
-		sessionID:    "test-session",
-		sessionStart: time.Now(),
-	}
+func TestDisabledOrUninstalledRecordsNothing(t *testing.T) {
+	t.Cleanup(func() { installed.Store(nil) })
 
-	ctx, cancel := context.WithCancel(context.Background())
-	client.ctx = ctx
-	client.cancel = cancel
-	defer client.Shutdown()
+	var nilClient *Client
+	nilClient.ForUser(context.Background(), "user-1").TrackSessionStart()
+	Tracker{}.TrackSessionStart()
 
-	// Verify initial user ID
-	assert.Equal(t, "initial-user", client.GetUserID())
+	Start(Settings{Disabled: true}, consent{"user-1": true})
+	assert.Nil(t, installed.Load())
+	assert.Equal(t, Tracker{}, ForUser(context.Background(), "user-1"))
 
-	// Update user ID (simulating login)
-	client.SetUserID("authenticated-user")
-	assert.Equal(t, "authenticated-user", client.GetUserID())
-
-	// Track an event - should use updated user ID
-	client.Track(EventType("test_event"), map[string]interface{}{
-		"test": "value",
-	})
-
-	// Verify the event has the correct user ID
-	client.mu.Lock()
-	require.Equal(t, 1, len(client.eventQueue))
-	assert.Equal(t, "authenticated-user", client.eventQueue[0].User.UserID)
-	client.mu.Unlock()
-
-	// Update to anonymous (simulating logout)
-	client.SetUserID("anonymous")
-	assert.Equal(t, "anonymous", client.GetUserID())
-
-	// Track another event
-	client.Track(EventType("test_event_after_logout"), map[string]interface{}{
-		"test": "value2",
-	})
-
-	// Verify the second event has anonymous user ID
-	client.mu.Lock()
-	require.Equal(t, 2, len(client.eventQueue))
-	assert.Equal(t, "anonymous", client.eventQueue[1].User.UserID)
-	client.mu.Unlock()
+	Start(Settings{}, consent{"user-1": true})
+	assert.NotEqual(t, Tracker{}, ForUser(context.Background(), "user-1"))
 }
 
-func TestSetUserIDConcurrent(t *testing.T) {
-	// Test concurrent SetUserID and GetUserID calls
-	client := &Client{
-		apiKey:       "test-api-key",
-		userID:       "initial-user",
-		httpClient:   &http.Client{Timeout: 5 * time.Second},
-		eventQueue:   make([]Event, 0, maxBatchSize),
-		sessionID:    "test-session",
-		sessionStart: time.Now(),
+func TestDuplicateWithinWindowIsDroppedPerUser(t *testing.T) {
+	c, buf := jsonClient(t, consent{"a": true, "b": true})
+	now := time.Unix(1_700_000_000, 0)
+	c.now = func() time.Time { return now }
+	ctx := context.Background()
+	page := PageVisitedMetrics{PageName: "settings"}
+
+	c.ForUser(ctx, "a").TrackPageVisited(page)
+	c.ForUser(ctx, "a").TrackPageVisited(page) // double-fired: dropped
+	c.ForUser(ctx, "b").TrackPageVisited(page) // another user: kept
+	now = now.Add(dedupWindow)
+	c.ForUser(ctx, "a").TrackPageVisited(page) // after the window: kept
+
+	var users []any
+	for _, rec := range records(t, buf) {
+		users = append(users, rec[AttrUserID])
 	}
+	assert.Equal(t, []any{"a", "b", "a"}, users)
+}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	client.ctx = ctx
-	client.cancel = cancel
-	defer client.Shutdown()
+func TestWorkflowEndedRetryIsOneEvent(t *testing.T) {
+	c, buf := jsonClient(t, consent{"a": true})
+	tr := c.ForUser(context.Background(), "a")
 
-	var wg sync.WaitGroup
+	// A retried activity reports the same run with a different duration.
+	tr.TrackWorkflowEnded(WorkflowMetrics{WorkflowID: "wf", Success: true, Duration: time.Second})
+	tr.TrackWorkflowEnded(WorkflowMetrics{WorkflowID: "wf", Success: true, Duration: 2 * time.Second})
 
-	// Concurrent writes
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
-			client.SetUserID(fmt.Sprintf("user-%d", index))
-		}(i)
-	}
-
-	// Concurrent reads
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_ = client.GetUserID()
-		}()
-	}
-
-	wg.Wait()
-
-	// Should not panic and should have some valid user ID
-	userID := client.GetUserID()
-	assert.NotEmpty(t, userID)
+	assert.Len(t, records(t, buf), 1)
 }

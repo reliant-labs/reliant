@@ -94,13 +94,10 @@ const {
 const windowStateClient = require("./window-state-client");
 const Sentry = require("@sentry/electron/main");
 const { sentryMainOptions } = require("./sentry-scrub");
-const { StatsigClient } = require("@statsig/js-client");
 const { autoUpdater } = require("electron-updater");
 const electronLog = require("electron-log");
 const ChunkedDownloader = require("./chunked-downloader");
 const crypto = require("crypto");
-
-const appStartTime = Date.now();
 
 // Configure auto-updater logging
 autoUpdater.logger = electronLog;
@@ -202,174 +199,6 @@ function getAnalyticsEnabled() {
 // Sentry needs to be initialized before app.ready event fires
 // We'll initialize it early with privacy settings check
 let sentryInitialized = false;
-let statsigClient = null;
-const statsigEventVersion = 1;
-const statsigSessionId = crypto.randomUUID();
-const allowedAuthFunnelEvents = new Set([
-  "app_opened",
-  "app_closed",
-  "auth_screen_viewed",
-  "login_attempted",
-  "login_failed",
-  "login_succeeded",
-  "signup_attempted",
-  "signup_succeeded",
-  "oauth_started",
-  "oauth_failed",
-  "oauth_succeeded",
-  "workflow_failed",
-  "update_available",
-  "update_download_started",
-  "update_download_completed",
-  "update_install_started",
-]);
-
-function getAnalyticsStatePath() {
-  return path.join(app.getPath("userData"), "analytics-state.json");
-}
-
-function readAnalyticsState() {
-  const defaults = {
-    stableId: crypto.randomUUID(),
-    firstSeenAt: new Date().toISOString(),
-    appOpenCount: 0,
-  };
-
-  try {
-    const statePath = getAnalyticsStatePath();
-    if (!fs.existsSync(statePath)) {
-      fs.writeFileSync(statePath, JSON.stringify(defaults, null, 2), "utf8");
-      return defaults;
-    }
-
-    const raw = fs.readFileSync(statePath, "utf8");
-    const parsed = JSON.parse(raw);
-    return {
-      stableId: typeof parsed.stableId === "string" && parsed.stableId.length > 0 ? parsed.stableId : defaults.stableId,
-      firstSeenAt: typeof parsed.firstSeenAt === "string" && parsed.firstSeenAt.length > 0 ? parsed.firstSeenAt : defaults.firstSeenAt,
-      appOpenCount: Number.isInteger(parsed.appOpenCount) && parsed.appOpenCount >= 0 ? parsed.appOpenCount : 0,
-    };
-  } catch (error) {
-    log.warn("[Statsig] Failed to read analytics state, using defaults:", error?.message || error);
-    return defaults;
-  }
-}
-
-function writeAnalyticsState(state) {
-  try {
-    fs.writeFileSync(getAnalyticsStatePath(), JSON.stringify(state, null, 2), "utf8");
-  } catch (error) {
-    log.warn("[Statsig] Failed to persist analytics state:", error?.message || error);
-  }
-}
-
-function getAuthMethodFromSession(session) {
-  if (!session?.user) return "unknown";
-
-  const identityProvider = session.user.identities?.[0]?.provider;
-  if (typeof identityProvider === "string" && identityProvider.length > 0) {
-    return identityProvider;
-  }
-
-  const appMetadataProvider = session.user.app_metadata?.provider;
-  if (typeof appMetadataProvider === "string" && appMetadataProvider.length > 0) {
-    return appMetadataProvider;
-  }
-
-  return "password";
-}
-
-async function trackStatsigEvent(eventName, metadata = {}, options = {}) {
-  if (!statsigClient || !getAnalyticsEnabled()) {
-    return false;
-  }
-
-  if (!allowedAuthFunnelEvents.has(eventName)) {
-    log.warn("[Statsig] Ignoring unknown event", { eventName });
-    return false;
-  }
-
-  const isDev = !app.isPackaged;
-  if (isDev) {
-    return false;
-  }
-
-  try {
-    if (typeof statsigClient.checkGate === "function") {
-      const enabled = statsigClient.checkGate("auth_funnel_tracking_enabled");
-      if (!enabled) {
-        return false;
-      }
-    }
-  } catch (gateError) {
-    log.warn("[Statsig] Failed gate check, continuing with event send", gateError?.message || gateError);
-  }
-
-  const analyticsState = readAnalyticsState();
-
-  let inferredUserId = "anonymous";
-  try {
-    const storedSession = authStorage.loadStoredAuth();
-    if (storedSession?.user?.id) {
-      inferredUserId = storedSession.user.id;
-    }
-  } catch (_) {
-    // no-op: anonymous fallback is fine
-  }
-
-  const userId = typeof options.userID === "string" && options.userID.length > 0
-    ? options.userID
-    : inferredUserId;
-  const authState = userId !== "anonymous" ? "authenticated" : "anonymous";
-
-  const enriched = {
-    ...metadata,
-    event_version: statsigEventVersion,
-    app_version: app.getVersion(),
-    platform: process.platform,
-    env_tier: app.isPackaged ? "production" : "development",
-    session_id: statsigSessionId,
-    auth_state: authState,
-    is_first_seen: analyticsState.appOpenCount <= 1,
-    stable_id: analyticsState.stableId,
-    user_id: authState === "authenticated" ? userId : null,
-    first_seen_at: analyticsState.firstSeenAt,
-    electron_version: process.versions.electron,
-    chrome_version: process.versions.chrome,
-    node_version: process.versions.node,
-  };
-
-  await statsigClient.logEvent(eventName, null, enriched);
-  return true;
-}
-
-function detectInstallMethod() {
-  if (process.platform === "darwin") {
-    // Check for Homebrew cask
-    try {
-      const homebrewPaths = [
-        "/opt/homebrew/Caskroom/reliant",
-        "/usr/local/Caskroom/reliant",
-      ];
-      for (const p of homebrewPaths) {
-        if (fs.existsSync(p)) return "homebrew";
-      }
-    } catch (_) {}
-    return "dmg";
-  } else if (process.platform === "linux") {
-    if (process.env.APPIMAGE) return "appimage";
-    // Check for AUR/pacman install
-    try {
-      const { execSync } = require("child_process");
-      execSync("pacman -Q reliant-labs-bin 2>/dev/null", { stdio: "ignore" });
-      return "aur";
-    } catch (_) {}
-    return "linux_other";
-  } else if (process.platform === "win32") {
-    return "exe_installer";
-  }
-  return "unknown";
-}
 
 // Initialize Sentry BEFORE app.ready (required by Sentry SDK)
 function initializeSentry() {
@@ -395,76 +224,6 @@ function initializeSentry() {
     }
   } else {
     log.info("[Sentry] Disabled (development mode or user opted out)");
-  }
-}
-
-// Initialize Statsig AFTER app.ready (can be async)
-function initializeStatsig() {
-  const analyticsEnabled = getAnalyticsEnabled();
-  console.log('[Statsig] Analytics enabled:', analyticsEnabled);
-
-  log.info('[Privacy] Initializing analytics with settings:', {
-    analyticsEnabled,
-  });
-
-  // Initialize Statsig client for analytics
-  // Disable in non-production environments
-  const nodeEnv = process.env.NODE_ENV || "production";
-  if (nodeEnv !== "production") {
-    log.info("[Statsig] Disabled in non-production environment", { NODE_ENV: nodeEnv });
-    return;
-  }
-
-  if (analyticsEnabled) {
-    // Get user ID from stored auth session
-    let userID = 'anonymous';
-    try {
-      const session = authStorage.loadStoredAuth();
-      if (session?.user?.id) {
-        userID = session.user.id;
-        log.info('[Statsig] Using Supabase user ID:', userID);
-      } else {
-        log.info('[Statsig] No user session found, using anonymous');
-      }
-    } catch (error) {
-      log.warn('[Statsig] Failed to load user ID, using anonymous:', error.message);
-    }
-
-    const statsigKey = process.env.STATSIG_CLIENT_KEY || "";
-    if (!statsigKey) {
-      log.info("[Statsig] No STATSIG_CLIENT_KEY configured, skipping initialization");
-      return;
-    }
-
-    statsigClient = new StatsigClient(
-      statsigKey,
-      { userID: userID },
-      {
-        environment: { tier: process.env.NODE_ENV || "production" },
-      }
-    );
-
-    statsigClient
-      .initializeAsync()
-      .then(async () => {
-        log.info("[Statsig] Initialized successfully", { userID, analyticsEnabled: true });
-
-        const analyticsState = readAnalyticsState();
-        analyticsState.appOpenCount += 1;
-        writeAnalyticsState(analyticsState);
-
-        await trackStatsigEvent("app_opened", {
-          app_open_count: analyticsState.appOpenCount,
-          install_method: detectInstallMethod(),
-        }, {
-          userID,
-        });
-      })
-      .catch((err) => {
-        log.error("[Statsig] Initialization failed:", err);
-      });
-  } else {
-    log.info("[Statsig] Disabled (user opted out)");
   }
 }
 
@@ -2584,7 +2343,6 @@ ipcMain.handle("auth:load", async () => {
 ipcMain.handle("auth:save", async (event, session) => {
   try {
     const previousSession = authStorage.loadStoredAuth();
-    const previousUserId = previousSession?.user?.id || "anonymous";
     // The restart is started but NOT awaited — see runAuthWrite. The renderer's
     // Supabase storage adapter awaits this IPC to commit the session, so work
     // left on this path delays the session itself, and an uncommitted session
@@ -2595,27 +2353,6 @@ ipcMain.handle("auth:save", async (event, session) => {
       reason: 'auth:save',
       logger: log,
     });
-
-    // Update Statsig user when auth changes. Analytics must never gate sign-in.
-    if (success && statsigClient && session?.user?.id) {
-      void (async () => {
-        try {
-          await statsigClient.updateUserAsync({ userID: session.user.id });
-          log.info("[Statsig] Updated user ID:", session.user.id);
-
-          if (previousUserId === "anonymous") {
-            await trackStatsigEvent("login_succeeded", {
-              auth_method: getAuthMethodFromSession(session),
-              source: "auth_save",
-            }, {
-              userID: session.user.id,
-            });
-          }
-        } catch (err) {
-          log.warn("[Statsig] Failed to update user:", err.message);
-        }
-      })();
-    }
 
     return { success };
   } catch (error) {
@@ -2649,44 +2386,10 @@ ipcMain.handle("auth:clear", async () => {
       logger: log,
     });
 
-    // Update Statsig to anonymous when user logs out. Not awaited: analytics
-    // must never gate the sign-out path.
-    if (success && statsigClient) {
-      void statsigClient.updateUserAsync({ userID: 'anonymous' })
-        .then(() => {
-          log.info("[Statsig] Updated user to anonymous (logged out)");
-        })
-        .catch((err) => {
-          log.warn("[Statsig] Failed to update user:", err.message);
-        });
-    }
-
     return { success };
   } catch (error) {
     log.error("[IPC] Failed to clear auth:", error);
     return { success: false, error: error.message };
-  }
-});
-
-ipcMain.handle("analytics:track", async (_event, payload) => {
-  try {
-    const eventName = payload?.eventName;
-    const metadata = payload?.metadata;
-    const userID = payload?.userID;
-
-    if (typeof eventName !== "string" || eventName.length === 0) {
-      return { success: false, error: "Invalid eventName" };
-    }
-
-    if (metadata != null && typeof metadata !== "object") {
-      return { success: false, error: "metadata must be an object" };
-    }
-
-    const tracked = await trackStatsigEvent(eventName, metadata || {}, { userID });
-    return { success: tracked };
-  } catch (error) {
-    log.warn("[Statsig] Failed to track analytics event via IPC", error?.message || error);
-    return { success: false, error: error?.message || "unknown error" };
   }
 });
 
@@ -2864,12 +2567,6 @@ autoUpdater.on("update-available", async (info) => {
     files: info.files?.map(f => ({ url: f.url, size: f.size, sha512: f.sha512 ? f.sha512.substring(0, 16) + '...' : 'none' }))
   });
 
-  await trackStatsigEvent("update_available", {
-    current_version: app.getVersion(),
-    new_version: info?.version || "unknown",
-    release_name: info?.releaseName || "",
-  });
-
   // Send to all windows
   BrowserWindow.getAllWindows().forEach((window) => {
     window.webContents.send("update-status", {
@@ -2950,10 +2647,6 @@ autoUpdater.on("download-progress", (progressObj) => {
 
 autoUpdater.on("update-downloaded", async (info) => {
   log.info("[AutoUpdater] Update downloaded:", info.version);
-
-  await trackStatsigEvent("update_download_completed", {
-    new_version: info?.version || "unknown",
-  });
 
   // Send to all windows - UI will handle prompting user to restart
   BrowserWindow.getAllWindows().forEach((window) => {
@@ -3186,10 +2879,6 @@ ipcMain.handle("download-update", async () => {
       lastProgressBytes = 0;
       downloadStartTime = Date.now();
 
-      await trackStatsigEvent("update_download_started", {
-        new_version: currentUpdateInfo?.version || "unknown",
-      });
-
       // Call downloadUpdate with timeout wrapper
       const downloadPromise = autoUpdater.downloadUpdate();
       const timeoutPromise = new Promise((_, reject) => {
@@ -3284,10 +2973,6 @@ ipcMain.handle("install-update", async () => {
     } catch (saveError) {
       log.error("[AutoUpdater] Failed to save window state:", saveError);
     }
-
-    await trackStatsigEvent("update_install_started", {
-      new_version: currentUpdateInfo?.version || "unknown",
-    });
 
     // Set BOTH flags to prevent any interference from quit handlers
     isQuitting = true;
@@ -3787,31 +3472,6 @@ function createApplicationMenu() {
 async function gracefulShutdown(exitCode = 0) {
   log.debug("Starting graceful shutdown...");
 
-  // Track app close event before shutdown
-  try {
-    const sessionDuration = Math.floor((Date.now() - appStartTime) / 1000);
-    const analyticsState = readAnalyticsState();
-
-    let authState = "anonymous";
-    try {
-      const session = authStorage.loadStoredAuth();
-      if (session?.user?.id) authState = "authenticated";
-    } catch (_) {}
-
-    await trackStatsigEvent("app_closed", {
-      session_duration_seconds: sessionDuration,
-      auth_state: authState,
-      app_open_count: analyticsState.appOpenCount,
-    });
-
-    // Give Statsig a moment to flush
-    if (statsigClient) {
-      await statsigClient.flush();
-    }
-  } catch (err) {
-    log.warn("[Statsig] Failed to track app_closed:", err?.message || err);
-  }
-
   // Save main window state before closing (uses backend API for worktree-local storage)
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -4106,11 +3766,6 @@ app.whenReady().then(async () => {
   const menuStart = Date.now();
   createApplicationMenu();
   log.info(`[App] ✓ Menu created in ${Date.now() - menuStart}ms`);
-
-  // Initialize Statsig analytics (Sentry was initialized earlier, before app.ready)
-  const statsigStart = Date.now();
-  initializeStatsig();
-  log.info(`[App] ✓ Statsig initialized in ${Date.now() - statsigStart}ms`);
 
   // Initialize window manager first (synchronous, fast)
   const wmStart = Date.now();

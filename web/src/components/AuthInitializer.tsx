@@ -8,7 +8,6 @@ import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
 import { initSentry } from "@/lib/sentry";
 import { initTelemetry } from "@/lib/telemetry";
-import { identifyUser, resetUser } from "@/lib/analytics";
 import { settingsSync } from "@/services/settingsSync";
 
 // NOTE: OAuth callback handling is done in authStore.initialize() to avoid duplicate listeners
@@ -106,7 +105,6 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
       if (hasInitializedAuthenticatedStartup.current) {
         logger.info("[AuthInitializer] User logged out, clearing authenticated startup state");
         hasInitializedAuthenticatedStartup.current = false;
-        void resetUser();
       }
     }
   }, [user, resetApiKeyCheck]);
@@ -174,9 +172,6 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
       // After initializePrivacy(): telemetry only starts with crash-reporting
       // consent, so the loaded setting must be in the store first.
       void initTelemetry();
-
-      // Identify user for analytics
-      void identifyUser(user.id, user.email ?? undefined);
     };
 
     void initializeAuthenticatedStartup();

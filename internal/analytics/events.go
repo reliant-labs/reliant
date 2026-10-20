@@ -3,6 +3,7 @@ package analytics
 
 import "time"
 
+// EventType is a product event's name without its "product." prefix.
 type EventType string
 
 const (
@@ -38,26 +39,6 @@ const (
 	EventOnboardingCompleted     EventType = "onboarding_completed"
 	EventOnboardingSkipped       EventType = "onboarding_skipped"
 )
-
-type Event struct {
-	Name      string                 `json:"eventName"`
-	User      UserInfo               `json:"user"`
-	Value     interface{}            `json:"value,omitempty"`
-	Metadata  map[string]interface{} `json:"metadata,omitempty"`
-	Timestamp int64                  `json:"time"`
-}
-
-type UserInfo struct {
-	UserID     string                 `json:"userID"`
-	StableID   string                 `json:"stableID,omitempty"`
-	Email      string                 `json:"email,omitempty"`
-	IP         string                 `json:"ip,omitempty"`
-	UserAgent  string                 `json:"userAgent,omitempty"`
-	Locale     string                 `json:"locale,omitempty"`
-	AppVersion string                 `json:"appVersion,omitempty"`
-	Country    string                 `json:"country,omitempty"`
-	Custom     map[string]interface{} `json:"custom,omitempty"`
-}
 
 // LLMCallMetrics tracks individual LLM API call completions
 type LLMCallMetrics struct {

@@ -1,69 +1,42 @@
 /**
- * Analytics event pipe.
+ * Product event pipe.
  *
- * Events fan out to up to three sinks, and ALL are optional:
+ * `trackEvent` fans out to the sinks telemetrySinks.ts selects. Both are
+ * optional and independent: one failing never stops the other.
  *
  *  - ClickStack, through forge's web runtime `track()`, when the build ships to
  *    it (VITE_TELEMETRY_SINKS includes `clickstack` and VITE_OTEL_ENDPOINT is
- *    set; see telemetrySinks.ts). An event becomes a span on the same session as
- *    the page's errors and replay. The runtime bounds and redacts the props.
- *    Statsig is removed together with web Sentry (DECISIONS.md, Q3), not before.
+ *    set). The event becomes a span named `product.<event>` on the same session
+ *    as the page's errors and replay; the runtime bounds and redacts the props.
+ *    This is where funnels are queried: the backend's product events are log
+ *    records with the same `product.` names (dev-docs/product-events.md).
  *
- *  - Statsig, when VITE_STATSIG_CLIENT_KEY is set. This is the growth-analytics
- *    sink and it is currently unset in every environment, which is why the whole
- *    onboarding funnel has been discarded in prod: the instrumentation in
- *    OnboardingFlow/analytics.ts is complete and its output went nowhere.
+ *  - Sentry, while web Sentry is still on (it is being replaced by ClickStack;
+ *    research/frontend-observability/DESIGN.md 6.6). It keeps the
+ *    funnel visible until ClickStack is the only sink, and because funnel events
+ *    and errors share a session, a funnel cliff arrives with the replay of the
+ *    user hitting it.
  *
- *  - Sentry, whenever Sentry is live. This is the detection sink, and it is the
- *    one that works today: the prod DSN is confirmed present in the shipped
- *    bundle bytes, so it is the only pipe already proven to reach production.
- *
- * Sending to Sentry as well as Statsig is deliberate rather than redundant.
- * Sentry is a worse analytics product and a far better debugging one, and the
- * purpose here is detection-and-diagnosis: because the funnel events and the
- * error events share a session, a funnel cliff arrives WITH a session replay of
- * the user hitting it, and Sentry's native `release` field attributes it to a
- * deploy. Statsig can tell you conversion fell; it cannot show you the user
- * falling.
- *
- * Events land as breadcrumbs (cheap, and they ride along on any error the
- * session later reports) plus, for the small set of funnel-defining events, an
- * explicit message that alert rules can match on. See
+ * In Sentry, events land as breadcrumbs (cheap, and they ride along on any
+ * error the session later reports) plus, for the small set of funnel-defining
+ * events, an explicit message that alert rules can match on. See
  * docs/observability/alert-rules.md for the rules that consume these.
+ *
+ * The user is attached by telemetry.ts (`setTelemetryUserId`), not here.
  */
 
-import { StatsigClient } from "@statsig/js-client";
 import * as Sentry from "@sentry/react";
 import { getPrivacySettings } from "../store/privacyStore";
 import { track } from "@reliantlabs/forge-web-runtime";
 import { isDev } from "./constants";
 import { clickstackEnabled, sentryEnabled } from "./telemetrySinks";
 
-let client: StatsigClient | null = null;
-let initPromise: Promise<void> | null = null;
+/** Starts every product event's ClickStack name, on web and backend alike. */
+export const PRODUCT_EVENT_PREFIX = "product.";
 
 function isEnabled(): boolean {
   if (isDev) return false;
   return getPrivacySettings().analyticsEnabled;
-}
-
-function getClient(): StatsigClient | null {
-  if (!isEnabled()) return null;
-
-  if (!client) {
-    const key = import.meta.env.VITE_STATSIG_CLIENT_KEY;
-    if (!key) return null;
-
-    client = new StatsigClient(key, {});
-    initPromise = client
-      .initializeAsync()
-      .then(() => undefined)
-      .catch(() => {
-        // Silently ignore init failures — analytics is best-effort
-      });
-  }
-
-  return client;
 }
 
 /**
@@ -85,11 +58,8 @@ const FUNNEL_MARKER_EVENTS = new Set([
 ]);
 
 /**
- * Track an analytics event. No-op when analytics is disabled or in dev mode.
- *
- * Delivery to the sinks is independent: a missing Statsig key must not stop the
- * event reaching Sentry or ClickStack, which is the whole reason the funnel was
- * dark.
+ * Track a product event. No-op when analytics is disabled or in dev mode.
+ * Delivery to the sinks is independent.
  */
 export function trackEvent(
   eventName: string,
@@ -105,11 +75,6 @@ export function trackEvent(
 
   if (sentryEnabled()) sendToSentry(eventName, stringMeta);
   if (clickstackEnabled()) sendToClickstack(eventName, metadata);
-
-  const c = getClient();
-  if (!c) return;
-
-  c.logEvent(eventName, undefined, stringMeta);
 }
 
 /**
@@ -125,8 +90,8 @@ export function toSnakeCaseKey(key: string): string {
 }
 
 /**
- * Send an event through the web runtime's `track()`. Best-effort like the other
- * sinks. Bounding (20 keys, 256-char values, credential redaction) is the
+ * Send an event through the web runtime's `track()` as `product.<event>`.
+ * Best-effort like the other sink. Bounding (20 keys, 256-char values, credential redaction) is the
  * runtime's; calls made before the SDK has started are held and replayed.
  */
 function sendToClickstack(
@@ -140,7 +105,7 @@ function sendToClickstack(
         props[toSnakeCaseKey(key)] = value;
       }
     }
-    track(eventName, props);
+    track(PRODUCT_EVENT_PREFIX + eventName, props);
   } catch {
     // Analytics is best-effort and must never surface to the user.
   }
@@ -180,31 +145,4 @@ function sendToSentry(
   } catch {
     // Analytics is best-effort and must never surface to the user.
   }
-}
-
-/**
- * Identify a user after authentication.
- */
-export async function identifyUser(
-  userId: string,
-  email?: string,
-): Promise<void> {
-  if (!isEnabled()) return;
-
-  const c = getClient();
-  if (!c) return;
-
-  // Wait for init to finish before updating user
-  if (initPromise) await initPromise;
-
-  await c.updateUserAsync({ userID: userId, email: email ?? undefined });
-}
-
-/**
- * Reset user identity on logout.
- */
-export async function resetUser(): Promise<void> {
-  if (!client) return;
-  if (initPromise) await initPromise;
-  await client.updateUserAsync({});
 }
