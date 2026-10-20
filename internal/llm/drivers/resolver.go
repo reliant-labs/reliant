@@ -47,9 +47,15 @@ func (p *baseDriver) Name() string {
 	return p.client.Name()
 }
 
-// SendMessages implements the Driver interface
+// SendMessages implements the Driver interface. The call is a gen_ai span
+// (llm.GenAISpan), the parent of the transport's HTTP spans.
 func (p *baseDriver) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) (*llm.DriverResponse, error) {
-	return p.client.SendMessages(ctx, prompts, messages, tools)
+	ctx, span := llm.StartGenAISpan(ctx, p.client.Name(), p.model, false)
+	defer span.End()
+	resp, err := p.client.SendMessages(ctx, prompts, messages, tools)
+	span.RecordResponse(resp, "")
+	span.RecordError(err)
+	return resp, err
 }
 
 // StreamResponse implements the Driver interface.
@@ -61,11 +67,18 @@ func (p *baseDriver) SendMessages(ctx context.Context, prompts []string, message
 // consumers DO walk away mid-stream: CallLLM stops reading on cancellation,
 // on the progress timeout and on a handler error. So the inner channel is
 // always drained to its close, whatever the consumer does.
+//
+// It is also where the call's gen_ai span (llm.GenAISpan) lives, observing
+// each event as it is relayed: tracing in a relay of its own would put a
+// second hop between the driver and a consumer that keeps taking already
+// produced events after it cancels.
 func (p *baseDriver) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) <-chan llm.DriverEvent {
 	ch := make(chan llm.DriverEvent)
+	ctx, span := llm.StartGenAISpan(ctx, p.client.Name(), p.model, true)
 	in := p.client.StreamResponse(ctx, prompts, messages, tools)
 	go func() {
 		defer close(ch)
+		defer span.End()
 		defer func() {
 			for range in { //nolint:revive // draining lets the driver finish and release its stream
 			}
@@ -73,7 +86,9 @@ func (p *baseDriver) StreamResponse(ctx context.Context, prompts []string, messa
 		for event := range in {
 			// Enrich the event with the model used
 			event.Model = p.model
+			span.Observe(event)
 			if !deliverEvent(ctx, ch, event) {
+				span.RecordError(ctx.Err())
 				return
 			}
 		}
