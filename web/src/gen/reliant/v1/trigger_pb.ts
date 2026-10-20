@@ -1978,15 +1978,14 @@ export const ResolveTriggerSendersResponseSchema: GenMessage<ResolveTriggerSende
  */
 export type ListReplayEventsRequest = Message<"reliant.v1.ListReplayEventsRequest"> & {
   /**
-   * Narrow to one project's triggers. Unset searches the caller's triggers
-   * across every project.
+   * Narrows the workflow's triggers to one project. Unset: every project.
    *
    * @generated from field: optional string project_id = 1;
    */
   projectId?: string | undefined;
 
   /**
-   * Workflow whose declared triggers' events to list.
+   * The workflow whose triggers' events to list. Required.
    *
    * @generated from field: string workflow = 2;
    */

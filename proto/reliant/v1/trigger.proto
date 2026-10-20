@@ -1062,11 +1062,9 @@ message ResolveTriggerSendersResponse {
 }
 
 message ListReplayEventsRequest {
-  // Narrow to one project's triggers. Unset searches the caller's triggers
-  // across every project.
+  // Narrows the workflow's triggers to one project. Unset: every project.
   optional string project_id = 1;
-
-  // Workflow whose declared triggers' events to list.
+  // The workflow whose triggers' events to list. Required.
   string workflow = 2 [(buf.validate.field).required = true];
 
   // Limit caps the events returned across all of the workflow's triggers.

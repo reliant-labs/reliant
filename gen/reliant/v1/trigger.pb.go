@@ -3933,10 +3933,9 @@ func (x *ResolveTriggerSendersResponse) GetSenders() []*ResolvedTriggerSender {
 
 type ListReplayEventsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Narrow to one project's triggers. Unset searches the caller's triggers
-	// across every project.
+	// Narrows the workflow's triggers to one project. Unset: every project.
 	ProjectId *string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
-	// Workflow whose declared triggers' events to list.
+	// The workflow whose triggers' events to list. Required.
 	Workflow string `protobuf:"bytes,2,opt,name=workflow,proto3" json:"workflow,omitempty"`
 	// Limit caps the events returned across all of the workflow's triggers.
 	// Default 20, maximum 50.
