@@ -52,7 +52,9 @@ func ResolveWorkflowTemplates(raw map[string]interface{}, inputs map[string]inte
 	}
 	// triggers[].inputs are templates over the launch event, evaluated when an
 	// event fires the trigger (see wfyaml.IsRuntimeEvaluatedTopLevelKey).
-	for _, key := range []string{"triggers"} {
+	// on_failure's nodes read the failure and the node outputs of a run that
+	// is already over.
+	for _, key := range []string{"triggers", "on_failure"} {
 		if wfyaml.IsRuntimeEvaluatedTopLevelKey(key) {
 			topLevelSkip[key] = true
 		}

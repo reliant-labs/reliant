@@ -869,6 +869,18 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		}
 	}
 
+	// The on_failure handler, observed the same way: read after the run from
+	// state the workflow holds, never steered.
+	var onFailure *scenario.OnFailureObserved
+	if r.workflow.GetOnFailure() != nil {
+		onFailure = &scenario.OnFailureObserved{}
+		var rec runtime.OnFailureRecord
+		if q, qErr := env.QueryWorkflow(runtime.OnFailureQuery); qErr == nil && q.Get(&rec) == nil {
+			*onFailure = scenario.OnFailureObserved{Ran: rec.Ran, NodeID: rec.NodeID, NodePath: rec.NodePath,
+				Error: rec.Error, ErrorCode: rec.ErrorCode, Attempt: rec.Attempt, HandlerError: rec.HandlerError}
+		}
+	}
+
 	execution := scenario.ExecutionDetails{
 		NodesReached:   rec.reached,
 		NodesCompleted: rec.completed,
@@ -879,6 +891,7 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		// Non-nil even when empty: this backend observes saves, so "none
 		// saved" is a real answer (see scenario.checkMessageExpectations).
 		SavedMessages: append([]scenario.SavedMessage{}, rec.saved...),
+		OnFailure:     onFailure,
 	}
 
 	if runErr := env.GetWorkflowError(); runErr != nil {

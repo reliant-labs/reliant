@@ -766,6 +766,22 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// not a Temporal command — safe for all histories.
 	ctx = WithStreamIDTracker(ctx, NewStreamIDTracker())
 
+	// on_failure: where the run failed, the handler to run for it and the
+	// outputs the run had produced when it did. The latter two are filled in
+	// as the run loads and starts; the recorder is read by the completion
+	// defer below.
+	failRec := &failureRecorder{}
+	ctx = withFailureRecorder(ctx, failRec)
+	var onFailureHandler *reliantv1.Workflow
+	var failureNodeOutputs map[string]interface{}
+	runOutcomeNode := ""
+	var onFailureRecord OnFailureRecord
+	if err := workflow.SetQueryHandler(ctx, OnFailureQuery, func() (OnFailureRecord, error) {
+		return onFailureRecord, nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to set on_failure query handler: %w", err)
+	}
+
 	logger.Debug("[Workflow Runtime] Using execution context",
 		"thread", thread,
 		"mode", execCtx.ThreadMode,
@@ -805,6 +821,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// exits on its own via ctx.Err() check to avoid blocking on Send
 		if handlerDone != nil && ctx.Err() == nil {
 			handlerDone.Send(ctx, true)
+		}
+		// A failed run gets its on_failure handler, once, before the run is
+		// reported failed. The run still fails: see on_failure.go.
+		if onFailureHandler != nil && runFailed(ctx, retErr, runOutcome) &&
+			workflow.GetVersion(ctx, onFailureChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+			runOnFailure(ctx, onFailureHandler, input, workflowID, execCtx, childTracker, failureNodeOutputs,
+				failureFor(failRec, retErr, runOutcome, runOutcomeNode), &onFailureRecord)
 		}
 		// Read at exit, off the final inputs map (ApplyDefaults replaces it).
 		launchRun := IsLaunchRun(input.Inputs)
@@ -953,6 +976,8 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// No templates - use the placeholder-resolved workflow directly
 		wf = wfWithPlaceholders
 	}
+
+	onFailureHandler = wf.GetOnFailure()
 
 	coreSemantics, err := CompileRuntimeSemantics(wf, input.WorkflowName)
 	if err != nil {
@@ -1198,6 +1223,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Track outputs from completed nodes using NodeOutputStore for centralized management
 	nodeOutputStore := NewNodeOutputStore(input.WorkflowName)
 	nodeOutputs := nodeOutputStore.AsMap() // Backwards compatible - existing code can use the map directly
+	failureNodeOutputs = nodeOutputs
 
 	// STEP 7.5: Initialize join state for synchronization nodes
 	joinState := NewJoinState()
@@ -1564,6 +1590,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				"", // top level: the node's path is its own id
 			)
 			if condErr != nil {
+				recordFailedNode(ctx, step.Node.GetId(), 1)
 				return nil, condErr
 			}
 			if skipped {
@@ -1578,6 +1605,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			// (derived from the same replayed history), so replay-safe.
 			if outcome := model.NodeOutcome(step.Node); outcome != "" {
 				runOutcome = outcome
+				runOutcomeNode = step.Node.GetId()
 				logger.Info("[Workflow Runtime] Node declared run outcome",
 					"stepID", step.Node.GetId(),
 					"outcome", outcome,
@@ -1768,6 +1796,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
 							"loop_execution_error",
 							fmt.Sprintf("Loop step '%s' failed: %s", step.Node.GetId(), execErr.Error()))
+						recordFailedNode(ctx, step.Node.GetId(), 1)
 						return nil, fmt.Errorf("loop step %s failed: %w", step.Node.GetId(), execErr)
 					}
 
@@ -1863,6 +1892,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						"config_evaluation_error",
 						fmt.Sprintf("Step '%s' config evaluation failed: %s", step.Node.GetId(), err.Error()))
 					// Fail fast - CEL evaluation errors should halt the workflow, not silently continue
+					recordFailedNode(ctx, step.Node.GetId(), 1)
 					return nil, fmt.Errorf("step %s config evaluation failed: %w", step.Node.GetId(), err)
 				}
 
@@ -1890,6 +1920,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						"executor_creation_error",
 						fmt.Sprintf("Failed to create executor for step '%s': %s", step.Node.GetId(), err.Error()))
 					// Fail fast - executor creation errors should halt the workflow
+					recordFailedNode(ctx, step.Node.GetId(), 1)
 					return nil, fmt.Errorf("failed to create executor for step %s: %w", step.Node.GetId(), err)
 				}
 
@@ -2234,6 +2265,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					logger,
 				)
 				if err != nil {
+					recordFailedNode(ctx, step.Node.GetId(), 1)
 					return nil, fmt.Errorf("approval %s failed: %w", step.Node.GetId(), err)
 				}
 				approvalOutput, err := executeApprovalSignalFlow(ctx, exec)
@@ -2591,6 +2623,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 								"inline_workflow_error",
 								fmt.Sprintf("Inline workflow '%s' failed: %s", running.StepID, running.Error.Error()))
 						}
+						recordFailedNode(ctx, running.StepID, 1)
 						return nil, fmt.Errorf("inline workflow %s failed: %w", running.StepID, running.Error)
 					}
 				}
@@ -3055,6 +3088,7 @@ func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]int
 	propagateUnattended(workflowInputs, childInputs)
 	propagateActingIdentity(workflowInputs, childInputs)
 	propagateTrigger(workflowInputs, childInputs)
+	propagateFailure(workflowInputs, childInputs)
 	// The parent's provider preference and policy are NOT copied here: these
 	// inputs are the child's node args, which beat its preset, so an inherited
 	// value would shadow the preset's `providers:`. The inline executor that

@@ -47,10 +47,13 @@ const triggerSourceOneof protoreflect.Name = "source"
 // resolved when the definition loads (runtime.ResolveWorkflowTemplates).
 // `triggers` belongs here: its inputs are templates over the launch event,
 // evaluated when an event fires them, and a run started from a plain chat has
-// no event to resolve them against.
+// no event to resolve them against. `on_failure` belongs here too: its nodes
+// read `failure` and the node outputs of a run that is already over, none of
+// which exist when the definition loads.
 var runtimeEvaluatedTopLevelKeys = map[string]bool{
-	"outputs":  true,
-	"triggers": true,
+	"outputs":    true,
+	"triggers":   true,
+	"on_failure": true,
 }
 
 // IsRuntimeEvaluatedTopLevelKey reports whether a top-level workflow key's

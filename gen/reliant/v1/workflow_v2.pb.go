@@ -7835,8 +7835,17 @@ type Workflow struct {
 	// builder test run) start it. Unset, the default, means a chat can start it
 	// like any other workflow.
 	AutomationOnly bool `protobuf:"varint,18,opt,name=automation_only,json=automationOnly,proto3" json:"automation_only,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// OnFailure is a finally-style handler: an inline graph (nodes, edges, entry)
+	// that runs ONCE when a run of this workflow FAILS: a node error nothing
+	// handled, an agent that never produced its required response, a node that
+	// declares `outcome: failure`. It does not run when the run completes,
+	// pauses or is cancelled. Its nodes read `failure.{node_id, node_path,
+	// error, error_code, attempt}` plus `inputs` and the `nodes` outputs the run
+	// had produced. The run still ends FAILED: the handler cannot mask the
+	// failure, and an error in it is logged, never recursive.
+	OnFailure     *Workflow `protobuf:"bytes,19,opt,name=on_failure,json=onFailure,proto3" json:"on_failure,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Workflow) Reset() {
@@ -7986,6 +7995,13 @@ func (x *Workflow) GetAutomationOnly() bool {
 		return x.AutomationOnly
 	}
 	return false
+}
+
+func (x *Workflow) GetOnFailure() *Workflow {
+	if x != nil {
+		return x.OnFailure
+	}
+	return nil
 }
 
 var File_reliant_v1_workflow_v2_proto protoreflect.FileDescriptor
@@ -8788,7 +8804,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x14.reliant.v1.PositionR\x05value:\x028\x01\x1aW\n" +
 	"\rSwitchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xb2\x06\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xe7\x06\n" +
 	"\bWorkflow\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12&\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x10.reliant.v1.NodeR\x05nodes\x12&\n" +
@@ -8809,7 +8825,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\btriggers\x18\x0f \x03(\v2\x1b.reliant.v1.WorkflowTriggerR\btriggers\x12\x14\n" +
 	"\x05title\x18\x10 \x01(\tR\x05title\x12\x16\n" +
 	"\x06hidden\x18\x11 \x01(\bR\x06hidden\x12'\n" +
-	"\x0fautomation_only\x18\x12 \x01(\bR\x0eautomationOnly\x1aL\n" +
+	"\x0fautomation_only\x18\x12 \x01(\bR\x0eautomationOnly\x123\n" +
+	"\n" +
+	"on_failure\x18\x13 \x01(\v2\x14.reliant.v1.WorkflowR\tonFailure\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +
@@ -9154,27 +9172,28 @@ var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	16,  // 202: reliant.v1.Workflow.presets:type_name -> reliant.v1.PresetsConfig
 	10,  // 203: reliant.v1.Workflow.daemon:type_name -> reliant.v1.CelDaemonSelector
 	115, // 204: reliant.v1.Workflow.triggers:type_name -> reliant.v1.WorkflowTrigger
-	113, // 205: reliant.v1.ToolsConfig.ToolsEntry.value:type_name -> google.protobuf.Struct
-	113, // 206: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry.value:type_name -> google.protobuf.Struct
-	114, // 207: reliant.v1.InvokeToolArgs.ParamsEntry.value:type_name -> google.protobuf.Value
-	114, // 208: reliant.v1.ActionArgs.WithEntry.value:type_name -> google.protobuf.Value
-	114, // 209: reliant.v1.ComputeArgs.OutputsEntry.value:type_name -> google.protobuf.Value
-	114, // 210: reliant.v1.SubWorkflowArgs.ArgsEntry.value:type_name -> google.protobuf.Value
-	114, // 211: reliant.v1.LoopArgs.ArgsEntry.value:type_name -> google.protobuf.Value
-	58,  // 212: reliant.v1.ObjectInputConfig.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
-	58,  // 213: reliant.v1.PropertySchema.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
-	45,  // 214: reliant.v1.GroupInputConfig.InputsEntry.value:type_name -> reliant.v1.Input
-	66,  // 215: reliant.v1.ToolCapabilities.BoundParamsEntry.value:type_name -> reliant.v1.ToolBoundParams
-	67,  // 216: reliant.v1.ToolBoundParams.ParamsEntry.value:type_name -> reliant.v1.BoundParam
-	113, // 217: reliant.v1.LoopOutput.ResultsEntry.value:type_name -> google.protobuf.Struct
-	84,  // 218: reliant.v1.WorkflowUI.PositionsEntry.value:type_name -> reliant.v1.Position
-	86,  // 219: reliant.v1.WorkflowUI.SwitchesEntry.value:type_name -> reliant.v1.SwitchMetadata
-	45,  // 220: reliant.v1.Workflow.InputsEntry.value:type_name -> reliant.v1.Input
-	221, // [221:221] is the sub-list for method output_type
-	221, // [221:221] is the sub-list for method input_type
-	221, // [221:221] is the sub-list for extension type_name
-	221, // [221:221] is the sub-list for extension extendee
-	0,   // [0:221] is the sub-list for field type_name
+	88,  // 205: reliant.v1.Workflow.on_failure:type_name -> reliant.v1.Workflow
+	113, // 206: reliant.v1.ToolsConfig.ToolsEntry.value:type_name -> google.protobuf.Struct
+	113, // 207: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry.value:type_name -> google.protobuf.Struct
+	114, // 208: reliant.v1.InvokeToolArgs.ParamsEntry.value:type_name -> google.protobuf.Value
+	114, // 209: reliant.v1.ActionArgs.WithEntry.value:type_name -> google.protobuf.Value
+	114, // 210: reliant.v1.ComputeArgs.OutputsEntry.value:type_name -> google.protobuf.Value
+	114, // 211: reliant.v1.SubWorkflowArgs.ArgsEntry.value:type_name -> google.protobuf.Value
+	114, // 212: reliant.v1.LoopArgs.ArgsEntry.value:type_name -> google.protobuf.Value
+	58,  // 213: reliant.v1.ObjectInputConfig.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
+	58,  // 214: reliant.v1.PropertySchema.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
+	45,  // 215: reliant.v1.GroupInputConfig.InputsEntry.value:type_name -> reliant.v1.Input
+	66,  // 216: reliant.v1.ToolCapabilities.BoundParamsEntry.value:type_name -> reliant.v1.ToolBoundParams
+	67,  // 217: reliant.v1.ToolBoundParams.ParamsEntry.value:type_name -> reliant.v1.BoundParam
+	113, // 218: reliant.v1.LoopOutput.ResultsEntry.value:type_name -> google.protobuf.Struct
+	84,  // 219: reliant.v1.WorkflowUI.PositionsEntry.value:type_name -> reliant.v1.Position
+	86,  // 220: reliant.v1.WorkflowUI.SwitchesEntry.value:type_name -> reliant.v1.SwitchMetadata
+	45,  // 221: reliant.v1.Workflow.InputsEntry.value:type_name -> reliant.v1.Input
+	222, // [222:222] is the sub-list for method output_type
+	222, // [222:222] is the sub-list for method input_type
+	222, // [222:222] is the sub-list for extension type_name
+	222, // [222:222] is the sub-list for extension extendee
+	0,   // [0:222] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_workflow_v2_proto_init() }

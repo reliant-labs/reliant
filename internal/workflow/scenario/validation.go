@@ -64,6 +64,12 @@ func ValidateScenario(scenario *Scenario, workflow *reliantv1.Workflow) *Validat
 
 	// Collect all valid node IDs from the workflow
 	validNodes := collectValidNodes(workflow, "")
+	// The on_failure handler's nodes are addressed under "on_failure.".
+	if handler := workflow.GetOnFailure(); handler != nil {
+		for id, info := range collectValidNodes(handler, onFailurePathPrefix) {
+			validNodes[id] = info
+		}
+	}
 
 	// Validate event node references
 	for i, event := range scenario.Events {
@@ -208,6 +214,11 @@ func canSaveMessage(info nodeInfo) bool {
 
 // collectValidNodes recursively collects all valid node IDs from a workflow.
 // The prefix is used for qualified IDs (e.g., "loop_id.inner_node_id").
+// onFailurePathPrefix is the path segment the runtime gives an on_failure
+// handler's nodes (runtime.OnFailureNodeID). A literal for the same reason as
+// spawnNodeRefPrefix; pinned by TestOnFailurePathPrefixMatchesRuntime in the runner package.
+const onFailurePathPrefix = "on_failure"
+
 func collectValidNodes(workflow *reliantv1.Workflow, prefix string) map[string]nodeInfo {
 	nodes := make(map[string]nodeInfo)
 	if workflow == nil {

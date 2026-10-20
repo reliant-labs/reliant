@@ -85,6 +85,10 @@ type InlineWorkflowExecutor struct {
 	threadInterrupt *ThreadInterrupt
 	// makeThreadInterrupt creates per-thread interrupt handles for spawned/nested threads.
 	makeThreadInterrupt func(string) *ThreadInterrupt
+
+	// seedNodeOutputs pre-populates the body's `nodes`. Only an on_failure
+	// handler sets it: it reads the outputs of the run it is handling.
+	seedNodeOutputs map[string]interface{}
 }
 
 // threadForError is the thread this inline workflow's failures belong to, or ""
@@ -149,6 +153,13 @@ func NewInlineWorkflowExecutor(
 // WithThreadTracker sets the thread tracker for recording thread resolutions.
 func (e *InlineWorkflowExecutor) WithThreadTracker(tracker *ThreadTracker) *InlineWorkflowExecutor {
 	e.threadTracker = tracker
+	return e
+}
+
+// WithSeedNodeOutputs starts the body's `nodes` from these outputs (a copy of
+// a failed run's), which the body can read and never changes.
+func (e *InlineWorkflowExecutor) WithSeedNodeOutputs(outputs map[string]interface{}) *InlineWorkflowExecutor {
+	e.seedNodeOutputs = outputs
 	return e
 }
 
@@ -532,6 +543,7 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputsWithOwnership() (map[stri
 	propagateUnattended(e.workflowInputs, subInputs)
 	propagateActingIdentity(e.workflowInputs, subInputs)
 	propagateTrigger(e.workflowInputs, subInputs)
+	propagateFailure(e.workflowInputs, subInputs)
 	propagateProviderPreference(e.workflowInputs, subInputs)
 
 	return subInputs, ownedKeys, nil
@@ -680,7 +692,10 @@ func (e *InlineWorkflowExecutor) loadSubWorkflow() error {
 // Returns the evaluated workflow outputs when complete.
 func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, error) {
 	// Create step outputs map for the sub-workflow (scoped to sub-workflow)
-	subNodeOutputs := make(map[string]interface{})
+	subNodeOutputs := make(map[string]interface{}, len(e.seedNodeOutputs))
+	for k, v := range e.seedNodeOutputs {
+		subNodeOutputs[k] = v
+	}
 
 	// Build unique activity ID base for this execution.
 	// Use workflowID (unique per spawn) + nodeID + subWorkflowName.
@@ -1096,6 +1111,12 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 
 				// Handle retry exhaustion - pause workflow and retry on resume.
 				if stepEvent.RetryExhausted {
+					// An on_failure handler never parks: the run is already
+					// failed and nothing will resume it.
+					if e.pauseCtrl.failsFast() {
+						recordFailedNode(e.ctx, joinNodePath(e.nodePath(), running.StepID), 1)
+						return nil, stepEvent.Error
+					}
 					// A provider usage limit holds the step, root or sub-agent,
 					// until the limit resets; see usage_limit_wait.go.
 					if waited := e.pauseCtrl.waitOutUsageLimit(e.ctx, e.threadForError(), running.StepID, stepEvent.Error); waited.Handled {
@@ -1202,6 +1223,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				}
 
 				if routingErr := EnsureStepEventRoutable(stepEvent); routingErr != nil {
+					recordFailedNode(e.ctx, joinNodePath(e.nodePath(), stepEvent.StepID), 1)
 					e.logger.Error("[InlineWorkflow] Step failed, aborting inline workflow",
 						"nodeID", e.nodeID,
 						"subWorkflow", e.subWorkflowName,

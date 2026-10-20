@@ -236,6 +236,7 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 	}
 
 	mismatches = append(mismatches, checkMessageExpectations(expect.Messages, execution.SavedMessages)...)
+	mismatches = append(mismatches, checkOnFailureExpectation(expect.OnFailure, execution.OnFailure)...)
 
 	// Check workflow-level outputs (dotted paths into structured values)
 	for path, expectedValue := range expect.Outputs {
@@ -345,4 +346,45 @@ func toFloat64(v interface{}) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// checkOnFailureExpectation compares an `expect.on_failure` block with what the
+// run's handler did. A workflow with no handler has nothing observed, which is
+// "did not run".
+func checkOnFailureExpectation(want *OnFailureExpectation, got *OnFailureObserved) []string {
+	if want == nil {
+		return nil
+	}
+	var out []string
+	ran := got != nil && got.Ran
+	if want.Ran != nil && *want.Ran != ran {
+		out = append(out, fmt.Sprintf("expected on_failure ran=%t but it ran=%t", *want.Ran, ran))
+	}
+	needsRun := want.NodeID != "" || want.NodePath != "" || want.ErrorCode != "" || want.Attempt != 0 ||
+		want.ErrorContains != "" || want.HandlerFailed != nil
+	if !ran {
+		if needsRun {
+			out = append(out, "expected the on_failure handler to have run, but it did not")
+		}
+		return out
+	}
+	if want.NodeID != "" && got.NodeID != want.NodeID {
+		out = append(out, fmt.Sprintf("expected failure.node_id %q but got %q", want.NodeID, got.NodeID))
+	}
+	if want.NodePath != "" && got.NodePath != want.NodePath {
+		out = append(out, fmt.Sprintf("expected failure.node_path %q but got %q", want.NodePath, got.NodePath))
+	}
+	if want.ErrorCode != "" && got.ErrorCode != want.ErrorCode {
+		out = append(out, fmt.Sprintf("expected failure.error_code %q but got %q", want.ErrorCode, got.ErrorCode))
+	}
+	if want.Attempt != 0 && got.Attempt != want.Attempt {
+		out = append(out, fmt.Sprintf("expected failure.attempt %d but got %d", want.Attempt, got.Attempt))
+	}
+	if want.ErrorContains != "" && !strings.Contains(got.Error, want.ErrorContains) {
+		out = append(out, fmt.Sprintf("expected failure.error to contain %q but it was %q", want.ErrorContains, got.Error))
+	}
+	if want.HandlerFailed != nil && *want.HandlerFailed != (got.HandlerError != "") {
+		out = append(out, fmt.Sprintf("expected the handler to have failed=%t but its error was %q", *want.HandlerFailed, got.HandlerError))
+	}
+	return out
 }

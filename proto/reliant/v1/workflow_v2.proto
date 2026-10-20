@@ -2075,4 +2075,13 @@ message Workflow {
   // builder test run) start it. Unset, the default, means a chat can start it
   // like any other workflow.
   bool automation_only = 18;
+  // OnFailure is a finally-style handler: an inline graph (nodes, edges, entry)
+  // that runs ONCE when a run of this workflow FAILS: a node error nothing
+  // handled, an agent that never produced its required response, a node that
+  // declares `outcome: failure`. It does not run when the run completes,
+  // pauses or is cancelled. Its nodes read `failure.{node_id, node_path,
+  // error, error_code, attempt}` plus `inputs` and the `nodes` outputs the run
+  // had produced. The run still ends FAILED: the handler cannot mask the
+  // failure, and an error in it is logged, never recursive.
+  Workflow on_failure = 19;
 }

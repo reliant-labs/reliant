@@ -109,6 +109,9 @@ var RuntimeInjectedInputs = map[string]bool{
 	// launcher only; a reply's run never carries them.
 	"__acting_identity": true,
 	"__automation":      true,
+	// What failed, for the nodes of an on_failure handler (runtime.Failure).
+	// Set by the runtime for the handler only, never taken from a client.
+	"__failure": true,
 }
 
 // NewWorkflowID generates a new random UUID for a root workflow.

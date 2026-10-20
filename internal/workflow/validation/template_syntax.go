@@ -106,6 +106,11 @@ func (w *templateSyntaxWalker) workflow(m protoreflect.Message, path []string) {
 		}
 	}
 
+	// The on_failure handler is a workflow of its own.
+	if fd := fields.ByName("on_failure"); fd != nil && m.Has(fd) {
+		w.workflow(m.Get(fd).Message(), appendPath(path, "on_failure"))
+	}
+
 	// Workflow outputs are templates keyed by output name.
 	outputs := m.Get(fields.ByName("outputs")).Map()
 	var names []string

@@ -39,6 +39,13 @@ const (
 	// Type: map[string]any (dynamic - payload shape varies by trigger kind)
 	CELTrigger CELNamespace = "trigger"
 
+	// CELFailure provides what failed, to the nodes of a workflow's on_failure
+	// handler and to nothing else: the namespace exists only where the runtime
+	// injected FailureInputKey.
+	// Usage: failure.node_id, failure.node_path, failure.error, failure.error_code, failure.attempt
+	// Type: map[string]any
+	CELFailure CELNamespace = "failure"
+
 	// CELWorkflow provides workflow metadata and environment context.
 	// Usage: workflow.id, workflow.name, workflow.path, workflow.branch
 	// Type: model.WorkflowContext (statically typed - known fields)
@@ -70,6 +77,7 @@ func AllNamespaces() []CELNamespace {
 	return []CELNamespace{
 		CELInputs,
 		CELTrigger,
+		CELFailure,
 		CELWorkflow,
 		CELNodes,
 		CELIter,
@@ -120,6 +128,9 @@ func (c *EdgeEvalContext) Activation() map[string]interface{} {
 		if t := triggerFromInputs(c.Inputs); t != nil {
 			m[string(CELTrigger)] = t
 		}
+		if f := failureFromInputs(c.Inputs); f != nil {
+			m[string(CELFailure)] = f
+		}
 	}
 	if c.Workflow != nil {
 		m[string(CELWorkflow)] = c.Workflow
@@ -134,7 +145,7 @@ func (c *EdgeEvalContext) Activation() map[string]interface{} {
 }
 
 func (c *EdgeEvalContext) Namespaces() []CELNamespace {
-	return withLoopOutputs([]CELNamespace{CELInputs, CELTrigger, CELWorkflow, CELNodes, CELIter}, c.Outputs)
+	return withFailure(withLoopOutputs([]CELNamespace{CELInputs, CELTrigger, CELWorkflow, CELNodes, CELIter}, c.Outputs), c.Inputs)
 }
 
 // =============================================================================
@@ -167,6 +178,9 @@ func (c *LoopEvalContext) Activation() map[string]interface{} {
 		if t := triggerFromInputs(c.Inputs); t != nil {
 			m[string(CELTrigger)] = t
 		}
+		if f := failureFromInputs(c.Inputs); f != nil {
+			m[string(CELFailure)] = f
+		}
 	}
 	if c.Nodes != nil {
 		m[string(CELNodes)] = c.Nodes
@@ -178,7 +192,7 @@ func (c *LoopEvalContext) Activation() map[string]interface{} {
 }
 
 func (c *LoopEvalContext) Namespaces() []CELNamespace {
-	return withLoopOutputs([]CELNamespace{CELIter, CELInputs, CELTrigger, CELNodes, CELWorkflow}, c.Outputs)
+	return withFailure(withLoopOutputs([]CELNamespace{CELIter, CELInputs, CELTrigger, CELNodes, CELWorkflow}, c.Outputs), c.Inputs)
 }
 
 // =============================================================================
@@ -215,6 +229,9 @@ func (c *PostActivityContext) Activation() map[string]interface{} {
 		if t := triggerFromInputs(c.Inputs); t != nil {
 			m[string(CELTrigger)] = t
 		}
+		if f := failureFromInputs(c.Inputs); f != nil {
+			m[string(CELFailure)] = f
+		}
 	}
 	if c.Workflow != nil {
 		m[string(CELWorkflow)] = c.Workflow
@@ -226,7 +243,7 @@ func (c *PostActivityContext) Activation() map[string]interface{} {
 }
 
 func (c *PostActivityContext) Namespaces() []CELNamespace {
-	return SaveMessageCELEnvConfig().Namespaces
+	return withFailure(SaveMessageCELEnvConfig().Namespaces, c.Inputs)
 }
 
 // =============================================================================
@@ -255,6 +272,9 @@ func (c *NodeResolutionContext) Activation() map[string]interface{} {
 		if t := triggerFromInputs(c.Inputs); t != nil {
 			m[string(CELTrigger)] = t
 		}
+		if f := failureFromInputs(c.Inputs); f != nil {
+			m[string(CELFailure)] = f
+		}
 	}
 	if c.Nodes != nil {
 		m[string(CELNodes)] = c.Nodes
@@ -272,7 +292,7 @@ func (c *NodeResolutionContext) Activation() map[string]interface{} {
 }
 
 func (c *NodeResolutionContext) Namespaces() []CELNamespace {
-	return withLoopOutputs([]CELNamespace{CELInputs, CELTrigger, CELNodes, CELIter, CELWorkflow}, c.Outputs)
+	return withFailure(withLoopOutputs([]CELNamespace{CELInputs, CELTrigger, CELNodes, CELIter, CELWorkflow}, c.Outputs), c.Inputs)
 }
 
 // withLoopOutputs appends `outputs` to a context's fixed namespaces when the
@@ -369,4 +389,25 @@ const TriggerInputKey = "__trigger"
 func triggerFromInputs(inputs map[string]interface{}) map[string]interface{} {
 	trigger, _ := inputs[TriggerInputKey].(map[string]interface{})
 	return trigger
+}
+
+// FailureInputKey is the reserved workflow-input key under which the runtime
+// carries the failure an on_failure handler runs for. Every typed context with
+// Inputs exposes it as the `failure` namespace, and declares that namespace
+// only when the key is present, so `failure` compiles in a handler and
+// nowhere else.
+const FailureInputKey = "__failure"
+
+func failureFromInputs(inputs map[string]interface{}) map[string]interface{} {
+	failure, _ := inputs[FailureInputKey].(map[string]interface{})
+	return failure
+}
+
+// withFailure appends `failure` to a context's namespaces when its inputs
+// carry a failure.
+func withFailure(fixed []CELNamespace, inputs map[string]interface{}) []CELNamespace {
+	if failureFromInputs(inputs) == nil {
+		return fixed
+	}
+	return append(fixed[:len(fixed):len(fixed)], CELFailure)
 }

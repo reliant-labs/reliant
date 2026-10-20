@@ -2735,4 +2735,5 @@ func ValidateCELWithCompilation(wf *reliantv1.Workflow, result *Result, loader W
 	scope := newWorkflowScope(wf, []string{wf.GetName()}, typeCtx, nil)
 	scope.root = true
 	validateWorkflowScope(scope, result)
+	validateOnFailureCEL(wf, typeCtx, result)
 }

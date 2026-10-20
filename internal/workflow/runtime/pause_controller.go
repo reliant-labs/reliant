@@ -74,11 +74,21 @@ type PauseController struct {
 	// inherits.
 	SubAgent bool
 
+	// FailFast marks the controller of an on_failure handler. It has no pause
+	// hooks, and a step that exhausts its retries on it ends the handler with
+	// that error instead of waiting for a resume nothing will send: the run is
+	// already failed, and a handler that parks would hold it open.
+	FailFast bool
+
 	// UsageLimit holds a step that failed on a provider's usage limit until the
 	// limit resets (usage_limit_wait.go). One per run, shared by every thread.
 	// nil when not wired (tests).
 	UsageLimit *usageLimitWaiter
 }
+
+// failsFast reports whether a step that exhausted its retries on this
+// controller ends the executor with its error (an on_failure handler).
+func (pc *PauseController) failsFast() bool { return pc != nil && pc.FailFast }
 
 // IsCancelled reports whether this thread has been cancelled by the user.
 // Nil-safe on both the receiver and the function.

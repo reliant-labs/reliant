@@ -1299,6 +1299,7 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 	propagateUnattended(e.workflowInputs, iterInputs)
 	propagateActingIdentity(e.workflowInputs, iterInputs)
 	propagateTrigger(e.workflowInputs, iterInputs)
+	propagateFailure(e.workflowInputs, iterInputs)
 	propagateProviderPreference(e.workflowInputs, iterInputs)
 	iterInputs["loop"] = map[string]interface{}{"iteration": e.iteration}
 	iterInputs["iter"] = e.buildIterCtx()
@@ -1924,6 +1925,12 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				// This handles rate limits, transient errors, etc. that exhaust
 				// Temporal's retry budget.
 				if stepEvent.RetryExhausted {
+					// An on_failure handler never parks: the run is already
+					// failed and nothing will resume it.
+					if e.pauseCtrl.failsFast() {
+						recordFailedNode(e.ctx, joinNodePath(e.nodePath(), running.StepID), e.iteration+1)
+						return nil, stepEvent.Error
+					}
 					// A provider usage limit holds the step, root or sub-agent,
 					// until the limit resets; see usage_limit_wait.go.
 					if waited := e.pauseCtrl.waitOutUsageLimit(e.ctx, e.threadForError(), running.StepID, stepEvent.Error); waited.Handled {
@@ -2059,6 +2066,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				}
 
 				if routingErr := EnsureStepEventRoutable(stepEvent); routingErr != nil {
+					recordFailedNode(e.ctx, joinNodePath(e.nodePath(), stepEvent.StepID), e.iteration+1)
 					e.logger.Error("[InlineLoop] Step failed, aborting iteration",
 						"loopID", e.loopID,
 						"iteration", e.iteration,
