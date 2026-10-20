@@ -49,6 +49,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ci migration-safety`](#reliant-forge-ci-migration-safety) | Run SQL migration safety checks based on forge.yaml config |
 | [`reliant forge ci run`](#reliant-forge-ci-run) | Show one CI run's timeline — cut, checks, promotes, rollouts — and whether it passed |
 | [`reliant forge ci summarize`](#reliant-forge-ci-summarize) | Render forge --json documents as a Markdown job summary (for $GITHUB_STEP_SUMMARY) |
+| [`reliant forge ci test-budget`](#reliant-forge-ci-test-budget) | Fail when a test not marked slow took longer than the budget in a `go test -short -json` run (reads output; runs nothing) |
 | [`reliant forge ci validate-kcl`](#reliant-forge-ci-validate-kcl) | Validate that every environment renders manifests kubectl will accept |
 | [`reliant forge ci verify-generated`](#reliant-forge-ci-verify-generated) | Verify generated code is pristine and up to date |
 | [`reliant forge ci verify-test-run`](#reliant-forge-ci-verify-test-run) | Verify a `go test -json` run actually ran its tests (reads output; runs nothing) |
@@ -1052,6 +1053,7 @@ reliant forge ci
 | [`migration-safety`](#reliant-forge-ci-migration-safety) | Run SQL migration safety checks based on forge.yaml config |
 | [`run`](#reliant-forge-ci-run) | Show one CI run's timeline — cut, checks, promotes, rollouts — and whether it passed |
 | [`summarize`](#reliant-forge-ci-summarize) | Render forge --json documents as a Markdown job summary (for $GITHUB_STEP_SUMMARY) |
+| [`test-budget`](#reliant-forge-ci-test-budget) | Fail when a test not marked slow took longer than the budget in a `go test -short -json` run (reads output; runs nothing) |
 | [`validate-kcl`](#reliant-forge-ci-validate-kcl) | Validate that every environment renders manifests kubectl will accept |
 | [`verify-generated`](#reliant-forge-ci-verify-generated) | Verify generated code is pristine and up to date |
 | [`verify-test-run`](#reliant-forge-ci-verify-test-run) | Verify a `go test -json` run actually ran its tests (reads output; runs nothing) |
@@ -1206,6 +1208,51 @@ Examples:
 ```
 reliant forge ci summarize <doc.json>...
 ```
+
+---
+
+#### reliant forge ci test-budget
+
+Fail when a test not marked slow took longer than the budget in a `go test -short -json` run (reads output; runs nothing)
+
+Read a `go test -short -json` stream and report every top-level test that took
+longer than --budget (default 2s), with its file and line.
+
+  go test -short -json ./... | tee test.json | forge ci test-budget
+  go test -short -json ./... > test.json; forge ci test-budget --from test.json
+
+WHY. The -short tier is the blocking one, so every second in it is paid by
+every change. A slow test belongs in the full tier, and says so:
+
+  testkit.Slow(t, "builds the forge binary")      // forge/pkg/testkit
+  if testing.Short() { t.Skip("builds the forge binary") }
+
+Under -short a marked test skips, so every test that RAN in a -short run claims
+to be fast. One over budget is a slow test nobody marked. `forge lint
+--slow-tests` flags slow work it can recognize in source; this catches the rest,
+whatever made the test slow.
+
+FEED IT A -short RUN. forge cannot see the flags a stream was made with. A test
+whose own body checks testing.Short or calls testkit.Slow is reported as MARKED:
+either it is still slow under -short (its bypass leaves slow work behind), or the
+run was made without -short.
+
+Top-level tests only: that is where the marker goes, and a table whose cases sum
+past the budget is still that long in the blocking tier. A failing or unbuildable
+package also fails the command, so piping a red run through it (in a shell
+without `set -o pipefail`) cannot report green.
+
+```
+reliant forge ci test-budget [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--budget` | `duration` | `2s` | Longest a test not marked slow may take |
+| `--from` | `string` | - | Read the 'go test -json' stream from this file instead of stdin |
+| `--warn-only` | `bool` | - | Report overruns without failing (adoption ramp; unreadable input and test failures still fail) |
 
 ---
 
@@ -5812,6 +5859,7 @@ reliant forge lint [paths...] [flags]
 | `--scope` | `stringSlice` | `[]` | Report only findings in files under `PATH` (repeatable or comma-separated, project-relative). Go linters run on PATH's packages only; file-anchored linters report only findings under PATH; whole-project linters (frontend lint, component-drift, config-reach) cannot be scoped, are skipped, and are named in the verdict. Auto-fix still rewrites files in place, only those under PATH (--no-fix to only check) |
 | `--show-suppressed` | `bool` | - | List every suppression the project declares, with file:line, what it covers and the stated reason: forge.yaml lint.rules (off/warn) and contracts.exclude, //forge:exclude-contract markers, forge:lint-disable* and nolint directives, and the migration and optional-dep pragmas. Read-only: runs no linter and exits 0; combines with --json and --scope |
 | `--skip-frontends` | `bool` | - | Skip the whole frontend lane (eslint/stylelint + TypeScript typecheck + static-export) for a backend-only gate that needs no Node toolchain |
+| `--slow-tests` | `bool` | - | Fail on a Go test that does slow work without being marked slow — execs go/forge/kcl/node/npm/git/docker/…, drives containers, or dials an external host, with no testkit.Slow(t, why) or testing.Short() guard on its path — so it runs in the blocking -short tier, and a file its child process reads is invisible to the test cache |
 | `--static-export` | `bool` | - | For each Next.js frontend that must build to a static export (forge.yaml output: static, or bound to forge.OnHosted / OnBucket / OnFirebase in any env), report with file:line what the export cannot serve. FAILS on what next build refuses (a dynamic route without generateStaticParams, server actions, next/headers, next/image without images.unoptimized, a build that is not an export); WARNS on what it silently drops (middleware, non-GET route handlers, ungated rewrites/redirects/headers, a bucket-bound export without trailingSlash) |
 | `--strict` | `bool` | - | Escalate advisory findings to errors so they fail the build / CI: RPCs missing a (forge.v1.method) auth-posture annotation, and any lane that could NOT run (frontend typecheck or eslint with deps not installed; typed-config guardrail when golangci-lint never reported) |
 | `--tests` | `bool` | - | Run test-convention rules (handler-tests-use-tdd + frontend-hook-tests; warnings only) |
@@ -6077,8 +6125,9 @@ in ClickHouse; HyperDX cannot draw flamegraphs, so this exports them:
   forge observe profile --trace 0af7651916cd43dd8448eb211c80319c   # CPU burned inside one trace
   forge observe profile --service api --format folded | flamegraph.pl > api.svg
 
-Sample types: cpu (nanoseconds), alloc_space / inuse_space / alloc_objects /
-inuse_objects (heap), goroutine. Raw samples (and so --trace) are kept 72h; the
+Sample types: cpu (nanoseconds) and inuse_space / inuse_objects (live heap) by
+default; alloc_space / alloc_objects and goroutine only from a workload whose
+profiling block turns them on (see forge skill load observability/profiles). Raw samples (and so --trace) are kept 72h; the
 per-minute aggregate behind --since is kept 30 days. --sql prints the query so
 you can run it yourself against the ClickStack ClickHouse.
 

@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file forge/v1/forge.proto.
  */
 export const file_forge_v1_forge: GenFile = /*@__PURE__*/
-  fileDesc("ChRmb3JnZS92MS9mb3JnZS5wcm90bxIIZm9yZ2UudjEigAEKDUVudGl0eU9wdGlvbnMSDQoFdGFibGUYASABKAkSEwoLc29mdF9kZWxldGUYAiABKAgSEgoKdGltZXN0YW1wcxgDIAEoCBIjCgdpbmRleGVzGAQgAygLMhIuZm9yZ2UudjEuSW5kZXhEZWYSEgoKbWlkZGxld2FyZRgFIAMoCSI4CghJbmRleERlZhIMCgRuYW1lGAEgASgJEg4KBmZpZWxkcxgCIAMoCRIOCgZ1bmlxdWUYAyABKAgizQEKDEZpZWxkT3B0aW9ucxIKCgJwaxgBIAEoCBIgCgVzdG9yZRgDIAEoDjIRLmZvcmdlLnYxLlN0b3JlQXMSCwoDcmVmGAQgASgJEg4KBnVuaXF1ZRgFIAEoCBINCgVpbmRleBgGIAEoCBIVCg1kZWZhdWx0X3ZhbHVlGAcgASgJEgwKBHNraXAYCCABKAgSKwoIdmFsaWRhdGUYCSABKAsyGS5mb3JnZS52MS5WYWxpZGF0aW9uUnVsZXMSEQoJaW1tdXRhYmxlGAogASgIIq4BCg9WYWxpZGF0aW9uUnVsZXMSEAoIcmVxdWlyZWQYASABKAgSEgoKbWluX2xlbmd0aBgCIAEoBRISCgptYXhfbGVuZ3RoGAMgASgFEg8KB3BhdHRlcm4YBCABKAkSDgoGZm9ybWF0GAUgASgJEgsKA21pbhgGIAEoARILCgNtYXgYByABKAESFgoOYWxsb3dlZF92YWx1ZXMYCCADKAkSDgoGY3VzdG9tGAkgASgJIsEBCg5TZXJ2aWNlT3B0aW9ucxIMCgRuYW1lGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSLwoKdmlzaWJpbGl0eRgEIAEoDjIbLmZvcmdlLnYxLlNlcnZpY2VWaXNpYmlsaXR5EhQKDGRlcGVuZGVuY2llcxgFIAMoCRIiCgRhdXRoGAYgASgLMhQuZm9yZ2UudjEuQXV0aENvbmZpZxIQCghhdWRpZW5jZRgHIAEoCSI6CgpBdXRoQ29uZmlnEhUKDWF1dGhfcmVxdWlyZWQYASABKAgSFQoNYXV0aF9wcm92aWRlchgCIAEoCSLTAQoNTWV0aG9kT3B0aW9ucxIaCg1hdXRoX3JlcXVpcmVkGAEgASgISACIAQESEgoKaWRlbXBvdGVudBgDIAEoCBIqCgd0aW1lb3V0GAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhcKD2lkZW1wb3RlbmN5X2tleRgFIAEoCBIOCgZlcnJvcnMYBiADKAkSKwoIYWN0aXZpdHkYByABKAsyGS5mb3JnZS52MS5BY3Rpdml0eU9wdGlvbnNCEAoOX2F1dGhfcmVxdWlyZWQirQEKD0FjdGl2aXR5T3B0aW9ucxIMCgR2ZXJiGAEgASgJEigKBnRhcmdldBgCIAEoCzIYLmZvcmdlLnYxLkFjdGl2aXR5VGFyZ2V0EgsKA2VudhgDIAEoCRINCgVzY29wZRgEIAEoCRIOCgZkZXRhaWwYBSADKAkSKAoGd3JpdGVyGAYgASgOMhguZm9yZ2UudjEuQWN0aXZpdHlXcml0ZXISDAoEbm9uZRgHIAEoCSI5Cg5BY3Rpdml0eVRhcmdldBIMCgRraW5kGAEgASgJEgoKAmlkGAIgASgJEg0KBWxhYmVsGAMgASgJIpkCChJDb25maWdGaWVsZE9wdGlvbnMSDwoHZW52X3ZhchgBIAEoCRIMCgRmbGFnGAIgASgJEhUKDWRlZmF1bHRfdmFsdWUYAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSEwoLZGVzY3JpcHRpb24YBSABKAkSEQoJc2Vuc2l0aXZlGAYgASgIEhAKCGNhdGVnb3J5GAcgASgJEicKBHJvbGUYCCABKA4yGS5mb3JnZS52MS5Db25maWdGaWVsZFJvbGUSFgoOYWxsb3dlZF92YWx1ZXMYCSADKAkSEAoIb3B0aW9uYWwYCiABKAgSLgoPZW52X3Zhcl9hbGlhc2VzGAsgAygLMhUuZm9yZ2UudjEuRW52VmFyQWxpYXMiLwoLRW52VmFyQWxpYXMSDAoEbmFtZRgBIAEoCRISCgpkZXByZWNhdGVkGAIgASgIIjYKE0JpbmFyeUNvbmZpZ09wdGlvbnMSDgoGYmluYXJ5GAEgASgJEg8KB2NvbW1hbmQYAiADKAkiKQoVRnJvbnRlbmRDb25maWdPcHRpb25zEhAKCGZyb250ZW5kGAEgASgJKnEKB1N0b3JlQXMSGAoUU1RPUkVfQVNfVU5TUEVDSUZJRUQQABISCg5TVE9SRV9BU19KU09OQhABEhEKDVNUT1JFX0FTX1RFWFQQAhIRCg1TVE9SRV9BU19CTE9CEAMSEgoOU1RPUkVfQVNfVEFCTEUQBCp0ChFTZXJ2aWNlVmlzaWJpbGl0eRIiCh5TRVJWSUNFX1ZJU0lCSUxJVFlfVU5TUEVDSUZJRUQQABIaChZTRVJWSUNFX1ZJU0lCSUxJVFlfQVBJEAESHwobU0VSVklDRV9WSVNJQklMSVRZX0lOVEVSTkFMEAIqbwoOQWN0aXZpdHlXcml0ZXISHwobQUNUSVZJVFlfV1JJVEVSX1VOU1BFQ0lGSUVEEAASHwobQUNUSVZJVFlfV1JJVEVSX0lOVEVSQ0VQVE9SEAESGwoXQUNUSVZJVFlfV1JJVEVSX0hBTkRMRVIQAirhAQoPQ29uZmlnRmllbGRSb2xlEiEKHUNPTkZJR19GSUVMRF9ST0xFX1VOU1BFQ0lGSUVEEAASGgoWQ09ORklHX0ZJRUxEX1JPTEVfTU9ERRABEh4KGkNPTkZJR19GSUVMRF9ST0xFX1RMU19DRVJUEAISHQoZQ09ORklHX0ZJRUxEX1JPTEVfVExTX0tFWRADEiIKHkNPTkZJR19GSUVMRF9ST0xFX0NPUlNfT1JJR0lOUxAEEiwKKENPTkZJR19GSUVMRF9ST0xFX0NPUlNfQUxMT1dfQ1JFREVOVElBTFMQBTpSCgZlbnRpdHkSHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMYmIgDIAEoCzIXLmZvcmdlLnYxLkVudGl0eU9wdGlvbnNSBmVudGl0eTplCg1iaW5hcnlfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJmIAyABKAsyHS5mb3JnZS52MS5CaW5hcnlDb25maWdPcHRpb25zUgxiaW5hcnlDb25maWc6awoPZnJvbnRlbmRfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJqIAyABKAsyHy5mb3JnZS52MS5Gcm9udGVuZENvbmZpZ09wdGlvbnNSDmZyb250ZW5kQ29uZmlnOk0KBWZpZWxkEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxj8iAMgASgLMhYuZm9yZ2UudjEuRmllbGRPcHRpb25zUgVmaWVsZDpVCgZjb25maWcSHS5nb29nbGUucHJvdG9idWYuRmllbGRPcHRpb25zGOCJAyABKAsyHC5mb3JnZS52MS5Db25maWdGaWVsZE9wdGlvbnNSBmNvbmZpZzpVCgdzZXJ2aWNlEh8uZ29vZ2xlLnByb3RvYnVmLlNlcnZpY2VPcHRpb25zGNCGAyABKAsyGC5mb3JnZS52MS5TZXJ2aWNlT3B0aW9uc1IHc2VydmljZTpRCgZtZXRob2QSHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxi0hwMgASgLMhcuZm9yZ2UudjEuTWV0aG9kT3B0aW9uc1IGbWV0aG9kQjNaMWdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL2ZvcmdlL3BrZy9mb3JnZXBiO2ZvcmdlcGJiBnByb3RvMw", [file_google_protobuf_descriptor, file_google_protobuf_duration]);
+  fileDesc("ChRmb3JnZS92MS9mb3JnZS5wcm90bxIIZm9yZ2UudjEigAEKDUVudGl0eU9wdGlvbnMSDQoFdGFibGUYASABKAkSEwoLc29mdF9kZWxldGUYAiABKAgSEgoKdGltZXN0YW1wcxgDIAEoCBIjCgdpbmRleGVzGAQgAygLMhIuZm9yZ2UudjEuSW5kZXhEZWYSEgoKbWlkZGxld2FyZRgFIAMoCSI4CghJbmRleERlZhIMCgRuYW1lGAEgASgJEg4KBmZpZWxkcxgCIAMoCRIOCgZ1bmlxdWUYAyABKAgizQEKDEZpZWxkT3B0aW9ucxIKCgJwaxgBIAEoCBIgCgVzdG9yZRgDIAEoDjIRLmZvcmdlLnYxLlN0b3JlQXMSCwoDcmVmGAQgASgJEg4KBnVuaXF1ZRgFIAEoCBINCgVpbmRleBgGIAEoCBIVCg1kZWZhdWx0X3ZhbHVlGAcgASgJEgwKBHNraXAYCCABKAgSKwoIdmFsaWRhdGUYCSABKAsyGS5mb3JnZS52MS5WYWxpZGF0aW9uUnVsZXMSEQoJaW1tdXRhYmxlGAogASgIIq4BCg9WYWxpZGF0aW9uUnVsZXMSEAoIcmVxdWlyZWQYASABKAgSEgoKbWluX2xlbmd0aBgCIAEoBRISCgptYXhfbGVuZ3RoGAMgASgFEg8KB3BhdHRlcm4YBCABKAkSDgoGZm9ybWF0GAUgASgJEgsKA21pbhgGIAEoARILCgNtYXgYByABKAESFgoOYWxsb3dlZF92YWx1ZXMYCCADKAkSDgoGY3VzdG9tGAkgASgJIsEBCg5TZXJ2aWNlT3B0aW9ucxIMCgRuYW1lGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSLwoKdmlzaWJpbGl0eRgEIAEoDjIbLmZvcmdlLnYxLlNlcnZpY2VWaXNpYmlsaXR5EhQKDGRlcGVuZGVuY2llcxgFIAMoCRIiCgRhdXRoGAYgASgLMhQuZm9yZ2UudjEuQXV0aENvbmZpZxIQCghhdWRpZW5jZRgHIAEoCSI6CgpBdXRoQ29uZmlnEhUKDWF1dGhfcmVxdWlyZWQYASABKAgSFQoNYXV0aF9wcm92aWRlchgCIAEoCSLTAQoNTWV0aG9kT3B0aW9ucxIaCg1hdXRoX3JlcXVpcmVkGAEgASgISACIAQESEgoKaWRlbXBvdGVudBgDIAEoCBIqCgd0aW1lb3V0GAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhcKD2lkZW1wb3RlbmN5X2tleRgFIAEoCBIOCgZlcnJvcnMYBiADKAkSKwoIYWN0aXZpdHkYByABKAsyGS5mb3JnZS52MS5BY3Rpdml0eU9wdGlvbnNCEAoOX2F1dGhfcmVxdWlyZWQirQEKD0FjdGl2aXR5T3B0aW9ucxIMCgR2ZXJiGAEgASgJEigKBnRhcmdldBgCIAEoCzIYLmZvcmdlLnYxLkFjdGl2aXR5VGFyZ2V0EgsKA2VudhgDIAEoCRINCgVzY29wZRgEIAEoCRIOCgZkZXRhaWwYBSADKAkSKAoGd3JpdGVyGAYgASgOMhguZm9yZ2UudjEuQWN0aXZpdHlXcml0ZXISDAoEbm9uZRgHIAEoCSI5Cg5BY3Rpdml0eVRhcmdldBIMCgRraW5kGAEgASgJEgoKAmlkGAIgASgJEg0KBWxhYmVsGAMgASgJIpkCChJDb25maWdGaWVsZE9wdGlvbnMSDwoHZW52X3ZhchgBIAEoCRIMCgRmbGFnGAIgASgJEhUKDWRlZmF1bHRfdmFsdWUYAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSEwoLZGVzY3JpcHRpb24YBSABKAkSEQoJc2Vuc2l0aXZlGAYgASgIEhAKCGNhdGVnb3J5GAcgASgJEicKBHJvbGUYCCABKA4yGS5mb3JnZS52MS5Db25maWdGaWVsZFJvbGUSFgoOYWxsb3dlZF92YWx1ZXMYCSADKAkSEAoIb3B0aW9uYWwYCiABKAgSLgoPZW52X3Zhcl9hbGlhc2VzGAsgAygLMhUuZm9yZ2UudjEuRW52VmFyQWxpYXMiLwoLRW52VmFyQWxpYXMSDAoEbmFtZRgBIAEoCRISCgpkZXByZWNhdGVkGAIgASgIIl8KE0JpbmFyeUNvbmZpZ09wdGlvbnMSDgoGYmluYXJ5GAEgASgJEg8KB2NvbW1hbmQYAiADKAkSJwoIc3VidHJlZXMYAyADKAsyFS5mb3JnZS52MS5Db21tYW5kUGF0aCIbCgtDb21tYW5kUGF0aBIMCgRwYXRoGAEgAygJIikKFUZyb250ZW5kQ29uZmlnT3B0aW9ucxIQCghmcm9udGVuZBgBIAEoCSpxCgdTdG9yZUFzEhgKFFNUT1JFX0FTX1VOU1BFQ0lGSUVEEAASEgoOU1RPUkVfQVNfSlNPTkIQARIRCg1TVE9SRV9BU19URVhUEAISEQoNU1RPUkVfQVNfQkxPQhADEhIKDlNUT1JFX0FTX1RBQkxFEAQqdAoRU2VydmljZVZpc2liaWxpdHkSIgoeU0VSVklDRV9WSVNJQklMSVRZX1VOU1BFQ0lGSUVEEAASGgoWU0VSVklDRV9WSVNJQklMSVRZX0FQSRABEh8KG1NFUlZJQ0VfVklTSUJJTElUWV9JTlRFUk5BTBACKm8KDkFjdGl2aXR5V3JpdGVyEh8KG0FDVElWSVRZX1dSSVRFUl9VTlNQRUNJRklFRBAAEh8KG0FDVElWSVRZX1dSSVRFUl9JTlRFUkNFUFRPUhABEhsKF0FDVElWSVRZX1dSSVRFUl9IQU5ETEVSEAIq4QEKD0NvbmZpZ0ZpZWxkUm9sZRIhCh1DT05GSUdfRklFTERfUk9MRV9VTlNQRUNJRklFRBAAEhoKFkNPTkZJR19GSUVMRF9ST0xFX01PREUQARIeChpDT05GSUdfRklFTERfUk9MRV9UTFNfQ0VSVBACEh0KGUNPTkZJR19GSUVMRF9ST0xFX1RMU19LRVkQAxIiCh5DT05GSUdfRklFTERfUk9MRV9DT1JTX09SSUdJTlMQBBIsCihDT05GSUdfRklFTERfUk9MRV9DT1JTX0FMTE9XX0NSRURFTlRJQUxTEAU6UgoGZW50aXR5Eh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJiIAyABKAsyFy5mb3JnZS52MS5FbnRpdHlPcHRpb25zUgZlbnRpdHk6ZQoNYmluYXJ5X2NvbmZpZxIfLmdvb2dsZS5wcm90b2J1Zi5NZXNzYWdlT3B0aW9ucxiZiAMgASgLMh0uZm9yZ2UudjEuQmluYXJ5Q29uZmlnT3B0aW9uc1IMYmluYXJ5Q29uZmlnOmsKD2Zyb250ZW5kX2NvbmZpZxIfLmdvb2dsZS5wcm90b2J1Zi5NZXNzYWdlT3B0aW9ucxiaiAMgASgLMh8uZm9yZ2UudjEuRnJvbnRlbmRDb25maWdPcHRpb25zUg5mcm9udGVuZENvbmZpZzpNCgVmaWVsZBIdLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE9wdGlvbnMY/IgDIAEoCzIWLmZvcmdlLnYxLkZpZWxkT3B0aW9uc1IFZmllbGQ6VQoGY29uZmlnEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxjgiQMgASgLMhwuZm9yZ2UudjEuQ29uZmlnRmllbGRPcHRpb25zUgZjb25maWc6VQoHc2VydmljZRIfLmdvb2dsZS5wcm90b2J1Zi5TZXJ2aWNlT3B0aW9ucxjQhgMgASgLMhguZm9yZ2UudjEuU2VydmljZU9wdGlvbnNSB3NlcnZpY2U6UQoGbWV0aG9kEh4uZ29vZ2xlLnByb3RvYnVmLk1ldGhvZE9wdGlvbnMYtIcDIAEoCzIXLmZvcmdlLnYxLk1ldGhvZE9wdGlvbnNSBm1ldGhvZEIzWjFnaXRodWIuY29tL3JlbGlhbnQtbGFicy9mb3JnZS9wa2cvZm9yZ2VwYjtmb3JnZXBiYgZwcm90bzM", [file_google_protobuf_descriptor, file_google_protobuf_duration]);
 
 /**
  * EntityOptions defines how a protobuf message maps to a database table.
@@ -855,11 +855,32 @@ export const EnvVarAliasSchema: GenMessage<EnvVarAlias> = /*@__PURE__*/
  *     flags on that subcommand, and its loader refuses to load from any
  *     other command.
  *
- * A process therefore reads the root config plus the ONE config declared for
- * its exact command path; command configs do not nest (a config for
- * ["server"] is not inherited by `server api`). The root config and a command
- * config of the same binary may not declare the same env var or flag: one
- * process would read the value twice, from two declarations that can drift.
+ *   - A SUBTREE config (`subtrees`) is loaded by every process running a
+ *     command AT OR BELOW one of its paths. Its leaves register as
+ *     PERSISTENT flags on each path's command, so the commands beneath
+ *     inherit them. It is how a setting that several commands read — but not
+ *     every process of the binary — is declared once: the CLI connection
+ *     every end-user command needs (server URL, token) without the server
+ *     roles' workloads carrying it, or the guard policy `daemon start` and
+ *     `open` both run.
+ *
+ * A process therefore reads the root config, every subtree config whose path
+ * prefixes its command path, and the ONE config declared for its exact path
+ * — and nothing else: least knowledge, by declaration. Two configs one
+ * process can load together (the root and anything; a subtree config and a
+ * command config or another subtree config below or above it) may not
+ * declare the same env var, flag or top-level field: that process would read
+ * one value from two declarations that can drift. Configs no process loads
+ * together (sibling commands) may compose the same block freely: that is one
+ * definition, two values.
+ *
+ *   message CLIConfig {
+ *     option (forge.v1.binary_config) = {
+ *       binary: "reliant"
+ *       subtrees: [{path: ["auth"]}, {path: ["daemon"]}, {path: ["open"]}]
+ *     };
+ *     string server_url = 1 [(forge.v1.config) = {env_var: "RELIANT_SERVER_URL", flag: "server"}];
+ *   }
  *
  * @generated from message forge.v1.BinaryConfigOptions
  */
@@ -891,6 +912,20 @@ export type BinaryConfigOptions = Message<"forge.v1.BinaryConfigOptions"> & {
    * @generated from field: repeated string command = 2;
    */
   command: string[];
+
+  /**
+   * Subtrees binds this config to every command AT OR BELOW each path:
+   * [{path: ["daemon"]}] is loaded by `daemon start`, `daemon status` and
+   * every other command under `daemon`, and by `daemon` itself. Exclusive
+   * with `command` (a config is one process's, or a subtree's); both empty
+   * binds the binary's root config. Each path is shaped like `command`, and
+   * no path may lie below another of the same message (the outer one already
+   * covers it). Register<Msg>Flags is called on each path's command; the
+   * generated Load<Msg>(cmd) refuses a command under none of them.
+   *
+   * @generated from field: repeated forge.v1.CommandPath subtrees = 3;
+   */
+  subtrees: CommandPath[];
 };
 
 /**
@@ -899,6 +934,26 @@ export type BinaryConfigOptions = Message<"forge.v1.BinaryConfigOptions"> & {
  */
 export const BinaryConfigOptionsSchema: GenMessage<BinaryConfigOptions> = /*@__PURE__*/
   messageDesc(file_forge_v1_forge, 11);
+
+/**
+ * CommandPath is one cobra command path below a binary's root, one command
+ * name per element: ["daemon", "start"]. See BinaryConfigOptions.subtrees.
+ *
+ * @generated from message forge.v1.CommandPath
+ */
+export type CommandPath = Message<"forge.v1.CommandPath"> & {
+  /**
+   * @generated from field: repeated string path = 1;
+   */
+  path: string[];
+};
+
+/**
+ * Describes the message forge.v1.CommandPath.
+ * Use `create(CommandPathSchema)` to create a new message.
+ */
+export const CommandPathSchema: GenMessage<CommandPath> = /*@__PURE__*/
+  messageDesc(file_forge_v1_forge, 12);
 
 /**
  * FrontendConfigOptions binds a config message to the FRONTEND that loads
@@ -955,7 +1010,7 @@ export type FrontendConfigOptions = Message<"forge.v1.FrontendConfigOptions"> & 
  * Use `create(FrontendConfigOptionsSchema)` to create a new message.
  */
 export const FrontendConfigOptionsSchema: GenMessage<FrontendConfigOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 12);
+  messageDesc(file_forge_v1_forge, 13);
 
 /**
  * StoreAs controls how complex or non-scalar protobuf types are persisted

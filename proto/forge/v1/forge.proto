@@ -581,11 +581,32 @@ message EnvVarAlias {
 //     flags on that subcommand, and its loader refuses to load from any
 //     other command.
 //
-// A process therefore reads the root config plus the ONE config declared for
-// its exact command path; command configs do not nest (a config for
-// ["server"] is not inherited by `server api`). The root config and a command
-// config of the same binary may not declare the same env var or flag: one
-// process would read the value twice, from two declarations that can drift.
+//   - A SUBTREE config (`subtrees`) is loaded by every process running a
+//     command AT OR BELOW one of its paths. Its leaves register as
+//     PERSISTENT flags on each path's command, so the commands beneath
+//     inherit them. It is how a setting that several commands read — but not
+//     every process of the binary — is declared once: the CLI connection
+//     every end-user command needs (server URL, token) without the server
+//     roles' workloads carrying it, or the guard policy `daemon start` and
+//     `open` both run.
+//
+// A process therefore reads the root config, every subtree config whose path
+// prefixes its command path, and the ONE config declared for its exact path
+// — and nothing else: least knowledge, by declaration. Two configs one
+// process can load together (the root and anything; a subtree config and a
+// command config or another subtree config below or above it) may not
+// declare the same env var, flag or top-level field: that process would read
+// one value from two declarations that can drift. Configs no process loads
+// together (sibling commands) may compose the same block freely: that is one
+// definition, two values.
+//
+//   message CLIConfig {
+//     option (forge.v1.binary_config) = {
+//       binary: "reliant"
+//       subtrees: [{path: ["auth"]}, {path: ["daemon"]}, {path: ["open"]}]
+//     };
+//     string server_url = 1 [(forge.v1.config) = {env_var: "RELIANT_SERVER_URL", flag: "server"}];
+//   }
 message BinaryConfigOptions {
   // Binary is the cmd/<name> leaf whose process loads this config — the same
   // name `forge scaffold binary` creates and the deploy layer names its
@@ -606,6 +627,22 @@ message BinaryConfigOptions {
   // blocks generate. The exact check runs where the tree is real: the
   // generated Load<Msg>(cmd) refuses a command whose path is not this one.
   repeated string command = 2;
+
+  // Subtrees binds this config to every command AT OR BELOW each path:
+  // [{path: ["daemon"]}] is loaded by `daemon start`, `daemon status` and
+  // every other command under `daemon`, and by `daemon` itself. Exclusive
+  // with `command` (a config is one process's, or a subtree's); both empty
+  // binds the binary's root config. Each path is shaped like `command`, and
+  // no path may lie below another of the same message (the outer one already
+  // covers it). Register<Msg>Flags is called on each path's command; the
+  // generated Load<Msg>(cmd) refuses a command under none of them.
+  repeated CommandPath subtrees = 3;
+}
+
+// CommandPath is one cobra command path below a binary's root, one command
+// name per element: ["daemon", "start"]. See BinaryConfigOptions.subtrees.
+message CommandPath {
+  repeated string path = 1;
 }
 
 // FrontendConfigOptions binds a config message to the FRONTEND that loads
