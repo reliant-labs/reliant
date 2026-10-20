@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -66,6 +67,12 @@ func runDaemonStop(t *testing.T, dataDir string, args ...string) (string, error)
 // test — the shell that launches it exits immediately, so the process is
 // reparented away and the test never reaps it.
 //
+// body must create the file "$READY" once it is ready to be signalled (after
+// installing any trap); startUnrelatedProcess returns only then. It used to
+// sleep a fixed 300ms instead, and under load the SIGTERM arrived before the
+// shell had run `trap "" TERM`: the process exited gracefully and the
+// escalation test failed — 23 of 30 runs on a machine at load ~110.
+//
 // That shape is the point. `stop` never has the daemon as a child, and it waited
 // on os.Process.Wait, which needs one: against a non-child Wait returns ECHILD
 // in microseconds. Spawning the target as a direct child would also make it a
@@ -73,10 +80,12 @@ func runDaemonStop(t *testing.T, dataDir string, args ...string) (string, error)
 // `stop` cannot encounter and must not be tested against.
 func startUnrelatedProcess(t *testing.T, body string) int {
 	t.Helper()
+	ready := filepath.Join(t.TempDir(), "ready")
 	// The child's stdout must be redirected away: it would otherwise inherit
 	// this pipe and hold it open for its whole life, so Output() — which reads
 	// to EOF — would never return.
 	launcher := exec.Command("sh", "-c", body+` >/dev/null 2>&1 & echo $!`)
+	launcher.Env = append(os.Environ(), "READY="+ready)
 	out, err := launcher.Output()
 	require.NoError(t, err)
 
@@ -88,9 +97,11 @@ func startUnrelatedProcess(t *testing.T, body string) int {
 		}
 	})
 
-	require.Eventually(t, func() bool { return daemonProcessAlive(pid) }, 5*time.Second, 20*time.Millisecond)
-	// Let the shell install its trap before anything signals it.
-	time.Sleep(300 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(ready)
+		return err == nil
+	}, 30*time.Second, 10*time.Millisecond, "the process never signalled it was ready")
+	require.True(t, daemonProcessAlive(pid))
 	return pid
 }
 
@@ -126,7 +137,7 @@ func TestStopDoesNotReportSuccessUntilTheProcessIsGone(t *testing.T) {
 	// a loaded machine can take a while to reap it.
 	setDaemonStopGraces(t, 300*time.Millisecond, daemonKillGrace)
 	dataDir := t.TempDir()
-	pid := startUnrelatedProcess(t, `sh -c 'trap "" TERM; while :; do sleep 0.2; done'`)
+	pid := startUnrelatedProcess(t, `sh -c 'trap "" TERM; : >"$READY"; while :; do sleep 0.2; done'`)
 	writeRecordForPID(t, dataDir, pid)
 
 	out, err := runDaemonStop(t, dataDir)
@@ -146,7 +157,7 @@ func TestStopDoesNotReportSuccessUntilTheProcessIsGone(t *testing.T) {
 // A daemon that exits on SIGTERM is reported as stopped, and only then.
 func TestStopReportsSuccessWhenTheProcessExitsGracefully(t *testing.T) {
 	dataDir := t.TempDir()
-	pid := startUnrelatedProcess(t, `sh -c 'while :; do sleep 0.2; done'`)
+	pid := startUnrelatedProcess(t, `sh -c ': >"$READY"; while :; do sleep 0.2; done'`)
 	writeRecordForPID(t, dataDir, pid)
 
 	out, err := runDaemonStop(t, dataDir)
