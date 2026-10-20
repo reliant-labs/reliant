@@ -168,15 +168,16 @@ func install(output io.Writer, s Settings, level slog.Level, options ...installO
 	} else {
 		handler = slog.NewTextHandler(output, opts)
 	}
+	// Every process gets the trace handler, not only the daemon: it is what
+	// stamps trace_id/span_id on a record logged with a span in its context,
+	// and without it the API server, worker and gateway logs cannot be joined
+	// to their traces at all. It sits inside withReporting, as in serverkit's
+	// logger, so it sees the level the error-class policy decided.
+	handler = observe.NewTraceHandler(handler)
 	handler = withReporting(handler)
 	if cfg.fields != nil {
 		handler = newIdentityHandler(handler, cfg.fields)
 	}
-	// Every process gets the trace handler, not only the daemon: it is what
-	// stamps trace_id/span_id on a record logged with a span in its context,
-	// and without it the API server, worker and gateway logs cannot be joined
-	// to their traces at all.
-	handler = observe.NewTraceHandler(handler)
 	slog.SetDefault(slog.New(handler))
 
 	if !recognised {
