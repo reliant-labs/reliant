@@ -41,7 +41,8 @@
 // telemetry inert in a local build.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -73,13 +74,16 @@ const BUILD_ENV = process.env.RELIANT_RELEASE_ENV || "";
 function renderFromKCL(env) {
   const entry = join(CONTROL_PLANE_DIR, KCL_ENTRYPOINT);
   if (!existsSync(entry)) return null;
+  // The JSON goes to a file, not stdout: kcl prints "waiting for package-cache
+  // lock..." to stdout while another kcl holds the shared package cache.
+  const out = join(mkdtempSync(join(tmpdir(), "release-config-")), "release_config.json");
   try {
-    const out = execFileSync(
+    execFileSync(
       "kcl",
-      ["run", KCL_ENTRYPOINT, "-D", `env=${env}`, "-S", "release_config", "--format", "json"],
+      ["run", KCL_ENTRYPOINT, "-D", `env=${env}`, "-S", "release_config", "--format", "json", "-o", out],
       { cwd: CONTROL_PLANE_DIR, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
     );
-    return JSON.parse(out);
+    return JSON.parse(readFileSync(out, "utf8"));
   } catch (err) {
     if (err.code === "ENOENT") return null; // kcl not installed
     // The KCL is present but does not render: that is a real defect in the
