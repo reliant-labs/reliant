@@ -64,6 +64,18 @@
             ]
           },
           {
+            "group": "Command line",
+            "pages": [
+              "cli/overview",
+              "cli/sign-in",
+              "cli/run-a-machine",
+              "cli/workflows",
+              "cli/forge",
+              "cli/previews",
+              "cli/scripting"
+            ]
+          },
+          {
             "group": "Automations & integrations",
             "pages": [
               "automations/overview",

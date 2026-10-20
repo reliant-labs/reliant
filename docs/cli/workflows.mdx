@@ -1,0 +1,241 @@
+---
+title: "Workflows from the terminal"
+description: "Validate and test a workflow next to your code, then run it, supervise it and put it on a schedule with reliant workflow"
+---
+
+A project workflow is a YAML file in your repository's `.reliant/workflows/`, so it is natural to work on it where you work on the code: in an editor, with a terminal beside it. The `reliant workflow` commands support that loop in two halves.
+
+The first half needs **no sign-in, no machine and no network**: `validate`, `validate-tree`, `scenario`, `eval` and `list` read the files on disk and run the same checks and the same workflow engine the app uses. That makes them quick enough to run on every save and safe to run in CI. The second half talks to Reliant: `run` starts a workflow, and `watch`, `status`, `wait-for-gate`, `answer` and their siblings follow and steer it while it runs.
+
+This page walks through one small workflow from first draft to scheduled run. For the YAML format, see [Creating custom workflows](/workflows/custom-workflows). For the scenario file format, see [Testing workflows](/workflows/testing).
+
+## The example
+
+The workflow runs the project's tests. If they pass, it records that and stops. If they fail, it hands the failure to an agent to fix. This first draft has a mistake in it, which the next section finds:
+
+{/* docs-validate: skip — deliberately invalid first draft; "Validate" below shows the error and the fix */}
+```yaml .reliant/workflows/test-then-fix.yaml
+name: test-then-fix
+description: Run the test suite; if it fails, hand the failure to an agent to fix.
+inputs:
+  test_command:
+    type: string
+    default: "make test"
+    description: Command that runs the tests
+entry: [tests]
+nodes:
+  - id: tests
+    type: run
+    args:
+      command: "{{inputs.test_command}}"
+  - id: fix
+    type: workflow
+    ref: builtin://agent
+    args:
+      message: "The tests failed. Fix them.\n\n{{nodes.tests.stdout}}"
+  - id: passed
+    type: compute
+edges:
+  - from: tests
+    cases:
+      - to: passed
+        condition: "nodes.tests.exit_code == 0"
+    default: fix
+```
+
+## Validate
+
+`reliant workflow validate` checks every workflow in `.reliant/workflows/`, or just the file you name. It covers structure, CEL expressions, input and output types, and references between workflows. Run against the draft above, it finds a real mistake:
+
+```text
+$ reliant workflow validate
+Validating 1 workflow(s)
+
+  ✗ test-then-fix.yaml (test-then-fix)
+      Error: test-then-fix.nodes.[2](passed).outputs: compute node declares no outputs (add at least one: outputs: {size: "{{ inputs.adds + inputs.dels < 60 ? 'S' : 'M' }}"})
+
+═══════════════════════════════════════════
+Summary
+───────────────────────────────────────────
+  Total:    1 workflows
+  Valid:    0
+  Invalid:  1
+  Warnings: 0
+═══════════════════════════════════════════
+
+❌ Validation failed
+validation failed
+```
+
+A `compute` node exists to produce values, so it must declare at least one. Give `passed` an output:
+
+```yaml
+  - id: passed
+    type: compute
+    outputs:
+      summary: "{{ 'tests passed: ' + nodes.tests.stdout }}"
+```
+
+and validate again:
+
+```text
+$ reliant workflow validate
+Validating 1 workflow(s)
+
+  ✓ test-then-fix.yaml (test-then-fix)
+…
+✅ All workflows valid
+```
+
+`validate` exits `1` when any workflow has an error, so it works as a pre-commit hook or a CI step. Add `--json` for output a program can read.
+
+`reliant workflow validate-tree <ref>` goes further for one workflow. It follows every workflow the target calls, through `project://` and `builtin://` references, and checks [presets](/workflows/presets) against the inputs they set. This is the check the server runs when a chat starts. Pass the workflow as a file path, `project://<name>` or `builtin://<name>`:
+
+```text
+$ reliant workflow validate-tree project://test-then-fix
+  ✓ project://test-then-fix (test-then-fix)
+…
+✅ All workflows valid
+```
+
+If the workflow declares triggers, `validate --trigger-payload '{…}'` also runs each trigger's filter, inputs mapping and prompt against a sample event. [Automations](/automations/overview) shows how.
+
+## Test with scenarios
+
+Validation proves the file is well formed. A scenario proves it behaves as you intend: it runs the workflow on the real engine, with each node's result supplied by you instead of a real command or model. No model is called and nothing is spent.
+
+A scenario lives in `.reliant/workflows/<name>/scenarios/`, one per file. These two cover both branches:
+
+```yaml .reliant/workflows/test-then-fix/scenarios/green_tests_skip_the_agent.yaml
+description: A passing test run goes straight to passed; no agent is started.
+events:
+  - node: tests
+    output: {"exit_code": 0, "stdout": "ok  ./..."}
+expect:
+  outcome: completed
+  reached: [tests, passed]
+  not_reached: [fix]
+```
+
+```yaml .reliant/workflows/test-then-fix/scenarios/red_tests_go_to_the_agent.yaml
+description: A failing test run routes to the fix agent.
+events:
+  - node: tests
+    output: {"exit_code": 1, "stdout": "--- FAIL: TestParse"}
+  - node: fix
+    black_box: true
+    output: {}
+expect:
+  outcome: completed
+  reached: [tests, fix]
+  not_reached: [passed]
+```
+
+`black_box: true` stands in for the whole `fix` sub-workflow, so the scenario tests this workflow's routing, not the agent's.
+
+```text
+$ reliant workflow scenario list
+WORKFLOW                 SOURCE     SCENARIO                             EVENTS
+────────                 ──────     ────────                             ──────
+test-then-fix            project    green_tests_skip_the_agent                1
+test-then-fix            project    red_tests_go_to_the_agent                 2
+
+2 scenario(s) across 1 workflow(s)
+
+$ reliant workflow scenario run
+Running 2 scenario(s) across 1 workflow(s)
+
+  ✓ test-then-fix/green_tests_skip_the_agent (844ms)
+  ✓ test-then-fix/red_tests_go_to_the_agent (34ms)
+…
+✅ All scenarios passed
+```
+
+When a scenario fails, the output says which expectation failed and what actually happened. Here the routing was wrong:
+
+```text
+$ reliant workflow scenario run --filter red
+…
+  ✗ test-then-fix/red_tests_go_to_the_agent (1147ms)
+      expected node "passed" to be reached but it wasn't (reached: [tests fix])
+      ... and 1 more (use --verbose)
+```
+
+`scenario run` exits `1` if any scenario fails. `--filter` runs only scenarios whose name contains a string, and `--fail-fast` stops at the first failure. The app lists the same scenario files, so the CLI and the app always agree on what is tested.
+
+## Try an expression before you commit to it
+
+Conditions and templates are CEL. `reliant workflow eval` evaluates one against data you supply and prints the value and its type, which is quicker than editing, validating and running a scenario to find out what an expression returns:
+
+```text
+$ reliant workflow eval --nodes '{"tests":{"exit_code":1,"stdout":"--- FAIL: TestParse"}}' \
+    "nodes.tests.exit_code == 0"
+false
+  type: bool (read as expression)
+
+$ reliant workflow eval --input test_command='go test ./...' "{{ 'running ' + inputs.test_command }}"
+"running go test ./..."
+  type: string (read as template)
+```
+
+Referring to data you did not supply is an error, not `null`, as it would be in a real run, and the hint says how to guard against it:
+
+```text
+$ reliant workflow eval "nodes.tests.exit_code == 0"
+✗ eval error: CEL evaluation error: no such key: tests
+  hint: a field the data lacks is an error, not null: guard it with has(x.f) or x.?f.orValue(default)
+evaluation failed
+```
+
+For trigger filters, `--integration github --event issues.opened --scope trigger` generates a realistic event payload for you. [CEL expressions](/reference/cel-expressions) is the language reference.
+
+## Run it
+
+Running a workflow needs you to be [signed in](/cli/sign-in) and a project to run in. A run is a chat. `reliant workflow run` starts one exactly as the app would, so the run appears in the app and you can open it there at any time:
+
+```bash
+reliant workflow run test-then-fix --project-path . --input test_command='go test ./...'
+```
+
+`--project-path` finds the Reliant project at that path, or creates it, so a new checkout needs no setup. `--project-id` names a project directly. Inputs come from `--input key=value` (repeatable) or `--input-file inputs.json`, and `--message` sets the chat's first message. The command prints the chat's ID, which is also the execution ID every supervision command takes.
+
+## Supervise it
+
+Pick the command that fits the person, or program, watching:
+
+| Command | Prints | Use it when |
+|---|---|---|
+| `reliant workflow watch <id>` | One readable line per node start, finish, failure, question and approval, until the run ends | You want to keep an eye on a run in a terminal |
+| `reliant workflow follow <id>` | One JSON event per line on stdout, everything else on stderr | A program consumes the events (`run --follow` does the same from the start) |
+| `reliant workflow status <id>` | A one-off snapshot: lifecycle, verdict, the node tree, open questions | You want to know where a run is right now |
+| `reliant workflow wait-for-gate <id>` | Nothing until the run needs you, then the question or approval | You only want to hear when to act |
+
+`status` prints two separate facts, and it is worth knowing the difference. **Status** is the lifecycle: did the run finish? **Outcome** is the run's own verdict: did the work pass? A workflow that fails its checks and ends at a failure node finishes cleanly, so it reads `Status COMPLETED, Outcome FAILURE`. `watch` reports such a run as `✗ workflow ended WITHOUT PASSING` rather than a tick. [Scripting and CI](/cli/scripting#exit-codes) lists the exit code of each command.
+
+When a run asks a question, `reliant workflow questions <id>` shows it and its options, and `reliant workflow answer <id>` answers it. Pass `--select "<option label>"` and/or `--text "<feedback>"`, or give no flags to pick interactively. Combined with `wait-for-gate`, that makes a supervision loop:
+
+```bash
+while reliant workflow wait-for-gate "$ID" --json > gate.json; do
+  reliant workflow answer "$ID" --select "$(./pick-answer.sh gate.json)"
+done
+```
+
+`wait-for-gate` exits `3` while a gate is open, so the loop continues until the run finishes. `pause`, `resume` and `terminate` do what their names say. A paused run keeps its state and can be resumed later.
+
+## Put it on a schedule
+
+`reliant trigger create` runs a workflow on a cron or interval schedule, on a machine you name with `--daemon` (its ID or hostname). Scheduled runs are unattended, so the agent is told to decide and proceed instead of asking questions:
+
+```bash
+reliant trigger create --name nightly-tests --workflow project://test-then-fix \
+  --cron "0 3 * * *" --timezone Europe/London --daemon build-server \
+  --message "Run the nightly tests and fix anything that broke."
+```
+
+`trigger list`, `get`, `fire` (run now), `events`, `enable`, `disable`, `update` and `delete` manage it afterwards. Turning an automation on is your decision, so `create`, `update` and `enable` refuse to run from an agent's shell. [Schedules](/automations/schedules) covers schedule options, catch-up after an outage, and overlapping runs.
+
+## Related topics
+
+- [Creating custom workflows](/workflows/custom-workflows) and [Testing workflows](/workflows/testing)
+- [Scripting and CI](/cli/scripting): running validation and scenarios on every pull request
+- [CLI reference: `reliant workflow`](/reference/cli#reliant-workflow) and [`reliant trigger`](/reference/cli#reliant-trigger)

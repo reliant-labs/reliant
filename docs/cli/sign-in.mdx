@@ -1,0 +1,117 @@
+---
+title: "Sign in and tokens"
+description: "Sign the reliant CLI in, sign in on a machine with no browser, and create tokens for scripts and CI"
+---
+
+The CLI uses three kinds of credential, and most sign-in confusion comes from mixing them up. Your **CLI login** is what `reliant project list`, `reliant workflow run` and `reliant forge …` use when you type them. An **API token** does the same job for a script or CI runner, without a browser. A **daemon credential** belongs to a machine: it lets a daemon connect and serve your agents, and nothing else. All three are `rlat_…` access tokens that act as you, and all three can be revoked.
+
+| Credential | Made by | Stored in | Used by | Lifetime |
+|---|---|---|---|---|
+| CLI login | `reliant auth login` | `~/.config/forge/credentials.json`, under the server it is for | Commands you type, and `reliant forge` | 90 days |
+| API token | `reliant auth token create` | Nowhere: printed once, you keep it | Scripts and CI, through `RELIANT_TOKEN` | 90 days |
+| Daemon credential | `reliant daemon register` or `start`, or **Settings → Access Tokens** in the app | `~/.reliant/daemon.json` | `reliant daemon start` | Long-lived |
+
+## Sign in on your own computer
+
+```bash
+reliant auth login
+```
+
+Your browser opens on Reliant's sign-in page. You sign in with your normal account and approve the request. The CLI stores the token and prints its prefix, its permissions, when it expires, and the file it was saved to. If the browser does not open, the CLI prints the address to visit:
+
+```text
+$ reliant auth login
+Opening your browser to log in.
+If it does not open, visit:
+    https://admin.reliantapi.com/oauth/authorize?client_id=reliant-cli&…&redirect_uri=http%3A%2F%2F127.0.0.1%3A35167%2Fcallback&…&scope=reliant%3Aapi+deploy%3Aread+deploy%3Awrite+secret%3Aread+secret%3Awrite+domain%3Aread+domain%3Awrite&…
+```
+
+The scopes show what the login asks for: `reliant:api` to use Reliant as you, and the deploy, secret and domain permissions that Forge needs. You only get the deploy, secret and domain permissions your organization grants you. Because they are part of the one login, [Forge needs no login of its own](/cli/forge#signed-in-as-you).
+
+Logging in again from the same computer replaces that computer's previous login token rather than adding another.
+
+## Check who you are signed in as
+
+`reliant auth status` reads only local files and makes no network call, so it is quick and safe to put in scripts. It exits `0` when a credential is available for the server, and `1` when there is none:
+
+```text
+$ reliant auth status
+Not logged in (not logged in)
+  Server: https://api.reliantapi.com (default — no --server flag and no RELIANT_SERVER_URL)
+Run 'reliant auth login' to authenticate
+```
+
+Add `--json` for a machine-readable answer:
+
+```json
+{
+  "logged_in": false,
+  "reason": "not logged in",
+  "server": "https://api.reliantapi.com",
+  "server_from": "https://api.reliantapi.com (default — no --server flag and no RELIANT_SERVER_URL)"
+}
+```
+
+When `RELIANT_TOKEN` is set, `status` reports that it will use it (`Using the token in RELIANT_TOKEN`). Because `status` never contacts the server, it does not check that the token is valid. The first real command does that, and its error names the credential it tried:
+
+```text
+$ RELIANT_TOKEN=rlat_… reliant project list
+listing projects: unauthenticated: invalid or expired token
+  server:     https://api.reliantapi.com (default — no --server flag and no RELIANT_SERVER_URL)
+  credential: the token in RELIANT_TOKEN
+  hint: the credential must belong to that server — re-authenticate with 'reliant auth login'
+```
+
+## Sign out
+
+`reliant auth logout` removes this server's login from the credentials file and forgets any Forge tokens exchanged from it. Two things are unchanged. The token itself stays valid on the server until it expires or you revoke it (see below). And a running daemon keeps working, because it uses its own daemon credential.
+
+## Sign in where there is no browser
+
+`reliant auth login` finishes by redirecting your browser to `127.0.0.1` on the computer running the CLI. On a server you reach over SSH, or on a CI runner, there is no browser on that computer, so the redirect has nowhere to land. Don't try to log in there. Create a token on a computer that has a browser and take it to the one that doesn't.
+
+**To run commands** (`workflow run`, `project list`, `trigger …`) on the headless machine, create an API token on your own computer:
+
+```bash
+reliant auth token create --name build-server
+```
+
+This is a browser approval like `login`. The token is printed **once** and not stored, and your own login is untouched. On the headless machine, provide it as `RELIANT_TOKEN`:
+
+```bash
+export RELIANT_TOKEN=rlat_…
+reliant project list
+```
+
+Running `create` again with the same `--name` replaces that token, so rotating a token is one command.
+
+**To run a daemon** on the headless machine, use a daemon credential instead. Create one in the app under **Settings → Access Tokens** and pipe it in:
+
+```bash
+echo "rlat_…" | reliant daemon start --token
+```
+
+An API token cannot connect a daemon, and a daemon credential cannot run commands. [Run a machine from the terminal](/cli/run-a-machine#on-a-machine-with-no-browser) covers the daemon side.
+
+## List and revoke API tokens
+
+`reliant auth token list` shows your API tokens: name, ID, prefix, when each was created and last used, when it expires, and whether it is still active. It never shows the secret. `reliant auth token revoke <name-or-id>` revokes one. If two tokens share a name, the command refuses to guess and asks for the ID. Both commands use your current credential, so they work with `RELIANT_TOKEN` as well as with a login. Daemon credentials are listed and revoked in the app, under **Settings → Access Tokens**.
+
+## Connecting Claude, Codex or Antigravity from the web app
+
+Signing in to Claude Code, Codex or Antigravity ends with the provider redirecting your browser to `localhost`, so something on the computer your browser runs on has to catch that redirect. The desktop app does this for you, and so does a daemon running on that same computer. If you use the web app and the chat's machine is somewhere else (a cloud machine, a remote server), run the helper in a terminal on your own computer and leave it running while you connect:
+
+```text
+$ reliant auth serve
+OAuth helper server listening on http://127.0.0.1:19284
+Press Ctrl+C to stop
+```
+
+It stores no credentials. It only passes the authorization code back to your browser, and you can stop it once the account is connected. [AI providers](/settings/api-keys#signing-in-from-the-web-app) walks through the in-app side.
+
+## Related topics
+
+- [Scripting and CI](/cli/scripting): using `RELIANT_TOKEN` in automation
+- [Run a machine from the terminal](/cli/run-a-machine)
+- [Forge sign-in](/features/forge-sign-in): how your session becomes a short-lived deploy token
+- [CLI reference: `reliant auth`](/reference/cli#reliant-auth)
