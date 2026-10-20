@@ -84,6 +84,12 @@ type PauseController struct {
 	// limit resets (usage_limit_wait.go). One per run, shared by every thread.
 	// nil when not wired (tests).
 	UsageLimit *usageLimitWaiter
+
+	// MachineWake wakes the run's machine before the first machine step after
+	// a hold (machine_resume_wake.go). One per run, shared by every thread so
+	// threads resuming together share one wake. nil when the run needs no
+	// machine, and in tests.
+	MachineWake *machineResumeWaker
 }
 
 // failsFast reports whether a step that exhausted its retries on this
@@ -138,5 +144,22 @@ func (pc *PauseController) ObserveRepeatedToolErrors(thread, activityName string
 func (pc *PauseController) ObserveDaemonOfflineStep(callerCtx workflow.Context, activityName string, stepEvent *StepEvent) {
 	if pc != nil && pc.DaemonOffline != nil {
 		pc.DaemonOffline.ObserveStep(callerCtx, activityName, stepEvent)
+	}
+}
+
+// WakeMachineBeforeStep wakes the run's machine, if a hold may have let it
+// sleep, before a machine step dispatches. callerCtx MUST be the calling
+// goroutine's own workflow.Context. Nil-safe on both the receiver and the
+// waker.
+func (pc *PauseController) WakeMachineBeforeStep(callerCtx, actCtx workflow.Context, toolNames []string, toolsKnown bool) {
+	if pc != nil {
+		pc.MachineWake.beforeMachineStep(callerCtx, actCtx, toolNames, toolsKnown)
+	}
+}
+
+// MachineStepDone records that a machine step just completed. Nil-safe.
+func (pc *PauseController) MachineStepDone(ctx workflow.Context) {
+	if pc != nil {
+		pc.MachineWake.machineStepDone(ctx)
 	}
 }

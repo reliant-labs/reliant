@@ -29,6 +29,9 @@ import {
   MACHINE_ASLEEP_STARTING,
   MACHINE_FAILED_TO_START,
   MACHINE_NOUN,
+  MACHINE_SLEPT_DURING_RUN_WAIT,
+  MACHINE_SLEPT_DURING_USAGE_LIMIT,
+  MACHINE_WAKES_ON_RESUME,
   RECONNECTING_MACHINE_FOR_MESSAGE,
   RECONNECTING_MACHINE_FOR_RUN,
   WAKING_MACHINE_FOR_MESSAGE,
@@ -87,6 +90,14 @@ export interface ChatMachineNoticeInput {
    * preflight is the run's wake point: it resumed the machine before parking.
    */
   runWaitingForMachine?: boolean;
+  /**
+   * A live run is waiting off the machine: held until a provider's usage
+   * limit resets ("usage_limit"), or otherwise working without it — an LLM
+   * call, a sub-agent, a timer ("run"). The idle policy may suspend the
+   * machine meanwhile, and the run wakes it itself when it next needs it
+   * (the server's resume wake), so an asleep machine is news, not a problem.
+   */
+  runHeld?: "usage_limit" | "run";
   /** When the unanswered message was sent, epoch ms. */
   messageSentAt?: number;
   now?: number;
@@ -107,6 +118,7 @@ export function chatMachineNotice({
   wakeStartedAt,
   sending = false,
   runWaitingForMachine = false,
+  runHeld,
   messageSentAt,
   now = Date.now(),
 }: ChatMachineNoticeInput): ChatMachineNotice | null {
@@ -157,6 +169,20 @@ export function chatMachineNotice({
         : `The run continues when it connects.`;
       if (beingWoken) {
         return { ...base, kind: "asleep", title: MACHINE_ASLEEP_STARTING, detail: promise, since };
+      }
+      // A live run that is waiting elsewhere wakes its machine itself when
+      // it resumes: say what happened and that nothing needs doing. A run
+      // that has not yet read the user's latest message is not known to be
+      // getting anywhere (chat 66a045ce was failing its replay), so that
+      // one keeps the offer to start the machine — unless it is held on a
+      // usage limit, which it will wait out and then wake the machine.
+      if (runHeld === "usage_limit" || (runHeld === "run" && !messageUnanswered)) {
+        return {
+          ...base,
+          kind: "asleep",
+          title: runHeld === "usage_limit" ? MACHINE_SLEPT_DURING_USAGE_LIMIT : MACHINE_SLEPT_DURING_RUN_WAIT,
+          detail: MACHINE_WAKES_ON_RESUME,
+        };
       }
       return {
         ...base,

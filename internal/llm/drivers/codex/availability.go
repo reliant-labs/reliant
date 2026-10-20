@@ -68,14 +68,17 @@ var (
 	unknownSlugsLogged sync.Map
 )
 
-// accountKey is a stable, non-reversible cache key for the credential.
-func accountKey(accountID, token string) string {
-	sum := sha256.Sum256([]byte(accountID + "\x00" + strings.TrimSpace(token)))
+// availabilityKey is a stable, non-reversible cache key for everything the
+// catalog depends on: the backend that serves it and the credential it is
+// asked with. A report fetched from one backend is never served for another,
+// even for the same token.
+func (c *CodexClient) availabilityKey() string {
+	sum := sha256.Sum256([]byte(c.baseURL + "\x00" + c.accountID + "\x00" + strings.TrimSpace(c.accessToken)))
 	return hex.EncodeToString(sum[:8])
 }
 
 // ReportAvailability implements registry.AvailabilityReporter from the account's
-// /codex/models catalog (cached per credential):
+// /codex/models catalog (cached per backend and credential):
 //
 //   - slug maps to our catalog id by api_model;
 //   - visibility "hide" means not offered;
@@ -91,7 +94,7 @@ func accountKey(accountID, token string) string {
 // registry.CredentialRejectedError (the provider is unavailable), anything
 // else an outage callers fail open on.
 func (c *CodexClient) ReportAvailability(ctx context.Context) (registry.ProviderAvailability, error) {
-	key := accountKey(c.accountID, c.accessToken)
+	key := c.availabilityKey()
 
 	availabilityMu.Lock()
 	if entry, ok := availabilityCache[key]; ok {

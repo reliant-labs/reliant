@@ -29,6 +29,12 @@ type PreflightDaemonCheckInput struct {
 	// terminal error can name it. The workflow owns the number; this is only
 	// how the message learns it.
 	WaitBudgetSeconds int `json:"wait_budget_seconds,omitempty"`
+	// RunResume marks a run that continues an earlier one (continue-as-new,
+	// or a resume of an interrupted run) rather than one a send or a trigger
+	// just started. Its machine may have gone to sleep while the predecessor
+	// was held, and the session token it carries may be hours old, so it
+	// wakes the machine the way any resuming run does (toolexec.RunWaker).
+	RunResume bool `json:"run_resume,omitempty"`
 }
 
 // PreflightDaemonCheckOutput is the output of the preflight daemon check.
@@ -141,7 +147,15 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 	if !ok {
 		return a.terminal(exitCtx, input.ChatID, attended, errPreflightNoDaemon(""))
 	}
-	daemonID, wakeErr := waker.EnsureAwake(ctx, project.UserID, input.DaemonSelector)
+	var daemonID string
+	var wakeErr error
+	if runWaker, isRunWaker := router.(toolexec.RunWaker); input.RunResume && isRunWaker {
+		var res toolexec.WakeResult
+		res, wakeErr = runWaker.WakeForRun(ctx, project.UserID, input.DaemonSelector)
+		daemonID = res.DaemonID
+	} else {
+		daemonID, wakeErr = waker.EnsureAwake(ctx, project.UserID, input.DaemonSelector)
+	}
 	if wakeErr != nil && !toolexec.IsDaemonPending(wakeErr) {
 		return a.terminal(exitCtx, input.ChatID, attended, errPreflightNoDaemon(wakeErr.Error()))
 	}

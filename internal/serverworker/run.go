@@ -22,6 +22,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/analytics"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
@@ -354,6 +355,12 @@ func Run(ctx context.Context, opts Options) error {
 			// The worker alone may fall back to a trigger's delegated
 			// token: an unattended fire has no user JWT.
 			toolexec.WithControlPlaneCredentials(automationcred.New(automationcred.Deps{Keys: repo})))
+		// A run that resumes after a hold wakes its machine as the worker
+		// (the owner's session token may have expired meanwhile); see
+		// toolexec.RunWaker.
+		if rr := controlplane.NewRunResumeClient(opts.ControlPlane, auth.SignInternalServiceToken); rr != nil {
+			daemonRouterOpts = append(daemonRouterOpts, toolexec.WithRunResumer(rr))
+		}
 	}
 	router := toolexec.NewNATSDaemonRouter(nc, daemonRouterOpts...)
 	remoteExecutor.SetDaemonRouter(router)

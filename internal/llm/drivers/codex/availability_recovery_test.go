@@ -57,7 +57,7 @@ func TestReportAvailability_RejectionRecoversWithoutReconnect(t *testing.T) {
 	assert.Equal(t, int32(1), hits.Load())
 
 	// The failure TTL elapses.
-	key := accountKey(client.accountID, client.accessToken)
+	key := client.availabilityKey()
 	availabilityMu.Lock()
 	entry := availabilityCache[key]
 	entry.fetchedAt = time.Now().Add(-availabilityFailureTTL - time.Second)
@@ -68,4 +68,40 @@ func TestReportAvailability_RejectionRecoversWithoutReconnect(t *testing.T) {
 	require.NoError(t, err, "once the backend accepts the credential, Codex is available again")
 	assert.Equal(t, int32(2), hits.Load())
 	assert.Contains(t, report.Models, "gpt-6.1-sol")
+}
+
+// The catalog is the backend's answer for a credential, so it is cached per
+// backend AND credential: the same token asked of a second backend asks that
+// backend rather than replaying the first one's report. Keyed on the
+// credential alone, a test re-run inside the same second (identical minted
+// token, fresh httptest backend) was served the previous run's report and its
+// backend was never asked.
+func TestReportAvailability_CachedPerBackend(t *testing.T) {
+	t.Parallel()
+	body, err := os.ReadFile("testdata/codex_models.json")
+	require.NoError(t, err)
+
+	backend := func(hits *atomic.Int32) *httptest.Server {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(body)
+		}))
+		t.Cleanup(srv.Close)
+		return srv
+	}
+	var firstHits, secondHits atomic.Int32
+	first, second := backend(&firstHits), backend(&secondHits)
+
+	token := mintJWT(t, "acct-cached-per-backend", time.Now().Add(time.Hour))
+	ctx := context.Background()
+	for _, srv := range []*httptest.Server{first, second, first, second} {
+		client, err := NewClient(llm.DriverOptions{ApiKey: token, BaseURL: srv.URL})
+		require.NoError(t, err)
+		report, err := client.ReportAvailability(ctx)
+		require.NoError(t, err)
+		assert.Contains(t, report.Models, "gpt-6.1-sol")
+	}
+	assert.Equal(t, int32(1), firstHits.Load(), "the first backend is asked once, then served from cache")
+	assert.Equal(t, int32(1), secondHits.Load(), "the second backend is asked, not answered from the first one's report")
 }

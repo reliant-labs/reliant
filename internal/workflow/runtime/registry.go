@@ -1177,7 +1177,7 @@ func resolveMaxAttempts(info activity.Info) int32 {
 	// No heartbeat: one of the infrastructure dispatches. These are named
 	// rather than shape-matched, because their timeouts are incidental.
 	switch info.ActivityType.Name {
-	case "PreflightDaemonCheck":
+	case "PreflightDaemonCheck", "MachineResumeWake":
 		return preflightActivityMaxAttempts
 	case "SaveMessage":
 		return inlineSaveMessageMaxAttempts

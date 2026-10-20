@@ -1026,7 +1026,8 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// replay; see preflightAfterStartedChangeID.
 	preflightAfterStarted := false
 	runPreflight := func() error { return nil }
-	if RequiresDaemon(wf, buildPreflightConfig()) {
+	runNeedsDaemon := RequiresDaemon(wf, buildPreflightConfig())
+	if runNeedsDaemon {
 		preflightAfterStarted = workflow.GetVersion(ctx, preflightAfterStartedChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
 		runPreflight = func() error {
 			return preflightDaemonCheck(ctx, input, execCtx, workflowID, thread)
@@ -1264,6 +1265,14 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	requestPause := pauser.RequestPause
 	usageLimitWaiter := newUsageLimitWaiter(pauser, childTracker, input.ChatID, workflowID, input.WorkflowName)
 
+	// STEP 8.54: Machine wake on resume (machine_resume_wake.go). A run that
+	// needs its machine wakes it before the first machine step after a hold,
+	// in any thread. Its clock starts now, right after preflight.
+	var machineWake *machineResumeWaker
+	if runNeedsDaemon {
+		machineWake = newMachineResumeWaker(ctx, preflightTarget(input, execCtx))
+	}
+
 	// STEP 8.55: Daemon-offline circuit breaker.
 	// Counts consecutive daemon-targeted step completions that failed with
 	// "no daemon connected" — across the main loop AND inline loop/workflow
@@ -1344,6 +1353,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			DaemonOffline:      daemonOfflineBreaker,
 			UsageLimit:         usageLimitWaiter,
 			RepeatedToolErrors: repeatedToolErrors,
+			MachineWake:        machineWake,
 			Cancelled:          func() bool { return cancelledThreads[thread] },
 			ResetCancelled: func() {
 				delete(cancelledThreads, thread)
@@ -1397,6 +1407,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		DaemonOffline:      daemonOfflineBreaker,
 		UsageLimit:         usageLimitWaiter,
 		RepeatedToolErrors: repeatedToolErrors,
+		MachineWake:        machineWake,
 	}
 
 	// STEP 8.7: Create step executor for unified step lifecycle
@@ -5422,17 +5433,16 @@ func getMapKeys(m map[string]interface{}) []string {
 // replaytest/fixtures/frozen/2026-10-08-preflight-before-started.
 const preflightAfterStartedChangeID = "preflight-after-started"
 
-// preflightDaemonCheck runs a daemon-requiring run's preflight: check the
-// daemon, and if it exists but is still coming up, wait for it (bounded). Only
-// a missing daemon, a refused wake or an exhausted budget fails the run. The
-// returned error is DynamicWorkflow's to return.
-func preflightDaemonCheck(ctx workflow.Context, input WorkflowInput, execCtx *ExecutionContext, workflowID, thread string) error {
-	preflightInput := map[string]interface{}{
+// preflightTarget is the machine a run targets, as the preflight and resume
+// wake activities take it: the chat, and the daemon selector the run resolved
+// (workflow level, else the session's daemon).
+func preflightTarget(input WorkflowInput, execCtx *ExecutionContext) map[string]interface{} {
+	target := map[string]interface{}{
 		"chat_id": input.ChatID,
 	}
 	// Pass daemon selector if one was resolved at workflow level
 	if execCtx.DaemonSelector != nil {
-		preflightInput["daemon_selector"] = map[string]interface{}{
+		target["daemon_selector"] = map[string]interface{}{
 			"id":   execCtx.DaemonSelector.ID,
 			"name": execCtx.DaemonSelector.Name,
 			"type": execCtx.DaemonSelector.Type,
@@ -5440,11 +5450,26 @@ func preflightDaemonCheck(ctx workflow.Context, input WorkflowInput, execCtx *Ex
 	}
 	// Also check session daemon from inputs
 	if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
-		if _, hasDaemonSelector := preflightInput["daemon_selector"]; !hasDaemonSelector {
-			preflightInput["daemon_selector"] = map[string]interface{}{
+		if _, hasDaemonSelector := target["daemon_selector"]; !hasDaemonSelector {
+			target["daemon_selector"] = map[string]interface{}{
 				"id": sessionDaemonID,
 			}
 		}
+	}
+	return target
+}
+
+// preflightDaemonCheck runs a daemon-requiring run's preflight: check the
+// daemon, and if it exists but is still coming up, wait for it (bounded). Only
+// a missing daemon, a refused wake or an exhausted budget fails the run. The
+// returned error is DynamicWorkflow's to return.
+func preflightDaemonCheck(ctx workflow.Context, input WorkflowInput, execCtx *ExecutionContext, workflowID, thread string) error {
+	preflightInput := preflightTarget(input, execCtx)
+	// A run continuing an earlier one wakes its machine the way any resuming
+	// run does: its predecessor may have been held long enough for the
+	// machine to sleep and its session token to expire.
+	if input.Resume != nil {
+		preflightInput["run_resume"] = true
 	}
 
 	if err := waitForDaemon(ctx, preflightInput); err != nil {

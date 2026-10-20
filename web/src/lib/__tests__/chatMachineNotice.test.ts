@@ -84,6 +84,48 @@ describe("chatMachineNotice", () => {
     });
   });
 
+  // The idle policy suspends a machine while a run waits off it (a usage limit,
+  // a sub-agent); the run wakes it itself on resume. So the line says what
+  // happened and that nothing needs doing — no Start it.
+  it("says a machine that slept through a usage-limit hold wakes by itself", () => {
+    const asleep = machine(DaemonStatus.SUSPENDED);
+    expect(chatMachineNotice({ daemon: asleep, messageUnanswered: false, runHeld: "usage_limit" })).toMatchObject({
+      kind: "asleep",
+      title: "Your machine went to sleep while waiting for the usage limit to reset",
+      detail: "It will wake automatically when work resumes.",
+      offerStart: false,
+      offerRetry: false,
+    });
+    expect(chatMachineNotice({ daemon: asleep, messageUnanswered: false, runHeld: "run" })).toMatchObject({
+      title: "Your machine went to sleep while the run was waiting",
+      detail: "It will wake automatically when work resumes.",
+      offerStart: false,
+    });
+    // A run that has not read the user's message yet is not known to be
+    // getting anywhere: that one still offers to start the machine.
+    expect(chatMachineNotice({ daemon: asleep, messageUnanswered: true, runHeld: "run" })).toMatchObject({
+      title: "Your machine is asleep",
+      offerStart: true,
+    });
+  });
+
+  it("says the machine is waking once the resuming run wakes it", () => {
+    // The run's resume wake marks it waiting for its machine before the
+    // registry has caught up …
+    expect(
+      chatMachineNotice({
+        daemon: machine(DaemonStatus.SUSPENDED),
+        messageUnanswered: false,
+        runWaitingForMachine: true,
+        runHeld: "usage_limit",
+      }),
+    ).toMatchObject({ title: "Your machine is asleep — starting it", offerStart: false });
+    // … and once the control plane has it coming up, the line says so.
+    expect(
+      chatMachineNotice({ daemon: machine(DaemonStatus.PENDING), messageUnanswered: false, runHeld: "run" }),
+    ).toMatchObject({ kind: "waking", title: "Waking your machine — the run continues when it connects" });
+  });
+
   it("says nothing about a machine that is up, or unknown", () => {
     expect(chatMachineNotice({ daemon: machine(DaemonStatus.ACTIVE), messageUnanswered: true })).toBeNull();
     expect(chatMachineNotice({ daemon: machine(DaemonStatus.IDLE), messageUnanswered: true })).toBeNull();
