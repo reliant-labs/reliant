@@ -46,8 +46,10 @@ describe("fileSystem preview transport", () => {
     mocks.useProjectStore.getState.mockReturnValue({
       currentProject: { id: "project-1" },
     });
+    const worktrees = [{ id: "wt-1", path: "/workspace", name: "main" }];
     mocks.useWorktreeStore.getState.mockReturnValue({
-      worktrees: [{ id: "wt-1", path: "/workspace", name: "main" }],
+      worktrees,
+      resolveWorktree: async (id: string) => worktrees.find((w) => w.id === id) ?? null,
     });
     mocks.useChatStore.getState.mockReturnValue({ activeChatId: "chat-1" });
     mocks.filesystemGrpc.getFilePreview.mockResolvedValue({

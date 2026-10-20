@@ -119,7 +119,9 @@ async function normalizeFilePathForAPI(path: string, worktreeId?: string): Promi
   }
 
   const { useWorktreeStore } = await import('../store/worktreeStore');
-  const worktree = useWorktreeStore.getState().worktrees.find(wt => wt.id === worktreeId);
+  // By id: the store holds only the workspaces something asked for, and an
+  // unknown one would leave an absolute path unstripped.
+  const worktree = await useWorktreeStore.getState().resolveWorktree(worktreeId);
   const worktreeBasePath = worktree?.path;
 
   if (worktreeBasePath && path.startsWith(worktreeBasePath)) {

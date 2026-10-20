@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { FolderGit2, Monitor } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
@@ -30,13 +30,10 @@ export function WorkspacesSection() {
   const closeSettings = useSettingsClose();
   const currentProject = useProjectStore((state) => state.currentProject);
   const worktrees = useWorktreeStore((state) => state.worktrees);
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
-
-  useEffect(() => {
-    if (currentProject?.id) {
-      loadWorktrees(currentProject.id, { includeArchived: true });
-    }
-  }, [currentProject?.id, loadWorktrees]);
+  const hasMoreActive = useWorktreeStore((state) => state.nextPageToken !== "");
+  const archivedLoaded = useWorktreeStore((state) => state.hasLoadedArchived);
+  const archivedCount = useWorktreeStore((state) => state.archivedWorktrees.length);
+  const hasMoreArchived = useWorktreeStore((state) => state.archivedNextPageToken !== "");
 
   // A selection belongs to a project, and to a workspace that still exists.
   // Archiving the open workspace from its own detail view lands back on the
@@ -46,19 +43,16 @@ export function WorkspacesSection() {
     [worktrees, selectedId],
   );
 
-  const { activeCount, archivedCount } = useMemo(() => {
-    let active = 0;
-    let archived = 0;
-    for (const worktree of worktrees) {
-      if (worktree.deleted_at) archived += 1;
-      else active += 1;
-    }
-    return { activeCount: active, archivedCount: archived };
-  }, [worktrees]);
-
+  // Counts reflect what is loaded. Archived workspaces are a separate query the
+  // Archived tab loads when opened, so until then there is no count to show.
+  const activeCount = worktrees.length;
   const tabs: Array<{ id: WorkspacesTab; label: string; count?: number }> = [
-    { id: "active", label: "Active", count: activeCount },
-    { id: "archived", label: "Archived", count: archivedCount },
+    { id: "active", label: hasMoreActive ? "Active (more)" : "Active", count: activeCount },
+    {
+      id: "archived",
+      label: hasMoreArchived ? "Archived (more)" : "Archived",
+      count: archivedLoaded ? archivedCount : undefined,
+    },
     { id: "settings", label: "Cleanup settings" },
   ];
 
@@ -143,7 +137,6 @@ export function WorkspacesSection() {
                 <WorktreesPanel
                   paddingClass=""
                   daemonId={activeDaemon?.daemonId}
-                  includeArchivedOnLoad
                   onSelect={(worktree) => setSelectedId(worktree.id)}
                   selectedId={null}
                   onOpened={closeSettings}

@@ -24,6 +24,7 @@ import { createFile, createFolder, deleteFileOrFolder, copyFile, moveFile, copyD
 import { useProjectStore } from "../../store/projectStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
+import { useWorktreeById } from "../../hooks/useWorktreeById";
 import { useFileClipboardStore } from "../../store/fileClipboardStore";
 import { queryClient } from "../../lib/query-client";
 import { settingsKeys, type UserPreferences } from "../../hooks/settings-queries";
@@ -141,11 +142,11 @@ export const FileTreeItem = memo(function FileTreeItem({
   const currentProject = useProjectStore((state) => state.currentProject);
   const viewerStore = useViewerStore();
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
+  const listedWorktree = useWorktreeById(worktreeId);
   const { setClipboard, operation, filePath, fileName, isDirectory: clipboardIsDirectory, worktreeId: clipboardWorktreeId, projectId: clipboardProjectId, clearClipboard } = useFileClipboardStore();
   // Get the worktree for building full paths
   const effectiveWorktree = worktreeId 
-    ? worktrees.find(w => w.id === worktreeId) || currentWorktree
+    ? listedWorktree || currentWorktree
     : currentWorktree;
   const isDirectory = node.type === "directory";
   const isSelected = selectedFile?.path === node.path;

@@ -28,6 +28,7 @@ import { capabilities } from "@/services/controlPlane/capabilities";
 import { ChatInput, type ComposerPrefill } from "./ChatInput";
 import { ReliantIcon } from "../icons/ReliantIcon";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
+import { LoadMoreWorktreesRow } from "../Worktrees/LoadMoreWorktreesRow";
 import { DiscoverWorktreesModal } from "../Worktrees/DiscoverWorktreesModal";
 import {
   FolderGit2,
@@ -467,6 +468,7 @@ export function NewChatView({
                             No additional workspaces
                           </div>
                         )}
+                        <LoadMoreWorktreesRow projectId={currentProject?.id} />
                       </div>
 
                       <div className="sticky bottom-0 bg-[var(--chat-dropdown-bg)] border-t border-border/50">

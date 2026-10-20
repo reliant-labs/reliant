@@ -30,7 +30,7 @@
  * at without starting or opening a chat in it.
  */
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
@@ -46,7 +46,7 @@ import {
 import { GroupedVirtuoso } from "react-virtuoso";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  useChatList,
+  useChatListWithWorkspaces,
   chatKeys,
   getChatFromCache,
   seedChatDetail,
@@ -86,11 +86,12 @@ import { ChatState } from "../../gen/reliant/v1/chat_pb";
 // The DOMAIN Chat (types/chat), not the raw protobuf one: it is
 // `Omit<ProtoChat, '$typeName'>` plus the client-side fields the API layer
 // flattens on (worktreeName / worktreeDeletedAt), and it is what
-// api.chatsV2.list — and therefore useChatList — actually returns. Importing
+// api.chatsV2.list — and therefore useChatListWithWorkspaces — actually returns. Importing
 // the pb type here made every list value fail to assign for want of a
 // `$typeName` this component never reads.
 import type { Chat } from "../../types/chat";
-import type { Worktree } from "../../store/worktreeStore";
+import type { WorktreeSummary } from "../../gen/reliant/v1/worktree_pb";
+import { workspaceOfChat } from "../../lib/chatWorkspace";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { useSortOrder, type ChatSortOption } from "../../store/chatListPreferencesStore";
 
@@ -99,7 +100,7 @@ interface ChatGroup {
   worktreeName: string;
   worktreeBranch: string;
   isMain: boolean;
-  /** False for the fallback group of chats whose worktree is gone. */
+  /** False for the fallback group of chats whose worktree row is gone. */
   hasWorktree: boolean;
   chats: Chat[];
   hasActivity: boolean;
@@ -109,17 +110,18 @@ interface ChatGroup {
 const chatNeedsAttention = (chat: Chat) =>
   needsUserAttention({ activity: chat.activity, needsRecovery: chat.needsRecovery });
 
-function buildGroups(
+// Grouped from the chat list alone: each chat carries its workspace and the
+// list carries the project's main one, so no worktree list is involved.
+export function buildGroups(
   chats: Chat[],
-  worktrees: Worktree[],
+  mainWorktree: WorktreeSummary | undefined,
   sortOrder: ChatSortOption,
 ): ChatGroup[] {
-  const worktreesById = new Map(worktrees.map((w) => [w.id, w]));
   const groupsById = new Map<string, ChatGroup>();
 
   for (const chat of chats) {
     if (chat.state === ChatState.ARCHIVED) continue;
-    const worktree = chat.worktreeId ? worktreesById.get(chat.worktreeId) : undefined;
+    const worktree = workspaceOfChat(chat, mainWorktree);
     // A chat whose worktree was deleted out from under it (rather than
     // archived through the normal flow) still needs somewhere to render —
     // group it under its own id so it doesn't silently vanish from the list.
@@ -132,7 +134,7 @@ function buildGroups(
         worktreeId,
         worktreeName: worktree?.name ?? "Unknown workspace",
         worktreeBranch: worktree?.branch ?? "",
-        isMain: worktree?.is_main ?? false,
+        isMain: worktree?.isMain ?? false,
         hasWorktree: !!worktree,
         chats: [chat],
         hasActivity: false,
@@ -143,8 +145,7 @@ function buildGroups(
 
   // Main worktree is always shown, even with zero chats, so there's always a
   // way to start a chat in the project's default workspace.
-  const mainWorktree = worktrees.find((w) => w.is_main && !w.deleted_at);
-  if (mainWorktree && !groupsById.has(mainWorktree.id)) {
+  if (mainWorktree && !mainWorktree.deletedAt && !groupsById.has(mainWorktree.id)) {
     groupsById.set(mainWorktree.id, {
       worktreeId: mainWorktree.id,
       worktreeName: mainWorktree.name,
@@ -368,11 +369,9 @@ export function MobileChatList() {
   const navigate = useNavigate();
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
-  const { data: chats, isLoading } = useChatList(currentProjectId);
-  const worktrees = useWorktreeStore((s) => s.worktrees);
+  const { data: chatList, isLoading } = useChatListWithWorkspaces(currentProjectId);
   const sortOrder = useSortOrder();
   const archiveWorktree = useWorktreeStore((s) => s.archiveWorktree);
-  const ensureWorktrees = useWorktreeStore((s) => s.ensureWorktrees);
   const queryClient = useQueryClient();
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -382,17 +381,11 @@ export function MobileChatList() {
   const [browsing, setBrowsing] = useState<ChatGroup | null>(null);
   const canCreateWorkspace = useCapability("worktreeCreate");
 
+  const chats = chatList?.chats;
   const groups = useMemo(
-    () => buildGroups(chats ?? [], worktrees, sortOrder),
-    [chats, worktrees, sortOrder],
+    () => buildGroups(chats ?? [], chatList?.mainWorktree, sortOrder),
+    [chats, chatList?.mainWorktree, sortOrder],
   );
-
-  // The store holds a snapshot of the worktree list; fetch by id any workspace
-  // a chat points at that it lacks, so its group gets a real name.
-  useEffect(() => {
-    const missing = groups.filter((g) => !g.hasWorktree && g.worktreeId !== "unknown").map((g) => g.worktreeId);
-    if (missing.length > 0) void ensureWorktrees(missing);
-  }, [groups, ensureWorktrees]);
 
   const toggleGroup = useCallback((worktreeId: string) => {
     setCollapsed((prev) => ({ ...prev, [worktreeId]: !prev[worktreeId] }));

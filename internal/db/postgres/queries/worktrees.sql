@@ -18,14 +18,27 @@ SELECT * FROM worktrees WHERE id = $1;
 SELECT * FROM worktrees WHERE path = $1;
 
 -- name: ListWorktrees :many
+-- Live workspaces by default. include_archived adds archived ones after them
+-- (server-internal callers that must see every row); archived_only lists only
+-- the archived ones, most recently archived first. main_only narrows to the
+-- project's main workspace.
 SELECT * FROM worktrees
 WHERE
     (sqlc.narg('project_id')::text IS NULL OR project_id = sqlc.narg('project_id')::text)
     AND (sqlc.narg('chat_id')::text IS NULL OR chat_id = sqlc.narg('chat_id')::text)
     AND (sqlc.narg('status')::integer IS NULL OR status = sqlc.narg('status')::integer)
-    AND (sqlc.arg('include_archived')::boolean OR deleted_at IS NULL)
-ORDER BY (deleted_at IS NOT NULL), is_main DESC, last_active DESC, id
+    AND (NOT sqlc.arg('main_only')::boolean OR is_main)
+    AND (
+        CASE WHEN sqlc.arg('archived_only')::boolean THEN deleted_at IS NOT NULL
+             ELSE (sqlc.arg('include_archived')::boolean OR deleted_at IS NULL) END
+    )
+ORDER BY (deleted_at IS NOT NULL), is_main DESC, COALESCE(deleted_at, last_active) DESC, id
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: ListWorktreesByIDs :many
+-- One round trip for the workspaces a page of chats points at, archived ones
+-- included: a chat's workspace being archived must not hide the chat.
+SELECT * FROM worktrees WHERE id = ANY(sqlc.arg('ids')::text[]);
 
 -- name: UpdateWorktree :exec
 -- `path` is settable because asynchronous creation only learns the on-disk

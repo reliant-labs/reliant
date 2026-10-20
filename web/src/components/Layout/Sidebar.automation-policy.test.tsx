@@ -65,7 +65,21 @@ const fixtures = vi.hoisted(() => ({
 }));
 
 vi.mock("../../hooks/chat-queries", () => ({
-  useChatList: () => ({ data: fixtures.listed, isLoading: false }),
+  useChatListWithWorkspaces: () => ({
+    data: {
+      chats: fixtures.listed,
+      lastUserUpdateSequence: 0,
+      mainWorktree: {
+        id: "worktree-main",
+        name: "main",
+        branch: "main",
+        path: "/tmp/project",
+        isMain: true,
+        status: 1,
+      },
+    },
+    isLoading: false,
+  }),
   useChat: (chatId?: string) => ({ data: fixtures.detail?.id === chatId ? fixtures.detail : undefined }),
   useArchivedChats: () => ({ data: [], isFetched: true }),
   useDeleteChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
@@ -160,22 +174,9 @@ beforeEach(() => {
     ReturnType<typeof useChatStore.getState>
   >);
   useActivityStore.setState({ activities: new Map() } as Partial<ReturnType<typeof useActivityStore.getState>>);
+  // Empty on purpose: the sidebar groups from the chat list alone.
   useWorktreeStore.setState({
-    worktrees: [
-      {
-        id: WORKTREE_ID,
-        name: "main",
-        path: "/tmp/project",
-        branch: "main",
-        base_branch: "main",
-        project_id: PROJECT_ID,
-        status: WorktreeStatus.ACTIVE,
-        is_main: true,
-        created_at: "2024-01-01T00:00:00.000Z",
-        updated_at: "2024-01-01T00:00:00.000Z",
-        last_active: "2024-01-01T00:00:00.000Z",
-      },
-    ],
+    worktrees: [],
     currentWorktree: null,
     switchWorktreeContext: vi.fn(async () => undefined),
   } as Partial<ReturnType<typeof useWorktreeStore.getState>>);

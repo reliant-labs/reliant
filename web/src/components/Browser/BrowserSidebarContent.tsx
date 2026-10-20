@@ -39,7 +39,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
   const closeViewer = useViewerStore((state) => state.closeViewer);
   const currentProject = useProjectStore((state) => state.currentProject);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
+  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
 
   // Filter tabs by worktree
   const worktreeTabs = worktreeId 
@@ -57,7 +57,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
     if (!currentProject?.id || !worktreeId) return;
     
     // Switch context to this worktree so the viewer is visible
-    const targetWorktree = worktrees.find(w => w.id === worktreeId);
+    const targetWorktree = await resolveWorktree(worktreeId);
     if (targetWorktree) {
       await switchWorktreeContext(currentProject.id, targetWorktree);
     }
@@ -85,7 +85,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
     if (!currentProject?.id || !worktreeId) return;
     
     // Switch context to this worktree so the viewer is visible
-    const targetWorktree = worktrees.find(w => w.id === worktreeId);
+    const targetWorktree = await resolveWorktree(worktreeId);
     if (targetWorktree) {
       await switchWorktreeContext(currentProject.id, targetWorktree);
     }
@@ -122,7 +122,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
     if (!currentProject?.id || !worktreeId) return;
     
     // Switch context to this worktree so the viewer is visible
-    const targetWorktree = worktrees.find(w => w.id === worktreeId);
+    const targetWorktree = await resolveWorktree(worktreeId);
     if (targetWorktree) {
       await switchWorktreeContext(currentProject.id, targetWorktree);
     }

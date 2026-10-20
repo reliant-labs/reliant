@@ -23,7 +23,7 @@ export function useWindowContext() {
   const [windowContext, setWindowContext] = useState<WindowContext | null>(null);
   const [isElectron, setIsElectron] = useState(false);
   const selectWorktree = useWorktreeStore((state) => state.selectWorktree);
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
+  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
   const selectProject = useProjectStore((state) => state.selectProject);
   const projects = useProjectStore((state) => state.projects);
   const loadProjects = useProjectStore((state) => state.loadProjects);
@@ -60,15 +60,11 @@ export function useWindowContext() {
             await selectProject(project, { skipClear: true });
             if (cancelled) return;
 
-            // Load worktrees for this project
-            await loadWorktrees(project.id);
-            if (cancelled) return;
-
-            // Now select the worktree
+            // Select the window's worktree, fetched by id: the project's full
+            // worktree list is not needed for that.
             if (context.worktreeId) {
-              // Get fresh worktrees from store
-              const currentWorktrees = useWorktreeStore.getState().worktrees;
-              const worktree = currentWorktrees.find(w => w.id === context.worktreeId);
+              const worktree = await resolveWorktree(context.worktreeId);
+              if (cancelled) return;
               if (worktree) {
                 selectWorktree(worktree);
               }
@@ -97,13 +93,10 @@ export function useWindowContext() {
             // Use skipClear since electron context provides specific worktree to use
             await selectProject(project, { skipClear: true });
 
-            // Load worktrees for this project
-            await loadWorktrees(project.id);
-
-            // Now select the worktree
+            // Select the window's worktree, fetched by id: the project's full
+            // worktree list is not needed for that.
             if (data.worktreeId) {
-              const currentWorktrees = useWorktreeStore.getState().worktrees;
-              const worktree = currentWorktrees.find(w => w.id === data.worktreeId);
+              const worktree = await resolveWorktree(data.worktreeId);
               if (worktree) {
                 selectWorktree(worktree);
               }
@@ -132,13 +125,10 @@ export function useWindowContext() {
             // Use skipClear since electron context provides specific worktree to use
             await selectProject(project, { skipClear: true });
 
-            // Load worktrees for this project
-            await loadWorktrees(project.id);
-
-            // Now select the worktree
+            // Select the window's worktree, fetched by id: the project's full
+            // worktree list is not needed for that.
             if (data.worktreeId) {
-              const currentWorktrees = useWorktreeStore.getState().worktrees;
-              const worktree = currentWorktrees.find(w => w.id === data.worktreeId);
+              const worktree = await resolveWorktree(data.worktreeId);
               if (worktree) {
                 selectWorktree(worktree);
               }
@@ -153,7 +143,7 @@ export function useWindowContext() {
         unsubSetContext();
       };
     }
-  }, [selectWorktree, selectProject, loadWorktrees, loadProjects]); // Note: intentionally not including worktrees/projects to avoid infinite loops
+  }, [selectWorktree, selectProject, resolveWorktree, loadProjects]); // Note: intentionally not including worktrees/projects to avoid infinite loops
 
   const openInNewWindow = useCallback(async (worktreeData: Partial<Worktree>) => {
     if (!window.electronAPI) {

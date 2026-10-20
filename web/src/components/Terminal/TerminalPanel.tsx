@@ -10,7 +10,7 @@ import { Terminal } from "./Terminal";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useSidebarStore } from "../../store/sidebarStore";
-import { useWorktreeStore, useActiveWorktreeId } from "../../store/worktreeStore";
+import { useWorktreeStore, useActiveWorktreeId, isWorktreeKnownGone } from "../../store/worktreeStore";
 import { resolveTerminalWorkingDir } from "../../lib/terminalWorkingDir";
 import { Tooltip } from "../ui/Tooltip";
 import { logger } from "../../lib/logger";
@@ -72,38 +72,72 @@ export function TerminalPanel(_props: TerminalPanelProps) {
   // Drop terminals whose workspace is gone. Every project session below
   // mounts a terminal with its own socket, hidden or not, so a stale one is
   // not just clutter — it reconnects forever to a directory that will never
-  // come back. Only once the list for THIS project has loaded: the main
-  // worktree is always in it, so its absence means the list is someone
-  // else's or not here yet, and pruning against it would drop live sessions.
-  const worktreesLoaded = useWorktreeStore((state) => state.hasLoaded);
+  // come back.
+  //
+  // The store holds only the workspaces something asked for, so absence from it
+  // says nothing: each session's workspace is checked by id instead (one
+  // lookup per distinct workspace the user has a terminal in, not per
+  // workspace of the project). Only an archived row or the server's explicit
+  // "not found" ends a session; a failed lookup keeps it, because discarding a
+  // live terminal over a flaky network is the worse mistake.
+  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
   const pruneSessions = useTerminalStore((state) => state.pruneSessions);
+  const sessionWorktreeKey = useMemo(() => {
+    const projectId = currentProject?.id;
+    return [
+      ...new Set(
+        allSessions
+          .filter((s) => s.projectId === projectId && s.worktreeId)
+          .map((s) => s.worktreeId as string),
+      ),
+    ]
+      .sort()
+      .join(",");
+  }, [allSessions, currentProject?.id]);
   useEffect(() => {
     const projectId = currentProject?.id;
-    if (!projectId || !worktreesLoaded) return;
-    const projectWorktrees = worktrees.filter((w) => w.project_id === projectId);
-    if (!projectWorktrees.some((w) => w.is_main)) return;
-    pruneSessions(
-      projectId,
-      new Set(projectWorktrees.filter((w) => !w.deleted_at).map((w) => w.id)),
-    );
-  }, [currentProject?.id, worktreesLoaded, worktrees, pruneSessions]);
+    if (!projectId || !sessionWorktreeKey) return;
+    let cancelled = false;
+    void (async () => {
+      const ids = sessionWorktreeKey.split(",");
+      const live = new Set<string>();
+      await Promise.all(
+        ids.map(async (id) => {
+          const worktree = await resolveWorktree(id);
+          const gone = worktree ? !!worktree.deleted_at : isWorktreeKnownGone(id);
+          if (!gone) live.add(id);
+        }),
+      );
+      if (cancelled) return;
+      // A terminal opened for another workspace while the lookups ran was not
+      // checked; it is not ours to end.
+      for (const session of useTerminalStore.getState().sessions) {
+        if (session.worktreeId && !ids.includes(session.worktreeId)) live.add(session.worktreeId);
+      }
+      pruneSessions(projectId, live);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentProject?.id, sessionWorktreeKey, resolveWorktree, pruneSessions]);
 
   // Get sessions scoped to current worktree (for UI display)
   const sessions = getWorktreeSessions(currentWorktreeId);
 
   // Keep terminals alive across workspace switches, but never mount a
-  // persisted terminal for a workspace that is no longer in the active list.
-  // A mounted terminal reconnects on a missing directory by design; retaining
-  // one after its workspace disappears turns that recovery loop into permanent
-  // daemon work.
+  // persisted terminal for a workspace known to be archived. A mounted
+  // terminal reconnects on a missing directory by design; retaining one after
+  // its workspace disappears turns that recovery loop into permanent daemon
+  // work. A workspace the store has not loaded is not known archived — the
+  // effect above resolves it and prunes it if it is.
   const projectSessions = useMemo(() => {
-    const activeWorktreeIDs = new Set(
-      worktrees.filter((worktree) => !worktree.deleted_at).map((worktree) => worktree.id)
+    const archivedIds = new Set(
+      worktrees.filter((worktree) => worktree.deleted_at).map((worktree) => worktree.id)
     );
     return allSessions.filter(
       (session) =>
         session.projectId === currentProject?.id &&
-        (!session.worktreeId || activeWorktreeIDs.has(session.worktreeId))
+        (!session.worktreeId || !archivedIds.has(session.worktreeId))
     );
   }, [allSessions, currentProject?.id, worktrees]);
 

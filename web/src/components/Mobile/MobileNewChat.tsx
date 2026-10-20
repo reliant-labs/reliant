@@ -47,7 +47,8 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowUp, ChevronLeft, GitBranchPlus, Loader2 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
+import type { Worktree } from "../../store/worktreeStore";
+import { useWorktreeList } from "../../hooks/useWorktreeList";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { sortActiveWorkspaces } from "../Worktrees/workspaceStatus";
 import { useWorkflows } from "../../store/globalDataStore";
@@ -116,8 +117,7 @@ export function MobileNewChat() {
   const [error, setError] = useState("");
 
   const currentProject = useProjectStore((s) => s.currentProject);
-  const worktrees = useWorktreeStore((s) => s.worktrees);
-  const loadWorktrees = useWorktreeStore((s) => s.loadWorktrees);
+  const { worktrees, hasMore, isLoadingMore, loadMore } = useWorktreeList(currentProject?.id);
 
   const { workflows, loading: workflowsLoading } = useWorkflows();
   const preferences = usePreferencesStore((s) => s.preferences);
@@ -134,14 +134,6 @@ export function MobileNewChat() {
   useEffect(() => {
     if (!preferences && !preferencesLoading) void loadPreferences();
   }, [preferences, preferencesLoading, loadPreferences]);
-
-  // MobileShell guarantees a project but not its worktrees; without this the
-  // main worktree is missing and every send would fail on a phone that landed
-  // here directly instead of via the chat list.
-  useEffect(() => {
-    if (!currentProject) return;
-    if (worktrees.length === 0) void loadWorktrees(currentProject.id);
-  }, [currentProject, worktrees.length, loadWorktrees]);
 
   // The user's pick on this screen wins over the one the URL arrived with.
   const [pickedWorktreeId, setPickedWorktreeId] = useState<string | null>(null);
@@ -302,6 +294,7 @@ export function MobileNewChat() {
                   sheetTitle="Which workspace"
                   options={workspaceRowOptions}
                   onChange={setPickedWorktreeId}
+                  paging={{ hasMore, isLoadingMore, onLoadMore: () => void loadMore() }}
                   action={
                     canCreateWorkspace
                       ? {

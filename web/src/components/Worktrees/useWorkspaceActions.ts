@@ -71,7 +71,7 @@ export function useOpenWorkspace(onAfterOpen?: () => void) {
       const projectId = useProjectStore.getState().currentProject?.id;
       if (!projectId) return;
       const worktree = chat.worktreeId
-        ? useWorktreeStore.getState().worktrees.find((w) => w.id === chat.worktreeId) ?? null
+        ? await useWorktreeStore.getState().resolveWorktree(chat.worktreeId)
         : null;
       await switchWorktreeContext(projectId, worktree);
       useChatStore.getState().selectChat(chat);

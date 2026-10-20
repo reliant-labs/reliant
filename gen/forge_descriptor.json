@@ -3558,6 +3558,2199 @@
       }
     },
     {
+      "Name": "WorktreeService",
+      "Package": "reliant.v1",
+      "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+      "PkgName": "reliantv1",
+      "Methods": [
+        {
+          "Name": "CreateWorktree",
+          "InputType": "CreateWorktreeRequest",
+          "OutputType": "CreateWorktreeResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "InputTypeFQ": "reliant.v1.CreateWorktreeRequest",
+          "OutputTypeFQ": "reliant.v1.CreateWorktreeResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "ListWorktrees",
+          "InputType": "ListWorktreesRequest",
+          "OutputType": "ListWorktreesResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "InputTypeFQ": "reliant.v1.ListWorktreesRequest",
+          "OutputTypeFQ": "reliant.v1.ListWorktreesResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "ListArchivedWorktrees",
+          "InputType": "ListArchivedWorktreesRequest",
+          "OutputType": "ListArchivedWorktreesResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "InputTypeFQ": "reliant.v1.ListArchivedWorktreesRequest",
+          "OutputTypeFQ": "reliant.v1.ListArchivedWorktreesResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "GetWorktree",
+          "InputType": "GetWorktreeRequest",
+          "OutputType": "GetWorktreeResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "InputTypeFQ": "reliant.v1.GetWorktreeRequest",
+          "OutputTypeFQ": "reliant.v1.GetWorktreeResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "UpdateWorktree",
+          "InputType": "UpdateWorktreeRequest",
+          "OutputType": "UpdateWorktreeResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "InputTypeFQ": "reliant.v1.UpdateWorktreeRequest",
+          "OutputTypeFQ": "reliant.v1.UpdateWorktreeResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "DeleteWorktree",
+          "InputType": "DeleteWorktreeRequest",
+          "OutputType": "DeleteWorktreeResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "InputTypeFQ": "reliant.v1.DeleteWorktreeRequest",
+          "OutputTypeFQ": "reliant.v1.DeleteWorktreeResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "ArchiveWorktree",
+          "InputType": "ArchiveWorktreeRequest",
+          "OutputType": "ArchiveWorktreeResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.ArchiveWorktreeRequest",
+          "OutputTypeFQ": "reliant.v1.ArchiveWorktreeResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "UnarchiveWorktree",
+          "InputType": "UnarchiveWorktreeRequest",
+          "OutputType": "UnarchiveWorktreeResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.UnarchiveWorktreeRequest",
+          "OutputTypeFQ": "reliant.v1.UnarchiveWorktreeResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "ImportWorktree",
+          "InputType": "ImportWorktreeRequest",
+          "OutputType": "ImportWorktreeResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.ImportWorktreeRequest",
+          "OutputTypeFQ": "reliant.v1.ImportWorktreeResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "DiscoverWorktrees",
+          "InputType": "DiscoverWorktreesRequest",
+          "OutputType": "DiscoverWorktreesResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.DiscoverWorktreesRequest",
+          "OutputTypeFQ": "reliant.v1.DiscoverWorktreesResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "PruneWorktrees",
+          "InputType": "PruneWorktreesRequest",
+          "OutputType": "PruneWorktreesResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.PruneWorktreesRequest",
+          "OutputTypeFQ": "reliant.v1.PruneWorktreesResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "RecreateWorktree",
+          "InputType": "RecreateWorktreeRequest",
+          "OutputType": "RecreateWorktreeResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.RecreateWorktreeRequest",
+          "OutputTypeFQ": "reliant.v1.RecreateWorktreeResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "GetWorktreeChanges",
+          "InputType": "GetWorktreeChangesRequest",
+          "OutputType": "GetWorktreeChangesResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.GetWorktreeChangesRequest",
+          "OutputTypeFQ": "reliant.v1.GetWorktreeChangesResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "GetWorktreeGitStatus",
+          "InputType": "GetWorktreeGitStatusRequest",
+          "OutputType": "GetWorktreeGitStatusResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.GetWorktreeGitStatusRequest",
+          "OutputTypeFQ": "reliant.v1.GetWorktreeGitStatusResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "GetWorktreeCommits",
+          "InputType": "GetWorktreeCommitsRequest",
+          "OutputType": "GetWorktreeCommitsResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.GetWorktreeCommitsRequest",
+          "OutputTypeFQ": "reliant.v1.GetWorktreeCommitsResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "ListWorktreeRepoStatuses",
+          "InputType": "ListWorktreeRepoStatusesRequest",
+          "OutputType": "ListWorktreeRepoStatusesResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.ListWorktreeRepoStatusesRequest",
+          "OutputTypeFQ": "reliant.v1.ListWorktreeRepoStatusesResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "StageFiles",
+          "InputType": "StageFilesRequest",
+          "OutputType": "StageFilesResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.StageFilesRequest",
+          "OutputTypeFQ": "reliant.v1.StageFilesResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "UnstageFiles",
+          "InputType": "UnstageFilesRequest",
+          "OutputType": "UnstageFilesResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.UnstageFilesRequest",
+          "OutputTypeFQ": "reliant.v1.UnstageFilesResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "RevertFiles",
+          "InputType": "RevertFilesRequest",
+          "OutputType": "RevertFilesResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.RevertFilesRequest",
+          "OutputTypeFQ": "reliant.v1.RevertFilesResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "CommitWorktree",
+          "InputType": "CommitWorktreeRequest",
+          "OutputType": "CommitWorktreeResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.CommitWorktreeRequest",
+          "OutputTypeFQ": "reliant.v1.CommitWorktreeResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "PushWorktree",
+          "InputType": "PushWorktreeRequest",
+          "OutputType": "PushWorktreeResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.PushWorktreeRequest",
+          "OutputTypeFQ": "reliant.v1.PushWorktreeResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "PullWorktree",
+          "InputType": "PullWorktreeRequest",
+          "OutputType": "PullWorktreeResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.PullWorktreeRequest",
+          "OutputTypeFQ": "reliant.v1.PullWorktreeResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "GetWorktreePR",
+          "InputType": "GetWorktreePRRequest",
+          "OutputType": "GetWorktreePRResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.GetWorktreePRRequest",
+          "OutputTypeFQ": "reliant.v1.GetWorktreePRResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        },
+        {
+          "Name": "CreateWorktreePR",
+          "InputType": "CreateWorktreePRRequest",
+          "OutputType": "CreateWorktreePRResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.CreateWorktreePRRequest",
+          "OutputTypeFQ": "reliant.v1.CreateWorktreePRResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto"
+        }
+      ],
+      "ProtoFile": "reliant/v1/worktree.proto",
+      "ModulePath": "",
+      "Messages": {
+        "ArchiveWorktreeRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "delete_git_branch",
+            "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "ArchiveWorktreeResponse": [
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "deleted_branch",
+            "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "CommitWorktreeRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "CommitWorktreeResponse": [
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "output",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "CreateWorktreePRRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "title",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "body",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "repo_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "CreateWorktreePRResponse": [
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "pr_url",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "output",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "auto_committed",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "auto_pushed",
+            "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "CreateWorktreeRequest": [
+          {
+            "Name": "name",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "branch",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "base_branch",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "copy_files",
+            "ProtoType": "[]string",
+            "IsOptional": false
+          },
+          {
+            "Name": "force",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "source_worktree_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "base_branches",
+            "ProtoType": "message",
+            "IsOptional": false
+          },
+          {
+            "Name": "idempotency_key",
+            "ProtoType": "string",
+            "IsOptional": true
+          }
+        ],
+        "CreateWorktreeResponse": [
+          {
+            "Name": "worktree",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.Worktree"
+          }
+        ],
+        "DeleteWorktreeRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "delete_git_branch",
+            "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "DeleteWorktreeResponse": [
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "deleted_branch",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "is_permanent_delete",
+            "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "DiscoverWorktreesRequest": [
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "background",
+            "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "DiscoverWorktreesResponse": [
+          {
+            "Name": "discovered",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.DiscoveredWorktree"
+          },
+          {
+            "Name": "stale",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.StaleWorktree"
+          },
+          {
+            "Name": "workspaces_root",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetWorktreeChangesRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetWorktreeChangesResponse": [
+          {
+            "Name": "branch",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "files",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.WorktreeFileChange"
+          },
+          {
+            "Name": "total_files",
+            "ProtoType": "int32",
+            "IsOptional": false
+          },
+          {
+            "Name": "ahead",
+            "ProtoType": "int32",
+            "IsOptional": false
+          },
+          {
+            "Name": "behind",
+            "ProtoType": "int32",
+            "IsOptional": false
+          },
+          {
+            "Name": "default_branch",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetWorktreeCommitsRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "limit",
+            "ProtoType": "int32",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetWorktreeCommitsResponse": [
+          {
+            "Name": "commits",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.GitCommit"
+          },
+          {
+            "Name": "total",
+            "ProtoType": "int32",
+            "IsOptional": false
+          },
+          {
+            "Name": "branch",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "base_branch",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "comparison_mode",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "comparison_ref",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "current_branch",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetWorktreeGitStatusRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetWorktreeGitStatusResponse": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "path",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "branch",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "clean",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "has_changes",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "staged_files",
+            "ProtoType": "[]string",
+            "IsOptional": false
+          },
+          {
+            "Name": "modified_files",
+            "ProtoType": "[]string",
+            "IsOptional": false
+          },
+          {
+            "Name": "untracked_files",
+            "ProtoType": "[]string",
+            "IsOptional": false
+          },
+          {
+            "Name": "ahead",
+            "ProtoType": "int32",
+            "IsOptional": false
+          },
+          {
+            "Name": "behind",
+            "ProtoType": "int32",
+            "IsOptional": false
+          }
+        ],
+        "GetWorktreePRRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetWorktreePRResponse": [
+          {
+            "Name": "exists",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "url",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "number",
+            "ProtoType": "int32",
+            "IsOptional": true
+          },
+          {
+            "Name": "title",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "state",
+            "ProtoType": "string",
+            "IsOptional": true
+          }
+        ],
+        "GetWorktreeRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetWorktreeResponse": [
+          {
+            "Name": "worktree",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.Worktree"
+          }
+        ],
+        "ImportWorktreeRequest": [
+          {
+            "Name": "path",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "name",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "repo_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "confirm_move",
+            "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "ImportWorktreeResponse": [
+          {
+            "Name": "worktree",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.Worktree"
+          }
+        ],
+        "ListArchivedWorktreesRequest": [
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "limit",
+            "ProtoType": "int32",
+            "IsOptional": false
+          },
+          {
+            "Name": "page_token",
+            "ProtoType": "string",
+            "IsOptional": true
+          }
+        ],
+        "ListArchivedWorktreesResponse": [
+          {
+            "Name": "worktrees",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.Worktree"
+          },
+          {
+            "Name": "total",
+            "ProtoType": "int32",
+            "IsOptional": false
+          },
+          {
+            "Name": "next_page_token",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "ListWorktreeRepoStatusesRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "ListWorktreeRepoStatusesResponse": [
+          {
+            "Name": "statuses",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.WorktreeRepoStatus"
+          }
+        ],
+        "ListWorktreesRequest": [
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "limit",
+            "ProtoType": "int32",
+            "IsOptional": false
+          },
+          {
+            "Name": "page_token",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "main_only",
+            "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "ListWorktreesResponse": [
+          {
+            "Name": "worktrees",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.Worktree"
+          },
+          {
+            "Name": "total",
+            "ProtoType": "int32",
+            "IsOptional": false
+          },
+          {
+            "Name": "next_page_token",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "PruneWorktreesRequest": [
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "PruneWorktreesResponse": [
+          {
+            "Name": "pruned",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.StaleWorktree"
+          }
+        ],
+        "PullWorktreeRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "PullWorktreeResponse": [
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "output",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "PushWorktreeRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "PushWorktreeResponse": [
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "output",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "RecreateWorktreeRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "RecreateWorktreeResponse": [
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "path",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "branch",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "snapshot_warning",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "snapshot_refs",
+            "ProtoType": "[]string",
+            "IsOptional": false
+          }
+        ],
+        "RevertFilesRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "files",
+            "ProtoType": "[]string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "RevertFilesResponse": [
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "files",
+            "ProtoType": "[]string",
+            "IsOptional": false
+          }
+        ],
+        "StageFilesRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "files",
+            "ProtoType": "[]string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "StageFilesResponse": [
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "files",
+            "ProtoType": "[]string",
+            "IsOptional": false
+          }
+        ],
+        "UnarchiveWorktreeRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "UnarchiveWorktreeResponse": [
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "UnstageFilesRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "files",
+            "ProtoType": "[]string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "UnstageFilesResponse": [
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "files",
+            "ProtoType": "[]string",
+            "IsOptional": false
+          }
+        ],
+        "UpdateWorktreeRequest": [
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "name",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "status",
+            "ProtoType": "enum",
+            "IsOptional": true
+          },
+          {
+            "Name": "base_branch",
+            "ProtoType": "string",
+            "IsOptional": true
+          }
+        ],
+        "UpdateWorktreeResponse": [
+          {
+            "Name": "worktree",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.Worktree"
+          }
+        ]
+      },
+      "Audience": "user",
+      "Schemas": {
+        "reliant.v1.ArchiveWorktreeRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "delete_git_branch",
+            "kind": "bool"
+          }
+        ],
+        "reliant.v1.ArchiveWorktreeResponse": [
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "deleted_branch",
+            "kind": "bool"
+          }
+        ],
+        "reliant.v1.CleanupMetadata": [
+          {
+            "name": "directory_deleted",
+            "kind": "bool"
+          },
+          {
+            "name": "branch_deleted",
+            "kind": "bool"
+          },
+          {
+            "name": "held_reason",
+            "kind": "string"
+          },
+          {
+            "name": "held_detail",
+            "kind": "string"
+          },
+          {
+            "name": "size_bytes",
+            "kind": "int64"
+          },
+          {
+            "name": "snapshot_refs",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "stripped_paths",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "stripped_bytes",
+            "kind": "int64"
+          }
+        ],
+        "reliant.v1.CommitWorktreeRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.CommitWorktreeResponse": [
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "output",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.CreateWorktreePRRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "title",
+            "kind": "string"
+          },
+          {
+            "name": "body",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.CreateWorktreePRResponse": [
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "pr_url",
+            "kind": "string"
+          },
+          {
+            "name": "output",
+            "kind": "string"
+          },
+          {
+            "name": "auto_committed",
+            "kind": "bool"
+          },
+          {
+            "name": "auto_pushed",
+            "kind": "bool"
+          }
+        ],
+        "reliant.v1.CreateWorktreeRequest": [
+          {
+            "name": "name",
+            "kind": "string"
+          },
+          {
+            "name": "branch",
+            "kind": "string"
+          },
+          {
+            "name": "project_id",
+            "kind": "string"
+          },
+          {
+            "name": "base_branch",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "chat_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "copy_files",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "force",
+            "kind": "bool"
+          },
+          {
+            "name": "source_worktree_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "base_branches",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          },
+          {
+            "name": "idempotency_key",
+            "kind": "string",
+            "optional": true
+          }
+        ],
+        "reliant.v1.CreateWorktreeResponse": [
+          {
+            "name": "worktree",
+            "kind": "message",
+            "type_name": "reliant.v1.Worktree"
+          }
+        ],
+        "reliant.v1.DeleteWorktreeRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "delete_git_branch",
+            "kind": "bool"
+          }
+        ],
+        "reliant.v1.DeleteWorktreeResponse": [
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "deleted_branch",
+            "kind": "bool"
+          },
+          {
+            "name": "is_permanent_delete",
+            "kind": "bool"
+          }
+        ],
+        "reliant.v1.DiscoverWorktreesRequest": [
+          {
+            "name": "project_id",
+            "kind": "string"
+          },
+          {
+            "name": "background",
+            "kind": "bool"
+          }
+        ],
+        "reliant.v1.DiscoverWorktreesResponse": [
+          {
+            "name": "discovered",
+            "kind": "message",
+            "type_name": "reliant.v1.DiscoveredWorktree",
+            "repeated": true
+          },
+          {
+            "name": "stale",
+            "kind": "message",
+            "type_name": "reliant.v1.StaleWorktree",
+            "repeated": true
+          },
+          {
+            "name": "workspaces_root",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.DiscoveredWorktree": [
+          {
+            "name": "path",
+            "kind": "string"
+          },
+          {
+            "name": "name",
+            "kind": "string"
+          },
+          {
+            "name": "branch",
+            "kind": "string"
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          },
+          {
+            "name": "repo_name",
+            "kind": "string"
+          },
+          {
+            "name": "head",
+            "kind": "string"
+          },
+          {
+            "name": "locked",
+            "kind": "bool"
+          },
+          {
+            "name": "moves_on_import",
+            "kind": "bool"
+          }
+        ],
+        "reliant.v1.GetWorktreeChangesRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.GetWorktreeChangesResponse": [
+          {
+            "name": "branch",
+            "kind": "string"
+          },
+          {
+            "name": "files",
+            "kind": "message",
+            "type_name": "reliant.v1.WorktreeFileChange",
+            "repeated": true
+          },
+          {
+            "name": "total_files",
+            "kind": "int32"
+          },
+          {
+            "name": "ahead",
+            "kind": "int32"
+          },
+          {
+            "name": "behind",
+            "kind": "int32"
+          },
+          {
+            "name": "default_branch",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.GetWorktreeCommitsRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "limit",
+            "kind": "int32"
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.GetWorktreeCommitsResponse": [
+          {
+            "name": "commits",
+            "kind": "message",
+            "type_name": "reliant.v1.GitCommit",
+            "repeated": true
+          },
+          {
+            "name": "total",
+            "kind": "int32"
+          },
+          {
+            "name": "branch",
+            "kind": "string"
+          },
+          {
+            "name": "base_branch",
+            "kind": "string"
+          },
+          {
+            "name": "comparison_mode",
+            "kind": "bool"
+          },
+          {
+            "name": "comparison_ref",
+            "kind": "string"
+          },
+          {
+            "name": "current_branch",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.GetWorktreeGitStatusRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.GetWorktreeGitStatusResponse": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "path",
+            "kind": "string"
+          },
+          {
+            "name": "branch",
+            "kind": "string"
+          },
+          {
+            "name": "clean",
+            "kind": "bool"
+          },
+          {
+            "name": "has_changes",
+            "kind": "bool"
+          },
+          {
+            "name": "staged_files",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "modified_files",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "untracked_files",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "ahead",
+            "kind": "int32"
+          },
+          {
+            "name": "behind",
+            "kind": "int32"
+          }
+        ],
+        "reliant.v1.GetWorktreePRRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.GetWorktreePRResponse": [
+          {
+            "name": "exists",
+            "kind": "bool"
+          },
+          {
+            "name": "url",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "number",
+            "kind": "int32",
+            "optional": true
+          },
+          {
+            "name": "title",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "state",
+            "kind": "string",
+            "optional": true
+          }
+        ],
+        "reliant.v1.GetWorktreeRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.GetWorktreeResponse": [
+          {
+            "name": "worktree",
+            "kind": "message",
+            "type_name": "reliant.v1.Worktree"
+          }
+        ],
+        "reliant.v1.GitCommit": [
+          {
+            "name": "hash",
+            "kind": "string"
+          },
+          {
+            "name": "short_hash",
+            "kind": "string"
+          },
+          {
+            "name": "author",
+            "kind": "string"
+          },
+          {
+            "name": "email",
+            "kind": "string"
+          },
+          {
+            "name": "date",
+            "kind": "string"
+          },
+          {
+            "name": "message",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.ImportWorktreeRequest": [
+          {
+            "name": "path",
+            "kind": "string"
+          },
+          {
+            "name": "project_id",
+            "kind": "string"
+          },
+          {
+            "name": "name",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "chat_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          },
+          {
+            "name": "confirm_move",
+            "kind": "bool"
+          }
+        ],
+        "reliant.v1.ImportWorktreeResponse": [
+          {
+            "name": "worktree",
+            "kind": "message",
+            "type_name": "reliant.v1.Worktree"
+          }
+        ],
+        "reliant.v1.ListArchivedWorktreesRequest": [
+          {
+            "name": "project_id",
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
+          },
+          {
+            "name": "limit",
+            "kind": "int32"
+          },
+          {
+            "name": "page_token",
+            "kind": "string",
+            "optional": true
+          }
+        ],
+        "reliant.v1.ListArchivedWorktreesResponse": [
+          {
+            "name": "worktrees",
+            "kind": "message",
+            "type_name": "reliant.v1.Worktree",
+            "repeated": true
+          },
+          {
+            "name": "total",
+            "kind": "int32"
+          },
+          {
+            "name": "next_page_token",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.ListWorktreeRepoStatusesRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
+          }
+        ],
+        "reliant.v1.ListWorktreeRepoStatusesResponse": [
+          {
+            "name": "statuses",
+            "kind": "message",
+            "type_name": "reliant.v1.WorktreeRepoStatus",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.ListWorktreesRequest": [
+          {
+            "name": "project_id",
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
+          },
+          {
+            "name": "chat_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "limit",
+            "kind": "int32"
+          },
+          {
+            "name": "page_token",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "main_only",
+            "kind": "bool"
+          }
+        ],
+        "reliant.v1.ListWorktreesResponse": [
+          {
+            "name": "worktrees",
+            "kind": "message",
+            "type_name": "reliant.v1.Worktree",
+            "repeated": true
+          },
+          {
+            "name": "total",
+            "kind": "int32"
+          },
+          {
+            "name": "next_page_token",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.PruneWorktreesRequest": [
+          {
+            "name": "project_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.PruneWorktreesResponse": [
+          {
+            "name": "pruned",
+            "kind": "message",
+            "type_name": "reliant.v1.StaleWorktree",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.PullWorktreeRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.PullWorktreeResponse": [
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "output",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.PushWorktreeRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.PushWorktreeResponse": [
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "output",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.RecreateWorktreeRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.RecreateWorktreeResponse": [
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "path",
+            "kind": "string"
+          },
+          {
+            "name": "branch",
+            "kind": "string"
+          },
+          {
+            "name": "snapshot_warning",
+            "kind": "string"
+          },
+          {
+            "name": "snapshot_refs",
+            "kind": "string",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.RevertFilesRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "files",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.RevertFilesResponse": [
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "files",
+            "kind": "string",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.StageFilesRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "files",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.StageFilesResponse": [
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "files",
+            "kind": "string",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.StaleWorktree": [
+          {
+            "name": "path",
+            "kind": "string"
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          },
+          {
+            "name": "repo_name",
+            "kind": "string"
+          },
+          {
+            "name": "reason",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.UnarchiveWorktreeRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.UnarchiveWorktreeResponse": [
+          {
+            "name": "message",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.UnstageFilesRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "files",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "repo_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.UnstageFilesResponse": [
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "files",
+            "kind": "string",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.UpdateWorktreeRequest": [
+          {
+            "name": "worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "name",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "type_name": "reliant.v1.WorktreeStatus",
+            "optional": true
+          },
+          {
+            "name": "base_branch",
+            "kind": "string",
+            "optional": true
+          }
+        ],
+        "reliant.v1.UpdateWorktreeResponse": [
+          {
+            "name": "worktree",
+            "kind": "message",
+            "type_name": "reliant.v1.Worktree"
+          }
+        ],
+        "reliant.v1.Worktree": [
+          {
+            "name": "id",
+            "kind": "string"
+          },
+          {
+            "name": "name",
+            "kind": "string"
+          },
+          {
+            "name": "path",
+            "kind": "string"
+          },
+          {
+            "name": "branch",
+            "kind": "string"
+          },
+          {
+            "name": "base_branch",
+            "kind": "string"
+          },
+          {
+            "name": "project_id",
+            "kind": "string"
+          },
+          {
+            "name": "chat_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "type_name": "reliant.v1.WorktreeStatus"
+          },
+          {
+            "name": "is_main",
+            "kind": "bool"
+          },
+          {
+            "name": "created_at",
+            "kind": "string"
+          },
+          {
+            "name": "updated_at",
+            "kind": "string"
+          },
+          {
+            "name": "last_active",
+            "kind": "string"
+          },
+          {
+            "name": "deleted_at",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "cleanup_metadata",
+            "kind": "message",
+            "type_name": "reliant.v1.CleanupMetadata",
+            "optional": true
+          },
+          {
+            "name": "failure_reason",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.WorktreeFileChange": [
+          {
+            "name": "path",
+            "kind": "string"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "type_name": "reliant.v1.FileChangeStatus"
+          },
+          {
+            "name": "is_new",
+            "kind": "bool"
+          },
+          {
+            "name": "diff",
+            "kind": "string"
+          },
+          {
+            "name": "is_binary",
+            "kind": "bool"
+          }
+        ],
+        "reliant.v1.WorktreeRepoStatus": [
+          {
+            "name": "repo_id",
+            "kind": "string"
+          },
+          {
+            "name": "repo_name",
+            "kind": "string"
+          },
+          {
+            "name": "repo_relative_path",
+            "kind": "string"
+          },
+          {
+            "name": "current_branch",
+            "kind": "string"
+          },
+          {
+            "name": "has_changes",
+            "kind": "bool"
+          },
+          {
+            "name": "ahead",
+            "kind": "int32"
+          },
+          {
+            "name": "behind",
+            "kind": "int32"
+          },
+          {
+            "name": "changed_files",
+            "kind": "int32"
+          },
+          {
+            "name": "error",
+            "kind": "string"
+          }
+        ]
+      },
+      "SchemaFiles": {
+        "reliant.v1.ArchiveWorktreeRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.ArchiveWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.CleanupMetadata": "reliant/v1/worktree.proto",
+        "reliant.v1.CommitWorktreeRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.CommitWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.CreateWorktreePRRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.CreateWorktreePRResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.CreateWorktreeRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.CreateWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.DeleteWorktreeRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.DeleteWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.DiscoverWorktreesRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.DiscoverWorktreesResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.DiscoveredWorktree": "reliant/v1/worktree.proto",
+        "reliant.v1.GetWorktreeChangesRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.GetWorktreeChangesResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.GetWorktreeCommitsRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.GetWorktreeCommitsResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.GetWorktreeGitStatusRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.GetWorktreeGitStatusResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.GetWorktreePRRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.GetWorktreePRResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.GetWorktreeRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.GetWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.GitCommit": "reliant/v1/worktree.proto",
+        "reliant.v1.ImportWorktreeRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.ImportWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.ListArchivedWorktreesRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.ListArchivedWorktreesResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.ListWorktreeRepoStatusesRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.ListWorktreeRepoStatusesResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.ListWorktreesRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.ListWorktreesResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.PruneWorktreesRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.PruneWorktreesResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.PullWorktreeRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.PullWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.PushWorktreeRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.PushWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.RecreateWorktreeRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.RecreateWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.RevertFilesRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.RevertFilesResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.StageFilesRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.StageFilesResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.StaleWorktree": "reliant/v1/worktree.proto",
+        "reliant.v1.UnarchiveWorktreeRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.UnarchiveWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.UnstageFilesRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.UnstageFilesResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.UpdateWorktreeRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.UpdateWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.Worktree": "reliant/v1/worktree.proto",
+        "reliant.v1.WorktreeFileChange": "reliant/v1/worktree.proto",
+        "reliant.v1.WorktreeRepoStatus": "reliant/v1/worktree.proto"
+      },
+      "Enums": {
+        "reliant.v1.FileChangeStatus": [
+          "FILE_CHANGE_STATUS_UNSPECIFIED",
+          "FILE_CHANGE_STATUS_MODIFIED",
+          "FILE_CHANGE_STATUS_STAGED",
+          "FILE_CHANGE_STATUS_UNTRACKED",
+          "FILE_CHANGE_STATUS_DELETED"
+        ],
+        "reliant.v1.WorktreeStatus": [
+          "WORKTREE_STATUS_UNSPECIFIED",
+          "WORKTREE_STATUS_ACTIVE",
+          "WORKTREE_STATUS_COMPLETED",
+          "WORKTREE_STATUS_ABANDONED",
+          "WORKTREE_STATUS_MERGING",
+          "WORKTREE_STATUS_CREATING",
+          "WORKTREE_STATUS_FAILED"
+        ]
+      },
+      "EnumNumbers": {
+        "reliant.v1.FileChangeStatus": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "reliant.v1.WorktreeStatus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "EnumGoRefs": {
+        "reliant.v1.FileChangeStatus": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "FileChangeStatus"
+        },
+        "reliant.v1.WorktreeStatus": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "WorktreeStatus"
+        }
+      }
+    },
+    {
       "Name": "ChatService",
       "Package": "reliant.v1",
       "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -4385,6 +6578,12 @@
             "Name": "last_user_update_sequence",
             "ProtoType": "int64",
             "IsOptional": false
+          },
+          {
+            "Name": "main_worktree",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.WorktreeSummary"
           }
         ],
         "ListMessagesRequest": [
@@ -5283,6 +7482,11 @@
             "name": "selection",
             "kind": "message",
             "type_name": "reliant.v1.ChatSelection"
+          },
+          {
+            "name": "worktree",
+            "kind": "message",
+            "type_name": "reliant.v1.WorktreeSummary"
           }
         ],
         "reliant.v1.ChatPlan": [
@@ -5729,6 +7933,11 @@
           {
             "name": "last_user_update_sequence",
             "kind": "int64"
+          },
+          {
+            "name": "main_worktree",
+            "kind": "message",
+            "type_name": "reliant.v1.WorktreeSummary"
           }
         ],
         "reliant.v1.ListMessagesRequest": [
@@ -6645,6 +8854,38 @@
             "name": "copy_files_enabled",
             "kind": "bool"
           }
+        ],
+        "reliant.v1.WorktreeSummary": [
+          {
+            "name": "id",
+            "kind": "string"
+          },
+          {
+            "name": "name",
+            "kind": "string"
+          },
+          {
+            "name": "branch",
+            "kind": "string"
+          },
+          {
+            "name": "path",
+            "kind": "string"
+          },
+          {
+            "name": "is_main",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "type_name": "reliant.v1.WorktreeStatus"
+          },
+          {
+            "name": "deleted_at",
+            "kind": "string",
+            "optional": true
+          }
         ]
       },
       "SchemaFiles": {
@@ -6729,7 +8970,8 @@
         "reliant.v1.UpdateWorkflowParamsRequest": "reliant/v1/chat.proto",
         "reliant.v1.UpdateWorkflowParamsResponse": "reliant/v1/chat.proto",
         "reliant.v1.WorkflowExecution": "reliant/v1/chat.proto",
-        "reliant.v1.WorkspaceBranchContext": "reliant/v1/chat.proto"
+        "reliant.v1.WorkspaceBranchContext": "reliant/v1/chat.proto",
+        "reliant.v1.WorktreeSummary": "reliant/v1/worktree.proto"
       },
       "Enums": {
         "reliant.v1.ChatActivity": [
@@ -6820,6 +9062,15 @@
           "WORKFLOW_STOP_REASON_FAILED",
           "WORKFLOW_STOP_REASON_PAUSED",
           "WORKFLOW_STOP_REASON_CANCELLED"
+        ],
+        "reliant.v1.WorktreeStatus": [
+          "WORKTREE_STATUS_UNSPECIFIED",
+          "WORKTREE_STATUS_ACTIVE",
+          "WORKTREE_STATUS_COMPLETED",
+          "WORKTREE_STATUS_ABANDONED",
+          "WORKTREE_STATUS_MERGING",
+          "WORKTREE_STATUS_CREATING",
+          "WORKTREE_STATUS_FAILED"
         ]
       },
       "EnumNumbers": {
@@ -6911,6 +9162,15 @@
           2,
           3,
           4
+        ],
+        "reliant.v1.WorktreeStatus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
         ]
       },
       "EnumGoRefs": {
@@ -6965,6 +9225,10 @@
         "reliant.v1.WorkflowStopReason": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "WorkflowStopReason"
+        },
+        "reliant.v1.WorktreeStatus": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "WorktreeStatus"
         }
       }
     },
@@ -33093,2115 +35357,6 @@
           "GoName": "WorkflowDraftStatus"
         }
       }
-    },
-    {
-      "Name": "WorktreeService",
-      "Package": "reliant.v1",
-      "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
-      "PkgName": "reliantv1",
-      "Methods": [
-        {
-          "Name": "CreateWorktree",
-          "InputType": "CreateWorktreeRequest",
-          "OutputType": "CreateWorktreeResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "Custom": true,
-          "InputTypeFQ": "reliant.v1.CreateWorktreeRequest",
-          "OutputTypeFQ": "reliant.v1.CreateWorktreeResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "ListWorktrees",
-          "InputType": "ListWorktreesRequest",
-          "OutputType": "ListWorktreesResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "Custom": true,
-          "InputTypeFQ": "reliant.v1.ListWorktreesRequest",
-          "OutputTypeFQ": "reliant.v1.ListWorktreesResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "GetWorktree",
-          "InputType": "GetWorktreeRequest",
-          "OutputType": "GetWorktreeResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "Custom": true,
-          "InputTypeFQ": "reliant.v1.GetWorktreeRequest",
-          "OutputTypeFQ": "reliant.v1.GetWorktreeResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "UpdateWorktree",
-          "InputType": "UpdateWorktreeRequest",
-          "OutputType": "UpdateWorktreeResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "Custom": true,
-          "InputTypeFQ": "reliant.v1.UpdateWorktreeRequest",
-          "OutputTypeFQ": "reliant.v1.UpdateWorktreeResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "DeleteWorktree",
-          "InputType": "DeleteWorktreeRequest",
-          "OutputType": "DeleteWorktreeResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "Custom": true,
-          "InputTypeFQ": "reliant.v1.DeleteWorktreeRequest",
-          "OutputTypeFQ": "reliant.v1.DeleteWorktreeResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "ArchiveWorktree",
-          "InputType": "ArchiveWorktreeRequest",
-          "OutputType": "ArchiveWorktreeResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.ArchiveWorktreeRequest",
-          "OutputTypeFQ": "reliant.v1.ArchiveWorktreeResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "UnarchiveWorktree",
-          "InputType": "UnarchiveWorktreeRequest",
-          "OutputType": "UnarchiveWorktreeResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.UnarchiveWorktreeRequest",
-          "OutputTypeFQ": "reliant.v1.UnarchiveWorktreeResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "ImportWorktree",
-          "InputType": "ImportWorktreeRequest",
-          "OutputType": "ImportWorktreeResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.ImportWorktreeRequest",
-          "OutputTypeFQ": "reliant.v1.ImportWorktreeResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "DiscoverWorktrees",
-          "InputType": "DiscoverWorktreesRequest",
-          "OutputType": "DiscoverWorktreesResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.DiscoverWorktreesRequest",
-          "OutputTypeFQ": "reliant.v1.DiscoverWorktreesResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "PruneWorktrees",
-          "InputType": "PruneWorktreesRequest",
-          "OutputType": "PruneWorktreesResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.PruneWorktreesRequest",
-          "OutputTypeFQ": "reliant.v1.PruneWorktreesResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "RecreateWorktree",
-          "InputType": "RecreateWorktreeRequest",
-          "OutputType": "RecreateWorktreeResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.RecreateWorktreeRequest",
-          "OutputTypeFQ": "reliant.v1.RecreateWorktreeResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "GetWorktreeChanges",
-          "InputType": "GetWorktreeChangesRequest",
-          "OutputType": "GetWorktreeChangesResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.GetWorktreeChangesRequest",
-          "OutputTypeFQ": "reliant.v1.GetWorktreeChangesResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "GetWorktreeGitStatus",
-          "InputType": "GetWorktreeGitStatusRequest",
-          "OutputType": "GetWorktreeGitStatusResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.GetWorktreeGitStatusRequest",
-          "OutputTypeFQ": "reliant.v1.GetWorktreeGitStatusResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "GetWorktreeCommits",
-          "InputType": "GetWorktreeCommitsRequest",
-          "OutputType": "GetWorktreeCommitsResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.GetWorktreeCommitsRequest",
-          "OutputTypeFQ": "reliant.v1.GetWorktreeCommitsResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "ListWorktreeRepoStatuses",
-          "InputType": "ListWorktreeRepoStatusesRequest",
-          "OutputType": "ListWorktreeRepoStatusesResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.ListWorktreeRepoStatusesRequest",
-          "OutputTypeFQ": "reliant.v1.ListWorktreeRepoStatusesResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "StageFiles",
-          "InputType": "StageFilesRequest",
-          "OutputType": "StageFilesResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.StageFilesRequest",
-          "OutputTypeFQ": "reliant.v1.StageFilesResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "UnstageFiles",
-          "InputType": "UnstageFilesRequest",
-          "OutputType": "UnstageFilesResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.UnstageFilesRequest",
-          "OutputTypeFQ": "reliant.v1.UnstageFilesResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "RevertFiles",
-          "InputType": "RevertFilesRequest",
-          "OutputType": "RevertFilesResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.RevertFilesRequest",
-          "OutputTypeFQ": "reliant.v1.RevertFilesResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "CommitWorktree",
-          "InputType": "CommitWorktreeRequest",
-          "OutputType": "CommitWorktreeResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.CommitWorktreeRequest",
-          "OutputTypeFQ": "reliant.v1.CommitWorktreeResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "PushWorktree",
-          "InputType": "PushWorktreeRequest",
-          "OutputType": "PushWorktreeResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.PushWorktreeRequest",
-          "OutputTypeFQ": "reliant.v1.PushWorktreeResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "PullWorktree",
-          "InputType": "PullWorktreeRequest",
-          "OutputType": "PullWorktreeResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.PullWorktreeRequest",
-          "OutputTypeFQ": "reliant.v1.PullWorktreeResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "GetWorktreePR",
-          "InputType": "GetWorktreePRRequest",
-          "OutputType": "GetWorktreePRResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.GetWorktreePRRequest",
-          "OutputTypeFQ": "reliant.v1.GetWorktreePRResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        },
-        {
-          "Name": "CreateWorktreePR",
-          "InputType": "CreateWorktreePRRequest",
-          "OutputType": "CreateWorktreePRResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.CreateWorktreePRRequest",
-          "OutputTypeFQ": "reliant.v1.CreateWorktreePRResponse",
-          "InputProtoFile": "reliant/v1/worktree.proto",
-          "OutputProtoFile": "reliant/v1/worktree.proto"
-        }
-      ],
-      "ProtoFile": "reliant/v1/worktree.proto",
-      "ModulePath": "",
-      "Messages": {
-        "ArchiveWorktreeRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "delete_git_branch",
-            "ProtoType": "bool",
-            "IsOptional": false
-          }
-        ],
-        "ArchiveWorktreeResponse": [
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "deleted_branch",
-            "ProtoType": "bool",
-            "IsOptional": false
-          }
-        ],
-        "CommitWorktreeRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "repo_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "CommitWorktreeResponse": [
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "output",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "CreateWorktreePRRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "title",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "body",
-            "ProtoType": "string",
-            "IsOptional": true
-          },
-          {
-            "Name": "repo_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "CreateWorktreePRResponse": [
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "pr_url",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "output",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "auto_committed",
-            "ProtoType": "bool",
-            "IsOptional": false
-          },
-          {
-            "Name": "auto_pushed",
-            "ProtoType": "bool",
-            "IsOptional": false
-          }
-        ],
-        "CreateWorktreeRequest": [
-          {
-            "Name": "name",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "branch",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "project_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "base_branch",
-            "ProtoType": "string",
-            "IsOptional": true
-          },
-          {
-            "Name": "chat_id",
-            "ProtoType": "string",
-            "IsOptional": true
-          },
-          {
-            "Name": "copy_files",
-            "ProtoType": "[]string",
-            "IsOptional": false
-          },
-          {
-            "Name": "force",
-            "ProtoType": "bool",
-            "IsOptional": false
-          },
-          {
-            "Name": "source_worktree_id",
-            "ProtoType": "string",
-            "IsOptional": true
-          },
-          {
-            "Name": "base_branches",
-            "ProtoType": "message",
-            "IsOptional": false
-          },
-          {
-            "Name": "idempotency_key",
-            "ProtoType": "string",
-            "IsOptional": true
-          }
-        ],
-        "CreateWorktreeResponse": [
-          {
-            "Name": "worktree",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.Worktree"
-          }
-        ],
-        "DeleteWorktreeRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "delete_git_branch",
-            "ProtoType": "bool",
-            "IsOptional": false
-          }
-        ],
-        "DeleteWorktreeResponse": [
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "deleted_branch",
-            "ProtoType": "bool",
-            "IsOptional": false
-          },
-          {
-            "Name": "is_permanent_delete",
-            "ProtoType": "bool",
-            "IsOptional": false
-          }
-        ],
-        "DiscoverWorktreesRequest": [
-          {
-            "Name": "project_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "background",
-            "ProtoType": "bool",
-            "IsOptional": false
-          }
-        ],
-        "DiscoverWorktreesResponse": [
-          {
-            "Name": "discovered",
-            "ProtoType": "[]message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.DiscoveredWorktree"
-          },
-          {
-            "Name": "stale",
-            "ProtoType": "[]message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.StaleWorktree"
-          },
-          {
-            "Name": "workspaces_root",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "GetWorktreeChangesRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "repo_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "GetWorktreeChangesResponse": [
-          {
-            "Name": "branch",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "files",
-            "ProtoType": "[]message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.WorktreeFileChange"
-          },
-          {
-            "Name": "total_files",
-            "ProtoType": "int32",
-            "IsOptional": false
-          },
-          {
-            "Name": "ahead",
-            "ProtoType": "int32",
-            "IsOptional": false
-          },
-          {
-            "Name": "behind",
-            "ProtoType": "int32",
-            "IsOptional": false
-          },
-          {
-            "Name": "default_branch",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "GetWorktreeCommitsRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "limit",
-            "ProtoType": "int32",
-            "IsOptional": false
-          },
-          {
-            "Name": "repo_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "GetWorktreeCommitsResponse": [
-          {
-            "Name": "commits",
-            "ProtoType": "[]message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.GitCommit"
-          },
-          {
-            "Name": "total",
-            "ProtoType": "int32",
-            "IsOptional": false
-          },
-          {
-            "Name": "branch",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "base_branch",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "comparison_mode",
-            "ProtoType": "bool",
-            "IsOptional": false
-          },
-          {
-            "Name": "comparison_ref",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "current_branch",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "GetWorktreeGitStatusRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "repo_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "GetWorktreeGitStatusResponse": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "path",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "branch",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "clean",
-            "ProtoType": "bool",
-            "IsOptional": false
-          },
-          {
-            "Name": "has_changes",
-            "ProtoType": "bool",
-            "IsOptional": false
-          },
-          {
-            "Name": "staged_files",
-            "ProtoType": "[]string",
-            "IsOptional": false
-          },
-          {
-            "Name": "modified_files",
-            "ProtoType": "[]string",
-            "IsOptional": false
-          },
-          {
-            "Name": "untracked_files",
-            "ProtoType": "[]string",
-            "IsOptional": false
-          },
-          {
-            "Name": "ahead",
-            "ProtoType": "int32",
-            "IsOptional": false
-          },
-          {
-            "Name": "behind",
-            "ProtoType": "int32",
-            "IsOptional": false
-          }
-        ],
-        "GetWorktreePRRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "repo_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "GetWorktreePRResponse": [
-          {
-            "Name": "exists",
-            "ProtoType": "bool",
-            "IsOptional": false
-          },
-          {
-            "Name": "url",
-            "ProtoType": "string",
-            "IsOptional": true
-          },
-          {
-            "Name": "number",
-            "ProtoType": "int32",
-            "IsOptional": true
-          },
-          {
-            "Name": "title",
-            "ProtoType": "string",
-            "IsOptional": true
-          },
-          {
-            "Name": "state",
-            "ProtoType": "string",
-            "IsOptional": true
-          }
-        ],
-        "GetWorktreeRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "GetWorktreeResponse": [
-          {
-            "Name": "worktree",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.Worktree"
-          }
-        ],
-        "ImportWorktreeRequest": [
-          {
-            "Name": "path",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "project_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "name",
-            "ProtoType": "string",
-            "IsOptional": true
-          },
-          {
-            "Name": "chat_id",
-            "ProtoType": "string",
-            "IsOptional": true
-          },
-          {
-            "Name": "repo_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "confirm_move",
-            "ProtoType": "bool",
-            "IsOptional": false
-          }
-        ],
-        "ImportWorktreeResponse": [
-          {
-            "Name": "worktree",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.Worktree"
-          }
-        ],
-        "ListWorktreeRepoStatusesRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "ListWorktreeRepoStatusesResponse": [
-          {
-            "Name": "statuses",
-            "ProtoType": "[]message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.WorktreeRepoStatus"
-          }
-        ],
-        "ListWorktreesRequest": [
-          {
-            "Name": "project_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "chat_id",
-            "ProtoType": "string",
-            "IsOptional": true
-          },
-          {
-            "Name": "limit",
-            "ProtoType": "int32",
-            "IsOptional": false
-          },
-          {
-            "Name": "include_archived",
-            "ProtoType": "bool",
-            "IsOptional": true
-          },
-          {
-            "Name": "page_token",
-            "ProtoType": "string",
-            "IsOptional": true
-          }
-        ],
-        "ListWorktreesResponse": [
-          {
-            "Name": "worktrees",
-            "ProtoType": "[]message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.Worktree"
-          },
-          {
-            "Name": "total",
-            "ProtoType": "int32",
-            "IsOptional": false
-          },
-          {
-            "Name": "next_page_token",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "PruneWorktreesRequest": [
-          {
-            "Name": "project_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "PruneWorktreesResponse": [
-          {
-            "Name": "pruned",
-            "ProtoType": "[]message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.StaleWorktree"
-          }
-        ],
-        "PullWorktreeRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "repo_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "PullWorktreeResponse": [
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "output",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "PushWorktreeRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "repo_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "PushWorktreeResponse": [
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "output",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "RecreateWorktreeRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "RecreateWorktreeResponse": [
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "path",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "branch",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "snapshot_warning",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "snapshot_refs",
-            "ProtoType": "[]string",
-            "IsOptional": false
-          }
-        ],
-        "RevertFilesRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "files",
-            "ProtoType": "[]string",
-            "IsOptional": false
-          },
-          {
-            "Name": "repo_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "RevertFilesResponse": [
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "files",
-            "ProtoType": "[]string",
-            "IsOptional": false
-          }
-        ],
-        "StageFilesRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "files",
-            "ProtoType": "[]string",
-            "IsOptional": false
-          },
-          {
-            "Name": "repo_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "StageFilesResponse": [
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "files",
-            "ProtoType": "[]string",
-            "IsOptional": false
-          }
-        ],
-        "UnarchiveWorktreeRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "UnarchiveWorktreeResponse": [
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "UnstageFilesRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "files",
-            "ProtoType": "[]string",
-            "IsOptional": false
-          },
-          {
-            "Name": "repo_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          }
-        ],
-        "UnstageFilesResponse": [
-          {
-            "Name": "message",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "files",
-            "ProtoType": "[]string",
-            "IsOptional": false
-          }
-        ],
-        "UpdateWorktreeRequest": [
-          {
-            "Name": "worktree_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "name",
-            "ProtoType": "string",
-            "IsOptional": true
-          },
-          {
-            "Name": "status",
-            "ProtoType": "enum",
-            "IsOptional": true
-          },
-          {
-            "Name": "base_branch",
-            "ProtoType": "string",
-            "IsOptional": true
-          }
-        ],
-        "UpdateWorktreeResponse": [
-          {
-            "Name": "worktree",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.Worktree"
-          }
-        ]
-      },
-      "Audience": "user",
-      "Schemas": {
-        "reliant.v1.ArchiveWorktreeRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "delete_git_branch",
-            "kind": "bool"
-          }
-        ],
-        "reliant.v1.ArchiveWorktreeResponse": [
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "deleted_branch",
-            "kind": "bool"
-          }
-        ],
-        "reliant.v1.CleanupMetadata": [
-          {
-            "name": "directory_deleted",
-            "kind": "bool"
-          },
-          {
-            "name": "branch_deleted",
-            "kind": "bool"
-          },
-          {
-            "name": "held_reason",
-            "kind": "string"
-          },
-          {
-            "name": "held_detail",
-            "kind": "string"
-          },
-          {
-            "name": "size_bytes",
-            "kind": "int64"
-          },
-          {
-            "name": "snapshot_refs",
-            "kind": "string",
-            "repeated": true
-          },
-          {
-            "name": "stripped_paths",
-            "kind": "string",
-            "repeated": true
-          },
-          {
-            "name": "stripped_bytes",
-            "kind": "int64"
-          }
-        ],
-        "reliant.v1.CommitWorktreeRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.CommitWorktreeResponse": [
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "output",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.CreateWorktreePRRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "title",
-            "kind": "string"
-          },
-          {
-            "name": "body",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.CreateWorktreePRResponse": [
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "pr_url",
-            "kind": "string"
-          },
-          {
-            "name": "output",
-            "kind": "string"
-          },
-          {
-            "name": "auto_committed",
-            "kind": "bool"
-          },
-          {
-            "name": "auto_pushed",
-            "kind": "bool"
-          }
-        ],
-        "reliant.v1.CreateWorktreeRequest": [
-          {
-            "name": "name",
-            "kind": "string"
-          },
-          {
-            "name": "branch",
-            "kind": "string"
-          },
-          {
-            "name": "project_id",
-            "kind": "string"
-          },
-          {
-            "name": "base_branch",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "chat_id",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "copy_files",
-            "kind": "string",
-            "repeated": true
-          },
-          {
-            "name": "force",
-            "kind": "bool"
-          },
-          {
-            "name": "source_worktree_id",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "base_branches",
-            "kind": "map",
-            "map_key_kind": "string",
-            "map_value_kind": "string"
-          },
-          {
-            "name": "idempotency_key",
-            "kind": "string",
-            "optional": true
-          }
-        ],
-        "reliant.v1.CreateWorktreeResponse": [
-          {
-            "name": "worktree",
-            "kind": "message",
-            "type_name": "reliant.v1.Worktree"
-          }
-        ],
-        "reliant.v1.DeleteWorktreeRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "delete_git_branch",
-            "kind": "bool"
-          }
-        ],
-        "reliant.v1.DeleteWorktreeResponse": [
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "deleted_branch",
-            "kind": "bool"
-          },
-          {
-            "name": "is_permanent_delete",
-            "kind": "bool"
-          }
-        ],
-        "reliant.v1.DiscoverWorktreesRequest": [
-          {
-            "name": "project_id",
-            "kind": "string"
-          },
-          {
-            "name": "background",
-            "kind": "bool"
-          }
-        ],
-        "reliant.v1.DiscoverWorktreesResponse": [
-          {
-            "name": "discovered",
-            "kind": "message",
-            "type_name": "reliant.v1.DiscoveredWorktree",
-            "repeated": true
-          },
-          {
-            "name": "stale",
-            "kind": "message",
-            "type_name": "reliant.v1.StaleWorktree",
-            "repeated": true
-          },
-          {
-            "name": "workspaces_root",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.DiscoveredWorktree": [
-          {
-            "name": "path",
-            "kind": "string"
-          },
-          {
-            "name": "name",
-            "kind": "string"
-          },
-          {
-            "name": "branch",
-            "kind": "string"
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          },
-          {
-            "name": "repo_name",
-            "kind": "string"
-          },
-          {
-            "name": "head",
-            "kind": "string"
-          },
-          {
-            "name": "locked",
-            "kind": "bool"
-          },
-          {
-            "name": "moves_on_import",
-            "kind": "bool"
-          }
-        ],
-        "reliant.v1.GetWorktreeChangesRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.GetWorktreeChangesResponse": [
-          {
-            "name": "branch",
-            "kind": "string"
-          },
-          {
-            "name": "files",
-            "kind": "message",
-            "type_name": "reliant.v1.WorktreeFileChange",
-            "repeated": true
-          },
-          {
-            "name": "total_files",
-            "kind": "int32"
-          },
-          {
-            "name": "ahead",
-            "kind": "int32"
-          },
-          {
-            "name": "behind",
-            "kind": "int32"
-          },
-          {
-            "name": "default_branch",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.GetWorktreeCommitsRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "limit",
-            "kind": "int32"
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.GetWorktreeCommitsResponse": [
-          {
-            "name": "commits",
-            "kind": "message",
-            "type_name": "reliant.v1.GitCommit",
-            "repeated": true
-          },
-          {
-            "name": "total",
-            "kind": "int32"
-          },
-          {
-            "name": "branch",
-            "kind": "string"
-          },
-          {
-            "name": "base_branch",
-            "kind": "string"
-          },
-          {
-            "name": "comparison_mode",
-            "kind": "bool"
-          },
-          {
-            "name": "comparison_ref",
-            "kind": "string"
-          },
-          {
-            "name": "current_branch",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.GetWorktreeGitStatusRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.GetWorktreeGitStatusResponse": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "path",
-            "kind": "string"
-          },
-          {
-            "name": "branch",
-            "kind": "string"
-          },
-          {
-            "name": "clean",
-            "kind": "bool"
-          },
-          {
-            "name": "has_changes",
-            "kind": "bool"
-          },
-          {
-            "name": "staged_files",
-            "kind": "string",
-            "repeated": true
-          },
-          {
-            "name": "modified_files",
-            "kind": "string",
-            "repeated": true
-          },
-          {
-            "name": "untracked_files",
-            "kind": "string",
-            "repeated": true
-          },
-          {
-            "name": "ahead",
-            "kind": "int32"
-          },
-          {
-            "name": "behind",
-            "kind": "int32"
-          }
-        ],
-        "reliant.v1.GetWorktreePRRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.GetWorktreePRResponse": [
-          {
-            "name": "exists",
-            "kind": "bool"
-          },
-          {
-            "name": "url",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "number",
-            "kind": "int32",
-            "optional": true
-          },
-          {
-            "name": "title",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "state",
-            "kind": "string",
-            "optional": true
-          }
-        ],
-        "reliant.v1.GetWorktreeRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.GetWorktreeResponse": [
-          {
-            "name": "worktree",
-            "kind": "message",
-            "type_name": "reliant.v1.Worktree"
-          }
-        ],
-        "reliant.v1.GitCommit": [
-          {
-            "name": "hash",
-            "kind": "string"
-          },
-          {
-            "name": "short_hash",
-            "kind": "string"
-          },
-          {
-            "name": "author",
-            "kind": "string"
-          },
-          {
-            "name": "email",
-            "kind": "string"
-          },
-          {
-            "name": "date",
-            "kind": "string"
-          },
-          {
-            "name": "message",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.ImportWorktreeRequest": [
-          {
-            "name": "path",
-            "kind": "string"
-          },
-          {
-            "name": "project_id",
-            "kind": "string"
-          },
-          {
-            "name": "name",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "chat_id",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          },
-          {
-            "name": "confirm_move",
-            "kind": "bool"
-          }
-        ],
-        "reliant.v1.ImportWorktreeResponse": [
-          {
-            "name": "worktree",
-            "kind": "message",
-            "type_name": "reliant.v1.Worktree"
-          }
-        ],
-        "reliant.v1.ListWorktreeRepoStatusesRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string",
-            "validate": {
-              "required": true
-            }
-          }
-        ],
-        "reliant.v1.ListWorktreeRepoStatusesResponse": [
-          {
-            "name": "statuses",
-            "kind": "message",
-            "type_name": "reliant.v1.WorktreeRepoStatus",
-            "repeated": true
-          }
-        ],
-        "reliant.v1.ListWorktreesRequest": [
-          {
-            "name": "project_id",
-            "kind": "string",
-            "validate": {
-              "required": true
-            }
-          },
-          {
-            "name": "chat_id",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "limit",
-            "kind": "int32"
-          },
-          {
-            "name": "include_archived",
-            "kind": "bool",
-            "optional": true
-          },
-          {
-            "name": "page_token",
-            "kind": "string",
-            "optional": true
-          }
-        ],
-        "reliant.v1.ListWorktreesResponse": [
-          {
-            "name": "worktrees",
-            "kind": "message",
-            "type_name": "reliant.v1.Worktree",
-            "repeated": true
-          },
-          {
-            "name": "total",
-            "kind": "int32"
-          },
-          {
-            "name": "next_page_token",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.PruneWorktreesRequest": [
-          {
-            "name": "project_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.PruneWorktreesResponse": [
-          {
-            "name": "pruned",
-            "kind": "message",
-            "type_name": "reliant.v1.StaleWorktree",
-            "repeated": true
-          }
-        ],
-        "reliant.v1.PullWorktreeRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.PullWorktreeResponse": [
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "output",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.PushWorktreeRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.PushWorktreeResponse": [
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "output",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.RecreateWorktreeRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.RecreateWorktreeResponse": [
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "path",
-            "kind": "string"
-          },
-          {
-            "name": "branch",
-            "kind": "string"
-          },
-          {
-            "name": "snapshot_warning",
-            "kind": "string"
-          },
-          {
-            "name": "snapshot_refs",
-            "kind": "string",
-            "repeated": true
-          }
-        ],
-        "reliant.v1.RevertFilesRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "files",
-            "kind": "string",
-            "repeated": true
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.RevertFilesResponse": [
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "files",
-            "kind": "string",
-            "repeated": true
-          }
-        ],
-        "reliant.v1.StageFilesRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "files",
-            "kind": "string",
-            "repeated": true
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.StageFilesResponse": [
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "files",
-            "kind": "string",
-            "repeated": true
-          }
-        ],
-        "reliant.v1.StaleWorktree": [
-          {
-            "name": "path",
-            "kind": "string"
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          },
-          {
-            "name": "repo_name",
-            "kind": "string"
-          },
-          {
-            "name": "reason",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.UnarchiveWorktreeRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.UnarchiveWorktreeResponse": [
-          {
-            "name": "message",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.UnstageFilesRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "files",
-            "kind": "string",
-            "repeated": true
-          },
-          {
-            "name": "repo_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.UnstageFilesResponse": [
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "files",
-            "kind": "string",
-            "repeated": true
-          }
-        ],
-        "reliant.v1.UpdateWorktreeRequest": [
-          {
-            "name": "worktree_id",
-            "kind": "string"
-          },
-          {
-            "name": "name",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "status",
-            "kind": "enum",
-            "type_name": "reliant.v1.WorktreeStatus",
-            "optional": true
-          },
-          {
-            "name": "base_branch",
-            "kind": "string",
-            "optional": true
-          }
-        ],
-        "reliant.v1.UpdateWorktreeResponse": [
-          {
-            "name": "worktree",
-            "kind": "message",
-            "type_name": "reliant.v1.Worktree"
-          }
-        ],
-        "reliant.v1.Worktree": [
-          {
-            "name": "id",
-            "kind": "string"
-          },
-          {
-            "name": "name",
-            "kind": "string"
-          },
-          {
-            "name": "path",
-            "kind": "string"
-          },
-          {
-            "name": "branch",
-            "kind": "string"
-          },
-          {
-            "name": "base_branch",
-            "kind": "string"
-          },
-          {
-            "name": "project_id",
-            "kind": "string"
-          },
-          {
-            "name": "chat_id",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "status",
-            "kind": "enum",
-            "type_name": "reliant.v1.WorktreeStatus"
-          },
-          {
-            "name": "is_main",
-            "kind": "bool"
-          },
-          {
-            "name": "created_at",
-            "kind": "string"
-          },
-          {
-            "name": "updated_at",
-            "kind": "string"
-          },
-          {
-            "name": "last_active",
-            "kind": "string"
-          },
-          {
-            "name": "deleted_at",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "cleanup_metadata",
-            "kind": "message",
-            "type_name": "reliant.v1.CleanupMetadata",
-            "optional": true
-          },
-          {
-            "name": "failure_reason",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.WorktreeFileChange": [
-          {
-            "name": "path",
-            "kind": "string"
-          },
-          {
-            "name": "status",
-            "kind": "enum",
-            "type_name": "reliant.v1.FileChangeStatus"
-          },
-          {
-            "name": "is_new",
-            "kind": "bool"
-          },
-          {
-            "name": "diff",
-            "kind": "string"
-          },
-          {
-            "name": "is_binary",
-            "kind": "bool"
-          }
-        ],
-        "reliant.v1.WorktreeRepoStatus": [
-          {
-            "name": "repo_id",
-            "kind": "string"
-          },
-          {
-            "name": "repo_name",
-            "kind": "string"
-          },
-          {
-            "name": "repo_relative_path",
-            "kind": "string"
-          },
-          {
-            "name": "current_branch",
-            "kind": "string"
-          },
-          {
-            "name": "has_changes",
-            "kind": "bool"
-          },
-          {
-            "name": "ahead",
-            "kind": "int32"
-          },
-          {
-            "name": "behind",
-            "kind": "int32"
-          },
-          {
-            "name": "changed_files",
-            "kind": "int32"
-          },
-          {
-            "name": "error",
-            "kind": "string"
-          }
-        ]
-      },
-      "SchemaFiles": {
-        "reliant.v1.ArchiveWorktreeRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.ArchiveWorktreeResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.CleanupMetadata": "reliant/v1/worktree.proto",
-        "reliant.v1.CommitWorktreeRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.CommitWorktreeResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.CreateWorktreePRRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.CreateWorktreePRResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.CreateWorktreeRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.CreateWorktreeResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.DeleteWorktreeRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.DeleteWorktreeResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.DiscoverWorktreesRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.DiscoverWorktreesResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.DiscoveredWorktree": "reliant/v1/worktree.proto",
-        "reliant.v1.GetWorktreeChangesRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.GetWorktreeChangesResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.GetWorktreeCommitsRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.GetWorktreeCommitsResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.GetWorktreeGitStatusRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.GetWorktreeGitStatusResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.GetWorktreePRRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.GetWorktreePRResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.GetWorktreeRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.GetWorktreeResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.GitCommit": "reliant/v1/worktree.proto",
-        "reliant.v1.ImportWorktreeRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.ImportWorktreeResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.ListWorktreeRepoStatusesRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.ListWorktreeRepoStatusesResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.ListWorktreesRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.ListWorktreesResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.PruneWorktreesRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.PruneWorktreesResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.PullWorktreeRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.PullWorktreeResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.PushWorktreeRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.PushWorktreeResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.RecreateWorktreeRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.RecreateWorktreeResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.RevertFilesRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.RevertFilesResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.StageFilesRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.StageFilesResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.StaleWorktree": "reliant/v1/worktree.proto",
-        "reliant.v1.UnarchiveWorktreeRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.UnarchiveWorktreeResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.UnstageFilesRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.UnstageFilesResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.UpdateWorktreeRequest": "reliant/v1/worktree.proto",
-        "reliant.v1.UpdateWorktreeResponse": "reliant/v1/worktree.proto",
-        "reliant.v1.Worktree": "reliant/v1/worktree.proto",
-        "reliant.v1.WorktreeFileChange": "reliant/v1/worktree.proto",
-        "reliant.v1.WorktreeRepoStatus": "reliant/v1/worktree.proto"
-      },
-      "Enums": {
-        "reliant.v1.FileChangeStatus": [
-          "FILE_CHANGE_STATUS_UNSPECIFIED",
-          "FILE_CHANGE_STATUS_MODIFIED",
-          "FILE_CHANGE_STATUS_STAGED",
-          "FILE_CHANGE_STATUS_UNTRACKED",
-          "FILE_CHANGE_STATUS_DELETED"
-        ],
-        "reliant.v1.WorktreeStatus": [
-          "WORKTREE_STATUS_UNSPECIFIED",
-          "WORKTREE_STATUS_ACTIVE",
-          "WORKTREE_STATUS_COMPLETED",
-          "WORKTREE_STATUS_ABANDONED",
-          "WORKTREE_STATUS_MERGING",
-          "WORKTREE_STATUS_CREATING",
-          "WORKTREE_STATUS_FAILED"
-        ]
-      },
-      "EnumNumbers": {
-        "reliant.v1.FileChangeStatus": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
-        "reliant.v1.WorktreeStatus": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5,
-          6
-        ]
-      },
-      "EnumGoRefs": {
-        "reliant.v1.FileChangeStatus": {
-          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
-          "GoName": "FileChangeStatus"
-        },
-        "reliant.v1.WorktreeStatus": {
-          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
-          "GoName": "WorktreeStatus"
-        }
-      }
     }
   ],
   "configs": [
@@ -37669,5 +37824,5 @@
       "Line": 20
     }
   ],
-  "source_hash": "091057ec8d4d8d8fa9f70e0f60e7ef066f08de581afbaf0da559620c069b40d8"
+  "source_hash": "3b3d2bace3b33170c67b2c9db56750991ac34babe9648f0679138ea06d57a145"
 }

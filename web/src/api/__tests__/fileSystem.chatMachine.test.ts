@@ -36,7 +36,7 @@ describe("file APIs name the open chat so the server reads its machine", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.useProjectStore.getState.mockReturnValue({ currentProject: { id: "project-1" } });
-    mocks.useWorktreeStore.getState.mockReturnValue({ worktrees: [] });
+    mocks.useWorktreeStore.getState.mockReturnValue({ worktrees: [], resolveWorktree: async () => null });
     mocks.useChatStore.getState.mockReturnValue({ activeChatId: "chat-on-b" });
     mocks.filesystemGrpc.getFileTree.mockResolvedValue([]);
     mocks.filesystemGrpc.getFileContent.mockResolvedValue("hello");

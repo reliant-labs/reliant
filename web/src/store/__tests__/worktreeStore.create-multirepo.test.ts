@@ -10,7 +10,7 @@ const toastErrorMock = vi.hoisted(() => vi.fn());
 vi.mock("../../api/worktree-grpc", () => ({
   worktreeGrpc: {
     create: createMock,
-    listAll: async (...args: unknown[]) => (await listMock(...args)).worktrees,
+    list: async (...args: unknown[]) => await listMock(...args),
   },
 }));
 
@@ -108,7 +108,6 @@ describe("worktreeStore.refreshWorktrees", () => {
     useWorktreeStore.setState({
       worktrees: [buildWorktree({})],
       hasLoaded: true,
-      lastLoadIncludedArchived: false,
     });
   });
 
@@ -132,6 +131,8 @@ describe("worktreeStore.refreshWorktrees", () => {
             last_active: now,
           },
         ],
+        total: 1,
+        nextPageToken: "",
       })
       .mockResolvedValueOnce({
         worktrees: [
@@ -162,6 +163,8 @@ describe("worktreeStore.refreshWorktrees", () => {
             last_active: now,
           },
         ],
+        total: 2,
+        nextPageToken: "",
       });
 
     const inFlight = useWorktreeStore.getState().loadWorktrees(projectId);

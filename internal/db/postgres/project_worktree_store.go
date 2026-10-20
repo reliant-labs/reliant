@@ -384,11 +384,24 @@ func (s *worktreeStore) ListWorktrees(ctx context.Context, filters core.Worktree
 		ChatID:          chatIDNull,
 		Status:          statusNull,
 		IncludeArchived: filters.IncludeArchived,
+		ArchivedOnly:    filters.ArchivedOnly,
+		MainOnly:        filters.MainOnly,
 		Limit:           int32(limit),
 		Offset:          int32(offset),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
+	}
+	return worktreesFromPG(rows), nil
+}
+
+func (s *worktreeStore) ListWorktreesByIDs(ctx context.Context, ids []string) ([]*core.Worktree, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := s.q.ListWorktreesByIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees by id: %w", err)
 	}
 	return worktreesFromPG(rows), nil
 }

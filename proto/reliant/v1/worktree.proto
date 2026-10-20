@@ -39,6 +39,11 @@ service WorktreeService {
   rpc CreateWorktree(CreateWorktreeRequest) returns (CreateWorktreeResponse) {}
   // forge:custom — authorizes through the project, and creates its main worktree when none exists
   rpc ListWorktrees(ListWorktreesRequest) returns (ListWorktreesResponse) {}
+  // ListArchivedWorktrees pages through the project's archived workspaces,
+  // most recently archived first. Archived workspaces are never part of
+  // ListWorktrees: only the archived view asks for them.
+  // forge:custom — authorizes through the project and reads only archived rows
+  rpc ListArchivedWorktrees(ListArchivedWorktreesRequest) returns (ListArchivedWorktreesResponse) {}
   // forge:custom — authorizes through the worktree's project before it reads
   rpc GetWorktree(GetWorktreeRequest) returns (GetWorktreeResponse) {}
   // forge:custom — a partial update authorized through the worktree's project
@@ -105,6 +110,22 @@ message Worktree {
   // FAILED and the reason is the user's to fix; empty otherwise, including for
   // a failure on our side.
   string failure_reason = 15;
+}
+
+// WorktreeSummary is the part of a worktree a chat list renders and groups by.
+// ListChats carries one per chat so the sidebar never needs the project's full
+// worktree list: the cost of showing chats scales with the chats, not with the
+// workspaces agents have created.
+message WorktreeSummary {
+  string id = 1;
+  string name = 2;
+  string branch = 3;
+  // Empty while the workspace is still being created.
+  string path = 4;
+  bool is_main = 5;
+  WorktreeStatus status = 6;
+  // Archive timestamp; unset for a live workspace.
+  optional string deleted_at = 7;
 }
 
 // CleanupMetadata tracks what was cleaned up during archive
@@ -239,10 +260,15 @@ message ListWorktreesRequest {
   optional string chat_id = 2;
   // Page size; 0 means the server default (100).
   int32 limit = 3;
-  optional bool include_archived = 4;
+  // Archived workspaces are listed by ListArchivedWorktrees.
+  reserved 4;
+  reserved "include_archived";
   // Continues a previous response's next_page_token. Opaque. Pages are ordered
   // main workspace first, then by last_active descending.
   optional string page_token = 5;
+  // When true, return only the project's main workspace (creating it if the
+  // project has none). The cheap way to find main without paging the list.
+  bool main_only = 6;
 }
 
 // ListWorktreesResponse returns a page of worktrees
@@ -251,6 +277,25 @@ message ListWorktreesResponse {
   // Number of worktrees in this page.
   int32 total = 2;
   // Set when more worktrees follow; pass it as page_token. Empty on the last page.
+  string next_page_token = 3;
+}
+
+// ListArchivedWorktreesRequest pages through a project's archived workspaces.
+message ListArchivedWorktreesRequest {
+  string project_id = 1 [(buf.validate.field).required = true]; // Required
+  // Page size; 0 means the server default (100).
+  int32 limit = 2;
+  // Continues a previous response's next_page_token. Opaque. Pages are ordered
+  // most recently archived first.
+  optional string page_token = 3;
+}
+
+// ListArchivedWorktreesResponse returns a page of archived worktrees
+message ListArchivedWorktreesResponse {
+  repeated Worktree worktrees = 1;
+  // Number of worktrees in this page.
+  int32 total = 2;
+  // Set when more follow; pass it as page_token. Empty on the last page.
   string next_page_token = 3;
 }
 

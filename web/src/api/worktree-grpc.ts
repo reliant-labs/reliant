@@ -18,6 +18,7 @@ export { WorktreeStatus };
 import {
   CreateWorktreeRequestSchema,
   ListWorktreesRequestSchema,
+  ListArchivedWorktreesRequestSchema,
   GetWorktreeRequestSchema,
   UpdateWorktreeRequestSchema,
   DeleteWorktreeRequestSchema,
@@ -253,8 +254,14 @@ function protoFileChangeToFrontend(proto: ProtoFileChange): WorktreeFileChange {
   };
 }
 
-// Safety bound on pagination: 100 pages of 100 is 10,000 worktrees.
-const MAX_WORKTREE_PAGES = 100;
+/** One page of a worktree list; an empty nextPageToken marks the last page. */
+export interface WorktreePage {
+  worktrees: Worktree[];
+  total: number;
+  nextPageToken: string;
+}
+
+export const WORKTREE_PAGE_SIZE = 100;
 
 export const worktreeGrpc = {
   // =============================================================================
@@ -297,19 +304,21 @@ export const worktreeGrpc = {
     return protoToFrontend(response.worktree);
   },
 
-  // List ONE page of worktrees for a project. Pass the returned nextPageToken
-  // back as pageToken to continue; an empty token means the last page. Callers
-  // that need every worktree use listAll.
+  // List ONE page of a project's live (unarchived) worktrees, main workspace
+  // first. Pass the returned nextPageToken back as pageToken to continue; an
+  // empty token means the last page. mainOnly returns just the main workspace
+  // (creating it when the project has none). Archived workspaces are never in
+  // this list: see listArchived.
   async list(
     projectId: string,
-    options?: { chatId?: string; limit?: number; includeArchived?: boolean; pageToken?: string }
-  ): Promise<{ worktrees: Worktree[]; total: number; nextPageToken: string }> {
+    options?: { chatId?: string; limit?: number; pageToken?: string; mainOnly?: boolean }
+  ): Promise<WorktreePage> {
     const client = grpcClient.worktree();
     const request = create(ListWorktreesRequestSchema, {
       projectId,
       chatId: options?.chatId,
-      limit: options?.limit || 100,
-      includeArchived: options?.includeArchived ?? false,
+      limit: options?.limit || WORKTREE_PAGE_SIZE,
+      mainOnly: options?.mainOnly ?? false,
       pageToken: options?.pageToken || undefined,
     });
     const response = await client.listWorktrees(request);
@@ -320,27 +329,30 @@ export const worktreeGrpc = {
     };
   },
 
-  // List EVERY worktree for a project by following next_page_token. A project
-  // can hold far more worktrees than one page, and callers (the sidebar above
-  // all) treat the result as the complete set.
-  async listAll(
+  // The project's main workspace, or null when the server answers with none.
+  async getMain(projectId: string): Promise<Worktree | null> {
+    const page = await worktreeGrpc.list(projectId, { mainOnly: true, limit: 1 });
+    return page.worktrees.find((w) => w.is_main) ?? null;
+  },
+
+  // List ONE page of a project's archived worktrees, most recently archived
+  // first. Only the archived view asks for these.
+  async listArchived(
     projectId: string,
-    options?: { includeArchived?: boolean }
-  ): Promise<Worktree[]> {
-    const all: Worktree[] = [];
-    const seen = new Set<string>();
-    let pageToken: string | undefined;
-    for (let page = 0; page < MAX_WORKTREE_PAGES; page++) {
-      const response = await worktreeGrpc.list(projectId, { ...options, pageToken });
-      for (const w of response.worktrees) {
-        if (seen.has(w.id)) continue;
-        seen.add(w.id);
-        all.push(w);
-      }
-      if (!response.nextPageToken) return all;
-      pageToken = response.nextPageToken;
-    }
-    throw new Error(`worktree list did not finish after ${MAX_WORKTREE_PAGES} pages`);
+    options?: { limit?: number; pageToken?: string }
+  ): Promise<WorktreePage> {
+    const client = grpcClient.worktree();
+    const request = create(ListArchivedWorktreesRequestSchema, {
+      projectId,
+      limit: options?.limit || WORKTREE_PAGE_SIZE,
+      pageToken: options?.pageToken || undefined,
+    });
+    const response = await client.listArchivedWorktrees(request);
+    return {
+      worktrees: response.worktrees.map(protoToFrontend),
+      total: response.total,
+      nextPageToken: response.nextPageToken,
+    };
   },
 
   // Get a worktree by ID

@@ -8,7 +8,8 @@ import React, {
   memo,
 } from "react";
 import { ChatState } from "../../gen/reliant/v1/chat_pb";
-import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
+import type { WorktreeSummary } from "../../gen/reliant/v1/worktree_pb";
+import { isWorkspaceClosed, workspaceOfChat } from "../../lib/chatWorkspace";
 import {
   Plus,
   Trash2,
@@ -40,7 +41,7 @@ import {
   Activity,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
-import { useChat, useChatList, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
+import { useChat, useChatListWithWorkspaces, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
 import { useAdoptRun, useUnadoptRun } from "../../hooks/run-queries";
 import { useTriggerName } from "../../hooks/trigger-queries";
 import { isAdoptedAutomation, isAutomationLaunch, withOpenChatPinned } from "../../lib/sidebarChatList";
@@ -670,7 +671,11 @@ function SidebarComponent({
   onOpenObservability,
 }: SidebarProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
-  const { data: listedChats = [] } = useChatList(currentProject?.id);
+  const { data: chatList } = useChatListWithWorkspaces(currentProject?.id);
+  const listedChats = useMemo(() => chatList?.chats ?? [], [chatList?.chats]);
+  // The list carries each chat's workspace and the project's main one, so the
+  // sidebar groups from this response alone.
+  const mainWorktree = chatList?.mainWorktree;
   // Get active chat from navigation store
   const activeChatId = useChatStore((state) => state.activeChatId);
   // The open chat stays in the list even when the server left it out (§6.2
@@ -731,7 +736,6 @@ function SidebarComponent({
   // Archived chats from React Query (auto-fetches)
   const { data: archivedChats = [] } = useArchivedChats();
   
-  const worktrees = useWorktreeStore((state) => state.worktrees);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
   const fetchProcesses = useProcessStore(
     (state) => state.fetchProcesses
@@ -838,25 +842,24 @@ function SidebarComponent({
     });
   }, [chats, getChatActivity]);
 
-  // Get worktree for a chat - all chats now have worktree_id
-  const getWorktreeForChat = useCallback(
-    (chat: Chat) => {
-      return worktrees.find((w) => w.id === chat.worktreeId);
-    },
-    [worktrees]
-  );
-
-  // The worktree list is a snapshot, so a chat's workspace can be missing from
-  // it (not loaded yet, or created elsewhere). Resolve those by id instead of
-  // treating absence as "archived".
-  useEffect(() => {
-    const missing = chatsWithActivity
-      .map((chat) => chat.worktreeId)
-      .filter((id): id is string => !!id && !worktrees.some((w) => w.id === id));
-    if (missing.length > 0) {
-      void useWorktreeStore.getState().ensureWorktrees(missing);
+  // Every workspace the list names, by id: the group headers' context menus
+  // read a path from here.
+  const workspacesById = useMemo(() => {
+    const byId = new Map<string, WorktreeSummary>();
+    if (mainWorktree) byId.set(mainWorktree.id, mainWorktree);
+    for (const chat of listedChats) {
+      if (chat.worktree) byId.set(chat.worktree.id, chat.worktree);
     }
-  }, [chatsWithActivity, worktrees]);
+    return byId;
+  }, [listedChats, mainWorktree]);
+
+  // The workspace a chat is grouped under: its own summary, or the project's
+  // main workspace for a chat with no worktree. Undefined only when the server
+  // could not find the chat's worktree row.
+  const getWorktreeForChat = useCallback(
+    (chat: Chat) => workspaceOfChat(chat, mainWorktree),
+    [mainWorktree]
+  );
 
   // Filtered and sorted chats grouped by worktree (or flat list)
   const { activeGroups, flatList, archivedChats: filteredArchivedChats, archivedGroups } = useMemo(() => {
@@ -870,19 +873,15 @@ function SidebarComponent({
       const worktree = getWorktreeForChat(chat);
 
       // A chat's own state says whether it is archived (chatsWithActivity
-      // already dropped those). A worktree that isn't loaded says nothing
-      // about it, so the chat stays visible; it is grouped under a fallback
-      // until the worktree is fetched by id.
+      // already dropped those). A worktree row the server could not find says
+      // nothing about it, so the chat stays visible under a fallback group.
       if (!worktree) {
         activeWorktreeChats.push(chat);
         return;
       }
 
       // Skip if worktree is completed/abandoned (these are archived)
-      if (
-        worktree.status === WorktreeStatus.COMPLETED ||
-        worktree.status === WorktreeStatus.ABANDONED
-      ) {
+      if (isWorkspaceClosed(worktree)) {
         return;
       }
 
@@ -913,7 +912,7 @@ function SidebarComponent({
           worktreeBranch: worktree?.branch ?? "Unknown workspace",
           chats: [],
           hasActivity: false,
-          isMain: worktree?.is_main ?? false,
+          isMain: worktree?.isMain ?? false,
         });
       }
 
@@ -940,15 +939,12 @@ function SidebarComponent({
     });
 
     // Ensure main workspace is always present in grouped view, even with zero chats
-    const mainWorktree = worktrees.find(
-      (w) =>
-        w.is_main &&
-        !w.deleted_at &&
-        w.status !== WorktreeStatus.COMPLETED &&
-        w.status !== WorktreeStatus.ABANDONED
-    );
-
-    if (mainWorktree && !worktreeGroupsMap.has(mainWorktree.id)) {
+    if (
+      mainWorktree &&
+      !mainWorktree.deletedAt &&
+      !isWorkspaceClosed(mainWorktree) &&
+      !worktreeGroupsMap.has(mainWorktree.id)
+    ) {
       worktreeGroupsMap.set(mainWorktree.id, {
         worktreeId: mainWorktree.id,
         worktreeName: mainWorktree.name,
@@ -1023,7 +1019,7 @@ function SidebarComponent({
     getWorktreeForChat,
     projectArchivedChats,
     sortOrder,
-    worktrees,
+    mainWorktree,
   ]);
 
   const handleNewChat = async () => {
@@ -1076,8 +1072,7 @@ function SidebarComponent({
     e.preventDefault();
     e.stopPropagation();
 
-    const worktree = worktrees.find((w) => w.id === worktreeId);
-    if (!worktree?.path) return;
+    if (!workspacesById.get(worktreeId)?.path) return;
 
     setContextMenu({
       x: e.clientX,
@@ -1085,7 +1080,7 @@ function SidebarComponent({
       type: "worktree",
       worktreeId,
     });
-  }, [worktrees]);
+  }, [workspacesById]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).catch((err) => {
@@ -1154,7 +1149,7 @@ function SidebarComponent({
       },
     ];
 
-    const chatWorktree = worktrees.find((w) => w.id === chat.worktreeId);
+    const chatWorktree = getWorktreeForChat(chat);
     if (chatWorktree?.path) {
       menuItems.push({
         label: "Copy Workspace Path",
@@ -1196,7 +1191,7 @@ function SidebarComponent({
   };
 
   const getWorktreeContextMenuItems = (worktreeId: string): ContextMenuItem[] => {
-    const worktree = worktrees.find((w) => w.id === worktreeId);
+    const worktree = workspacesById.get(worktreeId);
     if (!worktree?.path) return [];
 
     return [

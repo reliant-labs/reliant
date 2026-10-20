@@ -41,6 +41,16 @@ export interface MobileSheetAction {
   onSelect: () => void;
 }
 
+/**
+ * Pages a long option list: the sheet shows a "Load more" row after the options
+ * while `hasMore`, so a list backed by a paged query stays fully reachable.
+ */
+export interface MobileSheetPaging {
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
+}
+
 export function MobileToggleRow({
   label,
   description,
@@ -108,6 +118,7 @@ export function MobileSelectRow({
   sheetTitle,
   placeholder,
   action,
+  paging,
 }: {
   label: string;
   description?: string;
@@ -119,6 +130,8 @@ export function MobileSelectRow({
   placeholder?: string;
   /** Optional footer action in the sheet; see `MobileSheetAction`. */
   action?: MobileSheetAction;
+  /** Set when `options` is one page of a longer list. */
+  paging?: MobileSheetPaging;
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
@@ -153,6 +166,7 @@ export function MobileSelectRow({
             setOpen(false);
           }}
           onClose={() => setOpen(false)}
+          paging={paging}
           action={
             action && {
               ...action,
@@ -178,6 +192,7 @@ export function MobileOptionSheet({
   onSelect,
   onClose,
   action,
+  paging,
 }: {
   title: string;
   options: MobileSettingOption[];
@@ -185,6 +200,7 @@ export function MobileOptionSheet({
   onSelect: (value: string) => void;
   onClose: () => void;
   action?: MobileSheetAction;
+  paging?: MobileSheetPaging;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -238,6 +254,16 @@ export function MobileOptionSheet({
               </button>
             );
           })}
+          {paging?.hasMore && (
+            <button
+              type="button"
+              onClick={paging.onLoadMore}
+              disabled={paging.isLoadingMore}
+              className="flex min-h-[44px] w-full items-center justify-center border-t border-border px-4 py-3 text-sm text-muted-foreground active:bg-foreground/5 disabled:opacity-60"
+            >
+              {paging.isLoadingMore ? "Loading…" : "Load more"}
+            </button>
+          )}
           {action && (
             <button
               type="button"

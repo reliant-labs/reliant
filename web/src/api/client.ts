@@ -271,10 +271,14 @@ export const api = {
 
     list: async (projectId?: string) => {
       if (!projectId) {
-        return { chats: [], lastUserUpdateSequence: 0 };
+        return { chats: [], lastUserUpdateSequence: 0, mainWorktree: undefined };
       }
       const result = await chatGrpc.list(projectId);
-      return { chats: result.chats, lastUserUpdateSequence: result.lastUserUpdateSequence };
+      return {
+        chats: result.chats,
+        lastUserUpdateSequence: result.lastUserUpdateSequence,
+        mainWorktree: result.mainWorktree,
+      };
     },
 
     search: async (projectId: string, searchQuery: string) => {

@@ -9,7 +9,7 @@
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useContextUsage, useContextUsageByThread } from "../../store/chatStoreHooks";
-import { useWorktreeStore } from "../../store/worktreeStore";
+import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
 import { useTerminalStore } from "../../store/terminalStore";
 import {
   MoreHorizontal,
@@ -75,7 +75,8 @@ export function ChatHeader({
   const chat = chatQuery.data;
   const messagesQuery = useMessages(chatId || undefined);
   const messages = messagesQuery.data?.messages ?? [];
-  const worktrees = useWorktreeStore((state) => state.worktrees);
+  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
+  const loadMainWorktree = useWorktreeStore((state) => state.loadMainWorktree);
   const deleteMutation = useDeleteChat();
   const renameMutation = useRenameChat();
   const createTerminalSession = useTerminalStore((state) => state.createSession);
@@ -118,25 +119,42 @@ export function ChatHeader({
   // Determine the title to show
   const title = isNewChat ? "New Chat" : (chat?.title || "New Chat");
 
-  // Get the workspace and path
-  const { workspaceName, workspacePath, worktree } = useMemo(() => {
-    const wtId = propWorktreeId || chat?.worktreeId;
-    if (!wtId) return { workspaceName: null, workspacePath: null, worktree: null };
-    const worktree = worktrees.find((w) => w.id === wtId);
-    if (!worktree) return { workspaceName: null, workspacePath: null, worktree: null };
-    
-    // Use branch name if available, otherwise use name
-    return {
-      workspaceName: worktree.branch || worktree.name || null,
-      workspacePath: worktree.path || null,
-      worktree,
+  // The workspace and path. Fetched by id (and cached in the store) rather than
+  // read from a list, so it resolves whichever workspace the chat is in.
+  const workspaceId = propWorktreeId || chat?.worktreeId;
+  const [worktree, setWorktree] = useState<Worktree | null>(null);
+  const [mainWorktree, setMainWorktree] = useState<Worktree | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    setWorktree(null);
+    setMainWorktree(undefined);
+    if (!workspaceId) return;
+    void (async () => {
+      const resolved = await resolveWorktree(workspaceId);
+      if (cancelled) return;
+      setWorktree(resolved);
+      if (!resolved) return;
+      if (resolved.is_main) {
+        setMainWorktree(resolved);
+        return;
+      }
+      // Only the recovery menu reads it, so fetch it (one row) rather than
+      // depend on the store happening to hold it.
+      if (resolved.project_id) await loadMainWorktree(resolved.project_id);
+      if (cancelled) return;
+      setMainWorktree(
+        useWorktreeStore
+          .getState()
+          .worktrees.find((w) => w.is_main && w.project_id === resolved.project_id && !w.deleted_at),
+      );
+    })();
+    return () => {
+      cancelled = true;
     };
-  }, [chat?.worktreeId, propWorktreeId, worktrees]);
-
-  const mainWorktree = useMemo(
-    () => (worktree ? worktrees.find((w) => w.is_main && w.project_id === worktree.project_id && !w.deleted_at) : undefined),
-    [worktree, worktrees],
-  );
+  }, [workspaceId, resolveWorktree, loadMainWorktree]);
+  // Use branch name if available, otherwise use name
+  const workspaceName = worktree ? worktree.branch || worktree.name || null : null;
+  const workspacePath = worktree?.path || null;
 
   // Format time ago
   const timeAgo = useMemo(() => {

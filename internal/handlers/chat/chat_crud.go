@@ -249,6 +249,7 @@ func (s *Service) ListChats(
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
 	}
+	mainWorktree := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, chats, protoChats)
 
 	// Get latest user update sequence for stream sync —
 	// the frontend uses this to connect the streaming RPC without redundant event replay.
@@ -262,6 +263,7 @@ func (s *Service) ListChats(
 		Chats:                  protoChats,
 		Total:                  int32(len(protoChats)),
 		LastUserUpdateSequence: latestSeq,
+		MainWorktree:           mainWorktree,
 	}), nil
 }
 

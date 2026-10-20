@@ -9,6 +9,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const adoptWorktreeDaemon = `-- name: AdoptWorktreeDaemon :exec
@@ -348,25 +350,37 @@ WHERE
     ($1::text IS NULL OR project_id = $1::text)
     AND ($2::text IS NULL OR chat_id = $2::text)
     AND ($3::integer IS NULL OR status = $3::integer)
-    AND ($4::boolean OR deleted_at IS NULL)
-ORDER BY (deleted_at IS NOT NULL), is_main DESC, last_active DESC, id
-LIMIT $6 OFFSET $5
+    AND (NOT $4::boolean OR is_main)
+    AND (
+        CASE WHEN $5::boolean THEN deleted_at IS NOT NULL
+             ELSE ($6::boolean OR deleted_at IS NULL) END
+    )
+ORDER BY (deleted_at IS NOT NULL), is_main DESC, COALESCE(deleted_at, last_active) DESC, id
+LIMIT $8 OFFSET $7
 `
 
 type ListWorktreesParams struct {
 	ProjectID       sql.NullString `json:"project_id"`
 	ChatID          sql.NullString `json:"chat_id"`
 	Status          sql.NullInt32  `json:"status"`
+	MainOnly        bool           `json:"main_only"`
+	ArchivedOnly    bool           `json:"archived_only"`
 	IncludeArchived bool           `json:"include_archived"`
 	Offset          int32          `json:"offset"`
 	Limit           int32          `json:"limit"`
 }
 
+// Live workspaces by default. include_archived adds archived ones after them
+// (server-internal callers that must see every row); archived_only lists only
+// the archived ones, most recently archived first. main_only narrows to the
+// project's main workspace.
 func (q *Queries) ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([]Worktree, error) {
 	rows, err := q.db.QueryContext(ctx, listWorktrees,
 		arg.ProjectID,
 		arg.ChatID,
 		arg.Status,
+		arg.MainOnly,
+		arg.ArchivedOnly,
 		arg.IncludeArchived,
 		arg.Offset,
 		arg.Limit,
@@ -425,6 +439,54 @@ type ListWorktreesByBranchParams struct {
 // checkout or branch may outlive the archive.
 func (q *Queries) ListWorktreesByBranch(ctx context.Context, arg ListWorktreesByBranchParams) ([]Worktree, error) {
 	rows, err := q.db.QueryContext(ctx, listWorktreesByBranch, arg.ProjectID, arg.Branch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Worktree{}
+	for rows.Next() {
+		var i Worktree
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Path,
+			&i.Branch,
+			&i.BaseBranch,
+			&i.ProjectID,
+			&i.ChatID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastActive,
+			&i.DeletedAt,
+			&i.IsMain,
+			&i.CleanupMetadata,
+			&i.BaseBranches,
+			&i.DaemonID,
+			&i.IdempotencyKey,
+			&i.FailureReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorktreesByIDs = `-- name: ListWorktreesByIDs :many
+SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key, failure_reason FROM worktrees WHERE id = ANY($1::text[])
+`
+
+// One round trip for the workspaces a page of chats points at, archived ones
+// included: a chat's workspace being archived must not hide the chat.
+func (q *Queries) ListWorktreesByIDs(ctx context.Context, ids []string) ([]Worktree, error) {
+	rows, err := q.db.QueryContext(ctx, listWorktreesByIDs, pq.Array(ids))
 	if err != nil {
 		return nil, err
 	}

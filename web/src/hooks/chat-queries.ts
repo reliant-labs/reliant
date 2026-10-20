@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Chat } from "../api/client";
 import type { ChatSelection } from "../gen/reliant/v1/chat_pb";
+import type { WorktreeSummary } from "../gen/reliant/v1/worktree_pb";
 import { queryClient } from "../lib/query-client";
 import type { StartChatRequest, UpdateChatRequest } from "../types/api";
 
@@ -29,6 +30,8 @@ type ChatListEnvelope = {
   chats: Chat[];
   total?: number;
   lastUserUpdateSequence: number;
+  // The project's main workspace, so the list can show it with no chat in it.
+  mainWorktree?: WorktreeSummary;
 };
 
 /**
@@ -186,6 +189,18 @@ export function getCachedChatList(projectId: string | undefined): Chat[] {
 }
 
 /**
+ * The project's main workspace as the chat list last reported it (imperative,
+ * non-reactive). Undefined until the list has loaded.
+ */
+export function getCachedMainWorktree(
+  projectId: string | undefined
+): WorktreeSummary | undefined {
+  if (!projectId) return undefined;
+  return queryClient.getQueryData<ChatListEnvelope>(chatKeys.list(projectId))
+    ?.mainWorktree;
+}
+
+/**
  * Remove a chat from the list cache envelope and drop its detail cache.
  */
 export function removeChatFromListCache(
@@ -220,6 +235,19 @@ export function useChatList(projectId?: string) {
     queryFn: () => api.chatsV2.list(projectId),
     enabled: !!projectId,
     select: (data) => data.chats,
+  });
+}
+
+/**
+ * The chat list together with the project's main workspace: everything the
+ * sidebar and the mobile list need to group chats by workspace, from the one
+ * ListChats response. The full worktree list is not involved.
+ */
+export function useChatListWithWorkspaces(projectId?: string) {
+  return useQuery({
+    queryKey: chatKeys.list(projectId),
+    queryFn: () => api.chatsV2.list(projectId),
+    enabled: !!projectId,
   });
 }
 
@@ -326,24 +354,11 @@ export function useUnarchiveChat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (chatId: string) => api.chatsV2.unarchive(chatId),
-    onSuccess: async () => {
+    onSuccess: () => {
+      // The chat list carries each chat's workspace, so the restored chat shows
+      // with the right group as soon as the list refetches.
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
       queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
-
-      // Unarchiving a chat also unarchives its workspace server-side. That
-      // lives in Zustand, which query invalidation cannot reach, and the
-      // sidebar hides any chat whose worktree is missing from the store — so
-      // without this the restored chat stays invisible until a page reload.
-      // Imported dynamically: both stores import this module for
-      // getChatFromCache, so a static import would close the cycle.
-      const [{ useProjectStore }, { useWorktreeStore }] = await Promise.all([
-        import("../store/projectStore"),
-        import("../store/worktreeStore"),
-      ]);
-      const projectId = useProjectStore.getState().currentProject?.id;
-      if (projectId) {
-        await useWorktreeStore.getState().refreshWorktrees(projectId);
-      }
     },
   });
 }

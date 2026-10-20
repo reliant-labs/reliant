@@ -217,9 +217,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     // Clear worktrees and chats FIRST to avoid showing stale data
     // Skip clearing if this is initial window setup with context
     if (!options?.skipClear) {
-      const worktreeStore = useWorktreeStore.getState();
-      worktreeStore.worktrees = [];
-      worktreeStore.currentWorktree = null;
+      useWorktreeStore.getState().reset();
 
       // Chats now live in the React Query cache, keyed by projectId — the
       // list query for the new project scopes naturally and loadChats seeds
@@ -279,10 +277,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     // (user-initiated project switch). The Electron/skipClear path handles
     // worktree loading separately via useWindowContext.
     if (!options?.skipClear) {
-      await useWorktreeStore.getState().loadWorktrees(project.id);
-      
-      // Restore last worktree for this project
-      useWorktreeStore.getState().restoreLastWorktree(project.id);
+      // Restore last worktree for this project. Fetches only that workspace
+      // (or main) — the sidebar groups from the chat list, so the project's
+      // full worktree list is not loaded here.
+      await useWorktreeStore.getState().restoreLastWorktree(project.id);
       const currentWorktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
       
       // Restore viewer state (project context is now read from projectStore.currentProject)

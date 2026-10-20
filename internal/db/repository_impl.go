@@ -2315,6 +2315,10 @@ func (r *Repo) ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*W
 	return r.worktrees.ListWorktrees(ctx, filters)
 }
 
+func (r *Repo) ListWorktreesByIDs(ctx context.Context, ids []string) ([]*Worktree, error) {
+	return r.worktrees.ListWorktreesByIDs(ctx, ids)
+}
+
 func (r *Repo) UpdateWorktree(ctx context.Context, worktree *Worktree) error {
 	if worktree == nil {
 		return fmt.Errorf("worktree cannot be nil")

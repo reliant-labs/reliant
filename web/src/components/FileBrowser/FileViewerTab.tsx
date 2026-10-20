@@ -21,6 +21,7 @@ import {
 import { cn } from "../../lib/utils";
 import { useEditorStore } from "../../store/editorStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
+import { useWorktreeById } from "../../hooks/useWorktreeById";
 import {
   getMonacoLanguage,
   configureMonacoTheme,
@@ -68,11 +69,11 @@ function getPreviewKindLabel(viewerKind: FilePreviewInfo["viewerKind"]): string 
 export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded = false }: FileViewerTabProps) {
   const settings = useEditorStore((state) => state.settings);
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
 
   const effectiveWorktreeId = worktreeId || currentWorktree?.id;
+  const listedWorktree = useWorktreeById(effectiveWorktreeId);
   const effectiveWorktree = effectiveWorktreeId
-    ? worktrees.find((w) => w.id === effectiveWorktreeId) || currentWorktree
+    ? listedWorktree || currentWorktree
     : currentWorktree;
 
   const displayPath = getRelativePath(file.path, effectiveWorktree?.path);

@@ -5,6 +5,7 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
 import { Tooltip } from "../ui/Tooltip";
+import { LoadMoreWorktreesRow } from "../Worktrees/LoadMoreWorktreesRow";
 
 interface WorktreeSelectorProps {
   selectedWorktreeId?: string;
@@ -193,6 +194,7 @@ export function WorktreeSelector({
                 </button>
               ))
             )}
+            <LoadMoreWorktreesRow projectId={currentProject.id} />
 
             {/* Create new workspace option */}
             <button

@@ -22,11 +22,13 @@ interface ArchivedWorktreesPanelProps {
  * so the "Cleanup" column says what is actually left on disk.
  */
 export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktreesPanelProps) {
-  const worktrees = useWorktreeStore((state) => state.worktrees);
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
+  const worktrees = useWorktreeStore((state) => state.archivedWorktrees);
+  const loadArchived = useWorktreeStore((state) => state.loadArchivedWorktrees);
+  const loadMoreArchived = useWorktreeStore((state) => state.loadMoreArchivedWorktrees);
+  const hasMore = useWorktreeStore((state) => state.archivedNextPageToken !== "");
   const deleteWorktree = useWorktreeStore((state) => state.deleteWorktree);
   const unarchiveWorktree = useWorktreeStore((state) => state.unarchiveWorktree);
-  const isLoading = useWorktreeStore((state) => state.isLoading);
+  const isLoading = useWorktreeStore((state) => state.isLoadingArchived);
   const deletingId = useWorktreeStore((state) => state.deletingId);
   const currentProject = useProjectStore((state) => state.currentProject);
   const { data: chats = [] } = useChatList(currentProject?.id);
@@ -34,15 +36,15 @@ export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktre
   const [worktreeToDelete, setWorktreeToDelete] = useState<Worktree | null>(null);
 
   const archivedWorktrees = useMemo(
-    () => sortArchivedWorkspaces(worktrees.filter((worktree) => worktree.deleted_at)),
+    () => sortArchivedWorkspaces(worktrees),
     [worktrees],
   );
 
   useEffect(() => {
     if (currentProject) {
-      loadWorktrees(currentProject.id, { includeArchived: true });
+      void loadArchived(currentProject.id);
     }
-  }, [currentProject, loadWorktrees]);
+  }, [currentProject, loadArchived]);
 
   const handleRestore = async (id: string) => {
     setRestoringId(id);
@@ -83,14 +85,14 @@ export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktre
     <div className={cn("forge-ui flex flex-col gap-3", paddingClass)} data-testid="archived-workspaces">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          {archivedWorktrees.length === 1
+          {archivedWorktrees.length === 1 && !hasMore
             ? "1 archived workspace"
-            : `${archivedWorktrees.length} archived workspaces`}
+            : `${archivedWorktrees.length}${hasMore ? "+" : ""} archived workspaces`}
         </p>
         <IconAction
           label="Refresh archived workspaces"
           icon={<RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />}
-          onClick={() => void loadWorktrees(currentProject.id, { includeArchived: true })}
+          onClick={() => void loadArchived(currentProject.id)}
           disabled={isLoading}
         />
       </div>
@@ -193,6 +195,19 @@ export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktre
               })}
             </tbody>
           </table>
+          {hasMore && (
+            <div className="flex justify-center border-t border-border p-2">
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline disabled:opacity-60"
+                disabled={isLoading}
+                onClick={() => void loadMoreArchived(currentProject.id)}
+                data-testid="load-more-archived"
+              >
+                {isLoading ? "Loading…" : "Load more archived workspaces"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

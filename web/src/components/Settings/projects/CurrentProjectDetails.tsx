@@ -61,6 +61,8 @@ export function CurrentProjectDetails({
   const refreshCurrentProject = useProjectStore((state) => state.refreshCurrentProject);
   const worktrees = useWorktreeStore((state) => state.worktrees);
   const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
+  const hasMoreWorkspaces = useWorktreeStore((state) => state.nextPageToken !== "");
+  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
   const selectChat = useChatStore((state) => state.selectChat);
   const navigateToChat = useChatNavigationStore((state) => state.navigateToChat);
@@ -95,8 +97,8 @@ export function CurrentProjectDetails({
   );
 
   const openChat = async (chat: Chat) => {
-    const target = chat.worktreeId ? worktrees.find((w) => w.id === chat.worktreeId) ?? null : null;
-    // A chat on a workspace whose record we have not loaded keeps the current
+    const target = chat.worktreeId ? await resolveWorktree(chat.worktreeId) : null;
+    // A chat whose workspace the server could not give us keeps the current
     // context rather than dropping the user onto the main checkout.
     if (!chat.worktreeId || target) {
       await switchWorktreeContext(project.id, target);
@@ -182,7 +184,9 @@ export function CurrentProjectDetails({
             <Fact label="Workspaces">
               <span className="flex items-center gap-2">
                 <span className="tabular-nums text-foreground">
-                  {activeWorkspaceCount === 0 ? "None" : `${activeWorkspaceCount} active`}
+                  {activeWorkspaceCount === 0
+                    ? "None"
+                    : `${activeWorkspaceCount}${hasMoreWorkspaces ? "+" : ""} active`}
                 </span>
                 {onManageWorkspaces && (
                   <button

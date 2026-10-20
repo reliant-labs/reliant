@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/worktree.proto.
  */
 export const file_reliant_v1_worktree: GenFile = /*@__PURE__*/
-  fileDesc("ChlyZWxpYW50L3YxL3dvcmt0cmVlLnByb3RvEgpyZWxpYW50LnYxIpgDCghXb3JrdHJlZRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHBhdGgYAyABKAkSDgoGYnJhbmNoGAQgASgJEhMKC2Jhc2VfYnJhbmNoGAUgASgJEhIKCnByb2plY3RfaWQYBiABKAkSFAoHY2hhdF9pZBgHIAEoCUgAiAEBEioKBnN0YXR1cxgIIAEoDjIaLnJlbGlhbnQudjEuV29ya3RyZWVTdGF0dXMSDwoHaXNfbWFpbhgJIAEoCBISCgpjcmVhdGVkX2F0GAogASgJEhIKCnVwZGF0ZWRfYXQYCyABKAkSEwoLbGFzdF9hY3RpdmUYDCABKAkSFwoKZGVsZXRlZF9hdBgNIAEoCUgBiAEBEjoKEGNsZWFudXBfbWV0YWRhdGEYDiABKAsyGy5yZWxpYW50LnYxLkNsZWFudXBNZXRhZGF0YUgCiAEBEhYKDmZhaWx1cmVfcmVhc29uGA8gASgJQgoKCF9jaGF0X2lkQg0KC19kZWxldGVkX2F0QhMKEV9jbGVhbnVwX21ldGFkYXRhIskBCg9DbGVhbnVwTWV0YWRhdGESGQoRZGlyZWN0b3J5X2RlbGV0ZWQYASABKAgSFgoOYnJhbmNoX2RlbGV0ZWQYAiABKAgSEwoLaGVsZF9yZWFzb24YAyABKAkSEwoLaGVsZF9kZXRhaWwYBCABKAkSEgoKc2l6ZV9ieXRlcxgFIAEoAxIVCg1zbmFwc2hvdF9yZWZzGAYgAygJEhYKDnN0cmlwcGVkX3BhdGhzGAcgAygJEhYKDnN0cmlwcGVkX2J5dGVzGAggASgDItQBChJEaXNjb3ZlcmVkV29ya3RyZWUSDAoEcGF0aBgBIAEoCRIMCgRuYW1lGAIgASgJEg4KBmJyYW5jaBgDIAEoCRIPCgdyZXBvX2lkGAcgASgJEhEKCXJlcG9fbmFtZRgIIAEoCRIMCgRoZWFkGAkgASgJEg4KBmxvY2tlZBgKIAEoCBIXCg9tb3Zlc19vbl9pbXBvcnQYCyABKAhKBAgEEAVKBAgFEAZKBAgGEAdSC2lzX2ltcG9ydGVkUgtpc19wcnVuYWJsZVILaW1wb3J0ZWRfaWQiUQoNU3RhbGVXb3JrdHJlZRIMCgRwYXRoGAEgASgJEg8KB3JlcG9faWQYAiABKAkSEQoJcmVwb19uYW1lGAMgASgJEg4KBnJlYXNvbhgEIAEoCSJrCglHaXRDb21taXQSDAoEaGFzaBgBIAEoCRISCgpzaG9ydF9oYXNoGAIgASgJEg4KBmF1dGhvchgDIAEoCRINCgVlbWFpbBgEIAEoCRIMCgRkYXRlGAUgASgJEg8KB21lc3NhZ2UYBiABKAkigQEKEldvcmt0cmVlRmlsZUNoYW5nZRIMCgRwYXRoGAEgASgJEiwKBnN0YXR1cxgCIAEoDjIcLnJlbGlhbnQudjEuRmlsZUNoYW5nZVN0YXR1cxIOCgZpc19uZXcYAyABKAgSDAoEZGlmZhgEIAEoCRIRCglpc19iaW5hcnkYBSABKAgiowMKFUNyZWF0ZVdvcmt0cmVlUmVxdWVzdBIMCgRuYW1lGAEgASgJEg4KBmJyYW5jaBgCIAEoCRISCgpwcm9qZWN0X2lkGAMgASgJEhgKC2Jhc2VfYnJhbmNoGAQgASgJSACIAQESFAoHY2hhdF9pZBgFIAEoCUgBiAEBEhIKCmNvcHlfZmlsZXMYBiADKAkSDQoFZm9yY2UYByABKAgSHwoSc291cmNlX3dvcmt0cmVlX2lkGAggASgJSAKIAQESSgoNYmFzZV9icmFuY2hlcxgJIAMoCzIzLnJlbGlhbnQudjEuQ3JlYXRlV29ya3RyZWVSZXF1ZXN0LkJhc2VCcmFuY2hlc0VudHJ5EhwKD2lkZW1wb3RlbmN5X2tleRgKIAEoCUgDiAEBGjMKEUJhc2VCcmFuY2hlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFCDgoMX2Jhc2VfYnJhbmNoQgoKCF9jaGF0X2lkQhUKE19zb3VyY2Vfd29ya3RyZWVfaWRCEgoQX2lkZW1wb3RlbmN5X2tleSJAChZDcmVhdGVXb3JrdHJlZVJlc3BvbnNlEiYKCHdvcmt0cmVlGAEgASgLMhQucmVsaWFudC52MS5Xb3JrdHJlZSK/AQoUTGlzdFdvcmt0cmVlc1JlcXVlc3QSGgoKcHJvamVjdF9pZBgBIAEoCUIGukgDyAEBEhQKB2NoYXRfaWQYAiABKAlIAIgBARINCgVsaW1pdBgDIAEoBRIdChBpbmNsdWRlX2FyY2hpdmVkGAQgASgISAGIAQESFwoKcGFnZV90b2tlbhgFIAEoCUgCiAEBQgoKCF9jaGF0X2lkQhMKEV9pbmNsdWRlX2FyY2hpdmVkQg0KC19wYWdlX3Rva2VuImgKFUxpc3RXb3JrdHJlZXNSZXNwb25zZRInCgl3b3JrdHJlZXMYASADKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlEg0KBXRvdGFsGAIgASgFEhcKD25leHRfcGFnZV90b2tlbhgDIAEoCSIpChJHZXRXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkiPQoTR2V0V29ya3RyZWVSZXNwb25zZRImCgh3b3JrdHJlZRgBIAEoCzIULnJlbGlhbnQudjEuV29ya3RyZWUirgEKFVVwZGF0ZVdvcmt0cmVlUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIRCgRuYW1lGAIgASgJSACIAQESLwoGc3RhdHVzGAMgASgOMhoucmVsaWFudC52MS5Xb3JrdHJlZVN0YXR1c0gBiAEBEhgKC2Jhc2VfYnJhbmNoGAQgASgJSAKIAQFCBwoFX25hbWVCCQoHX3N0YXR1c0IOCgxfYmFzZV9icmFuY2giQAoWVXBkYXRlV29ya3RyZWVSZXNwb25zZRImCgh3b3JrdHJlZRgBIAEoCzIULnJlbGlhbnQudjEuV29ya3RyZWUiRwoVRGVsZXRlV29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEhkKEWRlbGV0ZV9naXRfYnJhbmNoGAMgASgIIl4KFkRlbGV0ZVdvcmt0cmVlUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIWCg5kZWxldGVkX2JyYW5jaBgCIAEoCBIbChNpc19wZXJtYW5lbnRfZGVsZXRlGAMgASgIIkgKFkFyY2hpdmVXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSGQoRZGVsZXRlX2dpdF9icmFuY2gYAyABKAgiQgoXQXJjaGl2ZVdvcmt0cmVlUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIWCg5kZWxldGVkX2JyYW5jaBgCIAEoCCIvChhVbmFyY2hpdmVXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkiLAoZVW5hcmNoaXZlV29ya3RyZWVSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJIp4BChVJbXBvcnRXb3JrdHJlZVJlcXVlc3QSDAoEcGF0aBgBIAEoCRISCgpwcm9qZWN0X2lkGAIgASgJEhEKBG5hbWUYAyABKAlIAIgBARIUCgdjaGF0X2lkGAQgASgJSAGIAQESDwoHcmVwb19pZBgFIAEoCRIUCgxjb25maXJtX21vdmUYBiABKAhCBwoFX25hbWVCCgoIX2NoYXRfaWQiQAoWSW1wb3J0V29ya3RyZWVSZXNwb25zZRImCgh3b3JrdHJlZRgBIAEoCzIULnJlbGlhbnQudjEuV29ya3RyZWUiQgoYRGlzY292ZXJXb3JrdHJlZXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEgoKYmFja2dyb3VuZBgCIAEoCCKfAQoZRGlzY292ZXJXb3JrdHJlZXNSZXNwb25zZRIyCgpkaXNjb3ZlcmVkGAEgAygLMh4ucmVsaWFudC52MS5EaXNjb3ZlcmVkV29ya3RyZWUSKAoFc3RhbGUYAyADKAsyGS5yZWxpYW50LnYxLlN0YWxlV29ya3RyZWUSFwoPd29ya3NwYWNlc19yb290GAQgASgJSgQIAhADUgV0b3RhbCIrChVQcnVuZVdvcmt0cmVlc1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSJDChZQcnVuZVdvcmt0cmVlc1Jlc3BvbnNlEikKBnBydW5lZBgBIAMoCzIZLnJlbGlhbnQudjEuU3RhbGVXb3JrdHJlZSIuChdSZWNyZWF0ZVdvcmt0cmVlUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCSJ6ChhSZWNyZWF0ZVdvcmt0cmVlUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIMCgRwYXRoGAIgASgJEg4KBmJyYW5jaBgDIAEoCRIYChBzbmFwc2hvdF93YXJuaW5nGAQgASgJEhUKDXNuYXBzaG90X3JlZnMYBSADKAkiQQoZR2V0V29ya3RyZWVDaGFuZ2VzUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIPCgdyZXBvX2lkGAIgASgJIqcBChpHZXRXb3JrdHJlZUNoYW5nZXNSZXNwb25zZRIOCgZicmFuY2gYASABKAkSLQoFZmlsZXMYAiADKAsyHi5yZWxpYW50LnYxLldvcmt0cmVlRmlsZUNoYW5nZRITCgt0b3RhbF9maWxlcxgDIAEoBRINCgVhaGVhZBgEIAEoBRIOCgZiZWhpbmQYBSABKAUSFgoOZGVmYXVsdF9icmFuY2gYBiABKAkiQwobR2V0V29ya3RyZWVHaXRTdGF0dXNSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEg8KB3JlcG9faWQYAiABKAki2wEKHEdldFdvcmt0cmVlR2l0U3RhdHVzUmVzcG9uc2USEwoLd29ya3RyZWVfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIOCgZicmFuY2gYAyABKAkSDQoFY2xlYW4YBCABKAgSEwoLaGFzX2NoYW5nZXMYBSABKAgSFAoMc3RhZ2VkX2ZpbGVzGAYgAygJEhYKDm1vZGlmaWVkX2ZpbGVzGAcgAygJEhcKD3VudHJhY2tlZF9maWxlcxgIIAMoCRINCgVhaGVhZBgJIAEoBRIOCgZiZWhpbmQYCiABKAUiUAoZR2V0V29ya3RyZWVDb21taXRzUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRINCgVsaW1pdBgCIAEoBRIPCgdyZXBvX2lkGAMgASgJIj4KH0xpc3RXb3JrdHJlZVJlcG9TdGF0dXNlc1JlcXVlc3QSGwoLd29ya3RyZWVfaWQYASABKAlCBrpIA8gBASLGAQoSV29ya3RyZWVSZXBvU3RhdHVzEg8KB3JlcG9faWQYASABKAkSEQoJcmVwb19uYW1lGAIgASgJEhoKEnJlcG9fcmVsYXRpdmVfcGF0aBgDIAEoCRIWCg5jdXJyZW50X2JyYW5jaBgEIAEoCRITCgtoYXNfY2hhbmdlcxgFIAEoCBINCgVhaGVhZBgGIAEoBRIOCgZiZWhpbmQYByABKAUSFQoNY2hhbmdlZF9maWxlcxgIIAEoBRINCgVlcnJvchgJIAEoCSJUCiBMaXN0V29ya3RyZWVSZXBvU3RhdHVzZXNSZXNwb25zZRIwCghzdGF0dXNlcxgBIAMoCzIeLnJlbGlhbnQudjEuV29ya3RyZWVSZXBvU3RhdHVzIsEBChpHZXRXb3JrdHJlZUNvbW1pdHNSZXNwb25zZRImCgdjb21taXRzGAEgAygLMhUucmVsaWFudC52MS5HaXRDb21taXQSDQoFdG90YWwYAiABKAUSDgoGYnJhbmNoGAMgASgJEhMKC2Jhc2VfYnJhbmNoGAQgASgJEhcKD2NvbXBhcmlzb25fbW9kZRgFIAEoCBIWCg5jb21wYXJpc29uX3JlZhgGIAEoCRIWCg5jdXJyZW50X2JyYW5jaBgHIAEoCSJIChFTdGFnZUZpbGVzUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRINCgVmaWxlcxgCIAMoCRIPCgdyZXBvX2lkGAMgASgJIjQKElN0YWdlRmlsZXNSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEg0KBWZpbGVzGAIgAygJIkoKE1Vuc3RhZ2VGaWxlc1JlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDQoFZmlsZXMYAiADKAkSDwoHcmVwb19pZBgDIAEoCSI2ChRVbnN0YWdlRmlsZXNSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEg0KBWZpbGVzGAIgAygJIkkKElJldmVydEZpbGVzUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRINCgVmaWxlcxgCIAMoCRIPCgdyZXBvX2lkGAMgASgJIjUKE1JldmVydEZpbGVzUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRINCgVmaWxlcxgCIAMoCSJOChVDb21taXRXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDwoHbWVzc2FnZRgCIAEoCRIPCgdyZXBvX2lkGAMgASgJIjkKFkNvbW1pdFdvcmt0cmVlUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIOCgZvdXRwdXQYAiABKAkiOwoTUHVzaFdvcmt0cmVlUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIPCgdyZXBvX2lkGAIgASgJIjcKFFB1c2hXb3JrdHJlZVJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSDgoGb3V0cHV0GAIgASgJIjsKE1B1bGxXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDwoHcmVwb19pZBgCIAEoCSI3ChRQdWxsV29ya3RyZWVSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEg4KBm91dHB1dBgCIAEoCSI8ChRHZXRXb3JrdHJlZVBSUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIPCgdyZXBvX2lkGAIgASgJIp0BChVHZXRXb3JrdHJlZVBSUmVzcG9uc2USDgoGZXhpc3RzGAEgASgIEhAKA3VybBgCIAEoCUgAiAEBEhMKBm51bWJlchgDIAEoBUgBiAEBEhIKBXRpdGxlGAQgASgJSAKIAQESEgoFc3RhdGUYBSABKAlIA4gBAUIGCgRfdXJsQgkKB19udW1iZXJCCAoGX3RpdGxlQggKBl9zdGF0ZSJqChdDcmVhdGVXb3JrdHJlZVBSUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRINCgV0aXRsZRgCIAEoCRIRCgRib2R5GAMgASgJSACIAQESDwoHcmVwb19pZBgEIAEoCUIHCgVfYm9keSJ4ChhDcmVhdGVXb3JrdHJlZVBSUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIOCgZwcl91cmwYAiABKAkSDgoGb3V0cHV0GAMgASgJEhYKDmF1dG9fY29tbWl0dGVkGAQgASgIEhMKC2F1dG9fcHVzaGVkGAUgASgIKuIBCg5Xb3JrdHJlZVN0YXR1cxIfChtXT1JLVFJFRV9TVEFUVVNfVU5TUEVDSUZJRUQQABIaChZXT1JLVFJFRV9TVEFUVVNfQUNUSVZFEAESHQoZV09SS1RSRUVfU1RBVFVTX0NPTVBMRVRFRBACEh0KGVdPUktUUkVFX1NUQVRVU19BQkFORE9ORUQQAxIbChdXT1JLVFJFRV9TVEFUVVNfTUVSR0lORxAEEhwKGFdPUktUUkVFX1NUQVRVU19DUkVBVElORxAFEhoKFldPUktUUkVFX1NUQVRVU19GQUlMRUQQBjLxEAoPV29ya3RyZWVTZXJ2aWNlElkKDkNyZWF0ZVdvcmt0cmVlEiEucmVsaWFudC52MS5DcmVhdGVXb3JrdHJlZVJlcXVlc3QaIi5yZWxpYW50LnYxLkNyZWF0ZVdvcmt0cmVlUmVzcG9uc2UiABJWCg1MaXN0V29ya3RyZWVzEiAucmVsaWFudC52MS5MaXN0V29ya3RyZWVzUmVxdWVzdBohLnJlbGlhbnQudjEuTGlzdFdvcmt0cmVlc1Jlc3BvbnNlIgASUAoLR2V0V29ya3RyZWUSHi5yZWxpYW50LnYxLkdldFdvcmt0cmVlUmVxdWVzdBofLnJlbGlhbnQudjEuR2V0V29ya3RyZWVSZXNwb25zZSIAElkKDlVwZGF0ZVdvcmt0cmVlEiEucmVsaWFudC52MS5VcGRhdGVXb3JrdHJlZVJlcXVlc3QaIi5yZWxpYW50LnYxLlVwZGF0ZVdvcmt0cmVlUmVzcG9uc2UiABJZCg5EZWxldGVXb3JrdHJlZRIhLnJlbGlhbnQudjEuRGVsZXRlV29ya3RyZWVSZXF1ZXN0GiIucmVsaWFudC52MS5EZWxldGVXb3JrdHJlZVJlc3BvbnNlIgASXAoPQXJjaGl2ZVdvcmt0cmVlEiIucmVsaWFudC52MS5BcmNoaXZlV29ya3RyZWVSZXF1ZXN0GiMucmVsaWFudC52MS5BcmNoaXZlV29ya3RyZWVSZXNwb25zZSIAEmIKEVVuYXJjaGl2ZVdvcmt0cmVlEiQucmVsaWFudC52MS5VbmFyY2hpdmVXb3JrdHJlZVJlcXVlc3QaJS5yZWxpYW50LnYxLlVuYXJjaGl2ZVdvcmt0cmVlUmVzcG9uc2UiABJZCg5JbXBvcnRXb3JrdHJlZRIhLnJlbGlhbnQudjEuSW1wb3J0V29ya3RyZWVSZXF1ZXN0GiIucmVsaWFudC52MS5JbXBvcnRXb3JrdHJlZVJlc3BvbnNlIgASYgoRRGlzY292ZXJXb3JrdHJlZXMSJC5yZWxpYW50LnYxLkRpc2NvdmVyV29ya3RyZWVzUmVxdWVzdBolLnJlbGlhbnQudjEuRGlzY292ZXJXb3JrdHJlZXNSZXNwb25zZSIAElkKDlBydW5lV29ya3RyZWVzEiEucmVsaWFudC52MS5QcnVuZVdvcmt0cmVlc1JlcXVlc3QaIi5yZWxpYW50LnYxLlBydW5lV29ya3RyZWVzUmVzcG9uc2UiABJfChBSZWNyZWF0ZVdvcmt0cmVlEiMucmVsaWFudC52MS5SZWNyZWF0ZVdvcmt0cmVlUmVxdWVzdBokLnJlbGlhbnQudjEuUmVjcmVhdGVXb3JrdHJlZVJlc3BvbnNlIgASZQoSR2V0V29ya3RyZWVDaGFuZ2VzEiUucmVsaWFudC52MS5HZXRXb3JrdHJlZUNoYW5nZXNSZXF1ZXN0GiYucmVsaWFudC52MS5HZXRXb3JrdHJlZUNoYW5nZXNSZXNwb25zZSIAEmsKFEdldFdvcmt0cmVlR2l0U3RhdHVzEicucmVsaWFudC52MS5HZXRXb3JrdHJlZUdpdFN0YXR1c1JlcXVlc3QaKC5yZWxpYW50LnYxLkdldFdvcmt0cmVlR2l0U3RhdHVzUmVzcG9uc2UiABJlChJHZXRXb3JrdHJlZUNvbW1pdHMSJS5yZWxpYW50LnYxLkdldFdvcmt0cmVlQ29tbWl0c1JlcXVlc3QaJi5yZWxpYW50LnYxLkdldFdvcmt0cmVlQ29tbWl0c1Jlc3BvbnNlIgASdwoYTGlzdFdvcmt0cmVlUmVwb1N0YXR1c2VzEisucmVsaWFudC52MS5MaXN0V29ya3RyZWVSZXBvU3RhdHVzZXNSZXF1ZXN0GiwucmVsaWFudC52MS5MaXN0V29ya3RyZWVSZXBvU3RhdHVzZXNSZXNwb25zZSIAEk0KClN0YWdlRmlsZXMSHS5yZWxpYW50LnYxLlN0YWdlRmlsZXNSZXF1ZXN0Gh4ucmVsaWFudC52MS5TdGFnZUZpbGVzUmVzcG9uc2UiABJTCgxVbnN0YWdlRmlsZXMSHy5yZWxpYW50LnYxLlVuc3RhZ2VGaWxlc1JlcXVlc3QaIC5yZWxpYW50LnYxLlVuc3RhZ2VGaWxlc1Jlc3BvbnNlIgASUAoLUmV2ZXJ0RmlsZXMSHi5yZWxpYW50LnYxLlJldmVydEZpbGVzUmVxdWVzdBofLnJlbGlhbnQudjEuUmV2ZXJ0RmlsZXNSZXNwb25zZSIAElkKDkNvbW1pdFdvcmt0cmVlEiEucmVsaWFudC52MS5Db21taXRXb3JrdHJlZVJlcXVlc3QaIi5yZWxpYW50LnYxLkNvbW1pdFdvcmt0cmVlUmVzcG9uc2UiABJTCgxQdXNoV29ya3RyZWUSHy5yZWxpYW50LnYxLlB1c2hXb3JrdHJlZVJlcXVlc3QaIC5yZWxpYW50LnYxLlB1c2hXb3JrdHJlZVJlc3BvbnNlIgASUwoMUHVsbFdvcmt0cmVlEh8ucmVsaWFudC52MS5QdWxsV29ya3RyZWVSZXF1ZXN0GiAucmVsaWFudC52MS5QdWxsV29ya3RyZWVSZXNwb25zZSIAElYKDUdldFdvcmt0cmVlUFISIC5yZWxpYW50LnYxLkdldFdvcmt0cmVlUFJSZXF1ZXN0GiEucmVsaWFudC52MS5HZXRXb3JrdHJlZVBSUmVzcG9uc2UiABJfChBDcmVhdGVXb3JrdHJlZVBSEiMucmVsaWFudC52MS5DcmVhdGVXb3JrdHJlZVBSUmVxdWVzdBokLnJlbGlhbnQudjEuQ3JlYXRlV29ya3RyZWVQUlJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_buf_validate_validate, file_reliant_v1_common]);
+  fileDesc("ChlyZWxpYW50L3YxL3dvcmt0cmVlLnByb3RvEgpyZWxpYW50LnYxIpgDCghXb3JrdHJlZRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHBhdGgYAyABKAkSDgoGYnJhbmNoGAQgASgJEhMKC2Jhc2VfYnJhbmNoGAUgASgJEhIKCnByb2plY3RfaWQYBiABKAkSFAoHY2hhdF9pZBgHIAEoCUgAiAEBEioKBnN0YXR1cxgIIAEoDjIaLnJlbGlhbnQudjEuV29ya3RyZWVTdGF0dXMSDwoHaXNfbWFpbhgJIAEoCBISCgpjcmVhdGVkX2F0GAogASgJEhIKCnVwZGF0ZWRfYXQYCyABKAkSEwoLbGFzdF9hY3RpdmUYDCABKAkSFwoKZGVsZXRlZF9hdBgNIAEoCUgBiAEBEjoKEGNsZWFudXBfbWV0YWRhdGEYDiABKAsyGy5yZWxpYW50LnYxLkNsZWFudXBNZXRhZGF0YUgCiAEBEhYKDmZhaWx1cmVfcmVhc29uGA8gASgJQgoKCF9jaGF0X2lkQg0KC19kZWxldGVkX2F0QhMKEV9jbGVhbnVwX21ldGFkYXRhIq4BCg9Xb3JrdHJlZVN1bW1hcnkSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZicmFuY2gYAyABKAkSDAoEcGF0aBgEIAEoCRIPCgdpc19tYWluGAUgASgIEioKBnN0YXR1cxgGIAEoDjIaLnJlbGlhbnQudjEuV29ya3RyZWVTdGF0dXMSFwoKZGVsZXRlZF9hdBgHIAEoCUgAiAEBQg0KC19kZWxldGVkX2F0IskBCg9DbGVhbnVwTWV0YWRhdGESGQoRZGlyZWN0b3J5X2RlbGV0ZWQYASABKAgSFgoOYnJhbmNoX2RlbGV0ZWQYAiABKAgSEwoLaGVsZF9yZWFzb24YAyABKAkSEwoLaGVsZF9kZXRhaWwYBCABKAkSEgoKc2l6ZV9ieXRlcxgFIAEoAxIVCg1zbmFwc2hvdF9yZWZzGAYgAygJEhYKDnN0cmlwcGVkX3BhdGhzGAcgAygJEhYKDnN0cmlwcGVkX2J5dGVzGAggASgDItQBChJEaXNjb3ZlcmVkV29ya3RyZWUSDAoEcGF0aBgBIAEoCRIMCgRuYW1lGAIgASgJEg4KBmJyYW5jaBgDIAEoCRIPCgdyZXBvX2lkGAcgASgJEhEKCXJlcG9fbmFtZRgIIAEoCRIMCgRoZWFkGAkgASgJEg4KBmxvY2tlZBgKIAEoCBIXCg9tb3Zlc19vbl9pbXBvcnQYCyABKAhKBAgEEAVKBAgFEAZKBAgGEAdSC2lzX2ltcG9ydGVkUgtpc19wcnVuYWJsZVILaW1wb3J0ZWRfaWQiUQoNU3RhbGVXb3JrdHJlZRIMCgRwYXRoGAEgASgJEg8KB3JlcG9faWQYAiABKAkSEQoJcmVwb19uYW1lGAMgASgJEg4KBnJlYXNvbhgEIAEoCSJrCglHaXRDb21taXQSDAoEaGFzaBgBIAEoCRISCgpzaG9ydF9oYXNoGAIgASgJEg4KBmF1dGhvchgDIAEoCRINCgVlbWFpbBgEIAEoCRIMCgRkYXRlGAUgASgJEg8KB21lc3NhZ2UYBiABKAkigQEKEldvcmt0cmVlRmlsZUNoYW5nZRIMCgRwYXRoGAEgASgJEiwKBnN0YXR1cxgCIAEoDjIcLnJlbGlhbnQudjEuRmlsZUNoYW5nZVN0YXR1cxIOCgZpc19uZXcYAyABKAgSDAoEZGlmZhgEIAEoCRIRCglpc19iaW5hcnkYBSABKAgiowMKFUNyZWF0ZVdvcmt0cmVlUmVxdWVzdBIMCgRuYW1lGAEgASgJEg4KBmJyYW5jaBgCIAEoCRISCgpwcm9qZWN0X2lkGAMgASgJEhgKC2Jhc2VfYnJhbmNoGAQgASgJSACIAQESFAoHY2hhdF9pZBgFIAEoCUgBiAEBEhIKCmNvcHlfZmlsZXMYBiADKAkSDQoFZm9yY2UYByABKAgSHwoSc291cmNlX3dvcmt0cmVlX2lkGAggASgJSAKIAQESSgoNYmFzZV9icmFuY2hlcxgJIAMoCzIzLnJlbGlhbnQudjEuQ3JlYXRlV29ya3RyZWVSZXF1ZXN0LkJhc2VCcmFuY2hlc0VudHJ5EhwKD2lkZW1wb3RlbmN5X2tleRgKIAEoCUgDiAEBGjMKEUJhc2VCcmFuY2hlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFCDgoMX2Jhc2VfYnJhbmNoQgoKCF9jaGF0X2lkQhUKE19zb3VyY2Vfd29ya3RyZWVfaWRCEgoQX2lkZW1wb3RlbmN5X2tleSJAChZDcmVhdGVXb3JrdHJlZVJlc3BvbnNlEiYKCHdvcmt0cmVlGAEgASgLMhQucmVsaWFudC52MS5Xb3JrdHJlZSK2AQoUTGlzdFdvcmt0cmVlc1JlcXVlc3QSGgoKcHJvamVjdF9pZBgBIAEoCUIGukgDyAEBEhQKB2NoYXRfaWQYAiABKAlIAIgBARINCgVsaW1pdBgDIAEoBRIXCgpwYWdlX3Rva2VuGAUgASgJSAGIAQESEQoJbWFpbl9vbmx5GAYgASgIQgoKCF9jaGF0X2lkQg0KC19wYWdlX3Rva2VuSgQIBBAFUhBpbmNsdWRlX2FyY2hpdmVkImgKFUxpc3RXb3JrdHJlZXNSZXNwb25zZRInCgl3b3JrdHJlZXMYASADKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlEg0KBXRvdGFsGAIgASgFEhcKD25leHRfcGFnZV90b2tlbhgDIAEoCSJxChxMaXN0QXJjaGl2ZWRXb3JrdHJlZXNSZXF1ZXN0EhoKCnByb2plY3RfaWQYASABKAlCBrpIA8gBARINCgVsaW1pdBgCIAEoBRIXCgpwYWdlX3Rva2VuGAMgASgJSACIAQFCDQoLX3BhZ2VfdG9rZW4icAodTGlzdEFyY2hpdmVkV29ya3RyZWVzUmVzcG9uc2USJwoJd29ya3RyZWVzGAEgAygLMhQucmVsaWFudC52MS5Xb3JrdHJlZRINCgV0b3RhbBgCIAEoBRIXCg9uZXh0X3BhZ2VfdG9rZW4YAyABKAkiKQoSR2V0V29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJIj0KE0dldFdvcmt0cmVlUmVzcG9uc2USJgoId29ya3RyZWUYASABKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlIq4BChVVcGRhdGVXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSEQoEbmFtZRgCIAEoCUgAiAEBEi8KBnN0YXR1cxgDIAEoDjIaLnJlbGlhbnQudjEuV29ya3RyZWVTdGF0dXNIAYgBARIYCgtiYXNlX2JyYW5jaBgEIAEoCUgCiAEBQgcKBV9uYW1lQgkKB19zdGF0dXNCDgoMX2Jhc2VfYnJhbmNoIkAKFlVwZGF0ZVdvcmt0cmVlUmVzcG9uc2USJgoId29ya3RyZWUYASABKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlIkcKFURlbGV0ZVdvcmt0cmVlUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIZChFkZWxldGVfZ2l0X2JyYW5jaBgDIAEoCCJeChZEZWxldGVXb3JrdHJlZVJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSFgoOZGVsZXRlZF9icmFuY2gYAiABKAgSGwoTaXNfcGVybWFuZW50X2RlbGV0ZRgDIAEoCCJIChZBcmNoaXZlV29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEhkKEWRlbGV0ZV9naXRfYnJhbmNoGAMgASgIIkIKF0FyY2hpdmVXb3JrdHJlZVJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSFgoOZGVsZXRlZF9icmFuY2gYAiABKAgiLwoYVW5hcmNoaXZlV29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJIiwKGVVuYXJjaGl2ZVdvcmt0cmVlUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCSKeAQoVSW1wb3J0V29ya3RyZWVSZXF1ZXN0EgwKBHBhdGgYASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIRCgRuYW1lGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBEg8KB3JlcG9faWQYBSABKAkSFAoMY29uZmlybV9tb3ZlGAYgASgIQgcKBV9uYW1lQgoKCF9jaGF0X2lkIkAKFkltcG9ydFdvcmt0cmVlUmVzcG9uc2USJgoId29ya3RyZWUYASABKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlIkIKGERpc2NvdmVyV29ya3RyZWVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhIKCmJhY2tncm91bmQYAiABKAginwEKGURpc2NvdmVyV29ya3RyZWVzUmVzcG9uc2USMgoKZGlzY292ZXJlZBgBIAMoCzIeLnJlbGlhbnQudjEuRGlzY292ZXJlZFdvcmt0cmVlEigKBXN0YWxlGAMgAygLMhkucmVsaWFudC52MS5TdGFsZVdvcmt0cmVlEhcKD3dvcmtzcGFjZXNfcm9vdBgEIAEoCUoECAIQA1IFdG90YWwiKwoVUHJ1bmVXb3JrdHJlZXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkiQwoWUHJ1bmVXb3JrdHJlZXNSZXNwb25zZRIpCgZwcnVuZWQYASADKAsyGS5yZWxpYW50LnYxLlN0YWxlV29ya3RyZWUiLgoXUmVjcmVhdGVXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkiegoYUmVjcmVhdGVXb3JrdHJlZVJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSDAoEcGF0aBgCIAEoCRIOCgZicmFuY2gYAyABKAkSGAoQc25hcHNob3Rfd2FybmluZxgEIAEoCRIVCg1zbmFwc2hvdF9yZWZzGAUgAygJIkEKGUdldFdvcmt0cmVlQ2hhbmdlc1JlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDwoHcmVwb19pZBgCIAEoCSKnAQoaR2V0V29ya3RyZWVDaGFuZ2VzUmVzcG9uc2USDgoGYnJhbmNoGAEgASgJEi0KBWZpbGVzGAIgAygLMh4ucmVsaWFudC52MS5Xb3JrdHJlZUZpbGVDaGFuZ2USEwoLdG90YWxfZmlsZXMYAyABKAUSDQoFYWhlYWQYBCABKAUSDgoGYmVoaW5kGAUgASgFEhYKDmRlZmF1bHRfYnJhbmNoGAYgASgJIkMKG0dldFdvcmt0cmVlR2l0U3RhdHVzUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIPCgdyZXBvX2lkGAIgASgJItsBChxHZXRXb3JrdHJlZUdpdFN0YXR1c1Jlc3BvbnNlEhMKC3dvcmt0cmVlX2lkGAEgASgJEgwKBHBhdGgYAiABKAkSDgoGYnJhbmNoGAMgASgJEg0KBWNsZWFuGAQgASgIEhMKC2hhc19jaGFuZ2VzGAUgASgIEhQKDHN0YWdlZF9maWxlcxgGIAMoCRIWCg5tb2RpZmllZF9maWxlcxgHIAMoCRIXCg91bnRyYWNrZWRfZmlsZXMYCCADKAkSDQoFYWhlYWQYCSABKAUSDgoGYmVoaW5kGAogASgFIlAKGUdldFdvcmt0cmVlQ29tbWl0c1JlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDQoFbGltaXQYAiABKAUSDwoHcmVwb19pZBgDIAEoCSI+Ch9MaXN0V29ya3RyZWVSZXBvU3RhdHVzZXNSZXF1ZXN0EhsKC3dvcmt0cmVlX2lkGAEgASgJQga6SAPIAQEixgEKEldvcmt0cmVlUmVwb1N0YXR1cxIPCgdyZXBvX2lkGAEgASgJEhEKCXJlcG9fbmFtZRgCIAEoCRIaChJyZXBvX3JlbGF0aXZlX3BhdGgYAyABKAkSFgoOY3VycmVudF9icmFuY2gYBCABKAkSEwoLaGFzX2NoYW5nZXMYBSABKAgSDQoFYWhlYWQYBiABKAUSDgoGYmVoaW5kGAcgASgFEhUKDWNoYW5nZWRfZmlsZXMYCCABKAUSDQoFZXJyb3IYCSABKAkiVAogTGlzdFdvcmt0cmVlUmVwb1N0YXR1c2VzUmVzcG9uc2USMAoIc3RhdHVzZXMYASADKAsyHi5yZWxpYW50LnYxLldvcmt0cmVlUmVwb1N0YXR1cyLBAQoaR2V0V29ya3RyZWVDb21taXRzUmVzcG9uc2USJgoHY29tbWl0cxgBIAMoCzIVLnJlbGlhbnQudjEuR2l0Q29tbWl0Eg0KBXRvdGFsGAIgASgFEg4KBmJyYW5jaBgDIAEoCRITCgtiYXNlX2JyYW5jaBgEIAEoCRIXCg9jb21wYXJpc29uX21vZGUYBSABKAgSFgoOY29tcGFyaXNvbl9yZWYYBiABKAkSFgoOY3VycmVudF9icmFuY2gYByABKAkiSAoRU3RhZ2VGaWxlc1JlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDQoFZmlsZXMYAiADKAkSDwoHcmVwb19pZBgDIAEoCSI0ChJTdGFnZUZpbGVzUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRINCgVmaWxlcxgCIAMoCSJKChNVbnN0YWdlRmlsZXNSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEg0KBWZpbGVzGAIgAygJEg8KB3JlcG9faWQYAyABKAkiNgoUVW5zdGFnZUZpbGVzUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRINCgVmaWxlcxgCIAMoCSJJChJSZXZlcnRGaWxlc1JlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDQoFZmlsZXMYAiADKAkSDwoHcmVwb19pZBgDIAEoCSI1ChNSZXZlcnRGaWxlc1Jlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSDQoFZmlsZXMYAiADKAkiTgoVQ29tbWl0V29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEg8KB21lc3NhZ2UYAiABKAkSDwoHcmVwb19pZBgDIAEoCSI5ChZDb21taXRXb3JrdHJlZVJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSDgoGb3V0cHV0GAIgASgJIjsKE1B1c2hXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDwoHcmVwb19pZBgCIAEoCSI3ChRQdXNoV29ya3RyZWVSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEg4KBm91dHB1dBgCIAEoCSI7ChNQdWxsV29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEg8KB3JlcG9faWQYAiABKAkiNwoUUHVsbFdvcmt0cmVlUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIOCgZvdXRwdXQYAiABKAkiPAoUR2V0V29ya3RyZWVQUlJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDwoHcmVwb19pZBgCIAEoCSKdAQoVR2V0V29ya3RyZWVQUlJlc3BvbnNlEg4KBmV4aXN0cxgBIAEoCBIQCgN1cmwYAiABKAlIAIgBARITCgZudW1iZXIYAyABKAVIAYgBARISCgV0aXRsZRgEIAEoCUgCiAEBEhIKBXN0YXRlGAUgASgJSAOIAQFCBgoEX3VybEIJCgdfbnVtYmVyQggKBl90aXRsZUIICgZfc3RhdGUiagoXQ3JlYXRlV29ya3RyZWVQUlJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDQoFdGl0bGUYAiABKAkSEQoEYm9keRgDIAEoCUgAiAEBEg8KB3JlcG9faWQYBCABKAlCBwoFX2JvZHkieAoYQ3JlYXRlV29ya3RyZWVQUlJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSDgoGcHJfdXJsGAIgASgJEg4KBm91dHB1dBgDIAEoCRIWCg5hdXRvX2NvbW1pdHRlZBgEIAEoCBITCgthdXRvX3B1c2hlZBgFIAEoCCriAQoOV29ya3RyZWVTdGF0dXMSHwobV09SS1RSRUVfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGgoWV09SS1RSRUVfU1RBVFVTX0FDVElWRRABEh0KGVdPUktUUkVFX1NUQVRVU19DT01QTEVURUQQAhIdChlXT1JLVFJFRV9TVEFUVVNfQUJBTkRPTkVEEAMSGwoXV09SS1RSRUVfU1RBVFVTX01FUkdJTkcQBBIcChhXT1JLVFJFRV9TVEFUVVNfQ1JFQVRJTkcQBRIaChZXT1JLVFJFRV9TVEFUVVNfRkFJTEVEEAYy4REKD1dvcmt0cmVlU2VydmljZRJZCg5DcmVhdGVXb3JrdHJlZRIhLnJlbGlhbnQudjEuQ3JlYXRlV29ya3RyZWVSZXF1ZXN0GiIucmVsaWFudC52MS5DcmVhdGVXb3JrdHJlZVJlc3BvbnNlIgASVgoNTGlzdFdvcmt0cmVlcxIgLnJlbGlhbnQudjEuTGlzdFdvcmt0cmVlc1JlcXVlc3QaIS5yZWxpYW50LnYxLkxpc3RXb3JrdHJlZXNSZXNwb25zZSIAEm4KFUxpc3RBcmNoaXZlZFdvcmt0cmVlcxIoLnJlbGlhbnQudjEuTGlzdEFyY2hpdmVkV29ya3RyZWVzUmVxdWVzdBopLnJlbGlhbnQudjEuTGlzdEFyY2hpdmVkV29ya3RyZWVzUmVzcG9uc2UiABJQCgtHZXRXb3JrdHJlZRIeLnJlbGlhbnQudjEuR2V0V29ya3RyZWVSZXF1ZXN0Gh8ucmVsaWFudC52MS5HZXRXb3JrdHJlZVJlc3BvbnNlIgASWQoOVXBkYXRlV29ya3RyZWUSIS5yZWxpYW50LnYxLlVwZGF0ZVdvcmt0cmVlUmVxdWVzdBoiLnJlbGlhbnQudjEuVXBkYXRlV29ya3RyZWVSZXNwb25zZSIAElkKDkRlbGV0ZVdvcmt0cmVlEiEucmVsaWFudC52MS5EZWxldGVXb3JrdHJlZVJlcXVlc3QaIi5yZWxpYW50LnYxLkRlbGV0ZVdvcmt0cmVlUmVzcG9uc2UiABJcCg9BcmNoaXZlV29ya3RyZWUSIi5yZWxpYW50LnYxLkFyY2hpdmVXb3JrdHJlZVJlcXVlc3QaIy5yZWxpYW50LnYxLkFyY2hpdmVXb3JrdHJlZVJlc3BvbnNlIgASYgoRVW5hcmNoaXZlV29ya3RyZWUSJC5yZWxpYW50LnYxLlVuYXJjaGl2ZVdvcmt0cmVlUmVxdWVzdBolLnJlbGlhbnQudjEuVW5hcmNoaXZlV29ya3RyZWVSZXNwb25zZSIAElkKDkltcG9ydFdvcmt0cmVlEiEucmVsaWFudC52MS5JbXBvcnRXb3JrdHJlZVJlcXVlc3QaIi5yZWxpYW50LnYxLkltcG9ydFdvcmt0cmVlUmVzcG9uc2UiABJiChFEaXNjb3Zlcldvcmt0cmVlcxIkLnJlbGlhbnQudjEuRGlzY292ZXJXb3JrdHJlZXNSZXF1ZXN0GiUucmVsaWFudC52MS5EaXNjb3Zlcldvcmt0cmVlc1Jlc3BvbnNlIgASWQoOUHJ1bmVXb3JrdHJlZXMSIS5yZWxpYW50LnYxLlBydW5lV29ya3RyZWVzUmVxdWVzdBoiLnJlbGlhbnQudjEuUHJ1bmVXb3JrdHJlZXNSZXNwb25zZSIAEl8KEFJlY3JlYXRlV29ya3RyZWUSIy5yZWxpYW50LnYxLlJlY3JlYXRlV29ya3RyZWVSZXF1ZXN0GiQucmVsaWFudC52MS5SZWNyZWF0ZVdvcmt0cmVlUmVzcG9uc2UiABJlChJHZXRXb3JrdHJlZUNoYW5nZXMSJS5yZWxpYW50LnYxLkdldFdvcmt0cmVlQ2hhbmdlc1JlcXVlc3QaJi5yZWxpYW50LnYxLkdldFdvcmt0cmVlQ2hhbmdlc1Jlc3BvbnNlIgASawoUR2V0V29ya3RyZWVHaXRTdGF0dXMSJy5yZWxpYW50LnYxLkdldFdvcmt0cmVlR2l0U3RhdHVzUmVxdWVzdBooLnJlbGlhbnQudjEuR2V0V29ya3RyZWVHaXRTdGF0dXNSZXNwb25zZSIAEmUKEkdldFdvcmt0cmVlQ29tbWl0cxIlLnJlbGlhbnQudjEuR2V0V29ya3RyZWVDb21taXRzUmVxdWVzdBomLnJlbGlhbnQudjEuR2V0V29ya3RyZWVDb21taXRzUmVzcG9uc2UiABJ3ChhMaXN0V29ya3RyZWVSZXBvU3RhdHVzZXMSKy5yZWxpYW50LnYxLkxpc3RXb3JrdHJlZVJlcG9TdGF0dXNlc1JlcXVlc3QaLC5yZWxpYW50LnYxLkxpc3RXb3JrdHJlZVJlcG9TdGF0dXNlc1Jlc3BvbnNlIgASTQoKU3RhZ2VGaWxlcxIdLnJlbGlhbnQudjEuU3RhZ2VGaWxlc1JlcXVlc3QaHi5yZWxpYW50LnYxLlN0YWdlRmlsZXNSZXNwb25zZSIAElMKDFVuc3RhZ2VGaWxlcxIfLnJlbGlhbnQudjEuVW5zdGFnZUZpbGVzUmVxdWVzdBogLnJlbGlhbnQudjEuVW5zdGFnZUZpbGVzUmVzcG9uc2UiABJQCgtSZXZlcnRGaWxlcxIeLnJlbGlhbnQudjEuUmV2ZXJ0RmlsZXNSZXF1ZXN0Gh8ucmVsaWFudC52MS5SZXZlcnRGaWxlc1Jlc3BvbnNlIgASWQoOQ29tbWl0V29ya3RyZWUSIS5yZWxpYW50LnYxLkNvbW1pdFdvcmt0cmVlUmVxdWVzdBoiLnJlbGlhbnQudjEuQ29tbWl0V29ya3RyZWVSZXNwb25zZSIAElMKDFB1c2hXb3JrdHJlZRIfLnJlbGlhbnQudjEuUHVzaFdvcmt0cmVlUmVxdWVzdBogLnJlbGlhbnQudjEuUHVzaFdvcmt0cmVlUmVzcG9uc2UiABJTCgxQdWxsV29ya3RyZWUSHy5yZWxpYW50LnYxLlB1bGxXb3JrdHJlZVJlcXVlc3QaIC5yZWxpYW50LnYxLlB1bGxXb3JrdHJlZVJlc3BvbnNlIgASVgoNR2V0V29ya3RyZWVQUhIgLnJlbGlhbnQudjEuR2V0V29ya3RyZWVQUlJlcXVlc3QaIS5yZWxpYW50LnYxLkdldFdvcmt0cmVlUFJSZXNwb25zZSIAEl8KEENyZWF0ZVdvcmt0cmVlUFISIy5yZWxpYW50LnYxLkNyZWF0ZVdvcmt0cmVlUFJSZXF1ZXN0GiQucmVsaWFudC52MS5DcmVhdGVXb3JrdHJlZVBSUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate, file_reliant_v1_common]);
 
 /**
  * Worktree represents a workspace-level git worktree in the system. Path
@@ -117,6 +117,62 @@ export const WorktreeSchema: GenMessage<Worktree> = /*@__PURE__*/
   messageDesc(file_reliant_v1_worktree, 0);
 
 /**
+ * WorktreeSummary is the part of a worktree a chat list renders and groups by.
+ * ListChats carries one per chat so the sidebar never needs the project's full
+ * worktree list: the cost of showing chats scales with the chats, not with the
+ * workspaces agents have created.
+ *
+ * @generated from message reliant.v1.WorktreeSummary
+ */
+export type WorktreeSummary = Message<"reliant.v1.WorktreeSummary"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string branch = 3;
+   */
+  branch: string;
+
+  /**
+   * Empty while the workspace is still being created.
+   *
+   * @generated from field: string path = 4;
+   */
+  path: string;
+
+  /**
+   * @generated from field: bool is_main = 5;
+   */
+  isMain: boolean;
+
+  /**
+   * @generated from field: reliant.v1.WorktreeStatus status = 6;
+   */
+  status: WorktreeStatus;
+
+  /**
+   * Archive timestamp; unset for a live workspace.
+   *
+   * @generated from field: optional string deleted_at = 7;
+   */
+  deletedAt?: string | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.WorktreeSummary.
+ * Use `create(WorktreeSummarySchema)` to create a new message.
+ */
+export const WorktreeSummarySchema: GenMessage<WorktreeSummary> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_worktree, 1);
+
+/**
  * CleanupMetadata tracks what was cleaned up during archive
  *
  * @generated from message reliant.v1.CleanupMetadata
@@ -184,7 +240,7 @@ export type CleanupMetadata = Message<"reliant.v1.CleanupMetadata"> & {
  * Use `create(CleanupMetadataSchema)` to create a new message.
  */
 export const CleanupMetadataSchema: GenMessage<CleanupMetadata> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 1);
+  messageDesc(file_reliant_v1_worktree, 2);
 
 /**
  * DiscoveredWorktree is a linked git worktree of one of the project's repos
@@ -257,7 +313,7 @@ export type DiscoveredWorktree = Message<"reliant.v1.DiscoveredWorktree"> & {
  * Use `create(DiscoveredWorktreeSchema)` to create a new message.
  */
 export const DiscoveredWorktreeSchema: GenMessage<DiscoveredWorktree> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 2);
+  messageDesc(file_reliant_v1_worktree, 3);
 
 /**
  * StaleWorktree is git's record of a linked worktree whose directory no longer
@@ -294,7 +350,7 @@ export type StaleWorktree = Message<"reliant.v1.StaleWorktree"> & {
  * Use `create(StaleWorktreeSchema)` to create a new message.
  */
 export const StaleWorktreeSchema: GenMessage<StaleWorktree> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 3);
+  messageDesc(file_reliant_v1_worktree, 4);
 
 /**
  * GitCommit represents a git commit
@@ -338,7 +394,7 @@ export type GitCommit = Message<"reliant.v1.GitCommit"> & {
  * Use `create(GitCommitSchema)` to create a new message.
  */
 export const GitCommitSchema: GenMessage<GitCommit> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 4);
+  messageDesc(file_reliant_v1_worktree, 5);
 
 /**
  * WorktreeFileChange represents a changed file in a worktree
@@ -379,7 +435,7 @@ export type WorktreeFileChange = Message<"reliant.v1.WorktreeFileChange"> & {
  * Use `create(WorktreeFileChangeSchema)` to create a new message.
  */
 export const WorktreeFileChangeSchema: GenMessage<WorktreeFileChange> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 5);
+  messageDesc(file_reliant_v1_worktree, 6);
 
 /**
  * CreateWorktreeRequest creates a workspace-level worktree spanning all of
@@ -470,7 +526,7 @@ export type CreateWorktreeRequest = Message<"reliant.v1.CreateWorktreeRequest"> 
  * Use `create(CreateWorktreeRequestSchema)` to create a new message.
  */
 export const CreateWorktreeRequestSchema: GenMessage<CreateWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 6);
+  messageDesc(file_reliant_v1_worktree, 7);
 
 /**
  * CreateWorktreeResponse returns the created workspace-level worktree.
@@ -489,7 +545,7 @@ export type CreateWorktreeResponse = Message<"reliant.v1.CreateWorktreeResponse"
  * Use `create(CreateWorktreeResponseSchema)` to create a new message.
  */
 export const CreateWorktreeResponseSchema: GenMessage<CreateWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 7);
+  messageDesc(file_reliant_v1_worktree, 8);
 
 /**
  * ListWorktreesRequest lists worktrees with filters
@@ -517,17 +573,20 @@ export type ListWorktreesRequest = Message<"reliant.v1.ListWorktreesRequest"> & 
   limit: number;
 
   /**
-   * @generated from field: optional bool include_archived = 4;
-   */
-  includeArchived?: boolean | undefined;
-
-  /**
    * Continues a previous response's next_page_token. Opaque. Pages are ordered
    * main workspace first, then by last_active descending.
    *
    * @generated from field: optional string page_token = 5;
    */
   pageToken?: string | undefined;
+
+  /**
+   * When true, return only the project's main workspace (creating it if the
+   * project has none). The cheap way to find main without paging the list.
+   *
+   * @generated from field: bool main_only = 6;
+   */
+  mainOnly: boolean;
 };
 
 /**
@@ -535,7 +594,7 @@ export type ListWorktreesRequest = Message<"reliant.v1.ListWorktreesRequest"> & 
  * Use `create(ListWorktreesRequestSchema)` to create a new message.
  */
 export const ListWorktreesRequestSchema: GenMessage<ListWorktreesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 8);
+  messageDesc(file_reliant_v1_worktree, 9);
 
 /**
  * ListWorktreesResponse returns a page of worktrees
@@ -568,7 +627,76 @@ export type ListWorktreesResponse = Message<"reliant.v1.ListWorktreesResponse"> 
  * Use `create(ListWorktreesResponseSchema)` to create a new message.
  */
 export const ListWorktreesResponseSchema: GenMessage<ListWorktreesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 9);
+  messageDesc(file_reliant_v1_worktree, 10);
+
+/**
+ * ListArchivedWorktreesRequest pages through a project's archived workspaces.
+ *
+ * @generated from message reliant.v1.ListArchivedWorktreesRequest
+ */
+export type ListArchivedWorktreesRequest = Message<"reliant.v1.ListArchivedWorktreesRequest"> & {
+  /**
+   * Required
+   *
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * Page size; 0 means the server default (100).
+   *
+   * @generated from field: int32 limit = 2;
+   */
+  limit: number;
+
+  /**
+   * Continues a previous response's next_page_token. Opaque. Pages are ordered
+   * most recently archived first.
+   *
+   * @generated from field: optional string page_token = 3;
+   */
+  pageToken?: string | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.ListArchivedWorktreesRequest.
+ * Use `create(ListArchivedWorktreesRequestSchema)` to create a new message.
+ */
+export const ListArchivedWorktreesRequestSchema: GenMessage<ListArchivedWorktreesRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_worktree, 11);
+
+/**
+ * ListArchivedWorktreesResponse returns a page of archived worktrees
+ *
+ * @generated from message reliant.v1.ListArchivedWorktreesResponse
+ */
+export type ListArchivedWorktreesResponse = Message<"reliant.v1.ListArchivedWorktreesResponse"> & {
+  /**
+   * @generated from field: repeated reliant.v1.Worktree worktrees = 1;
+   */
+  worktrees: Worktree[];
+
+  /**
+   * Number of worktrees in this page.
+   *
+   * @generated from field: int32 total = 2;
+   */
+  total: number;
+
+  /**
+   * Set when more follow; pass it as page_token. Empty on the last page.
+   *
+   * @generated from field: string next_page_token = 3;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message reliant.v1.ListArchivedWorktreesResponse.
+ * Use `create(ListArchivedWorktreesResponseSchema)` to create a new message.
+ */
+export const ListArchivedWorktreesResponseSchema: GenMessage<ListArchivedWorktreesResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_worktree, 12);
 
 /**
  * GetWorktreeRequest retrieves a worktree by ID
@@ -587,7 +715,7 @@ export type GetWorktreeRequest = Message<"reliant.v1.GetWorktreeRequest"> & {
  * Use `create(GetWorktreeRequestSchema)` to create a new message.
  */
 export const GetWorktreeRequestSchema: GenMessage<GetWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 10);
+  messageDesc(file_reliant_v1_worktree, 13);
 
 /**
  * GetWorktreeResponse returns the requested worktree
@@ -606,7 +734,7 @@ export type GetWorktreeResponse = Message<"reliant.v1.GetWorktreeResponse"> & {
  * Use `create(GetWorktreeResponseSchema)` to create a new message.
  */
 export const GetWorktreeResponseSchema: GenMessage<GetWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 11);
+  messageDesc(file_reliant_v1_worktree, 14);
 
 /**
  * UpdateWorktreeRequest updates a worktree
@@ -640,7 +768,7 @@ export type UpdateWorktreeRequest = Message<"reliant.v1.UpdateWorktreeRequest"> 
  * Use `create(UpdateWorktreeRequestSchema)` to create a new message.
  */
 export const UpdateWorktreeRequestSchema: GenMessage<UpdateWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 12);
+  messageDesc(file_reliant_v1_worktree, 15);
 
 /**
  * UpdateWorktreeResponse returns the updated worktree
@@ -659,7 +787,7 @@ export type UpdateWorktreeResponse = Message<"reliant.v1.UpdateWorktreeResponse"
  * Use `create(UpdateWorktreeResponseSchema)` to create a new message.
  */
 export const UpdateWorktreeResponseSchema: GenMessage<UpdateWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 13);
+  messageDesc(file_reliant_v1_worktree, 16);
 
 /**
  * DeleteWorktreeRequest deletes or archives a worktree
@@ -683,7 +811,7 @@ export type DeleteWorktreeRequest = Message<"reliant.v1.DeleteWorktreeRequest"> 
  * Use `create(DeleteWorktreeRequestSchema)` to create a new message.
  */
 export const DeleteWorktreeRequestSchema: GenMessage<DeleteWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 14);
+  messageDesc(file_reliant_v1_worktree, 17);
 
 /**
  * DeleteWorktreeResponse confirms deletion/archive
@@ -712,7 +840,7 @@ export type DeleteWorktreeResponse = Message<"reliant.v1.DeleteWorktreeResponse"
  * Use `create(DeleteWorktreeResponseSchema)` to create a new message.
  */
 export const DeleteWorktreeResponseSchema: GenMessage<DeleteWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 15);
+  messageDesc(file_reliant_v1_worktree, 18);
 
 /**
  * ArchiveWorktreeRequest archives a worktree (sets deleted_at)
@@ -736,7 +864,7 @@ export type ArchiveWorktreeRequest = Message<"reliant.v1.ArchiveWorktreeRequest"
  * Use `create(ArchiveWorktreeRequestSchema)` to create a new message.
  */
 export const ArchiveWorktreeRequestSchema: GenMessage<ArchiveWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 16);
+  messageDesc(file_reliant_v1_worktree, 19);
 
 /**
  * ArchiveWorktreeResponse confirms archive
@@ -760,7 +888,7 @@ export type ArchiveWorktreeResponse = Message<"reliant.v1.ArchiveWorktreeRespons
  * Use `create(ArchiveWorktreeResponseSchema)` to create a new message.
  */
 export const ArchiveWorktreeResponseSchema: GenMessage<ArchiveWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 17);
+  messageDesc(file_reliant_v1_worktree, 20);
 
 /**
  * UnarchiveWorktreeRequest restores an archived worktree
@@ -779,7 +907,7 @@ export type UnarchiveWorktreeRequest = Message<"reliant.v1.UnarchiveWorktreeRequ
  * Use `create(UnarchiveWorktreeRequestSchema)` to create a new message.
  */
 export const UnarchiveWorktreeRequestSchema: GenMessage<UnarchiveWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 18);
+  messageDesc(file_reliant_v1_worktree, 21);
 
 /**
  * UnarchiveWorktreeResponse confirms unarchive
@@ -798,7 +926,7 @@ export type UnarchiveWorktreeResponse = Message<"reliant.v1.UnarchiveWorktreeRes
  * Use `create(UnarchiveWorktreeResponseSchema)` to create a new message.
  */
 export const UnarchiveWorktreeResponseSchema: GenMessage<UnarchiveWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 19);
+  messageDesc(file_reliant_v1_worktree, 22);
 
 /**
  * ImportWorktreeRequest adopts a discovered worktree as a Reliant workspace.
@@ -854,7 +982,7 @@ export type ImportWorktreeRequest = Message<"reliant.v1.ImportWorktreeRequest"> 
  * Use `create(ImportWorktreeRequestSchema)` to create a new message.
  */
 export const ImportWorktreeRequestSchema: GenMessage<ImportWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 20);
+  messageDesc(file_reliant_v1_worktree, 23);
 
 /**
  * ImportWorktreeResponse returns the imported worktree
@@ -873,7 +1001,7 @@ export type ImportWorktreeResponse = Message<"reliant.v1.ImportWorktreeResponse"
  * Use `create(ImportWorktreeResponseSchema)` to create a new message.
  */
 export const ImportWorktreeResponseSchema: GenMessage<ImportWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 21);
+  messageDesc(file_reliant_v1_worktree, 24);
 
 /**
  * DiscoverWorktreesRequest lists the project's untracked git worktrees.
@@ -901,7 +1029,7 @@ export type DiscoverWorktreesRequest = Message<"reliant.v1.DiscoverWorktreesRequ
  * Use `create(DiscoverWorktreesRequestSchema)` to create a new message.
  */
 export const DiscoverWorktreesRequestSchema: GenMessage<DiscoverWorktreesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 22);
+  messageDesc(file_reliant_v1_worktree, 25);
 
 /**
  * DiscoverWorktreesResponse returns the untracked worktrees of every repo of
@@ -934,7 +1062,7 @@ export type DiscoverWorktreesResponse = Message<"reliant.v1.DiscoverWorktreesRes
  * Use `create(DiscoverWorktreesResponseSchema)` to create a new message.
  */
 export const DiscoverWorktreesResponseSchema: GenMessage<DiscoverWorktreesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 23);
+  messageDesc(file_reliant_v1_worktree, 26);
 
 /**
  * PruneWorktreesRequest removes git's records of the project's worktrees
@@ -954,7 +1082,7 @@ export type PruneWorktreesRequest = Message<"reliant.v1.PruneWorktreesRequest"> 
  * Use `create(PruneWorktreesRequestSchema)` to create a new message.
  */
 export const PruneWorktreesRequestSchema: GenMessage<PruneWorktreesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 24);
+  messageDesc(file_reliant_v1_worktree, 27);
 
 /**
  * PruneWorktreesResponse lists the records that were removed.
@@ -973,7 +1101,7 @@ export type PruneWorktreesResponse = Message<"reliant.v1.PruneWorktreesResponse"
  * Use `create(PruneWorktreesResponseSchema)` to create a new message.
  */
 export const PruneWorktreesResponseSchema: GenMessage<PruneWorktreesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 25);
+  messageDesc(file_reliant_v1_worktree, 28);
 
 /**
  * RecreateWorktreeRequest recreates an archived worktree from its branch
@@ -992,7 +1120,7 @@ export type RecreateWorktreeRequest = Message<"reliant.v1.RecreateWorktreeReques
  * Use `create(RecreateWorktreeRequestSchema)` to create a new message.
  */
 export const RecreateWorktreeRequestSchema: GenMessage<RecreateWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 26);
+  messageDesc(file_reliant_v1_worktree, 29);
 
 /**
  * RecreateWorktreeResponse confirms recreation
@@ -1036,7 +1164,7 @@ export type RecreateWorktreeResponse = Message<"reliant.v1.RecreateWorktreeRespo
  * Use `create(RecreateWorktreeResponseSchema)` to create a new message.
  */
 export const RecreateWorktreeResponseSchema: GenMessage<RecreateWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 27);
+  messageDesc(file_reliant_v1_worktree, 30);
 
 /**
  * GetWorktreeChangesRequest gets file changes for a worktree.
@@ -1062,7 +1190,7 @@ export type GetWorktreeChangesRequest = Message<"reliant.v1.GetWorktreeChangesRe
  * Use `create(GetWorktreeChangesRequestSchema)` to create a new message.
  */
 export const GetWorktreeChangesRequestSchema: GenMessage<GetWorktreeChangesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 28);
+  messageDesc(file_reliant_v1_worktree, 31);
 
 /**
  * GetWorktreeChangesResponse returns file changes
@@ -1108,7 +1236,7 @@ export type GetWorktreeChangesResponse = Message<"reliant.v1.GetWorktreeChangesR
  * Use `create(GetWorktreeChangesResponseSchema)` to create a new message.
  */
 export const GetWorktreeChangesResponseSchema: GenMessage<GetWorktreeChangesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 29);
+  messageDesc(file_reliant_v1_worktree, 32);
 
 /**
  * GetWorktreeGitStatusRequest gets git status for a worktree.
@@ -1134,7 +1262,7 @@ export type GetWorktreeGitStatusRequest = Message<"reliant.v1.GetWorktreeGitStat
  * Use `create(GetWorktreeGitStatusRequestSchema)` to create a new message.
  */
 export const GetWorktreeGitStatusRequestSchema: GenMessage<GetWorktreeGitStatusRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 30);
+  messageDesc(file_reliant_v1_worktree, 33);
 
 /**
  * GetWorktreeGitStatusResponse returns git status
@@ -1198,7 +1326,7 @@ export type GetWorktreeGitStatusResponse = Message<"reliant.v1.GetWorktreeGitSta
  * Use `create(GetWorktreeGitStatusResponseSchema)` to create a new message.
  */
 export const GetWorktreeGitStatusResponseSchema: GenMessage<GetWorktreeGitStatusResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 31);
+  messageDesc(file_reliant_v1_worktree, 34);
 
 /**
  * GetWorktreeCommitsRequest gets commit history for a worktree.
@@ -1231,7 +1359,7 @@ export type GetWorktreeCommitsRequest = Message<"reliant.v1.GetWorktreeCommitsRe
  * Use `create(GetWorktreeCommitsRequestSchema)` to create a new message.
  */
 export const GetWorktreeCommitsRequestSchema: GenMessage<GetWorktreeCommitsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 32);
+  messageDesc(file_reliant_v1_worktree, 35);
 
 /**
  * ListWorktreeRepoStatusesRequest fans the per-repo git status across every
@@ -1251,7 +1379,7 @@ export type ListWorktreeRepoStatusesRequest = Message<"reliant.v1.ListWorktreeRe
  * Use `create(ListWorktreeRepoStatusesRequestSchema)` to create a new message.
  */
 export const ListWorktreeRepoStatusesRequestSchema: GenMessage<ListWorktreeRepoStatusesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 33);
+  messageDesc(file_reliant_v1_worktree, 36);
 
 /**
  * WorktreeRepoStatus is the per-repo status row inside the aggregator
@@ -1316,7 +1444,7 @@ export type WorktreeRepoStatus = Message<"reliant.v1.WorktreeRepoStatus"> & {
  * Use `create(WorktreeRepoStatusSchema)` to create a new message.
  */
 export const WorktreeRepoStatusSchema: GenMessage<WorktreeRepoStatus> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 34);
+  messageDesc(file_reliant_v1_worktree, 37);
 
 /**
  * ListWorktreeRepoStatusesResponse fans status across nested repos.
@@ -1335,7 +1463,7 @@ export type ListWorktreeRepoStatusesResponse = Message<"reliant.v1.ListWorktreeR
  * Use `create(ListWorktreeRepoStatusesResponseSchema)` to create a new message.
  */
 export const ListWorktreeRepoStatusesResponseSchema: GenMessage<ListWorktreeRepoStatusesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 35);
+  messageDesc(file_reliant_v1_worktree, 38);
 
 /**
  * GetWorktreeCommitsResponse returns commit history
@@ -1384,7 +1512,7 @@ export type GetWorktreeCommitsResponse = Message<"reliant.v1.GetWorktreeCommitsR
  * Use `create(GetWorktreeCommitsResponseSchema)` to create a new message.
  */
 export const GetWorktreeCommitsResponseSchema: GenMessage<GetWorktreeCommitsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 36);
+  messageDesc(file_reliant_v1_worktree, 39);
 
 /**
  * StageFilesRequest stages files in a worktree.
@@ -1417,7 +1545,7 @@ export type StageFilesRequest = Message<"reliant.v1.StageFilesRequest"> & {
  * Use `create(StageFilesRequestSchema)` to create a new message.
  */
 export const StageFilesRequestSchema: GenMessage<StageFilesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 37);
+  messageDesc(file_reliant_v1_worktree, 40);
 
 /**
  * StageFilesResponse confirms staging
@@ -1441,7 +1569,7 @@ export type StageFilesResponse = Message<"reliant.v1.StageFilesResponse"> & {
  * Use `create(StageFilesResponseSchema)` to create a new message.
  */
 export const StageFilesResponseSchema: GenMessage<StageFilesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 38);
+  messageDesc(file_reliant_v1_worktree, 41);
 
 /**
  * UnstageFilesRequest unstages files in a worktree.
@@ -1474,7 +1602,7 @@ export type UnstageFilesRequest = Message<"reliant.v1.UnstageFilesRequest"> & {
  * Use `create(UnstageFilesRequestSchema)` to create a new message.
  */
 export const UnstageFilesRequestSchema: GenMessage<UnstageFilesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 39);
+  messageDesc(file_reliant_v1_worktree, 42);
 
 /**
  * UnstageFilesResponse confirms unstaging
@@ -1498,7 +1626,7 @@ export type UnstageFilesResponse = Message<"reliant.v1.UnstageFilesResponse"> & 
  * Use `create(UnstageFilesResponseSchema)` to create a new message.
  */
 export const UnstageFilesResponseSchema: GenMessage<UnstageFilesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 40);
+  messageDesc(file_reliant_v1_worktree, 43);
 
 /**
  * RevertFilesRequest reverts/discards file changes
@@ -1532,7 +1660,7 @@ export type RevertFilesRequest = Message<"reliant.v1.RevertFilesRequest"> & {
  * Use `create(RevertFilesRequestSchema)` to create a new message.
  */
 export const RevertFilesRequestSchema: GenMessage<RevertFilesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 41);
+  messageDesc(file_reliant_v1_worktree, 44);
 
 /**
  * RevertFilesResponse confirms revert
@@ -1556,7 +1684,7 @@ export type RevertFilesResponse = Message<"reliant.v1.RevertFilesResponse"> & {
  * Use `create(RevertFilesResponseSchema)` to create a new message.
  */
 export const RevertFilesResponseSchema: GenMessage<RevertFilesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 42);
+  messageDesc(file_reliant_v1_worktree, 45);
 
 /**
  * CommitWorktreeRequest commits staged changes.
@@ -1587,7 +1715,7 @@ export type CommitWorktreeRequest = Message<"reliant.v1.CommitWorktreeRequest"> 
  * Use `create(CommitWorktreeRequestSchema)` to create a new message.
  */
 export const CommitWorktreeRequestSchema: GenMessage<CommitWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 43);
+  messageDesc(file_reliant_v1_worktree, 46);
 
 /**
  * CommitWorktreeResponse confirms commit
@@ -1611,7 +1739,7 @@ export type CommitWorktreeResponse = Message<"reliant.v1.CommitWorktreeResponse"
  * Use `create(CommitWorktreeResponseSchema)` to create a new message.
  */
 export const CommitWorktreeResponseSchema: GenMessage<CommitWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 44);
+  messageDesc(file_reliant_v1_worktree, 47);
 
 /**
  * PushWorktreeRequest pushes commits to remote.
@@ -1637,7 +1765,7 @@ export type PushWorktreeRequest = Message<"reliant.v1.PushWorktreeRequest"> & {
  * Use `create(PushWorktreeRequestSchema)` to create a new message.
  */
 export const PushWorktreeRequestSchema: GenMessage<PushWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 45);
+  messageDesc(file_reliant_v1_worktree, 48);
 
 /**
  * PushWorktreeResponse confirms push
@@ -1661,7 +1789,7 @@ export type PushWorktreeResponse = Message<"reliant.v1.PushWorktreeResponse"> & 
  * Use `create(PushWorktreeResponseSchema)` to create a new message.
  */
 export const PushWorktreeResponseSchema: GenMessage<PushWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 46);
+  messageDesc(file_reliant_v1_worktree, 49);
 
 /**
  * PullWorktreeRequest pulls changes from remote.
@@ -1687,7 +1815,7 @@ export type PullWorktreeRequest = Message<"reliant.v1.PullWorktreeRequest"> & {
  * Use `create(PullWorktreeRequestSchema)` to create a new message.
  */
 export const PullWorktreeRequestSchema: GenMessage<PullWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 47);
+  messageDesc(file_reliant_v1_worktree, 50);
 
 /**
  * PullWorktreeResponse confirms pull
@@ -1711,7 +1839,7 @@ export type PullWorktreeResponse = Message<"reliant.v1.PullWorktreeResponse"> & 
  * Use `create(PullWorktreeResponseSchema)` to create a new message.
  */
 export const PullWorktreeResponseSchema: GenMessage<PullWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 48);
+  messageDesc(file_reliant_v1_worktree, 51);
 
 /**
  * GetWorktreePRRequest checks for existing PR.
@@ -1737,7 +1865,7 @@ export type GetWorktreePRRequest = Message<"reliant.v1.GetWorktreePRRequest"> & 
  * Use `create(GetWorktreePRRequestSchema)` to create a new message.
  */
 export const GetWorktreePRRequestSchema: GenMessage<GetWorktreePRRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 49);
+  messageDesc(file_reliant_v1_worktree, 52);
 
 /**
  * GetWorktreePRResponse returns PR info if exists
@@ -1778,7 +1906,7 @@ export type GetWorktreePRResponse = Message<"reliant.v1.GetWorktreePRResponse"> 
  * Use `create(GetWorktreePRResponseSchema)` to create a new message.
  */
 export const GetWorktreePRResponseSchema: GenMessage<GetWorktreePRResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 50);
+  messageDesc(file_reliant_v1_worktree, 53);
 
 /**
  * CreateWorktreePRRequest creates a pull request.
@@ -1814,7 +1942,7 @@ export type CreateWorktreePRRequest = Message<"reliant.v1.CreateWorktreePRReques
  * Use `create(CreateWorktreePRRequestSchema)` to create a new message.
  */
 export const CreateWorktreePRRequestSchema: GenMessage<CreateWorktreePRRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 51);
+  messageDesc(file_reliant_v1_worktree, 54);
 
 /**
  * CreateWorktreePRResponse confirms PR creation
@@ -1853,7 +1981,7 @@ export type CreateWorktreePRResponse = Message<"reliant.v1.CreateWorktreePRRespo
  * Use `create(CreateWorktreePRResponseSchema)` to create a new message.
  */
 export const CreateWorktreePRResponseSchema: GenMessage<CreateWorktreePRResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 52);
+  messageDesc(file_reliant_v1_worktree, 55);
 
 /**
  * WorktreeStatus tracks the lifecycle of a worktree
@@ -1944,6 +2072,19 @@ export const WorktreeService: GenService<{
     methodKind: "unary";
     input: typeof ListWorktreesRequestSchema;
     output: typeof ListWorktreesResponseSchema;
+  },
+  /**
+   * ListArchivedWorktrees pages through the project's archived workspaces,
+   * most recently archived first. Archived workspaces are never part of
+   * ListWorktrees: only the archived view asks for them.
+   * forge:custom — authorizes through the project and reads only archived rows
+   *
+   * @generated from rpc reliant.v1.WorktreeService.ListArchivedWorktrees
+   */
+  listArchivedWorktrees: {
+    methodKind: "unary";
+    input: typeof ListArchivedWorktreesRequestSchema;
+    output: typeof ListArchivedWorktreesResponseSchema;
   },
   /**
    * forge:custom — authorizes through the worktree's project before it reads

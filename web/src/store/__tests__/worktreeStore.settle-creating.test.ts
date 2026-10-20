@@ -15,12 +15,15 @@ import type { Worktree as GrpcWorktree } from "../../api/worktree-grpc";
 // ---------------------------------------------------------------------------
 
 const createMock = vi.hoisted(() => vi.fn());
+const getMock = vi.hoisted(() => vi.fn());
 const listMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../api/worktree-grpc", () => ({
   worktreeGrpc: {
     create: createMock,
-    listAll: async (...args: unknown[]) => (await listMock(...args)).worktrees,
+    get: getMock,
+    list: listMock,
+    getMain: async () => mainRow,
   },
 }));
 
@@ -74,7 +77,7 @@ describe("worktreeStore: a CREATING worktree settles in place", () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     useWorktreeStore.getState().reset();
-    listMock.mockResolvedValue({ worktrees: [mainRow] });
+    listMock.mockResolvedValue({ worktrees: [mainRow], total: 1, nextPageToken: "" });
     await useWorktreeStore.getState().loadWorktrees(projectId);
 
     createMock.mockResolvedValue(creatingRow);
@@ -84,6 +87,7 @@ describe("worktreeStore: a CREATING worktree settles in place", () => {
       branch: "triggers",
     });
     listMock.mockClear();
+    getMock.mockReset();
   });
 
   afterEach(() => {
@@ -98,12 +102,15 @@ describe("worktreeStore: a CREATING worktree settles in place", () => {
   });
 
   it("picks up the settled path when the server announces it", async () => {
-    listMock.mockResolvedValue({ worktrees: [mainRow, settledRow] });
+    getMock.mockResolvedValue(settledRow);
 
     triggerRefetch("worktree_changes", "wt-new");
     await flushRefetch();
 
-    expect(listMock).toHaveBeenCalledTimes(1);
+    // One row re-read by id — not the project's whole worktree list.
+    expect(getMock).toHaveBeenCalledTimes(1);
+    expect(getMock).toHaveBeenCalledWith("wt-new");
+    expect(listMock).not.toHaveBeenCalled();
     const state = useWorktreeStore.getState();
     expect(state.worktrees.find((w) => w.id === "wt-new")?.path).toBe(settledPath);
     // The selected snapshot must follow, not just the list — consumers read
@@ -116,7 +123,7 @@ describe("worktreeStore: a CREATING worktree settles in place", () => {
     // Agent tool calls emit worktree_changes for whatever worktree they ran
     // in, constantly. A per-TYPE debounce kept only the last entity id, so the
     // settle for wt-new was overwritten by noise for wt-main.
-    listMock.mockResolvedValue({ worktrees: [mainRow, settledRow] });
+    getMock.mockResolvedValue(settledRow);
 
     triggerRefetch("worktree_changes", "wt-new");
     await vi.advanceTimersByTimeAsync(50);
@@ -126,19 +133,18 @@ describe("worktreeStore: a CREATING worktree settles in place", () => {
     expect(useWorktreeStore.getState().currentWorktree?.path).toBe(settledPath);
   });
 
-  it("does not refetch the list for changes to a worktree that is not pending", async () => {
-    // worktree_changes also fires on every agent file edit. Re-listing
+  it("does not refetch anything for changes to a worktree that is not pending", async () => {
+    // worktree_changes also fires on every agent file edit. Re-reading
     // worktrees for each of those would be pure load.
     triggerRefetch("worktree_changes", "wt-main");
     await flushRefetch();
 
+    expect(getMock).not.toHaveBeenCalled();
     expect(listMock).not.toHaveBeenCalled();
   });
 
   it("records a FAILED settle so callers stop waiting", async () => {
-    listMock.mockResolvedValue({
-      worktrees: [mainRow, { ...creatingRow, status: WorktreeStatus.FAILED }],
-    });
+    getMock.mockResolvedValue({ ...creatingRow, status: WorktreeStatus.FAILED });
 
     triggerRefetch("worktree_changes", "wt-new");
     await flushRefetch();
@@ -152,9 +158,7 @@ describe("worktreeStore: a CREATING worktree settles in place", () => {
   it("says why a FAILED settle failed, once", async () => {
     const reason =
       "base branch 'feat/telemetry-delivery-c2' doesn't exist in reliant — check the name, or start from an existing branch";
-    listMock.mockResolvedValue({
-      worktrees: [mainRow, { ...creatingRow, status: WorktreeStatus.FAILED, failure_reason: reason }],
-    });
+    getMock.mockResolvedValue({ ...creatingRow, status: WorktreeStatus.FAILED, failure_reason: reason });
 
     triggerRefetch("worktree_changes", "wt-new");
     await flushRefetch();
@@ -170,9 +174,7 @@ describe("worktreeStore: a CREATING worktree settles in place", () => {
   });
 
   it("still says a FAILED settle failed when the reason is ours", async () => {
-    listMock.mockResolvedValue({
-      worktrees: [mainRow, { ...creatingRow, status: WorktreeStatus.FAILED }],
-    });
+    getMock.mockResolvedValue({ ...creatingRow, status: WorktreeStatus.FAILED });
 
     triggerRefetch("worktree_changes", "wt-new");
     await flushRefetch();
@@ -182,7 +184,7 @@ describe("worktreeStore: a CREATING worktree settles in place", () => {
   });
 
   it("says nothing when the create succeeds", async () => {
-    listMock.mockResolvedValue({ worktrees: [mainRow, settledRow] });
+    getMock.mockResolvedValue(settledRow);
 
     triggerRefetch("worktree_changes", "wt-new");
     await flushRefetch();
@@ -202,7 +204,7 @@ describe("worktreeStore: a CREATING worktree settles in place", () => {
   });
 
   it("shows success, replacing the pending toast, once the worktree is ACTIVE", async () => {
-    listMock.mockResolvedValue({ worktrees: [mainRow, settledRow] });
+    getMock.mockResolvedValue(settledRow);
 
     triggerRefetch("worktree_changes", "wt-new");
     await flushRefetch();
@@ -219,9 +221,7 @@ describe("worktreeStore: a CREATING worktree settles in place", () => {
   });
 
   it("shows only the failure toast, replacing the pending one, when it FAILS", async () => {
-    listMock.mockResolvedValue({
-      worktrees: [mainRow, { ...creatingRow, status: WorktreeStatus.FAILED, failure_reason: "bad base" }],
-    });
+    getMock.mockResolvedValue({ ...creatingRow, status: WorktreeStatus.FAILED, failure_reason: "bad base" });
 
     triggerRefetch("worktree_changes", "wt-new");
     await flushRefetch();

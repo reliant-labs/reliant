@@ -154,12 +154,14 @@ func selectionJSON(sel *chatselection.Selection) map[string]interface{} {
 	}
 }
 
-// chatToProtoWithSelection is chatToProto plus the chat's selection, for the
+// chatToProtoWithSelection is chatToProto plus the chat's selection and
+// workspace summary, for the
 // responses a client builds a composer from (StartChat, BranchChat, GetChat).
 // A read failure leaves the selection out: the composer then shows the
 // workflow's defaults, which is what the server runs when it cannot read it.
 func (s *Service) chatToProtoWithSelection(ctx context.Context, chat *db.Chat) *reliantv1.Chat {
 	out := chatToProto(chat)
+	s.attachWorktree(ctx, chat, out)
 	sel, err := s.selections().Get(ctx, chat.ID)
 	if err != nil {
 		logging.Warn("Failed to read the chat's selection", "error", err, "chatID", chat.ID)

@@ -198,15 +198,9 @@ export function useWorkspaceRestore(
         return;
       }
 
-      // Step 2: Load worktrees if not loaded
-      if (worktreeStore.worktrees.length === 0) {
-        await worktreeStore.loadWorktrees(currentProject.id);
-      } else {
-        logger.debug(`[WorkspaceRestore] Worktrees already loaded (${worktreeStore.worktrees.length})`);
-      }
-
-      // Step 3: Restore last worktree
-      const worktreeRestored = worktreeStore.restoreLastWorktree(currentProject.id);
+      // Step 2: Restore last worktree. It is fetched by id (or main alone), so
+      // the project's full worktree list is never needed to start.
+      const worktreeRestored = await worktreeStore.restoreLastWorktree(currentProject.id);
       // Get fresh worktree state after restoration
       const freshWorktreeStore = useWorktreeStore.getState();
       if (worktreeRestored && freshWorktreeStore.currentWorktree) {

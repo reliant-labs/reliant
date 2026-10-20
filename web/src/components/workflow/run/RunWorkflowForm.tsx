@@ -21,7 +21,7 @@
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { presetGrpc, type Preset } from "@/api/preset-grpc";
 import { worktreeGrpc } from "@/api/worktree-grpc";
@@ -337,16 +337,33 @@ interface WorktreeFieldProps {
 }
 
 function WorktreeField({ id, projectId, worktreeId, disabled, onChange }: WorktreeFieldProps) {
-  const worktreesQuery = useQuery({
+  // One page at a time: a project can hold hundreds of workspaces agents
+  // created, and the form needs none of them until the user opens the list.
+  const worktreesQuery = useInfiniteQuery({
     queryKey: ["run-workflow-form", "worktrees", projectId],
-    queryFn: () => worktreeGrpc.listAll(projectId),
+    queryFn: ({ pageParam }) => worktreeGrpc.list(projectId, { pageToken: pageParam || undefined }),
+    initialPageParam: "",
+    getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!projectId,
     staleTime: 30_000,
   });
-  const worktrees = worktreesQuery.data;
+  const worktrees = useMemo(
+    () => worktreesQuery.data?.pages.flatMap((page) => page.worktrees),
+    [worktreesQuery.data],
+  );
+  // A stored workspace beyond the loaded pages is looked up by id, so an edit
+  // shows its real name instead of "Unavailable" just because it is on page 3.
+  const storedQuery = useQuery({
+    queryKey: ["run-workflow-form", "worktree", worktreeId],
+    queryFn: () => worktreeGrpc.get(worktreeId!),
+    enabled: !!worktreeId && worktreesQuery.isSuccess && !worktrees?.some((w) => w.id === worktreeId),
+    staleTime: 30_000,
+    retry: false,
+  });
 
   const options = useMemo(() => {
-    const listed = (worktrees ?? [])
+    const stored = storedQuery.data && !storedQuery.data.deleted_at ? [storedQuery.data] : [];
+    const listed = [...(worktrees ?? []), ...stored]
       .filter((w) => !w.is_main || w.id === worktreeId)
       .map((w) => ({ value: w.id, label: w.branch ? `${w.name} (${w.branch})` : w.name }))
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -356,7 +373,7 @@ function WorktreeField({ id, projectId, worktreeId, disabled, onChange }: Worktr
       listed.unshift({ value: worktreeId, label: `Unavailable workspace (${worktreeId.slice(0, 8)})` });
     }
     return listed;
-  }, [worktrees, worktreeId]);
+  }, [worktrees, worktreeId, storedQuery.data]);
 
   return (
     <div>
@@ -378,6 +395,16 @@ function WorktreeField({ id, projectId, worktreeId, disabled, onChange }: Worktr
           </option>
         ))}
       </select>
+      {worktreesQuery.hasNextPage && (
+        <button
+          type="button"
+          className="mt-1 text-xs text-primary hover:underline disabled:opacity-60"
+          disabled={disabled || worktreesQuery.isFetchingNextPage}
+          onClick={() => void worktreesQuery.fetchNextPage()}
+        >
+          {worktreesQuery.isFetchingNextPage ? "Loading…" : "Load more workspaces"}
+        </button>
+      )}
       <p id={`${id}-hint`} className={hintClass}>
         {worktreesQuery.isLoading
           ? "Loading this project's workspaces…"

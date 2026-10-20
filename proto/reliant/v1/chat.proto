@@ -6,6 +6,7 @@ package reliant.v1;
 import "buf/validate/validate.proto";
 import "google/protobuf/struct.proto";
 import "reliant/v1/common.proto";
+import "reliant/v1/worktree.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -353,6 +354,11 @@ message Chat {
   // The composer's server-side choice for this chat (model, mode, tools, ...) and
   // its provider policy. Set by GetChat; unset when the chat has none yet.
   ChatSelection selection = 40;
+  // The workspace named by worktree_id. Set by ListChats, GetChat, StartChat and
+  // BranchChat; unset for a chat with
+  // no worktree_id (it runs in the project's main workspace, which
+  // ListChatsResponse.main_worktree carries) and when the row is gone.
+  WorktreeSummary worktree = 41;
 }
 
 // ChatSelection is the server-side record of what the composer chose for a chat.
@@ -561,6 +567,9 @@ message ListChatsResponse {
   // The frontend uses this to connect the streaming RPC with sinceSeq = this value,
   // avoiding redundant replay of events already reflected in the chat list.
   int64 last_user_update_sequence = 3;
+  // The project's main workspace, so the sidebar can show it even when no chat
+  // runs there. Unset only for a project that has no main worktree row yet.
+  WorktreeSummary main_worktree = 4;
 }
 
 // GetChatRequest retrieves a chat by ID

@@ -34,10 +34,22 @@ vi.mock("../../hooks/useDebounce", () => ({
   useDebounce: <T,>(value: T) => value,
 }));
 
+// What the server sends: the chat carries its workspace, so none of this needs
+// the worktree store.
+const featureWorktree = {
+  id: "worktree-1",
+  name: "Workspace",
+  branch: "feature/test",
+  path: "/tmp/worktree",
+  isMain: false,
+  status: WorktreeStatus.ACTIVE,
+};
+
 const mockChatListData = [
   {
     id: "chat-1",
     title: "Selected chat",
+    worktree: featureWorktree,
     createdAt: "2024-01-01T00:00:00.000Z",
     updatedAt: "2024-01-01T00:00:00.000Z",
     lastMessageAt: "2024-01-01T00:00:00.000Z",
@@ -51,7 +63,10 @@ const mockChatListData = [
 const mockArchivedChatData: Array<Record<string, unknown>> = [];
 
 vi.mock("../../hooks/chat-queries", () => ({
-  useChatList: () => ({ data: mockChatListData, isLoading: false }),
+  useChatListWithWorkspaces: () => ({
+    data: { chats: mockChatListData, lastUserUpdateSequence: 0, mainWorktree: undefined },
+    isLoading: false,
+  }),
   useArchivedChats: () => ({ data: mockArchivedChatData, isFetched: true }),
   useDeleteChat: () => ({ mutateAsync: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
@@ -118,22 +133,9 @@ describe("Sidebar selected chat scroll", () => {
       activities: new Map([["chat-1", ChatActivity.IDLE]]),
     } as Partial<ReturnType<typeof useActivityStore.getState>>);
 
+    // Empty on purpose: the sidebar groups from the chat list alone.
     useWorktreeStore.setState({
-      worktrees: [
-        {
-          id: "worktree-1",
-          name: "Workspace",
-          path: "/tmp/worktree",
-          branch: "feature/test",
-          base_branch: "main",
-          project_id: "project-1",
-          status: WorktreeStatus.ACTIVE,
-          is_main: false,
-          created_at: "2024-01-01T00:00:00.000Z",
-          updated_at: "2024-01-01T00:00:00.000Z",
-          last_active: "2024-01-01T00:00:00.000Z",
-        },
-      ],
+      worktrees: [],
       currentWorktree: null,
       switchWorktreeContext,
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);

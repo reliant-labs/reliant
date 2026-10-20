@@ -26,9 +26,12 @@ vi.mock("@tanstack/react-router", () => ({
   useRouterState: () => "/m/chats",
 }));
 
-const useChatList = vi.fn();
+// The list response: chats (each carrying its workspace) plus the project's
+// main workspace. The worktree store is never consulted, so it is mocked with
+// nothing in it — a workspace that is in no store must still group correctly.
+const useChatListWithWorkspaces = vi.fn();
 vi.mock("../../../hooks/chat-queries", () => ({
-  useChatList: (...args: unknown[]) => useChatList(...args),
+  useChatListWithWorkspaces: (...args: unknown[]) => useChatListWithWorkspaces(...args),
   // Real key factory, not a stub: the archive flow invalidates
   // `chatKeys.lists()` to clear chats whose worktree just went away, and a
   // mismatched key would make the assertion pass while the app still showed a
@@ -45,19 +48,34 @@ vi.mock("../../../store/projectStore", () => ({
 }));
 
 const archiveWorktree = vi.fn();
-const ensureWorktrees = vi.fn(async () => {});
-let worktreesFixture: Array<{
+const storeState = { worktrees: [] as unknown[], archiveWorktree };
+
+vi.mock("../../../store/worktreeStore", () => ({
+  useWorktreeStore: (selector: (s: unknown) => unknown) => selector(storeState),
+}));
+
+type Workspace = {
   id: string;
   name: string;
   branch: string;
-  is_main: boolean;
-  deleted_at?: string | null;
-}> = [];
+  isMain: boolean;
+  deletedAt?: string;
+};
+const MAIN: Workspace = { id: "wt-main", name: "reliant", branch: "main", isMain: true };
+const FEATURE: Workspace = { id: "wt-feature", name: "feature-x", branch: "feature/x", isMain: false };
+const WORKSPACES: Record<string, Workspace> = { [MAIN.id]: MAIN, [FEATURE.id]: FEATURE };
 
-vi.mock("../../../store/worktreeStore", () => ({
-  useWorktreeStore: (selector: (s: unknown) => unknown) =>
-    selector({ worktrees: worktreesFixture, archiveWorktree, ensureWorktrees }),
-}));
+/** The list response for these chats, joined the way the server joins it. */
+function listOf(chats: Array<ReturnType<typeof chat>>, mainWorktree: Workspace | undefined = MAIN) {
+  return {
+    data: {
+      chats: chats.map((c) => ({ ...c, worktree: WORKSPACES[c.worktreeId] })),
+      lastUserUpdateSequence: 0,
+      mainWorktree,
+    },
+    isLoading: false,
+  };
+}
 
 vi.mock("../../../store/mobileDrawerStore", () => ({
   useMobileDrawerStore: (selector: (s: unknown) => unknown) =>
@@ -140,22 +158,15 @@ function chat(overrides: Partial<{
 beforeEach(() => {
   navigate.mockReset();
   archiveWorktree.mockReset();
-  useChatList.mockReset();
-  worktreesFixture = [
-    { id: "wt-main", name: "reliant", branch: "main", is_main: true },
-    { id: "wt-feature", name: "feature-x", branch: "feature/x", is_main: false },
-  ];
+  useChatListWithWorkspaces.mockReset();
 });
 
 describe("MobileChatList", () => {
   it("groups chats by worktree with the main workspace first", () => {
-    useChatList.mockReturnValue({
-      data: [
+    useChatListWithWorkspaces.mockReturnValue(listOf([
         chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature", lastMessageAt: "2024-01-03T00:00:00.000Z" }),
         chat({ id: "c2", title: "Main chat", worktreeId: "wt-main", lastMessageAt: "2024-01-01T00:00:00.000Z" }),
-      ],
-      isLoading: false,
-    });
+      ]));
 
     renderList();
 
@@ -167,16 +178,54 @@ describe("MobileChatList", () => {
     expect(screen.getByText("Branch chat")).toBeInTheDocument();
   });
 
+  it("names every group from the list response with no worktree in the store", () => {
+    // 113 workspaces exist; the store holds none, and these two chats sit on
+    // workspaces a paged worktree list would have dropped.
+    const far = { id: "wt-112", name: "agent-112", branch: "agent/112", isMain: false };
+    useChatListWithWorkspaces.mockReturnValue({
+      data: {
+        chats: [
+          { ...chat({ id: "c1", title: "Far chat", worktreeId: "wt-112" }), worktree: far },
+          { ...chat({ id: "c2", title: "Main chat", worktreeId: "wt-main" }), worktree: MAIN },
+        ],
+        lastUserUpdateSequence: 0,
+        mainWorktree: MAIN,
+      },
+      isLoading: false,
+    });
+    renderList();
+
+    expect(storeState.worktrees).toEqual([]);
+    expect(screen.getByText("agent-112")).toBeInTheDocument();
+    expect(screen.getByText("Far chat")).toBeInTheDocument();
+    expect(screen.queryByText("Unknown workspace")).not.toBeInTheDocument();
+  });
+
+  it("puts a chat with no worktree under the main workspace", () => {
+    useChatListWithWorkspaces.mockReturnValue({
+      data: {
+        chats: [{ ...chat({ id: "c1", title: "Unbound chat" }), worktreeId: undefined, worktree: undefined }],
+        lastUserUpdateSequence: 0,
+        mainWorktree: MAIN,
+      },
+      isLoading: false,
+    });
+    renderList();
+
+    expect(screen.getByText("Unbound chat")).toBeInTheDocument();
+    expect(screen.getByText("reliant")).toBeInTheDocument();
+    expect(screen.queryByText("Unknown workspace")).not.toBeInTheDocument();
+  });
+
   it("shows the main workspace even with zero chats", () => {
-    useChatList.mockReturnValue({ data: [], isLoading: false });
+    useChatListWithWorkspaces.mockReturnValue(listOf([]));
     renderList();
     expect(screen.getByText("reliant")).toBeInTheDocument();
     expect(screen.getByText("0", { selector: "span" })).toBeInTheDocument();
   });
 
   it("sorts a needing-attention group before a merely-recent group", () => {
-    useChatList.mockReturnValue({
-      data: [
+    useChatListWithWorkspaces.mockReturnValue(listOf([
         chat({ id: "c1", title: "Recent branch chat", worktreeId: "wt-feature", lastMessageAt: "2024-01-05T00:00:00.000Z" }),
         chat({
           id: "c2",
@@ -185,9 +234,7 @@ describe("MobileChatList", () => {
           activity: ChatActivity.AWAITING_INPUT,
           lastMessageAt: "2024-01-01T00:00:00.000Z",
         }),
-      ],
-      isLoading: false,
-    });
+      ]));
 
     renderList();
     // Main is pinned first by the isMain rule regardless of activity, so this
@@ -198,13 +245,10 @@ describe("MobileChatList", () => {
   });
 
   it("orders chats within a group by attention first, then recency", () => {
-    useChatList.mockReturnValue({
-      data: [
+    useChatListWithWorkspaces.mockReturnValue(listOf([
         chat({ id: "c1", title: "Older, needs attention", worktreeId: "wt-main", activity: ChatActivity.AWAITING_INPUT, lastMessageAt: "2024-01-01T00:00:00.000Z" }),
         chat({ id: "c2", title: "Newer, idle", worktreeId: "wt-main", lastMessageAt: "2024-01-05T00:00:00.000Z" }),
-      ],
-      isLoading: false,
-    });
+      ]));
 
     renderList();
     const rows = screen.getAllByText(/Older, needs attention|Newer, idle/);
@@ -215,10 +259,7 @@ describe("MobileChatList", () => {
 
   it("collapses and expands a group", async () => {
     const user = userEvent.setup();
-    useChatList.mockReturnValue({
-      data: [chat({ id: "c1", title: "Main chat", worktreeId: "wt-main" })],
-      isLoading: false,
-    });
+    useChatListWithWorkspaces.mockReturnValue(listOf([chat({ id: "c1", title: "Main chat", worktreeId: "wt-main" })]));
 
     renderList();
     expect(screen.getByText("Main chat")).toBeInTheDocument();
@@ -234,10 +275,7 @@ describe("MobileChatList", () => {
     // The reported bug: the header `+` and the main group's `+` rendered as two
     // identical icons a few px apart. Which workspace a chat starts in is now
     // picked on /m/new, so no group carries its own new-chat button.
-    useChatList.mockReturnValue({
-      data: [chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })],
-      isLoading: false,
-    });
+    useChatListWithWorkspaces.mockReturnValue(listOf([chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })]));
     renderList();
 
     // By label: the stubbed Link renders an <a> with no href, which has no
@@ -250,7 +288,7 @@ describe("MobileChatList", () => {
 
   it("creates a workspace from the list and lands on the composer pointed at it", async () => {
     const user = userEvent.setup();
-    useChatList.mockReturnValue({ data: [], isLoading: false });
+    useChatListWithWorkspaces.mockReturnValue(listOf([]));
     renderList();
 
     await user.click(screen.getByRole("button", { name: "New workspace" }));
@@ -262,17 +300,14 @@ describe("MobileChatList", () => {
   });
 
   it("does not offer to archive the main workspace", () => {
-    useChatList.mockReturnValue({ data: [], isLoading: false });
+    useChatListWithWorkspaces.mockReturnValue(listOf([]));
     renderList();
     expect(screen.queryByRole("button", { name: /Archive reliant/ })).not.toBeInTheDocument();
   });
 
   it("archives a non-main workspace after confirmation", async () => {
     const user = userEvent.setup();
-    useChatList.mockReturnValue({
-      data: [chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })],
-      isLoading: false,
-    });
+    useChatListWithWorkspaces.mockReturnValue(listOf([chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })]));
 
     renderList();
     await user.click(screen.getByRole("button", { name: /Archive feature-x/ }));
@@ -289,10 +324,7 @@ describe("MobileChatList", () => {
     // gone, and the grouping fell back to a ghost "Unknown workspace" row that
     // survived until a manual reload.
     const user = userEvent.setup();
-    useChatList.mockReturnValue({
-      data: [chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })],
-      isLoading: false,
-    });
+    useChatListWithWorkspaces.mockReturnValue(listOf([chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })]));
 
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -321,10 +353,7 @@ describe("MobileChatList", () => {
 
   it("opens a workspace's Files and Git without a chat", async () => {
     const user = userEvent.setup();
-    useChatList.mockReturnValue({
-      data: [chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })],
-      isLoading: false,
-    });
+    useChatListWithWorkspaces.mockReturnValue(listOf([chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })]));
     renderList();
 
     await user.click(screen.getByRole("button", { name: "Files and Git for feature-x" }));
@@ -334,10 +363,7 @@ describe("MobileChatList", () => {
   });
 
   it("offers no Files and Git for chats whose workspace is gone", () => {
-    useChatList.mockReturnValue({
-      data: [chat({ id: "c1", title: "Orphan", worktreeId: "wt-deleted" })],
-      isLoading: false,
-    });
+    useChatListWithWorkspaces.mockReturnValue(listOf([chat({ id: "c1", title: "Orphan", worktreeId: "wt-deleted" })]));
     renderList();
     expect(screen.getByText("Unknown workspace")).toBeInTheDocument();
     expect(
@@ -351,10 +377,7 @@ describe("MobileChatList", () => {
     const user = userEvent.setup();
     let finish!: () => void;
     archiveWorktree.mockReturnValue(new Promise<void>((resolve) => (finish = resolve)));
-    useChatList.mockReturnValue({
-      data: [chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })],
-      isLoading: false,
-    });
+    useChatListWithWorkspaces.mockReturnValue(listOf([chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })]));
 
     renderList();
     await user.click(screen.getByRole("button", { name: /Archive feature-x/ }));
@@ -374,10 +397,7 @@ describe("MobileChatList", () => {
 
   it("cancels archiving without calling archiveWorktree", async () => {
     const user = userEvent.setup();
-    useChatList.mockReturnValue({
-      data: [chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })],
-      isLoading: false,
-    });
+    useChatListWithWorkspaces.mockReturnValue(listOf([chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })]));
 
     renderList();
     await user.click(screen.getByRole("button", { name: /Archive feature-x/ }));
@@ -387,7 +407,7 @@ describe("MobileChatList", () => {
   });
 
   it("shows a loading state", () => {
-    useChatList.mockReturnValue({ data: undefined, isLoading: true });
+    useChatListWithWorkspaces.mockReturnValue({ data: undefined, isLoading: true });
     renderList();
     expect(screen.queryByText("reliant")).not.toBeInTheDocument();
   });

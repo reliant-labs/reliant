@@ -1,6 +1,7 @@
 import { worktreeGrpc } from "./worktree-grpc";
 import { triggerImmediateGitStatusRefresh } from "../store/gitStatusStore";
 import { useWorktreeStore } from "../store/worktreeStore";
+import { useProjectStore } from "../store/projectStore";
 
 export interface StageFilesRequest {
   files: string[]; // Array of file paths to stage, or ["."] to stage all
@@ -26,10 +27,13 @@ export interface GitOperationResponse {
   pr_url?: string;
 }
 
-// Helper to get projectId from worktreeId for refresh triggers
+// Helper to get projectId from worktreeId for refresh triggers. The store holds
+// only the workspaces something asked for, so a miss falls back to the open
+// project: git operations run in the workspace the user is looking at.
 function getProjectIdFromWorktree(worktreeId: string): string | undefined {
-  const worktree = useWorktreeStore.getState().worktrees.find(w => w.id === worktreeId);
-  return worktree?.project_id;
+  const { worktrees, currentWorktree } = useWorktreeStore.getState();
+  const known = worktrees.find(w => w.id === worktreeId) ?? (currentWorktree?.id === worktreeId ? currentWorktree : undefined);
+  return known?.project_id ?? useProjectStore.getState().currentProject?.id;
 }
 
 export interface ExistingPRResponse {

@@ -1040,10 +1040,17 @@ type Querier interface {
 	// List all workflows at a specific lifecycle (e.g. ACTIVE, or STOPPED/PAUSED).
 	// Used for startup recovery to restart workers for active workflows.
 	ListWorkflowsByStatus(ctx context.Context, arg ListWorkflowsByStatusParams) ([]Workflow, error)
+	// Live workspaces by default. include_archived adds archived ones after them
+	// (server-internal callers that must see every row); archived_only lists only
+	// the archived ones, most recently archived first. main_only narrows to the
+	// project's main workspace.
 	ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([]Worktree, error)
 	// Every row, archived included, recorded against a branch: an archived row's
 	// checkout or branch may outlive the archive.
 	ListWorktreesByBranch(ctx context.Context, arg ListWorktreesByBranchParams) ([]Worktree, error)
+	// One round trip for the workspaces a page of chats points at, archived ones
+	// included: a chat's workspace being archived must not hide the chat.
+	ListWorktreesByIDs(ctx context.Context, ids []string) ([]Worktree, error)
 	// Every workspace whose directory a daemon may still hold: not main, has a
 	// path, and not already known to be removed. Status 5 is CREATING and 6 is
 	// FAILED (WorktreeStatus in worktree.proto); neither has a directory yet. Archived rows are the ones to remove; the rest are locked as

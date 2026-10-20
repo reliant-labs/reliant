@@ -45,6 +45,7 @@ import {
   MessageRole,
   DisplayStyle,
 } from "../gen/reliant/v1/chat_pb";
+import type { WorktreeSummary } from "../gen/reliant/v1/worktree_pb";
 import { PlanStatus } from "../gen/reliant/v1/common_pb";
 
 export type {
@@ -304,6 +305,7 @@ export const chatGrpc = {
     chats: Chat[];
     total: number;
     lastUserUpdateSequence: number;
+    mainWorktree?: WorktreeSummary;
   }> {
     const client = grpcClient.chat();
     const request = create(ListChatsRequestSchema, {
@@ -324,6 +326,7 @@ export const chatGrpc = {
       chats: response.chats.map(convertProtoChat),
       total: response.total,
       lastUserUpdateSequence: Number(response.lastUserUpdateSequence),
+      mainWorktree: response.mainWorktree,
     };
   },
 

@@ -41,7 +41,6 @@ interface WorktreesPanelProps {
   /** Padding around the panel. The viewer tab relies on the default. */
   paddingClass?: string;
   daemonId?: string;
-  includeArchivedOnLoad?: boolean;
   /**
    * Called when a workspace's name is clicked. Without it, clicking a name
    * switches the app into that workspace (the viewer tab's behaviour, where
@@ -64,14 +63,16 @@ interface WorktreesPanelProps {
 export function WorktreesPanel({
   paddingClass = "p-3",
   daemonId,
-  includeArchivedOnLoad = false,
   onSelect,
   selectedId,
   onOpened,
 }: WorktreesPanelProps) {
   const allWorktrees = useWorktreeStore((state) => state.worktrees);
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
+  const refreshWorktreeList = useWorktreeStore((state) => state.refreshWorktrees);
+  const loadMoreWorktrees = useWorktreeStore((state) => state.loadMoreWorktrees);
+  const hasMore = useWorktreeStore((state) => state.nextPageToken !== "");
+  const isLoadingMore = useWorktreeStore((state) => state.isLoadingMore);
   const isLoading = useWorktreeStore((state) => state.isLoading);
   const deletingId = useWorktreeStore((state) => state.deletingId);
   const error = useWorktreeStore((state) => state.error);
@@ -97,16 +98,19 @@ export function WorktreesPanel({
 
   const refreshWorktrees = () => {
     if (currentProject) {
-      return loadWorktrees(currentProject.id, { includeArchived: includeArchivedOnLoad });
+      return refreshWorktreeList(currentProject.id);
     }
     return Promise.resolve();
   };
 
+  // First page on open; further pages on request. The panel is the one place
+  // that lists workspaces for their own sake, so it is where paging lives.
+  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
   useEffect(() => {
     if (currentProject) {
-      loadWorktrees(currentProject.id, { includeArchived: includeArchivedOnLoad });
+      void loadWorktrees(currentProject.id);
     }
-  }, [currentProject, includeArchivedOnLoad, loadWorktrees]);
+  }, [currentProject, loadWorktrees]);
 
   const handleSelect = (worktree: Worktree) => {
     if (onSelect) onSelect(worktree);
@@ -318,6 +322,19 @@ export function WorktreesPanel({
               })}
             </tbody>
           </table>
+          {hasMore && (
+            <div className="flex justify-center border-t border-border p-2">
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline disabled:opacity-60"
+                disabled={isLoadingMore}
+                onClick={() => void loadMoreWorktrees(currentProject.id)}
+                data-testid="load-more-workspaces"
+              >
+                {isLoadingMore ? "Loading…" : "Load more workspaces"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

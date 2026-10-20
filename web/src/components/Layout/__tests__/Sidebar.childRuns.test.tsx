@@ -42,8 +42,19 @@ vi.mock("../../../api/grpc-client", async () => {
   };
 });
 
-const chats = ["chat-1", "chat-2", "chat-3"].map((id) => ({
+// What the server sends: each chat carries its workspace.
+const workspace = {
+  id: "worktree-1",
+  name: "Workspace",
+  branch: "feature/test",
+  path: "/tmp/worktree",
+  isMain: false,
+  status: WorktreeStatus.ACTIVE,
+};
+
+const chats: Array<Record<string, unknown>> = ["chat-1", "chat-2", "chat-3"].map((id) => ({
   id,
+  worktree: workspace,
   title: `Chat ${id}`,
   createdAt: "2024-01-01T00:00:00.000Z",
   updatedAt: "2024-01-01T00:00:00.000Z",
@@ -55,7 +66,10 @@ const chats = ["chat-1", "chat-2", "chat-3"].map((id) => ({
 }));
 
 vi.mock("../../../hooks/chat-queries", () => ({
-  useChatList: () => ({ data: chats, isLoading: false }),
+  useChatListWithWorkspaces: () => ({
+    data: { chats, lastUserUpdateSequence: 0, mainWorktree: undefined },
+    isLoading: false,
+  }),
   useArchivedChats: () => ({ data: [], isFetched: true }),
   useDeleteChat: () => ({ mutateAsync: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
@@ -84,22 +98,9 @@ describe("Sidebar and child runs", () => {
     useChatStore.setState({ activeChatId: "chat-1", selectChat: vi.fn() } as Partial<
       ReturnType<typeof useChatStore.getState>
     >);
+    // Empty on purpose: the sidebar groups from the chat list alone.
     useWorktreeStore.setState({
-      worktrees: [
-        {
-          id: "worktree-1",
-          name: "Workspace",
-          path: "/tmp/worktree",
-          branch: "feature/test",
-          base_branch: "main",
-          project_id: "project-1",
-          status: WorktreeStatus.ACTIVE,
-          is_main: false,
-          created_at: "2024-01-01T00:00:00.000Z",
-          updated_at: "2024-01-01T00:00:00.000Z",
-          last_active: "2024-01-01T00:00:00.000Z",
-        },
-      ],
+      worktrees: [],
       currentWorktree: null,
       switchWorktreeContext: vi.fn(async () => undefined),
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
@@ -118,11 +119,11 @@ describe("Sidebar and child runs", () => {
     } as Partial<ReturnType<typeof useProjectStore.getState>>);
   });
 
-  it("keeps a chat whose workspace is not loaded and fetches that workspace by id", async () => {
-    const ensureWorktrees = vi.fn(async () => undefined);
-    // `chats` is shared with the other test; add the stray chat for this one.
-    chats.push({ ...chats[0], id: "chat-far", title: "Chat far", worktreeId: "worktree-not-loaded" });
-    useWorktreeStore.setState({ ensureWorktrees } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
+  it("groups chats under the workspace the list names, with no worktree in any store", async () => {
+    // 113 workspaces exist in the project; the store holds none of them, and the
+    // chat on workspace 112 is exactly the kind a paged worktree list dropped.
+    const far = { ...workspace, id: "worktree-112", name: "Agent workspace 112", branch: "agent/112" };
+    chats.push({ ...chats[0], id: "chat-far", title: "Chat far", worktreeId: far.id, worktree: far });
     try {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       render(
@@ -131,7 +132,27 @@ describe("Sidebar and child runs", () => {
         </QueryClientProvider>,
       );
       expect(await screen.findByText("Chat far")).toBeInTheDocument();
-      expect(ensureWorktrees).toHaveBeenCalledWith(["worktree-not-loaded"]);
+      // The group header shows the workspace's branch.
+      expect(screen.getByText("agent/112")).toBeInTheDocument();
+      expect(screen.getByText("feature/test")).toBeInTheDocument();
+      expect(screen.queryByText("Unknown workspace")).not.toBeInTheDocument();
+      expect(useWorktreeStore.getState().worktrees).toEqual([]);
+    } finally {
+      chats.pop();
+    }
+  });
+
+  it("keeps a chat whose workspace row the server could not find, under a fallback group", async () => {
+    chats.push({ ...chats[0], id: "chat-orphan", title: "Chat orphan", worktreeId: "worktree-gone", worktree: undefined });
+    try {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <Sidebar />
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByText("Chat orphan")).toBeInTheDocument();
+      expect(screen.getByText("Unknown workspace")).toBeInTheDocument();
     } finally {
       chats.pop();
     }

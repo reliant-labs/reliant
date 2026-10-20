@@ -33,7 +33,7 @@ export function MobileChatScreen() {
   const chat = useChat(chatId);
   const currentProject = useProjectStore((s) => s.currentProject);
   const worktrees = useWorktreeStore((s) => s.worktrees);
-  const loadWorktrees = useWorktreeStore((s) => s.loadWorktrees);
+  const loadMainWorktree = useWorktreeStore((s) => s.loadMainWorktree);
   const [showWorkspace, setShowWorkspace] = useState(false);
 
   // A deep link or notification can open a chat that is not in the project the
@@ -59,11 +59,13 @@ export function MobileChatScreen() {
 
   // A chat with no worktreeId runs against the project's main checkout — the
   // same default MobileNewChat resolves to when creating a chat. Without
-  // loading worktrees here, that fallback has nothing to resolve against.
+  // loading the main workspace here, that fallback has nothing to resolve
+  // against. Only that one row: the screen never lists workspaces.
+  const hasMain = worktrees.some((w) => w.is_main && !w.deleted_at);
   useEffect(() => {
     if (!currentProject) return;
-    if (worktrees.length === 0) void loadWorktrees(currentProject.id);
-  }, [currentProject, worktrees.length, loadWorktrees]);
+    if (!hasMain) void loadMainWorktree(currentProject.id);
+  }, [currentProject, hasMain, loadMainWorktree]);
 
   const mainWorktree = worktrees.find((w) => w.is_main && !w.deleted_at);
   const effectiveWorktreeId = chat?.worktreeId ?? mainWorktree?.id;

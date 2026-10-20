@@ -174,6 +174,7 @@ type Repository interface {
 	// key, or (nil, nil) when there is none.
 	GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error)
 	ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error)
+	ListWorktreesByIDs(ctx context.Context, ids []string) ([]*Worktree, error)
 	UpdateWorktree(ctx context.Context, worktree *Worktree) error
 	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *CleanupMetadata) error
 	ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error)

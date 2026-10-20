@@ -43,8 +43,6 @@ export async function loadRunContext(chatId: string): Promise<Chat> {
     const project = useProjectStore.getState().projects.find((p) => p.id === chat.projectId);
     if (!project) throw new RunProjectUnavailableError();
     await useProjectStore.getState().selectProject(project);
-  } else if (useWorktreeStore.getState().worktrees.length === 0) {
-    await useWorktreeStore.getState().loadWorktrees(chat.projectId);
   }
 
   const worktreeStore = useWorktreeStore.getState();

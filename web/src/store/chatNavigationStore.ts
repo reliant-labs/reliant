@@ -29,14 +29,14 @@
 
 import { create } from "zustand";
 import { ChatState } from "../gen/reliant/v1/chat_pb";
-import { WorktreeStatus } from "../gen/reliant/v1/worktree_pb";
+import { isWorkspaceClosed, workspaceOfChat } from "../lib/chatWorkspace";
 import { logger } from "../lib/logger";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useProjectStore } from "./projectStore";
 import { useWorktreeStore } from "./worktreeStore";
 import type { Chat } from "../api/client";
 import { useActivityStore, activityToDotState, ChatActivity } from "./activityStore";
-import { getCachedChatList, getChatFromCache } from "../hooks/chat-queries";
+import { getCachedChatList, getCachedMainWorktree, getChatFromCache } from "../hooks/chat-queries";
 import { sortChats, compareChatGroups } from "../lib/chatListOrder";
 
 /**
@@ -88,22 +88,18 @@ async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
  */
 async function getOrderedChatList(): Promise<Chat[]> {
   const { useChatListPreferencesStore } = await import("./chatListPreferencesStore");
-  const { useWorktreeStore } = await import("./worktreeStore");
   const { useProjectStore } = await import("./projectStore");
   // Read the chat list from the React Query cache — the same source the sidebar
   // renders from — so navigation order matches the sidebar exactly.
-  const chats = getCachedChatList(
-    useProjectStore.getState().currentProject?.id
-  );
+  const projectId = useProjectStore.getState().currentProject?.id;
+  const chats = getCachedChatList(projectId);
+  const mainWorktree = getCachedMainWorktree(projectId);
   const { sortOrder, viewMode, filters } = useChatListPreferencesStore.getState();
-  const worktrees = useWorktreeStore.getState().worktrees;
   const activities = useActivityStore.getState().activities;
 
-  // Helper to get worktree for a chat
-  const getWorktreeForChat = (chat: Chat) => {
-    if (!chat.worktreeId) return null;
-    return worktrees.find((w) => w.id === chat.worktreeId) || null;
-  };
+  // The workspace comes from the chat list itself, as it does in the sidebar,
+  // so the order here cannot disagree with what is rendered.
+  const getWorktreeForChat = (chat: Chat) => workspaceOfChat(chat, mainWorktree);
 
   // Helper to check if chat is awaiting approval
   const isAwaitingApproval = (chatId: string) =>
@@ -122,22 +118,9 @@ async function getOrderedChatList(): Promise<Chat[]> {
   let activeChats = chats.filter((c) => c.state !== ChatState.ARCHIVED);
 
   // Apply worktree filtering (matching Sidebar.tsx logic)
-  // Skip chats whose worktrees are completed/abandoned. A worktree that isn't
-  // loaded is not a reason to skip: the sidebar still lists the chat.
-  activeChats = activeChats.filter((chat) => {
-    const worktree = getWorktreeForChat(chat);
-    if (!worktree) {
-      return true;
-    }
-    // Skip if worktree is completed/abandoned
-    if (
-      worktree.status === WorktreeStatus.COMPLETED ||
-      worktree.status === WorktreeStatus.ABANDONED
-    ) {
-      return false;
-    }
-    return true;
-  });
+  // Skip chats whose worktrees are completed/abandoned. A worktree the server
+  // could not find is not a reason to skip: the sidebar still lists the chat.
+  activeChats = activeChats.filter((chat) => !isWorkspaceClosed(getWorktreeForChat(chat)));
 
   // Apply state filters (matching Sidebar.tsx logic)
   if (filters.states && filters.states.length > 0) {

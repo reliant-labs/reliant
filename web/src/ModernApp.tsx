@@ -381,9 +381,9 @@ function App() {
       // Reload worktrees to get the updated main worktree with correct branch name
       // This is important because git init may have created a branch with a custom name
       // (e.g., "master" instead of "main") and the main worktree needs to reflect this
-      const { loadWorktrees, restoreLastWorktree } = useWorktreeStore.getState();
-      await loadWorktrees(projectId);
-      restoreLastWorktree(projectId);
+      const { refreshWorktrees, restoreLastWorktree } = useWorktreeStore.getState();
+      await refreshWorktrees(projectId);
+      await restoreLastWorktree(projectId);
       logger.info('[ModernApp] Reloaded worktrees after git initialization');
     }
     handleCloseGitInitModal();

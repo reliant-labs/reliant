@@ -41,6 +41,9 @@ const (
 	// WorktreeServiceListWorktreesProcedure is the fully-qualified name of the WorktreeService's
 	// ListWorktrees RPC.
 	WorktreeServiceListWorktreesProcedure = "/reliant.v1.WorktreeService/ListWorktrees"
+	// WorktreeServiceListArchivedWorktreesProcedure is the fully-qualified name of the
+	// WorktreeService's ListArchivedWorktrees RPC.
+	WorktreeServiceListArchivedWorktreesProcedure = "/reliant.v1.WorktreeService/ListArchivedWorktrees"
 	// WorktreeServiceGetWorktreeProcedure is the fully-qualified name of the WorktreeService's
 	// GetWorktree RPC.
 	WorktreeServiceGetWorktreeProcedure = "/reliant.v1.WorktreeService/GetWorktree"
@@ -118,6 +121,11 @@ type WorktreeServiceClient interface {
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
 	// forge:custom — authorizes through the project, and creates its main worktree when none exists
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
+	// ListArchivedWorktrees pages through the project's archived workspaces,
+	// most recently archived first. Archived workspaces are never part of
+	// ListWorktrees: only the archived view asks for them.
+	// forge:custom — authorizes through the project and reads only archived rows
+	ListArchivedWorktrees(context.Context, *connect.Request[v1.ListArchivedWorktreesRequest]) (*connect.Response[v1.ListArchivedWorktreesResponse], error)
 	// forge:custom — authorizes through the worktree's project before it reads
 	GetWorktree(context.Context, *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error)
 	// forge:custom — a partial update authorized through the worktree's project
@@ -175,6 +183,12 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceListWorktreesProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("ListWorktrees")),
+			connect.WithClientOptions(opts...),
+		),
+		listArchivedWorktrees: connect.NewClient[v1.ListArchivedWorktreesRequest, v1.ListArchivedWorktreesResponse](
+			httpClient,
+			baseURL+WorktreeServiceListArchivedWorktreesProcedure,
+			connect.WithSchema(worktreeServiceMethods.ByName("ListArchivedWorktrees")),
 			connect.WithClientOptions(opts...),
 		),
 		getWorktree: connect.NewClient[v1.GetWorktreeRequest, v1.GetWorktreeResponse](
@@ -310,6 +324,7 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 type worktreeServiceClient struct {
 	createWorktree           *connect.Client[v1.CreateWorktreeRequest, v1.CreateWorktreeResponse]
 	listWorktrees            *connect.Client[v1.ListWorktreesRequest, v1.ListWorktreesResponse]
+	listArchivedWorktrees    *connect.Client[v1.ListArchivedWorktreesRequest, v1.ListArchivedWorktreesResponse]
 	getWorktree              *connect.Client[v1.GetWorktreeRequest, v1.GetWorktreeResponse]
 	updateWorktree           *connect.Client[v1.UpdateWorktreeRequest, v1.UpdateWorktreeResponse]
 	deleteWorktree           *connect.Client[v1.DeleteWorktreeRequest, v1.DeleteWorktreeResponse]
@@ -341,6 +356,11 @@ func (c *worktreeServiceClient) CreateWorktree(ctx context.Context, req *connect
 // ListWorktrees calls reliant.v1.WorktreeService.ListWorktrees.
 func (c *worktreeServiceClient) ListWorktrees(ctx context.Context, req *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error) {
 	return c.listWorktrees.CallUnary(ctx, req)
+}
+
+// ListArchivedWorktrees calls reliant.v1.WorktreeService.ListArchivedWorktrees.
+func (c *worktreeServiceClient) ListArchivedWorktrees(ctx context.Context, req *connect.Request[v1.ListArchivedWorktreesRequest]) (*connect.Response[v1.ListArchivedWorktreesResponse], error) {
+	return c.listArchivedWorktrees.CallUnary(ctx, req)
 }
 
 // GetWorktree calls reliant.v1.WorktreeService.GetWorktree.
@@ -460,6 +480,11 @@ type WorktreeServiceHandler interface {
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
 	// forge:custom — authorizes through the project, and creates its main worktree when none exists
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
+	// ListArchivedWorktrees pages through the project's archived workspaces,
+	// most recently archived first. Archived workspaces are never part of
+	// ListWorktrees: only the archived view asks for them.
+	// forge:custom — authorizes through the project and reads only archived rows
+	ListArchivedWorktrees(context.Context, *connect.Request[v1.ListArchivedWorktreesRequest]) (*connect.Response[v1.ListArchivedWorktreesResponse], error)
 	// forge:custom — authorizes through the worktree's project before it reads
 	GetWorktree(context.Context, *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error)
 	// forge:custom — a partial update authorized through the worktree's project
@@ -513,6 +538,12 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceListWorktreesProcedure,
 		svc.ListWorktrees,
 		connect.WithSchema(worktreeServiceMethods.ByName("ListWorktrees")),
+		connect.WithHandlerOptions(opts...),
+	)
+	worktreeServiceListArchivedWorktreesHandler := connect.NewUnaryHandler(
+		WorktreeServiceListArchivedWorktreesProcedure,
+		svc.ListArchivedWorktrees,
+		connect.WithSchema(worktreeServiceMethods.ByName("ListArchivedWorktrees")),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceGetWorktreeHandler := connect.NewUnaryHandler(
@@ -647,6 +678,8 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 			worktreeServiceCreateWorktreeHandler.ServeHTTP(w, r)
 		case WorktreeServiceListWorktreesProcedure:
 			worktreeServiceListWorktreesHandler.ServeHTTP(w, r)
+		case WorktreeServiceListArchivedWorktreesProcedure:
+			worktreeServiceListArchivedWorktreesHandler.ServeHTTP(w, r)
 		case WorktreeServiceGetWorktreeProcedure:
 			worktreeServiceGetWorktreeHandler.ServeHTTP(w, r)
 		case WorktreeServiceUpdateWorktreeProcedure:
@@ -704,6 +737,10 @@ func (UnimplementedWorktreeServiceHandler) CreateWorktree(context.Context, *conn
 
 func (UnimplementedWorktreeServiceHandler) ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.ListWorktrees is not implemented"))
+}
+
+func (UnimplementedWorktreeServiceHandler) ListArchivedWorktrees(context.Context, *connect.Request[v1.ListArchivedWorktreesRequest]) (*connect.Response[v1.ListArchivedWorktreesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.ListArchivedWorktrees is not implemented"))
 }
 
 func (UnimplementedWorktreeServiceHandler) GetWorktree(context.Context, *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error) {

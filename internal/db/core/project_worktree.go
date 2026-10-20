@@ -251,12 +251,18 @@ type ProjectFilters struct {
 
 // WorktreeFilters contains options for filtering worktrees.
 type WorktreeFilters struct {
-	ProjectID       *string
-	ChatID          *string
-	Status          *int32
+	ProjectID *string
+	ChatID    *string
+	Status    *int32
+	// IncludeArchived adds archived rows after the live ones.
 	IncludeArchived bool
-	Limit           int
-	Offset          int
+	// ArchivedOnly lists only archived rows, most recently archived first.
+	// It takes precedence over IncludeArchived.
+	ArchivedOnly bool
+	// MainOnly narrows to the project's main workspace.
+	MainOnly bool
+	Limit    int
+	Offset   int
 }
 
 // ProjectStore is the shared contract for project persistence across drivers.
@@ -308,6 +314,9 @@ type WorktreeStore interface {
 	// key, or (nil, nil) when there is none.
 	GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error)
 	ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error)
+	// ListWorktreesByIDs returns the rows with these ids, archived ones
+	// included, in no particular order. Unknown ids are skipped.
+	ListWorktreesByIDs(ctx context.Context, ids []string) ([]*Worktree, error)
 	UpdateWorktree(ctx context.Context, worktree *Worktree) error
 	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *CleanupMetadata) error
 	// ListWorktreesForReclaim returns every non-main workspace that may still

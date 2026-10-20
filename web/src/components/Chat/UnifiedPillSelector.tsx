@@ -9,6 +9,7 @@ import { cn } from "../../lib/utils";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
+import { LoadMoreWorktreesRow } from "../Worktrees/LoadMoreWorktreesRow";
 import { AgentSelector } from "./AgentSelector";
 import { Tooltip } from "../ui/Tooltip";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
@@ -276,6 +277,7 @@ export function UnifiedPillSelector({
                       </button>
                     ))
                   )}
+                  <LoadMoreWorktreesRow projectId={currentProject?.id} />
 
                   {/* Create new workspace */}
                   <button

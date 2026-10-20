@@ -49,7 +49,10 @@ vi.mock("../ui/ContextMenu", () => ({ ContextMenu: () => null }));
 vi.mock("../../hooks/useDebounce", () => ({ useDebounce: <T,>(value: T) => value }));
 
 vi.mock("../../hooks/chat-queries", () => ({
-  useChatList: () => ({ data: [], isLoading: false }),
+  useChatListWithWorkspaces: () => ({
+    data: { chats: [], lastUserUpdateSequence: 0, mainWorktree: undefined },
+    isLoading: false,
+  }),
   useArchivedChats: () => ({ data: [], isFetched: true }),
   useDeleteChat: () => ({ mutateAsync: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),

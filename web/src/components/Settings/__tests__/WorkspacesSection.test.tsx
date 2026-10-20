@@ -7,7 +7,14 @@ import type { Worktree } from "../../../store/worktreeStore";
 
 const mocks = vi.hoisted(() => ({
   worktrees: [] as Worktree[],
+  archivedWorktrees: [] as Worktree[],
+  nextPageToken: "",
+  archivedNextPageToken: "",
   loadWorktrees: vi.fn(async () => {}),
+  refreshWorktrees: vi.fn(async () => {}),
+  loadMoreWorktrees: vi.fn(async () => {}),
+  loadArchivedWorktrees: vi.fn(async () => {}),
+  loadMoreArchivedWorktrees: vi.fn(async () => {}),
   deleteWorktree: vi.fn(async () => {}),
   unarchiveWorktree: vi.fn(async () => {}),
   updateWorktreeStatus: vi.fn(async () => {}),
@@ -28,11 +35,21 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../../store/worktreeStore", () => {
   const state = () => ({
     worktrees: mocks.worktrees,
+    archivedWorktrees: mocks.archivedWorktrees,
+    nextPageToken: mocks.nextPageToken,
+    archivedNextPageToken: mocks.archivedNextPageToken,
+    hasLoadedArchived: mocks.archivedWorktrees.length > 0,
+    isLoadingMore: false,
+    isLoadingArchived: false,
     currentWorktree: mocks.worktrees.find((w) => w.is_main) ?? null,
     isLoading: false,
     deletingId: null,
     error: null,
     loadWorktrees: mocks.loadWorktrees,
+    refreshWorktrees: mocks.refreshWorktrees,
+    loadMoreWorktrees: mocks.loadMoreWorktrees,
+    loadArchivedWorktrees: mocks.loadArchivedWorktrees,
+    loadMoreArchivedWorktrees: mocks.loadMoreArchivedWorktrees,
     deleteWorktree: mocks.deleteWorktree,
     unarchiveWorktree: mocks.unarchiveWorktree,
     updateWorktreeStatus: mocks.updateWorktreeStatus,
@@ -155,7 +172,10 @@ function renderSection() {
 describe("Settings → Workspaces", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.worktrees = [MAIN, FEATURE, ARCHIVED];
+    mocks.worktrees = [MAIN, FEATURE];
+    mocks.archivedWorktrees = [ARCHIVED];
+    mocks.nextPageToken = "";
+    mocks.archivedNextPageToken = "";
     mocks.preferences.worktree.archiveMode = "ask_me";
     mocks.getGitStatus.mockResolvedValue({
       is_clean: false,
@@ -306,6 +326,47 @@ describe("Settings → Workspaces", () => {
     expect(
       within(settings).getByRole("switch", { name: "Delete the git branch" }),
     ).toBeInTheDocument();
+  });
+
+  it("loads only the live workspaces on open, never the archived ones", () => {
+    renderSection();
+    expect(mocks.loadWorktrees).toHaveBeenCalledWith("project-1");
+    expect(mocks.loadArchivedWorktrees).not.toHaveBeenCalled();
+  });
+
+  it("loads the archived workspaces when the Archived tab is opened", async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(screen.getByRole("tab", { name: /archived/i }));
+
+    expect(mocks.loadArchivedWorktrees).toHaveBeenCalledWith("project-1");
+  });
+
+  it("offers the next page of live workspaces and fetches it on request", async () => {
+    mocks.nextPageToken = "t2";
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(screen.getByTestId("load-more-workspaces"));
+
+    expect(mocks.loadMoreWorktrees).toHaveBeenCalledWith("project-1");
+  });
+
+  it("offers no load-more on the last page", () => {
+    renderSection();
+    expect(screen.queryByTestId("load-more-workspaces")).not.toBeInTheDocument();
+  });
+
+  it("pages the archived workspaces on their own token", async () => {
+    mocks.archivedNextPageToken = "a2";
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(screen.getByRole("tab", { name: /archived/i }));
+    await user.click(screen.getByTestId("load-more-archived"));
+
+    expect(mocks.loadMoreArchivedWorktrees).toHaveBeenCalledWith("project-1");
   });
 
   it("explains what a workspace is when there are none", () => {

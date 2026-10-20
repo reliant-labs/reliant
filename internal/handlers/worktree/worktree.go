@@ -635,8 +635,8 @@ func (s *Service) ListWorktrees(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid page_token"))
 	}
 	filters := db.WorktreeFilters{
-		ProjectID:       &projectID,
-		IncludeArchived: req.Msg.GetIncludeArchived(),
+		ProjectID: &projectID,
+		MainOnly:  req.Msg.GetMainOnly(),
 		// One extra row tells us whether another page follows.
 		Limit:  pageSize + 1,
 		Offset: offset,
@@ -704,6 +704,60 @@ func (s *Service) ListWorktrees(
 	}
 
 	return connect.NewResponse(&reliantv1.ListWorktreesResponse{
+		Worktrees:     protoWorktrees,
+		Total:         int32(len(protoWorktrees)),
+		NextPageToken: nextPageToken,
+	}), nil
+}
+
+// ListArchivedWorktrees pages through the project's archived workspaces, most
+// recently archived first. ListWorktrees never returns them.
+func (s *Service) ListArchivedWorktrees(
+	ctx context.Context,
+	req *connect.Request[reliantv1.ListArchivedWorktreesRequest],
+) (*connect.Response[reliantv1.ListArchivedWorktreesResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	if req.Msg.ProjectId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+	}
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		return nil, err
+	}
+
+	pageSize := defaultListWorktreesPageSize
+	if req.Msg.Limit > 0 {
+		pageSize = int(req.Msg.Limit)
+	}
+	offset, err := decodeWorktreePageToken(req.Msg.GetPageToken())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid page_token"))
+	}
+
+	projectID := req.Msg.ProjectId
+	worktrees, err := s.deps.Repo.ListWorktrees(ctx, db.WorktreeFilters{
+		ProjectID:    &projectID,
+		ArchivedOnly: true,
+		// One extra row tells us whether another page follows.
+		Limit:  pageSize + 1,
+		Offset: offset,
+	})
+	if err != nil {
+		logging.Error("Failed to list archived worktrees", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list archived worktrees"))
+	}
+
+	nextPageToken := ""
+	if len(worktrees) > pageSize {
+		worktrees = worktrees[:pageSize]
+		nextPageToken = encodeWorktreePageToken(offset + pageSize)
+	}
+
+	protoWorktrees := make([]*reliantv1.Worktree, len(worktrees))
+	for i, w := range worktrees {
+		protoWorktrees[i] = worktreeToProto(w)
+	}
+	return connect.NewResponse(&reliantv1.ListArchivedWorktreesResponse{
 		Worktrees:     protoWorktrees,
 		Total:         int32(len(protoWorktrees)),
 		NextPageToken: nextPageToken,
