@@ -55,7 +55,7 @@ func TestUnrecognisedEnvironmentFailsClosed(t *testing.T) {
 // RELIANT_ENV=e2e on the reliant pods, and that harness relied on the old
 // permissive default to reach dev behaviour. With the default now failing
 // closed it has to be named explicitly, or the e2e stack would silently switch
-// to prod behaviour (live Sentry, Statsig, no env-var feature-flag provider).
+// to prod behaviour (live Sentry, no env-var feature-flag provider).
 func TestRecognisedEnvironments(t *testing.T) {
 	cases := []struct {
 		reliantEnv string

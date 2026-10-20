@@ -320,7 +320,8 @@ func automationTrigger(chat *db.Chat) string {
 // started it and is waiting on it. Empty is a chat from before launch kinds
 // were recorded, which was always interactive.
 func isInteractiveLaunchKind(kind string) bool {
-	return kind == "" || kind == string(core.TriggerEventKindChatStart) || kind == string(core.TriggerEventKindBuilderTest)
+	return kind == "" || kind == string(core.TriggerEventKindChatStart) ||
+		kind == string(core.TriggerEventKindBuilderTest) || kind == string(core.TriggerEventKindManualRun)
 }
 
 // reviveThreadForNewRun moves this run's thread out of a terminal status,
@@ -813,7 +814,7 @@ func (a *WorkflowStatusActivity) emitThreadUpdate(ctx context.Context, input Wor
 	return a.repo.CreateChatUpdate(ctx, input.ChatID, db.UpdateTypeThread, input.WorkflowID, string(updateDataJSON))
 }
 
-// trackAnalytics sends workflow analytics events to Statsig
+// trackAnalytics records workflow product events (internal/analytics).
 // Only tracks root workflows to reduce event volume - child workflow data
 // can be derived from root workflow metrics if needed
 func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input WorkflowStatusInput) {
@@ -856,7 +857,7 @@ func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input Workf
 		IsChild:      false, // Always false now since we skip children
 	}
 
-	analyticsClient := analytics.GetClientForUser(ctx, userID)
+	analyticsClient := analytics.ForUser(ctx, userID)
 	switch input.Status {
 	case "started":
 		analyticsClient.TrackWorkflowStarted(metrics)

@@ -81,7 +81,7 @@ export function RunHeader({ chat, triggerName, event, parent, projectName, actio
     : undefined;
   const startedAt = Date.parse(chat.createdAt);
   // Interactive chats and adopted runs are already in the chat list.
-  const isChat = launch.kind === "chat.start" || Boolean(chat.adoptedAt);
+  const isChat = launch.kind === "chat.start" || launch.kind === "manual.run" || Boolean(chat.adoptedAt);
   const location = [projectName, machine].filter(Boolean).join(" · ");
 
   return (

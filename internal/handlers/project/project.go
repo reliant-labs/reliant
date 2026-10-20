@@ -788,7 +788,7 @@ func (s *Service) GetProject(
 		logging.WarnContext(ctx, "GetProject: failed to persist updated git status", "error", err, "projectID", project.ID)
 	}
 
-	analyticsClient := analytics.GetClientForUser(ctx, userID)
+	analyticsClient := analytics.ForUser(ctx, userID)
 	analyticsClient.TrackProjectOpened(analytics.ProjectOpenedMetrics{
 		ProjectID: project.ID,
 		IsGitRepo: project.IsGitRepo,

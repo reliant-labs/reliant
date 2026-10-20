@@ -33,6 +33,7 @@ export function launchContextOf(
   const integration = event.integration;
   return {
     manual: event.manual,
+    replayedEvent: event.replayedEvent,
     at: event.kind === "webhook" && event.occurredAt ? formatClock(event.occurredAt) : undefined,
     providerName: integration ? naming.integration(integration) : integration,
     providerEvent: integration && event.providerEvent ? naming.event(integration, event.providerEvent) : event.providerEvent,

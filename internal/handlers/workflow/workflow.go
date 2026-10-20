@@ -679,7 +679,7 @@ func (s *Service) SaveWorkflow(
 	}
 
 	// Track workflow draft saved event
-	analyticsClient := analytics.GetClientForUser(ctx, userID)
+	analyticsClient := analytics.ForUser(ctx, userID)
 	analyticsClient.TrackWorkflowDraftSaved(analytics.WorkflowDraftSavedMetrics{
 		WorkflowSlug: slug,
 		WorkflowName: protoWf.Name,
@@ -885,7 +885,7 @@ func (s *Service) CreateWorkflowDraft(
 
 	logging.InfoContext(ctx, "Created workflow draft", "draftID", draftID, "name", name, "slug", slug, "userID", userID)
 
-	analyticsClient := analytics.GetClientForUser(ctx, userID)
+	analyticsClient := analytics.ForUser(ctx, userID)
 	analyticsClient.TrackWorkflowDraftCreated(analytics.WorkflowDraftCreatedMetrics{
 		WorkflowSlug: slug,
 		WorkflowName: name,

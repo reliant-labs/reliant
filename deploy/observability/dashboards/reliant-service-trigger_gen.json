@@ -847,9 +847,111 @@
       }
     },
     {
-      "id": "t-rpc-ListTriggerEvents-rate",
+      "id": "t-rpc-ListReplayEvents-rate",
       "x": 0,
       "y": 54,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListReplayEvents: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.TriggerService/ListReplayEvents'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListReplayEvents-errors",
+      "x": 8,
+      "y": 54,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListReplayEvents: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.TriggerService/ListReplayEvents'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListReplayEvents-latency",
+      "x": 16,
+      "y": 54,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "ListReplayEvents: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.TriggerService/ListReplayEvents'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-rpc-ListTriggerEvents-rate",
+      "x": 0,
+      "y": 60,
       "w": 8,
       "h": 6,
       "config": {
@@ -876,7 +978,7 @@
     {
       "id": "t-rpc-ListTriggerEvents-errors",
       "x": 8,
-      "y": 54,
+      "y": 60,
       "w": 8,
       "h": 6,
       "config": {
@@ -910,7 +1012,7 @@
     {
       "id": "t-rpc-ListTriggerEvents-latency",
       "x": 16,
-      "y": 54,
+      "y": 60,
       "w": 8,
       "h": 6,
       "config": {
@@ -951,7 +1053,7 @@
     {
       "id": "t-rpc-ListTriggers-rate",
       "x": 0,
-      "y": 60,
+      "y": 66,
       "w": 8,
       "h": 6,
       "config": {
@@ -978,7 +1080,7 @@
     {
       "id": "t-rpc-ListTriggers-errors",
       "x": 8,
-      "y": 60,
+      "y": 66,
       "w": 8,
       "h": 6,
       "config": {
@@ -1012,7 +1114,7 @@
     {
       "id": "t-rpc-ListTriggers-latency",
       "x": 16,
-      "y": 60,
+      "y": 66,
       "w": 8,
       "h": 6,
       "config": {
@@ -1051,9 +1153,111 @@
       }
     },
     {
+      "id": "t-rpc-PreviewReplay-rate",
+      "x": 0,
+      "y": 72,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "PreviewReplay: requests",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.TriggerService/PreviewReplay'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-rpc-PreviewReplay-errors",
+      "x": 8,
+      "y": 72,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "PreviewReplay: error rate",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "lower(StatusCode) = 'error'",
+            "aggConditionLanguage": "sql",
+            "alias": "errors"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "requests"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.TriggerService/PreviewReplay'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "seriesReturnType": "ratio",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-rpc-PreviewReplay-latency",
+      "x": 16,
+      "y": 72,
+      "w": 8,
+      "h": 6,
+      "config": {
+        "name": "PreviewReplay: latency",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.TriggerService/PreviewReplay'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
       "id": "t-rpc-ResolveTriggerSenders-rate",
       "x": 0,
-      "y": 66,
+      "y": 78,
       "w": 8,
       "h": 6,
       "config": {
@@ -1080,7 +1284,7 @@
     {
       "id": "t-rpc-ResolveTriggerSenders-errors",
       "x": 8,
-      "y": 66,
+      "y": 78,
       "w": 8,
       "h": 6,
       "config": {
@@ -1114,7 +1318,7 @@
     {
       "id": "t-rpc-ResolveTriggerSenders-latency",
       "x": 16,
-      "y": 66,
+      "y": 78,
       "w": 8,
       "h": 6,
       "config": {
@@ -1155,7 +1359,7 @@
     {
       "id": "t-rpc-RotateWebhookToken-rate",
       "x": 0,
-      "y": 72,
+      "y": 84,
       "w": 8,
       "h": 6,
       "config": {
@@ -1182,7 +1386,7 @@
     {
       "id": "t-rpc-RotateWebhookToken-errors",
       "x": 8,
-      "y": 72,
+      "y": 84,
       "w": 8,
       "h": 6,
       "config": {
@@ -1216,7 +1420,7 @@
     {
       "id": "t-rpc-RotateWebhookToken-latency",
       "x": 16,
-      "y": 72,
+      "y": 84,
       "w": 8,
       "h": 6,
       "config": {
@@ -1257,7 +1461,7 @@
     {
       "id": "t-rpc-SetTriggerEnabled-rate",
       "x": 0,
-      "y": 78,
+      "y": 90,
       "w": 8,
       "h": 6,
       "config": {
@@ -1284,7 +1488,7 @@
     {
       "id": "t-rpc-SetTriggerEnabled-errors",
       "x": 8,
-      "y": 78,
+      "y": 90,
       "w": 8,
       "h": 6,
       "config": {
@@ -1318,7 +1522,7 @@
     {
       "id": "t-rpc-SetTriggerEnabled-latency",
       "x": 16,
-      "y": 78,
+      "y": 90,
       "w": 8,
       "h": 6,
       "config": {
@@ -1359,7 +1563,7 @@
     {
       "id": "t-rpc-UpdateTrigger-rate",
       "x": 0,
-      "y": 84,
+      "y": 96,
       "w": 8,
       "h": 6,
       "config": {
@@ -1386,7 +1590,7 @@
     {
       "id": "t-rpc-UpdateTrigger-errors",
       "x": 8,
-      "y": 84,
+      "y": 96,
       "w": 8,
       "h": 6,
       "config": {
@@ -1420,7 +1624,7 @@
     {
       "id": "t-rpc-UpdateTrigger-latency",
       "x": 16,
-      "y": 84,
+      "y": 96,
       "w": 8,
       "h": 6,
       "config": {
@@ -1461,7 +1665,7 @@
     {
       "id": "t-db-latency",
       "x": 0,
-      "y": 90,
+      "y": 102,
       "w": 12,
       "h": 7,
       "config": {
@@ -1502,7 +1706,7 @@
     {
       "id": "t-db-by-operation",
       "x": 12,
-      "y": 90,
+      "y": 102,
       "w": 12,
       "h": 7,
       "config": {
@@ -1537,7 +1741,7 @@
     {
       "id": "t-go-memory",
       "x": 0,
-      "y": 97,
+      "y": 109,
       "w": 12,
       "h": 7,
       "config": {
@@ -1572,7 +1776,7 @@
     {
       "id": "t-go-goroutines",
       "x": 12,
-      "y": 97,
+      "y": 109,
       "w": 12,
       "h": 7,
       "config": {
@@ -1601,7 +1805,7 @@
     {
       "id": "t-go-alloc",
       "x": 0,
-      "y": 104,
+      "y": 116,
       "w": 24,
       "h": 7,
       "config": {
@@ -1629,7 +1833,7 @@
     {
       "id": "t-error-logs",
       "x": 0,
-      "y": 111,
+      "y": 123,
       "w": 24,
       "h": 9,
       "config": {
@@ -1644,7 +1848,7 @@
     {
       "id": "t-logs",
       "x": 0,
-      "y": 120,
+      "y": 132,
       "w": 24,
       "h": 9,
       "config": {

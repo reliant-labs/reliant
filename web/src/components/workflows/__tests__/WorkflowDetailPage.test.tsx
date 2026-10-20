@@ -4,8 +4,8 @@
  * Workflow detail (WORKFLOW_UI.md §2.3), against the real data layer with only
  * the RPC client mocked: its recent runs (ListRuns filtered to the workflow),
  * the automations that run it (ListTriggers), its presets
- * (ListPresetsForWorkflow), its inputs, and the actions — Run… opens
- * RunWorkflowDialog, Edit opens the builder, New automation opens the
+ * (ListPresetsForWorkflow), its inputs, and the actions — Run now opens
+ * RunNowDialog, Edit opens the builder, New automation opens the
  * automation form prefilled with this workflow.
  */
 
@@ -162,13 +162,14 @@ describe("WorkflowDetailPage", () => {
     expect(screen.queryByText("Nothing runs this workflow on its own.")).toBeNull();
   });
 
-  it("a workflow whose Chat trigger is off cannot be run from here, and says why", async () => {
+  it("a workflow whose Chat trigger is off can still be run by hand: Run now is how it is run", async () => {
     const library = libraryResponse();
     library.workflows[1] = { ...library.workflows[1]!, automationOnly: true } as (typeof library.workflows)[number];
     mocks.listWorkflows.mockResolvedValue(library);
     renderDetail();
-    expect(await screen.findByText(/Its Chat trigger is off/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Run…" })).toBeDisabled();
+    await screen.findByRole("heading", { level: 1, name: "Triage" });
+    expect(screen.queryByText(/Its Chat trigger is off/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Run now" })).toBeEnabled();
   });
 
   it("shows the presets that fit it, and its inputs", async () => {
@@ -186,10 +187,10 @@ describe("WorkflowDetailPage", () => {
     expect(within(inputs).getByText("review.strictness")).toBeInTheDocument();
   });
 
-  it("Run… opens RunWorkflowDialog for this workflow", async () => {
+  it("Run now opens the run dialog for this workflow", async () => {
     renderDetail();
     await screen.findByRole("heading", { level: 1, name: "Triage" });
-    await userEvent.click(screen.getByRole("button", { name: "Run…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Run now" }));
     expect(await screen.findByRole("dialog", { name: "Run Triage" })).toBeInTheDocument();
   });
 
@@ -212,7 +213,7 @@ describe("WorkflowDetailPage", () => {
   it("a draft cannot run, and says why in text", async () => {
     renderDetail("my-draft");
     await screen.findByRole("heading", { level: 1, name: "My Draft" });
-    expect(screen.getByRole("button", { name: "Run…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Run now" })).toBeDisabled();
     expect(screen.getByText("Drafts can't run until they are published. Open it in the editor to publish it.")).toBeInTheDocument();
   });
 

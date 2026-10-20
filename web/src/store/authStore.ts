@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger'
 import { getAppURL } from '@/lib/constants'
 import { setSentryUser } from '@/lib/sentry'
 import { setTelemetryUserId } from '@/lib/telemetry'
+import { trackEvent } from '@/lib/analytics'
 import { queryClient } from '@/lib/query-client'
 import {
   startOAuthSignIn,
@@ -79,19 +80,10 @@ const normalizeFailureReason = (error: unknown): string => {
   return 'unknown_error'
 }
 
-const trackAuthFunnelEvent = async (eventName: string, metadata: Record<string, unknown> = {}): Promise<void> => {
-  if (!isElectron || !window.electronAPI?.analyticsTrack) {
-    return
-  }
-
-  try {
-    await window.electronAPI.analyticsTrack({
-      eventName,
-      metadata,
-    })
-  } catch (error) {
-    logger.debug('[AuthStore] analyticsTrack failed', { eventName, error })
-  }
+// The pre-auth funnel, on every platform, through the same product-event pipe
+// as the rest of the app.
+const trackAuthFunnelEvent = (eventName: string, metadata: Record<string, string | number | boolean> = {}): void => {
+  trackEvent(eventName, metadata)
 }
 
 
@@ -170,7 +162,7 @@ const runOAuthSignIn = async (
   const startedAt = Date.now()
   const transport = oauthCallbackTransport()
 
-  await trackAuthFunnelEvent('oauth_started', {
+  trackAuthFunnelEvent('oauth_started', {
     auth_method: provider,
     oauth_callback_transport: transport,
   })
@@ -178,7 +170,7 @@ const runOAuthSignIn = async (
   try {
     await startOAuthSignIn(provider, state)
   } catch (error) {
-    await trackAuthFunnelEvent('oauth_failed', {
+    trackAuthFunnelEvent('oauth_failed', {
       auth_method: provider,
       oauth_callback_transport: transport,
       failure_reason: normalizeFailureReason(error),
@@ -203,7 +195,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signIn: async (email: string, password: string) => {
     const startedAt = Date.now()
-    await trackAuthFunnelEvent('login_attempted', {
+    trackAuthFunnelEvent('login_attempted', {
       auth_method: 'password',
     })
 
@@ -214,7 +206,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     })
 
     if (error) {
-      await trackAuthFunnelEvent('login_failed', {
+      trackAuthFunnelEvent('login_failed', {
         auth_method: 'password',
         failure_reason: normalizeFailureReason(error),
         latency_ms: Date.now() - startedAt,
@@ -371,14 +363,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
 
   signInAnonymously: async () => {
-    await trackAuthFunnelEvent('login_attempted', {
+    trackAuthFunnelEvent('login_attempted', {
       auth_method: 'anonymous',
     })
 
     const { data, error } = await supabase.auth.signInAnonymously()
 
     if (error) {
-      await trackAuthFunnelEvent('login_failed', {
+      trackAuthFunnelEvent('login_failed', {
         auth_method: 'anonymous',
         failure_reason: normalizeFailureReason(error),
       })
@@ -390,7 +382,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       session: data.session,
     })
 
-    await trackAuthFunnelEvent('login_succeeded', {
+    trackAuthFunnelEvent('login_succeeded', {
       auth_method: 'anonymous',
     })
   },
@@ -576,7 +568,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * generically — so the code and the link finish the same sign-in.
    */
   sendEmailSignInCode: async (email: string, state?: OAuthRedirectState) => {
-    await trackAuthFunnelEvent('login_attempted', { auth_method: 'email_otp' })
+    trackAuthFunnelEvent('login_attempted', { auth_method: 'email_otp' })
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -593,7 +585,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Notably includes over_email_send_rate_limit. Surfacing it is the
       // point: reporting success for a send that did not happen leaves the
       // user staring at a code-entry box waiting for mail that is not coming.
-      await trackAuthFunnelEvent('login_failed', {
+      trackAuthFunnelEvent('login_failed', {
         auth_method: 'email_otp',
         failure_reason: normalizeFailureReason(error),
       })
@@ -621,7 +613,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     })
 
     if (error) {
-      await trackAuthFunnelEvent('login_failed', {
+      trackAuthFunnelEvent('login_failed', {
         auth_method: 'email_otp',
         failure_reason: normalizeFailureReason(error),
       })
@@ -630,7 +622,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     set({ user: data.user, session: data.session })
-    await trackAuthFunnelEvent('login_succeeded', { auth_method: 'email_otp' })
+    trackAuthFunnelEvent('login_succeeded', { auth_method: 'email_otp' })
   },
 
   sendPasswordResetOTP: async (email: string) => {

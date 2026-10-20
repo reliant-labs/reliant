@@ -47,7 +47,7 @@ func TestAuthInterceptorAccessTokenDispatch(t *testing.T) {
 	daemonToken := mintFor(t, authority, "user-at", fat.ScopeDaemonConnect)
 
 	t.Run("reliant:api token resolves identity and marks the context machine", func(t *testing.T) {
-		authedCtx, claims, _, err := interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader(apiToken.Plaintext))
+		authedCtx, claims, err := interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader(apiToken.Plaintext))
 		require.NoError(t, err)
 		require.Equal(t, "user-at", claims.Sub)
 		userID, ok := auth.GetUserIDFromContext(authedCtx)
@@ -59,12 +59,12 @@ func TestAuthInterceptorAccessTokenDispatch(t *testing.T) {
 	})
 
 	t.Run("daemon:connect token is refused (scope separation)", func(t *testing.T) {
-		_, _, _, err := interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader(daemonToken.Plaintext))
+		_, _, err := interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader(daemonToken.Plaintext))
 		require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "a daemon token must never authenticate user APIs")
 	})
 
 	t.Run("access token is never stored as a user JWT", func(t *testing.T) {
-		_, _, _, err := interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader(apiToken.Plaintext))
+		_, _, err := interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader(apiToken.Plaintext))
 		require.NoError(t, err)
 		if jwt, ok := auth.GetUserJWT("user-at"); ok {
 			require.NotEqual(t, apiToken.Plaintext, jwt, "access token leaked into the user-JWT store")
@@ -72,7 +72,7 @@ func TestAuthInterceptorAccessTokenDispatch(t *testing.T) {
 	})
 
 	t.Run("session bearer path still works and is not machine", func(t *testing.T) {
-		authedCtx, claims, _, err := interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader("legacy-api-key-secret"))
+		authedCtx, claims, err := interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader("legacy-api-key-secret"))
 		require.NoError(t, err)
 		require.NotEmpty(t, claims.Sub)
 		_, isMachine := auth.MachineTokenFromContext(authedCtx)
@@ -82,23 +82,23 @@ func TestAuthInterceptorAccessTokenDispatch(t *testing.T) {
 	t.Run("unknown access token rejected", func(t *testing.T) {
 		unknown, err := fat.Mint()
 		require.NoError(t, err)
-		_, _, _, err = interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader(unknown.Plaintext))
+		_, _, err = interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader(unknown.Plaintext))
 		require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 	})
 
 	t.Run("retired rlnt_pat_ is not an access token", func(t *testing.T) {
-		_, _, _, err := interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader("rlnt_pat_000000000000000000000000000000"))
+		_, _, err := interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader("rlnt_pat_000000000000000000000000000000"))
 		require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 	})
 
 	t.Run("revoked access token rejected", func(t *testing.T) {
 		require.NoError(t, authority.RevokeForUser(ctx, "user-at", apiToken.TokenID))
-		_, _, _, err := interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader(apiToken.Plaintext))
+		_, _, err := interceptor.authenticateRequest(ctx, "/reliant.v1.ChatService/GetChat", bearerHeader(apiToken.Plaintext))
 		require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 	})
 
 	t.Run("public methods skip auth entirely", func(t *testing.T) {
-		_, claims, _, err := interceptor.authenticateRequest(ctx, "/reliant.v1.SystemService/Health", func(string) string { return "" })
+		_, claims, err := interceptor.authenticateRequest(ctx, "/reliant.v1.SystemService/Health", func(string) string { return "" })
 		require.NoError(t, err)
 		require.Nil(t, claims)
 	})
@@ -113,7 +113,7 @@ func TestAuthInterceptorAccessTokensDisabled(t *testing.T) {
 	token, err := fat.Mint()
 	require.NoError(t, err)
 
-	_, _, _, err = interceptor.authenticateRequest(context.Background(), "/reliant.v1.ChatService/GetChat", bearerHeader(token.Plaintext))
+	_, _, err = interceptor.authenticateRequest(context.Background(), "/reliant.v1.ChatService/GetChat", bearerHeader(token.Plaintext))
 	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }
 
@@ -131,13 +131,13 @@ func TestAuthInterceptorUnreachableAuthorityIsNotARejection(t *testing.T) {
 	interceptor.SetAccessTokenIntrospector(authority)
 
 	tokenauthority.SetMemoryUnavailable(authority, true)
-	_, _, _, err = interceptor.authenticateRequest(context.Background(), "/reliant.v1.ChatService/GetChat", bearerHeader(token.Plaintext))
+	_, _, err = interceptor.authenticateRequest(context.Background(), "/reliant.v1.ChatService/GetChat", bearerHeader(token.Plaintext))
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err),
 		"an authority that could not be reached has not rejected anything")
 
 	tokenauthority.SetMemoryUnavailable(authority, false)
 	unknown, err := fat.Mint()
 	require.NoError(t, err)
-	_, _, _, err = interceptor.authenticateRequest(context.Background(), "/reliant.v1.ChatService/GetChat", bearerHeader(unknown.Plaintext))
+	_, _, err = interceptor.authenticateRequest(context.Background(), "/reliant.v1.ChatService/GetChat", bearerHeader(unknown.Plaintext))
 	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }

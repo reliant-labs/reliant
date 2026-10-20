@@ -430,10 +430,7 @@ func Run(ctx context.Context, opts Options) error {
 	reconciler.SetResetGuard(resetGuard)
 
 	// Analytics
-	logging.InfoContext(ctx, "[Analytics] Initializing analytics")
-	analyticsClient := analytics.NewClientFromSettings(ctx, "", true, opts.Analytics)
-	analytics.SetClient(analyticsClient)
-	analytics.SetPrivacyChecker(repo)
+	analytics.Start(opts.Analytics, repo)
 
 	// Telemetry — Sentry in prod (when SENTRY_DSN is set), noop in dev/test.
 	telemetry.SetReporter(telemetry.NewReporter(opts.Sentry))
@@ -851,10 +848,10 @@ func apiNodes(c apiComponents) []lifecyclekit.Node {
 	)
 }
 
-// flushTelemetry is the root's last step, after every node has stopped:
-// analytics, then any pending Sentry events.
+// flushTelemetry is the root's last step, after every node has stopped: any
+// pending Sentry events. Product events need no flush: each is written to the
+// log as it happens.
 func flushTelemetry(context.Context) error {
-	analytics.Shutdown()
 	telemetry.Flush(5)
 	return nil
 }

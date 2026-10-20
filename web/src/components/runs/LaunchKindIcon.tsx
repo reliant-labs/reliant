@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { Bot, CalendarClock, FlaskConical, MessageSquare, Zap } from "lucide-react";
+import { Bot, CalendarClock, FlaskConical, MessageSquare, Play, Zap } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,8 @@ export function LaunchKindIcon({ kind, className }: { kind: string; className?: 
           ? FlaskConical
           : kind === "chat.start"
             ? MessageSquare
-            : Zap;
+            : kind === "manual.run"
+              ? Play
+              : Zap;
   return <Icon className={cn("h-3.5 w-3.5 shrink-0", className)} aria-hidden="true" />;
 }

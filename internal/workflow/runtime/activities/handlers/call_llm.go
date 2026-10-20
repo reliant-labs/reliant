@@ -3113,7 +3113,7 @@ func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Ch
 		metrics.WorkflowID = *chat.WorkflowID
 	}
 
-	analyticsClient := analytics.GetClientForUser(ctx, chat.UserID)
+	analyticsClient := analytics.ForUser(ctx, chat.UserID)
 	analyticsClient.TrackLLMCallCompleted(metrics)
 }
 

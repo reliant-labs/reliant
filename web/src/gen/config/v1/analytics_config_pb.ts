@@ -12,51 +12,24 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file config/v1/analytics_config.proto.
  */
 export const file_config_v1_analytics_config: GenFile = /*@__PURE__*/
-  fileDesc("CiBjb25maWcvdjEvYW5hbHl0aWNzX2NvbmZpZy5wcm90bxIJY29uZmlnLnYxIv4DCg9BbmFseXRpY3NDb25maWcSTAoIZGlzYWJsZWQYASABKAhCOoLOGDYKGlJFTElBTlRfQU5BTFlUSUNTX0RJU0FCTEVEKhhTZW5kIG5vIGFuYWx5dGljcyBldmVudHMSXQoLc3RhdHNpZ19rZXkYAiABKAlCSILOGEQKElNUQVRTSUdfQ0xJRU5UX0tFWSoqU3RhdHNpZyBrZXkgYW5hbHl0aWNzIGV2ZW50cyBhcmUgc2VudCB3aXRoMAFQARJjCgxzdXBhYmFzZV91cmwYAyABKAlCTYLOGEkKDFNVUEFCQVNFX1VSTCo5U3VwYWJhc2UgcHJvamVjdCBVUkwgYW5hbHl0aWNzIGV2ZW50cyBhcmUgYWxzbyB3cml0dGVuIHRvEmgKEXN1cGFiYXNlX2Fub25fa2V5GAQgASgJQk2CzhhJChFTVVBBQkFTRV9BTk9OX0tFWSo0U3VwYWJhc2UgcHVibGlzaGFibGUgKGFub24pIGtleSBmb3IgYW5hbHl0aWNzIHdyaXRlcxJvCgxhcHBfZGF0YV9kaXIYBSABKAlCWYLOGFUKFFJFTElBTlRfQVBQX0RBVEFfRElSKj1Xcml0YWJsZSBhcHAgZGF0YSBkaXJlY3RvcnkgYW5hbHl0aWNzIGNhY2hlcyBpdHMgZGV2aWNlIGlkIGluQjhaNmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_forge_v1_forge]);
+  fileDesc("CiBjb25maWcvdjEvYW5hbHl0aWNzX2NvbmZpZy5wcm90bxIJY29uZmlnLnYxIr0BCg9BbmFseXRpY3NDb25maWcSVgoIZGlzYWJsZWQYASABKAhCRILOGEAKGlJFTElBTlRfQU5BTFlUSUNTX0RJU0FCTEVEKiJSZWNvcmQgbm8gcHJvZHVjdCBhbmFseXRpY3MgZXZlbnRzSgQIAhADSgQIAxAESgQIBBAFSgQIBRAGUgtzdGF0c2lnX2tleVIMc3VwYWJhc2VfdXJsUhFzdXBhYmFzZV9hbm9uX2tleVIMYXBwX2RhdGFfZGlyQjhaNmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_forge_v1_forge]);
 
 /**
- * AnalyticsConfig is where the API server and the worker send product
- * analytics events. Only a prod-tier process sends any (internal/runenv). The
- * rules every config here follows are in config.proto's header.
+ * AnalyticsConfig governs the product events the API server and the worker
+ * record. Each event is one structured log record (dev-docs/product-events.md),
+ * so it ships wherever the process's logs ship; there is no vendor key. A
+ * user's analytics opt-out is honoured per event regardless. The rules every
+ * config here follows are in config.proto's header.
  *
  * @generated from message config.v1.AnalyticsConfig
  */
 export type AnalyticsConfig = Message<"config.v1.AnalyticsConfig"> & {
   /**
-   * A kill switch, independent of the tier.
+   * A kill switch for every product event.
    *
    * @generated from field: bool disabled = 1;
    */
   disabled: boolean;
-
-  /**
-   * The Statsig key events are sent with (control-plane stores the server
-   * key under this name). Unset: Statsig sending is off, said once.
-   *
-   * @generated from field: string statsig_key = 2;
-   */
-  statsigKey: string;
-
-  /**
-   * The Supabase project events are also written to. The anon key is a
-   * publishable key, not a secret.
-   *
-   * @generated from field: string supabase_url = 3;
-   */
-  supabaseUrl: string;
-
-  /**
-   * @generated from field: string supabase_anon_key = 4;
-   */
-  supabaseAnonKey: string;
-
-  /**
-   * Where analytics caches its device id. Unset — every server container —
-   * caches nothing: its root filesystem is read-only.
-   *
-   * @generated from field: string app_data_dir = 5;
-   */
-  appDataDir: string;
 };
 
 /**

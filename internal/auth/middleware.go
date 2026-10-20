@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
-	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
@@ -211,16 +210,9 @@ func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospect
 			ctx = WithMachineToken(ctx, principal)
 		}
 
-		// Update analytics client userID and Sentry user context on first authentication
+		// Update the Sentry user context on first authentication
 		if m.firstSeenTracker.isFirstTimeSeen(claims.Sub) {
-			analytics.SetUserID(claims.Sub)
 			telemetry.GetReporter().SetUser(claims.Sub, claims.Email)
-		}
-
-		// Always update the JWT (it refreshes on each request). Access tokens
-		// are never stored where a JWT is expected.
-		if !isAccessToken {
-			analytics.SetUserJWT(tokenString)
 		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))

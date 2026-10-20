@@ -48,8 +48,30 @@ func (s *Service) StartChat(
 	req *connect.Request[reliantv1.StartChatRequest],
 ) (*connect.Response[reliantv1.StartChatResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// The launch kind is the server's decision. A client can ask for exactly
+	// one non-default kind, builder.test, through builder_test; schedule,
+	// agent.start_run and manual.run have no way in through this RPC.
+	eventKind := core.TriggerEventKindChatStart
+	if req.Msg.GetBuilderTest() {
+		if err := s.validateBuilderTest(ctx, userID, req.Msg); err != nil {
+			return nil, err
+		}
+		eventKind = core.TriggerEventKindBuilderTest
+	}
+	return s.startChat(ctx, userID, req.Msg, eventKind, nil)
+}
 
-	clientID, err := parseClientMessageID(req.Msg.GetClientMessageId())
+// startChat is the start path every attended launch kind shares: StartChat's
+// chat.start and builder.test, and RunNow's manual.run. extraPayload is merged
+// into the launch event's payload next to the counts.
+func (s *Service) startChat(
+	ctx context.Context,
+	userID string,
+	msg *reliantv1.StartChatRequest,
+	eventKind core.TriggerEventKind,
+	extraPayload map[string]any,
+) (*connect.Response[reliantv1.StartChatResponse], error) {
+	clientID, err := parseClientMessageID(msg.GetClientMessageId())
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +82,7 @@ func (s *Service) StartChat(
 	// client discipline. The id is minted here so the event row and the chat
 	// row agree by construction. The payload carries counts, never message
 	// text: the messages table already holds that.
-	chatID := req.Msg.GetChatId()
+	chatID := msg.GetChatId()
 	newChatID := ""
 	if chatID == "" {
 		newChatID = uuid.NewString()
@@ -73,46 +95,40 @@ func (s *Service) StartChat(
 		}
 		chatID = newChatID
 	}
-	// The launch kind is the server's decision. A client can ask for exactly
-	// one non-default kind, builder.test, through builder_test; schedule and
-	// agent.start_run have no way in through this RPC.
-	eventKind := core.TriggerEventKindChatStart
-	if req.Msg.GetBuilderTest() {
-		if err := s.validateBuilderTest(ctx, userID, req.Msg); err != nil {
-			return nil, err
-		}
-		eventKind = core.TriggerEventKindBuilderTest
+	payload := map[string]any{
+		"message_count":    len(msg.Messages),
+		"attachment_count": len(msg.Attachments),
+	}
+	for key, value := range extraPayload {
+		payload[key] = value
 	}
 	event := launch.Event{
 		Kind:       eventKind,
 		DedupeKey:  chatID,
 		OccurredAt: time.Now().UTC(),
-		Payload: map[string]any{
-			"message_count":    len(req.Msg.Messages),
-			"attachment_count": len(req.Msg.Attachments),
-		},
+		Payload:    payload,
 	}
 
 	spec := launch.Spec{
 		OwnerUserID: userID,
-		ProjectID:   req.Msg.ProjectId,
-		WorktreeID:  req.Msg.WorktreeId,
-		ChatID:      req.Msg.GetChatId(),
+		ProjectID:   msg.ProjectId,
+		WorktreeID:  msg.WorktreeId,
+		ChatID:      msg.GetChatId(),
 		NewChatID:   newChatID,
-		Title:       req.Msg.Title,
-		Workflow:    req.Msg.Workflow,
-		Presets:     req.Msg.SelectedPresets,
-		Params:      req.Msg.WorkflowParams,
-		Mode:        req.Msg.Mode,
-		Messages:    seedMessagesFromInput(req.Msg.Messages),
-		Attachments: req.Msg.Attachments,
+		Title:       msg.Title,
+		Workflow:    msg.Workflow,
+		Presets:     msg.SelectedPresets,
+		Params:      msg.WorkflowParams,
+		Mode:        msg.Mode,
+		Messages:    seedMessagesFromInput(msg.Messages),
+		Attachments: msg.Attachments,
 
 		ClientMessageID: clientID,
 
 		// An interactive start always had both of these, and still does. A
 		// branch is not a first turn of new work, so it skips the probe.
 		GenerateTitle:   true,
-		GreenfieldProbe: req.Msg.GetChatId() == "",
+		GreenfieldProbe: msg.GetChatId() == "",
 	}
 	if jwt, ok := auth.GetUserJWT(userID); ok {
 		spec.UserJWT = jwt
@@ -121,25 +137,25 @@ func (s *Service) StartChat(
 	// A chat with no machine by design: there is nothing to choose, validate
 	// or wake. The launcher refuses the contradictions (with a daemon_id, or
 	// a branch) and a workflow that cannot run without a machine.
-	spec.NoMachine = req.Msg.GetNoMachine()
+	spec.NoMachine = msg.GetNoMachine()
 
 	// The chat the wake should target: a branch's own chat (pinned by its
 	// worktree) or, for a new chat, one that carries the chosen daemon.
 	var wakeChat *db.Chat
-	chosen := req.Msg.GetDaemonId()
+	chosen := msg.GetDaemonId()
 	if spec.NoMachine {
 		// Left for the launcher to reject alongside no_machine.
 		spec.DaemonID = chosen
 		chosen = ""
 	}
-	if id := req.Msg.GetChatId(); id != "" && !spec.NoMachine {
+	if id := msg.GetChatId(); id != "" && !spec.NoMachine {
 		// A branch's first send.
 		if branch, getErr := s.getChatForUser(ctx, id, userID); getErr == nil {
 			wakeChat = branch
 		}
 	}
 	if chosen != "" {
-		projectID := req.Msg.ProjectId
+		projectID := msg.ProjectId
 		if wakeChat != nil {
 			projectID = wakeChat.ProjectID
 			// The branch's worktree lives on one machine, so a pinned chat's

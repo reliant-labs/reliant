@@ -3,10 +3,14 @@
 import { grpcClient } from "./grpc-client";
 import { singleflight } from "../lib/singleflight";
 import { repairLegacyWorkflowParams } from "../lib/paramUtils";
-import { create } from "@bufbuild/protobuf";
+import { create, fromJson, type JsonObject } from "@bufbuild/protobuf";
+import { StructSchema } from "@bufbuild/protobuf/wkt";
 import { jsToProtoValue, protoValueToJs, type ProtoValue } from "./proto-utils";
 import {
   StartChatRequestSchema,
+  RunNowRequestSchema,
+  ReplayEventSchema,
+  type ReplayEvent,
   ListChatsRequestSchema,
   GetChatRequestSchema,
   UpdateChatRequestSchema,
@@ -181,6 +185,44 @@ export interface InputMessage {
   display_style?: DisplayStyle;
 }
 
+/** A past trigger event a "Run now" replays. The payload is whatever the person edited it to. */
+export interface ReplayEventInput {
+  /** The declared trigger whose inputs and prompt map the event. */
+  triggerName: string;
+  /** The recorded event being replayed; empty for a payload the person wrote. */
+  eventId?: string;
+  /** "schedule" | "webhook" | "integration" | "workflow_event"; omitted means the trigger's own kind. */
+  kind?: string;
+  /** RFC3339 UTC; omitted means now. */
+  occurredAt?: string;
+  payload: Record<string, unknown>;
+}
+
+export interface RunNowOptions {
+  projectId: string;
+  workflow: string;
+  /** What the run starts from. Omitted starts from "Run now." (or, for a replay, the trigger's prompt). */
+  message?: string;
+  inputs?: Record<string, unknown>;
+  presets?: Record<string, string>;
+  worktreeId?: string;
+  daemonId?: string;
+  noMachine?: boolean;
+  replay?: ReplayEventInput;
+  /** Makes the start idempotent: a repeat returns the run the first call started. */
+  clientMessageId?: string;
+}
+
+export function replayEventToProto(replay: ReplayEventInput): ReplayEvent {
+  return create(ReplayEventSchema, {
+    triggerName: replay.triggerName,
+    eventId: replay.eventId ?? "",
+    kind: replay.kind ?? "",
+    occurredAt: replay.occurredAt ?? "",
+    payload: fromJson(StructSchema, replay.payload as JsonObject),
+  });
+}
+
 export interface StartChatOptions {
   chat_id?: string;  // Start an existing PENDING chat (a branch's first send) instead of creating one
   project_id?: string; // Required for a new chat; omit with chat_id, where the chat names its own project
@@ -289,6 +331,34 @@ export const chatGrpc = {
       clientMessageId: options.client_message_id,
     });
     const response = await client.startChat(request);
+    if (!response.chat) throw new Error("No chat in response");
+    return {
+      chat: convertProtoChat(response.chat),
+      workflow_id: response.workflowId,
+      run_id: response.runId,
+    };
+  },
+
+  // Run a workflow by hand ("Run now"): an attended start recorded as manual.run.
+  // Works for automation-only workflows, and can replay a past trigger event.
+  async runNow(options: RunNowOptions): Promise<{
+    chat: Chat;
+    workflow_id: string;
+    run_id: string;
+  }> {
+    const request = create(RunNowRequestSchema, {
+      projectId: options.projectId,
+      workflow: options.workflow,
+      message: options.message ?? "",
+      inputs: buildWorkflowParamsPayload(options.inputs),
+      presets: options.presets ?? {},
+      worktreeId: options.worktreeId || undefined,
+      daemonId: options.daemonId || undefined,
+      noMachine: options.noMachine ?? false,
+      replay: options.replay ? replayEventToProto(options.replay) : undefined,
+      clientMessageId: options.clientMessageId,
+    });
+    const response = await grpcClient.chat().runNow(request);
     if (!response.chat) throw new Error("No chat in response");
     return {
       chat: convertProtoChat(response.chat),

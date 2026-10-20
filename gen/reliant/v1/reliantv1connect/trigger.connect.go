@@ -74,6 +74,12 @@ const (
 	// TriggerServiceResolveTriggerSendersProcedure is the fully-qualified name of the TriggerService's
 	// ResolveTriggerSenders RPC.
 	TriggerServiceResolveTriggerSendersProcedure = "/reliant.v1.TriggerService/ResolveTriggerSenders"
+	// TriggerServiceListReplayEventsProcedure is the fully-qualified name of the TriggerService's
+	// ListReplayEvents RPC.
+	TriggerServiceListReplayEventsProcedure = "/reliant.v1.TriggerService/ListReplayEvents"
+	// TriggerServicePreviewReplayProcedure is the fully-qualified name of the TriggerService's
+	// PreviewReplay RPC.
+	TriggerServicePreviewReplayProcedure = "/reliant.v1.TriggerService/PreviewReplay"
 )
 
 // TriggerServiceClient is a client for the reliant.v1.TriggerService service.
@@ -140,6 +146,15 @@ type TriggerServiceClient interface {
 	// CALLER's own credential for the integration. GitHub only; a caller with
 	// no usable GitHub credential is FailedPrecondition.
 	ResolveTriggerSenders(context.Context, *connect.Request[v1.ResolveTriggerSendersRequest]) (*connect.Response[v1.ResolveTriggerSendersResponse], error)
+	// ListReplayEvents lists the recent events the caller's activations of a
+	// workflow's declared triggers received, newest first, so one can be run
+	// again with ChatService.RunNow.
+	ListReplayEvents(context.Context, *connect.Request[v1.ListReplayEventsRequest]) (*connect.Response[v1.ListReplayEventsResponse], error)
+	// PreviewReplay maps a past event through a declared trigger's inputs and
+	// prompt, as a fire of that event would. Only the mapping applies: the
+	// trigger's filter and origin_filter are not evaluated, because the person
+	// replaying has decided the event is wanted.
+	PreviewReplay(context.Context, *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error)
 }
 
 // NewTriggerServiceClient constructs a client for the reliant.v1.TriggerService service. By
@@ -231,6 +246,18 @@ func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(triggerServiceMethods.ByName("ResolveTriggerSenders")),
 			connect.WithClientOptions(opts...),
 		),
+		listReplayEvents: connect.NewClient[v1.ListReplayEventsRequest, v1.ListReplayEventsResponse](
+			httpClient,
+			baseURL+TriggerServiceListReplayEventsProcedure,
+			connect.WithSchema(triggerServiceMethods.ByName("ListReplayEvents")),
+			connect.WithClientOptions(opts...),
+		),
+		previewReplay: connect.NewClient[v1.PreviewReplayRequest, v1.PreviewReplayResponse](
+			httpClient,
+			baseURL+TriggerServicePreviewReplayProcedure,
+			connect.WithSchema(triggerServiceMethods.ByName("PreviewReplay")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -249,6 +276,8 @@ type triggerServiceClient struct {
 	enableWorkflow        *connect.Client[v1.EnableWorkflowRequest, v1.EnableWorkflowResponse]
 	disableWorkflow       *connect.Client[v1.DisableWorkflowRequest, v1.DisableWorkflowResponse]
 	resolveTriggerSenders *connect.Client[v1.ResolveTriggerSendersRequest, v1.ResolveTriggerSendersResponse]
+	listReplayEvents      *connect.Client[v1.ListReplayEventsRequest, v1.ListReplayEventsResponse]
+	previewReplay         *connect.Client[v1.PreviewReplayRequest, v1.PreviewReplayResponse]
 }
 
 // CreateTrigger calls reliant.v1.TriggerService.CreateTrigger.
@@ -316,6 +345,16 @@ func (c *triggerServiceClient) ResolveTriggerSenders(ctx context.Context, req *c
 	return c.resolveTriggerSenders.CallUnary(ctx, req)
 }
 
+// ListReplayEvents calls reliant.v1.TriggerService.ListReplayEvents.
+func (c *triggerServiceClient) ListReplayEvents(ctx context.Context, req *connect.Request[v1.ListReplayEventsRequest]) (*connect.Response[v1.ListReplayEventsResponse], error) {
+	return c.listReplayEvents.CallUnary(ctx, req)
+}
+
+// PreviewReplay calls reliant.v1.TriggerService.PreviewReplay.
+func (c *triggerServiceClient) PreviewReplay(ctx context.Context, req *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error) {
+	return c.previewReplay.CallUnary(ctx, req)
+}
+
 // TriggerServiceHandler is an implementation of the reliant.v1.TriggerService service.
 type TriggerServiceHandler interface {
 	// CreateTrigger stores a new trigger and converges its schedule.
@@ -380,6 +419,15 @@ type TriggerServiceHandler interface {
 	// CALLER's own credential for the integration. GitHub only; a caller with
 	// no usable GitHub credential is FailedPrecondition.
 	ResolveTriggerSenders(context.Context, *connect.Request[v1.ResolveTriggerSendersRequest]) (*connect.Response[v1.ResolveTriggerSendersResponse], error)
+	// ListReplayEvents lists the recent events the caller's activations of a
+	// workflow's declared triggers received, newest first, so one can be run
+	// again with ChatService.RunNow.
+	ListReplayEvents(context.Context, *connect.Request[v1.ListReplayEventsRequest]) (*connect.Response[v1.ListReplayEventsResponse], error)
+	// PreviewReplay maps a past event through a declared trigger's inputs and
+	// prompt, as a fire of that event would. Only the mapping applies: the
+	// trigger's filter and origin_filter are not evaluated, because the person
+	// replaying has decided the event is wanted.
+	PreviewReplay(context.Context, *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error)
 }
 
 // NewTriggerServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -467,6 +515,18 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 		connect.WithSchema(triggerServiceMethods.ByName("ResolveTriggerSenders")),
 		connect.WithHandlerOptions(opts...),
 	)
+	triggerServiceListReplayEventsHandler := connect.NewUnaryHandler(
+		TriggerServiceListReplayEventsProcedure,
+		svc.ListReplayEvents,
+		connect.WithSchema(triggerServiceMethods.ByName("ListReplayEvents")),
+		connect.WithHandlerOptions(opts...),
+	)
+	triggerServicePreviewReplayHandler := connect.NewUnaryHandler(
+		TriggerServicePreviewReplayProcedure,
+		svc.PreviewReplay,
+		connect.WithSchema(triggerServiceMethods.ByName("PreviewReplay")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.TriggerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TriggerServiceCreateTriggerProcedure:
@@ -495,6 +555,10 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 			triggerServiceDisableWorkflowHandler.ServeHTTP(w, r)
 		case TriggerServiceResolveTriggerSendersProcedure:
 			triggerServiceResolveTriggerSendersHandler.ServeHTTP(w, r)
+		case TriggerServiceListReplayEventsProcedure:
+			triggerServiceListReplayEventsHandler.ServeHTTP(w, r)
+		case TriggerServicePreviewReplayProcedure:
+			triggerServicePreviewReplayHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -554,4 +618,12 @@ func (UnimplementedTriggerServiceHandler) DisableWorkflow(context.Context, *conn
 
 func (UnimplementedTriggerServiceHandler) ResolveTriggerSenders(context.Context, *connect.Request[v1.ResolveTriggerSendersRequest]) (*connect.Response[v1.ResolveTriggerSendersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.ResolveTriggerSenders is not implemented"))
+}
+
+func (UnimplementedTriggerServiceHandler) ListReplayEvents(context.Context, *connect.Request[v1.ListReplayEventsRequest]) (*connect.Response[v1.ListReplayEventsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.ListReplayEvents is not implemented"))
+}
+
+func (UnimplementedTriggerServiceHandler) PreviewReplay(context.Context, *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.PreviewReplay is not implemented"))
 }

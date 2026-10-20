@@ -3,7 +3,7 @@ package db
 
 // Privacy settings keys
 const (
-	// PrivacyAnalyticsEnabled controls whether analytics (Statsig) is enabled
+	// PrivacyAnalyticsEnabled controls whether product analytics events are recorded for the user
 	PrivacyAnalyticsEnabled = "privacy.analytics_enabled"
 
 	// PrivacyCrashReportingEnabled controls whether crash reporting (Sentry) is enabled

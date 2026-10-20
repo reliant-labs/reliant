@@ -302,6 +302,8 @@ describe("launchKindDisplay: the §0 launch-kind vocabulary", () => {
     ],
     ["agent.start_run", {}, "Agent", "Started by an agent"],
     ["builder.test", {}, "Test", "Test run from the builder"],
+    ["manual.run", {}, "Run now", "Started by you with Run now"],
+    ["manual.run", { replayedEvent: true }, "Run now", "Started by you with Run now, replaying a past event"],
     [
       "webhook",
       { triggerName: "deploy-hook", at: "14:02" },
@@ -358,7 +360,7 @@ describe("launchKindDisplay: the §0 launch-kind vocabulary", () => {
     },
   );
 
-  it.each(["chat.start", "agent.start_run", "builder.test"])("%s names no automation", (kind) => {
+  it.each(["chat.start", "agent.start_run", "builder.test", "manual.run"])("%s names no automation", (kind) => {
     expect(launchKindDisplay(kind, { triggerName: "Auto" }).automationParts).toBeUndefined();
   });
 
@@ -384,6 +386,7 @@ describe("isUnattendedLaunchKind: core.TriggerEventKind.Unattended, mirrored", (
     ["chat.start", false],
     ["agent.start_run", false],
     ["builder.test", false],
+    ["manual.run", false],
   ])("%s → %s", (kind, unattended) => {
     expect(isUnattendedLaunchKind(kind)).toBe(unattended);
   });

@@ -8,6 +8,7 @@ import { EmailCodeForm } from './EmailCodeForm'
 import { PasswordInput } from './PasswordInput'
 import { isSafeReturnTo } from '@/lib/returnTo'
 import { describeAuthError } from '@/lib/authErrors'
+import { trackEvent } from '@/lib/analytics'
 import { AuthLayout, AuthHeader, AuthError, AuthDivider, AuthLegalLinks } from './AuthLayout'
 
 /**
@@ -81,14 +82,7 @@ export function AuthScreen() {
 
   // Track auth screen view for pre-auth funnel
   useEffect(() => {
-    if (!window.electronAPI?.analyticsTrack) return
-
-    void window.electronAPI.analyticsTrack({
-      eventName: 'auth_screen_viewed',
-      metadata: {
-        view: phase,
-      },
-    })
+    trackEvent('auth_screen_viewed', { view: phase })
   }, [phase])
 
   const goToApp = () => {

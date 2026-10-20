@@ -171,6 +171,8 @@ func eventKindToProto(kind core.TriggerEventKind) reliantv1.TriggerEventKind {
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_INTEGRATION
 	case core.TriggerEventKindWorkflowEvent:
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_WORKFLOW_EVENT
+	case core.TriggerEventKindManualRun:
+		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_MANUAL_RUN
 	default:
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_UNSPECIFIED
 	}

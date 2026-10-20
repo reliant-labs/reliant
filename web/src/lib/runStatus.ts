@@ -278,7 +278,8 @@ export type LaunchKind =
   | "builder.test"
   | "webhook"
   | "integration"
-  | "workflow_event";
+  | "workflow_event"
+  | "manual.run";
 
 /** What the "Started by" line can name. Every field is optional. */
 export interface LaunchContext {
@@ -289,6 +290,8 @@ export interface LaunchContext {
   triggerName?: string;
   /** A "Run now" fire of a schedule (payload `manual: true`). */
   manual?: boolean;
+  /** A manual.run that replayed a past trigger event (payload `replay`). */
+  replayedEvent?: boolean;
   /** The slot a scheduled fire was for, already formatted ("Tue 09:00 (Europe/London)"). */
   scheduledFor?: string;
   /** The chat the starting agent was in, for agent.start_run. */
@@ -395,6 +398,12 @@ export function launchKindDisplay(
       };
     case "builder.test":
       return { kind, shortLabel: "Test", startedByLine: "Test run from the builder" };
+    case "manual.run":
+      return {
+        kind,
+        shortLabel: "Run now",
+        startedByLine: context.replayedEvent ? "Started by you with Run now, replaying a past event" : "Started by you with Run now",
+      };
     case "webhook": {
       // A webhook trigger's name is the webhook's name.
       const at = context.at ? ` at ${context.at}` : "";

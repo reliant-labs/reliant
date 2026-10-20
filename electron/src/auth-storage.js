@@ -74,8 +74,8 @@ class AuthStorage {
 
     // Latch holding the most recent unreadable-blob incident until something
     // reports it. The renderer learns about failures through `auth:load`, but
-    // the FIRST read of a run is usually the main process's own (Statsig user
-    // id, daemon PAT mint) — that read is what discovers and clears a dead
+    // the FIRST read of a run is usually the main process's own (the daemon PAT
+    // mint) — that read is what discovers and clears a dead
     // blob, and without this latch the renderer never hears about it.
     this.lastLoadFailure = null;
   }
@@ -164,7 +164,7 @@ class AuthStorage {
    *
    * This is the real read path; `loadStoredAuth()` is a thin
    * session-or-null wrapper kept for the callers that genuinely only want the
-   * session (Statsig user id, daemon PAT mint).
+   * session (the daemon PAT mint).
    *
    * The unrecoverable cases delete the blob HERE, exactly once, and record the
    * incident on `lastLoadFailure`. Deleting is not a nicety: leaving a blob
