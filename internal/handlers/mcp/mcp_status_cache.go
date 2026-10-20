@@ -168,7 +168,7 @@ func (c *mcpStatusCache) startFetchLocked(ctx context.Context, key, userID, proj
 		defer cancel()
 		status, err := c.fetch(fetchCtx, userID, projectPath)
 		if err != nil {
-			logging.Debug("MCP server status unavailable from daemon", "user_id", userID, "project_path", projectPath, "error", err)
+			logging.DebugContext(ctx, "MCP server status unavailable from daemon", "user_id", userID, "project_path", projectPath, "error", err)
 			status = nil
 		}
 		c.mu.Lock()

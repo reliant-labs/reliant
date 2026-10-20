@@ -87,7 +87,7 @@ func (s *Service) relockActive(ctx context.Context, userID string, worktree *db.
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, *worktree.DaemonID, "worktree.reconcile", req, &resp); err != nil {
 		// Do not flip the row to active over a directory we could not re-lock:
 		// it stays archived and the user retries when the machine is reachable.
-		logging.Warn("Could not reach the machine to re-lock an archived workspace; leaving it archived", "worktreeID", worktree.ID, "error", err)
+		logging.WarnContext(ctx, "Could not reach the machine to re-lock an archived workspace; leaving it archived", "worktreeID", worktree.ID, "error", err)
 		return false, fmt.Errorf("the machine that holds this workspace is unreachable, so it was left archived: %w", err)
 	}
 	if len(resp.Results) == 0 {
@@ -426,7 +426,7 @@ func (s *Service) CreateWorktree(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
@@ -450,7 +450,7 @@ func (s *Service) CreateWorktree(
 		}
 		sourceWorktree, err = s.deps.Repo.GetWorktree(ctx, *req.Msg.SourceWorktreeId)
 		if err != nil {
-			logging.Warn("Source worktree not found, falling back to project paths",
+			logging.WarnContext(ctx, "Source worktree not found, falling back to project paths",
 				"sourceWorktreeId", *req.Msg.SourceWorktreeId, "error", err)
 			sourceWorktree = nil
 		} else {
@@ -486,7 +486,7 @@ func (s *Service) CreateWorktree(
 	if req.Msg.IdempotencyKey != nil && *req.Msg.IdempotencyKey != "" {
 		existing, err := s.deps.Repo.GetWorktreeByIdempotencyKey(ctx, project.ID, *req.Msg.IdempotencyKey)
 		if err != nil {
-			logging.Error("Failed to check worktree idempotency key", "error", err)
+			logging.ErrorContext(ctx, "Failed to check worktree idempotency key", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
 		}
 		if existing != nil {
@@ -605,7 +605,7 @@ func (s *Service) emitWorktreeChanged(ctx context.Context, userID, projectID, wo
 		ProjectID:  &projectID,
 		WorktreeID: &worktreeID,
 	}); err != nil {
-		logging.Error("Failed to emit worktree refetch", "error", err, "worktreeID", worktreeID)
+		logging.ErrorContext(ctx, "Failed to emit worktree refetch", "error", err, "worktreeID", worktreeID)
 	}
 }
 
@@ -648,7 +648,7 @@ func (s *Service) ListWorktrees(
 
 	worktrees, err := s.deps.Repo.ListWorktrees(ctx, filters)
 	if err != nil {
-		logging.Error("Failed to list worktrees", "error", err)
+		logging.ErrorContext(ctx, "Failed to list worktrees", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list worktrees"))
 	}
 
@@ -687,7 +687,7 @@ func (s *Service) ListWorktrees(
 		}
 
 		if err := s.deps.Repo.CreateWorktree(ctx, mainWorktree); err != nil {
-			logging.Warn("Failed to auto-create main worktree during ListWorktrees", "error", err, "projectID", project.ID)
+			logging.WarnContext(ctx, "Failed to auto-create main worktree during ListWorktrees", "error", err, "projectID", project.ID)
 			// Re-fetch in case another request created it concurrently.
 			worktrees, err = s.deps.Repo.ListWorktrees(ctx, filters)
 			if err != nil || len(worktrees) == 0 {
@@ -743,7 +743,7 @@ func (s *Service) ListArchivedWorktrees(
 		Offset: offset,
 	})
 	if err != nil {
-		logging.Error("Failed to list archived worktrees", "error", err)
+		logging.ErrorContext(ctx, "Failed to list archived worktrees", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list archived worktrees"))
 	}
 
@@ -804,7 +804,7 @@ func (s *Service) GetWorktree(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -830,7 +830,7 @@ func (s *Service) UpdateWorktree(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -848,7 +848,7 @@ func (s *Service) UpdateWorktree(
 	worktree.LastActive = now
 
 	if err := s.deps.Repo.UpdateWorktree(ctx, worktree); err != nil {
-		logging.Error("Failed to update worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to update worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update worktree"))
 	}
 
@@ -874,7 +874,7 @@ func (s *Service) DeleteWorktree(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -885,7 +885,7 @@ func (s *Service) DeleteWorktree(
 
 	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
 	if err != nil {
-		logging.Warn("Failed to get project for worktree cleanup", "error", err)
+		logging.WarnContext(ctx, "Failed to get project for worktree cleanup", "error", err)
 	}
 
 	isPermanentDelete := worktree.DeletedAt != nil
@@ -923,7 +923,7 @@ func (s *Service) DeleteWorktree(
 			deletedBranch = s.cleanupWorktreeBranch(ctx, userID, daemonplacement.WorktreeOwner(worktree), project.Path, worktree.Branch)
 		}
 		if err := s.deps.Repo.DeleteWorktree(ctx, req.Msg.WorktreeId); err != nil {
-			logging.Error("Failed to permanently delete worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+			logging.ErrorContext(ctx, "Failed to permanently delete worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to permanently delete worktree"))
 		}
 
@@ -938,7 +938,7 @@ func (s *Service) DeleteWorktree(
 
 	// Archive the worktree
 	if err := s.deps.Repo.ArchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
-		logging.Error("Failed to archive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to archive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to archive worktree"))
 	}
 
@@ -971,7 +971,7 @@ func (s *Service) ArchiveWorktree(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -985,7 +985,7 @@ func (s *Service) ArchiveWorktree(
 
 	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
 	if err != nil {
-		logging.Warn("Failed to get project for worktree cleanup", "error", err)
+		logging.WarnContext(ctx, "Failed to get project for worktree cleanup", "error", err)
 	}
 
 	// The branch is checked out in the directory until the machine removes it,
@@ -995,7 +995,7 @@ func (s *Service) ArchiveWorktree(
 
 	// Archive the worktree
 	if err := s.deps.Repo.ArchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
-		logging.Error("Failed to archive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to archive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to archive worktree"))
 	}
 
@@ -1027,7 +1027,7 @@ func (s *Service) UnarchiveWorktree(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -1066,7 +1066,7 @@ func (s *Service) UnarchiveWorktree(
 			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 				"cannot unarchive '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name))
 		}
-		logging.Error("Failed to unarchive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to unarchive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to unarchive worktree"))
 	}
 
@@ -1096,7 +1096,7 @@ func (s *Service) cleanupWorktreeBranch(ctx context.Context, userID, daemonID, p
 		"project_path": projectPath,
 		"branch":       branch,
 	}, &resp); err != nil {
-		logging.Warn("Failed to delete git branch via daemon", "error", err, "branch", branch)
+		logging.WarnContext(ctx, "Failed to delete git branch via daemon", "error", err, "branch", branch)
 		return false
 	}
 	return resp.Deleted
@@ -1115,7 +1115,7 @@ func (s *Service) storeCleanupMetadata(ctx context.Context, worktreeID string, d
 		return true
 	})
 	if err != nil {
-		logging.Warn("Failed to store cleanup metadata", "error", err, "worktreeID", worktreeID)
+		logging.WarnContext(ctx, "Failed to store cleanup metadata", "error", err, "worktreeID", worktreeID)
 	}
 }
 
@@ -1127,7 +1127,7 @@ func (s *Service) archiveWorktreeChats(ctx context.Context, userID string, workt
 		Limit:           1000,
 	})
 	if err != nil {
-		logging.Warn("Failed to list chats for archiving", "error", err)
+		logging.WarnContext(ctx, "Failed to list chats for archiving", "error", err)
 		return
 	}
 
@@ -1138,7 +1138,7 @@ func (s *Service) archiveWorktreeChats(ctx context.Context, userID string, workt
 				_ = s.deps.Temporal.CancelWorkflow(ctx, workflowID, "")
 			}
 			if err := s.deps.Repo.UpdateChatState(ctx, chat.ID, db.ChatStateArchived, "worktree_archived"); err != nil {
-				logging.Warn("Failed to archive chat", "error", err, "chatID", chat.ID)
+				logging.WarnContext(ctx, "Failed to archive chat", "error", err, "chatID", chat.ID)
 			}
 		}
 	}
@@ -1153,14 +1153,14 @@ func (s *Service) unarchiveWorktreeChats(ctx context.Context, userID string, wor
 		Limit:     1000,
 	})
 	if err != nil {
-		logging.Warn("Failed to list chats for unarchiving", "error", err)
+		logging.WarnContext(ctx, "Failed to list chats for unarchiving", "error", err)
 		return
 	}
 
 	for _, chat := range chats {
 		if chat.WorktreeID != nil && *chat.WorktreeID == worktree.ID {
 			if err := s.deps.Repo.UpdateChatState(ctx, chat.ID, db.ChatStateIdle, "worktree_unarchived"); err != nil {
-				logging.Warn("Failed to unarchive chat", "error", err, "chatID", chat.ID)
+				logging.WarnContext(ctx, "Failed to unarchive chat", "error", err, "chatID", chat.ID)
 			}
 		}
 	}
@@ -1328,7 +1328,7 @@ func (s *Service) ImportWorktree(
 		worktree.Path = ""
 		worktree.UpdatedAt = time.Now().UTC()
 		if err := s.deps.Repo.UpdateWorktree(ctx, worktree); err != nil {
-			logging.Error("Failed to mark adopted worktree failed", "error", err, "worktreeID", worktree.ID)
+			logging.ErrorContext(ctx, "Failed to mark adopted worktree failed", "error", err, "worktreeID", worktree.ID)
 		}
 		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
 		if moveErr != nil {
@@ -1417,7 +1417,7 @@ func (s *Service) trackedWorktreePaths(ctx context.Context, projectID string) ([
 		ProjectID: &projectID, IncludeArchived: true, Limit: 100000,
 	})
 	if err != nil {
-		logging.Error("Failed to list worktrees", "error", err)
+		logging.ErrorContext(ctx, "Failed to list worktrees", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list worktrees"))
 	}
 	paths := make([]string, 0, len(tracked))
@@ -1481,7 +1481,7 @@ func (s *Service) DiscoverWorktrees(
 	}
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 	refs, byID, err := s.projectRepoRefs(ctx, project)
@@ -1517,7 +1517,7 @@ func (s *Service) DiscoverWorktrees(
 		if req.Msg.Background && daemonerr.Unreachable(err) {
 			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("your machine is not connected"))
 		}
-		logging.Warn("Failed to discover worktrees via daemon", "error", err)
+		logging.WarnContext(ctx, "Failed to discover worktrees via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("failed to list git worktrees"))
 	}
 
@@ -1580,11 +1580,11 @@ func (s *Service) PruneWorktrees(
 		if machinewake.IsWaking(err) {
 			return nil, err
 		}
-		logging.Warn("Failed to prune worktrees via daemon", "error", err)
+		logging.WarnContext(ctx, "Failed to prune worktrees via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("failed to prune git worktrees"))
 	}
 	for _, msg := range resp.Errors {
-		logging.Warn("worktree prune error", "projectID", project.ID, "error", msg)
+		logging.WarnContext(ctx, "worktree prune error", "projectID", project.ID, "error", msg)
 	}
 	if len(resp.Pruned) == 0 && len(resp.Errors) > 0 {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("git error: %s", resp.Errors[0]))
@@ -1617,14 +1617,14 @@ func (s *Service) RecreateWorktree(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
 	// Get project for git operations
 	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
 	if err != nil {
-		logging.Error("Failed to get project", "error", err, "projectID", worktree.ProjectID)
+		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", worktree.ProjectID)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
@@ -1685,7 +1685,7 @@ func (s *Service) RecreateWorktree(
 		"fence":         strconv.FormatInt(worktree.DeletedAt.UnixNano(), 10),
 		"repos":         recreateRepos,
 	}, &recreateResp); err != nil {
-		logging.Error("Failed to recreate worktree via daemon", "error", err)
+		logging.ErrorContext(ctx, "Failed to recreate worktree via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to recreate worktree"))
 	}
 	if !recreateResp.Success {
@@ -1719,12 +1719,12 @@ func (s *Service) RecreateWorktree(
 		keep = nil
 	}
 	if err := s.deps.Repo.UpdateWorktreeCleanupMetadata(ctx, req.Msg.WorktreeId, keep); err != nil {
-		logging.Warn("Failed to update cleanup metadata", "error", err)
+		logging.WarnContext(ctx, "Failed to update cleanup metadata", "error", err)
 	}
 
 	// Unarchive the worktree
 	if err := s.deps.Repo.UnarchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
-		logging.Error("Failed to unarchive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to unarchive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to unarchive worktree"))
 	}
 
@@ -1782,7 +1782,7 @@ func (s *Service) repairActiveWorktree(ctx context.Context, userID string, workt
 		if machinewake.IsWaking(err) {
 			return nil, err
 		}
-		logging.Warn("Failed to repair worktree via daemon", "error", err, "worktreeID", worktree.ID)
+		logging.WarnContext(ctx, "Failed to repair worktree via daemon", "error", err, "worktreeID", worktree.ID)
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("could not reach the machine that holds this workspace: %w", err))
 	}
 
@@ -1820,7 +1820,7 @@ func (s *Service) GetWorktreeChanges(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -1912,7 +1912,7 @@ func (s *Service) GetWorktreeGitStatus(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -1975,7 +1975,7 @@ func (s *Service) GetWorktreeCommits(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -2031,7 +2031,7 @@ func (s *Service) GetWorktreeCommits(
 		BaseBranch:   baseBranch,
 		Limit:        limit,
 	}, &commitsResp, worktreeReadCommandTimeoutMs); err != nil {
-		logging.Warn("Failed to get git commits via daemon", "error", err)
+		logging.WarnContext(ctx, "Failed to get git commits via daemon", "error", err)
 		return connect.NewResponse(&reliantv1.GetWorktreeCommitsResponse{
 			Commits: []*reliantv1.GitCommit{},
 		}), nil
@@ -2082,7 +2082,7 @@ func (s *Service) StageFiles(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -2137,7 +2137,7 @@ func (s *Service) UnstageFiles(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -2196,7 +2196,7 @@ func (s *Service) CommitWorktree(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -2216,7 +2216,7 @@ func (s *Service) CommitWorktree(
 		if strings.Contains(errStr, "nothing to commit") || strings.Contains(errStr, "nothing added to commit") {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no staged changes to commit; stage files first"))
 		}
-		logging.Error("Failed to commit changes", "error", err, "path", repoPath)
+		logging.ErrorContext(ctx, "Failed to commit changes", "error", err, "path", repoPath)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to commit: %w", err))
 	}
 
@@ -2243,7 +2243,7 @@ func (s *Service) PushWorktree(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -2261,7 +2261,7 @@ func (s *Service) PushWorktree(
 	// this repo since creation.
 	output, err := s.pushViaDaemon(ctx, userID, daemonplacement.WorktreeOwner(worktree), repoPath)
 	if err != nil {
-		logging.Error("Failed to push changes", "error", err)
+		logging.ErrorContext(ctx, "Failed to push changes", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to push: %w", err))
 	}
 
@@ -2288,7 +2288,7 @@ func (s *Service) PullWorktree(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -2304,7 +2304,7 @@ func (s *Service) PullWorktree(
 	// Pull via daemon. Branch resolved daemon-side from HEAD.
 	output, err := s.pullViaDaemon(ctx, userID, daemonplacement.WorktreeOwner(worktree), repoPath)
 	if err != nil {
-		logging.Error("Failed to pull changes", "error", err)
+		logging.ErrorContext(ctx, "Failed to pull changes", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to pull: %w", err))
 	}
 
@@ -2331,7 +2331,7 @@ func (s *Service) GetWorktreePR(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -2358,7 +2358,7 @@ func (s *Service) GetWorktreePR(
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.get_pr", map[string]string{
 		"worktree_path": repoPath,
 	}, &prResp); err != nil {
-		logging.Warn("Failed to check PR via daemon", "error", err)
+		logging.WarnContext(ctx, "Failed to check PR via daemon", "error", err)
 		return connect.NewResponse(&reliantv1.GetWorktreePRResponse{Exists: false}), nil
 	}
 
@@ -2404,7 +2404,7 @@ func (s *Service) CreateWorktreePR(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -2444,7 +2444,7 @@ func (s *Service) CreateWorktreePR(
 		"body":          body,
 		"base_branch":   baseBranch,
 	}, &prResp); err != nil {
-		logging.Error("Failed to create PR via daemon", "error", err)
+		logging.ErrorContext(ctx, "Failed to create PR via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create PR: %w", err))
 	}
 
@@ -2496,7 +2496,7 @@ func (s *Service) RevertFiles(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 
@@ -2523,7 +2523,7 @@ func (s *Service) RevertFiles(
 		"worktree_path": repoPath,
 		"files":         req.Msg.Files,
 	}, &revertResp); err != nil {
-		logging.Error("Failed to revert files via daemon", "error", err)
+		logging.ErrorContext(ctx, "Failed to revert files via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to revert files: %w", err))
 	}
 
@@ -2579,7 +2579,7 @@ func (s *Service) ListWorktreeRepoStatuses(
 
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
-		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 	}
 

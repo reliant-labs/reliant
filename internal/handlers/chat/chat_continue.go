@@ -83,11 +83,11 @@ func (s *Service) ContinueQueued(ctx context.Context, chatID string) (bool, erro
 		return false, err
 	}
 	requeue := func(why error) {
-		logging.Warn("[ContinueQueued] Could not start a run for the chat's undelivered message",
+		logging.WarnContext(ctx, "[ContinueQueued] Could not start a run for the chat's undelivered message",
 			"chatID", chatID, "workflowID", workflowID, "error", why)
 		if queued {
 			if _, err := s.deps.Repo.SetChatQueuedForMachine(ctx, chatID, true); err != nil {
-				logging.Error("[ContinueQueued] Could not re-queue the message for the machine; the user will have to send it again",
+				logging.ErrorContext(ctx, "[ContinueQueued] Could not re-queue the message for the machine; the user will have to send it again",
 					"chatID", chatID, "error", err)
 			}
 		}
@@ -122,7 +122,7 @@ func (s *Service) ContinueQueued(ctx context.Context, chatID string) (bool, erro
 			return false, err
 		}
 		if outcome.Kind == runs.OutcomeResumed {
-			logging.Info("[ContinueQueued] Resumed the interrupted run to deliver the chat's undelivered message",
+			logging.InfoContext(ctx, "[ContinueQueued] Resumed the interrupted run to deliver the chat's undelivered message",
 				"chatID", chatID, "workflowID", workflowID, "runID", outcome.RunID, "queuedForMachine", queued)
 			return true, nil
 		}
@@ -136,7 +136,7 @@ func (s *Service) ContinueQueued(ctx context.Context, chatID string) (bool, erro
 		requeue(err)
 		return false, err
 	}
-	logging.Info("[ContinueQueued] Started a run at the last checkpoint to deliver the chat's undelivered message",
+	logging.InfoContext(ctx, "[ContinueQueued] Started a run at the last checkpoint to deliver the chat's undelivered message",
 		"chatID", chatID, "workflowID", workflowID, "runID", runID, "queuedForMachine", queued)
 	return true, nil
 }
@@ -182,7 +182,7 @@ func (s *Service) ResumePausedForMachine(ctx context.Context, chatID string) (bo
 		// Archived, or the run is no longer paused: a send or the user already
 		// resumed or ended it. Nothing is owed; drop the mark.
 		if _, err := s.deps.Repo.SetChatPausedForMachine(ctx, chatID, false); err != nil {
-			logging.Warn("[ResumePausedForMachine] Could not clear the paused-for-machine mark", "chatID", chatID, "error", err)
+			logging.WarnContext(ctx, "[ResumePausedForMachine] Could not clear the paused-for-machine mark", "chatID", chatID, "error", err)
 		}
 		return false, nil
 	}
@@ -195,10 +195,10 @@ func (s *Service) ResumePausedForMachine(ctx context.Context, chatID string) (bo
 		return false, nil
 	}
 	restore := func(why error) {
-		logging.Warn("[ResumePausedForMachine] Could not resume the chat; it stays paused for its machine",
+		logging.WarnContext(ctx, "[ResumePausedForMachine] Could not resume the chat; it stays paused for its machine",
 			"chatID", chatID, "workflowID", workflowID, "error", why)
 		if _, err := s.deps.Repo.SetChatPausedForMachine(ctx, chatID, true); err != nil {
-			logging.Error("[ResumePausedForMachine] Could not put the paused-for-machine mark back; the user's next message resumes the chat",
+			logging.ErrorContext(ctx, "[ResumePausedForMachine] Could not put the paused-for-machine mark back; the user's next message resumes the chat",
 				"chatID", chatID, "error", err)
 		}
 	}
@@ -209,7 +209,7 @@ func (s *Service) ResumePausedForMachine(ctx context.Context, chatID string) (bo
 	hidden := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
 	if _, err := s.deps.Repo.SaveMessageToThread(ctx, chatID, root.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM),
 		machineBackNote, &workflowID, nil, &hidden); err != nil {
-		logging.Warn("[ResumePausedForMachine] Could not tell the agent its machine is back", "chatID", chatID, "error", err)
+		logging.WarnContext(ctx, "[ResumePausedForMachine] Could not tell the agent its machine is back", "chatID", chatID, "error", err)
 	}
 
 	outcome, err := s.runs.Resume(ctx, chatID, nil)
@@ -221,11 +221,11 @@ func (s *Service) ResumePausedForMachine(ctx context.Context, chatID string) (bo
 		// The run is gone or wedged; resuming it in place is not possible. The
 		// user's next message recovers it (SendMessage restarts at position),
 		// and retrying here would only fail the same way.
-		logging.Warn("[ResumePausedForMachine] The paused run cannot be resumed in place; the user's next message recovers it",
+		logging.WarnContext(ctx, "[ResumePausedForMachine] The paused run cannot be resumed in place; the user's next message recovers it",
 			"chatID", chatID, "workflowID", workflowID, "outcome", outcome.Kind)
 		return false, nil
 	}
-	logging.Info("[ResumePausedForMachine] The chat's machine is back; resumed the run the offline breaker paused",
+	logging.InfoContext(ctx, "[ResumePausedForMachine] The chat's machine is back; resumed the run the offline breaker paused",
 		"chatID", chatID, "workflowID", workflowID, "runID", outcome.RunID)
 	return true, nil
 }
@@ -248,11 +248,11 @@ func (s *Service) awaitsDelivery(ctx context.Context, threadID string) (bool, er
 func (s *Service) dropQueuedMessage(ctx context.Context, chatID, why string) {
 	cleared, err := s.deps.Repo.SetChatQueuedForMachine(ctx, chatID, false)
 	if err != nil {
-		logging.Warn("[ContinueQueued] Could not clear the queued-for-machine marker", "chatID", chatID, "error", err)
+		logging.WarnContext(ctx, "[ContinueQueued] Could not clear the queued-for-machine marker", "chatID", chatID, "error", err)
 		return
 	}
 	if cleared {
-		logging.Info("[ContinueQueued] Dropped a queued-for-machine marker nothing is owed for", "chatID", chatID, "why", why)
+		logging.InfoContext(ctx, "[ContinueQueued] Dropped a queued-for-machine marker nothing is owed for", "chatID", chatID, "why", why)
 	}
 }
 
@@ -301,7 +301,7 @@ func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *
 	// queued mailbox row is what the reconciler's orphaned-mailbox sweep
 	// marks undelivered. Revive it before the run exists.
 	if _, err := s.deps.Repo.ReviveThread(ctx, root.Thread); err != nil {
-		logging.Warn("[ContinueQueued] Could not revive the root thread before restarting its run; starting it anyway",
+		logging.WarnContext(ctx, "[ContinueQueued] Could not revive the root thread before restarting its run; starting it anyway",
 			"chatID", chat.ID, "threadID", root.Thread, "error", err)
 	}
 
@@ -330,7 +330,7 @@ func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *
 	// Recorded as running now, not when the run's own "started" lands, so a
 	// caller that takes the run-control lock next finds it live.
 	if err := s.deps.Repo.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-		logging.Warn("[ContinueQueued] Started the run but could not mark it running; the run's own status write corrects it",
+		logging.WarnContext(ctx, "[ContinueQueued] Started the run but could not mark it running; the run's own status write corrects it",
 			"chatID", chat.ID, "workflowID", workflowID, "error", err)
 	}
 	return run.GetRunID(), nil
@@ -343,13 +343,13 @@ func (s *Service) closedRunInputs(ctx context.Context, workflowID string) map[st
 	defer cancel()
 	encoded, err := s.deps.Temporal.QueryWorkflow(queryCtx, workflowID, "", "get_workflow_inputs")
 	if err != nil {
-		logging.Info("[ContinueQueued] Could not read the closed run's inputs; rebuilding them from the chat's presets",
+		logging.InfoContext(ctx, "[ContinueQueued] Could not read the closed run's inputs; rebuilding them from the chat's presets",
 			"workflowID", workflowID, "error", err)
 		return nil
 	}
 	var inputs map[string]interface{}
 	if err := encoded.Get(&inputs); err != nil || inputs == nil {
-		logging.Info("[ContinueQueued] Could not decode the closed run's inputs; rebuilding them from the chat's presets",
+		logging.InfoContext(ctx, "[ContinueQueued] Could not decode the closed run's inputs; rebuilding them from the chat's presets",
 			"workflowID", workflowID, "error", err)
 		return nil
 	}
@@ -367,7 +367,7 @@ func (s *Service) nudgeMachineWait(ctx context.Context, chat *db.Chat) {
 	if err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, "", machinewait.SignalName, machinewait.Signal{
 		Reason: machinewait.ReasonUserMessage,
 	}); err != nil {
-		logging.Warn("Could not ask the chat's run to check its machine", "chatID", chat.ID, "workflowID", workflowID, "error", err)
+		logging.WarnContext(ctx, "Could not ask the chat's run to check its machine", "chatID", chat.ID, "workflowID", workflowID, "error", err)
 	}
 }
 
@@ -394,7 +394,7 @@ func (s *Service) abandonMachineWait(ctx context.Context, chat *db.Chat) {
 		Abandon: true,
 		Reason:  machinewait.ReasonContinuedWithoutMachine,
 	}); err != nil {
-		logging.Warn("[BranchChat] Could not tell the source chat's run to stop waiting for its machine",
+		logging.WarnContext(ctx, "[BranchChat] Could not tell the source chat's run to stop waiting for its machine",
 			"chatID", chat.ID, "workflowID", workflowID, "error", err)
 	}
 }

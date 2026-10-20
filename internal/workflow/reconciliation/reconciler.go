@@ -700,12 +700,12 @@ func (r *Reconciler) pollersActive(ctx context.Context, ps *pollerState, taskTyp
 		// One summary log line per pass (not per workflow).
 		switch {
 		case ps.err != nil:
-			logging.Warn("[Reconciler] Failed to check task queue pollers - skipping stuck-task handling this pass",
+			logging.WarnContext(ctx, "[Reconciler] Failed to check task queue pollers - skipping stuck-task handling this pass",
 				"taskQueue", r.taskQueue,
 				"error", ps.err,
 			)
 		case !ps.workflowPollers || !ps.activityPollers:
-			logging.Info("[Reconciler] Task queue has no active pollers - worker down or rebuilding, skipping stuck-task handling this pass",
+			logging.InfoContext(ctx, "[Reconciler] Task queue has no active pollers - worker down or rebuilding, skipping stuck-task handling this pass",
 				"taskQueue", r.taskQueue,
 				"workflowPollers", ps.workflowPollers,
 				"activityPollers", ps.activityPollers,
@@ -789,7 +789,7 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 		isRunning = true
 	default:
 		// Unknown status - treat as completed to allow starting fresh
-		logging.Warn("[Reconciler] Unknown Temporal workflow status",
+		logging.WarnContext(ctx, "[Reconciler] Unknown Temporal workflow status",
 			"workflowID", workflowID,
 			"status", execStatus.String(),
 		)
@@ -841,7 +841,7 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 			state.WedgedTaskAttempt = pwt.Attempt
 			outcome, err := v2workflow.LatestWorkflowTaskOutcome(ctx, r.tempClient.WorkflowService(), r.namespace, workflowID, runID)
 			if err != nil {
-				logging.Warn("[Reconciler] Could not read why a workflow task keeps retrying; not treating it as wedged this pass",
+				logging.WarnContext(ctx, "[Reconciler] Could not read why a workflow task keeps retrying; not treating it as wedged this pass",
 					"workflowID", workflowID,
 					"attempt", pwt.Attempt,
 					"error", err,
@@ -851,7 +851,7 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 			state.WedgeOutcome = outcome
 			state.HasWedgedWorkflowTask = outcome.FailsDeterministically()
 
-			logging.Debug("[Reconciler] Observed a repeatedly retried workflow task",
+			logging.DebugContext(ctx, "[Reconciler] Observed a repeatedly retried workflow task",
 				"workflowID", workflowID,
 				"attempt", pwt.Attempt,
 				"taskState", pwt.State.String(),
@@ -877,7 +877,7 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 
 					// Debug: this fires every pass while a task waits (e.g.
 					// during a worker rebuild); action-time logs are louder.
-					logging.Debug("[Reconciler] Observed workflow task in Scheduled state past threshold",
+					logging.DebugContext(ctx, "[Reconciler] Observed workflow task in Scheduled state past threshold",
 						"workflowID", workflowID,
 						"scheduledTime", scheduledTime,
 						"stuckDuration", stuckDuration,
@@ -903,7 +903,7 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 						state.StuckDuration = stuckDuration
 
 						// Debug: fires every pass while a task waits; see above.
-						logging.Debug("[Reconciler] Observed activity in Scheduled state past threshold",
+						logging.DebugContext(ctx, "[Reconciler] Observed activity in Scheduled state past threshold",
 							"workflowID", workflowID,
 							"activityID", pa.ActivityId,
 							"activityType", pa.ActivityType.GetName(),
@@ -973,7 +973,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 		// ERROR (Sentry-visible): the DB believed this workflow was live but
 		// Temporal has no record of it — state was silently lost somewhere.
-		logging.Error("[Reconciler] Workflow not found in Temporal, marked as completed",
+		logging.ErrorContext(ctx, "[Reconciler] Workflow not found in Temporal, marked as completed",
 			"workflowID", wf.ID,
 			"chatID", wf.ChatID,
 			"dbStatus", wf.Status,
@@ -1107,7 +1107,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 				result.RecoveredByReset = true
 				return result
 			} else { //nolint:revive // keep err scoped to the recovery attempt
-				logging.Warn("[Reconciler] Workflow reset failed - falling back to terminate",
+				logging.WarnContext(ctx, "[Reconciler] Workflow reset failed - falling back to terminate",
 					"error", err,
 					"workflowID", wf.ID,
 					"chatID", wf.ChatID,
@@ -1120,7 +1120,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		terminateDetail := "reset recovery failed"
 		if resetSkippedByHistoryLimit {
 			terminateDetail = "at Temporal's history limit (reset would fork inside the oversized history)"
-			logging.Error("[Reconciler] Stuck workflow is at Temporal's history limit - terminating instead of resetting",
+			logging.ErrorContext(ctx, "[Reconciler] Stuck workflow is at Temporal's history limit - terminating instead of resetting",
 				"workflowID", wf.ID,
 				"chatID", wf.ChatID,
 				"historyLength", temporalState.HistoryLength,
@@ -1129,7 +1129,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			r.recordAnomaly(stats, anomalyResetFailedTerminated)
 		} else if resetSkippedByGuard {
 			terminateDetail = "reset-attempt guard exhausted (repeated resets made no progress)"
-			logging.Error("[Reconciler] Reset-attempt guard exhausted for stuck workflow - terminating and marking as failed",
+			logging.ErrorContext(ctx, "[Reconciler] Reset-attempt guard exhausted for stuck workflow - terminating and marking as failed",
 				"workflowID", wf.ID,
 				"chatID", wf.ChatID,
 				"stuckTaskType", temporalState.StuckTaskType,
@@ -1137,7 +1137,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			)
 			r.recordAnomaly(stats, anomalyResetAttemptsExhausted)
 		} else {
-			logging.Error("[Reconciler] Workflow is stuck and reset failed - terminating and marking as failed",
+			logging.ErrorContext(ctx, "[Reconciler] Workflow is stuck and reset failed - terminating and marking as failed",
 				"workflowID", wf.ID,
 				"chatID", wf.ChatID,
 				"stuckTaskType", temporalState.StuckTaskType,
@@ -1153,7 +1153,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		// This prevents any confusion where DB says failed but Temporal says running
 		terminateReason := fmt.Sprintf("Workflow stuck: %s task in Scheduled state for %v (%s)", temporalState.StuckTaskType, temporalState.StuckDuration, terminateDetail)
 		if err := r.tempClient.TerminateWorkflow(ctx, wf.ID, "", terminateReason); err != nil {
-			logging.Warn("[Reconciler] Failed to terminate stuck workflow in Temporal",
+			logging.WarnContext(ctx, "[Reconciler] Failed to terminate stuck workflow in Temporal",
 				"error", err,
 				"workflowID", wf.ID,
 			)
@@ -1174,7 +1174,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		// Add error message to chat so user knows what happened
 		// Only runs if CAS succeeded, preventing duplicate messages
 		if err := r.addWorkflowErrorMessage(ctx, wf, temporalState); err != nil {
-			logging.Warn("[Reconciler] Failed to add error message to chat",
+			logging.WarnContext(ctx, "[Reconciler] Failed to add error message to chat",
 				"error", err,
 				"workflowID", wf.ID,
 			)
@@ -1201,7 +1201,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			// Report only. The cause is unknown — it could still be a wait
 			// class this reconciler doesn't know about — so give it a full
 			// confirmation window before doing anything destructive.
-			logging.Error("[Reconciler] Progress stall detected: running workflow has no pending work and no history growth",
+			logging.ErrorContext(ctx, "[Reconciler] Progress stall detected: running workflow has no pending work and no history growth",
 				"workflowID", wf.ID,
 				"chatID", wf.ChatID,
 				"historyLength", temporalState.HistoryLength,
@@ -1238,7 +1238,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 				break
 			}
 
-			logging.Error("[Reconciler] Progress stall confirmed - terminating and marking as failed for resume",
+			logging.ErrorContext(ctx, "[Reconciler] Progress stall confirmed - terminating and marking as failed for resume",
 				"workflowID", wf.ID,
 				"chatID", wf.ChatID,
 				"historyLength", temporalState.HistoryLength,
@@ -1252,7 +1252,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 				temporalState.HistoryLength, elapsed.Round(time.Second), passes,
 			)
 			if err := r.tempClient.TerminateWorkflow(ctx, wf.ID, "", terminateReason); err != nil {
-				logging.Warn("[Reconciler] Failed to terminate stalled workflow in Temporal",
+				logging.WarnContext(ctx, "[Reconciler] Failed to terminate stalled workflow in Temporal",
 					"error", err,
 					"workflowID", wf.ID,
 				)
@@ -1275,7 +1275,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			// because SendMessage starts the next run in resume-at-position
 			// mode for failed/terminated predecessors.
 			if _, err := r.repo.SaveMessageToThread(ctx, wf.ChatID, wf.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), progressStallChatMessage, &wf.ID, nil, nil); err != nil {
-				logging.Warn("[Reconciler] Failed to add progress-stall message to chat",
+				logging.WarnContext(ctx, "[Reconciler] Failed to add progress-stall message to chat",
 					"error", err,
 					"workflowID", wf.ID,
 				)
@@ -1299,7 +1299,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	// Special case: DB says paused, but Temporal says completed/failed/cancelled
 	// The Temporal execution ended while paused — repair DB status.
 	if wf.Status == db.Paused() && !temporalState.IsRunning {
-		logging.Warn("[Reconciler] Paused workflow's Temporal execution ended, repairing",
+		logging.WarnContext(ctx, "[Reconciler] Paused workflow's Temporal execution ended, repairing",
 			"workflowID", wf.ID,
 			"chatID", wf.ChatID,
 			"dbStatus", wf.Status,
@@ -1337,7 +1337,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 	// For other mismatches, repair DB to match Temporal (source of truth).
 	if wf.Status != temporalState.Status {
-		logging.Warn("[Reconciler] Status mismatch detected, repairing",
+		logging.WarnContext(ctx, "[Reconciler] Status mismatch detected, repairing",
 			"workflowID", wf.ID,
 			"chatID", wf.ChatID,
 			"dbStatus", wf.Status,
@@ -1409,7 +1409,7 @@ func (r *Reconciler) recoverWedgedWorkflow(ctx context.Context, wf *db.Workflow,
 	if outcome.CancelRequested {
 		to = db.Cancelled()
 	}
-	logging.Error("[Reconciler] Workflow task fails on every attempt (wedged) - terminating",
+	logging.ErrorContext(ctx, "[Reconciler] Workflow task fails on every attempt (wedged) - terminating",
 		"workflowID", wf.ID,
 		"chatID", wf.ChatID,
 		"attempt", temporalState.WedgedTaskAttempt,
@@ -1425,7 +1425,7 @@ func (r *Reconciler) recoverWedgedWorkflow(ctx context.Context, wf *db.Workflow,
 		outcome.Cause.String(), temporalState.WedgedTaskAttempt,
 	)
 	if err := r.tempClient.TerminateWorkflow(ctx, wf.ID, "", terminateReason); err != nil {
-		logging.Warn("[Reconciler] Failed to terminate wedged workflow in Temporal",
+		logging.WarnContext(ctx, "[Reconciler] Failed to terminate wedged workflow in Temporal",
 			"error", err,
 			"workflowID", wf.ID,
 		)
@@ -1435,7 +1435,7 @@ func (r *Reconciler) recoverWedgedWorkflow(ctx context.Context, wf *db.Workflow,
 
 	if outcome.CancelRequested {
 		if err := r.repo.DeleteWorkflowCheckpoint(ctx, wf.ID); err != nil {
-			logging.Warn("[Reconciler] Failed to drop the checkpoint of a wedged run that was cancelled",
+			logging.WarnContext(ctx, "[Reconciler] Failed to drop the checkpoint of a wedged run that was cancelled",
 				"error", err,
 				"workflowID", wf.ID,
 			)
@@ -1469,7 +1469,7 @@ func (r *Reconciler) recoverWedgedWorkflow(ctx context.Context, wf *db.Workflow,
 		note = recoveredContinuingChatMessage
 	}
 	if _, err := r.repo.SaveMessageToThread(ctx, wf.ChatID, wf.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), note, &wf.ID, nil, nil); err != nil {
-		logging.Warn("[Reconciler] Failed to add wedge interruption message to chat",
+		logging.WarnContext(ctx, "[Reconciler] Failed to add wedge interruption message to chat",
 			"error", err,
 			"workflowID", wf.ID,
 		)
@@ -1569,7 +1569,7 @@ func reconciledFailureText(outcome core.RunEventOutcome) string {
 func (r *Reconciler) transitionChatOnCompletion(ctx context.Context, wf *db.Workflow) {
 	to, err := handlers.TransitionChatOnCompletion(ctx, r.repo, wf.ChatID, wf.WorkflowName)
 	if err != nil {
-		logging.Warn("[Reconciler] Failed to transition chat on completion",
+		logging.WarnContext(ctx, "[Reconciler] Failed to transition chat on completion",
 			"workflowID", wf.ID,
 			"chatID", wf.ChatID,
 			"error", err,
@@ -1785,7 +1785,7 @@ func (r *Reconciler) observeProgress(ctx context.Context, wf *db.Workflow, state
 	// reporting or acting.
 	waiting, err := r.awaitingUserInput(ctx, wf)
 	if err != nil {
-		logging.Warn("[Reconciler] Progress watchdog could not check user-input waits - holding",
+		logging.WarnContext(ctx, "[Reconciler] Progress watchdog could not check user-input waits - holding",
 			"workflowID", wf.ID,
 			"chatID", wf.ChatID,
 			"error", err,
@@ -1851,7 +1851,7 @@ func (r *Reconciler) awaitingUserInput(ctx context.Context, wf *db.Workflow) (bo
 		}
 	}
 	if len(pausedIDs) > 0 {
-		logging.Error("[Reconciler] Progress watchdog: running root workflow has paused descendant rows - treating as pause-parked, not a stall (pause writer failed to mark the root row)",
+		logging.ErrorContext(ctx, "[Reconciler] Progress watchdog: running root workflow has paused descendant rows - treating as pause-parked, not a stall (pause writer failed to mark the root row)",
 			"workflowID", wf.ID,
 			"chatID", wf.ChatID,
 			"pausedWorkflowIDs", pausedIDs,
@@ -1908,7 +1908,7 @@ func (r *Reconciler) recoverStuckWorkflowByReset(ctx context.Context, wf *db.Wor
 	// ERROR (Sentry-visible) even though recovery succeeded: a task was LOST
 	// from Temporal's queue, which should never happen — the repair working is
 	// not a reason to hide the anomaly.
-	logging.Error("[Reconciler] Recovered stuck workflow via reset (task was lost from queue)",
+	logging.ErrorContext(ctx, "[Reconciler] Recovered stuck workflow via reset (task was lost from queue)",
 		"workflowID", wf.ID,
 		"chatID", wf.ChatID,
 		"stuckTaskType", state.StuckTaskType,
@@ -1994,7 +1994,7 @@ func (r *Reconciler) findResetPoint(ctx context.Context, workflowID string, stat
 func (r *Reconciler) reapOrphanedDescendants(ctx context.Context, stats *passStats) (int, error) {
 	reaped, err := r.repo.ReapOrphanedWorkflowDescendants(ctx)
 	if err != nil {
-		logging.Error("[Reconciler] Failed to reap orphaned workflow descendants", "error", err)
+		logging.ErrorContext(ctx, "[Reconciler] Failed to reap orphaned workflow descendants", "error", err)
 		return 0, fmt.Errorf("failed to reap orphaned workflow descendants: %w", err)
 	}
 	if len(reaped) == 0 {
@@ -2013,14 +2013,14 @@ func (r *Reconciler) reapOrphanedDescendants(ctx context.Context, stats *passSta
 			for range run.workflowIDs {
 				r.recordAnomaly(stats, anomalyOrphanDescendantReapedAfterTerminate)
 			}
-			logging.Info("[Reconciler] Reaped the descendants of a run Temporal stopped outright — no workflow code ran to cascade, as expected",
+			logging.InfoContext(ctx, "[Reconciler] Reaped the descendants of a run Temporal stopped outright — no workflow code ran to cascade, as expected",
 				fields...)
 			continue
 		}
 		for range run.workflowIDs {
 			r.recordAnomaly(stats, anomalyOrphanDescendantReaped)
 		}
-		logging.Error("[Reconciler] Reaped orphaned workflow descendants — a terminal parent did not cascade",
+		logging.ErrorContext(ctx, "[Reconciler] Reaped orphaned workflow descendants — a terminal parent did not cascade",
 			fields...)
 	}
 	return len(reaped), nil
@@ -2088,7 +2088,7 @@ func (r *Reconciler) groupReapedWorkflowsByRun(ctx context.Context, reaped []db.
 func (r *Reconciler) reapOrphanedThreads(ctx context.Context, stats *passStats) (int, error) {
 	reaped, err := r.repo.ReapOrphanedThreads(ctx)
 	if err != nil {
-		logging.Error("[Reconciler] Failed to reap orphaned threads", "error", err)
+		logging.ErrorContext(ctx, "[Reconciler] Failed to reap orphaned threads", "error", err)
 		return 0, fmt.Errorf("failed to reap orphaned threads: %w", err)
 	}
 	if len(reaped) == 0 {
@@ -2111,14 +2111,14 @@ func (r *Reconciler) reapOrphanedThreads(ctx context.Context, stats *passStats) 
 			for range run.threadIDs {
 				r.recordAnomaly(stats, anomalyOrphanThreadReapedAfterTerminate)
 			}
-			logging.Info("[Reconciler] Reaped the threads of a run Temporal stopped outright — no workflow code ran to cascade, as expected",
+			logging.InfoContext(ctx, "[Reconciler] Reaped the threads of a run Temporal stopped outright — no workflow code ran to cascade, as expected",
 				fields...)
 			continue
 		}
 		for range run.threadIDs {
 			r.recordAnomaly(stats, anomalyOrphanThreadReaped)
 		}
-		logging.Error("[Reconciler] Reaped orphaned threads — a terminal workflow did not cascade to its thread",
+		logging.ErrorContext(ctx, "[Reconciler] Reaped orphaned threads — a terminal workflow did not cascade to its thread",
 			fields...)
 	}
 	return len(reaped), nil
@@ -2244,7 +2244,7 @@ func closeStatusLabel(status enums.WorkflowExecutionStatus) string {
 func (r *Reconciler) repairStrandedSpawnToolCalls(ctx context.Context, stats *passStats) (int, error) {
 	stranded, err := r.repo.ListStrandedSpawnToolCalls(ctx)
 	if err != nil {
-		logging.Error("[Reconciler] Failed to list stranded spawn tool calls", "error", err)
+		logging.ErrorContext(ctx, "[Reconciler] Failed to list stranded spawn tool calls", "error", err)
 		return 0, fmt.Errorf("failed to list stranded spawn tool calls: %w", err)
 	}
 	if len(stranded) == 0 {
@@ -2261,7 +2261,7 @@ func (r *Reconciler) repairStrandedSpawnToolCalls(ctx context.Context, stats *pa
 			CreatedAt:  now,
 			UpdatedAt:  now,
 		}); err != nil {
-			logging.Error("[Reconciler] Failed to write stranded spawn result",
+			logging.ErrorContext(ctx, "[Reconciler] Failed to write stranded spawn result",
 				"toolCallID", call.ID, "childWorkflowID", call.ChildWorkflowID, "error", err)
 			continue
 		}
@@ -2276,7 +2276,7 @@ func (r *Reconciler) repairStrandedSpawnToolCalls(ctx context.Context, stats *pa
 			Status:      core.ToolCallStatusFailed,
 			CompletedAt: &now,
 		}); err != nil {
-			logging.Error("[Reconciler] Failed to close stranded spawn tool call",
+			logging.ErrorContext(ctx, "[Reconciler] Failed to close stranded spawn tool call",
 				"toolCallID", call.ID, "error", err)
 			continue
 		}
@@ -2286,7 +2286,7 @@ func (r *Reconciler) repairStrandedSpawnToolCalls(ctx context.Context, stats *pa
 	}
 
 	if repaired > 0 {
-		logging.Error("[Reconciler] Repaired stranded spawn tool calls — a terminal child never reported back to its parent",
+		logging.ErrorContext(ctx, "[Reconciler] Repaired stranded spawn tool calls — a terminal child never reported back to its parent",
 			"rows", repaired,
 		)
 	}
@@ -2368,7 +2368,7 @@ func mailboxKindForTerminalWorkflowStatus(status core.WorkflowStatus) core.Agent
 func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *passStats) (int, error) {
 	stranded, err := r.repo.ListStrandedBackgroundSpawnToolCalls(ctx)
 	if err != nil {
-		logging.Error("[Reconciler] Failed to list stranded background spawn tool calls", "error", err)
+		logging.ErrorContext(ctx, "[Reconciler] Failed to list stranded background spawn tool calls", "error", err)
 		return 0, fmt.Errorf("failed to list stranded background spawn tool calls: %w", err)
 	}
 	if len(stranded) == 0 {
@@ -2416,7 +2416,7 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 			// Nothing to deliver into without a recipient thread — skip
 			// rather than guess, and let a later pass pick it up once the
 			// thread_id lands.
-			logging.Warn("[Reconciler] Stranded background spawn has no parent thread id, skipping",
+			logging.WarnContext(ctx, "[Reconciler] Stranded background spawn has no parent thread id, skipping",
 				"toolCallID", call.ToolCallID, "childThreadID", call.ChildThreadID)
 			continue
 		}
@@ -2448,13 +2448,13 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 			// provider-chosen id, so this one's outcome has nowhere to go.
 			// Said once, loudly, and the call is still closed: leaving it
 			// backgrounded would only repeat this every pass.
-			logging.Error("[Reconciler] Stranded background spawn's report slot is held by another spawn; its outcome cannot be delivered",
+			logging.ErrorContext(ctx, "[Reconciler] Stranded background spawn's report slot is held by another spawn; its outcome cannot be delivered",
 				"chatID", call.ChatID, "toolCallID", call.ToolCallID, "childThreadID", call.ChildThreadID, "error", err)
 			r.closeStrandedBackgroundSpawnCall(ctx, call)
 			continue
 		}
 		if err != nil {
-			logging.Error("[Reconciler] Failed to enqueue stranded background spawn completion",
+			logging.ErrorContext(ctx, "[Reconciler] Failed to enqueue stranded background spawn completion",
 				"toolCallID", call.ToolCallID, "childThreadID", call.ChildThreadID, "error", err)
 			continue
 		}
@@ -2486,7 +2486,7 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 	}
 
 	if repaired > 0 {
-		logging.Error("[Reconciler] Repaired stranded background spawn tool calls — a terminal child never reported back to its parent's mailbox",
+		logging.ErrorContext(ctx, "[Reconciler] Repaired stranded background spawn tool calls — a terminal child never reported back to its parent's mailbox",
 			"rows", repaired,
 		)
 	}
@@ -2494,7 +2494,7 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 		// ERROR, not Info, for the same reason ThreadStatus.resolveMailbox
 		// logs at ERROR: every row here is a sub-agent's finished work that
 		// no agent will ever read, because the parent was already gone.
-		logging.Error("[Reconciler] Recorded stranded background spawn reports as UNDELIVERED — the parent thread had already exited",
+		logging.ErrorContext(ctx, "[Reconciler] Recorded stranded background spawn reports as UNDELIVERED — the parent thread had already exited",
 			"rows", undeliverable,
 		)
 	}
@@ -2541,7 +2541,7 @@ func (r *Reconciler) rootAwaitingResume(ctx context.Context, chatID string) bool
 func (r *Reconciler) recipientThreadIsTerminal(ctx context.Context, threadID string) bool {
 	thread, err := r.repo.GetThread(ctx, threadID)
 	if err != nil || thread == nil {
-		logging.Warn("[Reconciler] Could not read stranded spawn's parent thread; treating it as live",
+		logging.WarnContext(ctx, "[Reconciler] Could not read stranded spawn's parent thread; treating it as live",
 			"threadID", threadID, "error", err)
 		return false
 	}
@@ -2573,7 +2573,7 @@ func (r *Reconciler) closeStrandedBackgroundSpawnCall(ctx context.Context, call 
 		Status:      core.ToolCallStatusCancelled,
 		CompletedAt: &now,
 	}); err != nil {
-		logging.Error("[Reconciler] Failed to close stranded background spawn tool call",
+		logging.ErrorContext(ctx, "[Reconciler] Failed to close stranded background spawn tool call",
 			"toolCallID", call.ToolCallID, "error", err)
 	}
 }
@@ -2649,7 +2649,7 @@ func strandedBackgroundSpawnBody(call *db.StrandedBackgroundSpawn, recipientDead
 func (r *Reconciler) resolveOrphanedAgentMessages(ctx context.Context, stats *passStats) (int, error) {
 	threadIDs, err := r.repo.ListThreadsWithOrphanedAgentMessages(ctx)
 	if err != nil {
-		logging.Error("[Reconciler] Failed to list threads with orphaned agent messages", "error", err)
+		logging.ErrorContext(ctx, "[Reconciler] Failed to list threads with orphaned agent messages", "error", err)
 		return 0, fmt.Errorf("failed to list threads with orphaned agent messages: %w", err)
 	}
 	if len(threadIDs) == 0 {
@@ -2663,7 +2663,7 @@ func (r *Reconciler) resolveOrphanedAgentMessages(ctx context.Context, stats *pa
 		}
 		rows, err := r.repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, threadID)
 		if err != nil {
-			logging.Error("[Reconciler] Failed to resolve orphaned agent messages",
+			logging.ErrorContext(ctx, "[Reconciler] Failed to resolve orphaned agent messages",
 				"threadID", threadID, "error", err)
 			continue
 		}
@@ -2679,7 +2679,7 @@ func (r *Reconciler) resolveOrphanedAgentMessages(ctx context.Context, stats *pa
 	}
 
 	if resolved > 0 {
-		logging.Error("[Reconciler] Resolved orphaned agent messages — queued for a thread whose loop had already exited",
+		logging.ErrorContext(ctx, "[Reconciler] Resolved orphaned agent messages — queued for a thread whose loop had already exited",
 			"rows", resolved,
 			"threads", len(threadIDs),
 		)
@@ -2709,7 +2709,7 @@ func (r *Reconciler) mailboxMayStillBeDelivered(ctx context.Context, threadID st
 	// is no Temporal execution to ask (a spawn runs inside its chat's), so
 	// the check below would call every such row orphaned.
 	if err == nil && thread != nil && r.stoppedSubAgentResumable(ctx, thread) {
-		logging.Debug("[Reconciler] Leaving a stopped sub-agent's queued mail: a message resumes it, and its resumed run reads them",
+		logging.DebugContext(ctx, "[Reconciler] Leaving a stopped sub-agent's queued mail: a message resumes it, and its resumed run reads them",
 			"threadID", threadID, "chatID", thread.ChatID)
 		return true
 	}
@@ -2717,7 +2717,7 @@ func (r *Reconciler) mailboxMayStillBeDelivered(ctx context.Context, threadID st
 	// that run drains this mailbox (queueddelivery). Its rows are not
 	// orphaned, however long the machine takes.
 	if err == nil && thread != nil && r.chatHoldsQueuedMessage(ctx, thread.ChatID) {
-		logging.Debug("[Reconciler] Leaving a terminal thread's queued mail: its chat holds a message queued for its machine",
+		logging.DebugContext(ctx, "[Reconciler] Leaving a terminal thread's queued mail: its chat holds a message queued for its machine",
 			"threadID", threadID, "chatID", thread.ChatID)
 		return true
 	}
@@ -2727,12 +2727,12 @@ func (r *Reconciler) mailboxMayStillBeDelivered(ctx context.Context, threadID st
 		if errors.As(err, &notFound) || strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
 			return false
 		}
-		logging.Warn("[Reconciler] Could not ask Temporal whether a thread's run is still open; leaving its mailbox for the next pass",
+		logging.WarnContext(ctx, "[Reconciler] Could not ask Temporal whether a thread's run is still open; leaving its mailbox for the next pass",
 			"threadID", threadID, "workflowID", ownerID, "error", err)
 		return true
 	}
 	if desc.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		logging.Info("[Reconciler] Leaving a terminal thread's queued mail: its run is still open and may deliver it",
+		logging.InfoContext(ctx, "[Reconciler] Leaving a terminal thread's queued mail: its run is still open and may deliver it",
 			"threadID", threadID, "workflowID", ownerID)
 		return true
 	}
@@ -2777,7 +2777,7 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 		// One summary line per pass when anything anomalous was found; silence
 		// when clean. The per-anomaly detail is in the ERROR logs.
 		if total, summary := stats.snapshot(); total > 0 {
-			logging.Info("[Reconciler] Anomalies this pass",
+			logging.InfoContext(ctx, "[Reconciler] Anomalies this pass",
 				"total", total,
 				"byClass", summary,
 			)
@@ -2851,7 +2851,7 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 		return reconciled, errors
 	}
 
-	logging.Debug("[Reconciler] Reconciling workflows",
+	logging.DebugContext(ctx, "[Reconciler] Reconciling workflows",
 		"running", len(allWorkflows),
 	)
 
@@ -2898,7 +2898,7 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	r.resetGuard.Prune(runningIDs)
 
 	if reconciled > 0 {
-		logging.Info("[Reconciler] Reconciliation complete",
+		logging.InfoContext(ctx, "[Reconciler] Reconciliation complete",
 			"reconciled", reconciled,
 			"errors", len(errors),
 		)
@@ -2986,7 +2986,7 @@ func (r *Reconciler) emitSilentTerminationError(ctx context.Context, wf *db.Work
 		ErrorSummary: summary,
 		Thread:       wf.Thread,
 	}); err != nil {
-		logging.Warn("[Reconciler] Failed to emit termination error to chat",
+		logging.WarnContext(ctx, "[Reconciler] Failed to emit termination error to chat",
 			"error", err,
 			"workflowID", wf.ID,
 			"chatID", wf.ChatID,
@@ -3102,7 +3102,7 @@ func (r *Reconciler) closeReason(ctx context.Context, workflowID string, state *
 		event, err := iter.Next()
 		if err != nil {
 			// Best-effort enrichment: the error is still emitted without it.
-			logging.Warn("[Reconciler] Failed to read close event for close reason",
+			logging.WarnContext(ctx, "[Reconciler] Failed to read close event for close reason",
 				"error", err,
 				"workflowID", workflowID,
 			)
@@ -3158,7 +3158,7 @@ func (r *Reconciler) StartBackgroundReconciliation(ctx context.Context) {
 	r.pollDone = make(chan struct{})
 	r.mu.Unlock()
 
-	logging.Info("[Reconciler] Starting background reconciliation",
+	logging.InfoContext(ctx, "[Reconciler] Starting background reconciliation",
 		"interval", r.pollInterval,
 	)
 
@@ -3171,10 +3171,10 @@ func (r *Reconciler) StartBackgroundReconciliation(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
-				logging.Info("[Reconciler] Context cancelled, stopping background reconciliation")
+				logging.InfoContext(ctx, "[Reconciler] Context cancelled, stopping background reconciliation")
 				return
 			case <-r.stopPolling:
-				logging.Info("[Reconciler] Stop signal received, stopping background reconciliation")
+				logging.InfoContext(ctx, "[Reconciler] Stop signal received, stopping background reconciliation")
 				return
 			case <-ticker.C:
 				// Run reconciliation with a timeout
@@ -3183,7 +3183,7 @@ func (r *Reconciler) StartBackgroundReconciliation(ctx context.Context) {
 				cancel()
 
 				if len(errors) > 0 {
-					logging.Warn("[Reconciler] Background reconciliation had errors",
+					logging.WarnContext(ctx, "[Reconciler] Background reconciliation had errors",
 						"reconciled", reconciled,
 						"errors", len(errors),
 					)

@@ -257,7 +257,7 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 	if errors.Is(err, errDrainBatchTaken) {
 		// Rolled back cleanly: the rows are queued again and whoever took them is
 		// delivering them. "Nothing delivered" is the honest answer for THIS call.
-		logging.Info("[DrainAgentMessages] Batch was claimed by another writer; rolled back and left it to them",
+		logging.InfoContext(ctx, "[DrainAgentMessages] Batch was claimed by another writer; rolled back and left it to them",
 			"chatID", input.ChatID, "thread", input.Thread, "count", len(queued))
 		return DrainAgentMessagesOutput{}, nil
 	}

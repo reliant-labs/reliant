@@ -79,7 +79,7 @@ func configuredAccounts(ctx context.Context, repo db.Repository, userID string) 
 	}
 	limits, err := repo.ListAccountLimits(ctx, userID)
 	if err != nil {
-		logging.Warn("Could not read account limit state; treating every account as unlimited", "user_id", userID, "error", err)
+		logging.WarnContext(ctx, "Could not read account limit state; treating every account as unlimited", "user_id", userID, "error", err)
 	}
 	now := time.Now()
 
@@ -195,7 +195,7 @@ func accountDriverConfig(ctx context.Context, userID string, acct *core.AccountW
 				secret = healed
 				cfg.APIKey = healed
 			} else {
-				logging.Warn("Skipping reliant provider key: not an rlat_ access token and it could not be healed",
+				logging.WarnContext(ctx, "Skipping reliant provider key: not an rlat_ access token and it could not be healed",
 					"user_id", userID, "reason", "legacy_reliant_key_format",
 					"heal_configured", configured, "error", healErr)
 				return cfg, false
@@ -258,7 +258,7 @@ func withAccountAvailability(ctx context.Context, accounts map[models.DriverID][
 			report, err := reporter.ReportAvailability(ctx)
 			var rejected *registry.CredentialRejectedError
 			if errors.As(err, &rejected) {
-				logging.Warn("provider rejected the stored credential; account unavailable until reconnected",
+				logging.WarnContext(ctx, "provider rejected the stored credential; account unavailable until reconnected",
 					"driver", string(driverID), "account_id", acct.AccountID, "error", err)
 				if firstReason == "" {
 					firstReason = fmt.Sprintf("%s rejected the saved credential (HTTP %d: %s)",
@@ -267,7 +267,7 @@ func withAccountAvailability(ctx context.Context, accounts map[models.DriverID][
 				continue
 			}
 			if err != nil {
-				logging.Warn("provider availability report failed (outage, not a credential verdict); treating its models as servable",
+				logging.WarnContext(ctx, "provider availability report failed (outage, not a credential verdict); treating its models as servable",
 					"driver", string(driverID), "account_id", acct.AccountID, "error", err)
 				kept[driverID] = append(kept[driverID], acct)
 				continue

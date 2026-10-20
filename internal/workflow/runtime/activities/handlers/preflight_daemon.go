@@ -214,7 +214,7 @@ func (a *PreflightDaemonCheckActivity) terminal(ctx context.Context, chatID stri
 		return PreflightDaemonCheckOutput{}, cause
 	}
 	if _, err := a.repo.SetChatQueuedForMachine(ctx, chatID, true); err != nil {
-		logging.Error("[PreflightDaemonCheck] Failed to queue the message for the machine; the user will have to send it again",
+		logging.ErrorContext(ctx, "[PreflightDaemonCheck] Failed to queue the message for the machine; the user will have to send it again",
 			"chatID", chatID, "error", err)
 		return PreflightDaemonCheckOutput{}, cause
 	}
@@ -258,7 +258,7 @@ func machineNotComing(ctx context.Context, router toolexec.DaemonRouter, userID 
 	}
 	state, err := reader.MachineState(ctx, userID, selector)
 	if err != nil {
-		logging.Warn("[PreflightDaemonCheck] Could not read the machine's state; still waiting for it",
+		logging.WarnContext(ctx, "[PreflightDaemonCheck] Could not read the machine's state; still waiting for it",
 			"userID", userID, "error", err)
 		return nil
 	}
@@ -283,7 +283,7 @@ func machineNotComing(ctx context.Context, router toolexec.DaemonRouter, userID 
 // answered it. A cheap UPDATE that matches no row when there is none.
 func (a *PreflightDaemonCheckActivity) machineReady(ctx context.Context, chatID string) {
 	if _, err := a.repo.SetChatQueuedForMachine(ctx, chatID, false); err != nil {
-		logging.Warn("[PreflightDaemonCheck] Failed to clear the queued-for-machine marker", "chatID", chatID, "error", err)
+		logging.WarnContext(ctx, "[PreflightDaemonCheck] Failed to clear the queued-for-machine marker", "chatID", chatID, "error", err)
 	}
 }
 
@@ -291,7 +291,7 @@ func (a *PreflightDaemonCheckActivity) machineReady(ctx context.Context, chatID 
 // the chat list surfaces as WAITING_FOR_DAEMON. Best-effort.
 func (a *PreflightDaemonCheckActivity) setBlocked(ctx context.Context, chatID string, blocked bool) {
 	if err := a.repo.SetChatDaemonBlocked(ctx, chatID, blocked); err != nil {
-		logging.Warn("[PreflightDaemonCheck] Failed to update daemon-blocked marker", "chatID", chatID, "blocked", blocked, "error", err)
+		logging.WarnContext(ctx, "[PreflightDaemonCheck] Failed to update daemon-blocked marker", "chatID", chatID, "blocked", blocked, "error", err)
 	}
 }
 

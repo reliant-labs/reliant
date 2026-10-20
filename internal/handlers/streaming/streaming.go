@@ -88,7 +88,7 @@ func (s *Service) StreamUserUpdates(
 	// --- User-level initialization ---
 	latestSeq, err := s.deps.Repo.GetLatestUserUpdateSequence(ctx, userID)
 	if err != nil {
-		logging.Error(LOG_PREFIX_STREAM_USER+" Failed to get latest sequence", "error", err, "userID", userID)
+		logging.ErrorContext(ctx, LOG_PREFIX_STREAM_USER+" Failed to get latest sequence", "error", err, "userID", userID)
 		return err
 	}
 
@@ -118,7 +118,7 @@ func (s *Service) StreamUserUpdates(
 	lastUserSeq := sinceSeq
 	if latestSeq > sinceSeq {
 		if err := s.sendUserUpdateBatches(ctx, userID, sinceSeq, latestSeq, filter, stream); err != nil {
-			logging.Error(LOG_PREFIX_STREAM_USER+" Failed to send updates", "error", err, "userID", userID)
+			logging.ErrorContext(ctx, LOG_PREFIX_STREAM_USER+" Failed to send updates", "error", err, "userID", userID)
 			return err
 		}
 		lastUserSeq = latestSeq
@@ -139,7 +139,7 @@ func (s *Service) StreamUserUpdates(
 			return connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 		}
 
-		logging.Debug(LOG_PREFIX_STREAM_USER+" Subscribing to chat detail events",
+		logging.DebugContext(ctx, LOG_PREFIX_STREAM_USER+" Subscribing to chat detail events",
 			"userID", userID, "chatID", subscribeChatID[:8])
 
 		// Subscribe to the streaming hub for ephemeral events (streaming deltas)
@@ -170,11 +170,11 @@ func (s *Service) StreamUserUpdates(
 		if !useSnapshot {
 			chatLatestSeq, err = s.deps.Repo.GetLatestUpdateSequence(ctx, subscribeChatID)
 			if err != nil {
-				logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to get latest sequence", "error", err, "chatID", subscribeChatID[:8])
+				logging.ErrorContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to get latest sequence", "error", err, "chatID", subscribeChatID[:8])
 				return err
 			}
 			if chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq) {
-				logging.Debug(LOG_PREFIX_STREAM_CHAT+" Cursor not replayable, sending snapshot",
+				logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Cursor not replayable, sending snapshot",
 					"chatID", subscribeChatID[:8], "chatSinceSeq", chatSinceSeq, "chatLatestSeq", chatLatestSeq)
 				useSnapshot = true
 			}
@@ -186,14 +186,14 @@ func (s *Service) StreamUserUpdates(
 			// anything committed in between is in the snapshot.
 			snapshotSeq, err := s.sendChatSnapshotViaUserStream(ctx, subscribeChatID, stream)
 			if err != nil {
-				logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to send snapshot", "error", err, "chatID", subscribeChatID[:8])
+				logging.ErrorContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to send snapshot", "error", err, "chatID", subscribeChatID[:8])
 				return err
 			}
 			lastChatSeq = snapshotSeq
 		} else {
 			if chatLatestSeq > chatSinceSeq {
 				if err := s.sendChatUpdateBatchesViaUserStream(ctx, subscribeChatID, chatSinceSeq, chatLatestSeq, stream); err != nil {
-					logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to send updates", "error", err, "chatID", subscribeChatID[:8])
+					logging.ErrorContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to send updates", "error", err, "chatID", subscribeChatID[:8])
 					return err
 				}
 			}
@@ -267,7 +267,7 @@ func (s *Service) StreamUserUpdates(
 			// revealed it. The client never infers loss from a skip.
 			if event.SequenceNumber > lastUserSeq+1 {
 				if err := s.sendUserUpdateBatches(ctx, userID, lastUserSeq, event.SequenceNumber-1, filter, stream); err != nil {
-					logging.Error(LOG_PREFIX_STREAM_USER+" Failed to backfill dropped updates", "error", err,
+					logging.ErrorContext(ctx, LOG_PREFIX_STREAM_USER+" Failed to backfill dropped updates", "error", err,
 						"userID", userID, "fromSeq", lastUserSeq, "toSeq", event.SequenceNumber-1)
 					return err
 				}
@@ -308,7 +308,7 @@ func (s *Service) StreamUserUpdates(
 				//
 				// Drop to a nil channel so this branch is never selected again
 				// and the stream stays up on its durable path.
-				logging.Warn(LOG_PREFIX_STREAM_CHAT+" Delta hub closed — continuing without live deltas",
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Delta hub closed — continuing without live deltas",
 					"chatID", subscribeChatID[:min(8, len(subscribeChatID))])
 				hubEventCh = nil
 				continue
@@ -563,7 +563,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 		var err error
 		totalMessageCount, err = s.deps.Repo.CountMessagesInChat(gctx, chatID)
 		if err != nil {
-			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to count messages", "error", err, "chatID", chatID[:8])
+			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to count messages", "error", err, "chatID", chatID[:8])
 			return nil // non-fatal; falls back to the assembled count below
 		}
 		return nil
@@ -575,7 +575,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 		var err error
 		liveToolCalls, err = s.deps.Repo.ListLiveToolCallsByChat(gctx, chatID)
 		if err != nil {
-			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list live tool calls", "error", err, "chatID", chatID[:8])
+			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to list live tool calls", "error", err, "chatID", chatID[:8])
 			liveToolCalls = nil
 		}
 		return nil
@@ -585,7 +585,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 		var err error
 		otherUpdates, err = s.getNonMessageUpdates(gctx, chatID)
 		if err != nil {
-			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to get non-message updates", "error", err, "chatID", chatID[:8])
+			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to get non-message updates", "error", err, "chatID", chatID[:8])
 			otherUpdates = []*reliantv1.ChatUpdateData{}
 			return nil // non-fatal
 		}
@@ -627,7 +627,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 		recent, err := threadsSvc.LoadRecentDisplayMessages(gctx2, mainThread, snapshotMessageLimit+1)
 		if err != nil {
 			if err.Error() != "thread not found" {
-				logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to load main thread messages via CW chain",
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to load main thread messages via CW chain",
 					"error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
 			}
 			mainThreadMessages = []*db.Message{}
@@ -645,7 +645,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 	g2.Go(func() error {
 		contextUsage, err := s.deps.Repo.GetContextUsage(gctx2, chatID, mainThread)
 		if err != nil {
-			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to get context usage", "error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
+			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to get context usage", "error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
 			return nil // non-fatal
 		}
 		if contextUsage != nil {
@@ -688,7 +688,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 	}
 	siblingMessages, err := s.deps.Repo.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThread, fromSeq, snapshotMessageLimit)
 	if err != nil {
-		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to load sibling thread messages",
+		logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to load sibling thread messages",
 			"error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
 		siblingMessages = nil // non-fatal: the transcript still renders
 	}
@@ -719,7 +719,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 
 	allBlocks, err := s.deps.Repo.ListContentBlocksForMessages(ctx, messageIDs)
 	if err != nil {
-		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to batch load content blocks",
+		logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to batch load content blocks",
 			"error", err, "chatID", chatID[:8], "messageCount", len(messages))
 		// Fallback: return empty blocks rather than fail
 		allBlocks = []*db.MessageContentBlock{}
@@ -760,7 +760,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 	for _, msg := range messages {
 		if len(messageBlocks[msg.ID]) == 0 {
 			messagesSkipped++
-			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Skipping message with no content blocks",
+			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Skipping message with no content blocks",
 				"chatID", chatID[:8], "messageID", msg.ID[:8], "role", msg.Role, "seq", msg.Seq)
 			continue
 		}
@@ -808,7 +808,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 	}
 
 	if messagesSkipped > 0 {
-		logging.Debug(LOG_PREFIX_STREAM_CHAT+" Snapshot built",
+		logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Snapshot built",
 			"chatID", chatID[:8], "messages", len(assembledMessages), "skipped", messagesSkipped)
 	}
 
@@ -885,7 +885,7 @@ type threadSnapshotMetadata struct {
 func (s *Service) threadMetadata(ctx context.Context, chatID string) map[string]threadSnapshotMetadata {
 	threadRows, err := s.deps.Repo.ListThreadsByConversation(ctx, chatID)
 	if err != nil {
-		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list threads for metadata reconciliation",
+		logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to list threads for metadata reconciliation",
 			"error", err, "chatID", chatID[:8])
 		return map[string]threadSnapshotMetadata{}
 	}
@@ -943,7 +943,7 @@ func (s *Service) threadMetadata(ctx context.Context, chatID string) map[string]
 func (s *Service) spawnToolCallIDsByThread(ctx context.Context, chatID string) map[string]string {
 	byThread, err := s.deps.Repo.SpawnToolCallIDsByChildThread(ctx, chatID)
 	if err != nil {
-		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to resolve spawn tool call ids for cancel reconciliation",
+		logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to resolve spawn tool call ids for cancel reconciliation",
 			"error", err, "chatID", chatID[:8])
 		return map[string]string{}
 	}
@@ -1102,7 +1102,7 @@ func (s *Service) snapshotToolCalls(ctx context.Context, blocks []*db.MessageCon
 	if len(blockCallIDs) > 0 {
 		byID, err := s.deps.Repo.ListToolCallsByIDs(ctx, blockCallIDs)
 		if err != nil {
-			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list tool calls for snapshot", "error", err, "toolCallCount", len(blockCallIDs))
+			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to list tool calls for snapshot", "error", err, "toolCallCount", len(blockCallIDs))
 		}
 		for _, call := range byID {
 			add(call)

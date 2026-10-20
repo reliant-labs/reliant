@@ -74,7 +74,7 @@ func (a *CleanupActivity) Category() schema.ActivityCategory {
 
 // Execute cancels pending approvals and notifies UI
 func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (CleanupOutput, error) {
-	logging.Debug("[Cleanup] Starting cleanup for chat", "chatID", input.ChatID)
+	logging.DebugContext(ctx, "[Cleanup] Starting cleanup for chat", "chatID", input.ChatID)
 
 	// Cancel orphaned tool calls (stops spinning indicators in UI for cancelled tool executions)
 	toolCallsCancelled := a.cancelOrphanedToolCalls(ctx, input.ChatID, input.Thread)
@@ -82,16 +82,16 @@ func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (Clea
 	// Get all pending approvals for this chat
 	pendingApprovals, err := a.repo.ListPendingApprovalsByChat(ctx, input.ChatID)
 	if err != nil {
-		logging.Error("[Cleanup] Failed to list pending approvals", "error", err)
+		logging.ErrorContext(ctx, "[Cleanup] Failed to list pending approvals", "error", err)
 		return CleanupOutput{ToolCallsCancelled: toolCallsCancelled}, fmt.Errorf("failed to list pending approvals: %w", err)
 	}
 
 	if len(pendingApprovals) == 0 {
-		logging.Debug("[Cleanup] No pending approvals to cancel")
+		logging.DebugContext(ctx, "[Cleanup] No pending approvals to cancel")
 		return CleanupOutput{ApprovalsCancelled: 0, ToolCallsCancelled: toolCallsCancelled}, nil
 	}
 
-	logging.Debug("[Cleanup] Found pending approvals to cancel", "count", len(pendingApprovals))
+	logging.DebugContext(ctx, "[Cleanup] Found pending approvals to cancel", "count", len(pendingApprovals))
 
 	// Cancel each pending approval
 	cancelledCount := 0
@@ -127,16 +127,16 @@ func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (Clea
 		})
 
 		if err != nil {
-			logging.Error("[Cleanup] Failed to cancel approval", "approvalID", approval.ID, "error", err)
+			logging.ErrorContext(ctx, "[Cleanup] Failed to cancel approval", "approvalID", approval.ID, "error", err)
 			// Continue with other approvals even if one fails
 			continue
 		}
 
 		cancelledCount++
-		logging.Debug("[Cleanup] Cancelled approval", "approvalID", approval.ID)
+		logging.DebugContext(ctx, "[Cleanup] Cancelled approval", "approvalID", approval.ID)
 	}
 
-	logging.Info("[Cleanup] Cleanup completed", "approvalsCancelled", cancelledCount, "toolCallsCancelled", toolCallsCancelled)
+	logging.InfoContext(ctx, "[Cleanup] Cleanup completed", "approvalsCancelled", cancelledCount, "toolCallsCancelled", toolCallsCancelled)
 	return CleanupOutput{ApprovalsCancelled: cancelledCount, ToolCallsCancelled: toolCallsCancelled}, nil
 }
 
@@ -164,7 +164,7 @@ func (a *CleanupActivity) cancelOrphanedToolCalls(ctx context.Context, chatID, t
 	}
 	msgs, err := a.repo.ListMessages(ctx, chatID, opts)
 	if err != nil {
-		logging.Error("[Cleanup] Failed to list messages for tool call cleanup", "chatID", chatID, "thread", thread, "error", err)
+		logging.ErrorContext(ctx, "[Cleanup] Failed to list messages for tool call cleanup", "chatID", chatID, "thread", thread, "error", err)
 		return 0
 	}
 
@@ -184,7 +184,7 @@ func (a *CleanupActivity) cancelOrphanedToolCalls(ctx context.Context, chatID, t
 		// Get content blocks for this message
 		blocks, err := a.repo.ListContentBlocks(ctx, msg.ID)
 		if err != nil {
-			logging.Error("[Cleanup] Failed to list content blocks", "messageID", msg.ID, "error", err)
+			logging.ErrorContext(ctx, "[Cleanup] Failed to list content blocks", "messageID", msg.ID, "error", err)
 			continue
 		}
 
@@ -203,7 +203,7 @@ func (a *CleanupActivity) cancelOrphanedToolCalls(ctx context.Context, chatID, t
 			// Check if there's a matching tool_result
 			resultBlock, err := a.repo.GetToolResultBlock(ctx, toolCallID)
 			if err != nil {
-				logging.Error("[Cleanup] Failed to check for tool result", "toolCallID", toolCallID, "error", err)
+				logging.ErrorContext(ctx, "[Cleanup] Failed to check for tool result", "toolCallID", toolCallID, "error", err)
 				continue
 			}
 			if resultBlock != nil {
@@ -237,7 +237,7 @@ func (a *CleanupActivity) cancelOrphanedToolCalls(ctx context.Context, chatID, t
 		// Create the repair tool message and content blocks
 		repairMsgID, err := a.createRepairToolMessage(ctx, chatID, assistantMsg, orphans)
 		if err != nil {
-			logging.Error("[Cleanup] Failed to create repair tool message",
+			logging.ErrorContext(ctx, "[Cleanup] Failed to create repair tool message",
 				"error", err,
 				"chatID", chatID,
 				"assistantMessageID", msgID,
@@ -252,7 +252,7 @@ func (a *CleanupActivity) cancelOrphanedToolCalls(ctx context.Context, chatID, t
 
 		// Emit UI events for each repaired tool call
 		for _, orphan := range orphans {
-			logging.Info("[Cleanup] Repaired orphaned tool call",
+			logging.InfoContext(ctx, "[Cleanup] Repaired orphaned tool call",
 				"toolCallID", orphan.ToolCallID,
 				"toolName", orphan.ToolName,
 				"blockID", orphan.BlockID,
@@ -264,7 +264,7 @@ func (a *CleanupActivity) cancelOrphanedToolCalls(ctx context.Context, chatID, t
 	}
 
 	if cancelledCount > 0 {
-		logging.Info("[Cleanup] Repaired orphaned tool calls", "count", cancelledCount, "thread", thread)
+		logging.InfoContext(ctx, "[Cleanup] Repaired orphaned tool calls", "count", cancelledCount, "thread", thread)
 	}
 
 	return cancelledCount
@@ -309,7 +309,7 @@ func (a *CleanupActivity) callIsStillLive(ctx context.Context, toolCallID, toolN
 	// do not know (leave it alone).
 	calls, err := a.repo.ListToolCallsByIDs(ctx, []string{toolCallID})
 	if err != nil {
-		logging.Warn("[Cleanup] Could not read tool call status; treating as live and skipping repair",
+		logging.WarnContext(ctx, "[Cleanup] Could not read tool call status; treating as live and skipping repair",
 			"toolCallID", toolCallID, "toolName", toolName, "error", err)
 		return true
 	}
@@ -333,7 +333,7 @@ func (a *CleanupActivity) callIsStillLive(ctx context.Context, toolCallID, toolN
 			}
 		}
 
-		logging.Debug("[Cleanup] Tool call has no result yet but is still executing; not repairing",
+		logging.DebugContext(ctx, "[Cleanup] Tool call has no result yet but is still executing; not repairing",
 			"toolCallID", toolCallID, "toolName", toolName, "status", call.Status)
 		return true
 	}
@@ -416,7 +416,7 @@ func (a *CleanupActivity) createRepairToolMessage(
 		}
 
 		if err := a.repo.CreateContentBlock(ctx, block); err != nil {
-			logging.Error("[Cleanup] Failed to create repair content block",
+			logging.ErrorContext(ctx, "[Cleanup] Failed to create repair content block",
 				"error", err,
 				"chatID", chatID,
 				"blockID", blockID,
@@ -425,7 +425,7 @@ func (a *CleanupActivity) createRepairToolMessage(
 			continue
 		}
 
-		logging.Debug("[Cleanup] Created repair tool_result",
+		logging.DebugContext(ctx, "[Cleanup] Created repair tool_result",
 			"chatID", chatID,
 			"messageID", msgID,
 			"toolCallID", orphan.ToolCallID,
@@ -459,12 +459,12 @@ func (a *CleanupActivity) emitToolCancelledStatus(ctx context.Context, chatID, c
 
 	updateDataJSON, err := json.Marshal(updateData)
 	if err != nil {
-		logging.Error("[Cleanup] Failed to marshal tool cancelled update", "error", err, "toolCallID", toolCallID)
+		logging.ErrorContext(ctx, "[Cleanup] Failed to marshal tool cancelled update", "error", err, "toolCallID", toolCallID)
 		return
 	}
 
 	if err := a.repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeToolCall, contentBlockID, string(updateDataJSON)); err != nil {
-		logging.Error("[Cleanup] Failed to emit tool cancelled update", "error", err, "toolCallID", toolCallID)
+		logging.ErrorContext(ctx, "[Cleanup] Failed to emit tool cancelled update", "error", err, "toolCallID", toolCallID)
 	}
 
 	now := time.Now().UTC()
@@ -478,7 +478,7 @@ func (a *CleanupActivity) emitToolCancelledStatus(ctx context.Context, chatID, c
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}); err != nil {
-		logging.Error("[Cleanup] Failed to persist tool cancelled status", "error", err, "toolCallID", toolCallID)
+		logging.ErrorContext(ctx, "[Cleanup] Failed to persist tool cancelled status", "error", err, "toolCallID", toolCallID)
 	}
 }
 

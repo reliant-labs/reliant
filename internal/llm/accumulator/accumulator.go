@@ -37,7 +37,7 @@ func StreamAndAccumulate(
 ) (*llm.DriverResponse, error) {
 	streamStart := time.Now()
 
-	logging.Debug("[ACCUMULATOR] Starting streaming with accumulation",
+	logging.DebugContext(ctx, "[ACCUMULATOR] Starting streaming with accumulation",
 		"driver", driver.Name(),
 		"promptCount", len(prompts),
 		"messageCount", len(messages),
@@ -51,7 +51,7 @@ func StreamAndAccumulate(
 	model := driver.Model()
 	ceiling := int64(models.PromptCeiling(int(model.ContextWindow), int(model.DefaultMaxTokens)))
 	if message.TrimMessagesToFitContextWindow(messages, nil, nil, ceiling) {
-		logging.Debug("[ACCUMULATOR] Trimmed messages to fit context window",
+		logging.DebugContext(ctx, "[ACCUMULATOR] Trimmed messages to fit context window",
 			"promptCeiling", ceiling)
 	}
 
@@ -71,11 +71,11 @@ func StreamAndAccumulate(
 		defer func() {
 			if r := recover(); r != nil {
 				// Not in activity context (e.g., tests), ignore
-				logging.Debug("[ACCUMULATOR] Not in activity context, skipping heartbeat")
+				logging.DebugContext(ctx, "[ACCUMULATOR] Not in activity context, skipping heartbeat")
 			}
 		}()
 		activity.RecordHeartbeat(ctx, "streaming")
-		logging.Debug("[ACCUMULATOR] Heartbeat sent")
+		logging.DebugContext(ctx, "[ACCUMULATOR] Heartbeat sent")
 	}
 
 	// Get streaming channel
@@ -117,7 +117,7 @@ func StreamAndAccumulate(
 			case llm.EventError:
 				// Error during streaming
 				streamError = event.Error
-				logging.Error("[ACCUMULATOR] Stream error", "error", event.Error)
+				logging.ErrorContext(ctx, "[ACCUMULATOR] Stream error", "error", event.Error)
 
 			case llm.EventContentStart, llm.EventToolUseStart, llm.EventContentStop:
 				// Lifecycle events - just track for logging
@@ -127,11 +127,11 @@ func StreamAndAccumulate(
 				// Extended thinking - we don't need to accumulate this for compaction
 				// but we log it for debugging
 				if event.Thinking != "" {
-					logging.Debug("[ACCUMULATOR] Thinking delta", "length", len(event.Thinking))
+					logging.DebugContext(ctx, "[ACCUMULATOR] Thinking delta", "length", len(event.Thinking))
 				}
 
 			default:
-				logging.Warn("[ACCUMULATOR] Unknown event type", "type", event.Type)
+				logging.WarnContext(ctx, "[ACCUMULATOR] Unknown event type", "type", event.Type)
 			}
 
 		case <-heartbeatTicker.C:

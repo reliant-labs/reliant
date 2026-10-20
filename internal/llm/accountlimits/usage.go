@@ -233,14 +233,14 @@ func (f *Fetcher) reconcileBench(ctx context.Context, acct core.ProviderAccount,
 	if ex := exhausted(st.Windows, st.RepresentativeWindow, st.Status, now); ex.Exhausted {
 		eff, err := bench(ctx, f.Store, now, acct.UserID, acct.ID, ex.Until, ex.Window)
 		if err != nil {
-			logging.Warn("benching account from its usage reading failed", "account_id", acct.ID, "error", err)
+			logging.WarnContext(ctx, "benching account from its usage reading failed", "account_id", acct.ID, "error", err)
 			return time.Time{}
 		}
 		return eff
 	}
 	if cur != nil && cur.LimitedUntil != nil && cur.LimitedUntil.After(now) && cur.LimitedProbes == 0 {
 		if err := f.Store.BenchAccount(ctx, acct.UserID, acct.ID, *cur.LimitedUntil, cur.LimitedWindow, false); err != nil {
-			logging.Warn("restoring account bench after usage reading failed", "account_id", acct.ID, "error", err)
+			logging.WarnContext(ctx, "restoring account bench after usage reading failed", "account_id", acct.ID, "error", err)
 			return time.Time{}
 		}
 		return *cur.LimitedUntil
@@ -263,10 +263,10 @@ func (f *Fetcher) recordFailure(ctx context.Context, res Result, cur *core.Limit
 	// One warning when an account's usage reads start failing, then quiet: the
 	// failure is on the row, and a dead endpoint must not fill the log.
 	if failures == 1 || errOf(cur) != text {
-		logging.Warn("usage API read failed; account runs on response headers",
+		logging.WarnContext(ctx, "usage API read failed; account runs on response headers",
 			"account_id", res.Account.ID, "provider", res.Account.Provider, "reason", text, "retry_in", delay.Round(time.Second).String())
 	} else {
-		logging.Debug("usage API read still failing", "account_id", res.Account.ID, "provider", res.Account.Provider,
+		logging.DebugContext(ctx, "usage API read still failing", "account_id", res.Account.ID, "provider", res.Account.Provider,
 			"failures", failures, "long_term", longTerm)
 	}
 	res.Outcome, res.Err = OutcomeFailed, fetchErr
@@ -283,7 +283,7 @@ func (f *Fetcher) reload(ctx context.Context, accountID string, fallback *core.L
 
 func (f *Fetcher) schedule(ctx context.Context, accountID string, next time.Time, failures int, errText string) {
 	if err := f.Store.ScheduleUsagePoll(ctx, accountID, next, failures, errText); err != nil && !errors.Is(err, core.ErrProviderAccountNotFound) {
-		logging.Warn("scheduling usage poll failed", "account_id", accountID, "error", err)
+		logging.WarnContext(ctx, "scheduling usage poll failed", "account_id", accountID, "error", err)
 	}
 }
 

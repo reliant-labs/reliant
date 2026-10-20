@@ -249,7 +249,7 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 
 	// FORK-DEBUG: Log resolved fork point
 	if fork != nil {
-		logging.Debug("[Fork] CreateWorkflowWithThread resolved fork point",
+		logging.DebugContext(ctx, "[Fork] CreateWorkflowWithThread resolved fork point",
 			"parentThreadID", fork.parentThreadID,
 			"forkAtMessageID", fork.forkAtMessageID,
 			"forkAtContextWindowID", fork.forkAtContextWindowID,

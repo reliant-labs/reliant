@@ -63,9 +63,9 @@ func (s *Service) ListPresets(
 
 	// 1. Load builtin + stored project presets from DB
 	loadResult := s.loadAllPresetsFromDB(ctx, req.Msg.ProjectId)
-	logging.Debug("Loaded presets from DB", "project_id", req.Msg.ProjectId, "valid", len(loadResult.Valid), "invalid", len(loadResult.Invalid))
+	logging.DebugContext(ctx, "Loaded presets from DB", "project_id", req.Msg.ProjectId, "valid", len(loadResult.Valid), "invalid", len(loadResult.Invalid))
 	for _, p := range loadResult.Valid {
-		logging.Debug("Preset", "name", p.Name, "source", p.Source)
+		logging.DebugContext(ctx, "Preset", "name", p.Name, "source", p.Source)
 		protoPreset, err := presetToProto(p)
 		if err != nil {
 			continue
@@ -86,7 +86,7 @@ func (s *Service) ListPresets(
 	// 2. Load user presets from database (highest priority, override file-based)
 	dbPresets, err := s.deps.Repo.ListUserPresetsByProject(ctx, userID, req.Msg.ProjectId)
 	if err != nil {
-		logging.Warn("Failed to load user presets from database", "error", err)
+		logging.WarnContext(ctx, "Failed to load user presets from database", "error", err)
 	} else {
 		for _, dbPreset := range dbPresets {
 			protoPreset := dbPresetToProto(dbPreset)
@@ -98,12 +98,12 @@ func (s *Service) ListPresets(
 	presetItemType := int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_PRESET)
 	overrides, err := s.deps.Repo.ListVisibilityOverrides(ctx, userID, presetItemType)
 	if err != nil {
-		logging.Warn("Failed to batch-load visibility overrides for presets", "error", err)
+		logging.WarnContext(ctx, "Failed to batch-load visibility overrides for presets", "error", err)
 		overrides = nil
 	}
 	hiddenDefaults, err := s.deps.Repo.ListHiddenItemDefaults(ctx, presetItemType)
 	if err != nil {
-		logging.Warn("Failed to batch-load hidden defaults for presets", "error", err)
+		logging.WarnContext(ctx, "Failed to batch-load hidden defaults for presets", "error", err)
 		hiddenDefaults = nil
 	}
 	hiddenDefaultSet := make(map[string]bool, len(hiddenDefaults))
@@ -263,7 +263,7 @@ func (s *Service) ListPresetsForWorkflow(
 		}
 		protoPreset, err := presetToProto(p)
 		if err != nil {
-			logging.Warn("Failed to convert preset to proto", "preset", p.Name, "error", err)
+			logging.WarnContext(ctx, "Failed to convert preset to proto", "preset", p.Name, "error", err)
 			continue
 		}
 		presetsBySlug[p.Name] = protoPreset
@@ -272,7 +272,7 @@ func (s *Service) ListPresetsForWorkflow(
 	// 2. User presets from the database that match this workflow's tag (highest priority)
 	if workflowTag := wf.GetPresets().GetTag(); workflowTag != "" {
 		if dbPresetsErr != nil {
-			logging.Warn("Failed to load user presets from database", "tag", workflowTag, "error", dbPresetsErr)
+			logging.WarnContext(ctx, "Failed to load user presets from database", "tag", workflowTag, "error", dbPresetsErr)
 		} else {
 			for _, dbPreset := range dbPresets {
 				presetsBySlug[dbPreset.Slug] = dbPresetToProto(dbPreset)
@@ -281,11 +281,11 @@ func (s *Service) ListPresetsForWorkflow(
 	}
 
 	if overridesErr != nil {
-		logging.Warn("Failed to batch-load visibility overrides for presets", "error", overridesErr)
+		logging.WarnContext(ctx, "Failed to batch-load visibility overrides for presets", "error", overridesErr)
 		overrides = nil
 	}
 	if hiddenErr != nil {
-		logging.Warn("Failed to batch-load hidden defaults for presets", "error", hiddenErr)
+		logging.WarnContext(ctx, "Failed to batch-load hidden defaults for presets", "error", hiddenErr)
 		hiddenDefaults = nil
 	}
 	hiddenDefaultSet := make(map[string]bool, len(hiddenDefaults))
@@ -553,7 +553,7 @@ func (s *Service) CreatePreset(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create preset: %w", err))
 	}
 
-	logging.Info("Created preset", "name", req.Msg.Name, "slug", slug, "user_id", userID)
+	logging.InfoContext(ctx, "Created preset", "name", req.Msg.Name, "slug", slug, "user_id", userID)
 
 	return connect.NewResponse(&reliantv1.CreatePresetResponse{
 		Success: true,
@@ -702,7 +702,7 @@ func (s *Service) UpdatePreset(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preset: %w", err))
 		}
 
-		logging.Info("Updated user preset", "slug", dbPreset.Slug, "name", dbPreset.Name, "user_id", userID)
+		logging.InfoContext(ctx, "Updated user preset", "slug", dbPreset.Slug, "name", dbPreset.Name, "user_id", userID)
 		return connect.NewResponse(&reliantv1.UpdatePresetResponse{
 			Success: true,
 			Preset:  dbPresetToProto(updated),
@@ -772,7 +772,7 @@ func (s *Service) DeletePreset(
 		if err := s.deps.Repo.DeletePreset(ctx, dbPreset.ID); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete preset: %w", err))
 		}
-		logging.Info("Deleted user preset", "slug", slug, "user_id", userID)
+		logging.InfoContext(ctx, "Deleted user preset", "slug", slug, "user_id", userID)
 		return connect.NewResponse(&reliantv1.DeletePresetResponse{
 			Success: true,
 		}), nil
@@ -850,7 +850,7 @@ func (s *Service) SetDefaultPreset(
 	if err == nil && setting.Value != "" {
 		// Parse existing JSON blob
 		if err := json.Unmarshal([]byte(setting.Value), &defaults); err != nil {
-			logging.Warn("Failed to parse existing defaults blob", "key", settingKey, "error", err)
+			logging.WarnContext(ctx, "Failed to parse existing defaults blob", "key", settingKey, "error", err)
 			// Start fresh on parse error
 			defaults = make(map[string]string)
 		}
@@ -874,7 +874,7 @@ func (s *Service) SetDefaultPreset(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to set default preset: %w", err))
 	}
 
-	logging.Info("Set default preset", "workflow", req.Msg.WorkflowName, "group", groupName, "preset", presetName)
+	logging.InfoContext(ctx, "Set default preset", "workflow", req.Msg.WorkflowName, "group", groupName, "preset", presetName)
 
 	return connect.NewResponse(&reliantv1.SetDefaultPresetResponse{
 		Success: true,
@@ -929,7 +929,7 @@ func (s *Service) resolveDefaultPresets(
 
 	wf, err := load(workflowName)
 	if err != nil {
-		logging.Warn("resolveDefaultPresets: workflow not found", "workflowName", workflowName, "error", err)
+		logging.WarnContext(ctx, "resolveDefaultPresets: workflow not found", "workflowName", workflowName, "error", err)
 		return defaults
 	}
 
@@ -1019,7 +1019,7 @@ func (s *Service) GetDefaultPresetsBatch(
 			userOverrides[setting.Key] = setting.Value
 		}
 	} else {
-		logging.Warn("GetDefaultPresetsBatch: failed to load preset default overrides", "error", settingsErr)
+		logging.WarnContext(ctx, "GetDefaultPresetsBatch: failed to load preset default overrides", "error", settingsErr)
 	}
 
 	opts := workflowsource.Options{UserID: userIDStr, ProjectID: req.Msg.ProjectId}

@@ -491,8 +491,8 @@ func logTerminalMachineState(ctx context.Context, router toolexec.DaemonRouter, 
 		fields = append(fields, "daemon_id", daemonID)
 	}
 	if state == terminalMachineNotAnswering {
-		logging.Error("[TerminalWS] Machine is connected but did not answer; the browser retries", fields...)
+		logging.ErrorContext(ctx, "[TerminalWS] Machine is connected but did not answer; the browser retries", fields...)
 		return
 	}
-	logging.Info("[TerminalWS] Machine not ready; the browser shows it and retries", fields...)
+	logging.InfoContext(ctx, "[TerminalWS] Machine not ready; the browser shows it and retries", fields...)
 }

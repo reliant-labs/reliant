@@ -77,12 +77,12 @@ func (s *Service) ListInbox(
 
 	pending, err := s.deps.Repo.ListInboxPending(ctx, userID)
 	if err != nil {
-		logging.Error("Failed to list inbox", "error", err)
+		logging.ErrorContext(ctx, "Failed to list inbox", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list inbox"))
 	}
 	failing, err := s.failingAutomations(ctx, userID)
 	if err != nil {
-		logging.Error("Failed to compute failing automations for inbox", "error", err)
+		logging.ErrorContext(ctx, "Failed to compute failing automations for inbox", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list inbox"))
 	}
 
@@ -94,13 +94,13 @@ func (s *Service) ListInbox(
 	storage, err := s.storageItems(ctx, userID)
 	if err != nil {
 		// Disk state is advisory; a failure here must not blank the whole inbox.
-		logging.Warn("Failed to compute storage inbox items", "error", err)
+		logging.WarnContext(ctx, "Failed to compute storage inbox items", "error", err)
 	}
 	items = append(items, storage...)
 
 	items, err = s.dropDismissed(ctx, userID, items)
 	if err != nil {
-		logging.Error("Failed to filter dismissed inbox items", "error", err)
+		logging.ErrorContext(ctx, "Failed to filter dismissed inbox items", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list inbox"))
 	}
 
@@ -160,7 +160,7 @@ func (s *Service) DismissInboxItem(
 		return nil, err
 	}
 	if err := s.deps.Repo.DismissInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds), time.Now().UTC()); err != nil {
-		logging.Error("Failed to dismiss inbox items", "error", err, "count", len(req.Msg.ItemIds))
+		logging.ErrorContext(ctx, "Failed to dismiss inbox items", "error", err, "count", len(req.Msg.ItemIds))
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to dismiss inbox item"))
 	}
 	return connect.NewResponse(&reliantv1.DismissInboxItemResponse{}), nil
@@ -179,7 +179,7 @@ func (s *Service) RestoreInboxItem(
 		return nil, err
 	}
 	if err := s.deps.Repo.RestoreInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds)); err != nil {
-		logging.Error("Failed to restore inbox items", "error", err, "count", len(req.Msg.ItemIds))
+		logging.ErrorContext(ctx, "Failed to restore inbox items", "error", err, "count", len(req.Msg.ItemIds))
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to restore inbox item"))
 	}
 	return connect.NewResponse(&reliantv1.RestoreInboxItemResponse{}), nil
@@ -575,7 +575,7 @@ func (s *Service) CleanupStorage(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("that machine is offline; reconnect it and try again"))
 	}
 	if err != nil {
-		logging.Error("Storage cleanup failed to start", "error", err, "daemonID", req.Msg.DaemonId)
+		logging.ErrorContext(ctx, "Storage cleanup failed to start", "error", err, "daemonID", req.Msg.DaemonId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage cleanup failed"))
 	}
 

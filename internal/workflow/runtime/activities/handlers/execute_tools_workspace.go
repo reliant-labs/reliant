@@ -150,7 +150,7 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	selector := toolDaemonSelector(worktreeDaemon, threadBoundExplicit(threadBound, worktreeDaemon, rtx.DaemonSelector))
 	resp, err := ensureWorkspace(ctx, ensurer, project.UserID, selector, req)
 	if err != nil {
-		logging.Warn("[ExecuteTools] Could not check the batch's working directory; running it as is",
+		logging.WarnContext(ctx, "[ExecuteTools] Could not check the batch's working directory; running it as is",
 			"chatID", rtx.ChatID, "path", path, "error", err)
 		return out
 	}
@@ -158,7 +158,7 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 		// The batch stays in the thread's workspace (buildToolRequest never
 		// moves a thread-bound call), so its calls fail there; say why once,
 		// in place of a fallback note that would claim they ran elsewhere.
-		logging.Warn("[ExecuteTools] Thread's worktree is missing and could not be recreated",
+		logging.WarnContext(ctx, "[ExecuteTools] Thread's worktree is missing and could not be recreated",
 			"chatID", rtx.ChatID, "thread", rtx.Thread, "path", path, "detail", resp.Detail)
 		out.note = threadWorkspaceMissingNote(worktree, resp.Detail)
 		return out
@@ -168,7 +168,7 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	}
 	out.note = workspaceNoticeText(resp.Notice, project)
 	if resp.Status != toolexec.WorkspacePresent {
-		logging.Info("[ExecuteTools] Batch working directory was missing",
+		logging.InfoContext(ctx, "[ExecuteTools] Batch working directory was missing",
 			"chatID", rtx.ChatID, "status", resp.Status, "path", path, "runningIn", resp.Path, "detail", resp.Detail)
 	}
 	return out
@@ -180,7 +180,7 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 func ensureWorkspace(ctx context.Context, ensurer workspaceEnsurer, userID string, selector *toolexec.DaemonSelector, req toolexec.WorkspaceEnsureRequest) (resp *toolexec.WorkspaceEnsureResponse, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			logging.Error("[ExecuteTools] Workspace check panicked", "path", req.Path, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+			logging.ErrorContext(ctx, "[ExecuteTools] Workspace check panicked", "path", req.Path, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
 			resp, err = nil, fmt.Errorf("workspace check panicked: %v", r)
 		}
 	}()

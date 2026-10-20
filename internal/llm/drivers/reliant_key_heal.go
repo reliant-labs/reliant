@@ -94,7 +94,7 @@ func (h *ReliantKeyHealer) Heal(ctx context.Context, userID string) (key string,
 	}); err != nil {
 		return "", false, fmt.Errorf("could not store the replacement key: %w", err)
 	}
-	logging.Info("Healed legacy reliant provider key", "user_id", userID)
+	logging.InfoContext(ctx, "Healed legacy reliant provider key", "user_id", userID)
 	return fresh, true, nil
 }
 
@@ -130,7 +130,7 @@ func (h *ReliantKeyHealer) Sweep(ctx context.Context) (healed, failed int, err e
 		switch {
 		case herr != nil:
 			failed++
-			logging.Warn("Reliant key sweep: heal failed", "user_id", id, "error", herr)
+			logging.WarnContext(ctx, "Reliant key sweep: heal failed", "user_id", id, "error", herr)
 		case did:
 			healed++
 		}
@@ -173,10 +173,10 @@ func RunReliantKeySweeps(ctx context.Context, h *ReliantKeyHealer, interval time
 	run := func() {
 		healed, failed, err := h.Sweep(ctx)
 		if err != nil {
-			logging.Warn("Reliant key sweep failed", "error", err)
+			logging.WarnContext(ctx, "Reliant key sweep failed", "error", err)
 			return
 		}
-		logging.Info("Reliant key sweep finished", "healed", healed, "failed", failed)
+		logging.InfoContext(ctx, "Reliant key sweep finished", "healed", healed, "failed", failed)
 	}
 	run()
 	t := time.NewTicker(interval)

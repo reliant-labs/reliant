@@ -555,7 +555,7 @@ func (w *worktreeTool) reposForDisplay(ctx context.Context, rc *rctx.ToolContext
 	}
 	repos, err := w.repo.ListReposByProject(ctx, project.ID)
 	if err != nil {
-		logging.Warn("worktree tool: could not list repos", "projectID", project.ID, "error", err)
+		logging.WarnContext(ctx, "worktree tool: could not list repos", "projectID", project.ID, "error", err)
 		return nil
 	}
 	return repos
@@ -605,7 +605,7 @@ func (w *worktreeTool) emitChanged(ctx context.Context, userID, projectID, workt
 	if err := w.repo.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{
 		ProjectID: &projectID, WorktreeID: &worktreeID,
 	}); err != nil {
-		logging.Warn("worktree tool: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
+		logging.WarnContext(ctx, "worktree tool: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 	}
 }
 

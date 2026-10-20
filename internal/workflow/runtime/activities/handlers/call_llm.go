@@ -561,7 +561,7 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 		MessageID:         output.GetMessageId(),
 		DisplayStyle:      int32(reliantv1.DisplayStyle_DISPLAY_STYLE_UNSPECIFIED),
 	}); err != nil {
-		logging.Warn("[CallLLM] Could not persist the partial turn of an interrupted call",
+		logging.WarnContext(ctx, "[CallLLM] Could not persist the partial turn of an interrupted call",
 			"chatID", rtx.ChatID, "thread", thread, "error", err)
 	}
 }
@@ -663,7 +663,7 @@ func (a *CallLLMActivity) cancelInFlightStreamingToolCalls(
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}); err != nil {
-			logging.Warn("[CallLLM] Could not persist cancelled status for an interrupted tool call",
+			logging.WarnContext(ctx, "[CallLLM] Could not persist cancelled status for an interrupted tool call",
 				"chatID", chatID, "toolCallID", call.ID, "toolName", call.Name, "error", err)
 		}
 
@@ -674,7 +674,7 @@ func (a *CallLLMActivity) cancelInFlightStreamingToolCalls(
 			Timestamp:   now.Format(time.RFC3339),
 			CompletedAt: now.Format(time.RFC3339),
 		}); err != nil {
-			logging.Warn("[CallLLM] Could not emit cancelled update for an interrupted tool call",
+			logging.WarnContext(ctx, "[CallLLM] Could not emit cancelled update for an interrupted tool call",
 				"chatID", chatID, "toolCallID", call.ID, "toolName", call.Name, "error", err)
 		}
 
@@ -694,7 +694,7 @@ func (a *CallLLMActivity) cancelInFlightStreamingToolCalls(
 	}
 
 	if cancelled > 0 {
-		logging.Info("[CallLLM] Cancelled in-flight tool calls of an interrupted stream",
+		logging.InfoContext(ctx, "[CallLLM] Cancelled in-flight tool calls of an interrupted stream",
 			"chatID", chatID, "thread", thread, "cancelledToolCalls", cancelled)
 	}
 }
@@ -809,7 +809,7 @@ func (a *CallLLMActivity) reportContentFreeTurn(
 	}); err != nil {
 		// The log is the last line of defense for the very thing this function
 		// exists to prevent, so it is loud.
-		logging.Error("[CallLLM] Could not report a content-free turn to the chat — "+
+		logging.ErrorContext(ctx, "[CallLLM] Could not report a content-free turn to the chat — "+
 			"the run has stopped and the user has no indication why",
 			"chatID", chatID, "thread", thread, "finishReason", string(reason), "error", err)
 	}
@@ -883,7 +883,7 @@ func (a *CallLLMActivity) hasQueuedAgentMessages(ctx context.Context, thread str
 	}
 	queued, err := a.repo.ListQueuedAgentMessagesForThread(ctx, thread)
 	if err != nil {
-		logging.Warn("[CallLLM] Could not check the mailbox for late arrivals; "+
+		logging.WarnContext(ctx, "[CallLLM] Could not check the mailbox for late arrivals; "+
 			"a message queued during this turn may wait for the next send",
 			"thread", thread, "error", err)
 		return false
@@ -985,12 +985,12 @@ func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread 
 	drain := NewDrainAgentMessagesActivity(a.repo, threads.NewService(a.repo))
 	out, err := drain.Execute(ctx, DrainAgentMessagesInput{ChatID: chatID, Thread: thread})
 	if err != nil {
-		logging.Warn("[CallLLM] Failed to deliver queued agent messages; they stay queued for the next turn",
+		logging.WarnContext(ctx, "[CallLLM] Failed to deliver queued agent messages; they stay queued for the next turn",
 			"chatID", chatID, "thread", thread, "error", err)
 		return
 	}
 	if out.HasMessages {
-		logging.Info("[CallLLM] Delivered queued agent messages into history",
+		logging.InfoContext(ctx, "[CallLLM] Delivered queued agent messages into history",
 			"chatID", chatID, "thread", thread, "count", out.Count)
 	}
 }
@@ -2384,7 +2384,7 @@ func (a *CallLLMActivity) spawnHistory(ctx context.Context, chat *db.Chat, threa
 	}
 	children, err := a.repo.ListSpawnChildren(ctx, thread)
 	if err != nil {
-		logging.Warn("[CallLLM] Could not read spawn history; spawn management tools not auto-granted",
+		logging.WarnContext(ctx, "[CallLLM] Could not read spawn history; spawn management tools not auto-granted",
 			"chatID", chat.ID, "thread", thread, "error", err)
 		return false, false
 	}
@@ -2396,7 +2396,7 @@ func (a *CallLLMActivity) spawnHistory(ctx context.Context, chat *db.Chat, threa
 	}
 	inherited, err := a.repo.ListInheritedSpawnChildren(ctx, thread)
 	if err != nil {
-		logging.Warn("[CallLLM] Could not read inherited sub-agents",
+		logging.WarnContext(ctx, "[CallLLM] Could not read inherited sub-agents",
 			"chatID", chat.ID, "thread", thread, "error", err)
 		return ownChildren, false
 	}
@@ -3092,7 +3092,7 @@ func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Ch
 		"cacheReadPct", cacheReadPct,
 		"totalTokens", usage.TokenCount,
 	}
-	logging.Info("[CallLLM] Usage", append(usageFields, shape.logFields(diff)...)...)
+	logging.InfoContext(ctx, "[CallLLM] Usage", append(usageFields, shape.logFields(diff)...)...)
 	metrics := analytics.LLMCallMetrics{
 		Provider:    driver.Name(),
 		Model:       string(model.ID),

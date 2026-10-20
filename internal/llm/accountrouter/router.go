@@ -126,7 +126,7 @@ func (r *router) Assign(ctx context.Context, req Request) (Result, error) {
 		if err != nil {
 			// A thread whose assignment cannot be read still gets an account;
 			// it just is not remembered, and must not overwrite what is stored.
-			logging.Warn("[AccountRouter] could not read the thread's account; routing without stickiness",
+			logging.WarnContext(ctx, "[AccountRouter] could not read the thread's account; routing without stickiness",
 				"error", err, "thread_id", req.ThreadID, "provider", provider)
 			persist = false
 		} else {
@@ -167,7 +167,7 @@ func (r *router) Assign(ctx context.Context, req Request) (Result, error) {
 			AssignedAt: now, Reason: res.Reason,
 		}, prevID)
 		if err != nil {
-			logging.Warn("[AccountRouter] could not store the thread's account; continuing unrecorded",
+			logging.WarnContext(ctx, "[AccountRouter] could not store the thread's account; continuing unrecorded",
 				"error", err, "thread_id", req.ThreadID, "provider", provider, "account_id", pick.cfg.AccountID)
 			res.Changed = true
 			return res, nil
@@ -181,7 +181,7 @@ func (r *router) Assign(ctx context.Context, req Request) (Result, error) {
 		// it is usable, else pick again against what it wrote.
 		cur, err := r.store.GetThreadAssignment(ctx, req.ThreadID, provider)
 		if err != nil {
-			logging.Warn("[AccountRouter] could not re-read the thread's account after a lost race",
+			logging.WarnContext(ctx, "[AccountRouter] could not re-read the thread's account after a lost race",
 				"error", err, "thread_id", req.ThreadID, "provider", provider)
 			return res, nil
 		}
@@ -261,7 +261,7 @@ func (r *router) leastUsed(ctx context.Context, req Request, usable []accountVie
 	}
 	recent, err := r.store.RecentAssignmentCounts(ctx, ids, now.Add(-herdWindow))
 	if err != nil {
-		logging.Warn("[AccountRouter] could not read recent assignments; skipping the herd penalty",
+		logging.WarnContext(ctx, "[AccountRouter] could not read recent assignments; skipping the herd penalty",
 			"error", err, "provider", string(req.Driver))
 	}
 
@@ -307,7 +307,7 @@ func (r *router) loadLimits(ctx context.Context, userID string) map[string]Limit
 	if err != nil {
 		// Unknown usage looks like an unused account, and an account that is
 		// in fact limited is benched by its own refusal, so keep going.
-		logging.Warn("[AccountRouter] could not read account limits; routing without them", "error", err)
+		logging.WarnContext(ctx, "[AccountRouter] could not read account limits; routing without them", "error", err)
 		return nil
 	}
 	return limits

@@ -173,7 +173,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	// Rejections log at DEBUG: forge's LoggingInterceptor already records the
 	// Unauthenticated RPC ("rpc failed", procedure, request_id) once at WARN.
 	if authHeader == "" {
-		logging.Debug("[gRPC Auth] Missing authorization token",
+		logging.DebugContext(ctx, "[gRPC Auth] Missing authorization token",
 			"procedure", procedure)
 		return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
 			fmt.Errorf("missing authorization token"))
@@ -181,7 +181,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 	if tokenString == authHeader {
-		logging.Debug("[gRPC Auth] Invalid authorization header format",
+		logging.DebugContext(ctx, "[gRPC Auth] Invalid authorization header format",
 			"procedure", procedure)
 		return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
 			fmt.Errorf("invalid authorization header format"))
@@ -197,7 +197,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	var err error
 	if isAccessToken {
 		if i.accessTokens == nil {
-			logging.Warn("[gRPC Auth] access token presented but access-token auth is not enabled",
+			logging.WarnContext(ctx, "[gRPC Auth] access token presented but access-token auth is not enabled",
 				"procedure", procedure)
 			return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
 				fmt.Errorf("invalid or expired token"))
@@ -214,13 +214,13 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		// and to mint a new one, which cannot fix an unreachable dependency
 		// and destroys the only real signal.
 		if !auth.IsCredentialRejection(err) {
-			logging.Error("[gRPC Auth] Token verification unavailable",
+			logging.ErrorContext(ctx, "[gRPC Auth] Token verification unavailable",
 				"error", err,
 				"procedure", procedure)
 			return nil, nil, "", connect.NewError(connect.CodeUnavailable,
 				fmt.Errorf("token verification unavailable: %w", err))
 		}
-		logging.Debug("[gRPC Auth] Invalid token",
+		logging.DebugContext(ctx, "[gRPC Auth] Invalid token",
 			"error", err,
 			"procedure", procedure)
 		return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
@@ -240,7 +240,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		auth.SetUserJWT(claims.Sub, tokenString)
 	}
 
-	logging.Debug("[gRPC Auth] Authenticated request",
+	logging.DebugContext(ctx, "[gRPC Auth] Authenticated request",
 		"user_id", claims.Sub,
 		"role", claims.Role,
 		"procedure", procedure)
@@ -286,7 +286,7 @@ func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClai
 	if i.sessionTracker.isFirstTimeSeen(claims.Sub) {
 		analytics.SetUserID(claims.Sub)
 		telemetry.GetReporter().SetUser(claims.Sub, claims.Email)
-		logging.Info("[Analytics] User authenticated, updated analytics client",
+		logging.InfoContext(ctx, "[Analytics] User authenticated, updated analytics client",
 			"userID", claims.Sub)
 	}
 
@@ -303,7 +303,7 @@ func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClai
 	if i.sessionTracker.isNewSession(claims.Sub) {
 		i.sessionTracker.updateSession(claims.Sub)
 		analyticsClient.TrackSessionStart()
-		logging.Info("[Analytics] New session started",
+		logging.InfoContext(ctx, "[Analytics] New session started",
 			"userID", claims.Sub)
 	} else {
 		// Just update the last seen time without logging event

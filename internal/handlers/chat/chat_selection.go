@@ -65,7 +65,7 @@ func (s *Service) recordSelection(
 		if errors.Is(err, chatselection.ErrVersionConflict) {
 			return nil, err
 		}
-		logging.Warn("Failed to record the chat's selection", "error", err, "chatID", chat.ID)
+		logging.WarnContext(ctx, "Failed to record the chat's selection", "error", err, "chatID", chat.ID)
 		return nil, nil
 	}
 	if sel != nil && (before == nil || before.Version != sel.Version) {
@@ -131,7 +131,7 @@ func (s *Service) announceSelection(ctx context.Context, userID string, chat *db
 		EntityID:   chat.ID,
 		Data:       data,
 	}); err != nil {
-		logging.Warn("Failed to announce the chat's selection", "error", err, "chatID", chat.ID)
+		logging.WarnContext(ctx, "Failed to announce the chat's selection", "error", err, "chatID", chat.ID)
 	}
 }
 
@@ -164,7 +164,7 @@ func (s *Service) chatToProtoWithSelection(ctx context.Context, chat *db.Chat) *
 	s.attachWorktree(ctx, chat, out)
 	sel, err := s.selections().Get(ctx, chat.ID)
 	if err != nil {
-		logging.Warn("Failed to read the chat's selection", "error", err, "chatID", chat.ID)
+		logging.WarnContext(ctx, "Failed to read the chat's selection", "error", err, "chatID", chat.ID)
 		return out
 	}
 	out.Selection = selectionToProto(sel)
@@ -268,7 +268,7 @@ func (s *Service) UpdateChatProviderPolicy(
 		if errors.Is(err, chatselection.ErrVersionConflict) {
 			return nil, versionConflictError()
 		}
-		logging.Error("Failed to store the chat's provider policy", "error", err, "chatID", chat.ID)
+		logging.ErrorContext(ctx, "Failed to store the chat's provider policy", "error", err, "chatID", chat.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update provider policy"))
 	}
 	if sel != nil && (before == nil || before.Version != sel.Version) {

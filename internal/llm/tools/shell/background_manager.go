@@ -477,14 +477,14 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	// best-effort everywhere.
 	if cmd.Process != nil {
 		if err := osutil.AdjustChildOOMScore(cmd.Process.Pid); err != nil {
-			logging.Debug("Failed to adjust background process oom_score_adj", "pid", cmd.Process.Pid, "error", err)
+			logging.DebugContext(ctx, "Failed to adjust background process oom_score_adj", "pid", cmd.Process.Pid, "error", err)
 		}
 		// Yield to the daemon, the UI and Docker when the machine is saturated.
 		if err := osutil.LowerChildPriority(cmd.Process.Pid); err != nil {
-			logging.Debug("Failed to lower background process priority", "pid", cmd.Process.Pid, "error", err)
+			logging.DebugContext(ctx, "Failed to lower background process priority", "pid", cmd.Process.Pid, "error", err)
 		}
 		if err := osutil.LowerChildIOPriority(cmd.Process.Pid); err != nil {
-			logging.Debug("Failed to lower background process I/O priority", "pid", cmd.Process.Pid, "error", err)
+			logging.DebugContext(ctx, "Failed to lower background process I/O priority", "pid", cmd.Process.Pid, "error", err)
 		}
 	}
 
@@ -496,7 +496,7 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	m.processes[processID] = process
 	m.mu.Unlock()
 
-	logging.Debug("Started background process",
+	logging.DebugContext(ctx, "Started background process",
 		"id", processID,
 		"workingDir", opts.WorkingDir,
 		"worktreeID", opts.WorktreeID,

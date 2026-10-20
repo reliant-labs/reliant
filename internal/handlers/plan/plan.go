@@ -87,12 +87,12 @@ func (s *Service) CreatePlan(
 	}
 
 	if err := s.deps.Repo.CreatePlan(ctx, plan); err != nil {
-		logging.Error("Failed to create plan", "error", err)
+		logging.ErrorContext(ctx, "Failed to create plan", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create plan"))
 	}
 
 	if err := s.deps.Repo.EmitChatRefetch(ctx, req.Msg.ChatId, db.RefetchPlanTasks); err != nil {
-		logging.Warn("[PlanService] Failed to emit plan_tasks refetch", "error", err)
+		logging.WarnContext(ctx, "[PlanService] Failed to emit plan_tasks refetch", "error", err)
 	}
 
 	resp := &reliantv1.CreatePlanResponse{
@@ -236,12 +236,12 @@ func (s *Service) UpdatePlan(
 	}
 
 	if err := s.deps.Repo.UpdatePlan(ctx, plan); err != nil {
-		logging.Error("Failed to update plan", "error", err)
+		logging.ErrorContext(ctx, "Failed to update plan", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update plan"))
 	}
 
 	if err := s.deps.Repo.EmitChatRefetch(ctx, chatID, db.RefetchPlanTasks); err != nil {
-		logging.Warn("[PlanService] Failed to emit plan_tasks refetch", "error", err)
+		logging.WarnContext(ctx, "[PlanService] Failed to emit plan_tasks refetch", "error", err)
 	}
 
 	resp := &reliantv1.UpdatePlanResponse{
@@ -284,12 +284,12 @@ func (s *Service) DeletePlan(
 	chatID, _ := s.getChatIDForPlan(ctx, plan)
 
 	if err := s.deps.Repo.DeletePlan(ctx, req.Msg.PlanId); err != nil {
-		logging.Error("Failed to delete plan", "error", err)
+		logging.ErrorContext(ctx, "Failed to delete plan", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete plan"))
 	}
 
 	if err := s.deps.Repo.EmitChatRefetch(ctx, chatID, db.RefetchPlanTasks); err != nil {
-		logging.Warn("[PlanService] Failed to emit plan_tasks refetch", "error", err)
+		logging.WarnContext(ctx, "[PlanService] Failed to emit plan_tasks refetch", "error", err)
 	}
 
 	return connect.NewResponse(&reliantv1.DeletePlanResponse{Success: true}), nil
@@ -308,7 +308,7 @@ func (s *Service) ListPlanTasks(
 
 	tasks, err := s.deps.Repo.ListTasksByPlan(ctx, req.Msg.PlanId)
 	if err != nil {
-		logging.Error("Failed to list tasks", "error", err)
+		logging.ErrorContext(ctx, "Failed to list tasks", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list tasks"))
 	}
 

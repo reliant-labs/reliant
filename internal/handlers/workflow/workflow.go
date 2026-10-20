@@ -126,7 +126,7 @@ func (s *Service) ListWorkflows(
 
 		data, err := builtin.BuiltinWorkflowsFS.ReadFile(entry.Name())
 		if err != nil {
-			logging.Warn("Failed to read builtin workflow", "error", err, "file", entry.Name())
+			logging.WarnContext(ctx, "Failed to read builtin workflow", "error", err, "file", entry.Name())
 			invalidWorkflows = append(invalidWorkflows, &reliantv1.InvalidWorkflow{
 				Name:   "builtin://" + filename,
 				Source: "builtin",
@@ -138,7 +138,7 @@ func (s *Service) ListWorkflows(
 
 		protoWf, err := parseBuiltinWorkflowFile(entry.Name(), data)
 		if err != nil {
-			logging.Error("Failed to parse builtin workflow", "error", err, "file", entry.Name())
+			logging.ErrorContext(ctx, "Failed to parse builtin workflow", "error", err, "file", entry.Name())
 			invalidWorkflows = append(invalidWorkflows, &reliantv1.InvalidWorkflow{
 				Name:   "builtin://" + filename,
 				Source: "builtin",
@@ -206,7 +206,7 @@ func (s *Service) ListWorkflows(
 	// include_hidden=true; each carries its status and current findings.
 	drafts, draftsErr := catalog.Drafts()
 	if draftsErr != nil {
-		logging.Error("Failed to list workflows from database", "error", draftsErr, "user_id", userID, "include_hidden", req.Msg.GetIncludeHidden())
+		logging.ErrorContext(ctx, "Failed to list workflows from database", "error", draftsErr, "user_id", userID, "include_hidden", req.Msg.GetIncludeHidden())
 		// Continue with builtins and project workflows
 	} else {
 		// One loader for every workflow validated here, so a ref several of
@@ -227,7 +227,7 @@ func (s *Service) ListWorkflows(
 			}
 			item, err := userWorkflowListItem(draft, check)
 			if err != nil {
-				logging.Error("Failed to parse stored workflow", "error", err, "id", draft.ID, "name", draft.Name)
+				logging.ErrorContext(ctx, "Failed to parse stored workflow", "error", err, "id", draft.ID, "name", draft.Name)
 				continue
 			}
 			// Use draft.Slug directly as the map key - this is the stable runtime identifier.
@@ -237,11 +237,11 @@ func (s *Service) ListWorkflows(
 
 	// Visibility state for builtin workflows (read above, 2 queries instead of 2×N)
 	if overridesErr != nil {
-		logging.Warn("Failed to batch-load visibility overrides for workflows", "error", overridesErr)
+		logging.WarnContext(ctx, "Failed to batch-load visibility overrides for workflows", "error", overridesErr)
 		wfOverrides = nil
 	}
 	if hiddenErr != nil {
-		logging.Warn("Failed to batch-load hidden defaults for workflows", "error", hiddenErr)
+		logging.WarnContext(ctx, "Failed to batch-load hidden defaults for workflows", "error", hiddenErr)
 		wfHiddenDefaults = nil
 	}
 	wfHiddenDefaultSet := make(map[string]bool, len(wfHiddenDefaults))
@@ -333,7 +333,7 @@ func discoverProjectWorkflowsFromDB(repo workflowsource.ProjectStore, ctx contex
 	// than one of them silently winning.
 	index, err := workflowsource.ProjectIndex(ctx, repo, projectID)
 	if err != nil {
-		logging.Warn("Failed to read stored project workflows", "error", err, "project_id", projectID)
+		logging.WarnContext(ctx, "Failed to read stored project workflows", "error", err, "project_id", projectID)
 		return nil, nil
 	}
 
@@ -356,7 +356,7 @@ func discoverProjectWorkflowsFromDB(repo workflowsource.ProjectStore, ctx contex
 		}
 		protoWf, err := parseWorkflowYAML(entry.Content)
 		if err != nil {
-			logging.Warn("Failed to parse stored project workflow", "error", err, "path", entry.Path)
+			logging.WarnContext(ctx, "Failed to parse stored project workflow", "error", err, "path", entry.Path)
 			invalidWorkflows = append(invalidWorkflows, &reliantv1.InvalidWorkflow{
 				Name:   entry.Slug,
 				Source: "project",
@@ -577,7 +577,7 @@ func (s *Service) SaveWorkflow(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to write workflow to file via daemon: %w", err))
 		}
 
-		logging.Debug("SaveWorkflow wrote to project file",
+		logging.DebugContext(ctx, "SaveWorkflow wrote to project file",
 			"name", protoWf.Name,
 			"slug", slug,
 			"source_path", sourcePath,
@@ -677,7 +677,7 @@ func (s *Service) SaveWorkflow(
 		Status:       string(status),
 	})
 
-	logging.Info("SaveWorkflow completed",
+	logging.InfoContext(ctx, "SaveWorkflow completed",
 		"name", protoWf.Name,
 		"slug", slug,
 		"user_id", userID,
@@ -800,7 +800,7 @@ func (s *Service) CopyWorkflow(
 		forkedFrom := fmt.Sprintf("%s:%s", getResp.Msg.Source, req.Msg.SourceSlug)
 		_, err := s.deps.Repo.UpdateWorkflowForkedFrom(ctx, saveResp.Msg.Id, forkedFrom)
 		if err != nil {
-			logging.Warn("Failed to set forked_from on copied workflow", "error", err)
+			logging.WarnContext(ctx, "Failed to set forked_from on copied workflow", "error", err)
 			// Don't fail the copy operation for this
 		}
 	}
@@ -868,11 +868,11 @@ func (s *Service) CreateWorkflowDraft(
 		if errors.Is(err, db.ErrWorkflowSlugTaken) {
 			return nil, connect.NewError(connect.CodeAlreadyExists, err)
 		}
-		logging.Error("Failed to create workflow draft", "error", err, "userID", userID)
+		logging.ErrorContext(ctx, "Failed to create workflow draft", "error", err, "userID", userID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create workflow draft"))
 	}
 
-	logging.Info("Created workflow draft", "draftID", draftID, "name", name, "slug", slug, "userID", userID)
+	logging.InfoContext(ctx, "Created workflow draft", "draftID", draftID, "name", name, "slug", slug, "userID", userID)
 
 	analyticsClient := analytics.GetClientForUser(ctx, userID)
 	analyticsClient.TrackWorkflowDraftCreated(analytics.WorkflowDraftCreatedMetrics{
@@ -1044,7 +1044,7 @@ func (s *Service) SetWorkflowStatus(
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow status: %w", err))
 		}
-		logging.Info("Workflow status changed", "draft_id", draft.ID, "slug", draft.Slug, "from", draft.Status, "to", target, "user_id", userID)
+		logging.InfoContext(ctx, "Workflow status changed", "draft_id", draft.ID, "slug", draft.Slug, "from", draft.Status, "to", target, "user_id", userID)
 	}
 
 	message := "Workflow marked complete — it can now be run"
@@ -1222,7 +1222,7 @@ func (s *Service) DeleteWorkflow(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete workflow: %w", err))
 	}
 
-	logging.Info("Workflow deleted", "name", name, "slug", slug, "user_id", userID)
+	logging.InfoContext(ctx, "Workflow deleted", "name", name, "slug", slug, "user_id", userID)
 
 	return connect.NewResponse(&reliantv1.DeleteWorkflowResponse{
 		Success: true,
@@ -1327,7 +1327,7 @@ func (s *Service) ImportWorkflow(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save workflow: %w", err))
 	}
 
-	logging.Info("Workflow imported",
+	logging.InfoContext(ctx, "Workflow imported",
 		"name", protoWf.Name,
 		"slug", slug,
 		"user_id", userID,

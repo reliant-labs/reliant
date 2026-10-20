@@ -32,7 +32,7 @@ import (
 // the client is told only after the row it should read has committed.
 func (r *Repo) announceAgentMailboxChanged(ctx context.Context, chatID string) {
 	if err := r.EmitChatRefetch(ctx, chatID, RefetchAgentMailbox); err != nil {
-		logging.Warn("failed to announce agent mailbox change", "chatID", chatID, "error", err)
+		logging.WarnContext(ctx, "failed to announce agent mailbox change", "chatID", chatID, "error", err)
 	}
 }
 

@@ -53,7 +53,7 @@ func (s *Service) ListModels(
 	registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
 	allModels := registry.GetUserVisibleModels()
 
-	logging.Debug("[ListModels] Building model list for user", "userID", userID, "totalModels", len(allModels), "availableDrivers", len(availableDrivers.Drivers))
+	logging.DebugContext(ctx, "[ListModels] Building model list for user", "userID", userID, "totalModels", len(allModels), "availableDrivers", len(availableDrivers.Drivers))
 
 	// Build list of all model+driver combinations
 	// Key: "modelID@driverID" to ensure uniqueness
@@ -127,7 +127,7 @@ func (s *Service) ListModels(
 	// Sort models: by provider, then by model priority within each provider
 	sortModelsByProvider(modelList)
 
-	logging.Debug("[ListModels] Returning models", "count", len(modelList))
+	logging.DebugContext(ctx, "[ListModels] Returning models", "count", len(modelList))
 
 	resp := &reliantv1.ListModelsResponse{
 		Models: modelList,
@@ -202,7 +202,7 @@ func localModelSource(m local.Model) *reliantv1.LocalModelSource {
 func (s *Service) listLocalModels(ctx context.Context, userID string) []local.Model {
 	found, err := local.ListModels(ctx, s.deps.LocalModels, userID)
 	if err != nil {
-		logging.Warn("[ListModels] Could not list local models", "userID", userID, "error", err)
+		logging.WarnContext(ctx, "[ListModels] Could not list local models", "userID", userID, "error", err)
 		return nil
 	}
 	return found
@@ -233,7 +233,7 @@ func configuredProviderIDs(availableDrivers models.AvailableDrivers) []string {
 func (s *Service) loadTagPrefs(ctx context.Context, userID string) map[string]modelprefs.TagPrefs {
 	prefs, err := modelprefs.LoadAll(ctx, s.deps.TagPrefs, userID)
 	if err != nil {
-		logging.Warn("[ListModels] Model tag preferences partially unreadable", "error", err)
+		logging.WarnContext(ctx, "[ListModels] Model tag preferences partially unreadable", "error", err)
 	}
 	return prefs
 }
@@ -435,7 +435,7 @@ func (s *Service) ListAvailableModels(
 		})
 	}
 
-	logging.Debug("[ListAvailableModels] Returning available models", "userID", userID, "count", len(out))
+	logging.DebugContext(ctx, "[ListAvailableModels] Returning available models", "userID", userID, "count", len(out))
 	return connect.NewResponse(&reliantv1.ListAvailableModelsResponse{Models: out}), nil
 }
 

@@ -82,7 +82,7 @@ func (r *Reconciler) continueAfterEnd(ctx context.Context, wf *db.Workflow) bool
 		return false
 	}
 	if !r.autoContinueAllowed(wf.ChatID, time.Now()) {
-		logging.Error("[Reconciler] Not continuing a chat again: it was already continued automatically and ended again; the user's next message continues it",
+		logging.ErrorContext(ctx, "[Reconciler] Not continuing a chat again: it was already continued automatically and ended again; the user's next message continues it",
 			"workflowID", wf.ID, "chatID", wf.ChatID,
 			"limit", autoContinueLimit, "window", autoContinueWindow)
 		return false
@@ -91,13 +91,13 @@ func (r *Reconciler) continueAfterEnd(ctx context.Context, wf *db.Workflow) bool
 	defer cancel()
 	started, err := q.ContinueQueued(continueCtx, wf.ChatID)
 	if err != nil {
-		logging.Warn("[Reconciler] Could not continue an ended run's undelivered message; the user's next message continues it",
+		logging.WarnContext(ctx, "[Reconciler] Could not continue an ended run's undelivered message; the user's next message continues it",
 			"workflowID", wf.ID, "chatID", wf.ChatID, "error", err)
 		return false
 	}
 	if started {
 		r.recordAutoContinue(wf.ChatID, time.Now())
-		logging.Info("[Reconciler] Continued an ended run's undelivered message in a fresh run",
+		logging.InfoContext(ctx, "[Reconciler] Continued an ended run's undelivered message in a fresh run",
 			"workflowID", wf.ID, "chatID", wf.ChatID)
 	}
 	return started
@@ -133,7 +133,7 @@ func (r *Reconciler) recordAutoContinue(chatID string, at time.Time) {
 // fresh one is answering its last message.
 func (r *Reconciler) postRecoveredNote(ctx context.Context, wf *db.Workflow) {
 	if _, err := r.repo.SaveMessageToThread(ctx, wf.ChatID, wf.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), recoveredContinuingChatMessage, &wf.ID, nil, nil); err != nil {
-		logging.Warn("[Reconciler] Failed to tell the chat its run was continued",
+		logging.WarnContext(ctx, "[Reconciler] Failed to tell the chat its run was continued",
 			"error", err,
 			"workflowID", wf.ID,
 		)
@@ -150,7 +150,7 @@ func (r *Reconciler) sweepQueuedDeliveries(ctx context.Context) error {
 	}
 	started, err := q.Sweep(ctx)
 	if started > 0 {
-		logging.Info("[Reconciler] Delivered messages queued for machines that are back", "started", started)
+		logging.InfoContext(ctx, "[Reconciler] Delivered messages queued for machines that are back", "started", started)
 	}
 	return err
 }

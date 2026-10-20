@@ -101,7 +101,7 @@ func (s *SpawnStopper) StopSpawn(ctx context.Context, chatID string, ref SpawnRe
 	}); err != nil {
 		return fmt.Errorf("failed to signal spawn cancellation to %s: %w", workflowID, err)
 	}
-	logging.Info("Signalled spawn cancellation",
+	logging.InfoContext(ctx, "Signalled spawn cancellation",
 		"chatID", chatID, "childThread", ref.ThreadID, "toolCallID", ref.ToolCallID,
 		"childWorkflowID", ref.WorkflowID, "workflowID", workflowID)
 
@@ -126,7 +126,7 @@ func (s *SpawnStopper) reconcile(ctx context.Context, childWorkflowID string) {
 	for _, from := range []core.WorkflowStatus{core.Active(), core.Paused()} {
 		swapped, err := s.reconciler.CompareAndSwapWorkflowStatus(ctx, childWorkflowID, core.Cancelled(), from)
 		if err != nil {
-			logging.Warn("Failed to reconcile stopped spawn's workflow status",
+			logging.WarnContext(ctx, "Failed to reconcile stopped spawn's workflow status",
 				"childWorkflowID", childWorkflowID, "from", from, "error", err)
 			return
 		}

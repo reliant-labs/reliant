@@ -231,7 +231,7 @@ func (p *TriggerPoller) Poll(ctx context.Context, in PollInput) (*PollOutput, er
 		// Keep the cursor: advancing past items never delivered loses them.
 		reg.Status, reg.StatusDetail = core.TriggerRegistrationError, truncate(pollErr.Error(), 500)
 		if err := p.repo.UpsertTriggerRegistration(ctx, reg); err != nil {
-			logging.Warn("could not record a poll failure", "trigger_id", trigger.ID, "error", err)
+			logging.WarnContext(ctx, "could not record a poll failure", "trigger_id", trigger.ID, "error", err)
 		}
 		return nil, fmt.Errorf("poll %s for trigger %s: %w", cfg.Integration, trigger.ID, pollErr)
 	}
@@ -249,7 +249,7 @@ func (p *TriggerPoller) Poll(ctx context.Context, in PollInput) (*PollOutput, er
 			if item.Sender == nil {
 				// A poller bug, not the item's: say so instead of recording an
 				// event no "Only from" filter could ever pass.
-				logging.Warn("polled item has no sender; dropped", "trigger_id", trigger.ID, "integration", cfg.Integration, "item_id", item.ID)
+				logging.WarnContext(ctx, "polled item has no sender; dropped", "trigger_id", trigger.ID, "integration", cfg.Integration, "item_id", item.ID)
 				continue
 			}
 			if _, err := p.intake.Accept(ctx, trigger, pollEvent(trigger, cfg.Integration, conn, item), AcceptOptions{}); err != nil {
@@ -265,7 +265,7 @@ func (p *TriggerPoller) Poll(ctx context.Context, in PollInput) (*PollOutput, er
 	if res.Gap != "" {
 		reg.LastGapAt, reg.LastGapDetail = &now, truncate(res.Gap, 500)
 		out.Gap = true
-		logging.Warn("polled trigger lost its place and re-baselined", "trigger_id", trigger.ID, "integration", cfg.Integration, "detail", reg.LastGapDetail)
+		logging.WarnContext(ctx, "polled trigger lost its place and re-baselined", "trigger_id", trigger.ID, "integration", cfg.Integration, "detail", reg.LastGapDetail)
 	}
 	if err := p.repo.UpsertTriggerRegistration(ctx, reg); err != nil {
 		return nil, fmt.Errorf("save cursor for %s: %w", trigger.ID, err)
@@ -294,7 +294,7 @@ func (p *TriggerPoller) credentialFailed(ctx context.Context, reg *core.TriggerR
 	}
 	reg.Status, reg.StatusDetail = core.TriggerRegistrationError, truncate(err.Error(), 500)
 	if uerr := p.repo.UpsertTriggerRegistration(ctx, reg); uerr != nil {
-		logging.Warn("could not record a poll credential failure", "trigger_id", reg.TriggerID, "error", uerr)
+		logging.WarnContext(ctx, "could not record a poll credential failure", "trigger_id", reg.TriggerID, "error", uerr)
 	}
 	return nil, fmt.Errorf("resolve credential for trigger %s: %w", reg.TriggerID, err)
 }

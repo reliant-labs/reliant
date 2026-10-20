@@ -394,7 +394,7 @@ func (o *OpenaiClient) SendMessages(ctx context.Context, prompts []string, messa
 			if !retry {
 				return nil, retryErr
 			}
-			logging.Warn("OpenAI request failed; retrying", "attempt", wait.Attempt, "delay", wait.Delay, "status", wait.StatusCode, "reason", wait.Reason)
+			logging.WarnContext(ctx, "OpenAI request failed; retrying", "attempt", wait.Attempt, "delay", wait.Delay, "status", wait.StatusCode, "reason", wait.Reason)
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -485,7 +485,7 @@ func (o *OpenaiClient) StreamResponse(ctx context.Context, prompts []string, mes
 				} else if currentContent != "" {
 					// Stream ended without proper completion data but we have content
 					// This can happen with OpenRouter when the stream is interrupted
-					logging.Warn("Stream ended without completion choices but has content (length: %d) - treating as interrupted stream", len(currentContent))
+					logging.WarnContext(ctx, "Stream ended without completion choices but has content (length: %d) - treating as interrupted stream", len(currentContent))
 					// Send an error event to trigger retry
 					eventChan <- llm.DriverEvent{
 						Type:  llm.EventError,
@@ -495,7 +495,7 @@ func (o *OpenaiClient) StreamResponse(ctx context.Context, prompts []string, mes
 					return
 				} else {
 					// No content and no choices - completely empty response
-					logging.Error("Stream ended with no content and no completion data")
+					logging.ErrorContext(ctx, "Stream ended with no content and no completion data")
 					eventChan <- llm.DriverEvent{
 						Type:  llm.EventError,
 						Error: fmt.Errorf("empty response from OpenRouter"),
@@ -532,7 +532,7 @@ func (o *OpenaiClient) StreamResponse(ctx context.Context, prompts []string, mes
 				close(eventChan)
 				return
 			}
-			logging.Warn("OpenAI stream request failed; retrying", "attempt", wait.Attempt, "delay", wait.Delay, "status", wait.StatusCode, "reason", wait.Reason)
+			logging.WarnContext(ctx, "OpenAI stream request failed; retrying", "attempt", wait.Attempt, "delay", wait.Delay, "status", wait.StatusCode, "reason", wait.Reason)
 			select {
 			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
 			case <-ctx.Done():
@@ -1105,7 +1105,7 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 		}
 
 		if err := stream.Err(); err != nil {
-			logging.Error("[OpenAI Responses] Stream error", "error", err)
+			logging.ErrorContext(ctx, "[OpenAI Responses] Stream error", "error", err)
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
 			return
 		}

@@ -171,11 +171,11 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	defer func() {
 		if err := obsProvider.Shutdown(); err != nil {
-			logging.Warn("Failed to shutdown observability", "error", err)
+			logging.WarnContext(ctx, "Failed to shutdown observability", "error", err)
 		}
 	}()
 
-	logging.Info("Starting temporal-worker",
+	logging.InfoContext(ctx, "Starting temporal-worker",
 		"temporal_host", opts.TemporalHost,
 		"temporal_port", opts.TemporalPort,
 		"db_driver", opts.DatabaseDriver,
@@ -184,7 +184,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Ensure RELIANT_DATA_DIR is set for activities that need to locate files
 	if err := os.Setenv("RELIANT_DATA_DIR", opts.DataDir); err != nil {
-		logging.Warn("Failed to set RELIANT_DATA_DIR env var", "error", err)
+		logging.WarnContext(ctx, "Failed to set RELIANT_DATA_DIR env var", "error", err)
 	}
 
 	// -----------------------------------------------------------------
@@ -267,7 +267,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	defer temporalClient.Close()
 
-	logging.Info("Connected to external Temporal server",
+	logging.InfoContext(ctx, "Connected to external Temporal server",
 		"host", opts.TemporalHost, "port", opts.TemporalPort)
 
 	// -----------------------------------------------------------------
@@ -298,7 +298,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	defer func() { _ = streamingHub.Close() }()
 
-	logging.Info("Streaming hub initialized", "driver", opts.StreamingDriver)
+	logging.InfoContext(ctx, "Streaming hub initialized", "driver", opts.StreamingDriver)
 
 	// -----------------------------------------------------------------
 	// 8. NATS connection + update hubs
@@ -311,7 +311,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	userUpdateHub := streaming.NewNATSUpdateHub[db.UserUpdate](nc, "user.updates", "UserUpdate")
 	chatUpdateHub := streaming.NewNATSUpdateHub[db.ChatUpdate](nc, "chat.updates", "ChatUpdate")
-	logging.Info("Update hubs initialized (NATS)")
+	logging.InfoContext(ctx, "Update hubs initialized (NATS)")
 	defer func() { _ = userUpdateHub.Close() }()
 	defer func() { _ = chatUpdateHub.Close() }()
 
@@ -332,7 +332,7 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 9. Analytics + telemetry
 	// -----------------------------------------------------------------
-	logging.Info("[Analytics] Initializing analytics")
+	logging.InfoContext(ctx, "[Analytics] Initializing analytics")
 	analyticsClient := analytics.NewClientFromSettings(ctx, "", true, opts.Analytics)
 	analytics.SetClient(analyticsClient)
 	analytics.SetPrivacyChecker(repo)
@@ -356,7 +356,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	router := toolexec.NewNATSDaemonRouter(nc, daemonRouterOpts...)
 	remoteExecutor.SetDaemonRouter(router)
-	logging.Info("Tool execution routing via NATS")
+	logging.InfoContext(ctx, "Tool execution routing via NATS")
 
 	// The run-management tools (start_run, control_run, send_to_run) act as the
 	// calling chat's owner through the same launcher and run service the
@@ -577,9 +577,9 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to bind health endpoint: %w", err)
 	}
 	go func() {
-		logging.Info("Health endpoint started", "port", opts.HealthPort)
+		logging.InfoContext(ctx, "Health endpoint started", "port", opts.HealthPort)
 		if err := healthServer.Serve(healthLn); err != nil && err != http.ErrServerClosed {
-			logging.Error("Health endpoint failed", "error", err)
+			logging.ErrorContext(ctx, "Health endpoint failed", "error", err)
 		}
 	}()
 
@@ -593,7 +593,7 @@ func Run(ctx context.Context, opts Options) error {
 	// readiness, pauses for PRE_STOP_DELAY, then stops the nodes in reverse
 	// inside one SHUTDOWN_TIMEOUT budget — the Temporal worker first (see
 	// workerNodes) — logs each phase ("drain: …"), and flushes telemetry last.
-	logging.Info("Starting temporal-worker nodes", "health_port", opts.HealthPort)
+	logging.InfoContext(ctx, "Starting temporal-worker nodes", "health_port", opts.HealthPort)
 	stopCtx, stopSignals := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stopSignals()
 	runErr := lifecyclekit.Supervise(stopCtx, lifecyclekit.Policy{
@@ -608,7 +608,7 @@ func Run(ctx context.Context, opts Options) error {
 	healthCtx, cancelHealth := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelHealth()
 	if err := healthServer.Shutdown(healthCtx); err != nil {
-		logging.Warn("Health endpoint did not stop cleanly", "error", err)
+		logging.WarnContext(ctx, "Health endpoint did not stop cleanly", "error", err)
 	}
 
 	// Note: NATS, the Temporal client, the database and OTel are closed via
@@ -616,7 +616,7 @@ func Run(ctx context.Context, opts Options) error {
 	if runErr != nil {
 		return fmt.Errorf("temporal-worker: %w", runErr)
 	}
-	logging.Info("temporal-worker shut down gracefully")
+	logging.InfoContext(ctx, "temporal-worker shut down gracefully")
 	return nil
 }
 

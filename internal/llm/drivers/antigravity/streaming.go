@@ -39,7 +39,7 @@ func (c *Client) StreamResponse(ctx context.Context, prompts []string, messages 
 			return
 		}
 
-		logging.Debug("[ANTIGRAVITY] Streaming request",
+		logging.DebugContext(ctx, "[ANTIGRAVITY] Streaming request",
 			"model", c.requestModelID(),
 			"messageCount", len(messages),
 			"toolCount", len(toolList))
@@ -75,7 +75,7 @@ func (c *Client) StreamResponse(ctx context.Context, prompts []string, messages 
 			}
 
 			delay := retryDelay(attempt, resp)
-			logging.Warn("[ANTIGRAVITY] Retrying stream request",
+			logging.WarnContext(ctx, "[ANTIGRAVITY] Retrying stream request",
 				"status", status, "attempt", attempt, "maxRetries", models.MaxRetries, "delay", delay)
 			// Emitted BEFORE the sleep so a caller can record that this run is
 			// parked rather than working.
@@ -132,7 +132,7 @@ func (c *Client) consumeStream(ctx context.Context, body io.Reader, eventChan ch
 
 		var frame streamFrame
 		if err := json.Unmarshal(raw, &frame); err != nil {
-			logging.Debug("[ANTIGRAVITY] Skipping unparseable SSE frame", "error", err)
+			logging.DebugContext(ctx, "[ANTIGRAVITY] Skipping unparseable SSE frame", "error", err)
 			return nil
 		}
 		// A frame with no "response" member is not a Gemini response at the
@@ -236,7 +236,7 @@ func (c *Client) consumeStream(ctx context.Context, body io.Reader, eventChan ch
 			} else if len(unsignedCalls) > 0 {
 				// Worth a line in the log: this is the state that will 400 on
 				// the next request rather than on this one.
-				logging.Warn("[ANTIGRAVITY] Function call arrived with no thought signature anywhere in its candidate",
+				logging.WarnContext(ctx, "[ANTIGRAVITY] Function call arrived with no thought signature anywhere in its candidate",
 					"unsignedCalls", len(unsignedCalls))
 			}
 		}

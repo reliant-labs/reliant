@@ -135,13 +135,13 @@ func (r *Relay) Run(ctx context.Context) error {
 	lastPrune := time.Time{}
 	for {
 		if _, err := r.RelayOnce(ctx); err != nil && ctx.Err() == nil {
-			logging.Warn("[workflowevent] relay pass failed", "error", err)
+			logging.WarnContext(ctx, "[workflowevent] relay pass failed", "error", err)
 		}
 		if r.now().Sub(lastPrune) > time.Hour {
 			if n, err := r.store.DeleteDispatchedRunEventsBefore(ctx, r.now().Add(-r.Retention)); err != nil {
-				logging.Warn("[workflowevent] pruning dispatched run events failed", "error", err)
+				logging.WarnContext(ctx, "[workflowevent] pruning dispatched run events failed", "error", err)
 			} else if n > 0 {
-				logging.Info("[workflowevent] pruned dispatched run events", "count", n)
+				logging.InfoContext(ctx, "[workflowevent] pruned dispatched run events", "count", n)
 			}
 			lastPrune = r.now()
 		}

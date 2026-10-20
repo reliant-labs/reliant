@@ -204,7 +204,7 @@ func (s *Service) refreshTriggerAccess(ctx context.Context, trigger *core.Trigge
 			return connect.NewError(connect.CodeFailedPrecondition,
 				fmt.Errorf("%s triggers need access to your %s repositories: %w", cfg.Integration, cfg.Integration, err))
 		}
-		logging.Warn("refreshing integration access failed", "integration", cfg.Integration, "user_id", trigger.UserID, "error", err)
+		logging.WarnContext(ctx, "refreshing integration access failed", "integration", cfg.Integration, "user_id", trigger.UserID, "error", err)
 		return connect.NewError(connect.CodeUnavailable,
 			fmt.Errorf("could not read your %s access right now; try again", cfg.Integration))
 	}
@@ -289,7 +289,7 @@ func (s *Service) RotateWebhookToken(
 	if err != nil {
 		return nil, err
 	}
-	logging.Info("webhook trigger token rotated", "trigger_id", trigger.ID, "user_id", trigger.UserID)
+	logging.InfoContext(ctx, "webhook trigger token rotated", "trigger_id", trigger.ID, "user_id", trigger.UserID)
 	return connect.NewResponse(&reliantv1.RotateWebhookTokenResponse{
 		Trigger: s.render(ctx, trigger),
 		Webhook: cred,

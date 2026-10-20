@@ -30,7 +30,7 @@ func (s *Service) signalProviderPolicy(ctx context.Context, userID string, chat 
 		return
 	}
 	if err := s.signalParamUpdate(ctx, chat.ID, workflowID, runID, nil, update); err != nil {
-		logging.Warn("Could not signal the chat's provider policy to its live run", "chatID", chat.ID, "error", err)
+		logging.WarnContext(ctx, "Could not signal the chat's provider policy to its live run", "chatID", chat.ID, "error", err)
 	}
 }
 
@@ -50,10 +50,10 @@ func (s *Service) wakeUsageLimitWait(ctx context.Context, chat *db.Chat, allowsF
 		return
 	}
 	if err := s.deps.Temporal.SignalWorkflow(ctx, *chat.WorkflowID, "", v2.UsageLimitRetrySignalName, v2.UsageLimitRetrySignal{}); err != nil {
-		logging.Warn("Could not wake a run waiting on a usage limit after a policy change", "chatID", chat.ID, "error", err)
+		logging.WarnContext(ctx, "Could not wake a run waiting on a usage limit after a policy change", "chatID", chat.ID, "error", err)
 		return
 	}
-	logging.Info("Woke a run waiting on a usage limit to apply a policy change", "chatID", chat.ID, "workflowID", *chat.WorkflowID)
+	logging.InfoContext(ctx, "Woke a run waiting on a usage limit to apply a policy change", "chatID", chat.ID, "workflowID", *chat.WorkflowID)
 }
 
 // providerPolicyUpdate is the input update that brings a run holding runInputs

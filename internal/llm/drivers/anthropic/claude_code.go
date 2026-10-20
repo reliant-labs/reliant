@@ -575,11 +575,11 @@ func (c *ClaudeCodeClient) SendMessages(ctx context.Context, prompts []string, m
 	if c.options.SessionID != nil && *c.options.SessionID != "" {
 		logFields = append(logFields, "session_id", *c.options.SessionID)
 	}
-	logging.Debug("=== ClaudeCode: Sending messages ===", logFields...)
+	logging.DebugContext(ctx, "=== ClaudeCode: Sending messages ===", logFields...)
 
 	anthropicResponse, err := c.newMessage(ctx, preparedMessages)
 	if err != nil {
-		logging.Error("Error in ClaudeCode API call", "error", err)
+		logging.ErrorContext(ctx, "Error in ClaudeCode API call", "error", err)
 		observability.LLMRequestsTotal.WithLabelValues(string(ClaudeFamily), "error").Inc()
 		observability.LLMRequestDuration.WithLabelValues(string(ClaudeFamily)).Observe(time.Since(start).Seconds())
 		return nil, err
@@ -592,18 +592,18 @@ func (c *ClaudeCodeClient) SendMessages(ctx context.Context, prompts []string, m
 		}
 	}
 
-	logging.Debug("ClaudeCode SendMessages: Response details",
+	logging.DebugContext(ctx, "ClaudeCode SendMessages: Response details",
 		"stop_reason", anthropicResponse.StopReason,
 		"stop_sequence", anthropicResponse.StopSequence,
 		"content_blocks", len(anthropicResponse.Content))
 
 	finishReason := c.finishReason(string(anthropicResponse.StopReason))
-	logging.Debug("ClaudeCode SendMessages: Finish reason result", "finish_reason", finishReason)
+	logging.DebugContext(ctx, "ClaudeCode SendMessages: Finish reason result", "finish_reason", finishReason)
 
 	toolCalls, err := c.toolCalls(*anthropicResponse)
 	if err != nil {
 		// MalformedJSONError indicates transient streaming corruption
-		logging.Warn("ClaudeCode SendMessages: Tool call JSON validation failed (will retry)", "error", err)
+		logging.WarnContext(ctx, "ClaudeCode SendMessages: Tool call JSON validation failed (will retry)", "error", err)
 		observability.LLMRequestsTotal.WithLabelValues(string(ClaudeFamily), "error").Inc()
 		observability.LLMRequestDuration.WithLabelValues(string(ClaudeFamily)).Observe(time.Since(start).Seconds())
 		return nil, err
@@ -637,7 +637,7 @@ func (c *ClaudeCodeClient) StreamResponse(ctx context.Context, prompts []string,
 	if c.options.SessionID != nil && *c.options.SessionID != "" {
 		logFields = append(logFields, "session_id", *c.options.SessionID)
 	}
-	logging.Debug("=== ClaudeCode: Streaming messages ===", logFields...)
+	logging.DebugContext(ctx, "=== ClaudeCode: Streaming messages ===", logFields...)
 
 	return c.streamResponseInternal(ctx, preparedMessages)
 }
@@ -647,7 +647,7 @@ func (c *ClaudeCodeClient) Model() models.Model {
 }
 
 func (c *ClaudeCodeClient) ValidateKey(ctx context.Context) error {
-	logging.Debug("Validating ClaudeCode API key with Claude 3.5 Haiku model...")
+	logging.DebugContext(ctx, "Validating ClaudeCode API key with Claude 3.5 Haiku model...")
 	testMessages := []message.Message{
 		{
 			Role: message.User,

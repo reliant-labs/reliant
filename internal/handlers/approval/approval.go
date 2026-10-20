@@ -101,7 +101,7 @@ func (s *Service) ListApprovalsByChat(
 
 	approvals, err := s.deps.Repo.ListPendingApprovalsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		logging.Error("Failed to list approvals", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to list approvals", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list approvals"))
 	}
 
@@ -182,7 +182,7 @@ func (s *Service) Approve(
 	})
 
 	if err != nil {
-		logging.Error("Failed to approve request", "error", err, "requestID", req.Msg.RequestId)
+		logging.ErrorContext(ctx, "Failed to approve request", "error", err, "requestID", req.Msg.RequestId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to approve"))
 	}
 
@@ -214,7 +214,7 @@ func (s *Service) Deny(
 	// Get the approval
 	approval, err := s.deps.Repo.GetApproval(ctx, req.Msg.RequestId)
 	if err != nil || approval == nil {
-		logging.Error("Failed to get approval", "error", err, "requestID", req.Msg.RequestId)
+		logging.ErrorContext(ctx, "Failed to get approval", "error", err, "requestID", req.Msg.RequestId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found"))
 	}
 
@@ -277,7 +277,7 @@ func (s *Service) Deny(
 	})
 
 	if err != nil {
-		logging.Error("Failed to deny request", "error", err, "approvalID", approval.ID)
+		logging.ErrorContext(ctx, "Failed to deny request", "error", err, "approvalID", approval.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to deny"))
 	}
 
@@ -285,7 +285,7 @@ func (s *Service) Deny(
 	// run answers the call itself (answeredByItsRun).
 	if !answeredByItsRun(approval) {
 		if err := s.createDenialMessage(ctx, approval.ChatID, denialReason); err != nil {
-			logging.Error("Failed to create denial message", "error", err, "approvalID", approval.ID)
+			logging.ErrorContext(ctx, "Failed to create denial message", "error", err, "approvalID", approval.ID)
 			// Don't fail the request, just log the error
 		}
 	}
@@ -301,7 +301,7 @@ func (s *Service) Deny(
 		"action_taken":  actionTakenStr,
 	})
 
-	logging.Info("Denied request and signalled workflow", "requestID", req.Msg.RequestId, "hasReason", denialReason != "")
+	logging.InfoContext(ctx, "Denied request and signalled workflow", "requestID", req.Msg.RequestId, "hasReason", denialReason != "")
 
 	return connect.NewResponse(&reliantv1.DenyResponse{
 		Success: true,
@@ -385,7 +385,7 @@ func (s *Service) BatchApprove(
 		})
 
 		if err != nil {
-			logging.Error("Failed to update approval in batch", "requestID", requestID, "error", err)
+			logging.ErrorContext(ctx, "Failed to update approval in batch", "requestID", requestID, "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to approve"))
 		}
 
@@ -435,7 +435,7 @@ func (s *Service) BatchDeny(
 	for _, requestID := range req.Msg.RequestIds {
 		approval, err := s.deps.Repo.GetApproval(ctx, requestID)
 		if err != nil || approval == nil {
-			logging.Error("Approval not found in batch", "requestID", requestID)
+			logging.ErrorContext(ctx, "Approval not found in batch", "requestID", requestID)
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found: %s", requestID))
 		}
 		deniedStepApproval = deniedStepApproval || !answeredByItsRun(approval)
@@ -494,7 +494,7 @@ func (s *Service) BatchDeny(
 		})
 
 		if err != nil {
-			logging.Error("Failed to update approval in batch", "requestID", requestID, "error", err)
+			logging.ErrorContext(ctx, "Failed to update approval in batch", "requestID", requestID, "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to deny"))
 		}
 
@@ -514,7 +514,7 @@ func (s *Service) BatchDeny(
 	// chat), unless every one of them is answered by its run.
 	if chatID != "" && deniedStepApproval {
 		if err := s.createDenialMessage(ctx, chatID, denialReason); err != nil {
-			logging.Error("Failed to create denial message", "error", err, "chatID", chatID)
+			logging.ErrorContext(ctx, "Failed to create denial message", "error", err, "chatID", chatID)
 			// Don't fail the request, just log the error
 		}
 	}
@@ -529,12 +529,12 @@ func (s *Service) BatchDeny(
 // signalApproval sends a signal to the workflow using PauseService.SignalWithRecovery
 func (s *Service) signalApproval(ctx context.Context, approval *db.Approval, signalData map[string]interface{}) {
 	if approval.TemporalWorkflowID == "" {
-		logging.Warn("[Approval] No temporal_workflow_id on approval, cannot signal", "approvalID", approval.ID)
+		logging.WarnContext(ctx, "[Approval] No temporal_workflow_id on approval, cannot signal", "approvalID", approval.ID)
 		return
 	}
 	signalName := "signal.approval." + approval.ID
 	if err := s.deps.Signals.SignalWithRecovery(ctx, approval.TemporalWorkflowID, signalName, signalData, nil); err != nil {
-		logging.Warn("[Approval] Failed to signal approval resolution",
+		logging.WarnContext(ctx, "[Approval] Failed to signal approval resolution",
 			"error", err,
 			"approvalID", approval.ID,
 			"temporalWorkflowID", approval.TemporalWorkflowID,
@@ -561,7 +561,7 @@ func (s *Service) createDenialMessage(ctx context.Context, chatID string, denial
 	}
 
 	if lastAssistantMsg == nil {
-		logging.Debug("[Approval] No assistant message found for denial", "chatID", chatID)
+		logging.DebugContext(ctx, "[Approval] No assistant message found for denial", "chatID", chatID)
 		return nil
 	}
 
@@ -580,11 +580,11 @@ func (s *Service) createDenialMessage(ctx context.Context, chatID string, denial
 	}
 
 	if len(toolCallBlocks) == 0 {
-		logging.Debug("[Approval] No tool_call blocks found in assistant message", "chatID", chatID, "messageID", lastAssistantMsg.ID)
+		logging.DebugContext(ctx, "[Approval] No tool_call blocks found in assistant message", "chatID", chatID, "messageID", lastAssistantMsg.ID)
 		return nil
 	}
 
-	logging.Debug("[Approval] Found tool_call blocks to deny", "count", len(toolCallBlocks), "chatID", chatID)
+	logging.DebugContext(ctx, "[Approval] Found tool_call blocks to deny", "count", len(toolCallBlocks), "chatID", chatID)
 
 	// Get next ordinal for the chat
 	nextOrdinal, err := s.deps.Repo.GetNextOrdinal(ctx, lastAssistantMsg.ThreadID)
@@ -715,7 +715,7 @@ func (s *Service) createDenialMessage(ctx context.Context, chatID string, denial
 		return err
 	}
 
-	logging.Debug("[Approval] Created denial message",
+	logging.DebugContext(ctx, "[Approval] Created denial message",
 		"chatID", chatID, "messageID", messageID, "toolCallCount", len(toolCallBlocks))
 
 	return nil

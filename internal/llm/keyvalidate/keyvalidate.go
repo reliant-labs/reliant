@@ -42,7 +42,7 @@ func Validate(ctx context.Context, provider models.Family, apiKey string) (bool,
 	driverOpts = append(driverOpts, llm.WithAPIKey(resolvedAPIKey))
 	driver, err := drivers.GetDriverForModel(testModel, provider, driverOpts...)
 	if err != nil {
-		logging.Error("Failed to create driver for validation", "provider", provider, "error", err)
+		logging.ErrorContext(ctx, "Failed to create driver for validation", "provider", provider, "error", err)
 		return false, fmt.Sprintf("Failed to initialize provider: %v", err)
 	}
 
@@ -56,7 +56,7 @@ func Validate(ctx context.Context, provider models.Family, apiKey string) (bool,
 			strings.Contains(errStr, "401") {
 			return false, "Invalid API key"
 		}
-		logging.Warn("API key validation error (may not be auth-related)", "provider", provider, "error", err)
+		logging.WarnContext(ctx, "API key validation error (may not be auth-related)", "provider", provider, "error", err)
 		return false, fmt.Sprintf("Validation failed: %v", err)
 	}
 

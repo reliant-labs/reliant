@@ -137,11 +137,11 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	defer func() {
 		if err := obsProvider.Shutdown(); err != nil {
-			logging.Warn("Failed to shutdown observability", "error", err)
+			logging.WarnContext(ctx, "Failed to shutdown observability", "error", err)
 		}
 	}()
 
-	logging.Info("Starting Reliant daemon-gateway",
+	logging.InfoContext(ctx, "Starting Reliant daemon-gateway",
 		"daemon_port", opts.ToolsDaemonPort,
 		"health_port", opts.HealthPort,
 		"db_driver", opts.DatabaseDriver,
@@ -184,12 +184,12 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 	defer func() {
-		logging.Info("Closing database")
+		logging.InfoContext(ctx, "Closing database")
 		if err := repo.Close(); err != nil {
-			logging.Error("Error closing database", "error", err)
+			logging.ErrorContext(ctx, "Error closing database", "error", err)
 		}
 	}()
-	logging.Info("Database initialized", "driver", opts.DatabaseDriver)
+	logging.InfoContext(ctx, "Database initialized", "driver", opts.DatabaseDriver)
 
 	// Daemon credentials are `rlat_` access tokens, resolved by the ONE token
 	// authority — control-plane's Introspect when hosted, reliant's own store
@@ -203,7 +203,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("daemon credential authority: %w", err)
 	}
-	logging.Info("daemon credential authentication initialized", "authority", authorityMode)
+	logging.InfoContext(ctx, "daemon credential authentication initialized", "authority", authorityMode)
 
 	// NATS connection
 	nc, err := natsutil.Connect(opts.NATS)
@@ -211,7 +211,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 	defer nc.Close()
-	logging.Info("Connected to NATS", "url", opts.NATS.URL)
+	logging.InfoContext(ctx, "Connected to NATS", "url", opts.NATS.URL)
 
 	// TLS certificates
 	tlsCertFile := opts.TLSCertFile
@@ -226,11 +226,11 @@ func Run(ctx context.Context, opts Options) error {
 			tlsCertFile = certPaths.CertFile
 			tlsKeyFile = certPaths.KeyFile
 		}
-		logging.Info("TLS enabled", "cert", tlsCertFile)
+		logging.InfoContext(ctx, "TLS enabled", "cert", tlsCertFile)
 	} else {
 		tlsCertFile = ""
 		tlsKeyFile = ""
-		logging.Info("TLS disabled via DISABLE_TLS=true")
+		logging.InfoContext(ctx, "TLS disabled via DISABLE_TLS=true")
 	}
 
 	// -------------------------------------------------------------------------
@@ -270,7 +270,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("tools_daemon service: %w", err)
 	}
 	defer func() { _ = userUpdateHub.Close() }()
-	logging.Info("Daemon state publisher wired",
+	logging.InfoContext(ctx, "Daemon state publisher wired",
 		"subjectPrefix", daemonwire.SubjectPrefix,
 	)
 
@@ -299,7 +299,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err := toolBridge.Start(); err != nil {
 		return fmt.Errorf("failed to start NATS tool bridge: %w", err)
 	}
-	logging.Info("NATS tool bridge started — per-daemon subscriptions on connect/disconnect")
+	logging.InfoContext(ctx, "NATS tool bridge started — per-daemon subscriptions on connect/disconnect")
 
 	// Daemon lifecycle event publisher: forwards connect/disconnect to the
 	// control-plane admin-server via the DAEMON_EVENTS JetStream stream so
@@ -315,7 +315,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to build daemon event publisher: %w", err)
 	}
 	toolsDaemonService.AddConnectionListener(eventPublisher)
-	logging.Info("Daemon lifecycle event publisher started",
+	logging.InfoContext(ctx, "Daemon lifecycle event publisher started",
 		"stream", daemonevents.StreamDaemonEvents,
 		"subjects", daemonevents.SubjectDaemonEventsAll,
 	)
@@ -327,7 +327,7 @@ func Run(ctx context.Context, opts Options) error {
 	// stream — no service registry, no DB column to keep in sync.
 	statusResponder := daemonquery.NewResponder(nc, toolsDaemonService)
 	toolsDaemonService.AddConnectionListener(statusResponder)
-	logging.Info("Daemon status responder started",
+	logging.InfoContext(ctx, "Daemon status responder started",
 		"subjectPattern", daemonquery.SubjectQueryPrefix+"<daemonID>.status",
 	)
 
@@ -340,7 +340,7 @@ func Run(ctx context.Context, opts Options) error {
 	// gateway holds a stream for the user.
 	userLivenessResponder := daemonquery.NewUserResponder(nc, toolsDaemonService)
 	toolsDaemonService.AddConnectionListener(userLivenessResponder)
-	logging.Info("Per-user daemon liveness responder started",
+	logging.InfoContext(ctx, "Per-user daemon liveness responder started",
 		"subjectPattern", daemonquery.SubjectQueryPrefix+"user.<userID>.any-live",
 	)
 
@@ -353,7 +353,7 @@ func Run(ctx context.Context, opts Options) error {
 		_ = toolBridge.Close()
 		return fmt.Errorf("failed to start daemon activity subscriber: %w", err)
 	}
-	logging.Info("Daemon activity subscriber started",
+	logging.InfoContext(ctx, "Daemon activity subscriber started",
 		"subjectPattern", daemonactivity.SubjectWildcard,
 	)
 
@@ -444,9 +444,9 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to bind health endpoint: %w", err)
 	}
 	go func() {
-		logging.Info("Health endpoint started", "address", healthAddr)
+		logging.InfoContext(ctx, "Health endpoint started", "address", healthAddr)
 		if err := healthServer.Serve(healthLn); err != nil && err != http.ErrServerClosed {
-			logging.Error("Health endpoint failed", "error", err)
+			logging.ErrorContext(ctx, "Health endpoint failed", "error", err)
 		}
 	}()
 
@@ -459,7 +459,7 @@ func Run(ctx context.Context, opts Options) error {
 	// stops accepting; then it stops the nodes in reverse, inside one
 	// SHUTDOWN_TIMEOUT budget — see gatewayNodes for why that order is the
 	// daemon hand-over — and logs each phase ("drain: …").
-	logging.Info("Starting Reliant daemon-gateway nodes",
+	logging.InfoContext(ctx, "Starting Reliant daemon-gateway nodes",
 		"setup_duration", time.Since(startTime),
 		"daemon_port", opts.ToolsDaemonPort,
 		"health_port", opts.HealthPort,
@@ -474,14 +474,14 @@ func Run(ctx context.Context, opts Options) error {
 	healthCtx, cancelHealth := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelHealth()
 	if err := healthServer.Shutdown(healthCtx); err != nil {
-		logging.Warn("Health endpoint did not stop cleanly", "error", err)
+		logging.WarnContext(ctx, "Health endpoint did not stop cleanly", "error", err)
 	}
 
 	// Note: NATS, the database and telemetry are closed via defers above.
 	if runErr != nil {
 		return fmt.Errorf("daemon-gateway: %w", runErr)
 	}
-	logging.Info("Daemon-gateway shut down gracefully")
+	logging.InfoContext(ctx, "Daemon-gateway shut down gracefully")
 	return nil
 }
 
@@ -536,9 +536,9 @@ func gatewayNodes(c gatewayComponents) []lifecyclekit.Node {
 			// logged, not fatal: the daemon streams do not depend on it.
 			Name: "state-derivation",
 			Run: func(ctx context.Context) error {
-				logging.Info("Daemon state derivation consumer started", "subject", daemonwire.SubjectWildcard)
+				logging.InfoContext(ctx, "Daemon state derivation consumer started", "subject", daemonwire.SubjectWildcard)
 				if err := c.derivation.Start(ctx); err != nil && ctx.Err() == nil {
-					logging.Error("Daemon state derivation consumer failed", "error", err)
+					logging.ErrorContext(ctx, "Daemon state derivation consumer failed", "error", err)
 				}
 				return nil
 			},
@@ -560,9 +560,9 @@ func gatewayNodes(c gatewayComponents) []lifecyclekit.Node {
 			// depend on it.
 			Name: "managed-reconciler",
 			Run: func(ctx context.Context) error {
-				logging.Info("Managed daemon reconciler started")
+				logging.InfoContext(ctx, "Managed daemon reconciler started")
 				if err := c.reconciler.Start(ctx); err != nil && ctx.Err() == nil {
-					logging.Error("ManagedDaemonReconciler failed", "error", err)
+					logging.ErrorContext(ctx, "ManagedDaemonReconciler failed", "error", err)
 				}
 				return nil
 			},

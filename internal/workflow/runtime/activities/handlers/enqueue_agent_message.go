@@ -106,7 +106,7 @@ func (a *EnqueueAgentMessageActivity) Execute(ctx context.Context, input Enqueue
 	if input.ToolCallID != "" && isTerminalSpawnReportKind(kind) {
 		outcome, err := a.repo.EnqueueSpawnReport(ctx, msg)
 		if errors.Is(err, core.ErrSpawnReportSlotTaken) {
-			logging.Error("[EnqueueAgentMessage] another spawn already reported under this tool call id; this report cannot be delivered",
+			logging.ErrorContext(ctx, "[EnqueueAgentMessage] another spawn already reported under this tool call id; this report cannot be delivered",
 				"chat_id", input.ChatID, "tool_call_id", input.ToolCallID,
 				"from_thread_id", input.FromThreadID, "to_thread_id", input.ToThreadID, "error", err)
 			return EnqueueAgentMessageOutput{}, temporal.NewNonRetryableApplicationError(
@@ -117,11 +117,11 @@ func (a *EnqueueAgentMessageActivity) Execute(ctx context.Context, input Enqueue
 		}
 		switch outcome {
 		case core.SpawnReportSuperseded:
-			logging.Info("[EnqueueAgentMessage] real spawn report superseded a synthesized placeholder",
+			logging.InfoContext(ctx, "[EnqueueAgentMessage] real spawn report superseded a synthesized placeholder",
 				"tool_call_id", input.ToolCallID)
 		case core.SpawnReportAlreadyReported:
 			// Idempotent: also what a retry after a lost commit response sees.
-			logging.Debug("[EnqueueAgentMessage] spawn already reported; no-op",
+			logging.DebugContext(ctx, "[EnqueueAgentMessage] spawn already reported; no-op",
 				"tool_call_id", input.ToolCallID)
 		}
 		return EnqueueAgentMessageOutput{ID: msg.ID}, nil

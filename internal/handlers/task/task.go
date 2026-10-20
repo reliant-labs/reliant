@@ -107,12 +107,12 @@ func (s *Service) CreateTask(
 	}
 
 	if err := s.deps.Repo.CreateTask(ctx, task); err != nil {
-		logging.Error("Failed to create task", "error", err)
+		logging.ErrorContext(ctx, "Failed to create task", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create task"))
 	}
 
 	if err := s.deps.Repo.EmitChatRefetch(ctx, chatID, db.RefetchPlanTasks); err != nil {
-		logging.Warn("[TaskService] Failed to emit plan_tasks refetch", "error", err)
+		logging.WarnContext(ctx, "[TaskService] Failed to emit plan_tasks refetch", "error", err)
 	}
 
 	resp := &reliantv1.CreateTaskResponse{
@@ -206,7 +206,7 @@ func (s *Service) ListTasks(
 
 	tasks, err := s.deps.Repo.ListTasksByPlan(ctx, *req.Msg.PlanId)
 	if err != nil {
-		logging.Error("Failed to list tasks", "error", err)
+		logging.ErrorContext(ctx, "Failed to list tasks", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list tasks"))
 	}
 
@@ -266,7 +266,7 @@ func (s *Service) UpdateTask(
 	}
 
 	if err := s.deps.Repo.UpdateTask(ctx, task); err != nil {
-		logging.Error("Failed to update task", "error", err)
+		logging.ErrorContext(ctx, "Failed to update task", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update task"))
 	}
 
@@ -274,7 +274,7 @@ func (s *Service) UpdateTask(
 	if taskPlan, err := s.deps.Repo.GetPlan(ctx, task.PlanID); err == nil {
 		if cid, err := s.getChatIDForPlan(ctx, taskPlan); err == nil {
 			if err := s.deps.Repo.EmitChatRefetch(ctx, cid, db.RefetchPlanTasks); err != nil {
-				logging.Warn("[TaskService] Failed to emit plan_tasks refetch", "error", err)
+				logging.WarnContext(ctx, "[TaskService] Failed to emit plan_tasks refetch", "error", err)
 			}
 		}
 	}
@@ -322,13 +322,13 @@ func (s *Service) DeleteTask(
 	}
 
 	if err := s.deps.Repo.DeleteTask(ctx, req.Msg.TaskId); err != nil {
-		logging.Error("Failed to delete task", "error", err)
+		logging.ErrorContext(ctx, "Failed to delete task", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete task"))
 	}
 
 	if deleteChatID != "" {
 		if err := s.deps.Repo.EmitChatRefetch(ctx, deleteChatID, db.RefetchPlanTasks); err != nil {
-			logging.Warn("[TaskService] Failed to emit plan_tasks refetch", "error", err)
+			logging.WarnContext(ctx, "[TaskService] Failed to emit plan_tasks refetch", "error", err)
 		}
 	}
 

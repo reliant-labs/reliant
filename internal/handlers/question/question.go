@@ -58,7 +58,7 @@ func (s *Service) ResolveQuestion(
 	}
 
 	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, responseData); err != nil {
-		logging.Error("Failed to resolve question", "error", err, "questionID", question.ID)
+		logging.ErrorContext(ctx, "Failed to resolve question", "error", err, "questionID", question.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve question"))
 	}
 
@@ -70,14 +70,14 @@ func (s *Service) ResolveQuestion(
 		StepID:     question.StepID,
 		Status:     "resolved",
 	}); err != nil {
-		logging.Warn("[Question] Failed to emit question update", "error", err)
+		logging.WarnContext(ctx, "[Question] Failed to emit question update", "error", err)
 	}
 
 	// For "reply" action with response_data and ask_user metadata: save user message to thread
 	if req.Msg.Action == "reply" && responseData != nil && question.Metadata != nil {
 		if isAskUserQuestion(question.Metadata) {
 			if err := s.saveUserReplyMessage(ctx, question, *responseData); err != nil {
-				logging.Warn("[Question] Failed to save user reply message", "error", err, "questionID", question.ID)
+				logging.WarnContext(ctx, "[Question] Failed to save user reply message", "error", err, "questionID", question.ID)
 			}
 		}
 	}
@@ -169,12 +169,12 @@ func questionStatusString(status int) string {
 // signalQuestion sends a signal to the workflow using PauseService.SignalWithRecovery
 func (s *Service) signalQuestion(ctx context.Context, question *db.Question, signalData map[string]interface{}) {
 	if question.TemporalWorkflowID == "" {
-		logging.Warn("[Question] No temporal_workflow_id on question, cannot signal", "questionID", question.ID)
+		logging.WarnContext(ctx, "[Question] No temporal_workflow_id on question, cannot signal", "questionID", question.ID)
 		return
 	}
 	signalName := "signal.question." + question.ID
 	if err := s.deps.Signals.SignalWithRecovery(ctx, question.TemporalWorkflowID, signalName, signalData, nil); err != nil {
-		logging.Warn("[Question] Failed to signal question resolution",
+		logging.WarnContext(ctx, "[Question] Failed to signal question resolution",
 			"error", err,
 			"questionID", question.ID,
 			"temporalWorkflowID", question.TemporalWorkflowID,

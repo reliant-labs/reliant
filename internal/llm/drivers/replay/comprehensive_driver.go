@@ -97,7 +97,7 @@ func (d *ComprehensiveReplayDriver) SendMessages(ctx context.Context, prompts []
 	// Update current agent if this session has a different agent
 	if session.Agent != "" && session.Agent != d.currentAgent {
 		d.currentAgent = session.Agent
-		logging.Debug("Switching to agent", "agent", session.Agent, "session", session.ID)
+		logging.DebugContext(ctx, "Switching to agent", "agent", session.Agent, "session", session.ID)
 	}
 
 	// Extract content and tool calls from the message
@@ -106,7 +106,7 @@ func (d *ComprehensiveReplayDriver) SendMessages(ctx context.Context, prompts []
 		return nil, fmt.Errorf("failed to extract message parts: %w", err)
 	}
 
-	logging.Debug("Replaying message",
+	logging.DebugContext(ctx, "Replaying message",
 		"session", nextMsg.SessionID,
 		"agent", nextMsg.Agent,
 		"role", nextMsg.Role,

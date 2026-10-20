@@ -807,7 +807,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 		tc := c.newTurnContext()
 		params, err := c.buildParams(prompts, messages, toolList)
 		if err != nil {
-			logging.Error("[Codex] Request preflight failed",
+			logging.ErrorContext(ctx, "[Codex] Request preflight failed",
 				"error", err,
 				"messageCount", len(messages),
 				"promptCount", len(prompts),
@@ -863,7 +863,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				return
 			}
 			openErr = AugmentAPIError(openErr)
-			logging.Error("[Codex] Stream error", "error", openErr)
+			logging.ErrorContext(ctx, "[Codex] Stream error", "error", openErr)
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: openErr}
 			return
 		}
@@ -989,7 +989,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 
 		if err := stream.Err(); err != nil {
 			err = AugmentAPIError(err)
-			logging.Error("[Codex] Stream error", "error", err)
+			logging.ErrorContext(ctx, "[Codex] Stream error", "error", err)
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
 			return
 		}

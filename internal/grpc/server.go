@@ -384,7 +384,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		WithAutoArchive(cfg.WorktreeAutoArchive, database,
 			func(ctx context.Context, userID, projectID, worktreeID string) {
 				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
-					logging.Warn("worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
+					logging.WarnContext(ctx, "worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 				}
 			})
 	worktreeService, err := worktree.New(worktree.Deps{
@@ -1057,7 +1057,7 @@ func (s *Server) IsTLS() bool {
 // first (serverkit.Drainer.Begin), so those reconnects reach a replica that
 // is still serving rather than this one.
 func (s *Server) Stop(ctx context.Context) error {
-	logging.Info("Stopping Connect/gRPC server", "streams_open", s.streams.Active())
+	logging.InfoContext(ctx, "Stopping Connect/gRPC server", "streams_open", s.streams.Active())
 	// DrainHTTP writes the listener's phase line ("drain: listener drained",
 	// with what the drain did to the long-lived streams).
 	return serverkit.DrainHTTP(ctx, s.server, s.streams)

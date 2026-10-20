@@ -150,7 +150,7 @@ func (s *Service) chatRunClosed(ctx context.Context, chat *db.Chat) bool {
 	}
 	state, err := s.runs.State(ctx, chatRunWorkflowID(chat))
 	if err != nil {
-		logging.Warn("Could not tell whether a chat's run is open", "error", err, "chatID", chat.ID)
+		logging.WarnContext(ctx, "Could not tell whether a chat's run is open", "error", err, "chatID", chat.ID)
 		return false
 	}
 	return !state.Exists || !state.IsRunning
@@ -169,7 +169,7 @@ func chatRunWorkflowID(chat *db.Chat) string {
 // composer's refusal — which keeps the text — is the whole story.
 func (s *Service) withdrawQueuedAgentMessage(ctx context.Context, chat *db.Chat, messageID string) {
 	if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, messageID, chat.ID); err != nil {
-		logging.Warn("Could not withdraw a message queued to a stopped agent that could not be resumed",
+		logging.WarnContext(ctx, "Could not withdraw a message queued to a stopped agent that could not be resumed",
 			"error", err, "chatID", chat.ID, "messageID", messageID)
 	}
 }
@@ -189,7 +189,7 @@ func (s *Service) withdrawQueuedAgentMessage(ctx context.Context, chat *db.Chat,
 // started the run meanwhile is rung instead of replaced.
 func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID string, chat *db.Chat, threadID, messageID string) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
 	refuse := func(cause error, message string) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
-		logging.Warn("Could not start a run to resume a stopped sub-agent; withdrawing the message queued to it",
+		logging.WarnContext(ctx, "Could not start a run to resume a stopped sub-agent; withdrawing the message queued to it",
 			"error", cause, "chatID", chat.ID, "threadID", threadID, "messageID", messageID)
 		s.withdrawQueuedAgentMessage(ctx, chat, messageID)
 		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: false, Message: message}), nil
@@ -284,7 +284,7 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 		return refuse(err, tryAgain)
 	}
 	s.runs.RecordRun(ctx, chat.ID, workflowID, run.GetRunID())
-	logging.Info("Started the chat's run to resume a sub-agent that stopped on an error, for a message sent to it",
+	logging.InfoContext(ctx, "Started the chat's run to resume a sub-agent that stopped on an error, for a message sent to it",
 		"chatID", chat.ID, "workflowID", workflowID, "runID", run.GetRunID(),
 		"threadID", threadID, "toolCallID", stopped.ToolCallID)
 	return connect.NewResponse(&reliantv1.SendAgentMessageResponse{

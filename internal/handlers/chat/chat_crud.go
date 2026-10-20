@@ -240,7 +240,7 @@ func (s *Service) ListChats(
 
 	chats, err := s.deps.Repo.ListChats(ctx, filters)
 	if err != nil {
-		logging.Error("Failed to list chats", "error", err)
+		logging.ErrorContext(ctx, "Failed to list chats", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list chats"))
 	}
 
@@ -256,7 +256,7 @@ func (s *Service) ListChats(
 	latestSeq, err := s.deps.Repo.GetLatestUserUpdateSequence(ctx, userID)
 	if err != nil {
 		// Non-fatal: log and return 0 so the frontend falls back to full replay
-		logging.Warn("Failed to get latest user update sequence", "error", err, "userID", userID)
+		logging.WarnContext(ctx, "Failed to get latest user update sequence", "error", err, "userID", userID)
 	}
 
 	return connect.NewResponse(&reliantv1.ListChatsResponse{
@@ -300,7 +300,7 @@ func (s *Service) GetChat(
 			// DB says running — verify Temporal agrees
 			temporalState, err := s.runs.State(ctx, workflowID)
 			if err != nil {
-				logging.Warn("Failed to query Temporal for workflow status",
+				logging.WarnContext(ctx, "Failed to query Temporal for workflow status",
 					"error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
 			} else if !temporalState.Exists {
 				// Ghost workflow — Temporal lost it but DB says running
@@ -384,7 +384,7 @@ func (s *Service) UpdateChat(
 
 		// Update workflow name on the workflow record
 		if err := s.deps.Repo.UpdateWorkflowName(ctx, *chat.WorkflowID, newWorkflowName); err != nil {
-			logging.Error("Failed to update workflow name", "error", err, "workflowID", *chat.WorkflowID)
+			logging.ErrorContext(ctx, "Failed to update workflow name", "error", err, "workflowID", *chat.WorkflowID)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow"))
 		}
 
@@ -396,7 +396,7 @@ func (s *Service) UpdateChat(
 	chat.LastActive = time.Now().UTC()
 
 	if err := s.deps.Repo.UpdateChat(ctx, chat); err != nil {
-		logging.Error("Failed to update chat", "error", err)
+		logging.ErrorContext(ctx, "Failed to update chat", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update chat"))
 	}
 
@@ -416,7 +416,7 @@ func (s *Service) UpdateChat(
 			EntityID:   chat.ID,
 			Data:       titleData,
 		}); err != nil {
-			logging.Warn("Failed to emit chat_title_changed", "error", err)
+			logging.WarnContext(ctx, "Failed to emit chat_title_changed", "error", err)
 		}
 	}
 
@@ -437,7 +437,7 @@ func (s *Service) UpdateChat(
 			EntityID:   chat.ID,
 			Data:       configData,
 		}); err != nil {
-			logging.Warn("Failed to emit chat_config_changed", "error", err)
+			logging.WarnContext(ctx, "Failed to emit chat_config_changed", "error", err)
 		}
 	}
 
@@ -459,7 +459,7 @@ func (s *Service) UpdateChat(
 			"title":         chat.Title,
 		})
 		if err := s.deps.Repo.CreateChatUpdate(ctx, chat.ID, db.UpdateTypeChat, chat.ID, string(chatUpdateData)); err != nil {
-			logging.Warn("Failed to emit chat_update for config change", "error", err)
+			logging.WarnContext(ctx, "Failed to emit chat_update for config change", "error", err)
 		}
 	}
 
@@ -493,7 +493,7 @@ func (s *Service) DeleteChat(
 		}
 
 		if err := s.deps.Repo.DeleteChat(ctx, req.Msg.ChatId); err != nil {
-			logging.Error("Failed to permanently delete chat", "error", err, "chatID", req.Msg.ChatId)
+			logging.ErrorContext(ctx, "Failed to permanently delete chat", "error", err, "chatID", req.Msg.ChatId)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to permanently delete chat"))
 		}
 
@@ -506,7 +506,7 @@ func (s *Service) DeleteChat(
 
 	// Otherwise, archive the chat
 	if err := s.deps.Repo.UpdateChatState(ctx, req.Msg.ChatId, db.ChatStateArchived, "user_archived"); err != nil {
-		logging.Error("Failed to archive chat", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to archive chat", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to archive chat"))
 	}
 
@@ -542,7 +542,7 @@ func (s *Service) cancelArchivedChatWorkflow(ctx context.Context, chat *db.Chat)
 	if err == nil || errors.As(err, &notFound) {
 		return
 	}
-	logging.Error("Failed to cancel workflow for archived chat",
+	logging.ErrorContext(ctx, "Failed to cancel workflow for archived chat",
 		"error", err,
 		"chatID", chat.ID,
 		"workflowID", workflowID)
@@ -581,7 +581,7 @@ func (s *Service) SearchChats(
 
 	chats, err := s.deps.Repo.SearchChats(ctx, filters)
 	if err != nil {
-		logging.Error("Failed to search chats", "error", err)
+		logging.ErrorContext(ctx, "Failed to search chats", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to search chats"))
 	}
 
@@ -605,7 +605,7 @@ func (s *Service) ListArchivedChats(
 
 	archivedChats, err := s.deps.Repo.ListArchivedChats(ctx, userID)
 	if err != nil {
-		logging.Error("Failed to list archived chats", "error", err)
+		logging.ErrorContext(ctx, "Failed to list archived chats", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list archived chats"))
 	}
 
@@ -703,7 +703,7 @@ func (s *Service) ListMessages(
 
 		messages, hasMore, err = s.listThreadMessages(ctx, threadsSvc, threadID, beforeSeq, recentLimit)
 		if err != nil {
-			logging.Error("Failed to load thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
+			logging.ErrorContext(ctx, "Failed to load thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
 			return nil, loadMessagesError(ctx, err)
 		}
 		// The display count, not the LLM one: listThreadMessages reads the
@@ -712,7 +712,7 @@ func (s *Service) ListMessages(
 		// the one being returned.
 		totalCount, err = threadsSvc.CountDisplayMessages(ctx, threadID)
 		if err != nil {
-			logging.Error("Failed to count thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
+			logging.ErrorContext(ctx, "Failed to count thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
 			return nil, loadMessagesError(ctx, err)
 		}
 		if len(messages) > 0 {
@@ -723,7 +723,7 @@ func (s *Service) ListMessages(
 		messages, totalCount, oldestSeq, hasMore, err = s.listMessagesBounded(
 			ctx, threadsSvc, req.Msg.ChatId, mainThreadID, beforeSeq, recentLimit)
 		if err != nil {
-			logging.Error("Failed to load bounded messages", "error", err, "chatID", req.Msg.ChatId)
+			logging.ErrorContext(ctx, "Failed to load bounded messages", "error", err, "chatID", req.Msg.ChatId)
 			return nil, loadMessagesError(ctx, err)
 		}
 	default:
@@ -732,7 +732,7 @@ func (s *Service) ListMessages(
 		// thread's full history and hand it to paginateBySeq unbounded.
 		messages, totalCount, err = s.listMessagesUnbounded(ctx, threadsSvc, req.Msg.ChatId, mainThreadID)
 		if err != nil {
-			logging.Error("Failed to resolve messages", "error", err, "chatID", req.Msg.ChatId)
+			logging.ErrorContext(ctx, "Failed to resolve messages", "error", err, "chatID", req.Msg.ChatId)
 			return nil, loadMessagesError(ctx, err)
 		}
 
@@ -751,7 +751,7 @@ func (s *Service) ListMessages(
 	}
 	allBlocks, err := s.deps.Repo.ListContentBlocksForMessages(ctx, messageIDs)
 	if err != nil {
-		logging.Error("Failed to batch list content blocks", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to batch list content blocks", "error", err, "chatID", req.Msg.ChatId)
 		return nil, loadMessagesError(ctx, err)
 	}
 	blocksByMessageID := make(map[string][]*db.MessageContentBlock, len(messages))
@@ -841,7 +841,7 @@ func (s *Service) UpdateChatState(
 
 	// Update the state
 	if err := s.deps.Repo.UpdateChatState(ctx, req.Msg.ChatId, newState, reason); err != nil {
-		logging.Error("Failed to update chat state", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to update chat state", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update chat state"))
 	}
 
@@ -850,7 +850,7 @@ func (s *Service) UpdateChatState(
 		worktree, err := s.deps.Repo.GetWorktree(ctx, *chat.WorktreeID)
 		if err == nil && worktree.DeletedAt != nil {
 			if err := s.deps.Repo.UnarchiveWorktree(ctx, *chat.WorktreeID); err != nil {
-				logging.Error("Failed to unarchive workspace when unarchiving chat",
+				logging.ErrorContext(ctx, "Failed to unarchive workspace when unarchiving chat",
 					"error", err,
 					"chatID", req.Msg.ChatId,
 					"worktreeID", *chat.WorktreeID)
@@ -896,7 +896,7 @@ func (s *Service) TerminateChat(
 		case errors.Is(err, runs.ErrChatNotFound):
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 		default:
-			logging.Error("Failed to terminate workflow", "error", err, "chatID", req.Msg.ChatId)
+			logging.ErrorContext(ctx, "Failed to terminate workflow", "error", err, "chatID", req.Msg.ChatId)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to terminate workflow"))
 		}
 	}
@@ -959,7 +959,7 @@ func (s *Service) PauseChat(
 		UserID: userID,
 		ChatID: req.Msg.ChatId,
 	}); err != nil {
-		logging.Warn("Failed to push tool cancel while pausing; the workflow-level pause still applies",
+		logging.WarnContext(ctx, "Failed to push tool cancel while pausing; the workflow-level pause still applies",
 			"error", err, "chatID", req.Msg.ChatId)
 	}
 
@@ -968,7 +968,7 @@ func (s *Service) PauseChat(
 	// A failed cancel push above must not strand the workflow un-paused, so
 	// this always runs regardless of that outcome.
 	if err := s.runs.Pause(ctx, req.Msg.ChatId); err != nil {
-		logging.Error("Failed to pause workflow", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to pause workflow", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to pause workflow"))
 	}
 
@@ -1011,7 +1011,7 @@ func (s *Service) ResumeChat(
 
 	outcome, err := s.runs.Resume(ctx, req.Msg.ChatId, nil)
 	if err != nil {
-		logging.Error("Failed to resume workflow", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to resume workflow", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resume workflow"))
 	}
 
@@ -1077,7 +1077,7 @@ func (s *Service) DismissChat(
 
 	// Clear unread flag
 	if err := s.deps.Repo.UpdateChatUnread(ctx, req.Msg.ChatId, false, "user_dismissed"); err != nil {
-		logging.Error("Failed to dismiss chat", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to dismiss chat", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to dismiss chat"))
 	}
 
@@ -1124,7 +1124,7 @@ func (s *Service) MarkUnreadChat(
 
 	// Set unread flag
 	if err := s.deps.Repo.UpdateChatUnread(ctx, req.Msg.ChatId, true, "user_marked_unread"); err != nil {
-		logging.Error("Failed to mark chat as unread", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to mark chat as unread", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to mark chat as unread"))
 	}
 
@@ -1164,7 +1164,7 @@ func (s *Service) CompactChat(
 		Thread: &threadToCompact,
 	})
 	if err != nil {
-		logging.Error("Failed to list messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadToCompact)
+		logging.ErrorContext(ctx, "Failed to list messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadToCompact)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check messages"))
 	}
 
@@ -1176,7 +1176,7 @@ func (s *Service) CompactChat(
 	if workflowID := chat.MainThreadID(); workflowID != "" {
 		temporalState, err := s.runs.State(ctx, workflowID)
 		if err != nil {
-			logging.Error("Failed to check workflow status for compaction",
+			logging.ErrorContext(ctx, "Failed to check workflow status for compaction",
 				"error", err,
 				"chatID", req.Msg.ChatId,
 				"workflowID", workflowID,
@@ -1218,7 +1218,7 @@ func (s *Service) CompactChat(
 
 	workflowRun, err := s.deps.Temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
-		logging.Error("Failed to start compact workflow", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to start compact workflow", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to start compaction"))
 	}
 
@@ -1254,14 +1254,14 @@ func (s *Service) GetChatUpdates(
 	// Get updates since sequence
 	updates, err := s.deps.Repo.GetUpdatesSince(ctx, req.Msg.ChatId, req.Msg.SinceSeq, 0)
 	if err != nil {
-		logging.Error("Failed to fetch updates", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to fetch updates", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to fetch updates"))
 	}
 
 	// Get latest sequence for client
 	latestSeq, err := s.deps.Repo.GetLatestUpdateSequence(ctx, req.Msg.ChatId)
 	if err != nil {
-		logging.Error("Failed to get latest sequence", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to get latest sequence", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get latest sequence"))
 	}
 
@@ -1342,11 +1342,11 @@ func (s *Service) SetChatDaemon(
 			Data:       configData,
 		})
 	}); err != nil {
-		logging.Error("Failed to set chat daemon", "error", err, "chatID", chat.ID)
+		logging.ErrorContext(ctx, "Failed to set chat daemon", "error", err, "chatID", chat.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to set chat daemon"))
 	}
 	if connecting {
-		logging.Info("[SetChatDaemon] chat with no machine connected to a machine",
+		logging.InfoContext(ctx, "[SetChatDaemon] chat with no machine connected to a machine",
 			"chatID", chat.ID, "daemonID", req.Msg.DaemonId)
 	}
 
@@ -1394,7 +1394,7 @@ func (s *Service) setChatAdopted(ctx context.Context, chatID string, adopted boo
 	}
 	owned, err := s.deps.Repo.SetChatAdopted(ctx, chatID, userID, adopted)
 	if err != nil {
-		logging.Error("Failed to set chat adoption", "error", err, "chatID", chatID, "adopted", adopted)
+		logging.ErrorContext(ctx, "Failed to set chat adoption", "error", err, "chatID", chatID, "adopted", adopted)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update chat"))
 	}
 	if !owned {
@@ -1430,7 +1430,7 @@ func (s *Service) ListChatPlans(
 	// List plans for the chat (across all threads)
 	plans, err := s.deps.Repo.ListPlansByChatID(ctx, req.Msg.ChatId)
 	if err != nil {
-		logging.Error("Failed to list plans", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to list plans", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list plans"))
 	}
 
@@ -1482,7 +1482,7 @@ func (s *Service) listMessagesUnbounded(
 
 	allThreads, err := s.deps.Repo.ListThreadsByConversation(ctx, chatID)
 	if err != nil {
-		logging.Warn("Failed to list threads for conversation", "error", err, "chatID", chatID)
+		logging.WarnContext(ctx, "Failed to list threads for conversation", "error", err, "chatID", chatID)
 		allThreads = []*db.Thread{}
 	}
 
@@ -1493,7 +1493,7 @@ func (s *Service) listMessagesUnbounded(
 		}
 		childMsgs, err := threadsSvc.LoadDisplayMessages(ctx, thread.ID)
 		if err != nil {
-			logging.Warn("Failed to load child thread messages", "error", err, "threadID", thread.ID)
+			logging.WarnContext(ctx, "Failed to load child thread messages", "error", err, "threadID", thread.ID)
 			continue
 		}
 		childThreadMessages = append(childThreadMessages, childMsgs...)
@@ -1618,7 +1618,7 @@ func (s *Service) listMessagesBounded(
 
 	allThreads, err := s.deps.Repo.ListThreadsByConversation(ctx, chatID)
 	if err != nil {
-		logging.Warn("Failed to list threads for conversation", "error", err, "chatID", chatID)
+		logging.WarnContext(ctx, "Failed to list threads for conversation", "error", err, "chatID", chatID)
 		allThreads = []*db.Thread{}
 	}
 
@@ -1632,7 +1632,7 @@ func (s *Service) listMessagesBounded(
 		}
 		childMsgs, err := threadsSvc.LoadMessagesInSeqRange(ctx, thread.ID, fromSeq, toSeq)
 		if err != nil {
-			logging.Warn("Failed to load child thread messages in range", "error", err, "threadID", thread.ID)
+			logging.WarnContext(ctx, "Failed to load child thread messages in range", "error", err, "threadID", thread.ID)
 			continue
 		}
 		for _, msg := range childMsgs {

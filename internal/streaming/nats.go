@@ -136,7 +136,7 @@ func (h *NATSHub) Publish(ctx context.Context, chatID string, delta StreamingDel
 	if err != nil {
 		h.dropCount.Add(1)
 		observability.StreamingErrorsTotal.WithLabelValues("marshal").Inc()
-		logging.Warn("[NATSHub] Failed to marshal delta",
+		logging.WarnContext(ctx, "[NATSHub] Failed to marshal delta",
 			"chatID", chatID[:min(8, len(chatID))],
 			"error", err)
 		return
@@ -148,7 +148,7 @@ func (h *NATSHub) Publish(ctx context.Context, chatID string, delta StreamingDel
 	if _, err := h.js.PublishMsgAsync(msg); err != nil {
 		h.dropCount.Add(1)
 		observability.NATSErrorsTotal.WithLabelValues("streaming.chat", "publish").Inc()
-		logging.Warn("[NATSHub] Failed to publish delta",
+		logging.WarnContext(ctx, "[NATSHub] Failed to publish delta",
 			"chatID", chatID[:min(8, len(chatID))],
 			"error", err)
 		return
@@ -181,7 +181,7 @@ func (h *NATSHub) Subscribe(ctx context.Context, chatID string) Subscription {
 	chatSubs, _ := h.subscribers.LoadOrStore(chatID, &sync.Map{})
 	chatSubs.(*sync.Map).Store(id, sub)
 
-	logging.Debug("[NATSHub] New subscriber",
+	logging.DebugContext(ctx, "[NATSHub] New subscriber",
 		"chatID", chatID[:min(8, len(chatID))],
 		"subscriberID", id)
 
@@ -226,12 +226,12 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 	// client reconnect loop that never heals on its own.
 	if errors.Is(err, jetstream.ErrStreamNotFound) {
 		observability.StreamingErrorsTotal.WithLabelValues("stream_missing").Inc()
-		logging.Warn("[NATSHub] Deltas stream missing — recreating",
+		logging.WarnContext(ctx, "[NATSHub] Deltas stream missing — recreating",
 			"chatID", sub.chatID[:min(8, len(sub.chatID))],
 			"stream", natsStreamName)
 		if ensureErr := h.ensureStream(ctx); ensureErr != nil {
 			observability.StreamingErrorsTotal.WithLabelValues("stream_recreate").Inc()
-			logging.Warn("[NATSHub] Failed to recreate deltas stream",
+			logging.WarnContext(ctx, "[NATSHub] Failed to recreate deltas stream",
 				"chatID", sub.chatID[:min(8, len(sub.chatID))],
 				"error", ensureErr)
 			return
@@ -240,7 +240,7 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 	}
 	if err != nil {
 		observability.StreamingErrorsTotal.WithLabelValues("consumer_create").Inc()
-		logging.Warn("[NATSHub] Failed to create ordered consumer",
+		logging.WarnContext(ctx, "[NATSHub] Failed to create ordered consumer",
 			"chatID", sub.chatID[:min(8, len(sub.chatID))],
 			"error", err)
 		return
@@ -249,7 +249,7 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 	iter, err := consumer.Messages()
 	if err != nil {
 		observability.StreamingErrorsTotal.WithLabelValues("iterator_start").Inc()
-		logging.Warn("[NATSHub] Failed to start message iterator",
+		logging.WarnContext(ctx, "[NATSHub] Failed to start message iterator",
 			"chatID", sub.chatID[:min(8, len(sub.chatID))],
 			"error", err)
 		return
@@ -297,7 +297,7 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 		var delta StreamingDelta
 		if err := json.Unmarshal(msg.Data(), &delta); err != nil {
 			observability.StreamingErrorsTotal.WithLabelValues("unmarshal").Inc()
-			logging.Warn("[NATSHub] Failed to unmarshal delta",
+			logging.WarnContext(ctx, "[NATSHub] Failed to unmarshal delta",
 				"chatID", sub.chatID[:min(8, len(sub.chatID))],
 				"error", err)
 			span.End()

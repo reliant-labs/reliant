@@ -415,7 +415,7 @@ func (s *Service) readMCPConfigForScope(ctx context.Context, projectID string, s
 
 	cfg, ok, parseErr := readScopeConfigFromStoredRecord(record, normalizedScope)
 	if parseErr != nil {
-		logging.Warn("Failed to parse stored scoped MCP config; returning empty", "project_id", projectID, "scope", normalizedScope.String(), "error", parseErr)
+		logging.WarnContext(ctx, "Failed to parse stored scoped MCP config; returning empty", "project_id", projectID, "scope", normalizedScope.String(), "error", parseErr)
 		return &MCPConfigFile{MCPServers: make(map[string]MCPServerConfig)}, nil
 	}
 	if ok {
@@ -483,7 +483,7 @@ func (s *Service) removeServerFromAllScopes(ctx context.Context, projectID, user
 	} {
 		cfg, err := s.readMCPConfigForScope(ctx, projectID, scope)
 		if err != nil {
-			logging.Warn("Failed reading MCP config for uninstall", "scope", scope.String(), "error", err)
+			logging.WarnContext(ctx, "Failed reading MCP config for uninstall", "scope", scope.String(), "error", err)
 			continue
 		}
 		if _, exists := cfg.MCPServers[name]; !exists {
@@ -502,13 +502,13 @@ func (s *Service) removeServerFromAllScopes(ctx context.Context, projectID, user
 func (s *Service) ensureProjectLocalGitignore(ctx context.Context, projectID string) {
 	project, err := s.deps.Repo.GetProject(ctx, projectID)
 	if err != nil {
-		logging.Warn("Failed to get project while ensuring .reliant.local is gitignored", "project_id", projectID, "error", err)
+		logging.WarnContext(ctx, "Failed to get project while ensuring .reliant.local is gitignored", "project_id", projectID, "error", err)
 		return
 	}
 
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || s.deps.Router == nil {
-		logging.Warn("Cannot ensure gitignore: no user context or daemon router")
+		logging.WarnContext(ctx, "Cannot ensure gitignore: no user context or daemon router")
 		return
 	}
 
@@ -518,7 +518,7 @@ func (s *Service) ensureProjectLocalGitignore(ctx context.Context, projectID str
 	}{ProjectPath: project.Path, Pattern: ".reliant.local/"})
 
 	if _, err := s.deps.Router.SendDaemonCommand(ctx, userID, "mcp.ensure_gitignore", payload, 10000); err != nil {
-		logging.Warn("Failed to ensure .reliant.local/ is gitignored via daemon", "project_path", project.Path, "error", err)
+		logging.WarnContext(ctx, "Failed to ensure .reliant.local/ is gitignored via daemon", "project_path", project.Path, "error", err)
 	}
 }
 
@@ -894,7 +894,7 @@ func (s *Service) InstallServer(
 ) (*connect.Response[reliantv1.InstallServerResponse], error) {
 	projectID := req.Msg.ProjectId
 	if projectID == "" {
-		logging.Error("InstallServer: project_id is required")
+		logging.ErrorContext(ctx, "InstallServer: project_id is required")
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
 	}
 
@@ -906,22 +906,22 @@ func (s *Service) InstallServer(
 
 	name := req.Msg.Name
 	if name == "" {
-		logging.Error("InstallServer: server name is required")
+		logging.ErrorContext(ctx, "InstallServer: server name is required")
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("server name is required"))
 	}
 
 	scope := req.Msg.Scope
-	logging.Debug("InstallServer request received", "project_id", projectID, "name", name, "scope", scope.String())
+	logging.DebugContext(ctx, "InstallServer request received", "project_id", projectID, "name", name, "scope", scope.String())
 
 	if s.deps.Router == nil {
-		logging.Error("InstallServer: MCP manager is nil")
+		logging.ErrorContext(ctx, "InstallServer: MCP manager is nil")
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP not available - manager not initialized"))
 	}
 
 	// Read MCP config for the requested scope
 	mcpConfig, err := s.readMCPConfigForScope(ctx, projectID, scope)
 	if err != nil {
-		logging.Error("InstallServer: failed to read MCP config", "error", err, "scope", scope.String())
+		logging.ErrorContext(ctx, "InstallServer: failed to read MCP config", "error", err, "scope", scope.String())
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read MCP configuration: %w", err))
 	}
 
@@ -943,7 +943,7 @@ func (s *Service) InstallServer(
 	// No server-side DOCKER_HOST probing needed.
 
 	if err := s.preflightMCPServer(ctx, name, internalConfig); err != nil {
-		logging.Error("MCP server install failed",
+		logging.ErrorContext(ctx, "MCP server install failed",
 			"operation", "install",
 			"server", name,
 			"phase", "preflight",
@@ -962,7 +962,7 @@ func (s *Service) InstallServer(
 
 	// Write updated config via daemon
 	if err := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, scope, mcpConfig); err != nil {
-		logging.Error("Failed to write MCP config", "error", err)
+		logging.ErrorContext(ctx, "Failed to write MCP config", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save MCP configuration: %w", err))
 	}
 
@@ -985,15 +985,15 @@ func (s *Service) InstallServer(
 			delete(mcpConfig.MCPServers, name)
 		}
 		if rollbackErr := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, scope, mcpConfig); rollbackErr != nil {
-			logging.Error("Failed to rollback MCP config after skill bundle failure", "error", rollbackErr, "server", name)
+			logging.ErrorContext(ctx, "Failed to rollback MCP config after skill bundle failure", "error", rollbackErr, "server", name)
 		}
 		if persistErr := s.persistStoredMCPConfigScopes(ctx, projectID, map[reliantv1.ConfigScope]*MCPConfigFile{
 			normalizeScope(scope): mcpConfig,
 		}); persistErr != nil {
-			logging.Error("Failed to rollback stored MCP scope snapshot after skill bundle failure", "error", persistErr, "server", name)
+			logging.ErrorContext(ctx, "Failed to rollback stored MCP scope snapshot after skill bundle failure", "error", persistErr, "server", name)
 		}
 
-		logging.Error("MCP server install failed",
+		logging.ErrorContext(ctx, "MCP server install failed",
 			"operation", "install",
 			"server", name,
 			"phase", "skill_bundle",
@@ -1012,7 +1012,7 @@ func (s *Service) InstallServer(
 
 	if internalConfig.Enabled {
 		if err := s.mcpManagerForUser(userID).AddProjectServer(startCtx, projectPath, name, internalConfig); err != nil {
-			logging.Error("MCP server install failed",
+			logging.ErrorContext(ctx, "MCP server install failed",
 				"operation", "install",
 				"server", name,
 				"phase", "startup",
@@ -1026,11 +1026,11 @@ func (s *Service) InstallServer(
 		}
 	}
 
-	logging.Info("MCP server installed successfully", "name", name, "scope", scope.String())
+	logging.InfoContext(ctx, "MCP server installed successfully", "name", name, "scope", scope.String())
 
 	if userID, ok := auth.GetUserIDFromContext(ctx); ok {
 		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
-			logging.Warn("Failed to emit config_health refetch after InstallServer", "error", err)
+			logging.WarnContext(ctx, "Failed to emit config_health refetch after InstallServer", "error", err)
 		}
 	}
 
@@ -1286,13 +1286,13 @@ func (s *Service) UninstallServer(
 
 	// Remove from running manager first
 	if err := s.mcpManagerForUser(userID).RemoveProjectServer(projectPath, name); err != nil {
-		logging.Warn("Failed to remove MCP server from manager during uninstall", "error", err, "name", name)
+		logging.WarnContext(ctx, "Failed to remove MCP server from manager during uninstall", "error", err, "name", name)
 		// Continue anyway to remove from config files
 	}
 
 	updatedScopes, err := s.removeServerFromAllScopes(ctx, projectID, userID, name)
 	if err != nil {
-		logging.Error("Failed to remove MCP server from scoped configs", "error", err, "name", name)
+		logging.ErrorContext(ctx, "Failed to remove MCP server from scoped configs", "error", err, "name", name)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save MCP configuration: %w", err))
 	}
 
@@ -1300,10 +1300,10 @@ func (s *Service) UninstallServer(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	logging.Info("MCP server uninstalled successfully", "name", name)
+	logging.InfoContext(ctx, "MCP server uninstalled successfully", "name", name)
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after UninstallServer", "error", err)
+		logging.WarnContext(ctx, "Failed to emit config_health refetch after UninstallServer", "error", err)
 	}
 
 	return connect.NewResponse(&reliantv1.UninstallServerResponse{
@@ -1351,7 +1351,7 @@ func (s *Service) RestartServer(
 	}
 
 	if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
-		logging.Warn("RestartServer: failed to remove existing server before restart", "name", name, "error", err)
+		logging.WarnContext(ctx, "RestartServer: failed to remove existing server before restart", "name", name, "error", err)
 	}
 
 	if !scoped.Config.IsEnabled() {
@@ -1365,7 +1365,7 @@ func (s *Service) RestartServer(
 	intCfg := scopedConfigToInternal(scoped.Config)
 
 	if err := s.preflightMCPServer(ctx, name, intCfg); err != nil {
-		logging.Error("MCP server restart failed",
+		logging.ErrorContext(ctx, "MCP server restart failed",
 			"operation", "restart",
 			"server", name,
 			"phase", "preflight",
@@ -1382,7 +1382,7 @@ func (s *Service) RestartServer(
 	defer cancel()
 
 	if err := mgr.AddProjectServer(startCtx, projectPath, name, intCfg); err != nil {
-		logging.Error("MCP server restart failed",
+		logging.ErrorContext(ctx, "MCP server restart failed",
 			"operation", "restart",
 			"server", name,
 			"phase", "startup",
@@ -1397,7 +1397,7 @@ func (s *Service) RestartServer(
 
 	if userID, ok := auth.GetUserIDFromContext(ctx); ok {
 		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
-			logging.Warn("Failed to emit config_health refetch after RestartServer", "error", err)
+			logging.WarnContext(ctx, "Failed to emit config_health refetch after RestartServer", "error", err)
 		}
 	}
 
@@ -1426,7 +1426,7 @@ func (s *Service) ListRecommended(
 	// Load recommended MCPs from YAML config
 	recommendedConfig, err := config.LoadRecommendedMCPs()
 	if err != nil {
-		logging.Error("Failed to load recommended MCPs", "error", err)
+		logging.ErrorContext(ctx, "Failed to load recommended MCPs", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load recommended MCPs: %w", err))
 	}
 
@@ -1544,7 +1544,7 @@ func (s *Service) UpdateServerConfig(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("server name is required"))
 	}
 
-	logging.Debug("UpdateServerConfig request", "project_id", projectID, "name", name, "env_keys", len(req.Msg.Env))
+	logging.DebugContext(ctx, "UpdateServerConfig request", "project_id", projectID, "name", name, "env_keys", len(req.Msg.Env))
 
 	scopedServers, err := s.readMergedScopedServers(ctx, projectID)
 	if err != nil {
@@ -1588,7 +1588,7 @@ func (s *Service) UpdateServerConfig(
 	if s.deps.Router != nil {
 		mgr := s.mcpManagerForUser(userID)
 		if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
-			logging.Warn("Failed to remove server before restart", "error", err)
+			logging.WarnContext(ctx, "Failed to remove server before restart", "error", err)
 		}
 
 		intCfg := scopedConfigToInternal(serverCfg)
@@ -1601,7 +1601,7 @@ func (s *Service) UpdateServerConfig(
 
 	if userID, ok := auth.GetUserIDFromContext(ctx); ok {
 		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
-			logging.Warn("Failed to emit config_health refetch after UpdateServerConfig", "error", err)
+			logging.WarnContext(ctx, "Failed to emit config_health refetch after UpdateServerConfig", "error", err)
 		}
 	}
 
@@ -1665,7 +1665,7 @@ func (s *Service) SetServerEnabled(
 		mgr := s.mcpManagerForUser(userID)
 		if req.Msg.Enabled {
 			if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
-				logging.Warn("Failed to remove server before enable restart", "name", name, "error", err)
+				logging.WarnContext(ctx, "Failed to remove server before enable restart", "name", name, "error", err)
 			}
 
 			intCfg := scopedConfigToInternal(serverCfg)
@@ -1673,7 +1673,7 @@ func (s *Service) SetServerEnabled(
 			defer cancel()
 
 			if err := s.preflightMCPServer(ctx, name, intCfg); err != nil {
-				logging.Error("MCP server enable/disable failed",
+				logging.ErrorContext(ctx, "MCP server enable/disable failed",
 					"operation", "set_enabled",
 					"server", name,
 					"phase", "preflight",
@@ -1688,7 +1688,7 @@ func (s *Service) SetServerEnabled(
 			}
 
 			if err := mgr.AddProjectServer(startCtx, projectPath, name, intCfg); err != nil {
-				logging.Error("MCP server enable/disable failed",
+				logging.ErrorContext(ctx, "MCP server enable/disable failed",
 					"operation", "set_enabled",
 					"server", name,
 					"phase", "startup",
@@ -1703,7 +1703,7 @@ func (s *Service) SetServerEnabled(
 			}
 		} else {
 			if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
-				logging.Warn("Failed to stop server while disabling", "name", name, "error", err)
+				logging.WarnContext(ctx, "Failed to stop server while disabling", "name", name, "error", err)
 			}
 		}
 	}
@@ -1806,7 +1806,7 @@ func (s *Service) MoveServerScope(
 	if s.deps.Router != nil {
 		mgr := s.mcpManagerForUser(userID)
 		if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
-			logging.Warn("Failed to remove server before restarting after scope move", "name", name, "error", err)
+			logging.WarnContext(ctx, "Failed to remove server before restarting after scope move", "name", name, "error", err)
 		}
 
 		intCfg := scopedConfigToInternal(serverCfg)
@@ -1815,7 +1815,7 @@ func (s *Service) MoveServerScope(
 			defer cancel()
 
 			if err := mgr.AddProjectServer(startCtx, projectPath, name, intCfg); err != nil {
-				logging.Error("MCP server scope move failed",
+				logging.ErrorContext(ctx, "MCP server scope move failed",
 					"operation", "move_scope",
 					"server", name,
 					"target_scope", targetScope.String(),

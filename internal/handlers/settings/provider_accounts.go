@@ -83,12 +83,12 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 
 	acct, created, err := repo.UpsertProviderAccount(ctx, in.upsert)
 	if err != nil {
-		logging.Error("Failed to persist provider account", "provider", in.provider, "error", err)
+		logging.ErrorContext(ctx, "Failed to persist provider account", "provider", in.provider, "error", err)
 		return signInResult{}, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save %s credentials", providerName(in.provider)))
 	}
 	if created && in.label != "" && acct.Label == "" && acct.Email == "" {
 		if acct, err = repo.PatchProviderAccount(ctx, in.userID, acct.ID, core.AccountPatch{Label: &in.label}); err != nil {
-			logging.Warn("Failed to label new provider account", "provider", in.provider, "error", err)
+			logging.WarnContext(ctx, "Failed to label new provider account", "provider", in.provider, "error", err)
 		}
 	}
 
@@ -100,7 +100,7 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 
 	if providerusage.UsageAPIEnabled(in.provider) {
 		if err := repo.ScheduleUsagePoll(ctx, acct.ID, time.Now(), 0, ""); err != nil {
-			logging.Warn("Failed to schedule usage poll for new account", "provider", in.provider, "error", err)
+			logging.WarnContext(ctx, "Failed to schedule usage poll for new account", "provider", in.provider, "error", err)
 		}
 	}
 
@@ -108,7 +108,7 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 		Provider: in.provider, Action: "connected", AuthMethod: "oauth",
 	})
 	if err := repo.EmitUserRefetch(ctx, in.userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after provider sign-in", "provider", in.provider, "error", err)
+		logging.WarnContext(ctx, "Failed to emit config_health refetch after provider sign-in", "provider", in.provider, "error", err)
 	}
 
 	limits, _ := repo.ListAccountLimits(ctx, in.userID)
@@ -149,7 +149,7 @@ func (s *Service) claudeIdentity(ctx context.Context, accessToken, accountUUID, 
 		pctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		if p, err := s.deps.ClaudeProfile(pctx, accessToken); err != nil {
-			logging.Warn("Claude profile read failed; the plan stays unknown until the next poll", "error", err)
+			logging.WarnContext(ctx, "Claude profile read failed; the plan stays unknown until the next poll", "error", err)
 		} else {
 			if u.Email == "" {
 				u.Email = p.Email

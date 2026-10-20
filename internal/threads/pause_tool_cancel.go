@@ -51,7 +51,7 @@ func (s *Service) CancelChatToolCalls(ctx context.Context, opts CancelChatToolCa
 
 	inFlight, err := s.inFlightToolCallsForChat(ctx, opts.ChatID)
 	if err != nil {
-		logging.Error("Failed to read in-flight tool calls for pause",
+		logging.ErrorContext(ctx, "Failed to read in-flight tool calls for pause",
 			"error", err, "chatID", opts.ChatID)
 		return CancelChatToolCallsResult{}, fmt.Errorf("failed to read tool calls: %w", err)
 	}
@@ -59,7 +59,7 @@ func (s *Service) CancelChatToolCalls(ctx context.Context, opts CancelChatToolCa
 	outcome := s.cancelToolCalls(ctx, opts.UserID, inFlight, pauseToolCancelReason)
 	result := CancelChatToolCallsResult(outcome)
 
-	logging.Info("Pause cancelled in-flight tool calls",
+	logging.InfoContext(ctx, "Pause cancelled in-flight tool calls",
 		"chatID", opts.ChatID,
 		"cancelledToolCalls", result.CancelledToolCalls,
 		"undeliverable", len(result.UndeliverableToolCalls),

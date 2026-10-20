@@ -71,7 +71,7 @@ func (s *Service) PreviewAccountDeletion(
 
 	counts, err := accountpurge.Preview(ctx, s.deps.SQL, userID)
 	if err != nil {
-		logging.Error("[AccountService] preview failed", "user_id", userID, "error", err)
+		logging.ErrorContext(ctx, "[AccountService] preview failed", "user_id", userID, "error", err)
 		return nil, connect.NewError(connect.CodeInternal,
 			fmt.Errorf("could not read account contents"))
 	}
@@ -86,7 +86,7 @@ func (s *Service) PreviewAccountDeletion(
 		quote, cpErr := s.deps.ControlPlane.PreviewAccountDeletionWallet(ctx,
 			auth.BearerToken(req.Header().Get("Authorization")))
 		if cpErr != nil {
-			logging.Error("[AccountService] control-plane wallet quote failed", "user_id", userID, "error", cpErr)
+			logging.ErrorContext(ctx, "[AccountService] control-plane wallet quote failed", "user_id", userID, "error", cpErr)
 			return nil, connect.NewError(connect.CodeUnavailable,
 				fmt.Errorf("could not load your wallet balance; please try again"))
 		}
@@ -131,7 +131,7 @@ func (s *Service) DeleteAccount(
 		}
 	}
 
-	logging.Warn("[AccountService] deleting account", "user_id", userID)
+	logging.WarnContext(ctx, "[AccountService] deleting account", "user_id", userID)
 
 	// CONTROL PLANE FIRST, then the local purge.
 	//
@@ -148,7 +148,7 @@ func (s *Service) DeleteAccount(
 		result, cpErr := s.deps.ControlPlane.DeleteCurrentUserAccount(ctx,
 			auth.BearerToken(req.Header().Get("Authorization")))
 		if cpErr != nil {
-			logging.Error("[AccountService] control-plane deletion failed", "user_id", userID, "error", cpErr)
+			logging.ErrorContext(ctx, "[AccountService] control-plane deletion failed", "user_id", userID, "error", cpErr)
 			if connect.CodeOf(cpErr) == connect.CodeUnavailable {
 				// A refund's outcome could not be confirmed with the payment
 				// provider. Nothing irreversible happened and retrying replays
@@ -174,14 +174,14 @@ func (s *Service) DeleteAccount(
 
 	deleted, err := accountpurge.Purge(ctx, s.deps.SQL, userID)
 	if err != nil {
-		logging.Error("[AccountService] purge failed", "user_id", userID, "error", err)
+		logging.ErrorContext(ctx, "[AccountService] purge failed", "user_id", userID, "error", err)
 		// The purge is transactional: a failure changed nothing, so the client
 		// can safely retry.
 		return nil, connect.NewError(connect.CodeInternal,
 			fmt.Errorf("account deletion failed; nothing was deleted"))
 	}
 
-	logging.Warn("[AccountService] account deleted", "user_id", userID, "rows", deleted,
+	logging.WarnContext(ctx, "[AccountService] account deleted", "user_id", userID, "rows", deleted,
 		"refund_pending", resp.RefundPending)
 
 	resp.DeletedRowCount = deleted

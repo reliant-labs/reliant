@@ -220,7 +220,7 @@ func (r *Recorder) flush(ctx context.Context, force bool) {
 		}
 		r.mu.Unlock()
 		if err != nil {
-			logging.Warn("persisting rate-limit snapshot failed", "account_id", it.accountID, "error", err)
+			logging.WarnContext(ctx, "persisting rate-limit snapshot failed", "account_id", it.accountID, "error", err)
 		}
 	}
 }
@@ -232,7 +232,7 @@ func (r *Recorder) write(ctx context.Context, it flushItem, now time.Time) error
 	// A refused request with a known reset benches the account for it.
 	if ex := exhausted(it.state.Windows, it.state.RepresentativeWindow, it.state.Status, now); ex.Exhausted && !ex.Until.IsZero() {
 		if eff, err := bench(ctx, r.store, now, it.userID, it.accountID, ex.Until, ex.Window); err != nil {
-			logging.Warn("benching account from its rate-limit snapshot failed", "account_id", it.accountID, "error", err)
+			logging.WarnContext(ctx, "benching account from its rate-limit snapshot failed", "account_id", it.accountID, "error", err)
 		} else {
 			r.schedulePoll(ctx, it.accountID, eff.Add(confirmAfterReset))
 		}
@@ -248,7 +248,7 @@ func (r *Recorder) write(ctx context.Context, it flushItem, now time.Time) error
 // one scheduled. Best effort: a missed schedule only costs a poll.
 func (r *Recorder) schedulePoll(ctx context.Context, accountID string, at time.Time) {
 	if err := r.store.EnsureUsagePollScheduled(ctx, accountID, at, pollableProviders()); err != nil {
-		logging.Debug("scheduling usage poll failed", "account_id", accountID, "error", err)
+		logging.DebugContext(ctx, "scheduling usage poll failed", "account_id", accountID, "error", err)
 	}
 }
 

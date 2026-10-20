@@ -62,7 +62,7 @@ func GetAvailableModelsForUser(ctx context.Context, userID string) []models.Mode
 		_, found := models.SelectBestDriver(modelID, availableDrivers)
 		if found {
 			available = append(available, def.ToModel())
-			logging.Debug("Model available for user", "userID", userID, "modelID", modelID)
+			logging.DebugContext(ctx, "Model available for user", "userID", userID, "modelID", modelID)
 		}
 	}
 

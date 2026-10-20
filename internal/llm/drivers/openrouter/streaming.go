@@ -78,7 +78,7 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 			return
 		}
 
-		logging.Debug("OpenRouter streaming request with cache control",
+		logging.DebugContext(ctx, "OpenRouter streaming request with cache control",
 			"model", request["model"],
 			"hasTools", len(convertedTools) > 0,
 			"messageCount", len(convertedMessages.([]map[string]interface{})))
@@ -112,7 +112,7 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 			}
 
 			delay := retryDelay(attempt, resp)
-			logging.Warn("OpenRouter retrying streaming request",
+			logging.WarnContext(ctx, "OpenRouter retrying streaming request",
 				"status", resp.StatusCode,
 				"attempt", attempt,
 				"maxRetries", models.MaxRetries,
@@ -162,7 +162,7 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 				// Parse JSON
 				var event map[string]interface{}
 				if err := json.Unmarshal([]byte(data), &event); err != nil {
-					logging.Debug("Failed to parse SSE event", "error", err, "dataLen", len(data))
+					logging.DebugContext(ctx, "Failed to parse SSE event", "error", err, "dataLen", len(data))
 					continue
 				}
 
@@ -284,7 +284,7 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 			if ctx.Err() == nil {
 				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("error reading stream: %w", err)}
 			} else {
-				logging.Debug("OpenRouter stream cancelled", "ctxErr", ctx.Err())
+				logging.DebugContext(ctx, "OpenRouter stream cancelled", "ctxErr", ctx.Err())
 			}
 		}
 	}()
@@ -340,7 +340,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 			request["reasoning"] = map[string]string{
 				"effort": c.Options.ReasoningEffort,
 			}
-			logging.Debug("OpenRouter Gemini streaming with reasoning",
+			logging.DebugContext(ctx, "OpenRouter Gemini streaming with reasoning",
 				"effort", c.Options.ReasoningEffort)
 		}
 
@@ -350,7 +350,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 			return
 		}
 
-		logging.Debug("OpenRouter Gemini streaming request",
+		logging.DebugContext(ctx, "OpenRouter Gemini streaming request",
 			"model", request["model"],
 			"hasTools", len(convertedTools) > 0,
 			"messageCount", len(convertedMessages),
@@ -385,7 +385,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 			}
 
 			delay := retryDelay(attempt, resp)
-			logging.Warn("OpenRouter retrying Gemini streaming request",
+			logging.WarnContext(ctx, "OpenRouter retrying Gemini streaming request",
 				"status", resp.StatusCode,
 				"attempt", attempt,
 				"maxRetries", models.MaxRetries,
@@ -441,7 +441,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 				// Parse JSON
 				var event map[string]interface{}
 				if err := json.Unmarshal([]byte(data), &event); err != nil {
-					logging.Debug("Failed to parse SSE event", "error", err, "dataLen", len(data))
+					logging.DebugContext(ctx, "Failed to parse SSE event", "error", err, "dataLen", len(data))
 					continue
 				}
 
@@ -485,7 +485,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 									}
 									if rd.ID != "" {
 										reasoningByID[rd.ID] = rd
-										logging.Debug("OpenRouter Gemini streaming reasoning detail",
+										logging.DebugContext(ctx, "OpenRouter Gemini streaming reasoning detail",
 											"id", rd.ID,
 											"type", rd.Type,
 											"hasData", rd.Data != "")
@@ -531,7 +531,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 									if rd, ok := reasoningByID[toolCallID]; ok {
 										if rd.Type == "reasoning.encrypted" && rd.Data != "" {
 											currentToolCall.ThoughtSignature = rd.Data
-											logging.Debug("OpenRouter Gemini stream associated thought signature on create",
+											logging.DebugContext(ctx, "OpenRouter Gemini stream associated thought signature on create",
 												"toolCallID", toolCallID,
 												"toolName", currentToolCall.Name,
 												"signatureLength", len(rd.Data))
@@ -572,7 +572,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 								if rd, ok := reasoningByID[upstreamID[toolCall.ID]]; ok {
 									if rd.Type == "reasoning.encrypted" && rd.Data != "" {
 										toolCall.ThoughtSignature = rd.Data
-										logging.Debug("OpenRouter Gemini stream associated thought signature",
+										logging.DebugContext(ctx, "OpenRouter Gemini stream associated thought signature",
 											"toolCallID", toolCall.ID,
 											"toolName", toolCall.Name,
 											"signatureLength", len(rd.Data))
@@ -608,7 +608,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 			if ctx.Err() == nil {
 				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("error reading stream: %w", err)}
 			} else {
-				logging.Debug("OpenRouter Gemini stream cancelled", "ctxErr", ctx.Err())
+				logging.DebugContext(ctx, "OpenRouter Gemini stream cancelled", "ctxErr", ctx.Err())
 			}
 		}
 	}()

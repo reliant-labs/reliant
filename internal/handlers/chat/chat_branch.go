@@ -41,7 +41,7 @@ func (s *Service) BranchChat(
 	// Get the message directly by ID - simple and unambiguous
 	branchPointMsg, err := s.deps.Repo.GetMessage(ctx, req.Msg.MessageId)
 	if err != nil {
-		logging.Error("Failed to get branch point message", "error", err, "messageID", req.Msg.MessageId)
+		logging.ErrorContext(ctx, "Failed to get branch point message", "error", err, "messageID", req.Msg.MessageId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("message not found"))
 	}
 
@@ -51,7 +51,7 @@ func (s *Service) BranchChat(
 	// Derive thread and context_sequence from context_window
 	cw, err := s.deps.Repo.GetContextWindow(ctx, branchPointMsg.ContextWindowID)
 	if err != nil || cw == nil {
-		logging.Error("Failed to get context window for branch point message", "error", err, "messageID", req.Msg.MessageId)
+		logging.ErrorContext(ctx, "Failed to get context window for branch point message", "error", err, "messageID", req.Msg.MessageId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("context window not found"))
 	}
 	branchThread := branchPointMsg.ThreadID
@@ -61,7 +61,7 @@ func (s *Service) BranchChat(
 	// Get the source chat to verify ownership and get metadata
 	sourceChat, err := s.deps.Repo.GetChat(ctx, sourceChatID)
 	if err != nil {
-		logging.Error("Failed to get source chat", "error", err, "chatID", sourceChatID)
+		logging.ErrorContext(ctx, "Failed to get source chat", "error", err, "chatID", sourceChatID)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("source chat not found"))
 	}
 	if sourceChat.UserID != userID {
@@ -72,7 +72,7 @@ func (s *Service) BranchChat(
 	// Use threads.Service for proper fork chain resolution
 	messages, err := s.threads.LoadCurrentMessages(ctx, branchThread)
 	if err != nil {
-		logging.Warn("Failed to get messages for context", "error", err)
+		logging.WarnContext(ctx, "Failed to get messages for context", "error", err)
 		messages = []*db.Message{branchPointMsg}
 	}
 
@@ -81,7 +81,7 @@ func (s *Service) BranchChat(
 	if branchPointMsg.Role == reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
 		blocks, err := s.deps.Repo.ListContentBlocks(ctx, branchPointMsg.ID)
 		if err != nil {
-			logging.Error("Failed to check for tool calls", "error", err, "messageID", branchPointMsg.ID)
+			logging.ErrorContext(ctx, "Failed to check for tool calls", "error", err, "messageID", branchPointMsg.ID)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to validate branch point"))
 		}
 
@@ -115,7 +115,7 @@ func (s *Service) BranchChat(
 			if !foundToolMsg {
 				orphanedToolCalls := s.findOrphanedToolCalls(ctx, toolCallIDs, toolCallBlocks)
 				if len(orphanedToolCalls) > 0 {
-					logging.Warn("[BranchChat] Found orphaned tool calls at branch point, auto-repairing",
+					logging.WarnContext(ctx, "[BranchChat] Found orphaned tool calls at branch point, auto-repairing",
 						"chatID", sourceChatID,
 						"messageID", branchPointMsg.ID,
 						"orphanCount", len(orphanedToolCalls))
@@ -123,12 +123,12 @@ func (s *Service) BranchChat(
 					// Create repair tool message in source chat
 					repairMsg, err := s.createBranchRepairToolMessage(ctx, sourceChatID, branchPointMsg, orphanedToolCalls)
 					if err != nil {
-						logging.Error("[BranchChat] Failed to create repair tool message", "error", err)
+						logging.ErrorContext(ctx, "[BranchChat] Failed to create repair tool message", "error", err)
 						// Don't fail the branch - the in-memory repair in CallLLM will handle it
 					} else {
 						// Update branch point to the repair message
 						branchPointMsg = repairMsg
-						logging.Info("[BranchChat] Created repair tool message for branch",
+						logging.InfoContext(ctx, "[BranchChat] Created repair tool message for branch",
 							"repairMessageID", repairMsg.ID,
 							"repairOrdinal", repairMsg.Ordinal)
 					}
@@ -180,7 +180,7 @@ func (s *Service) BranchChat(
 		// Verify the worktree exists and belongs to the same project
 		worktree, err := s.deps.Repo.GetWorktree(ctx, *req.Msg.WorktreeId)
 		if err != nil {
-			logging.Error("Failed to get worktree for branch", "error", err, "worktreeID", *req.Msg.WorktreeId)
+			logging.ErrorContext(ctx, "Failed to get worktree for branch", "error", err, "worktreeID", *req.Msg.WorktreeId)
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
 		}
 		if worktree.ProjectID != sourceChat.ProjectID {
@@ -208,7 +208,7 @@ func (s *Service) BranchChat(
 	if activeDaemonID == nil && !noMachine {
 		sourceDaemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, fromChat)
 		if err != nil {
-			logging.Error("Failed to resolve source chat's machine for branch", "error", err, "chatID", fromChat.ID)
+			logging.ErrorContext(ctx, "Failed to resolve source chat's machine for branch", "error", err, "chatID", fromChat.ID)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve the source chat's machine"))
 		}
 		if sourceDaemonID != "" {
@@ -292,7 +292,7 @@ func (s *Service) BranchChat(
 	}
 	chatCreatedJSON, marshalErr := json.Marshal(chatCreatedData)
 	if marshalErr != nil {
-		logging.Error("Failed to marshal chat_created data for branch", "error", marshalErr, "chatID", branchChat.ID)
+		logging.ErrorContext(ctx, "Failed to marshal chat_created data for branch", "error", marshalErr, "chatID", branchChat.ID)
 	}
 
 	// The branch chat row, its forked workflow+thread, the inherited plan,
@@ -358,7 +358,7 @@ func (s *Service) BranchChat(
 
 		return nil
 	}); err != nil {
-		logging.Error("Failed to create branched chat", "error", err, "chatID", branchChatID)
+		logging.ErrorContext(ctx, "Failed to create branched chat", "error", err, "chatID", branchChatID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create branch"))
 	}
 
@@ -368,7 +368,7 @@ func (s *Service) BranchChat(
 	// without drifting from it.
 	committed, err := s.deps.Repo.GetChat(ctx, branchChatID)
 	if err != nil {
-		logging.Error("Failed to re-read branched chat after commit", "error", err, "chatID", branchChatID)
+		logging.ErrorContext(ctx, "Failed to re-read branched chat after commit", "error", err, "chatID", branchChatID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load branch"))
 	}
 	// "Continue without machine" ends the chat it leaves waiting for its
@@ -571,7 +571,7 @@ func (s *Service) copyPlanAndTasks(ctx context.Context, sourceChatID, targetThre
 			}
 		}
 
-		logging.Debug("Copied plan and tasks to branched chat",
+		logging.DebugContext(ctx, "Copied plan and tasks to branched chat",
 			"sourcePlanID", sourcePlan.ID,
 			"newPlanID", newPlanID,
 			"taskCount", len(tasks),
@@ -603,7 +603,7 @@ func (s *Service) findOrphanedToolCalls(ctx context.Context, toolCallIDs []strin
 		// Check if there's a matching tool_result in the database
 		resultBlock, err := s.deps.Repo.GetToolResultBlock(ctx, toolCallID)
 		if err != nil {
-			logging.Warn("[BranchChat] Failed to check for tool result", "toolCallID", toolCallID, "error", err)
+			logging.WarnContext(ctx, "[BranchChat] Failed to check for tool result", "toolCallID", toolCallID, "error", err)
 			continue
 		}
 
@@ -613,7 +613,7 @@ func (s *Service) findOrphanedToolCalls(ctx context.Context, toolCallIDs []strin
 			// all predates the tool_calls table or died before recording
 			// anything, and is treated as orphaned exactly as before.
 			if call, callErr := s.deps.Repo.GetToolCall(ctx, toolCallID); callErr == nil && call != nil && !call.Status.IsTerminal() {
-				logging.Info("[BranchChat] Skipping in-flight tool call at branch point",
+				logging.InfoContext(ctx, "[BranchChat] Skipping in-flight tool call at branch point",
 					"toolCallID", toolCallID,
 					"status", call.Status,
 					"childWorkflowID", call.ChildWorkflowID)
@@ -696,7 +696,7 @@ func (s *Service) createBranchRepairToolMessage(
 		}
 
 		if err := s.deps.Repo.CreateContentBlock(ctx, block); err != nil {
-			logging.Error("[BranchChat] Failed to create repair content block",
+			logging.ErrorContext(ctx, "[BranchChat] Failed to create repair content block",
 				"error", err,
 				"blockID", blockID,
 				"toolCallID", orphan.ToolCallID)
@@ -736,7 +736,7 @@ func (s *Service) ListBranches(
 		Limit:  1000,
 	})
 	if err != nil {
-		logging.Error("Failed to list chats", "error", err)
+		logging.ErrorContext(ctx, "Failed to list chats", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list branches"))
 	}
 

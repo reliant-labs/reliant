@@ -82,7 +82,7 @@ func (s *Service) checkParamsActuallyChanged(ctx context.Context, workflowID, ru
 	if err != nil {
 		// If query fails (e.g., workflow not running yet) or the worker is too
 		// busy to answer in time, assume params changed to be safe
-		logging.Warn("Failed to query workflow inputs, assuming params changed", "error", err, "workflowID", workflowID,
+		logging.WarnContext(ctx, "Failed to query workflow inputs, assuming params changed", "error", err, "workflowID", workflowID,
 			"timed_out", errors.Is(queryCtx.Err(), context.DeadlineExceeded))
 		return true
 	}

@@ -109,7 +109,7 @@ func (s *Service) DiscoverRepos(
 		"max_depth": req.Msg.MaxDepth,
 	}
 	if err := s.sendDaemonCommand(ctx, userID, "repo.discover", payload, &daemonResp); err != nil {
-		logging.Error("Failed to discover repos via daemon", "error", err, "projectID", project.ID)
+		logging.ErrorContext(ctx, "Failed to discover repos via daemon", "error", err, "projectID", project.ID)
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon unreachable; cannot scan filesystem"))
 	}
 
@@ -143,7 +143,7 @@ func (s *Service) ListRepos(
 
 	repos, err := s.deps.Repo.ListReposByProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.Error("Failed to list repos", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to list repos", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos"))
 	}
 
@@ -235,7 +235,7 @@ func (s *Service) AddRepo(
 		UpdatedAt:    now,
 	}
 	if err := s.deps.Repo.CreateRepo(ctx, record); err != nil {
-		logging.Error("Failed to persist repo", "error", err, "projectID", project.ID)
+		logging.ErrorContext(ctx, "Failed to persist repo", "error", err, "projectID", project.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to add repo"))
 	}
 
@@ -245,7 +245,7 @@ func (s *Service) AddRepo(
 		project.IsGitRepo = true
 		project.UpdatedAt = now
 		if err := s.deps.Repo.UpdateProject(ctx, project, userID); err != nil {
-			logging.Warn("Failed to flip project.is_git_repo", "error", err, "projectID", project.ID)
+			logging.WarnContext(ctx, "Failed to flip project.is_git_repo", "error", err, "projectID", project.ID)
 		}
 	}
 
@@ -270,7 +270,7 @@ func (s *Service) RemoveRepo(
 	}
 
 	if err := s.deps.Repo.DeleteRepo(ctx, repo.ID); err != nil {
-		logging.Error("Failed to delete repo", "error", err, "repoID", repo.ID)
+		logging.ErrorContext(ctx, "Failed to delete repo", "error", err, "repoID", repo.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete repo"))
 	}
 
@@ -315,7 +315,7 @@ func (s *Service) GetRepoGitInfo(
 		Behind         int32    `json:"behind"`
 	}
 	if err := s.sendDaemonCommand(ctx, userID, "project.git_info", map[string]string{"path": repoPath}, &gitInfo); err != nil {
-		logging.Error("Failed to get git info via daemon", "error", err, "repoID", repo.ID)
+		logging.ErrorContext(ctx, "Failed to get git info via daemon", "error", err, "repoID", repo.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get git info"))
 	}
 

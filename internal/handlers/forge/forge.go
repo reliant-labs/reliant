@@ -325,7 +325,7 @@ func (s *Service) rememberForgeProjectName(ctx context.Context, project *db.Proj
 		return
 	}
 	if _, err := s.deps.Repo.SetProjectForgeName(ctx, project.ID, userID, name); err != nil {
-		logging.Warn("forge: failed to persist forge project name", "error", err, "project_id", project.ID)
+		logging.WarnContext(ctx, "forge: failed to persist forge project name", "error", err, "project_id", project.ID)
 	}
 }
 

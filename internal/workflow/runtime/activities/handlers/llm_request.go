@@ -252,7 +252,7 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 			resolved = preferred
 		} else {
 			if prefs.ModelID != "" && !prefs.IsLocalModel() && !runPinned {
-				logging.Warn("[LLMRequest] Ignoring tag preference model_id: not available for this user",
+				logging.WarnContext(ctx, "[LLMRequest] Ignoring tag preference model_id: not available for this user",
 					"userID", spec.UserID, "tag", modelprefs.TagFor(spec.Selector), "modelID", prefs.ModelID)
 			}
 			var err error
@@ -375,7 +375,7 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 			if d, aerr := spec.Routing.DriverFor(ctx, spec.UserID, account.Config.DriverConfig, legacyModel, append(drivers.PreferenceDriverOptions(legacyModel, preferences[0]), driverOpts...)...); aerr != nil {
 				// A driver for the chosen account that cannot be built is not
 				// worth a failed turn: the provider's default account serves.
-				logging.Warn("[LLMRequest] Could not build a driver for the thread's account; using the provider's default account",
+				logging.WarnContext(ctx, "[LLMRequest] Could not build a driver for the thread's account; using the provider's default account",
 					"userID", spec.UserID, "provider", providerDriver, "accountID", account.Config.AccountID, "error", aerr)
 				account = nil
 			} else {
@@ -437,7 +437,7 @@ func resolvePinnedLocalPref(ctx context.Context, spec llmCallSpec) (pinnedLocalP
 	}
 	legacy, def, modelID, thinking, transport, err := resolveLocalModel(ctx, localSpec)
 	if err != nil {
-		logging.Warn("[LLMRequest] Ignoring tag preference model_id: local model unavailable; using the tier",
+		logging.WarnContext(ctx, "[LLMRequest] Ignoring tag preference model_id: local model unavailable; using the tier",
 			"userID", spec.UserID, "tag", modelprefs.TagFor(spec.Selector), "modelID", prefs.ModelID, "error", err)
 		return pinnedLocalPref{}, pinnedLocalSpec{}, false
 	}
@@ -458,7 +458,7 @@ func loadTagPrefs(ctx context.Context, spec llmCallSpec, registry *models.ModelR
 	}
 	all, err := modelprefs.LoadAll(ctx, spec.TagPrefsReader, spec.UserID)
 	if err != nil {
-		logging.Warn("[LLMRequest] Model tag preferences partially unreadable; affected tags use defaults",
+		logging.WarnContext(ctx, "[LLMRequest] Model tag preferences partially unreadable; affected tags use defaults",
 			"userID", spec.UserID, "error", err)
 	}
 	return all[tag]

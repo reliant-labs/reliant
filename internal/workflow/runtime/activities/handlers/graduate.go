@@ -69,7 +69,7 @@ func TransitionChatOnCompletion(ctx context.Context, repo db.Repository, chatID,
 		return "", fmt.Errorf("transition_to: switch chat %s workflow %q -> %q: %w", chatID, completedWorkflowName, target, err)
 	}
 
-	logging.Info("[Transition] Chat transitioned to target workflow on completion",
+	logging.InfoContext(ctx, "[Transition] Chat transitioned to target workflow on completion",
 		"chatID", chatID,
 		"from", completedWorkflowName,
 		"transition_to", target,
@@ -98,7 +98,7 @@ func loadTransitionTarget(ctx context.Context, repo db.Repository, chatID, compl
 
 	def, err := loader.loadWorkflowByName(ctx, completedWorkflowName, wfCtx)
 	if err != nil || def == nil {
-		logging.Warn("[Transition] Could not load completed workflow definition; skipping transition",
+		logging.WarnContext(ctx, "[Transition] Could not load completed workflow definition; skipping transition",
 			"workflowName", completedWorkflowName,
 			"chatID", chatID,
 			"error", err,
@@ -132,7 +132,7 @@ func EmitTransitionMessage(ctx context.Context, repo db.Repository, chatID, thre
 		nil,
 		nil,
 	); err != nil {
-		logging.Warn("[Transition] Failed to post transition message",
+		logging.WarnContext(ctx, "[Transition] Failed to post transition message",
 			"chatID", chatID,
 			"transition_to", target,
 			"error", err,

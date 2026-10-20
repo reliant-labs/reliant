@@ -104,9 +104,9 @@ func (s *PostgresStore) RunGC(ctx context.Context, horizon time.Duration) {
 		deleted, err := s.DeleteExpired(ctx, horizon)
 		switch {
 		case err != nil && ctx.Err() == nil:
-			logging.Warn("Payload blob GC failed", "error", err, "deleted_before_error", deleted)
+			logging.WarnContext(ctx, "Payload blob GC failed", "error", err, "deleted_before_error", deleted)
 		case deleted > 0:
-			logging.Info("Payload blob GC deleted expired blobs", "deleted", deleted, "horizon", horizon)
+			logging.InfoContext(ctx, "Payload blob GC deleted expired blobs", "deleted", deleted, "horizon", horizon)
 		}
 		select {
 		case <-ctx.Done():

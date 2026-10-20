@@ -269,7 +269,7 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 	// chat permanently untitled: this activity only ever runs once per chat, and
 	// it returns early above whenever a title is already set.
 	if strings.TrimSpace(input.FirstMessage) == "" {
-		logging.Debug("[GenerateTitle] Skipping: chat has no first message text", "chatID", input.ChatID)
+		logging.DebugContext(ctx, "[GenerateTitle] Skipping: chat has no first message text", "chatID", input.ChatID)
 		return GenerateTitleOutput{}, nil
 	}
 
@@ -284,7 +284,7 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 	var generatedTitle string
 	if input.UseFallback {
 		generatedTitle = generateSimpleTitleFallback(input.FirstMessage)
-		logging.Warn("[GenerateTitle] LLM generation exhausted, writing truncated first message",
+		logging.WarnContext(ctx, "[GenerateTitle] LLM generation exhausted, writing truncated first message",
 			"chatID", input.ChatID, "titleLen", len(generatedTitle))
 	} else {
 		generatedTitle, err = a.generateTitle(ctx, chat.UserID, input.FirstMessage)
@@ -294,7 +294,7 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 				defer func() { _ = recover() }() // safe outside activity context (tests)
 				attempt = activity.GetInfo(ctx).Attempt
 			}()
-			logging.Error("[GenerateTitle] LLM generation failed",
+			logging.ErrorContext(ctx, "[GenerateTitle] LLM generation failed",
 				"error", err, "chatID", input.ChatID, "attempt", attempt)
 			return GenerateTitleOutput{}, fmt.Errorf("generate title for chat %s: %w", input.ChatID, err)
 		}
@@ -341,7 +341,7 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 		EntityID:   input.ChatID,
 		Data:       titleData,
 	}); err != nil {
-		logging.Warn("[GenerateTitle] Failed to emit chat_title_changed", "error", err)
+		logging.WarnContext(ctx, "[GenerateTitle] Failed to emit chat_title_changed", "error", err)
 	}
 
 	return GenerateTitleOutput{Title: generatedTitle}, nil
@@ -403,7 +403,7 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 			// The thread is on another provider until its own resets.
 			spec.Selector = models.ModelSelector{ID: fallbackModel, RequireOutputModality: models.ModalityText}
 		}
-		logging.Debug("[COMPACTION] Selected model for summarization",
+		logging.DebugContext(ctx, "[COMPACTION] Selected model for summarization",
 			"chatID", chat.ID,
 			"model", selector.ID,
 			"tags", selector.Tags,
@@ -485,7 +485,7 @@ func resolveCompactionModel(ctx context.Context, userID string, preferred *relia
 		if _, err := registry.Resolve(selector, availableProviders); err == nil {
 			return selector, "agent model (summarizes in the window that filled)", nil
 		}
-		logging.Warn("[COMPACTION] Agent model unavailable for summarization, falling back to tier list",
+		logging.WarnContext(ctx, "[COMPACTION] Agent model unavailable for summarization, falling back to tier list",
 			"model", preferred.GetId(),
 			"tags", preferred.GetTags())
 	}
@@ -580,7 +580,7 @@ func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, first
 		return "", err
 	}
 	driver := resolved.Driver
-	logging.Debug("[GenerateTitle] Selected model", "model", resolved.ModelID)
+	logging.DebugContext(ctx, "[GenerateTitle] Selected model", "model", resolved.ModelID)
 
 	// Wrap the message in a delimiter and restate the instruction after it.
 	// Unwrapped, the first message reads as a live request to an agent — and
@@ -710,7 +710,7 @@ func (a *CompactActivity) emitThreadUpdate(ctx context.Context, chatID, thread, 
 
 	persisted, err := a.repo.GetThread(ctx, thread)
 	if err != nil {
-		logging.Warn("[CompactActivity] Failed to load thread metadata for compact update",
+		logging.WarnContext(ctx, "[CompactActivity] Failed to load thread metadata for compact update",
 			"error", err,
 			"chatID", chatID,
 			"thread", thread)
@@ -745,14 +745,14 @@ func (a *CompactActivity) emitThreadUpdate(ctx context.Context, chatID, thread, 
 
 	updateDataJSON, err := json.Marshal(updateData)
 	if err != nil {
-		logging.Error("[CompactActivity] Failed to marshal thread update",
+		logging.ErrorContext(ctx, "[CompactActivity] Failed to marshal thread update",
 			"error", err,
 			"chatID", chatID)
 		return
 	}
 
 	if err := a.repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, threadID, string(updateDataJSON)); err != nil {
-		logging.Error("[CompactActivity] Failed to create thread update",
+		logging.ErrorContext(ctx, "[CompactActivity] Failed to create thread update",
 			"error", err,
 			"chatID", chatID)
 	}

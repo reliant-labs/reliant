@@ -202,7 +202,7 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 
 	input := EventFireInput{TriggerID: trigger.ID, Kind: ev.Kind, DedupeKey: ev.DedupeKey, Manual: opts.Manual}
 	if err := StartEventFire(ctx, in.starter, res.EventID, input, in.taskQueue); err != nil {
-		logging.Warn("could not start the fire of an accepted trigger event; the redriver will retry",
+		logging.WarnContext(ctx, "could not start the fire of an accepted trigger event; the redriver will retry",
 			"trigger_id", trigger.ID, "event_id", res.EventID, "error", err)
 	}
 	return res, nil

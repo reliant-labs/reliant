@@ -140,7 +140,7 @@ func (ps *PauseService) SetResetGuard(g *ResetAttemptGuard) {
 // If the workflow has already completed, it reconciles the DB status and returns nil
 // since the user's intent (stop the workflow) is already satisfied.
 func (ps *PauseService) PauseWorkflow(ctx context.Context, workflowID, chatID, reason string) error {
-	logging.Info("[PauseService] Sending pause signal",
+	logging.InfoContext(ctx, "[PauseService] Sending pause signal",
 		"workflowID", workflowID,
 		"chatID", chatID,
 		"reason", reason,
@@ -152,7 +152,7 @@ func (ps *PauseService) PauseWorkflow(ctx context.Context, workflowID, chatID, r
 		if isWorkflowAlreadyDoneErr(err) {
 			// Workflow already finished — reconcile DB status and return success.
 			// reconcileTerminalStatus also cascades completion to child workflows.
-			logging.Warn("[PauseService] Workflow already completed, reconciling DB status",
+			logging.WarnContext(ctx, "[PauseService] Workflow already completed, reconciling DB status",
 				"workflowID", workflowID,
 				"chatID", chatID,
 				"signalError", err,
@@ -162,7 +162,7 @@ func (ps *PauseService) PauseWorkflow(ctx context.Context, workflowID, chatID, r
 			// (covers children that aren't direct descendants of this workflow).
 			if chatID != "" {
 				if pErr := ps.database.PauseRunningWorkflowsByChat(ctx, chatID); pErr != nil {
-					logging.Error("[PauseService] Failed to pause remaining workflows after reconciliation",
+					logging.ErrorContext(ctx, "[PauseService] Failed to pause remaining workflows after reconciliation",
 						"workflowID", workflowID,
 						"chatID", chatID,
 						"error", pErr,
@@ -180,7 +180,7 @@ func (ps *PauseService) PauseWorkflow(ctx context.Context, workflowID, chatID, r
 
 	// Update workflow status in DB so the UI shows "paused"
 	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Paused()); err != nil {
-		logging.Error("[PauseService] Failed to update workflow status to paused",
+		logging.ErrorContext(ctx, "[PauseService] Failed to update workflow status to paused",
 			"workflowID", workflowID,
 			"error", err,
 		)
@@ -191,7 +191,7 @@ func (ps *PauseService) PauseWorkflow(ctx context.Context, workflowID, chatID, r
 	// so the chats_with_activity view correctly reports the chat as paused.
 	if chatID != "" {
 		if err := ps.database.PauseRunningWorkflowsByChat(ctx, chatID); err != nil {
-			logging.Error("[PauseService] Failed to pause child workflows",
+			logging.ErrorContext(ctx, "[PauseService] Failed to pause child workflows",
 				"workflowID", workflowID,
 				"chatID", chatID,
 				"error", err,
@@ -200,7 +200,7 @@ func (ps *PauseService) PauseWorkflow(ctx context.Context, workflowID, chatID, r
 		}
 	}
 
-	logging.Info("[PauseService] Workflow paused successfully",
+	logging.InfoContext(ctx, "[PauseService] Workflow paused successfully",
 		"workflowID", workflowID,
 	)
 	return nil
@@ -216,7 +216,7 @@ func (ps *PauseService) clearPausedForMachine(ctx context.Context, chatID string
 		return
 	}
 	if _, err := ps.database.SetChatPausedForMachine(ctx, chatID, false); err != nil {
-		logging.Warn("[PauseService] Failed to clear the paused-for-machine mark",
+		logging.WarnContext(ctx, "[PauseService] Failed to clear the paused-for-machine mark",
 			"chatID", chatID, "error", err)
 	}
 }
@@ -280,7 +280,7 @@ func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID 
 		return nil
 	})
 	if err != nil {
-		logging.Error("[PauseService] Failed to reconcile workflow status",
+		logging.ErrorContext(ctx, "[PauseService] Failed to reconcile workflow status",
 			"workflowID", workflowID,
 			"targetStatus", status.Label(),
 			"error", err,
@@ -400,14 +400,14 @@ func (ps *PauseService) reviveResumedSubtree(ctx context.Context, workflowID, ch
 	if resetPoint.IsZero() {
 		// No reset point means no way to tell redone work from replayed
 		// work, and guessing would resurrect sub-agents that really ended.
-		logging.Warn("[PauseService] Reset returned no reset-point time; skipping subtree revival",
+		logging.WarnContext(ctx, "[PauseService] Reset returned no reset-point time; skipping subtree revival",
 			"workflowID", workflowID, "chatID", chatID)
 		return
 	}
 
 	workflowsRevived, threadsRevived, err := ps.database.ReviveSubtreeLiveAt(ctx, workflowID, resetPoint)
 	if err != nil {
-		logging.Error("[PauseService] Failed to revive resumed subtree — live sub-agents may read as failed",
+		logging.ErrorContext(ctx, "[PauseService] Failed to revive resumed subtree — live sub-agents may read as failed",
 			"workflowID", workflowID,
 			"chatID", chatID,
 			"resetPoint", resetPoint,
@@ -419,7 +419,7 @@ func (ps *PauseService) reviveResumedSubtree(ctx context.Context, workflowID, ch
 		return
 	}
 
-	logging.Info("[PauseService] Revived the subtree a reset-and-replay is bringing back",
+	logging.InfoContext(ctx, "[PauseService] Revived the subtree a reset-and-replay is bringing back",
 		"workflowID", workflowID,
 		"chatID", chatID,
 		"resetPoint", resetPoint,
@@ -434,7 +434,7 @@ func (ps *PauseService) reviveResumedSubtree(ctx context.Context, workflowID, ch
 		return
 	}
 	if err := ps.database.EmitChatRefetch(ctx, chatID, db.RefetchWorkflowExecutions); err != nil {
-		logging.Warn("[PauseService] Failed to emit refetch after subtree revival",
+		logging.WarnContext(ctx, "[PauseService] Failed to emit refetch after subtree revival",
 			"workflowID", workflowID, "chatID", chatID, "error", err)
 	}
 }
@@ -444,7 +444,7 @@ func (ps *PauseService) reviveResumedSubtree(ctx context.Context, workflowID, ch
 // resets the workflow to the pause point and then signals resume on the new run.
 // inputUpdate, when non-empty, reaches whichever run that is first (signalRun).
 func (ps *PauseService) ResumeWorkflow(ctx context.Context, workflowID, chatID string, inputUpdate map[string]interface{}) error {
-	logging.Info("[PauseService] Resuming workflow",
+	logging.InfoContext(ctx, "[PauseService] Resuming workflow",
 		"workflowID", workflowID,
 		"chatID", chatID,
 	)
@@ -477,7 +477,7 @@ func (ps *PauseService) ResumeWorkflow(ctx context.Context, workflowID, chatID s
 
 	// Update DB status to running
 	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-		logging.Error("[PauseService] Failed to update workflow status to running",
+		logging.ErrorContext(ctx, "[PauseService] Failed to update workflow status to running",
 			"workflowID", workflowID,
 			"error", err,
 		)
@@ -487,7 +487,7 @@ func (ps *PauseService) ResumeWorkflow(ctx context.Context, workflowID, chatID s
 	// Resume all paused child workflows for this chat
 	if chatID != "" {
 		if err := ps.database.ResumeWorkflowsByChat(ctx, chatID); err != nil {
-			logging.Error("[PauseService] Failed to resume child workflows",
+			logging.ErrorContext(ctx, "[PauseService] Failed to resume child workflows",
 				"workflowID", workflowID,
 				"chatID", chatID,
 				"error", err,
@@ -496,7 +496,7 @@ func (ps *PauseService) ResumeWorkflow(ctx context.Context, workflowID, chatID s
 		}
 	}
 
-	logging.Info("[PauseService] Workflow resumed successfully",
+	logging.InfoContext(ctx, "[PauseService] Workflow resumed successfully",
 		"workflowID", workflowID,
 	)
 	return nil
@@ -505,7 +505,7 @@ func (ps *PauseService) ResumeWorkflow(ctx context.Context, workflowID, chatID s
 // ResumeExpiredWorkflow resets an expired (timed-out) workflow execution back to
 // its pause point and sends a resume signal on the new run. Returns the new run ID.
 func (ps *PauseService) ResumeExpiredWorkflow(ctx context.Context, workflowID, chatID string) (string, error) {
-	logging.Info("[PauseService] Resetting expired workflow",
+	logging.InfoContext(ctx, "[PauseService] Resetting expired workflow",
 		"workflowID", workflowID,
 		"chatID", chatID,
 	)
@@ -533,14 +533,14 @@ func (ps *PauseService) ResumeExpiredWorkflow(ctx context.Context, workflowID, c
 
 	// Update DB status to running
 	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-		logging.Error("[PauseService] Failed to update workflow status to running after reset",
+		logging.ErrorContext(ctx, "[PauseService] Failed to update workflow status to running after reset",
 			"workflowID", workflowID,
 			"error", err,
 		)
 		// Don't fail — the workflow is already resumed
 	}
 
-	logging.Info("[PauseService] Expired workflow reset and resumed",
+	logging.InfoContext(ctx, "[PauseService] Expired workflow reset and resumed",
 		"workflowID", workflowID,
 		"newRunID", newRunID,
 	)
@@ -591,14 +591,14 @@ func (ps *PauseService) ResumeInterruptedWorkflow(ctx context.Context, workflowI
 	}
 
 	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-		logging.Error("[PauseService] Failed to update workflow status to running after interrupted resume",
+		logging.ErrorContext(ctx, "[PauseService] Failed to update workflow status to running after interrupted resume",
 			"workflowID", workflowID,
 			"error", err,
 		)
 		// Don't fail — the workflow is already resumed in Temporal.
 	}
 
-	logging.Info("[PauseService] Interrupted workflow reset-and-resumed",
+	logging.InfoContext(ctx, "[PauseService] Interrupted workflow reset-and-resumed",
 		"workflowID", workflowID,
 		"chatID", chatID,
 		"newRunID", newRunID,
@@ -661,7 +661,7 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 	limitTerminated := status == enums.WORKFLOW_EXECUTION_STATUS_TERMINATED &&
 		terminatedForHistoryLimit(ctx, ps.temporalClient, workflowID, runID)
 	if limitTerminated || HistoryAtLimit(historyLen, historySize) {
-		logging.Warn("[PauseService] Workflow died at Temporal's history limit; reset cannot recover it, falling back to fresh restart",
+		logging.WarnContext(ctx, "[PauseService] Workflow died at Temporal's history limit; reset cannot recover it, falling back to fresh restart",
 			"workflowID", workflowID,
 			"chatID", chatID,
 			"historyLength", historyLen,
@@ -675,7 +675,7 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 	// Bounded guard: stop resetting a workflow that keeps re-failing at the same
 	// point (deterministic error / replay wedge) — fall back to coarse restart.
 	if !ps.resetGuard.Allow(workflowID, historyLen) {
-		logging.Warn("[PauseService] Reset-attempt guard exhausted, falling back to coarse restart",
+		logging.WarnContext(ctx, "[PauseService] Reset-attempt guard exhausted, falling back to coarse restart",
 			"workflowID", workflowID,
 			"chatID", chatID,
 			"attempts", ps.resetGuard.Attempts(workflowID),
@@ -688,7 +688,7 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 	if errors.Is(err, ErrReplayDiverged) {
 		// Resetting would wedge the new run exactly like this one; only a
 		// fresh execution on the current code can continue it.
-		logging.Warn("[PauseService] Workflow history no longer replays on the current code; reset cannot recover it, falling back to fresh restart",
+		logging.WarnContext(ctx, "[PauseService] Workflow history no longer replays on the current code; reset cannot recover it, falling back to fresh restart",
 			"workflowID", workflowID,
 			"chatID", chatID,
 		)
@@ -710,7 +710,7 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 	// outputs that no checkpoint could restore.
 	recordResumeOutcome(resumeOutcomeResetReplay, workflowID, chatID, nil)
 
-	logging.Info("[PauseService] Interrupted workflow reset for resume",
+	logging.InfoContext(ctx, "[PauseService] Interrupted workflow reset for resume",
 		"workflowID", workflowID,
 		"chatID", chatID,
 		"newRunID", reset.NewRunID,

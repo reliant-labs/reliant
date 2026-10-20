@@ -39,7 +39,7 @@ func Observe(ctx context.Context, provider string, s Snapshot) {
 		o.ObserveRateLimits(ctx, s)
 		return
 	}
-	logging.Debug("LLM rate-limit snapshot", "provider", provider, "status", string(s.Status),
+	logging.DebugContext(ctx, "LLM rate-limit snapshot", "provider", provider, "status", string(s.Status),
 		"windows", len(s.Windows), "representative", s.RepresentativeWindow)
 }
 

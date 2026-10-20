@@ -319,7 +319,7 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	}
 
 	// Debug logging to trace loop context
-	logging.Debug("[ExecuteToolsActivity] Received input",
+	logging.DebugContext(ctx, "[ExecuteToolsActivity] Received input",
 		"stepID", rtx.StepID,
 		"loopNodeID", rtx.LoopNodeID,
 		"loopIteration", rtx.LoopIteration,
@@ -1720,6 +1720,6 @@ func (a *ExecuteToolsActivity) emitWorktreeRefetch(ctx context.Context, tec *too
 		WorktreeID: worktreePtr,
 	})
 	if err != nil {
-		logging.Warn("[ExecuteTools] Failed to emit worktree refetch", "error", err)
+		logging.WarnContext(ctx, "[ExecuteTools] Failed to emit worktree refetch", "error", err)
 	}
 }

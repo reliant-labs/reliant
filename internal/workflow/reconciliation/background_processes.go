@@ -105,7 +105,7 @@ func (r *Reconciler) reconcileBackgroundedProcesses(ctx context.Context, stats *
 	}
 	calls, err := r.repo.ListBackgroundedProcessToolCalls(ctx)
 	if err != nil {
-		logging.Error("[Reconciler] Failed to list backgrounded process tool calls", "error", err)
+		logging.ErrorContext(ctx, "[Reconciler] Failed to list backgrounded process tool calls", "error", err)
 		return 0, fmt.Errorf("failed to list backgrounded process tool calls: %w", err)
 	}
 	if len(calls) == 0 {
@@ -135,7 +135,7 @@ func (r *Reconciler) reconcileBackgroundedProcesses(ctx context.Context, stats *
 	}
 
 	if closed > 0 {
-		logging.Info("[Reconciler] Closed backgrounded tool calls whose process had ended", "rows", closed)
+		logging.InfoContext(ctx, "[Reconciler] Closed backgrounded tool calls whose process had ended", "rows", closed)
 	}
 	return closed, nil
 }
@@ -193,7 +193,7 @@ func (r *Reconciler) settleOwnedProcesses(ctx context.Context, stats *passStats,
 func (r *Reconciler) settleUnattributedProcesses(ctx context.Context, stats *passStats, daemons BackgroundProcessDaemons, userID string, calls []*db.BackgroundedProcessCall) int {
 	daemonIDs, err := daemons.ConnectedDaemonIDs(ctx, userID)
 	if err != nil {
-		logging.Warn("[Reconciler] Could not list connected daemons; leaving unattributed backgrounded calls alone",
+		logging.WarnContext(ctx, "[Reconciler] Could not list connected daemons; leaving unattributed backgrounded calls alone",
 			"userID", userID, "error", err)
 		return 0
 	}
@@ -258,13 +258,13 @@ func askDaemon(ctx context.Context, daemons BackgroundProcessDaemons, userID, da
 		}
 		raw, err := daemons.SendDaemonCommandToDaemon(ctx, userID, daemonID, "exec.bg_status", payload, bgStatusTimeoutMs)
 		if err != nil {
-			logging.Debug("[Reconciler] Daemon did not answer exec.bg_status; will retry next pass",
+			logging.DebugContext(ctx, "[Reconciler] Daemon did not answer exec.bg_status; will retry next pass",
 				"daemonID", daemonID, "error", err)
 			return nil, nil, false
 		}
 		var resp daemon.ProcessStatusResponse
 		if err := json.Unmarshal(raw, &resp); err != nil {
-			logging.Warn("[Reconciler] Unreadable exec.bg_status response", "daemonID", daemonID, "error", err)
+			logging.WarnContext(ctx, "[Reconciler] Unreadable exec.bg_status response", "daemonID", daemonID, "error", err)
 			return nil, nil, false
 		}
 		for i := range resp.Processes {
@@ -332,7 +332,7 @@ func (r *Reconciler) closeBackgroundedCall(ctx context.Context, stats *passStats
 		row.ErrorMessage = &message
 	}
 	if err := db.UpsertToolCallStatus(ctx, r.repo, row); err != nil {
-		logging.Error("[Reconciler] Failed to close backgrounded tool call",
+		logging.ErrorContext(ctx, "[Reconciler] Failed to close backgrounded tool call",
 			"toolCallID", call.ToolCallID, "status", status, "error", err)
 		return false
 	}
@@ -346,7 +346,7 @@ func (r *Reconciler) closeBackgroundedCall(ctx context.Context, stats *passStats
 	}); err != nil {
 		// The durable row is what a reload and the snapshot read; the event
 		// only spares an open client the wait.
-		logging.Warn("[Reconciler] Closed backgrounded tool call but could not emit its status",
+		logging.WarnContext(ctx, "[Reconciler] Closed backgrounded tool call but could not emit its status",
 			"toolCallID", call.ToolCallID, "error", err)
 	}
 	r.recordAnomaly(stats, anomalyBackgroundedProcessClosed)

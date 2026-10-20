@@ -238,11 +238,11 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	defer func() {
 		if err := obsProvider.Shutdown(); err != nil {
-			logging.Warn("Failed to shutdown observability", "error", err)
+			logging.WarnContext(ctx, "Failed to shutdown observability", "error", err)
 		}
 	}()
 
-	logging.Info("Starting Reliant API server (stateless)",
+	logging.InfoContext(ctx, "Starting Reliant API server (stateless)",
 		"grpc_port", opts.GRPCPort,
 		"temporal", fmt.Sprintf("%s:%d", opts.TemporalHost, opts.TemporalPort),
 		"db_driver", opts.DatabaseDriver,
@@ -252,7 +252,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Ensure RELIANT_DATA_DIR is set for activities that need to locate files
 	if err := os.Setenv("RELIANT_DATA_DIR", opts.DataDir); err != nil {
-		logging.Warn("Failed to set RELIANT_DATA_DIR env var", "error", err)
+		logging.WarnContext(ctx, "Failed to set RELIANT_DATA_DIR env var", "error", err)
 	}
 
 	// Global model registry
@@ -285,7 +285,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
-	logging.Info("Database initialized", "driver", opts.DatabaseDriver)
+	logging.InfoContext(ctx, "Database initialized", "driver", opts.DatabaseDriver)
 
 	// Credential vault: required when hosted, generated when self-hosted.
 	// Fails startup on a missing or malformed key.
@@ -326,7 +326,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to Temporal: %w", err)
 	}
-	logging.Info("Connected to external Temporal server", "host", opts.TemporalHost, "port", opts.TemporalPort)
+	logging.InfoContext(ctx, "Connected to external Temporal server", "host", opts.TemporalHost, "port", opts.TemporalPort)
 
 	// Tools factory (catalog metadata only; the api-server executes no tools)
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
@@ -376,7 +376,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	userUpdateHub = streaming.NewNATSUpdateHub[db.UserUpdate](nc, "user.updates", "UserUpdate")
 	chatUpdateHub = streaming.NewNATSUpdateHub[db.ChatUpdate](nc, "chat.updates", "ChatUpdate")
-	logging.Info("Update hubs initialized (NATS)")
+	logging.InfoContext(ctx, "Update hubs initialized (NATS)")
 	defer func() { _ = userUpdateHub.Close() }()
 	defer func() { _ = chatUpdateHub.Close() }()
 
@@ -412,10 +412,10 @@ func Run(ctx context.Context, opts Options) error {
 	reconciler := reconciliation.NewReconciler(repo, temporalClient, reconcilerCfg)
 	reconciler.SetResetGuard(resetGuard)
 	reconciler.StartBackgroundReconciliation(ctx)
-	logging.Info("Background reconciler started")
+	logging.InfoContext(ctx, "Background reconciler started")
 
 	// Analytics
-	logging.Info("[Analytics] Initializing analytics")
+	logging.InfoContext(ctx, "[Analytics] Initializing analytics")
 	analyticsClient := analytics.NewClientFromSettings(ctx, "", true, opts.Analytics)
 	analytics.SetClient(analyticsClient)
 	analytics.SetPrivacyChecker(repo)
@@ -436,17 +436,17 @@ func Run(ctx context.Context, opts Options) error {
 			tlsCertFile = certPaths.CertFile
 			tlsKeyFile = certPaths.KeyFile
 		}
-		logging.Info("TLS enabled", "cert", tlsCertFile)
+		logging.InfoContext(ctx, "TLS enabled", "cert", tlsCertFile)
 	} else {
 		tlsCertFile = ""
 		tlsKeyFile = ""
-		logging.Info("TLS disabled via DISABLE_TLS=true, using plaintext HTTP")
+		logging.InfoContext(ctx, "TLS disabled via DISABLE_TLS=true, using plaintext HTTP")
 	}
 
 	// Daemon routing: reuses the same NATS connection
 	daemonRouter := toolexec.NewNATSDaemonRouter(nc, daemonRouterOptions(repo, opts.ControlPlane.URL)...)
 	natsChecker := nc.IsConnected
-	logging.Info("Using NATS daemon router — daemon services run in separate daemon-gateway process")
+	logging.InfoContext(ctx, "Using NATS daemon router — daemon services run in separate daemon-gateway process")
 
 	// Backgrounded tool calls end when their process does, and only the daemon
 	// running the process can say so. The reconciler asks on every pass; set
@@ -538,7 +538,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	// The listener is bound: /ready now answers from its dependency checks.
 	drainer.MarkReady()
-	logging.Info("gRPC/Connect server started", "port", opts.GRPCPort)
+	logging.InfoContext(ctx, "gRPC/Connect server started", "port", opts.GRPCPort)
 
 	// Subscribe to daemon.v1.events.connected on the DAEMON_EVENTS
 	// JetStream stream so we can heal each user's project directories the
@@ -548,7 +548,7 @@ func Run(ctx context.Context, opts Options) error {
 	if projectSvc := grpcSrv.ProjectService(); projectSvc != nil {
 		go func() {
 			if err := projectSvc.StartDaemonEventConsumer(ctx, nc); err != nil {
-				logging.Warn("daemon-events consumer exited with error", "error", err)
+				logging.WarnContext(ctx, "daemon-events consumer exited with error", "error", err)
 			}
 		}()
 	}
@@ -562,7 +562,7 @@ func Run(ctx context.Context, opts Options) error {
 		reconciler.SetQueuedDelivery(queued)
 		go func() {
 			if err := queued.Run(ctx, nc); err != nil {
-				logging.Warn("queued-delivery consumer exited with error; the reconciler's sweep still delivers", "error", err)
+				logging.WarnContext(ctx, "queued-delivery consumer exited with error; the reconciler's sweep still delivers", "error", err)
 			}
 		}()
 	}
@@ -638,16 +638,16 @@ func Run(ctx context.Context, opts Options) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
-		logging.Info("Health endpoint started", "address", healthAddr)
+		logging.InfoContext(ctx, "Health endpoint started", "address", healthAddr)
 		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logging.Error("Health endpoint failed", "error", err)
+			logging.ErrorContext(ctx, "Health endpoint failed", "error", err)
 		}
 	}()
 
 	// -----------------------------------------------------------------
 	// Startup complete
 	// -----------------------------------------------------------------
-	logging.Info("Reliant API server ready",
+	logging.InfoContext(ctx, "Reliant API server ready",
 		"startup_duration", time.Since(startTime),
 		"grpc_port", opts.GRPCPort,
 		"pprof_port", opts.PprofPort,
@@ -664,9 +664,9 @@ func Run(ctx context.Context, opts Options) error {
 
 	select {
 	case sig := <-sigCh:
-		logging.Info("Received shutdown signal, beginning graceful shutdown", "signal", sig)
+		logging.InfoContext(ctx, "Received shutdown signal, beginning graceful shutdown", "signal", sig)
 	case <-ctx.Done():
-		logging.Info("Context cancelled, beginning graceful shutdown")
+		logging.InfoContext(ctx, "Context cancelled, beginning graceful shutdown")
 	}
 
 	// Flip /ready to 503 and hold the listener open for PRE_STOP_DELAY so
@@ -682,17 +682,17 @@ func Run(ctx context.Context, opts Options) error {
 	defer cancel()
 
 	// Stop gRPC server
-	logging.Info("Stopping gRPC server")
+	logging.InfoContext(ctx, "Stopping gRPC server")
 	if err := grpcSrv.Stop(shutdownCtx); err != nil {
-		logging.Error("Error stopping gRPC server", "error", err)
+		logging.ErrorContext(ctx, "Error stopping gRPC server", "error", err)
 	}
 
 	// Stop reconciler
-	logging.Info("Stopping reconciler")
+	logging.InfoContext(ctx, "Stopping reconciler")
 	reconciler.Stop()
 
 	// Close Temporal client
-	logging.Info("Closing Temporal client")
+	logging.InfoContext(ctx, "Closing Temporal client")
 	temporalClient.Close()
 
 	// Close daemon router
@@ -701,9 +701,9 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// Close database
-	logging.Info("Closing database")
+	logging.InfoContext(ctx, "Closing database")
 	if err := repo.Close(); err != nil {
-		logging.Error("Error closing database", "error", err)
+		logging.ErrorContext(ctx, "Error closing database", "error", err)
 	}
 
 	// Health endpoint LAST: it served the 503 "draining" answer for the
@@ -713,25 +713,25 @@ func Run(ctx context.Context, opts Options) error {
 	// Its own short budget: the shutdown context is usually spent by now, and
 	// an expired one would skip the graceful close of a server whose only
 	// clients are probes that take microseconds.
-	logging.Info("Stopping health endpoint")
+	logging.InfoContext(ctx, "Stopping health endpoint")
 	healthCtx, cancelHealth := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelHealth()
 	if err := healthServer.Shutdown(healthCtx); err != nil {
-		logging.Error("Error stopping health endpoint", "error", err)
+		logging.ErrorContext(ctx, "Error stopping health endpoint", "error", err)
 	}
 	// The shutdown's total ("drain: complete"), before telemetry is flushed
 	// so the point is exported.
 	drainer.Complete()
 
 	// Flush analytics
-	logging.Info("[Analytics] Shutting down analytics")
+	logging.InfoContext(ctx, "[Analytics] Shutting down analytics")
 	analytics.Shutdown()
 
 	// Flush telemetry
-	logging.Info("[Telemetry] Flushing pending events")
+	logging.InfoContext(ctx, "[Telemetry] Flushing pending events")
 	telemetry.Flush(5)
 
-	logging.Info("API server shut down gracefully")
+	logging.InfoContext(ctx, "API server shut down gracefully")
 	return nil
 }
 

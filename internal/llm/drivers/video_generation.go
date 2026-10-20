@@ -57,7 +57,7 @@ func ResolveVideoGenerator(ctx context.Context, userID string, selector models.M
 	}
 
 	config := videoGenConfig(resolved, driverConfig)
-	logging.Debug("Resolved video generation model",
+	logging.DebugContext(ctx, "Resolved video generation model",
 		"model", config.ModelID, "api_model", config.APIModel, "driver", config.Driver)
 
 	return newVideoGenClient(config)

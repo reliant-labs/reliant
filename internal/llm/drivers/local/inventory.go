@@ -225,7 +225,7 @@ func ListModels(ctx context.Context, dir Directory, userID string) ([]Model, err
 		endpoints, err := lister.ConfiguredEndpoints(ctx, userID)
 		if err != nil {
 			// Detected models stay usable when the endpoint list cannot be read.
-			logging.Warn("[LocalModels] Could not list configured endpoints", "userID", userID, "error", err)
+			logging.WarnContext(ctx, "[LocalModels] Could not list configured endpoints", "userID", userID, "error", err)
 		}
 		for _, cfg := range endpoints {
 			all = append(all, SynthesizeEndpoint(cfg)...)
@@ -390,7 +390,7 @@ func (r *RepoDirectory) LocalDaemons(ctx context.Context, userID string) ([]Daem
 	for daemonID, raw := range stored {
 		inv := &reliantv1.LocalModelInventory{}
 		if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal([]byte(raw), inv); err != nil {
-			logging.Warn("[LocalModels] Skipping unreadable stored inventory", "daemonID", daemonID, "error", err)
+			logging.WarnContext(ctx, "[LocalModels] Skipping unreadable stored inventory", "daemonID", daemonID, "error", err)
 			continue
 		}
 		machine := hostnames[daemonID]

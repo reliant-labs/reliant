@@ -53,11 +53,11 @@ func (s *Service) wakeDaemonForAttendedTurn(ctx context.Context, userID string, 
 		// Pending is not a failed wake: the machine is already on its way up
 		// (provisioning), and the turn's tool calls will wait for it.
 		if toolexec.IsDaemonPending(err) {
-			logging.Info("[ChatService] daemon is still coming up; accepting the message",
+			logging.InfoContext(ctx, "[ChatService] daemon is still coming up; accepting the message",
 				"error", err, "user_id", userID)
 			return
 		}
-		logging.Warn("[ChatService] best-effort daemon wake failed; accepting the message anyway",
+		logging.WarnContext(ctx, "[ChatService] best-effort daemon wake failed; accepting the message anyway",
 			"error", err, "user_id", userID)
 	}
 }

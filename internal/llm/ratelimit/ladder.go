@@ -161,7 +161,7 @@ func (r Retryer) Run(ctx context.Context, try func(attempt int) (Failure, bool),
 		if !retry {
 			return err
 		}
-		logging.Warn(r.Log+" failed; retrying", "attempt", wait.Attempt, "delay", wait.Delay,
+		logging.WarnContext(ctx, r.Log+" failed; retrying", "attempt", wait.Attempt, "delay", wait.Delay,
 			"status", wait.StatusCode, "reason", wait.Reason, "error", f.Err)
 		if emit != nil {
 			if err := emit(wait); err != nil {

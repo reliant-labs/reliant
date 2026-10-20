@@ -175,7 +175,7 @@ func (s *Service) ExchangeToken(
 		return nil, err
 	}
 
-	logging.Info("access token exchanged", "user_id", userID, "subject_token_id", subject.TokenID,
+	logging.InfoContext(ctx, "access token exchanged", "user_id", userID, "subject_token_id", subject.TokenID,
 		"token_id", minted.TokenID, "scopes", fat.JoinScopes(granted), "expires_at", expiresAt.UTC().Format(time.RFC3339))
 	out := &reliantv1.ExchangeTokenResponse{
 		Token:       minted.Plaintext,
@@ -205,7 +205,7 @@ func (s *Service) sessionCredential(ctx context.Context, header http.Header) (*f
 			"this Reliant credential is no longer valid; sign in to Reliant again (`reliant auth login` / the app)"))
 	}
 	if err != nil {
-		logging.Error("token authority failed", "op", "exchange-introspect", "error", tokenauthority.Describe(err))
+		logging.ErrorContext(ctx, "token authority failed", "op", "exchange-introspect", "error", tokenauthority.Describe(err))
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("token service unavailable"))
 	}
 	if strings.TrimSpace(subject.ActingUserID) == "" {
@@ -227,14 +227,14 @@ func (s *Service) confirmSameOrg(ctx context.Context, userID string, minted toke
 		return nil
 	}
 	if revokeErr := s.deps.Authority.RevokeForUser(ctx, userID, minted.TokenID); revokeErr != nil {
-		logging.Error("could not revoke a mis-scoped exchanged token", "token_id", minted.TokenID,
+		logging.ErrorContext(ctx, "could not revoke a mis-scoped exchanged token", "token_id", minted.TokenID,
 			"error", tokenauthority.Describe(revokeErr))
 	}
 	if err != nil {
-		logging.Error("token authority failed", "op", "exchange-confirm", "error", tokenauthority.Describe(err))
+		logging.ErrorContext(ctx, "token authority failed", "op", "exchange-confirm", "error", tokenauthority.Describe(err))
 		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("token service unavailable"))
 	}
-	logging.Warn("exchange refused: minted org differs from the calling token's", "user_id", userID,
+	logging.WarnContext(ctx, "exchange refused: minted org differs from the calling token's", "user_id", userID,
 		"subject_token_id", subject.TokenID)
 	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 		"your primary organization is not the one this credential was issued for; sign in to Reliant again"))

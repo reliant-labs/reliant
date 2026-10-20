@@ -133,12 +133,12 @@ func (a *ExecuteToolsActivity) projectSkills(ctx context.Context, projectID stri
 		return nil
 	}
 	if a.configProvider == nil {
-		logging.Warn("[ExecuteTools] No config provider wired; the skill tool sees no project skills", "projectID", projectID)
+		logging.WarnContext(ctx, "[ExecuteTools] No config provider wired; the skill tool sees no project skills", "projectID", projectID)
 		return nil
 	}
 	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{ProjectID: projectID})
 	if err != nil {
-		logging.Warn("[ExecuteTools] Project skills could not be loaded", "projectID", projectID, "error", err)
+		logging.WarnContext(ctx, "[ExecuteTools] Project skills could not be loaded", "projectID", projectID, "error", err)
 		return nil
 	}
 	if cfg == nil {
