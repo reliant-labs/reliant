@@ -610,7 +610,7 @@ func TestPR5Smoke_ConfigSyncCancelDisconnectReconnect(t *testing.T) {
 			DaemonTimestampUnixMs: snapshotTS,
 			UserConfigYaml:        []byte("models: {}"),
 			ProjectConfigYaml:     []byte("debug: true"),
-			LocalConfigYaml:       []byte("context_paths: []"),
+			LocalConfigYaml:       []byte("local: yes"),
 		},
 	}))
 

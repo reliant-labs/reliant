@@ -241,9 +241,6 @@ func mergeConfigInto(dst *Config, src *Config) {
 	if src.WorktreeDir != "" {
 		dst.WorktreeDir = src.WorktreeDir
 	}
-	if len(src.ContextPaths) > 0 {
-		dst.ContextPaths = append([]string(nil), src.ContextPaths...)
-	}
 	if src.Models != nil {
 		dst.Models = src.Models
 	}

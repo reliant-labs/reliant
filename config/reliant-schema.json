@@ -233,17 +233,6 @@
       },
       "type": "object"
     },
-    "contextPaths": {
-      "default": [
-        "reliant.md",
-        "reliant.local.md"
-      ],
-      "description": "Context/instruction files that are auto-loaded (reliant.md for project, reliant.local.md for local/gitignored)",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
     "data": {
       "description": "Storage configuration",
       "properties": {
