@@ -863,7 +863,7 @@ Events are always keyed by node path, never by ref URL: `node: "builtin://agent"
 
 Every event needs either `output:` (a raw activity output map) or `type:` (a convenience wrapper
 like `llm_response`/`tool_result` that gets converted into one). **Write `output:` directly.** It is
-the form every scenario in `internal/workflow/builtin/testdata/` uses (the CI-gating corpus), and it is
+the form nearly every builtin scenario (`internal/workflow/builtin/<workflow>/scenarios/`, which CI runs) uses, and it is
 the only form that exposes real activity field names — `response_data`, `thread_token_count`,
 `has_feedback`, `tool_results` — which you need for routing and compaction scenarios and which the
 `type:` wrapper hides.
