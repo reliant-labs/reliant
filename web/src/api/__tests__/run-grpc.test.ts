@@ -18,7 +18,7 @@ import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v
 const NOW = Date.parse("2026-10-04T12:00:00Z");
 
 describe("buildListRunsRequest", () => {
-  it("defaults to the last 24 hours, every kind, unarchived", () => {
+  it("defaults to the last 24 hours, every kind, archived runs included", () => {
     const request = buildListRunsRequest({}, { now: NOW });
     expect(timestampDate(request.startedAfter!).toISOString()).toBe("2026-10-03T12:00:00.000Z");
     expect(request.startedBefore).toBeUndefined();
@@ -29,7 +29,7 @@ describe("buildListRunsRequest", () => {
     expect(request.triggerId).toBeUndefined();
     expect(request.query).toBeUndefined();
     expect(request.pageToken).toBeUndefined();
-    expect(request.includeArchived).toBe(false);
+    expect(request.includeArchived).toBe(true);
   });
 
   it("maps every filter onto its request field", () => {

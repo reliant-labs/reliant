@@ -1,6 +1,7 @@
 name: autopilot-lease-release
 title: Autopilot · release a work-item lease
 hidden: true
+automation_only: true
 apiVersion: "0.0.5"
 description: |
   Releases the lease autopilot-lease-acquire took, then looks at what arrived while it was held.

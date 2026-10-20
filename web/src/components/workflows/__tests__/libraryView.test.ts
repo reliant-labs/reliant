@@ -64,6 +64,23 @@ const names = (view: ReturnType<typeof libraryView>) =>
   Object.fromEntries(view.sections.map((section) => [section.key, section.workflows.map((w) => w.name)]));
 
 describe("libraryView", () => {
+  it("lists hidden built-ins as building blocks, but not an automation's internal steps", () => {
+    const view = libraryView({
+      workflows: [
+        ...workflows,
+        { ...wf("builtin://structured-agent", "builtin"), isHidden: true },
+        // Autopilot's helpers: hidden AND automation_only. Nobody can run
+        // them, so they are listed nowhere.
+        { ...wf("builtin://autopilot-lease-acquire", "builtin"), isHidden: true, automationOnly: true },
+        { ...wf("builtin://autopilot-agent", "builtin"), isHidden: true, automationOnly: true },
+      ],
+      invalid,
+      triggers: [],
+    });
+    expect(view.buildingBlocks.map((w) => w.name)).toEqual(["builtin://structured-agent"]);
+    expect(view.rows.map((row) => row.workflow.name)).not.toContain("builtin://autopilot-lease-acquire");
+  });
+
   it("by default keeps the origin sections, sorted by name, and the broken definitions", () => {
     const view = libraryView({ workflows, invalid, triggers: [] });
     expect(names(view)).toEqual({

@@ -249,3 +249,26 @@ func TestListRuns_BuilderTestsHiddenUnlessFilteredByKind(t *testing.T) {
 	assert.Equal(t, []string{"test"}, runIDs(tests))
 	assert.Equal(t, "builder.test", tests[0].LaunchKind)
 }
+
+// An automation archives each run it finishes successfully, so archived runs
+// are history the Runs page asks for (include_archived), each marked as such,
+// and they still count as their workflow's last run.
+func TestListRuns_ArchivedRunsAreListedOnRequestAndMarked(t *testing.T) {
+	f := newRunListFixture(t)
+	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	f.seed(t, "kept", "wf-a", db.Completed(), base)
+	f.seed(t, "archived", "wf-a", db.Completed(), base.Add(time.Minute))
+	require.NoError(t, f.repo.UpdateChatState(f.ctx, "archived", db.ChatStateArchived, "automation_succeeded"))
+
+	assert.Equal(t, []string{"kept"}, runIDs(f.list(t, &reliantv1.ListRunsRequest{}).Runs))
+
+	all := f.list(t, &reliantv1.ListRunsRequest{IncludeArchived: ptr.Of(true)}).Runs
+	require.Equal(t, []string{"archived", "kept"}, runIDs(all))
+	assert.True(t, all[0].Archived)
+	assert.False(t, all[1].Archived)
+
+	last, err := f.svc.LastRunPerWorkflow(f.ctx, connect.NewRequest(&reliantv1.LastRunPerWorkflowRequest{}))
+	require.NoError(t, err)
+	require.Equal(t, []string{"archived"}, runIDs(last.Msg.Runs), "an archived run is still the workflow's last run")
+	assert.True(t, last.Msg.Runs[0].Archived)
+}

@@ -176,6 +176,12 @@ message Run {
   // ParentChatTitle is that parent chat's title. Unset when parent_chat_id is,
   // or when the parent chat no longer exists or is not the caller's.
   optional string parent_chat_title = 22;
+
+  // Archived is set when the run's chat is archived: a person put it away, or
+  // it is an automation run that finished successfully and was archived on
+  // its own. Filled by the cross-cutting list like title above. An archived
+  // run is history, still listed when the request asks for archived runs.
+  bool archived = 23;
 }
 
 // RunDisplayState is the single status vocabulary the UI shows for a run

@@ -87,6 +87,11 @@ LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 -- List archived chats with worktree info. Reads chats_with_activity (not chats)
 -- so the root workflow state and last_message_at come back like every other
 -- chat read; falls back to project name if worktree name is unavailable.
+--
+-- The sidebar's Archived tab, so it lists what the sidebar lists: the
+-- list_in_sidebar policy, as ListChats applies it with sidebar_only. An
+-- automation archives its own runs once they succeed; those are history in
+-- Runs (ListRuns with include_archived), not chats the user put away.
 SELECT
     c.*,
     COALESCE(w.name, c.archived_worktree_name, p.name) as worktree_name,
@@ -96,6 +101,7 @@ LEFT JOIN worktrees w ON c.worktree_id = w.id
 LEFT JOIN projects p ON c.project_id = p.id
 WHERE c.state = 3
   AND c.user_id = @user_id
+  AND c.list_in_sidebar
 ORDER BY c.updated_at DESC;
 -- name: SetChatAdoptedAt :execrows
 -- Idempotent: adopting an adopted chat keeps its original adopted_at, and

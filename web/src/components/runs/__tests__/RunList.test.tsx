@@ -103,6 +103,23 @@ describe("RunList", () => {
     expect(screen.getByText("Sweep a")).toBeInTheDocument();
   });
 
+  it("marks an archived run: an automation archives each run it finishes successfully", async () => {
+    renderRunsAt(
+      <RunList
+        runs={[
+          { ...hourly("kept", RunDisplayState.FAILED, 1), title: "Failed sweep" },
+          { ...hourly("done", RunDisplayState.COMPLETED, 2), title: "Archived sweep", archived: true },
+        ]}
+        groupRepeats={false}
+      />,
+    );
+    const archivedRow = await screen.findByTestId("run-row-done");
+    expect(within(archivedRow).getByText("Archived")).toBeInTheDocument();
+    // The trigger that fired it is named on the row.
+    expect(within(archivedRow).getByRole("link", { name: "Hourly sweep" })).toBeInTheDocument();
+    expect(within(screen.getByTestId("run-row-kept")).queryByText("Archived")).not.toBeInTheDocument();
+  });
+
   it("shows every repeat when grouping is off", async () => {
     renderRunsAt(
       <RunList runs={["a", "b", "c", "d"].map((id, i) => hourly(id, RunDisplayState.COMPLETED, i))} groupRepeats={false} />,

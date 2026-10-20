@@ -1,6 +1,7 @@
 name: autopilot-lease-acquire
 title: Autopilot · take a work-item lease
 hidden: true
+automation_only: true
 apiVersion: "0.0.5"
 description: |
   The lease Autopilot's workflows take on an issue or pull request so two runs do not work it at once.

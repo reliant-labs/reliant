@@ -109,6 +109,7 @@ export function buildRun(overrides: Partial<RunSummary> = {}): RunSummary {
     outcome: "",
     createdAt: Date.now() - 10 * MINUTE,
     completedAt: Date.now() - 5 * MINUTE,
+    archived: false,
     ...overrides,
   };
 }

@@ -60,8 +60,7 @@ SELECT DISTINCT ON (r.workflow_name) r.chat_id, r.run_id, r.title, r.project_id,
               AND te.chat_id IS NOT NULL))
 ) r
 WHERE
-    r.chat_state IS DISTINCT FROM 3
-    AND r.launch_kind IS DISTINCT FROM 'builder.test'
+    r.launch_kind IS DISTINCT FROM 'builder.test'
     AND r.workflow_name <> ''
     AND ($3::text IS NULL OR r.project_id = $3::text)
     AND (cardinality($4::text[]) = 0 OR r.workflow_name = ANY($4::text[]))
@@ -99,6 +98,9 @@ type LastRunPerWorkflowRow struct {
 }
 
 // Newest run of each workflow name. Same columns and display_state as ListRuns.
+// Archived runs count: an automation archives each run it finishes
+// successfully, so leaving them out would make a healthy automation's
+// workflow read as never having run.
 func (q *Queries) LastRunPerWorkflow(ctx context.Context, arg LastRunPerWorkflowParams) ([]LastRunPerWorkflowRow, error) {
 	rows, err := q.db.QueryContext(ctx, lastRunPerWorkflow,
 		arg.UserID,

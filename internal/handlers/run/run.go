@@ -443,6 +443,7 @@ func runItemToProto(item *db.RunListItem) *reliantv1.Run {
 		DaemonId:     item.DaemonID,
 		Activity:     reliantv1.ChatActivity(item.Activity),
 		DisplayState: reliantv1.RunDisplayState(item.DisplayState),
+		Archived:     item.Archived,
 	}
 	if item.CompletedAt != nil {
 		out.CompletedAtMs = item.CompletedAt.UnixMilli()

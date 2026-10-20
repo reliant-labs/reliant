@@ -244,7 +244,13 @@ If an agent in a shell can write to GitHub as you, give the writing to an action
 
 Nobody is watching an automation's run. The agent is told to decide and proceed rather than ask, questions and approvals resolve immediately with no answer instead of waiting, and a run that pauses on a failure (a rate limit, a machine that went away) resumes itself with a growing wait instead of waiting for someone to resume it. Only a failure that outlasts about half an hour of retries leaves it paused, in **Workflows → Runs**, for a person to look at. Design workflows for this: give them everything they need in the prompt and inputs, and assume nothing can be clarified mid-run.
 
-A workflow that should only ever start from its triggers, never from a chat, can set `automation_only: true`.
+A workflow that should only ever start from its triggers, never from a chat, can set `automation_only: true`: chat pickers stop offering it and a chat start of it is refused. A helper that other workflows only `ref:` also sets `hidden: true`, which keeps it out of every picker and listing.
+
+## Where runs go
+
+An automation's runs stay out of your chat list. Each one is listed under **Workflows → Runs**, named by the automation that fired it, with its status. A run that finishes successfully archives itself: it stays in Runs, marked **Archived**, and out of the sidebar's Archived tab, which holds only chats you put away. A run that fails, completes into a declared `outcome: failure`, is cancelled, or is waiting on you stays unarchived, so it surfaces in Runs and the Inbox. Route a blocked path to a terminal node with `outcome: failure` when you want to look at it.
+
+An automation with **Notify me when it finishes** keeps its successful runs unarchived, since the notification points at them. **Open as chat** on a run moves it into your chat list, out of the archive if it was there.
 
 ## Who an automation acts as
 

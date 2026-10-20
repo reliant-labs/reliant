@@ -230,6 +230,11 @@ func (s *Service) ListWorkflows(
 				logging.Error("Failed to parse stored workflow", "error", err, "id", draft.ID, "name", draft.Name)
 				continue
 			}
+			// A definition that declares `hidden: true` is a building block, as
+			// a hidden builtin is: out of the default listing, still resolvable.
+			if item.IsHidden && !req.Msg.GetIncludeHidden() {
+				continue
+			}
 			// Use draft.Slug directly as the map key - this is the stable runtime identifier.
 			workflowsBySlug[draft.Slug] = item
 		}
@@ -271,6 +276,11 @@ func (s *Service) ListWorkflows(
 	// Filter by visibility and convert map to slice
 	workflows := make([]*reliantv1.WorkflowListItem, 0, len(workflowsBySlug))
 	for _, wf := range workflowsBySlug {
+		// A project workflow whose definition declares `hidden: true` is a
+		// building block: out of the default listing, like a hidden builtin.
+		if wf.Source == "project" && wf.IsHidden && !req.Msg.GetIncludeHidden() {
+			continue
+		}
 		// Check visibility for builtin workflows (unless include_hidden is set)
 		if wf.Source == "builtin" && !req.Msg.GetIncludeHidden() {
 			visible, ok := wfOverrides[wf.Name]
@@ -309,7 +319,7 @@ func userWorkflowListItem(draft *db.WorkflowDraft, check workflowCheck) (*relian
 		Nodes:            protoWf.Nodes,
 		Edges:            protoWf.Edges,
 		Inputs:           protoWf.Inputs,
-		IsHidden:         draft.IsHidden,
+		IsHidden:         draft.IsHidden || protoWf.Hidden,
 		HasPresetGroups:  rpcWorkflowHasPresetGroups(protoWf),
 		DraftId:          &draftID,
 		Status:           draftStatusToProto(draft.Status),
@@ -369,6 +379,7 @@ func discoverProjectWorkflowsFromDB(repo workflowsource.ProjectStore, ctx contex
 		items = append(items, &reliantv1.WorkflowListItem{
 			Name:            protoWf.Name,
 			Title:           protoWf.Title,
+			IsHidden:        protoWf.Hidden,
 			Filename:        entry.Slug,
 			Description:     protoWf.Description,
 			StepCount:       int32(len(protoWf.Nodes)),

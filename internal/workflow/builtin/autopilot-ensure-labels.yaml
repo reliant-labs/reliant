@@ -1,6 +1,7 @@
 name: autopilot-ensure-labels
 title: Autopilot · ensure labels exist
 hidden: true
+automation_only: true
 apiVersion: "0.0.5"
 description: |
   Makes sure the labels an Autopilot workflow uses exist in a repository, with a colour and a description.

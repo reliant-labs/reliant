@@ -4,7 +4,7 @@ import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
 import { useWorkflows } from "../../store/globalDataStore";
 import { isRunnable } from "../workflow/workflowDraftStatus";
-import { isChatLaunchable } from "../../api/workflow-grpc";
+import { isOfferedInChatPicker } from "../../api/workflow-grpc";
 
 interface AgentSelectorProps {
   // Current selection (agent name or workflow name)
@@ -31,7 +31,7 @@ export function AgentSelector({
 
   // Use cached workflows from global store
   const { workflows, loading: workflowsLoading } = useWorkflows();
-  const chatWorkflows = workflows.filter((workflow) => isRunnable(workflow) && isChatLaunchable(workflow));
+  const chatWorkflows = workflows.filter((workflow) => isRunnable(workflow) && isOfferedInChatPicker(workflow));
 
   // Close dropdown when clicking outside
   useEffect(() => {

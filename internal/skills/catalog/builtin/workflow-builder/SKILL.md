@@ -329,7 +329,15 @@ dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a s
 
 **Chat is a trigger too, on by default.** Set top-level `automation_only: true` for a workflow only its
 `triggers:` should start: chat pickers stop offering it and starting it from a chat is refused
-(a builder test run still works). Leave it unset for anything a person starts by chatting.
+(a builder test run still works). Leave it unset for anything a person starts by chatting. A helper that only
+other workflows `ref:` sets `hidden: true` as well: hidden keeps it out of every picker and listing, and
+the pair marks it as an automation's internal step.
+
+**Where an automation's runs go.** A run a trigger fires is a chat, but not one in the chat list: it is listed under
+Workflows → Runs, named by its automation. Once it finishes successfully it archives itself (still in Runs, marked
+Archived). A failed run, a completion into a declared `outcome: failure`, a cancelled run and one awaiting input stay
+unarchived so they surface. So route a blocked or punted path to a terminal node with `outcome: failure` when a person
+should look at it. An automation with "notify me when it finishes" keeps its successful runs too.
 
 What `trigger.payload` holds, by source:
 
@@ -716,7 +724,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `transition_to` | string | No | - |
 | `triggers` | WorkflowTrigger[] | No | *WHEN the workflow runs: a list of {name, description, one source (schedule \| webhook \| integration \| workflow_event), filter (raw CEL over `trigger`), inputs (templates over `trigger`), prompt (template over `trigger`: the message each run starts from)}. Declaring one fires nothing; the user enables it in the app. See the workflow-builder skill's Triggers section.* |
 | `title` | string | No | - |
-| `hidden` | boolean | No | - |
+| `hidden` | boolean | No | *A building block other workflows ref: true keeps it out of every picker and default listing while it stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. Unset means the workflow is listed.* |
 | `automation_only` | boolean | No | *The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat start of it, so only its triggers (or a builder test run) start it. Unset means a chat can start it.* |
 
 ## Edge

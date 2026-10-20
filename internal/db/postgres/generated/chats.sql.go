@@ -168,6 +168,7 @@ LEFT JOIN worktrees w ON c.worktree_id = w.id
 LEFT JOIN projects p ON c.project_id = p.id
 WHERE c.state = 3
   AND c.user_id = $1
+  AND c.list_in_sidebar
 ORDER BY c.updated_at DESC
 `
 
@@ -210,6 +211,11 @@ type ListArchivedChatsRow struct {
 // List archived chats with worktree info. Reads chats_with_activity (not chats)
 // so the root workflow state and last_message_at come back like every other
 // chat read; falls back to project name if worktree name is unavailable.
+//
+// The sidebar's Archived tab, so it lists what the sidebar lists: the
+// list_in_sidebar policy, as ListChats applies it with sidebar_only. An
+// automation archives its own runs once they succeed; those are history in
+// Runs (ListRuns with include_archived), not chats the user put away.
 func (q *Queries) ListArchivedChats(ctx context.Context, userID string) ([]ListArchivedChatsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listArchivedChats, userID)
 	if err != nil {

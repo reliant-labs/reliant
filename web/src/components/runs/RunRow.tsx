@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { Archive } from "lucide-react";
 
 import type { RunSummary } from "@/api/run-grpc";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
@@ -92,6 +93,7 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
         </Link>
         <p className="mt-0.5 truncate text-xs text-muted-foreground">
           <span className="text-foreground/80">{status.label}</span>
+          {run.archived && <ArchivedTag />}
           {detail.length > 0 && ` · ${detail.join(" · ")}`}
         </p>
       </div>
@@ -125,6 +127,23 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
         <RunDuration startedAt={run.createdAt} completedAt={run.completedAt} live={live} />
       </div>
     </li>
+  );
+}
+
+/**
+ * The run's chat is archived. An automation archives each run it finishes
+ * successfully, so on an automation's row this reads "done, nothing to do";
+ * a run that failed or needs input is never archived by it.
+ */
+function ArchivedTag() {
+  return (
+    <span
+      className="ml-1.5 inline-flex items-center gap-1 rounded border border-border/60 px-1 py-0.5 align-middle text-2xs font-medium uppercase leading-none tracking-wide text-muted-foreground"
+      title="Archived. Successful automation runs are archived automatically."
+    >
+      <Archive className="h-2.5 w-2.5" aria-hidden="true" />
+      Archived
+    </span>
   );
 }
 

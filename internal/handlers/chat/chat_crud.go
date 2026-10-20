@@ -1404,6 +1404,18 @@ func (s *Service) setChatAdopted(ctx context.Context, chatID string, adopted boo
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to reload chat"))
 	}
+	// Adopting is taking the run into the chat list, so an archived one comes
+	// back out of the archive: an automation archives every run it finishes
+	// successfully, and "Open as chat" on one of those must land somewhere.
+	if adopted && chat.State == db.ChatStateArchived {
+		if err := s.deps.Repo.UpdateChatState(ctx, chatID, db.ChatStateIdle, "adopted"); err != nil {
+			logging.Error("Failed to unarchive an adopted chat", "error", err, "chatID", chatID)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update chat"))
+		}
+		if chat, err = s.getChatForUser(ctx, chatID, userID); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to reload chat"))
+		}
+	}
 	return chat, nil
 }
 

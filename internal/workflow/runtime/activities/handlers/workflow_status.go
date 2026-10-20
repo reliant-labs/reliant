@@ -142,6 +142,7 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 				logging.Warn("[WorkflowStatus] Failed to mark chat as unread", "error", err, "reason", reason)
 			}
 		}
+		a.archiveSucceededAutomationRun(ctx, input)
 	}
 
 	// Build update data (shared for both chat_updates and user_updates)

@@ -203,6 +203,23 @@ export function isChatLaunchable(workflow: { automationOnly?: boolean; automatio
   return !(workflow.automationOnly ?? workflow.automation_only ?? false);
 }
 
+/**
+ * Whether a chat picker offers this workflow: a chat can start it
+ * (isChatLaunchable) and its definition is not a building block
+ * (`hidden: true`). The server already leaves hidden workflows out of the
+ * default listing; checking here too keeps a picker right whichever list it
+ * is handed. Every chat picker (composer, slash menu, agent selector, mobile
+ * new chat) filters by this one rule.
+ */
+export function isOfferedInChatPicker(workflow: {
+  automationOnly?: boolean;
+  automation_only?: boolean;
+  isHidden?: boolean;
+  is_hidden?: boolean;
+}): boolean {
+  return isChatLaunchable(workflow) && !(workflow.isHidden ?? workflow.is_hidden ?? false);
+}
+
 // ============================================
 // Workflow gRPC Client
 // ============================================
