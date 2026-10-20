@@ -51,7 +51,8 @@ To check that a rebuilt CLI is the one on your `PATH`, run `reliant --version`.
 Everything generated is committed: protobuf code (`gen/`, `web/src/gen/`), sqlc
 output, and the reference docs (`generated/docs-source/`, `docs/reference/`,
 the workflow-builder skill). CI's **Generated code is up to date** job runs
-`make generate-all` on every PR and fails on any diff. So after changing an
+`make generate-all` on every PR that can move a generator input (anything but a
+frontend-, electron- or CI-only change) and fails on any diff. So after changing an
 input — a `.proto`, a query or migration, a tool, a model, a CLI command, the
 forge pin — regenerate and commit the result in the same change:
 
@@ -64,7 +65,7 @@ make help              # every individual generate-* target
 
 `make generate-all` does not run forge. What forge projects — the generated
 mocks, `gen/forge_descriptor.json`, the per-service test harnesses,
-`deploy/observability/` — is checked by CI's **forge generate is a no-op** job:
+`deploy/observability/` — is checked by the same job's **forge generate is a no-op** step:
 after changing a `.proto`, a `contract.go` interface, a migration or the forge
 pin, run
 

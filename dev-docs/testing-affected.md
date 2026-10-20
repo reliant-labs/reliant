@@ -100,12 +100,37 @@ cannot see).
 
 `make test-affected` is the local inner loop. GitHub's PR CI
 (`.github/workflows/pr-ci.yml`) runs on every PR, every push to main, nightly
-(06:17 UTC) and on manual dispatch. The event picks the Go tier:
+(06:17 UTC) and on manual dispatch. The event picks the tier:
 
-| Event | Go tier | Command | What it skips |
+| Event | Tier | Go | Everything else |
 |---|---|---|---|
-| `pull_request` | **short**, job `Backend (Go, short)` | `go test -short` | tests gated on `testing.Short()` |
-| push to `main`, nightly `schedule`, `workflow_dispatch` | **full**, job `Backend (Go, full)` | `go test` | nothing |
+| `pull_request` | **fast**, job `Backend (Go, short)` | `go test -short` over the packages **this selector** picks for the PR's diff | only the lanes the diff can reach (below) |
+| push to `main`, nightly `schedule`, `workflow_dispatch` | **full**, job `Backend (Go, full)` | `go test` over every package | every lane |
+
+The PR tier is built to finish in about five minutes, and selection is how:
+the org's runners are shared, so a job a PR does not need is a slot another PR
+waits for. Nothing a PR skips is deleted; it runs on the next push to main.
+
+- **What decides a PR's lanes.** The `Detect what changed` job runs this tool
+  (`plan -base <merge base>`) for the Go package and vitest file selection, and
+  path patterns (in the job's script) for the rest: lint and the e2e stories
+  run unless the change is confined to `web/`, `electron/`, docs, research or
+  `.github/`; codegen drift runs unless it is confined to the frontends,
+  electron, research or `.github/` (the generated `web/src/gen/` and
+  `shortcutsData.generated.ts` still count); the web build runs on `web/`, the
+  root Node manifests, `electron/release.config.json` or `verify-bundle.mjs`;
+  Playwright on `web/` changes that are not unit tests; the electron package on
+  `electron/` or the web build config. Its job summary prints the decision.
+- **A PR that changes `pr-ci.yml` runs everything**, so a CI change is proven
+  against the whole PR path it changes.
+- **New and changed tests run three times.** `tools/test-affected
+  changed-tests` names every Test function the diff adds or edits (by
+  function, in files that build without tags); the `New and changed Go tests
+  (x3)` job runs them with `-count=3`. A test that fails on a repeat is a
+  flake: fix it at the root, never by re-running.
+- **`CI result`** is the run's single verdict (green when every job that ran
+  passed; a lane the change skipped is fine) and its summary shows each job's
+  queue wait and run time.
 
 - **DB-backed tests run in both tiers.** CI sets `REQUIRE_TEST_DB=1`, which
   overrides their short-mode skip (`internal/db/testutil.go`).
@@ -125,21 +150,27 @@ cannot see).
   have separate check histories. `TestCITestTierReachedGoTest`
   (`tools/test-affected/ci_tier_test.go`) fails when the job's declared tier
   (`RELIANT_TEST_TIER`) disagrees with whether `-short` reached `go test`.
-- **The Go tests run in 3 shards** (`Backend (Go, short) 1/3` ... `3/3`);
+- **The Go tests run in up to 4 shards** (`Backend (Go, short) 1/4` ... `4/4`);
   `Backend (Go, short)` / `Backend (Go, full)` is the one check that passes only
-  when every shard did. `go run ./tools/test-affected shard -index K -total N`
-  assigns packages by their measured duration in
-  `tools/test-affected/go-test-weights.tsv` and lists the slowest first. Every
-  package runs in exactly one shard whatever the weights say; a stale weights
-  file only costs balance. Refresh it when a shard runs much longer than the
-  others: `gh run view <run-id> --log | go run ./tools/test-affected weights >
-  tools/test-affected/go-test-weights.tsv`.
-- **Other jobs** run identically on every event: `Lint (forge)` (in parallel;
-  `forge lint --no-fix` at the pinned forge, with forge's pinned golangci-lint,
-  blocks; run it locally before pushing a Go or proto change), web lint/typecheck/build,
-  vitest in two shards (`Web (vitest 1/2)`, `2/2`), Playwright, the e2e
-  stories, generated-code drift, and `forge generate is a no-op` (the
-  forge-generate lane above).
+  when every shard did (and, on a PR that reaches no Go package, when none
+  ran). `go run ./tools/test-affected shard -index K -total N` assigns packages
+  by their measured duration in `tools/test-affected/go-test-weights.tsv` and
+  lists the slowest first. The assignment is made over EVERY package and then
+  narrowed to the PR's selection, so a PR's shard K holds only packages main's
+  shard K holds (main's per-shard build cache is a hit), and a shard left
+  empty is not launched. Every package runs in exactly one shard whatever the
+  weights say; a stale weights file only costs balance. Refresh it when a
+  shard runs much longer than the others: `gh run view <run-id> --log | go run
+  ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv`.
+- **Other jobs**: `Lint (forge)` (`forge lint --no-fix` at the pinned forge,
+  with forge's pinned golangci-lint and main's golangci-lint analysis cache;
+  blocks; run it locally before pushing a Go or proto change), web
+  lint/typecheck/build, vitest (`Web (vitest K/N)`, one shard for up to 150
+  selected files, two otherwise), Playwright in two shards, the e2e stories,
+  and `Generated code is up to date` (`make generate-all` drift, then `forge
+  generate is a no-op`, the forge-generate lane above, in one job).
+- **license-gate and Pin Drift** run on a PR only when it touches a dependency
+  manifest, a lockfile, the pin or their own scripts; on main, always.
 - **Caches are saved only on main.** A PR restores main's caches and never
   saves its own: a PR-scoped cache is unreachable from any other ref.
 

@@ -22,6 +22,18 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** The mocked server's project table, per page: CreateProject adds to it, ListProjects answers with it. */
+const mockProjects = new WeakMap<Page, unknown[]>();
+
+function serverProjects(page: Page): unknown[] {
+  let projects = mockProjects.get(page);
+  if (!projects) {
+    projects = [];
+    mockProjects.set(page, projects);
+  }
+  return projects;
+}
+
 /**
  * Intercept Connect-protocol gRPC calls and return canned success responses.
  *
@@ -47,25 +59,34 @@ async function mockGrpcRoutes(page: Page) {
     }),
   );
 
-  // ListProjects → empty (new user, triggers onboarding by default).
+  // ListProjects / CreateProject are STATEFUL, like GetCurrentUser below: a new
+  // user starts with no projects (which triggers onboarding), and a project the
+  // app creates is listed from then on, because that is what the real server
+  // does. A ListProjects pinned to `[]` forever fought the app on the way out:
+  // projectStore.loadProjects refetches once its 5s cooldown has passed, so on
+  // a slow runner the onboarding finish step's re-list (or the workspace
+  // restore on `/`) dropped the project it had just created, restoreLastProject
+  // found nothing, and the user was left on `/?tour=…` instead of
+  // `/project/<id>` — a mock artifact that only showed up when the run was slow.
+  mockProjects.set(page, []);
   await page.route('**/reliant.v1.ProjectService/ListProjects', (route: Route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ projects: [] }),
+      body: JSON.stringify({ projects: serverProjects(page) }),
     }),
   );
 
   // CreateProject → success stub.
-  await page.route('**/reliant.v1.ProjectService/CreateProject', (route: Route) =>
-    route.fulfill({
+  await page.route('**/reliant.v1.ProjectService/CreateProject', (route: Route) => {
+    const project = { id: 'proj_test_1', name: 'test-project', path: '/tmp/test' };
+    serverProjects(page).push(project);
+    return route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        project: { id: 'proj_test_1', name: 'test-project', path: '/tmp/test' },
-      }),
-    }),
-  );
+      body: JSON.stringify({ project }),
+    });
+  });
 
   // Local daemon registry (reliant.v1.DaemonRegistryService) — no daemon by
   // default. ComputeStep polls this to decide whether to auto-skip.
@@ -216,7 +237,7 @@ async function loginWithApiKey(page: Page) {
  * exactly as long as the test needs, and `release()` then lets the step
  * finish so the test can assert where it ends up.
  */
-async function holdRpc(page: Page, url: string, body: unknown) {
+async function holdRpc(page: Page, url: string, body: unknown, onRelease?: () => void) {
   let release!: () => void;
   const released = new Promise<void>((resolve) => {
     release = resolve;
@@ -225,6 +246,8 @@ async function holdRpc(page: Page, url: string, body: unknown) {
   await page.route(url, async (route: Route) => {
     requests.push(route.request().postDataJSON() as Record<string, unknown>);
     await released;
+    // Before the response, as a real server commits before it answers.
+    onRelease?.();
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -232,6 +255,13 @@ async function holdRpc(page: Page, url: string, body: unknown) {
     });
   });
   return { release, requests };
+}
+
+/** {@link holdRpc} for CreateProject: once released, the project is on the mocked server's list too. */
+async function holdCreateProject(page: Page, project: Record<string, unknown>) {
+  return holdRpc(page, '**/reliant.v1.ProjectService/CreateProject', { project }, () => {
+    serverProjects(page).push(project);
+  });
 }
 
 /** Navigate straight to `/onboarding` and wait for the dialog to mount. */
@@ -435,8 +465,8 @@ test.describe('Onboarding Flow', () => {
 
   test('Model: saving a BYO key on the local path advances to the finish step', async ({ page }) => {
     // Held so the finish step's loading state stays on screen — see holdRpc.
-    const createProject = await holdRpc(page, '**/reliant.v1.ProjectService/CreateProject', {
-      project: { id: 'proj_default', name: 'my-project', path: '~/Projects/my-project' },
+    const createProject = await holdCreateProject(page, {
+      id: 'proj_default', name: 'my-project', path: '~/Projects/my-project',
     });
 
     await gotoOnboardingWithPlan(page, { compute: 'local_daemon' });
@@ -845,8 +875,8 @@ test.describe('Onboarding – Project-choice branch selection', () => {
   // access, so the gate reports that task and waits for Continue.
   for (const modelProvider of ['anthropic', 'openai', 'reliant_credits'] as const) {
     test(`Local daemon + ${modelProvider}: lands on the finish step (default project, no picker)`, async ({ page }) => {
-      const createProject = await holdRpc(page, '**/reliant.v1.ProjectService/CreateProject', {
-        project: { id: 'proj_default', name: 'my-project', path: '~/Projects/my-project' },
+      const createProject = await holdCreateProject(page, {
+        id: 'proj_default', name: 'my-project', path: '~/Projects/my-project',
       });
 
       await gotoOnboardingWithPlan(page, { compute: 'local_daemon', modelProvider });

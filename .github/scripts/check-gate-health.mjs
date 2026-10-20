@@ -42,6 +42,8 @@
 
 import { execFileSync } from "node:child_process";
 
+import { badStreak } from "./gate-health-lib.mjs";
+
 const args = process.argv.slice(2);
 
 function argValue(flag, fallback) {
@@ -61,9 +63,6 @@ const runCount = Number(argValue("--runs", "15"));
 const threshold = Number(argValue("--threshold", "5"));
 const asJson = args.includes("--json");
 const repo = argValue("--repo", "");
-
-/** A job outcome that means "this gate produced no pass signal". */
-const BAD_CONCLUSIONS = new Set(["failure", "cancelled", "timed_out", "skipped"]);
 
 function gh(ghArgs) {
   const full = repo ? [...ghArgs, "--repo", repo] : ghArgs;
@@ -85,7 +84,7 @@ function listRuns() {
     "--workflow", workflow,
     ...(branch ? ["--branch", branch] : []),
     "--limit", String(runCount),
-    "--json", "databaseId,conclusion,status,createdAt,headSha",
+    "--json", "databaseId,conclusion,status,createdAt,headSha,event",
   ]);
   return JSON.parse(out)
     // Only completed runs carry meaningful job conclusions. An in-flight run is
@@ -120,20 +119,15 @@ const history = new Map();
 for (const run of runs) {
   for (const job of jobsForRun(run.databaseId)) {
     if (!history.has(job.name)) history.set(job.name, []);
-    history.get(job.name).push({ runId: run.databaseId, conclusion: job.conclusion });
+    history.get(job.name).push({ runId: run.databaseId, conclusion: job.conclusion, event: run.event });
   }
 }
 
 const report = [];
 for (const [name, results] of history) {
-  // Consecutive bad results from the most recent run backwards. A single
-  // success anywhere in the streak clears it — one green run proves the gate
-  // can still pass, which is exactly the property being monitored.
-  let streak = 0;
-  for (const r of results) {
-    if (!BAD_CONCLUSIONS.has(r.conclusion)) break;
-    streak++;
-  }
+  // Consecutive bad results from the most recent run backwards; a skip on a
+  // path-filtered PR run is neutral (see badStreak).
+  const streak = badStreak(results);
   report.push({
     job: name,
     streak,

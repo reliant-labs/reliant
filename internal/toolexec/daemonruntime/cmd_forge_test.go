@@ -496,6 +496,51 @@ func TestRunForgeProcessKilledByDeadlineIsAContextError(t *testing.T) {
 	}
 }
 
+// The deadline is a bound on the CALL, not only on the direct child. forge
+// spawns its own children (kcl, go, kubectl), and a grandchild that inherited
+// forge's stdout/stderr keeps those pipes open after forge itself is killed.
+// Without a WaitDelay, Wait blocks until that grandchild exits: this test took
+// the full 30s of its `sleep`, and a real invocation would have outlived its
+// two-minute budget by however long the orphan ran.
+func TestRunForgeProcessDeadlineIsNotHeldByAGrandchild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell child")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	// `sleep 30 &` is a grandchild that inherits the shell's stdout/stderr;
+	// `wait` keeps the shell alive until the deadline kills it.
+	_, err := runForgeProcess(ctx, t.TempDir(), "sh", "-c", "echo partial >&2; sleep 30 & wait")
+	elapsed := time.Since(start)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("want context.DeadlineExceeded, got %v", err)
+	}
+	if elapsed > 10*time.Second {
+		t.Fatalf("runForgeProcess returned %s after a 200ms deadline: an orphaned grandchild held its output pipes open", elapsed.Round(time.Second))
+	}
+}
+
+// A forge that EXITS 0 but leaves a grandchild holding its pipes still
+// delivered its verdict: the exit and the output it wrote, promptly.
+func TestRunForgeProcessCleanExitIsNotHeldByAGrandchild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell child")
+	}
+	start := time.Now()
+	res, err := runForgeProcess(context.Background(), t.TempDir(), "sh", "-c", "echo '{}'; sleep 30 &")
+	if err != nil {
+		t.Fatalf("forge exited 0; a lingering grandchild is not an error: %v", err)
+	}
+	if res.ExitCode != 0 || strings.TrimSpace(string(res.Stdout)) != "{}" {
+		t.Errorf("got exit %d stdout %q, want exit 0 stdout {}", res.ExitCode, res.Stdout)
+	}
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("runForgeProcess returned after %s: an orphaned grandchild held its output pipes open", elapsed.Round(time.Second))
+	}
+}
+
 // And a child that EXITS non-zero before its deadline keeps forge's verdict
 // channel: the code, as data, with no error.
 func TestRunForgeProcessExitCodeIsAVerdict(t *testing.T) {

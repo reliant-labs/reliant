@@ -11,17 +11,31 @@ name: PR CI
 # a red main. Post-merge verification is the only thing that catches that, and
 # it is also what gives `main` an authoritative last-known-good signal.
 #
-# TWO GO TEST TIERS. The event picks the tier, and the `backend` job is where it
-# lands (see the comment there):
+# TWO TIERS, AND THE EVENT PICKS THE TIER:
 #
-#   pull_request                      short: `go test -short`, DB tests still on
-#   push to main, schedule, dispatch  full:  `go test`, every short-gated test too
+#   pull_request                      FAST: only the lanes and tests the diff can
+#                                     reach (`changes` decides), Go `-short`
+#   push to main, schedule, dispatch  FULL: every lane, every Go package, no
+#                                     `-short`, nothing path-filtered
+#
+# The PR tier is built to finish in about five minutes. It gets there by NOT
+# running what the diff cannot affect — a web-only PR runs no Go, a Go change
+# to one package runs that package and its importers — never by deleting a
+# check: everything a PR skips runs on the very next push to main, and nightly.
+# gate-health.yml watches main's runs and opens a `ci:main-red` issue when one
+# goes red, so a break the PR tier missed is loud within one merge.
+#
+# WHY THE PR TIER HAS TO BE SMALL, NOT JUST PARALLEL. Measured over October
+# 2026 the jobs themselves fit in ~5 minutes, yet the workflow averaged 27
+# minutes and peaked at 65: jobs sat QUEUED for up to 40 minutes. The org's
+# concurrent-job limit is shared by every PR (and by control-plane), and each
+# PR used to launch 17 jobs whatever it changed. Every job a PR does not need is
+# a runner slot another PR is waiting for, so selection is the speed-up.
 #
 # The nightly `schedule` exists so the full tier also runs on days nobody
 # merges, and so a test that fails only some nights (a flake, a clock edge)
-# leaves a record. gate-health.yml watches main's runs and opens a tracking
-# issue when one goes red. `workflow_dispatch` runs the full tier on any branch
-# on demand: use it on a PR that touches code only the full tier exercises.
+# leaves a record. `workflow_dispatch` runs the full tier on any branch on
+# demand: use it on a PR that touches code only the full tier exercises.
 on:
   pull_request:
     branches: [main]
@@ -42,10 +56,10 @@ on:
 # On main, grouping by ref with cancel-in-progress would let each merge kill the
 # run before it, so a burst of merges leaves main with no verdict at all. That
 # is why main used to get one group per COMMIT SHA, never cancelled. The cost
-# was the opposite failure: a burst of N merges parked N full runs (10 jobs
-# each) on runners, 285 jobs ended up cancelled and some sat ~2.7 hours, and
-# because this repo shares the org's 20-concurrent-job limit with control-plane
-# it starved control-plane's CI too.
+# was the opposite failure: a burst of N merges parked N full runs on runners,
+# 285 jobs ended up cancelled and some sat ~2.7 hours, and because this repo
+# shares the org's concurrent-job limit with control-plane it starved
+# control-plane's CI too.
 #
 # So all pushes to main share ONE group and nothing in it is cancelled once it
 # starts: the run in progress always finishes and so always ends in a verdict.
@@ -55,10 +69,9 @@ on:
 # introduced by a skipped SHA is still caught; only the attribution is coarser
 # (bisect the range between two verdicts). This mirrors control-plane's ci.yml.
 #
-# The nightly `schedule` run joins main's group: it tests main's HEAD too, so a
-# pending push run and a pending nightly are interchangeable and whichever is
-# newer may supersede the other. A `workflow_dispatch` run groups by its ref and
-# is never cancelled: somebody asked for that verdict.
+# The nightly `schedule` run joins main's group: it tests main's HEAD too. A
+# `workflow_dispatch` run groups by its ref and is never cancelled: somebody
+# asked for that verdict.
 concurrency:
   group: pr-ci-${{ (github.event_name == 'push' || github.event_name == 'schedule') && 'main' || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -70,264 +83,307 @@ env:
   NODE_VERSION: '24'
 
 jobs:
-  # ── What changed in this PR? ──────────────────────────────────────────────
+  # ── What does this change reach? ──────────────────────────────────────────
   #
-  # Exists to let the three PURE-NODE jobs (web, e2e-frontend, electron) skip
-  # a PR that cannot possibly affect them — the release-chain version bump,
-  # which touches go.mod + go.sum and nothing else (PR #237, "require forge +
-  # forge/pkg v0.1.14", changed exactly those two files).
+  # Every other job reads its lane from here. Two sources, each for what it is
+  # good at:
   #
-  # WHY A JOB AND NOT `paths-ignore` — this is the load-bearing detail.
+  #   - `tools/test-affected` (the same selector `make test-affected` runs
+  #     locally, with its own tests) decides WHICH Go packages and vitest files
+  #     the diff reaches: a package runs when its test binary imports a changed
+  #     package, embeds a changed file or names one in a path literal; a vitest
+  #     file runs when it imports a changed module. Anything it cannot place
+  #     makes its lane FULL (dev-docs/testing-affected.md has the rule table).
+  #   - Path patterns below decide the lanes that are not test selection: lint,
+  #     codegen drift, the web build, Playwright, the electron package.
   #
-  # `paths-ignore` prevents the workflow from being CREATED, so its checks
-  # never report at all. A required status check that never reports is not a
-  # pass, it is a PR that can never merge — and the usual fix under deadline
-  # is to un-require the check, which quietly removes the gate for every
-  # future PR too. A job that is skipped via `if:` still REPORTS (as skipped,
-  # which branch protection accepts as satisfied), so the gate keeps working
-  # and nothing has to be weakened.
+  # Both fail in the safe direction. A path no pattern recognises turns the
+  # backend and codegen lanes ON. A change to this workflow, an event other
+  # than pull_request, or a diff that cannot be computed turns EVERYTHING on —
+  # a CI change is proven against the whole PR path it changes.
   #
-  # It is also per-JOB rather than per-workflow, which `paths-ignore` cannot
-  # express: the Go jobs below deliberately keep running on a go.mod change,
-  # because compiling against the new dependency is the entire point of the
-  # bump.
+  # WHY JOB-LEVEL `if:` AND NOT `paths-ignore`. `paths-ignore` stops the
+  # workflow from being created at all, so its checks never report; a job
+  # skipped by `if:` still reports (as skipped), and `ci-result` below turns
+  # the whole run into one verdict that is green only when every job that ran
+  # passed.
   #
-  # ON A PUSH TO MAIN the inputs are different and both PR-only: `github.base_ref`
-  # is EMPTY (there is no base branch) and `github.event.pull_request.head.sha`
-  # does not exist. Left as-is, `git merge-base "origin/" ""` would fail the step
-  # under `set -euo pipefail` and take every dependent job down with it. The push
-  # branch below uses `github.event.before`..`github.sha` instead — the range the
-  # push actually introduced — and falls back to running everything whenever that
-  # range is not usable (first push, force-push, or a `before` that is not an
-  # ancestor after history rewriting). Every uncertain case resolves to "run more",
-  # which is the safe direction.
+  # The Go shard assignment is computed here too, over the FULL package list
+  # and then narrowed to the selection, so a PR shard N only ever holds
+  # packages main's shard N holds: main's per-shard build cache is a hit for
+  # it. A shard left empty by the selection is not launched at all.
   changes:
     name: Detect what changed
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     outputs:
-      # true when the PR touches ANYTHING that is not go.mod / go.sum.
-      # Deliberately phrased as "is there any non-Go-module file", not "is
-      # there a frontend file": the default on an unrecognised path is to RUN
-      # the jobs. A new top-level directory nobody thought about makes this
-      # true and everything runs, which is the safe direction to be wrong in.
-      non_gomod: ${{ steps.filter.outputs.non_gomod }}
-      # true when the change touches the vendored control-plane contract or the
-      # script that produces it — the only changes in THIS repo that can move
-      # proto-vendor/controlplane/ relative to control-plane. Unusable or empty
-      # ranges set it true, like non_gomod.
-      cp_contract: ${{ steps.filter.outputs.cp_contract }}
+      backend: ${{ steps.lanes.outputs.backend }}
+      generated: ${{ steps.lanes.outputs.generated }}
+      web: ${{ steps.lanes.outputs.web }}
+      playwright: ${{ steps.lanes.outputs.playwright }}
+      electron: ${{ steps.lanes.outputs.electron }}
+      cp_contract: ${{ steps.lanes.outputs.cp_contract }}
+      # {"include":[{shard,shard_total,packages}]}, or empty when no Go
+      # package is selected.
+      go_matrix: ${{ steps.lanes.outputs.go_matrix }}
+      # {"include":[{shard,shard_total}]} for vitest, or empty; vitest_files is
+      # the file list (relative to web/) when the selection is partial.
+      vitest_matrix: ${{ steps.lanes.outputs.vitest_matrix }}
+      vitest_files: ${{ steps.lanes.outputs.vitest_files }}
+      # "<./pkg>\t<-run regexp>" lines for the new-flake gate.
+      flake_targets: ${{ steps.lanes.outputs.flake_targets }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Classify changed files
-        id: filter
+      # The selector loads the Go package graph (`go list -test -deps`), which
+      # needs the module cache. Restore only: shard 1 saves it on main.
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore Go module cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-mod-${{ runner.os }}-
+
+      - name: Classify the change
+        id: lanes
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PUSH_BEFORE: ${{ github.event.before }}
           PUSH_SHA: ${{ github.sha }}
+          GOFLAGS: -buildvcs=false
         run: |
           set -euo pipefail
+          out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+          outlines() {
+            if [ -z "$2" ]; then out "$1" ""; return; fi
+            { echo "$1<<__LANE_EOF__"; printf '%s\n' "$2"; echo "__LANE_EOF__"; } >> "$GITHUB_OUTPUT"
+          }
+          go build -o "${RUNNER_TEMP}/test-affected" ./tools/test-affected
+          ta="${RUNNER_TEMP}/test-affected"
 
-          # The nightly schedule and a manual dispatch have no change range at
-          # all: they are asked for a verdict on the whole tree, so every job
-          # runs — except the control-plane contract gate. That one judges a
-          # change made HERE; with no change, all it could report is that
-          # control-plane moved, which is control-plane's gate to catch (see
-          # cp-contract), and it would turn the nightly red for it.
-          if [ "${EVENT_NAME}" != "push" ] && [ "${EVENT_NAME}" != "pull_request" ]; then
-            echo "non_gomod=true" >> "$GITHUB_OUTPUT"
-            echo "cp_contract=false" >> "$GITHUB_OUTPUT"
-            echo "${EVENT_NAME} run — running everything but the cp-contract gate"
-            exit 0
-          fi
-
-          if [ "${EVENT_NAME}" = "push" ]; then
-            # A push has no base branch and no merge base. The right comparison
-            # is the range the push introduced: event.before..sha.
-            head="${PUSH_SHA}"
-            base="${PUSH_BEFORE}"
-
-            # event.before is all-zeroes on a branch's first push, and after a
-            # force-push it can name a commit that no longer exists. Either way
-            # the range is unusable, so run everything rather than guess.
-            if [ -z "${base}" ] \
-              || [ "${base}" = "0000000000000000000000000000000000000000" ] \
-              || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-              echo "non_gomod=true" >> "$GITHUB_OUTPUT"
-              echo "cp_contract=true" >> "$GITHUB_OUTPUT"
-              echo "push with no usable 'before' (${base:-unset}) — running everything"
-              exit 0
+          full=false
+          base=""
+          changed=""
+          cp_contract=false
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            # actions/checkout puts a PR on GitHub's merge commit; its first
+            # parent is the base it was merged onto, so base..HEAD is exactly
+            # what merging would bring in. Anything else: the merge base.
+            if [ "$(git rev-list --parents -n1 HEAD | wc -w)" -eq 3 ]; then
+              base="$(git rev-parse HEAD^1)"
+            else
+              base="$(git merge-base "origin/${BASE_REF}" HEAD)"
             fi
-            echo "push range: ${base}..${head}"
+            changed="$(git diff --name-only "${base}" HEAD)"
+            echo "base ${base}; changed files:"; echo "${changed}"
+            if [ -z "${changed}" ]; then
+              full=true; echo "::notice::empty diff — running everything"
+            elif grep -qE '^\.github/workflows/pr-ci\.yml$' <<< "${changed}"; then
+              full=true; echo "::notice::this PR changes pr-ci.yml — running the whole PR tier"
+            fi
           else
-            head="${HEAD_SHA}"
-            # Compare against the MERGE BASE, not the branch tip: a PR branched
-            # from an older main must be judged on its own commits, otherwise
-            # every unrelated commit that landed on main meanwhile counts as
-            # "changed" and the skip never fires.
-            base="$(git merge-base "origin/${BASE_REF}" "${head}")"
-            echo "merge base: ${base}"
+            full=true
+            echo "${EVENT_NAME} run — every lane runs, in full"
+            # The control-plane contract gate judges a change made HERE, so a
+            # push checks the range it introduced; a nightly or a dispatch has
+            # no change of its own and would only report that control-plane
+            # moved, which is control-plane's gate to catch.
+            if [ "${EVENT_NAME}" = "push" ]; then
+              if [ -n "${PUSH_BEFORE}" ] && [ "${PUSH_BEFORE}" != "0000000000000000000000000000000000000000" ] \
+                && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+                changed="$(git diff --name-only "${PUSH_BEFORE}" "${PUSH_SHA}")"
+              else
+                cp_contract=true
+              fi
+            fi
           fi
-
-          changed="$(git diff --name-only "${base}" "${head}")"
-          echo "--- changed files ---"
-          echo "${changed}"
-          echo "---------------------"
-
-          # An EMPTY diff yields non_gomod=false, which would skip the Node
-          # jobs. That is only reachable for an empty PR, but treat it as
-          # "run everything" anyway rather than reasoning about whether an
-          # empty PR is possible.
-          if [ -z "${changed}" ]; then
-            echo "non_gomod=true" >> "$GITHUB_OUTPUT"
-            echo "cp_contract=true" >> "$GITHUB_OUTPUT"
-            echo "empty diff — running everything"
-            exit 0
+          if grep -qE '^(proto-vendor/controlplane/|\.github/scripts/sync-controlplane-proto\.mjs$|\.github/workflows/pr-ci\.yml$)' <<< "${changed}"; then
+            cp_contract=true
           fi
+          out cp_contract "${cp_contract}"
 
-          if echo "${changed}" | grep -qE '^(proto-vendor/controlplane/|\.github/scripts/sync-controlplane-proto\.mjs$|\.github/workflows/pr-ci\.yml$)'; then
-            echo "cp_contract=true" >> "$GITHUB_OUTPUT"
-            echo "touches the vendored control-plane contract — its drift gate runs."
+          # ── path lanes ──
+          backend=true generated=true web=true playwright=true electron=true
+          if [ "${full}" = false ]; then
+            # Backend (lint, e2e stories): anything but the frontends, docs and
+            # CI plumbing. Top-level *.md only: nested ones may be embedded.
+            backend=false generated=false web=false playwright=false electron=false
+            if grep -qvE '^(web/|electron/|docs/|research/|dev-docs/|contributing/|\.github/|\.reliant/|LICENSE|\.license-allowlist|[^/]+\.md$)' <<< "${changed}"; then backend=true; fi
+            # Codegen drift: generators read Go, proto, SQL, config and docs
+            # and write into gen/, docs/, generated/ and two web/src paths.
+            if grep -vE '^(web/|electron/|research/|dev-docs/|\.github/)' <<< "${changed}" | grep -q . \
+              || grep -qE '^web/src/(gen/|store/shortcutsData\.generated\.ts$)' <<< "${changed}"; then generated=true; fi
+            # The web build (lint, typecheck, vite build, verify-bundle).
+            if grep -qE '^(web/|package(-lock)?\.json$|electron/release\.config\.json$|\.github/scripts/verify-bundle\.mjs$)' <<< "${changed}"; then web=true; fi
+            # Playwright drives the built renderer: any web change but unit
+            # tests and their fixtures.
+            if grep -E '^(web/|package(-lock)?\.json$|electron/release\.config\.json$)' <<< "${changed}" \
+              | grep -qvE '(/__tests__/|\.test\.tsx?$|^web/README\.md$)'; then playwright=true; fi
+            # The electron package: electron itself, or what it bundles the
+            # renderer with. Renderer source is the web job's to build.
+            if grep -qE '^(electron/|package(-lock)?\.json$|web/package(-lock)?\.json$|web/vite\.config\.ts$)' <<< "${changed}"; then electron=true; fi
+          fi
+          out backend "${backend}"; out generated "${generated}"; out web "${web}"
+          out playwright "${playwright}"; out electron "${electron}"
+
+          # ── test selection (tools/test-affected) ──
+          plan="${RUNNER_TEMP}/plan.json"
+          if [ "${full}" = true ]; then
+            "${ta}" plan -full -json > "${plan}"
           else
-            echo "cp_contract=false" >> "$GITHUB_OUTPUT"
+            "${ta}" plan -base "${base}" -json > "${plan}"
+            echo "why each Go package runs:"
+            jq -r '.go.reasons[]?, (.go.why // {} | to_entries[] | "  \(.key): \(.value)")' "${plan}" | head -200
           fi
-
-          if echo "${changed}" | grep -qvE '^(go\.mod|go\.sum)$'; then
-            echo "non_gomod=true" >> "$GITHUB_OUTPUT"
-            echo "PR touches files beyond go.mod/go.sum — every job runs."
+          module="$(go list -m)"
+          all="$(go list ./... | grep -vxF "${module}/e2e")"
+          if [ "$(jq -r .go.full "${plan}")" = true ]; then
+            selected="${all}"
           else
-            echo "non_gomod=false" >> "$GITHUB_OUTPUT"
-            echo "go.mod/go.sum ONLY — the pure-Node jobs will skip."
-            echo "Every Go job still runs: compiling and testing against the"
-            echo "new dependency is the point of a version bump."
+            selected="$(jq -r '.go.packages[]?' "${plan}" | sed -e "s#^\./#${module}/#" -e "s#^\.\$#${module}#" | grep -xF -f <(printf '%s\n' "${all}") || true)"
           fi
+          # Four shards. The count is fixed so the assignment, and with it the
+          # per-shard build cache main saves, is stable; the selection only
+          # decides which of the four launch and with what.
+          matrix='{"include":[]}'
+          for i in 1 2 3 4; do
+            pkgs="$("${ta}" shard -index "${i}" -total 4 <<< "${all}" | grep -xF -f <(printf '%s\n' "${selected}") || true)"
+            if [ -n "${pkgs}" ]; then
+              matrix="$(jq -c --argjson i "${i}" --arg p "$(tr '\n' ' ' <<< "${pkgs}")" '.include += [{shard: $i, shard_total: 4, packages: $p}]' <<< "${matrix}")"
+            fi
+          done
+          if [ "$(jq '.include | length' <<< "${matrix}")" -gt 0 ]; then out go_matrix "${matrix}"; else out go_matrix ""; fi
+          echo "Go: $(grep -c . <<< "${selected}" || true) of $(grep -c . <<< "${all}") packages selected"
 
-  # Catches what the pre-commit hook would have, for the cases where it did not
-  # run: hooks are opt-in (make setup-hooks) and --no-verify skips them.
-  no-binaries:
-    name: No committed binaries
+          # vitest: everything, a file list, or nothing. A list of up to 150
+          # files runs on one runner; more (or all) on two.
+          vitest_files=""
+          if [ "$(jq -r .web.full "${plan}")" = true ]; then
+            out vitest_matrix '{"include":[{"shard":1,"shard_total":2},{"shard":2,"shard_total":2}]}'
+          else
+            vitest_files="$(jq -r '.web.tests[]?' "${plan}")"
+            n="$(grep -c . <<< "${vitest_files}" || true)"
+            if [ "${n}" -eq 0 ]; then out vitest_matrix ""
+            elif [ "${n}" -le 150 ]; then out vitest_matrix '{"include":[{"shard":1,"shard_total":1}]}'
+            else out vitest_matrix '{"include":[{"shard":1,"shard_total":2},{"shard":2,"shard_total":2}]}'
+            fi
+          fi
+          outlines vitest_files "${vitest_files}"
+          echo "vitest: full=$(jq -r .web.full "${plan}"), $(grep -c . <<< "${vitest_files}" || true) selected file(s)"
+
+          # The new-flake gate: Test functions this PR adds or edits.
+          flake_targets=""
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            flake_targets="$("${ta}" changed-tests -base "${base}")"
+          fi
+          outlines flake_targets "${flake_targets}"
+          echo "new/changed Go tests to repeat:"; echo "${flake_targets:-<none>}"
+
+          {
+            echo "### What this run tests"
+            echo "| lane | runs |"; echo "|---|---|"
+            echo "| Go packages | $(grep -c . <<< "${selected}" || true) of $(grep -c . <<< "${all}") |"
+            echo "| vitest | $( [ "$(jq -r .web.full "${plan}")" = true ] && echo all || echo "$(grep -c . <<< "${vitest_files}" || true) file(s)") |"
+            echo "| lint, e2e stories | ${backend} |"
+            echo "| codegen drift | ${generated} |"
+            echo "| web build | ${web} |"
+            echo "| Playwright | ${playwright} |"
+            echo "| electron package | ${electron} |"
+            echo "| repeated new/changed tests | $(grep -c . <<< "${flake_targets}" || true) package(s) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Three cheap guards that used to be three jobs (three runner slots, each
+  # paying its own queue wait) for ~10s of work apiece.
+  #
+  #   - No committed binaries: what the pre-commit hook would have caught, for
+  #     when it did not run (hooks are opt-in; --no-verify skips them).
+  #   - electron/release.config.json is GENERATED from control-plane's KCL. This
+  #     validates the committed values are shippable (every required VITE_* and
+  #     RELIANT_* key present, non-empty, not localhost), the failure mode that
+  #     shipped v1.7.5 with no control-plane URL. It cannot compare against the
+  #     KCL (control-plane is private): that drift check runs in control-plane's
+  #     ci.yml with --check --require.
+  #   - The unit tests of the scripts the release and health workflows run
+  #     (.github/scripts/*.test.mjs), node's standard library only.
+  quick-checks:
+    name: Quick checks (binaries, release config, CI scripts)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      # The script takes <base> <head> and inspects only files ADDED in that
-      # range. `github.base_ref` is PR-only and EMPTY on a push, which would
-      # pass the literal ref "origin/" — so the base is chosen per event.
-      #
-      # On push that base is `github.event.before`, falling back to the parent
-      # commit (HEAD^) when `before` is unusable: all-zeroes on a branch's first
-      # push, or a vanished commit after a force-push. A merge commit's HEAD^ is
-      # the previous main, which is the range wanted anyway.
-      - name: Reject compiled binaries added by this push
-        if: github.event_name == 'push'
-        env:
-          PUSH_BEFORE: ${{ github.event.before }}
-          PUSH_SHA: ${{ github.sha }}
-        run: |
-          set -uo pipefail
-          base="${PUSH_BEFORE}"
-          if [ -z "${base}" ] \
-            || [ "${base}" = "0000000000000000000000000000000000000000" ] \
-            || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            base="${PUSH_SHA}^"
-            echo "push 'before' unusable — comparing against ${base}"
-          fi
-          .githooks/check-binary-files-ci.sh "${base}" "${PUSH_SHA}"
-
-      - name: Reject compiled binaries added by this PR
-        if: github.event_name == 'pull_request'
-        run: .githooks/check-binary-files-ci.sh "origin/${{ github.base_ref }}" "${{ github.sha }}"
-
-  # electron/release.config.json is GENERATED from control-plane's KCL
-  # (deploy/kcl/lib/env.k). This validates the committed file so a hand-edit
-  # that empties an endpoint, or points one at localhost, cannot reach a
-  # release — the failure mode that shipped v1.7.5 with no control-plane URL.
-  #
-  # WHAT THIS JOB DOES AND DOES NOT DO — the name used to overstate it.
-  #
-  # control-plane is private and this repo's CI has no checkout of it, so this
-  # job can NEVER render the KCL and therefore NEVER compares against it. It
-  # takes the skip branch on every single run. What it does verify is real but
-  # narrower: that the committed values are shippable — every required VITE_*
-  # and RELIANT_* key present, non-empty, and not pointed at localhost.
-  #
-  # The drift comparison — "does this file still match the KCL it was generated
-  # from" — happens in control-plane's `ci.yml`, which checks this repo out as a
-  # sibling and runs the same script with `--check --require`. `--require`
-  # makes the skip branch a hard failure there, so that invocation cannot pass
-  # by doing nothing the way this one structurally must.
-  release-config:
-    name: Release config values are shippable (drift checked in control-plane CI)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v6
-
-      # Deliberately NOT --require: there is no control-plane checkout here and
-      # a fork could not supply one. The skip is the expected path.
-      - name: Validate committed electron/release.config.json values
-        run: node .github/scripts/sync-release-config.mjs --check
-
-  # The unit tests of the scripts the release and health workflows run
-  # (.github/scripts/*.test.mjs). Those scripts decide whether a release is
-  # reported as failed and whether a PR's bundle is shippable, and nothing else
-  # exercises them before they are relied on. No npm install: the tests use
-  # node:test and node's standard library only.
-  ci-scripts:
-    name: CI scripts (node --test)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v6
 
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      # The script takes <base> <head> and inspects only files ADDED in that
+      # range. On push the base is `github.event.before`, falling back to the
+      # parent commit when it is unusable (a branch's first push, a vanished
+      # commit after a force-push).
+      - name: Reject compiled binaries added by this change
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            base="origin/${BASE_REF}"
+          else
+            base="${PUSH_BEFORE}"
+            if [ -z "${base}" ] || [ "${base}" = "0000000000000000000000000000000000000000" ] \
+              || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+              base="${SHA}^"
+              echo "push 'before' unusable — comparing against ${base}"
+            fi
+          fi
+          .githooks/check-binary-files-ci.sh "${base}" "${SHA}"
+
+      # Deliberately NOT --require: there is no control-plane checkout here and
+      # a fork could not supply one. The skip is the expected path.
+      - name: Validate committed electron/release.config.json values
+        if: ${{ !cancelled() }}
+        run: node .github/scripts/sync-release-config.mjs --check
+
       - name: Unit-test .github/scripts
+        if: ${{ !cancelled() }}
         run: node --test '.github/scripts/*.test.mjs'
 
   # proto-vendor/controlplane/ is a GENERATED `buf export` of control-plane's
   # public protos (.github/scripts/sync-controlplane-proto.mjs), and every
   # control-plane client here is generated from it.
   #
-  # control-plane's CI already runs this comparison ("Validate KCL" → "Verify
-  # reliant's vendored public proto matches this repo"). It runs only on
-  # control-plane's commits, though, so a change made HERE was never judged here.
-  # A re-vendor from a stale control-plane checkout, a hand edit, or a sync from
-  # a control-plane branch that never merged all passed this repo's CI. Each one
-  # surfaced later as a red control-plane main on some unrelated commit.
-  #
-  # This job is the other half. A PR that changes the vendored tree has to prove,
-  # on the PR, that the tree is exactly what control-plane's main exports.
-  #
-  # Path-filtered by `changes` to what can break that pairing from this side:
-  # proto-vendor/controlplane/ and the sync script. A PR touching neither cannot
-  # move the tree relative to control-plane. A control-plane proto change is
-  # control-plane's gate to catch.
+  # control-plane's CI runs this comparison on control-plane's commits; this job
+  # is the other half: a PR that changes the vendored tree has to prove, on the
+  # PR, that the tree is exactly what control-plane's main exports. Path-filtered
+  # by `changes` to what can break that pairing from this side (the vendored
+  # tree and the sync script). A control-plane proto change is control-plane's
+  # gate to catch.
   #
   # Reading control-plane, which is private, uses CONTROL_PLANE_DEPLOY_KEY: the
-  # private half of a READ-ONLY deploy key on reliant-labs/control-plane (and
-  # nothing else). A deploy key is scoped to that one repo, is not a person's
-  # credential, and does not expire, which a PAT is not. Without it the job FAILS
-  # rather than skipping: a drift gate that skips cannot be told apart from one
-  # that passes, which is why control-plane passes --require. Fork PRs are the
-  # one exception. GitHub never gives them secrets, so they are skipped with a
-  # notice, and control-plane's gate judges the tree once it reaches main.
+  # private half of a READ-ONLY deploy key on reliant-labs/control-plane. Without
+  # it the job FAILS rather than skipping: a drift gate that skips cannot be
+  # told apart from one that passes. Fork PRs are the one exception (GitHub
+  # never gives them secrets); control-plane's gate judges the tree on main.
   #
   # Ordering: with a strict gate on each side, one side's PR is red until the
   # other merges (control-plane's release skill, "The public proto contract is
-  # gated from BOTH sides"). Re-vendoring from a control-plane branch fails here
-  # until that branch is on control-plane main. Re-run this job after it lands.
+  # gated from BOTH sides"). Re-run this job after the control-plane side lands.
   cp-contract:
     name: Vendored control-plane contract matches control-plane main
     needs: changes
@@ -390,44 +446,40 @@ jobs:
             exit 1
           }
 
-  # The generators moved OFF the critical path, and this job is what keeps
-  # that safe.
+  # ── Generated code: both halves of the contract, in one job ───────────────
   #
   # .gitignore's "Generated code is committed" note makes the contract
   # explicit: a checkout must build as-cloned, and regenerating must be a
-  # no-op. Every other job now relies on the committed output instead of
-  # spending ~140s re-deriving it, so something has to prove the two agree —
-  # otherwise stale generated code would ship silently, which is worse than a
-  # slow build.
+  # no-op. Every other job relies on the committed output instead of re-deriving
+  # it, so this job proves the two agree. It is a hard gate: if regenerating
+  # produces a diff, commit that diff in the change that caused it.
   #
-  # This runs in PARALLEL with the test jobs rather than in front of them, so
-  # it costs wall-clock only if it is the slowest job (it is not — measured
-  # 20-65s for a full `make generate-all` locally, against 190s of Go tests).
+  # Two generators, two checks, ONE job:
   #
-  # It is a hard gate: if regenerating produces a diff, the fix is to commit
-  # that diff in the change that caused it.
+  #   1. `make generate-all` — every generator a contributor runs (protobuf with
+  #      the pinned local plugins, sqlc, the CLI/tools/models/... docs
+  #      references, the Mintlify pages) — then `git status` must be clean.
+  #   2. `make forge-generate-check` — forge.yaml's pinned `forge generate`
+  #      (mocks, gen/forge_descriptor.json, harnesses, observability files),
+  #      failing and naming every file it changes. It judges only what forge
+  #      changes, so it still reports on a tree check 1 left dirty.
   #
-  # It runs `make generate-all` — EVERY generator, the exact command a
-  # contributor runs — on every PR and every push to main, with no path filter.
-  # Two consequences that used to be false:
+  # They were two jobs. Merged, the second reuses the first's compile: both
+  # build essentially the whole module (the CLI reference compiles every
+  # command; forge validates with a full build), and that compile was most of
+  # each job's 4-6 minutes. One runner, one queue wait, one warm build cache.
   #
-  #   - Nothing it runs is remote. The buf plugins are local `go tool` /
-  #     tools/protoc-gen-es binaries pinned in this repo, and buf itself is
-  #     the Makefile's pinned build, so the Buf Schema Registry's rate limit
-  #     (`resource_exhausted`) can no longer fail it, and no BUF_API_KEY is
-  #     needed. A path filter existed only to spare the BSR.
-  #   - The docs references are gated too: cli.md (forge's command tree, so a
-  #     forge pin bump changes it), models.md/.mdx, tools.md and the rest of
-  #     `make generate`. Ungated, they drifted on main and every contributor
-  #     who ran `make generate` inherited someone else's diff.
-  #
-  # DELIBERATELY NOT GATED on the `changes` job: a forge bump "only" touches
-  # go.mod, but it CHANGES CODEGEN OUTPUT (cli.md, at minimum) — a real failure
-  # mode this repo hit — and this job is the only thing that catches it.
-  generate-drift:
+  # Path-filtered by `changes`: a change confined to the frontends, electron,
+  # research/dev-docs or CI plumbing cannot move a generator's input (the two
+  # web/src paths generators WRITE still count). A forge bump "only" touches
+  # go.mod but changes codegen output (cli.md at minimum), and go.mod is not in
+  # the skip list, so it runs.
+  generated:
     name: Generated code is up to date
+    needs: changes
+    if: needs.changes.outputs.generated == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
 
@@ -435,6 +487,7 @@ jobs:
       # this must install that same version or `go` would download it again.
       # `cache: false`: see "CACHES ARE SAVED ON MAIN ONLY" on the backend job.
       - name: Set up Go
+        id: setup-go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -448,14 +501,19 @@ jobs:
           restore-keys: |
             go-mod-${{ runner.os }}-
 
+      # Keyed by commit like the backend shards, so main saves a fresh cache on
+      # every push and a PR restores the newest. A shard's cache is the
+      # fallback: it shares every dependency.
       - name: Restore Go build cache
         id: build-cache
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
-          key: go-build-drift-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          key: go-build-gen-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-build-drift-${{ runner.os }}-
+            go-build-gen-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
+            go-build-gen-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
+            go-build-backend-
 
       # protoc-gen-es is a node script, pinned by tools/protoc-gen-es's
       # lockfile; `make` runs `npm ci` there itself.
@@ -467,14 +525,16 @@ jobs:
           cache-dependency-path: tools/protoc-gen-es/package-lock.json
 
       # The Makefile builds buf and sqlc from source at the versions it pins,
-      # into versioned paths it skips when present. Caching those two files
-      # makes that a no-op on every run but the first after a bump.
+      # into versioned paths it skips when present; forge runs `buf` from PATH
+      # and the Makefile hands it that pinned build. The forge pin is read from
+      # forge.yaml, which the check itself compares with go.mod.
       - name: Read pinned generator versions
         id: pins
         run: |
           set -euo pipefail
           echo "buf=$(sed -n 's/^BUF_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
           echo "sqlc=$(sed -n 's/^SQLC_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
+          echo "forge=$(sed -n 's/^forge_version:[[:space:]]*//p' forge.yaml)" >> "$GITHUB_OUTPUT"
 
       - name: Restore pinned buf and sqlc
         id: gen-bins
@@ -485,30 +545,40 @@ jobs:
             ~/go/bin/sqlc-${{ steps.pins.outputs.sqlc }}
           key: gen-bins-${{ runner.os }}-${{ runner.arch }}-buf-${{ steps.pins.outputs.buf }}-sqlc-${{ steps.pins.outputs.sqlc }}
 
-      - name: Regenerate everything
+      # Shared with the lint job: the same key.
+      - name: Restore forge binary
+        id: forge-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/bin/forge
+          key: forge-${{ runner.os }}-${{ steps.pins.outputs.forge }}
+
+      - name: Install forge
+        if: steps.forge-cache.outputs.cache-hit != 'true'
+        # GOPRIVATE: see the lint job's Install forge step.
+        env:
+          GOPRIVATE: github.com/reliant-labs/*
+          GONOSUMDB: github.com/reliant-labs/*
+          GONOSUMCHECK: "1"
+        run: go install "github.com/reliant-labs/forge/cmd/forge@${{ steps.pins.outputs.forge }}"
+
+      # forge generate starts an ephemeral Postgres to read the applied schema;
+      # its binaries come from Maven Central unless this cache holds them.
+      # forge's embedded-postgres pin fixes the archive, so the forge version
+      # keys it.
+      - name: Restore embedded Postgres binaries
+        id: pg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/forge/embedded-postgres
+          key: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.forge }}
+
+      - name: Regenerate everything (make generate-all)
+        id: generate-all
         run: make generate-all
 
-      # Saved here, before the docs and drift steps, so a drift failure on main
-      # still keeps the binaries. Main only: see the backend job.
-      - name: Save pinned buf and sqlc (main only)
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.gen-bins.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/go/bin/buf-${{ steps.pins.outputs.buf }}
-            ~/go/bin/sqlc-${{ steps.pins.outputs.sqlc }}
-          key: ${{ steps.gen-bins.outputs.cache-primary-key }}
-
-      - name: Save Go build cache (main only)
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/go-build
-          key: ${{ steps.build-cache.outputs.cache-primary-key }}
-
       # The published docs are generated too: the CLI/tools/models/types
-      # references, the changelog page and the Mintlify .mdx conversions. If a
-      # change makes them stale, the fix is to commit the regenerated pages.
+      # references, the changelog page and the Mintlify .mdx conversions.
       - name: Generate docs
         run: >
           make generate-scenario-schema generate-cli generate-tools-ref
@@ -532,126 +602,31 @@ jobs:
           fi
           echo "Generated code matches the committed output."
 
-  # The other half of the generated-code contract: what FORGE projects.
-  #
-  # `make generate-all` (generate-drift, above) does not run forge, so a PR that
-  # changed a proto, a contract.go interface or a migration without running the
-  # pinned `forge generate` merged green and left main's mocks, descriptor,
-  # harnesses or observability files stale — repeatedly. This job runs that
-  # forge (forge.yaml's forge_version, which must equal go.mod's) and fails,
-  # naming every file, if it changes anything.
-  #
-  # The logic is `make forge-generate-check` (scripts/check-forge-generate.sh),
-  # the same command `make test-affected` runs locally when a diff touches a
-  # forge input; this job only prepares the tools. It is its own job, beside
-  # generate-drift rather than inside it, so the two failures are attributed
-  # separately and both report on one run; it runs in parallel with the test
-  # shards and is shorter than them. Like generate-drift it is not gated on
-  # `changes`: a forge bump "only" touches go.mod and changes forge's output.
-  forge-generate:
-    name: forge generate is a no-op
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
+      # Runs whatever check 1 concluded, so both verdicts report on one run.
+      # FORGE: the cached binary; the check refuses it unless it reports the
+      # pinned version.
+      - name: forge generate is a no-op
+        if: ${{ !cancelled() && steps.generate-all.outcome == 'success' }}
+        run: FORGE="$HOME/go/bin/forge" make forge-generate-check FORGE_CHECK_FLAGS=--github
 
-      # The Makefile pins GOTOOLCHAIN to go.mod's version for generation.
-      # `cache: false`: see "CACHES ARE SAVED ON MAIN ONLY" on the backend job.
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: Restore Go module cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            go-mod-${{ runner.os }}-
-
-      # forge generate compiles the protoc plugins (`go tool`), tidies and
-      # validates the build, so it reads a backend shard's build cache, exactly
-      # as the lint job does. Restore only: this job never saves one.
-      - name: Restore Go build cache (a backend shard's)
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/go-build
-          key: go-build-backend-forge-generate-${{ github.sha }}
-          restore-keys: |
-            go-build-backend-
-
-      # protoc-gen-es is a node script, pinned by tools/protoc-gen-es's
-      # lockfile; `make` runs `npm ci` there itself.
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: tools/protoc-gen-es/package-lock.json
-
-      # forge runs `buf` from PATH; the Makefile hands it its pinned build.
-      # The forge pin is read from forge.yaml, which the check itself compares
-      # with go.mod, so this cache key equals the lint job's.
-      - name: Read pinned generator versions
-        id: pins
-        run: |
-          set -euo pipefail
-          echo "buf=$(sed -n 's/^BUF_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
-          echo "sqlc=$(sed -n 's/^SQLC_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
-          echo "forge=$(sed -n 's/^forge_version:[[:space:]]*//p' forge.yaml)" >> "$GITHUB_OUTPUT"
-
-      # Saved by generate-drift on main: the same key and paths.
-      - name: Restore pinned buf and sqlc
-        uses: actions/cache/restore@v4
+      # Saves: main only, and after the checks — whatever they found, the tools
+      # and the compile are good.
+      - name: Save pinned buf and sqlc (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.gen-bins.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
         with:
           path: |
             ~/go/bin/buf-${{ steps.pins.outputs.buf }}
             ~/go/bin/sqlc-${{ steps.pins.outputs.sqlc }}
-          key: gen-bins-${{ runner.os }}-${{ runner.arch }}-buf-${{ steps.pins.outputs.buf }}-sqlc-${{ steps.pins.outputs.sqlc }}
-
-      # Shared with the lint job: the same key, saved by whichever runs first
-      # on main.
-      - name: Restore forge binary
-        id: forge-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/go/bin/forge
-          key: forge-${{ runner.os }}-${{ steps.pins.outputs.forge }}
-
-      - name: Install forge
-        if: steps.forge-cache.outputs.cache-hit != 'true'
-        # GOPRIVATE: see the lint job's Install forge step.
-        env:
-          GOPRIVATE: github.com/reliant-labs/*
-          GONOSUMDB: github.com/reliant-labs/*
-          GONOSUMCHECK: "1"
-        run: go install "github.com/reliant-labs/forge/cmd/forge@${{ steps.pins.outputs.forge }}"
+          key: ${{ steps.gen-bins.outputs.cache-primary-key }}
 
       - name: Save forge binary (main only)
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.forge-cache.outputs.cache-hit != 'true'
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.forge-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ~/go/bin/forge
           key: ${{ steps.forge-cache.outputs.cache-primary-key }}
 
-      # generate starts an ephemeral Postgres to read the applied schema; its
-      # binaries come from Maven Central unless this cache holds them. forge's
-      # embedded-postgres pin fixes the archive, so the forge version keys it.
-      - name: Restore embedded Postgres binaries
-        id: pg-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/forge/embedded-postgres
-          key: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.forge }}
-
-      # FORGE: the cached binary; the check refuses it unless it reports the
-      # pinned version.
-      - name: Run forge generate and require it to change nothing
-        run: FORGE="$HOME/go/bin/forge" make forge-generate-check FORGE_CHECK_FLAGS=--github
-
-      # A drift failure on main still keeps the binaries.
       - name: Save embedded Postgres binaries (main only)
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.pg-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
@@ -659,65 +634,57 @@ jobs:
           path: ~/.cache/forge/embedded-postgres
           key: ${{ steps.pg-cache.outputs.cache-primary-key }}
 
+      - name: Save Go build cache (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.build-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
   # ── Go unit tests, in two tiers ───────────────────────────────────────────
   #
-  # The event picks the tier (see the header):
-  #
-  #   short  pull_request              go test -short   (~130s of fixed waits off)
-  #   full   push to main / schedule   go test          (every short-gated test)
+  #   PR    go test -short over the packages `changes` selected
+  #   main  go test over every package (push, nightly, dispatch)
   #
   # `-short` skips only tests that gate themselves on testing.Short(): ones that
   # wait out real production timeouts, start a NATS cluster or similar. DB-backed
   # tests still run on a PR, because REQUIRE_TEST_DB=1 overrides their
   # short-mode skip (internal/db/testutil.go, shortModeDBSkipReason). Nothing is
-  # deleted: every short-gated test runs on every push to main and every night.
+  # deleted: every short-gated test, and every package a PR did not reach, runs
+  # on every push to main and every night.
   #
   # THE TIERS CANNOT SILENTLY MERGE. Three things hold them apart:
   #
   #   1. The job NAME carries the tier, so "Backend (Go, short)" and
-  #      "Backend (Go, full)" are separate checks with separate histories. A
-  #      green PR run can never reset the bad streak of a red main, which it
-  #      could when both were "Backend (Go)".
+  #      "Backend (Go, full)" are separate checks with separate histories.
   #   2. RELIANT_TEST_TIER is checked against the flag that actually reached
   #      `go test` by TestCITestTierReachedGoTest (tools/test-affected), which
-  #      fails if the two disagree: an edit that drops or hardcodes `-short` on
-  #      the command line goes red in the run it lands in.
+  #      fails if the two disagree. A PR that edits this workflow runs every
+  #      package, that test included.
   #   3. gate-health.yml's main audit fails, and opens an issue, when main's
-  #      newest run has no green "Backend (Go, full)" job — including when the
-  #      job is missing because the full tier stopped running on main.
+  #      newest run has no green "Backend (Go, full)" job.
   #
-  # SHARDED ACROSS RUNNERS. The suite is CPU-bound on a 4-vCPU runner:
-  # measured, `go test -p 4` and `-p 8` both take ~540s, and `-short` alone
-  # barely moved it, because compile and test bodies already fill every core.
-  # So the packages are split across `shard_total` runners by
-  # `tools/test-affected shard`, which balances them by measured duration
-  # (tools/test-affected/go-test-weights.tsv) and starts each shard's slowest
-  # packages first. Every package runs in exactly one shard whatever the
-  # weights say (TestShardPartitionsEveryPackage); stale weights only cost
-  # balance. The `backend-result` job below is the one check that reports the
-  # tier, so the shard count can change without renaming anything.
-  #
-  # To change the shard count, extend `shard` AND `shard_total` together.
+  # SHARDED ACROSS FOUR RUNNERS. The suite is CPU-bound on a 4-vCPU runner, so
+  # `changes` splits the packages with `tools/test-affected shard`, which
+  # balances them by measured duration (tools/test-affected/go-test-weights.tsv)
+  # and starts each shard's slowest packages first. Every package runs in
+  # exactly one shard (TestShardPartitionsEveryPackage). A shard the selection
+  # leaves empty is never launched.
   backend:
     name: Backend (Go, ${{ github.event_name == 'pull_request' && 'short' || 'full' }}) ${{ matrix.shard }}/${{ matrix.shard_total }}
-    # DELIBERATELY NOT GATED on the `changes` job. A dependency bump is
-    # exactly the change this job exists to validate: a new forge/pkg can
-    # break compilation or change behaviour, and that failure must surface
-    # HERE, on the PR, rather than on main. Skipping Go tests on a go.mod
-    # change would be strictly worse than a slow CI run.
+    needs: changes
+    if: needs.changes.outputs.go_matrix != ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       # Every shard reports: one shard's failure must not hide another's.
       fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-        shard_total: [3]
-    # A REAL Postgres, for the same reason as the E2E job below. Without it
-    # DATABASE_URL was unset here, every DB-backed unit test skipped (1426 of
-    # them per run), and this job went green regardless. That is how a test
-    # fixture that violated a foreign key added in #464 reached main with CI
-    # green. REQUIRE_TEST_DB makes a skip a failure, so it cannot go dark again.
+      matrix: ${{ fromJSON(needs.changes.outputs.go_matrix || '{"include":[]}') }}
+    # A REAL Postgres. Without it DATABASE_URL was unset here, every DB-backed
+    # unit test skipped (1426 of them per run), and this job went green
+    # regardless. That is how a test fixture that violated a foreign key added
+    # in #464 reached main with CI green. REQUIRE_TEST_DB makes a skip a
+    # failure, so it cannot go dark again.
     services:
       postgres:
         image: postgres:16
@@ -738,23 +705,20 @@ jobs:
       RELIANT_TEST_TIER: ${{ github.event_name == 'pull_request' && 'short' || 'full' }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
-      # CACHES ARE SAVED ON MAIN ONLY, and every Go job follows this pattern.
+      # CACHES ARE SAVED ON MAIN ONLY, and every job follows this pattern.
       #
       # A cache saved by a pull_request run is scoped to that PR's ref: no
       # other PR and not main can ever restore it. Saving one was pure cost
-      # (~30-75s of "Post" steps on the PR's critical path whenever go.sum
-      # moved) and it doubled the repo's cache storage past GitHub's 10 GB cap
-      # (15.6 GB measured), so caches main needed were being evicted. Caches
-      # saved on main ARE visible to every PR. So: restore everywhere, save
-      # only on main (push, the nightly), and only when the exact key missed.
+      # (~30-75s of "Post" steps on the PR's critical path) and it doubled the
+      # repo's cache storage past GitHub's 10 GB cap, so caches main needed
+      # were being evicted. Caches saved on main ARE visible to every PR. So:
+      # restore everywhere, save only on main (push, the nightly), and only
+      # when the exact key missed.
       #
       # setup-go's own `cache: true` cannot be split that way (it always saves
-      # in its post step), and it stored GOMODCACHE + GOCACHE as one entry that
-      # whichever Go job finished first won. So it is off, and the module cache
-      # and this job's build cache are restored explicitly below.
+      # in its post step), so it is off, and the module cache and this job's
+      # build cache are restored explicitly below.
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
@@ -762,9 +726,9 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      # One module cache, shared by every Go job and saved only by shard 1,
-      # after `go mod download` (below) has fetched every module go.mod names,
-      # so it holds what the other jobs need too.
+      # One module cache, shared by every Go job and saved only by shard 1
+      # (which main always runs), after `go mod download` has fetched every
+      # module go.mod names.
       - name: Restore Go module cache
         id: mod-cache
         uses: actions/cache/restore@v4
@@ -779,15 +743,10 @@ jobs:
         run: go mod download
 
       # One build cache per shard, since each compiles a different package set.
-      #
       # The key ends in the commit SHA, so main saves a FRESH cache on every
-      # push and a PR restores the newest one by prefix. Keyed on go.sum alone
-      # (as before), main saved once per go.sum and every later run on main hit
-      # that key exactly and skipped saving, so the cache PRs restored drifted
-      # further from main with every merge, and a PR recompiled everything that
-      # changed since. The Go version and go.sum stay in the prefix: a
-      # toolchain bump or a dependency change prefers a cache built against
-      # them, and falls back to the previous one rather than starting cold.
+      # push and a PR restores the newest one by prefix (a go.sum-only key went
+      # stale with every merge). A PR shard N holds a subset of main's shard N
+      # (see `changes`), so this is a hit for everything the PR did not change.
       - name: Restore Go build cache
         id: build-cache
         uses: actions/cache/restore@v4
@@ -797,20 +756,11 @@ jobs:
           restore-keys: |
             go-build-backend-s${{ matrix.shard }}of${{ matrix.shard_total }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
             go-build-backend-s${{ matrix.shard }}of${{ matrix.shard_total }}-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
+            go-build-backend-
 
-      # Generated code is COMMITTED (see the "Generated code is committed"
-      # note in .gitignore): a checkout compiles and tests as-cloned, and
-      # regenerating is required to be a no-op. So this job does NOT need to
-      # run the generators to build or test — that was ~140s of the critical
-      # path producing, by contract, no change. Drift is caught by the
-      # dedicated `generate-drift` job below, which runs in PARALLEL rather
-      # than in front of the tests.
-      #
-      # goose was installed here for ~58s a job and never invoked: it is a
-      # LIBRARY dependency (github.com/pressly/goose/v3, imported by
-      # internal/db/connect.go, which embeds the migrations). Nothing in this
-      # repo shells out to the goose BINARY except check-migrations.yml, which
-      # installs it itself. Removed rather than cached.
+      # Generated code is COMMITTED: a checkout compiles and tests as-cloned,
+      # so this job never runs the generators (the `generated` job proves the
+      # committed output current, in parallel).
 
       - name: Disable VCS stamping
         run: echo "GOFLAGS=-buildvcs=false" >> $GITHUB_ENV
@@ -818,25 +768,16 @@ jobs:
       # ripgrep is a genuine RUNTIME dependency of this job: internal/llm/tools
       # shells out to `rg`, and requireRipgrep() SKIPS those tests when it is
       # missing — so without it the job goes green having silently not run
-      # them. Installed from apt (prebuilt) rather than compiled from source.
-      #
-      # ubuntu-latest does not ship ripgrep, so the `command -v` guard this
-      # replaces never once took its fast path.
+      # them. ubuntu-latest does not ship it.
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep
-
-      # forge lint used to run here, in front of the tests: ~30s of lint plus
-      # ~50s of `go install forge` on a forge bump, all on the critical path.
-      # It is the `lint` job now, in parallel.
 
       # The tier flag is the ONLY difference between the tiers, and it is
       # decided here, from RELIANT_TEST_TIER, nowhere else. An unknown tier is
       # an error rather than a default, so a typo cannot quietly pick one.
-      # TestCITestTierReachedGoTest then proves the flag reached `go test`.
       - name: Go tests (exclude e2e, ${{ env.RELIANT_TEST_TIER }} tier, shard ${{ matrix.shard }}/${{ matrix.shard_total }})
         env:
-          SHARD: ${{ matrix.shard }}
-          SHARD_TOTAL: ${{ matrix.shard_total }}
+          PACKAGES: ${{ matrix.packages }}
         run: |
           set -euo pipefail
           case "${RELIANT_TEST_TIER}" in
@@ -844,13 +785,13 @@ jobs:
             full)  tier_flags=() ;;
             *) echo "::error::RELIANT_TEST_TIER must be short or full, got '${RELIANT_TEST_TIER}'"; exit 1 ;;
           esac
-          echo "tier: ${RELIANT_TEST_TIER} (go test ${tier_flags[*]:-<no tier flag>})"
-          all="$(go list ./... | grep -v '^github.com/reliant-labs/reliant/e2e$')"
-          pkgs="$(go run ./tools/test-affected shard -index "${SHARD}" -total "${SHARD_TOTAL}" <<< "${all}")"
-          echo "shard ${SHARD}/${SHARD_TOTAL}: $(wc -l <<< "${pkgs}") of $(wc -l <<< "${all}") packages, slowest first:"
-          echo "${pkgs}"
-          # shellcheck disable=SC2086 # one argument per package
-          go test -timeout=10m -v "${tier_flags[@]}" ${pkgs}
+          read -r -a pkgs <<< "${PACKAGES}"
+          if [ "${#pkgs[@]}" -eq 0 ]; then
+            echo "::error::this shard was launched with no packages"; exit 1
+          fi
+          echo "tier: ${RELIANT_TEST_TIER} (go test ${tier_flags[*]:-<no tier flag>}); shard ${{ matrix.shard }}/${{ matrix.shard_total }}: ${#pkgs[@]} package(s), slowest first:"
+          printf '  %s\n' "${pkgs[@]}"
+          go test -timeout=10m -v "${tier_flags[@]}" "${pkgs[@]}"
 
       # Main only, after the tests: a red run on main still saves, because
       # the compiled packages are just as reusable. `!cancelled()` lets a
@@ -870,50 +811,147 @@ jobs:
           key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
   # The one Go check per tier: "Backend (Go, short)" on a PR, "Backend (Go,
-  # full)" on main. It passes only when every shard passed, so a skipped,
+  # full)" on main. It passes only when every launched shard passed, so a
   # cancelled or failed shard can never read as green, and its name does not
   # change with the shard count (gate-health.yml's main audit requires
-  # "Backend (Go, full)" by name).
+  # "Backend (Go, full)" by name). On a PR that reaches no Go package the
+  # shards are skipped, which passes; on main a skip is a failure, because main
+  # always runs every package.
   backend-result:
     name: Backend (Go, ${{ github.event_name == 'pull_request' && 'short' || 'full' }})
-    needs: backend
+    needs: [changes, backend]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Every shard passed
         env:
+          CHANGES: ${{ needs.changes.result }}
           RESULT: ${{ needs.backend.result }}
+          EVENT_NAME: ${{ github.event_name }}
+          GO_MATRIX: ${{ needs.changes.outputs.go_matrix }}
         run: |
+          if [ "${CHANGES}" != "success" ]; then
+            echo "::error::'Detect what changed' concluded '${CHANGES}': no test selection was made."
+            exit 1
+          fi
+          if [ "${RESULT}" = "skipped" ] && [ "${EVENT_NAME}" = "pull_request" ] && [ -z "${GO_MATRIX}" ]; then
+            echo "this PR reaches no Go package: no shard ran (main runs them all)"
+            exit 0
+          fi
           if [ "${RESULT}" != "success" ]; then
             echo "::error::Go test shards concluded '${RESULT}': at least one shard did not pass (see the shard jobs)."
             exit 1
           fi
           echo "every Go test shard passed"
 
+  # ── The new-flake gate ────────────────────────────────────────────────────
+  #
+  # A test that passes once and fails on a repeat is a flake. This repo's rule
+  # is that "passed on re-run" is never acceptable, and the cheapest moment to
+  # catch a flake is the PR that wrote it. So every Test function the PR adds
+  # or edits (`tools/test-affected changed-tests`, by function, not by file)
+  # runs three more times, in parallel with the shards. A test that relies on
+  # leftover state, a fixed port, wall-clock timing or test order fails here
+  # instead of on somebody else's main run a week later.
+  flake-gate:
+    name: New and changed Go tests (x3)
+    needs: changes
+    if: needs.changes.outputs.flake_targets != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reliant
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/reliant?sslmode=disable
+      REQUIRE_TEST_DB: "1"
+      RELIANT_TEST_TIER: short
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore Go module cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-mod-${{ runner.os }}-
+
+      # Restore only: the newest backend shard's cache.
+      - name: Restore Go build cache (a backend shard's)
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-build-backend-flake-${{ github.sha }}
+          restore-keys: |
+            go-build-backend-
+
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Run each new or changed test three times
+        env:
+          TARGETS: ${{ needs.changes.outputs.flake_targets }}
+        run: |
+          set -uo pipefail
+          status=0
+          while IFS=$'\t' read -r pkg pattern; do
+            [ -n "${pkg}" ] || continue
+            echo "::group::${pkg} -run '${pattern}' -count=3"
+            if ! go test -short -count=3 -timeout=10m -run "${pattern}" "${pkg}"; then
+              echo "::error title=Flaky or failing new test::${pkg} ${pattern} did not pass three runs in a row. A test that fails on a repeat is a flake; fix it at the root (shared state, a fixed port, wall-clock timing, test order)."
+              status=1
+            fi
+            echo "::endgroup::"
+          done <<< "${TARGETS}"
+          exit "${status}"
+
   # Lint via FORGE rather than a raw golangci-lint pin, in its own job so it
   # runs beside the tests instead of in front of them.
   #
-  # `forge lint` wraps golangci-lint (plus buf lint and the frontend
-  # lint/typecheck) and ships a version built against the Go it targets, so
-  # the toolchain-skew class of failure goes away. The previous pin —
-  # golangci-lint v2.5.0, a go1.25 build — refused to start the moment
-  # go.mod moved to 1.26.2:
-  #   can't load config: the Go language version (go1.25) used to build
-  #   golangci-lint is lower than the targeted Go version (1.26.2)
-  # That is exactly the maintenance forge exists to absorb.
+  # `forge lint` wraps golangci-lint (plus buf lint, the contract linter,
+  # migration safety and forge's convention and drift lanes) and ships a
+  # golangci-lint built against the Go it targets, so the toolchain-skew class
+  # of failure goes away.
   #
-  # It is a HARD GATE: every gating lane (golangci-lint, the contract linter,
-  # buf lint, migration safety, the forge convention and drift lanes) must
-  # pass. It was report-only while the backlog of pre-existing findings was
-  # fixed; a finding now is one the PR introduced, so the PR fixes it, or
-  # states why it is a false positive with a scoped //nolint (or a buf.yaml /
-  # .golangci.yml exclusion) and its reason. Warning-only lanes (the
-  # typed-config guardrail, handler size, config deps) still only report.
+  # It is a HARD GATE: every gating lane must pass. A finding is one the PR
+  # introduced, so the PR fixes it, or states why it is a false positive with a
+  # scoped //nolint (or a buf.yaml / .golangci.yml exclusion) and its reason.
+  #
+  # SPEED: golangci-lint was ~230s of this job's 5-6 minutes, every run, because
+  # its analysis cache (~/.cache/golangci-lint) was never kept, so it re-analysed
+  # the whole module from scratch. That cache is keyed per package on the
+  # package's content and config, so restoring main's leaves only what the PR
+  # changed (and its importers) to analyse. Saved on main per commit, like the
+  # build caches.
   lint:
     name: Lint (forge)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      GOLANGCI_LINT_CACHE: /home/runner/.cache/golangci-lint
     steps:
       - uses: actions/checkout@v6
         with:
@@ -935,10 +973,7 @@ jobs:
             go-mod-${{ runner.os }}-
 
       # golangci-lint type-checks every package, and a backend shard's build
-      # cache already holds most of that work (every shard compiles the shared
-      # dependencies), so lint reads the newest one rather than keeping a
-      # second multi-GB copy. Restore only: this job never saves it. The key
-      # never matches exactly; the prefix picks the most recent shard cache.
+      # cache already holds most of that work. Restore only.
       - name: Restore Go build cache (a backend shard's)
         uses: actions/cache/restore@v4
         with:
@@ -954,13 +989,11 @@ jobs:
         with:
           version: '1.57.0'
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          buf_api_token: ${{ secrets.BUF_API_KEY }}
 
       - name: Disable VCS stamping
         run: echo "GOFLAGS=-buildvcs=false" >> $GITHUB_ENV
 
-      # Resolve the forge version BEFORE the cache step, so the cache key can
-      # be keyed on it. go.mod stays the single source of truth — @latest
+      # go.mod stays the single source of truth for the forge version: @latest
       # silently switched forge mid-release once, and a hardcoded version is a
       # second place to remember to bump.
       - name: Resolve forge version
@@ -971,11 +1004,9 @@ jobs:
           echo "version=$FORGE_VERSION" >> "$GITHUB_OUTPUT"
           echo "forge $FORGE_VERSION"
 
-      # Cache the BUILT binary keyed on the exact version, so the ~52s
-      # `go install` from source happens once per forge bump instead of once
-      # per run. No restore-keys: a stale binary from a different version is
-      # not a partial hit, it is the wrong linter. Saved on main only, like
-      # every cache (see the backend job).
+      # The BUILT binary keyed on the exact version, so the ~52s `go install`
+      # happens once per forge bump. No restore-keys: a stale binary from a
+      # different version is not a partial hit, it is the wrong linter.
       - name: Restore forge binary
         id: forge-cache
         uses: actions/cache/restore@v4
@@ -986,22 +1017,11 @@ jobs:
       - name: Install forge
         if: steps.forge-cache.outputs.cache-hit != 'true'
         # GOPRIVATE routes OUR OWN modules straight at GitHub instead of
-        # proxy.golang.org. This is a real, measured delay, not a nicety: a
-        # freshly pushed tag takes proxy.golang.org ~20 MINUTES to ingest, and
-        # until it does, `go install ...@vX.Y.Z` fails with
-        #   invalid version: unknown revision vX.Y.Z
-        # on a tag that already exists and that `GOPROXY=direct` fetches
-        # instantly. Because the release chain is forge -> reliant ->
-        # control-plane, that stall is paid at EVERY hop of every release.
-        #
-        # It also removes a class of confusion the proxy's immutability
-        # creates: a deleted-and-re-cut tag is served forever from its first
-        # publish (that is how forge v0.1.12 became permanently unusable).
-        # Going direct means the tag in git is the tag you build.
-        #
-        # Scoped to reliant-labs/* on purpose — third-party modules keep using
-        # the proxy and the checksum database, which is where those are
-        # actually worth having.
+        # proxy.golang.org: a freshly pushed tag takes the proxy ~20 MINUTES to
+        # ingest, and until it does `go install ...@vX.Y.Z` fails with
+        # "unknown revision". It also means the tag in git is the tag you
+        # build (the proxy serves a deleted-and-re-cut tag forever). Scoped to
+        # reliant-labs/*; third-party modules keep the proxy and checksum db.
         env:
           GOPRIVATE: github.com/reliant-labs/*
           GONOSUMDB: github.com/reliant-labs/*
@@ -1015,13 +1035,9 @@ jobs:
           path: ~/go/bin/forge
           key: ${{ steps.forge-cache.outputs.cache-primary-key }}
 
-      # golangci-lint is forge's own pin, and forge lint builds it itself —
-      # that pin, with the Go this module selects — when it is not installed,
-      # failing the lane rather than skipping it if it cannot (forge#906).
-      # Cache that build under forge's tools cache, keyed on the pin the forge
-      # binary reports and the Go that builds it, so the one-time build is
-      # paid once per forge or Go bump rather than on every run. Saved on
-      # main only, like every cache (see the backend job).
+      # golangci-lint is forge's own pin, and forge lint builds it itself when
+      # it is not installed. Cache that build under forge's tools cache, keyed
+      # on the pin and the Go that builds it.
       - name: Resolve golangci-lint pin
         id: golangci
         run: |
@@ -1037,14 +1053,25 @@ jobs:
           path: ~/.cache/forge/tools
           key: forge-tools-${{ runner.os }}-golangci-lint-${{ steps.golangci.outputs.version }}-go${{ steps.setup-go.outputs.go-version }}
 
+      - name: Restore golangci-lint analysis cache
+        id: golangci-analysis
+        uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/.cache/golangci-lint
+          key: golangci-lint-analysis-${{ runner.os }}-${{ steps.golangci.outputs.version }}-go${{ steps.setup-go.outputs.go-version }}-${{ github.sha }}
+          restore-keys: |
+            golangci-lint-analysis-${{ runner.os }}-${{ steps.golangci.outputs.version }}-go${{ steps.setup-go.outputs.go-version }}-
+
       # Includes the migration-safety lane, which enforces forge.yaml's
-      # database.migration_safety.require_compat_declaration: every migration
-      # after the baseline says whether the previous release keeps working on
-      # the schema it leaves (internal/db/SCHEMA.md).
+      # database.migration_safety.require_compat_declaration (internal/db/SCHEMA.md).
       - name: Lint (forge)
         run: forge lint --no-fix
 
-      # After the lint, and whatever it found: the build it made is good.
+      - name: Report the analysis cache size
+        if: ${{ !cancelled() }}
+        run: du -sh "${GOLANGCI_LINT_CACHE}" 2>/dev/null || echo "no golangci-lint cache at ${GOLANGCI_LINT_CACHE}"
+
+      # After the lint, and whatever it found: the builds and analyses are good.
       - name: Save forge's golangci-lint build (main only)
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.golangci-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
@@ -1052,19 +1079,23 @@ jobs:
           path: ~/.cache/forge/tools
           key: ${{ steps.golangci-cache.outputs.cache-primary-key }}
 
+      - name: Save golangci-lint analysis cache (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.golangci-analysis.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/golangci-lint
+          key: ${{ steps.golangci-analysis.outputs.cache-primary-key }}
+
   e2e-backend:
     name: E2E Backend (Go)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 8
-    # The stories need a REAL Postgres (the Temporal dev server they start
+    # The stories need a REAL Postgres (and the Temporal dev server they start
     # themselves). Without this service DATABASE_URL was unset, TestMain
     # skipped every DB-backed story, and this job went green running exactly
-    # one story (09, which needs no DB) out of eleven. That is how
-    # story_{08,10,11} stopped compiling after #292 without anything going
-    # red until the compile error itself, and how stories 01/04/07 overwrote
-    # each other's tool-call rows (shared scripted ids) for as long as they
-    # existed. REQUIRE_TEST_DB below makes a skip a failure, so this gate
-    # cannot go dark that way again.
+    # one story out of eleven. REQUIRE_TEST_DB makes a skip a failure.
     services:
       postgres:
         image: postgres:16
@@ -1085,7 +1116,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # `cache: false`: see "CACHES ARE SAVED ON MAIN ONLY" on the backend job.
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
@@ -1114,22 +1144,12 @@ jobs:
             go-build-e2e-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
             go-build-e2e-${{ runner.os }}-
 
-      # buf is not needed here: nothing in this job generates code, and the
-      # e2e tests run against the committed generated output.
-
-      # Same reasoning as the backend job: generated code is committed, so the
-      # generators are not a build input here, and the goose BINARY is never
-      # invoked (goose is a library dependency). Both steps removed; drift is
-      # covered by the parallel `generate-drift` job.
-
       - name: Disable VCS stamping
         run: echo "GOFLAGS=-buildvcs=false" >> $GITHUB_ENV
 
       - name: Go E2E tests
         # -tags=e2e is REQUIRED: every file under ./e2e/stories carries
-        # `//go:build e2e`, so without the tag the pattern matches NO packages
-        # and `go test` exits 1 with "matched no packages" — a job that has
-        # never actually run a single e2e test while reporting failure.
+        # `//go:build e2e`, so without the tag the pattern matches NO packages.
         run: go test -tags=e2e -buildvcs=false -timeout=5m -v ./e2e/...
 
       - name: Save Go build cache (main only)
@@ -1141,21 +1161,17 @@ jobs:
 
   web:
     name: Web (lint, typecheck, build)
-    # SAFE TO SKIP on a go.mod/go.sum-only PR. This job is pure Node — npm
-    # lint / typecheck / vite build / verify-bundle (vitest is `web-test`,
-    # below) — with no Go toolchain in it at all (see the note below on why the generators were
-    # removed). The generated TypeScript under web/src/gen/** is COMMITTED, so
-    # nothing here is derived from a Go dependency at build time. Changing the
-    # version of a Go module cannot alter eslint, tsc, vitest or vite output.
+    # Pure Node: npm lint, then the release's renderer build and artifact gate.
+    # The generated TypeScript (web/src/gen/**) is COMMITTED, so nothing here is
+    # derived from Go at build time. Runs on any change under web/, the root
+    # Node manifests, electron/release.config.json (its build config) or
+    # verify-bundle.mjs (`changes`).
     needs: changes
-    if: needs.changes.outputs.non_gomod == 'true'
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
-
-      # No Go toolchain and no buf here: with the generators gone (see below)
-      # this job is pure Node — npm lint / typecheck / vite build.
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -1168,58 +1184,24 @@ jobs:
         working-directory: web
         run: npm ci || npm install
 
-      # The generated TypeScript (web/src/gen/**, 44 files) and
-      # web/src/store/shortcutsData.generated.ts are COMMITTED, so this job
-      # lints, typechecks, tests and builds straight from the checkout.
-      # Verified locally: `npm run typecheck` and `npm run build:alpha` both
-      # succeed on a clean `git archive` of HEAD with no generator run.
-      #
-      # Removed from this job:
-      #   - `buf generate` (TS protobufs) — output is committed
-      #   - `go install goose` (~58s) — goose's BINARY is never invoked
-      #     anywhere in this repo; it is a library dep of internal/db
-      #   - `make generate` (~140s) — builds 14 Go-side docgen targets
-      #     (CLI/tools/models/Mintlify reference…) that web/ does not consume
-      #
-      # Drift in any of that committed output is caught by the `generate-drift`
-      # job, which runs in parallel.
-
       - name: Lint
         working-directory: web
         # Block PRs on lint errors, but allow warnings.
         run: npm run lint
 
-      # The unit tests are the `web-test` job, sharded, in parallel with this.
-
       # ── The release's renderer build and artifact gate, on every PR. ──────
       #
       # v1.8.1's release failed at release.yml's "Verify the built bundle":
-      # ActivateTriggerDialog's `typeof window !== "undefined" ?
-      # window.location.origin : ""` minified to verify-bundle's [2/4]
-      # dev-leak marker. This job had built a bare `vite build` with no release
-      # config and never ran verify-bundle, so the marker merged green, and the
-      # check only ever ran once a tag was pushed. So this job now builds the
-      # bundle the way release.yml's prepare job does and runs the same gate.
+      # a `typeof window !== "undefined" ? window.location.origin : ""` minified
+      # to verify-bundle's [2/4] dev-leak marker. This job had built a bare
+      # `vite build` with no release config and never ran verify-bundle, so the
+      # marker merged green and the check only ever ran once a tag was pushed.
+      # So this job builds the bundle the way release.yml's prepare job does and
+      # runs the same gate. `npm run build` is `tsc -b && vite build`, and that
+      # `tsc -b` IS `npm run typecheck`, so type errors fail this step.
       #
-      # WHY HERE, IN PLACE, AND NOT A SEPARATE BUILD. Nothing consumes this
-      # job's `web-dist` artifact. release.yml uploads and downloads its own
-      # web-dist inside its own run. e2e-frontend and electron each build
-      # their own bundle and are untouched. So changing this build's env
-      # breaks no consumer, and it is the cheapest option: no extra job, no
-      # second install, no second vite build. `npm run build` is
-      # `tsc -b && vite build`, and that `tsc -b` IS `npm run typecheck`, so
-      # the separate "Type check" step is folded in rather than run twice.
-      # Type errors fail this step. The added cost is verify-bundle itself,
-      # a sub-second grep.
-      #
-      # WHAT TRIGGERS IT. The job's `if` skips only a go.mod/go.sum-only
-      # change. A change to verify-bundle.mjs, electron/release.config.json
-      # or anything under web/ makes `non_gomod` true, so it runs.
-      #
-      # NO SECRETS. Every hostname verify-bundle's [3/4] check expects,
-      # including the Sentry DSN's, comes from release.config.json's `.vite`
-      # block, the file this step exports. release.yml layers its secret DSN
-      # and Statsig key on top, but the check never reads those.
+      # NO SECRETS. Every hostname verify-bundle's [3/4] check expects comes
+      # from release.config.json's `.vite` block, the file this step exports.
       #
       # .github/scripts/verify-bundle.test.mjs pins these steps to
       # release.yml's, so the two builds cannot drift apart silently.
@@ -1227,8 +1209,8 @@ jobs:
         run: jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
       # NODE_ENV=production is scoped to this command, exactly as in
-      # release.yml (see the reason there). Never set it on `npm ci`, which
-      # would skip devDependencies, vite and typescript among them.
+      # release.yml. Never set it on `npm ci`, which would skip devDependencies,
+      # vite and typescript among them.
       - name: Type check and build (as release.yml builds it)
         id: build
         working-directory: web
@@ -1247,30 +1229,21 @@ jobs:
           path: web/dist
           retention-days: 1
 
-  # vitest, split across parallel runners.
-  #
-  # One runner spent ~333s here, and vitest's own breakdown said where: most of
-  # it is per-file jsdom environment setup and module import (424s + 426s
-  # summed across workers), not test bodies (253s). That cost is per FILE, so
-  # it divides cleanly across machines: `--shard=i/n` gives each runner a
-  # disjoint, deterministic 1/n of the test files, and together the shards run
-  # every file exactly once. Once Backend dropped below ~8 min this would
-  # otherwise have become the PR critical path.
-  #
-  # To add a shard, extend `shard` AND `shard_total` together.
+  # vitest, over the files `changes` selected (or all of them), split across
+  # runners. Most of a runner's time here is per-FILE jsdom setup and module
+  # import, not test bodies, so it divides cleanly: `--shard=i/n` gives each
+  # runner a disjoint, deterministic 1/n of the files. A selection of up to 150
+  # files runs on one runner; everything else on two.
   web-test:
     name: Web (vitest ${{ matrix.shard }}/${{ matrix.shard_total }})
-    # Same skip rule as `web`: pure Node, no Go dependency participates.
     needs: changes
-    if: needs.changes.outputs.non_gomod == 'true'
+    if: needs.changes.outputs.vitest_matrix != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       # Every shard reports: one shard's failure must not hide another's.
       fail-fast: false
-      matrix:
-        shard: [1, 2]
-        shard_total: [2]
+      matrix: ${{ fromJSON(needs.changes.outputs.vitest_matrix || '{"include":[]}') }}
     steps:
       - uses: actions/checkout@v6
 
@@ -1289,7 +1262,12 @@ jobs:
         working-directory: web
         env:
           CI: true
-        run: npm test -- --run --shard=${{ matrix.shard }}/${{ matrix.shard_total }}
+          FILES: ${{ needs.changes.outputs.vitest_files }}
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(grep . <<< "${FILES}" || true)
+          echo "vitest: ${#files[@]} selected file(s) (0 = all)"
+          npm test -- --run --shard=${{ matrix.shard }}/${{ matrix.shard_total }} "${files[@]}"
 
       - name: Upload vitest report (on failure)
         if: failure()
@@ -1301,25 +1279,22 @@ jobs:
             web/test-results
           if-no-files-found: ignore
 
+  # Playwright against the built renderer, no Go backend. Two shards: the suite
+  # runs single-worker per runner (tests share one preview server), so
+  # splitting it across runners is what halves its wall time without changing
+  # how any test runs. Path-filtered to web changes that are not unit tests.
   e2e-frontend:
-    name: E2E Frontend (Playwright)
-    # SAFE TO SKIP on a go.mod/go.sum-only PR, for the same reason as `web`:
-    # this is a pure-Node job (vite build + Playwright against the built
-    # renderer) and it starts NO Go backend. The suite drives the frontend
-    # only, so no Go dependency version participates in the result.
+    name: E2E Frontend (Playwright ${{ matrix.shard }}/2)
     needs: changes
-    if: needs.changes.outputs.non_gomod == 'true'
+    if: needs.changes.outputs.playwright == 'true'
     runs-on: ubuntu-latest
-    # Recent green runs take ~2 minutes (setup 2-3 min plus the suite), so 10
-    # is ~4x typical. History: this was 20 when 26 onboarding.spec.ts tests were
-    # genuinely failing and each failure cost 3 attempts (`retries: 2`, single
-    # worker); that suite is healthy now, and a long-running job here means a
-    # hang, which should fail fast rather than hold a runner.
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v6
-
-      # Pure Node job now — no Go toolchain, no buf (see the note below).
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -1332,13 +1307,6 @@ jobs:
         working-directory: web
         run: npm ci || npm install
 
-      # web/src/store/shortcutsData.generated.ts — the one generated file this
-      # job's build genuinely needs (shortcutsStore.ts imports it; deleting it
-      # breaks `vite build`) — is COMMITTED, as is the generated TypeScript
-      # under web/src/gen/. So `make generate-shortcuts`, `buf generate` and
-      # the goose install that supported them are all gone from this job;
-      # `generate-drift` verifies the committed copies are current.
-
       # Restored everywhere, saved on main only (see the backend job).
       - name: Restore Playwright browsers
         id: playwright-cache
@@ -1347,18 +1315,9 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
 
-      # Without this the renderer builds with no VITE_SUPABASE_ANON_KEY, and
-      # supabase-js throws `supabaseKey is required.` — previously at module
-      # load, which left #root empty and timed out every test in the suite on a
-      # blank page. web/src/lib/supabase.ts now defers that failure to first
-      # use, so the app mounts either way; supplying the key here is what lets
-      # the auth-dependent tests actually exercise auth.
-      #
-      # Same mechanism as release.yml's "Export renderer build config". These
-      # are the public KCL-sourced values only — no secrets are layered on
-      # here, because Playwright needs none of them. VITE_SUPABASE_ANON_KEY is
-      # a publishable client-side key that already ships inside every desktop
-      # build and is committed in electron/release.config.json.
+      # The public KCL-sourced values only (VITE_SUPABASE_ANON_KEY is a
+      # publishable client-side key committed in electron/release.config.json);
+      # without it the auth-dependent tests cannot exercise auth.
       - name: Export renderer build config
         run: jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
@@ -1371,23 +1330,23 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       - name: Save Playwright browsers (main only)
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.playwright-cache.outputs.cache-hit != 'true'
+        if: matrix.shard == 1 && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.playwright-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ steps.playwright-cache.outputs.cache-primary-key }}
 
-      - name: Run E2E tests
+      - name: Run E2E tests (shard ${{ matrix.shard }}/2)
         working-directory: web
         env:
           CI: true
-        run: npm run test:e2e -- --project=chromium
+        run: npm run test:e2e -- --project=chromium --shard=${{ matrix.shard }}/2
 
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: |
             web/playwright-report
             web/test-results
@@ -1396,30 +1355,17 @@ jobs:
 
   electron:
     name: Electron (build smoke)
-    # SAFE TO SKIP on a go.mod/go.sum-only PR. Verified from package.json
-    # rather than assumed: `dist:pr` runs with-release-config -> build:config
-    # -> build:web:alpha -> electron-builder --dir, and NONE of those compile
-    # Go. The Go binaries would live in electron/resources/server, which is
-    # untracked and which CI has never populated — this job has always
-    # packaged an empty server dir (the comment below says as much). A Go
-    # module bump therefore cannot change what it produces.
+    # `dist:pr` runs with-release-config -> build:config -> build:web:alpha ->
+    # electron-builder --dir; none of it compiles Go (electron/resources/server
+    # is untracked and CI has never populated it). Path-filtered to electron/
+    # and to what it bundles the renderer with; renderer source is the web
+    # job's to build.
     needs: changes
-    if: needs.changes.outputs.non_gomod == 'true'
+    if: needs.changes.outputs.electron == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
-
-      # No Go toolchain and no buf here. `npm run dist:pr` runs
-      # build:config -> build:web:alpha -> electron-builder --dir; none of that
-      # compiles Go. The backend binaries live in electron/resources/server,
-      # which is UNTRACKED — CI has never populated it, so this job has always
-      # packaged an empty server dir, and removing Go does not change what it
-      # produces. (build:backend exists but is not on the dist:pr path.)
-      #
-      # Also removed: `buf generate` (committed TS output) and `make generate`
-      # (~140s of Go docgen this job does not consume), plus the goose install
-      # (~58s) whose binary is never invoked.
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -1438,18 +1384,73 @@ jobs:
         working-directory: electron
         run: npm ci || npm install
 
-      # One target, not a hand-assembled pair of steps.
-      #
-      # This used to be `npm run build:web:alpha` followed by a bare
-      # `npx electron-builder`, which packaged whatever `web/dist` happened to
-      # contain with NO release config exported — so the PR artifact was built
-      # against undefined VITE_* endpoints and could not surface the class of
-      # defect that shipped v1.7.5. dist:pr routes through
-      # electron/scripts/with-release-config.mjs like every other build target,
-      # so the PR build exercises the same config path a release does.
+      # dist:pr routes through electron/scripts/with-release-config.mjs like
+      # every other build target, so the PR build exercises the same config
+      # path a release does (the class of defect that shipped v1.7.5).
       - name: Build electron app (no publish)
         working-directory: electron
         env:
           # Ensure CI doesn't require signing/notarization credentials
           CI: true
         run: npm run dist:pr
+
+  # ── One verdict for the run, and where its time went ──────────────────────
+  #
+  # Green only when every job that ran passed; a skipped job (a lane the change
+  # does not reach) is fine, a failed or cancelled one is not. This is the one
+  # check worth requiring in branch protection: its name never changes when
+  # jobs are added, split or path-filtered.
+  #
+  # The summary is the instrumentation: each job's queue wait and run time and
+  # the run's wall time so far, so "CI is slow" can be answered from the run
+  # page instead of re-derived from the API.
+  ci-result:
+    name: CI result
+    needs: [changes, quick-checks, cp-contract, generated, backend, backend-result, flake-gate, lint, e2e-backend, web, web-test, e2e-frontend, electron]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Where the time went
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -uo pipefail
+          run="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}")" || exit 0
+          jobs="$(gh api --paginate "repos/${REPO}/actions/runs/${RUN_ID}/attempts/${ATTEMPT}/jobs?per_page=100" --jq '.jobs[]' | jq -s .)" || exit 0
+          created="$(jq -r .run_started_at <<< "${run}")"
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          {
+            echo "### Where the time went"
+            echo
+            echo "Wall time so far: **$(jq -rn --arg a "${created}" --arg b "${now}" '(($b|fromdate)-($a|fromdate)) as $s | "\($s/60|floor)m\($s%60)s"')**"
+            echo
+            echo "| job | queued | ran | finished at | result |"
+            echo "|---|---:|---:|---:|---|"
+            jq -r --arg c "${created}" '
+              def secs(a; b): if a == null or b == null then null else ((b|fromdate) - (a|fromdate)) end;
+              def fmt(s): if s == null then "–" else "\(s/60|floor)m\(s%60)s" end;
+              sort_by(.completed_at // "9999") | .[]
+              | select(.name != "CI result")
+              | "| \(.name) | \(fmt(secs(.created_at; .started_at))) | \(fmt(secs(.started_at; .completed_at))) | \(fmt(secs($c; .completed_at))) | \(.conclusion // .status) |"
+            ' <<< "${jobs}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_STEP_SUMMARY"
+
+      - name: Every job that ran passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          bad="$(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"' <<< "${RESULTS}")"
+          if [ -n "${bad}" ]; then
+            echo "::error::jobs that did not pass:"; echo "${bad}"
+            exit 1
+          fi
+          echo "every job that ran passed"

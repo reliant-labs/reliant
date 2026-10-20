@@ -62,9 +62,23 @@
 # which is why it can afford to run daily.
 name: Pin Drift
 
+# PATH-FILTERED ON PULL REQUESTS to the files that hold or judge the pin. A PR
+# that touches none of them cannot move the pin, so its drift report and its
+# ancestry verdict are the same as main's; running them anyway cost every PR
+# two runner slots. Drift caused by forge moving is the weekly schedule's to
+# report, and ancestry is re-checked on every push to main and daily.
 on:
   pull_request:
     branches: [main]
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "forge.yaml"
+      - "scripts/pin-drift.sh"
+      - "scripts/pin-forge.sh"
+      - "scripts/check-pin-ancestry.sh"
+      - "scripts/test-pin-ancestry.sh"
+      - ".github/workflows/pin-drift.yml"
   push:
     branches: [main]
   schedule:

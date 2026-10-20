@@ -122,6 +122,10 @@ var runForge forgeCommandRunner = runForgeSelfExec
 // The caller's context still wins when it is shorter.
 const forgeInvocationTimeout = 2 * time.Minute
 
+// forgeWaitDelay bounds how long runForgeProcess waits for forge's output
+// pipes to close after forge exits or is killed (see runForgeProcess).
+const forgeWaitDelay = 2 * time.Second
+
 // forgeStderrExcerptLimit caps how much stderr reaches an error string. Errors
 // cross the daemon transport as plain strings and land in a UI; an unbounded
 // tail of a forge failure is not something to paste into a toast.
@@ -150,12 +154,19 @@ func runForgeSelfExec(ctx context.Context, projectDir string, args []string) (fo
 // standing in for the reason, and the api-server filed our own timeout under
 // FailedPrecondition. So the context is checked first, and its error is
 // returned wrapped, for invokeForgeReport to report as a timeout.
+//
+// THE DEADLINE BOUNDS THE CALL, NOT ONLY THE CHILD. The context kill reaches
+// forge alone; a grandchild it spawned (kcl, go, kubectl) still holds the
+// stdout/stderr pipes, and Wait would block until that grandchild exited.
+// forgeWaitDelay caps that drain, so a killed invocation returns promptly with
+// whatever output arrived.
 func runForgeProcess(ctx context.Context, dir, name string, args ...string) (forgeCommandResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, forgeInvocationTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
+	cmd.WaitDelay = forgeWaitDelay
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -171,6 +182,10 @@ func runForgeProcess(ctx context.Context, dir, name string, args ...string) (for
 	case ctx.Err() != nil:
 		// Stopped by the deadline (or a cancel), not finished: no verdict.
 		return result, fmt.Errorf("run forge: %w", ctx.Err())
+	case errors.Is(runErr, exec.ErrWaitDelay):
+		// forge exited 0; only a grandchild it left behind still held the
+		// pipes. forge's own output was drained during forgeWaitDelay.
+		result.ExitCode = 0
 	case errors.As(runErr, &exitErr):
 		// A non-zero exit is forge's verdict channel, not a transport
 		// failure. Record the code and let the caller decide, based on

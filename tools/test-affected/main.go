@@ -14,6 +14,10 @@
 //	go list ./... | go run ./tools/test-affected shard -index 1 -total 3
 //	gh run view <id> --log | go run ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv
 //
+// and its new-flake gate one (changedtests.go):
+//
+//	go run ./tools/test-affected changed-tests   # ./pkg<TAB>^(TestA|TestB)$
+//
 // `make test-affected` is the front door. The decision is Classify (plan.go)
 // over rules.go, the Go package graph (graph.go) and the web import graph
 // (webgraph.go); this file is the I/O. A path no rule and no Go package claims,
@@ -44,10 +48,14 @@ func main() {
 	// shard and weights serve CI's sharded Go lane (shard.go), not the
 	// affected-tests plan.
 	switch cmd {
-	case "shard", "weights":
+	case "shard", "weights", "changed-tests":
 		run := func() error { return runShard(args, os.Stdin, os.Stdout) }
-		if cmd == "weights" {
+		switch cmd {
+		case "weights":
 			run = func() error { return runWeights(os.Stdin, os.Stdout) }
+		case "changed-tests":
+			// CI's new-flake gate (changedtests.go).
+			run = func() error { return runChangedTests(args, os.Stdout) }
 		}
 		if err := run(); err != nil {
 			fmt.Fprintln(os.Stderr, "test-affected "+cmd+":", err)
@@ -56,7 +64,7 @@ func main() {
 		return
 	case "plan", "run":
 	default:
-		fmt.Fprintf(os.Stderr, "test-affected: unknown command %q (want plan, run, shard or weights)\n", cmd)
+		fmt.Fprintf(os.Stderr, "test-affected: unknown command %q (want plan, run, shard, weights or changed-tests)\n", cmd)
 		os.Exit(2)
 	}
 	fs := newFlagSet(cmd)

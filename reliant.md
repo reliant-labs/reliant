@@ -64,11 +64,16 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
 - **Never `make test` / `make test-all`** — they run `make stop`, which stops
   other agents' environments. For the full lane run `go test ./internal/<pkg>/...`
   (no `-short`) once at the end.
-- **CI has two Go tiers.** PRs run `go test -short` (DB tests still on); pushes
-  to main and the nightly run the full suite. A `testing.Short()`-gated test
-  therefore runs only on main: when you touch code one covers, run its package
-  without `-short` yourself, or dispatch PR CI on your branch. A red main opens
-  a `ci:main-red` issue. Details: `dev-docs/testing-affected.md`, "CI tiers".
+- **CI has two tiers.** A PR runs only what its diff reaches: `go test -short`
+  (DB tests still on) over the packages `tools/test-affected` selects, and only
+  the lint/codegen/web/Playwright lanes its paths can affect, in ~5 minutes.
+  Pushes to main and the nightly run everything, in full. So a
+  `testing.Short()`-gated test, or a package your diff does not reach, runs
+  only on main: when you touch code one covers, run its package without
+  `-short` yourself, or dispatch PR CI on your branch (full tier). New and
+  changed tests run 3x on the PR: a test that fails on a repeat is a flake to
+  fix, never to re-run. A red main opens a `ci:main-red` issue. Details:
+  `dev-docs/testing-affected.md`, "CI tiers".
 - **DB-backed tests use `DATABASE_URL` and only `DATABASE_URL`.** Unset, a bare
   `go test` skips them loudly and connects to nothing; `REQUIRE_TEST_DB=1`
   makes that a failure. The Make test targets pass `DATABASE_URL` for you —
