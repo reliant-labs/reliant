@@ -26,7 +26,17 @@ events:
     output: {"is_error": false, "data": {"id": 11}}
 expect:
   outcome: completed
-  completed: [rounds.plan, rounds.capped_label, rounds.capped_comment]
+  completed: [rounds.plan, rounds.capped_label, rounds.capped_comment, ended_failed]
   not_reached: [rounds.lease, rounds.agent, rounds.publish]
   node_outputs:
     rounds.plan: {status: round_cap}
+  # The round cap leaves feedback waiting for a human: the run is FAILED (not auto-archived), and because the
+  # capped comment already explained it on the PR, the handler posts no second note.
+  on_failure:
+    ran: true
+    node_id: ended_failed
+    error_code: outcome
+  messages:
+    on_failure.recorded:
+      count: 1
+      content_contains: ["the round already explained itself on the PR"]

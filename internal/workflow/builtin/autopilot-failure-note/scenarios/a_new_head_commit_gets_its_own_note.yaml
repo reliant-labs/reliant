@@ -1,0 +1,17 @@
+name: a_new_head_commit_gets_its_own_note
+description: >-
+  The marker found belongs to an EARLIER head commit: the new commit has not been noted, so one comment is
+  posted for it.
+inputs: {"repo": "reliant-labs/forge", "number": 101, "kind": "pr", "workflow_name": "autopilot-pr-review", "what": "the review", "error": "boom", "retry": "x"}
+events:
+  - node: head
+    output: {"is_error": false, "data": {"head": {"sha": "fedcba9876543210fedcba9876543210fedcba98"}}}
+  - node: comments
+    output: {"is_error": false, "data": {"items": [{"id": 5, "user": "reliant-01", "body": "<!-- autopilot-failure autopilot-pr-review:0123456789abcdef0123456789abcdef01234567 -->\nold"}]}}
+  - node: post
+    output: {"is_error": false, "data": {"id": 10}}
+expect:
+  outcome: completed
+  completed: [post, final]
+  node_outputs:
+    final: {status: posted}

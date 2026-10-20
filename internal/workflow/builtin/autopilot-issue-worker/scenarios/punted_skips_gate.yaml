@@ -36,7 +36,17 @@ events:
     output: {"recheck_found": 0, "other_live_lease": false}
 expect:
   outcome: completed
-  completed: [agent, pick, outcome, issue_labels_failed, release]
+  completed: [agent, pick, outcome, issue_labels_failed, release, finished, ended_failed]
   not_reached: [gate, publish, pr, agent_retry]
   node_outputs:
     outcome: {kind: punted}
+  on_failure:
+    ran: true
+    node_id: ended_failed
+    error_code: outcome
+  messages:
+    on_failure.recorded:
+      count: 1
+      content_contains: ["the issue already carries the explanation"]
+    ended_failed:
+      saved: true

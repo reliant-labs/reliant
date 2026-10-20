@@ -421,6 +421,30 @@ a reviewer or triager can be enabled as the bot so the owner can approve and mer
 fine. A self-hosted deployment has no App and acts as the owner. Comments written by Reliant's own bot never fire
 `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments cannot trigger itself; other bots' comments do.
 
+### When a run fails: `on_failure:`
+
+A workflow-level `on_failure:` is a finally-style handler: an inline graph (`entry`, `nodes`, `edges`, or `sequence:`) that runs ONCE when a run
+FAILS, so the people waiting on it are told instead of finding a silent dead end.
+
+```yaml
+on_failure:
+  sequence:
+    - id: note
+      type: save_message
+      args:
+        role: assistant
+        display_style: warning
+        content: "Failed at {{ failure.node_id }} ({{ failure.error_code }}): {{ failure.error }}. prep: {{ nodes.?prep.n.orValue('-') }}."
+```
+
+- **It runs when** a node's error was not handled (a config that will not evaluate, a sub-workflow that failed, an agent that never produced its response and ended the step), or the graph reached a node that declares `outcome: failure`. It does not run when the run completes, pauses (a step that exhausts its retries pauses the run, it does not fail it), or is cancelled.
+- **`failure`** exists only inside the handler: `failure.node_id`, `failure.node_path` (dotted, through loops and sub-workflows), `failure.error` (one line), `failure.error_code` (`node_error`, `outcome` or `panic`), `failure.attempt` (the loop iteration, 1 if none). `inputs` are the run's. `nodes` are the outputs the run had produced when it failed, as a read-only copy.
+- **Guard every `nodes.<main node>` read** with `has()` or `.?`: whichever node failed, the ones after it never ran, and validation rejects an unguarded read. A handler node may not reuse a main-graph node id, and `on_failure` itself is a reserved id.
+- **It cannot mask the failure.** The run still ends FAILED. An error inside the handler (or a handler that outlives its 5-minute budget) is logged and recorded, never handled and never recursive; it has no `outputs`, `inputs` or nested `on_failure`. It can contain actions, `save_message`, sub-workflows and agents, but no `approval` or `ask_question`: nobody is answering.
+- **Make a failure visible.** A run that ends on a path labelled "blocked", "punted" or "no result" but finishes normally is a success to the platform: it is auto-archived and never reaches the handler. Route those paths to a terminal node with `outcome: failure`.
+- **Tell a person once.** The Autopilot pack's `builtin://autopilot-failure-note` posts one comment per pull request head commit (or issue): it searches the thread for its own marker first, posts nothing if the thread cannot be read, and writes as whoever the run acts as.
+- **Test it.** A scenario names the handler's nodes `on_failure.<node>` in `events`, `reached`, `completed` and `messages`, and asserts `expect.on_failure: {ran, node_id, node_path, error_code, attempt, error_contains, handler_failed}`.
+
 ## Important rules
 
 ### Parameters
@@ -501,6 +525,7 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 
 | Namespace | Description | Fields |
 |-----------|-------------|--------|
+| `failure.*` | What failed, inside a workflow's on_failure handler only (failure.node_id, failure.node_path, failure.error, failure.error_code, failure.attempt). Undeclared everywhere else | workflow-specific |
 | `inputs.*` | Workflow input values passed at invocation | workflow-specific |
 | `iter.*` | Loop iteration context (iteration count, first/last flags) | `iteration` |
 | `nodes.*` | Output from completed nodes (nodes.<id>.<field>) | workflow-specific |
@@ -621,6 +646,7 @@ condition: "nodes.check.exit_code == 0"
 | `autopilot-agent` | The one agent loop every Autopilot workflow runs. It is a building block, not something to start. Structural limits: - The agent is offered EXACTLY the tools its caller names in `tools`, and nothing is loadable (loadable_tools: []), so it can never reach pr_review_create, issue_update, git_publish or any tool the caller did not name. - `tool_params` binds tool parameters the model can neither see nor override. The machine workflows bind the shell to `credentials: none`. - Tier `mutating`; no ask or approval nodes, so an unattended run never waits on a human. It loops until the response tool is called, at most max_turns turns. |
 | `autopilot-alert-triage` | Receives Alertmanager webhook notifications (payload v4: alerts[], status, groupKey, commonLabels; per alert a fingerprint, labels, annotations and startsAt) and turns each alert into GitHub state in the repository its service maps to (see service_repos). |
 | `autopilot-ensure-labels` | Makes sure the labels an Autopilot workflow uses exist in a repository, with a colour and a description. Building block of the Autopilot pack; not meant to be started on its own. |
+| `autopilot-failure-note` | Tells the people on a pull request or issue that an Autopilot run could not finish, once. Building block of the Autopilot pack's on_failure handlers; not meant to be started on its own. |
 | `autopilot-issue-worker` | Works an issue that someone you trust opted in, by labelling it agent:ready or by mentioning @reliant in a comment. It takes a lease on the issue, makes a worktree from the default branch, lets a restricted agent (a shell with no credentials, nothing loadable) write a failing test and then the fix, runs the repo's fast gate, and then git_publish pushes an autopilot/ branch (never the default branch, never a force) and a PR is opened that closes the issue. If it cannot be done the issue is labelled agent:punted or agent:blocked with exactly what is missing. Never merges, never approves. Part of the Autopilot pack. |
 | `autopilot-lease-acquire` | The lease Autopilot's workflows take on an issue or pull request so two runs do not work it at once. Built-in building block of the Autopilot pack; not meant to be started on its own. |
 | `autopilot-lease-release` | Releases the lease autopilot-lease-acquire took, then looks at what arrived while it was held. Building block of the Autopilot pack; not meant to be started on its own. |
@@ -726,6 +752,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `title` | string | No | - |
 | `hidden` | boolean | No | *A building block other workflows ref: true keeps it out of every picker and default listing while it stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. Unset means the workflow is listed.* |
 | `automation_only` | boolean | No | *The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat start of it, so only its triggers (or a builder test run) start it. Unset means a chat can start it.* |
+| `on_failure` | Workflow | No | *A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends FAILED; an error in the handler is logged and never recursive.* |
 
 ## Edge
 
@@ -804,6 +831,7 @@ Expectation defines what to verify after a scenario runs.
 | `node_outputs` | map[string]object | No | NodeOutputs specifies expected output values for specific nodes. |
 | `outputs` | object | No | Outputs specifies expected values for the workflow's declared outputs. |
 | `messages` | object | No | Messages asserts on the messages the run saved to the thread, keyed by |
+| `on_failure` | OnFailureExpectation | No | OnFailure asserts on the workflow's `on_failure` handler: whether it ran |
 
 ### Targeting Nodes
 

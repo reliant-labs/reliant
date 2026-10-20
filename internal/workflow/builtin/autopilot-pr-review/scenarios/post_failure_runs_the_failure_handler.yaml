@@ -1,0 +1,59 @@
+name: post_failure_runs_the_failure_handler
+description: >-
+  GitHub refuses the review. post_failed declares outcome: failure, so the run is FAILED and the handler tells
+  the PR once, naming that posting failed.
+inputs:
+  repos: [reliant-labs/forge]
+  repo: reliant-labs/forge
+  pr_number: 101
+events:
+  - node: me
+    output: {is_error: false, data: {login: reliant-01, id: 225976313}}
+  - node: pr
+    output:
+      is_error: false
+      data:
+        number: 101
+        state: open
+        draft: false
+        user: nunoo
+        title: Add a thing
+        body: "x"
+        changed_files: 1
+        head: {ref: feat/x, sha: 0123456789abcdef0123456789abcdef01234567}
+        base: {ref: main, sha: fedcba9876543210fedcba9876543210fedcba98}
+  - node: issue
+    output: {is_error: false, data: {labels: [], is_pull_request: true, state: open}}
+  - node: review.agent_loop.call_llm
+    output:
+      message: {role: assistant, text: ""}
+      response_text: ""
+      stop_reason: tool_use
+      model: test-model
+      tool_calls:
+        - id: call_0
+          name: submit_review
+          input: '{"verdict":"COMMENT","defects":0,"risks":1,"body":"### Risks\n- one"}'
+  - node: review.agent_loop.execute_tools
+    output:
+      message: {role: tool, text: ""}
+      tool_results:
+        - {tool_call_id: call_0, content: "ok"}
+      response_data:
+        submit_review: {verdict: COMMENT, defects: 0, risks: 1, body: "### Risks\n- one"}
+  - node: post
+    output: {is_error: true, content: "GitHub validation failed: Unprocessable Entity."}
+  - node: on_failure.note
+    black_box: true
+    output: {status: posted}
+expect:
+  outcome: completed
+  completed: [post_failed]
+  on_failure:
+    ran: true
+    node_id: post_failed
+    error_code: outcome
+  messages:
+    on_failure.recorded:
+      count: 1
+      content_contains: ["posting the review failed"]

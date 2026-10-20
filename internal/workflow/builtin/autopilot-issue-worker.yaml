@@ -566,6 +566,17 @@ nodes:
       role: assistant
       content: "issue-worker finished {{ inputs.repo }}#{{ inputs.issue_number }}: {{ nodes.outcome.kind }}{{ nodes.outcome.note != '' ? ' (' + nodes.outcome.note + ')' : '' }}."
 
+  # Punted, blocked, or a pushed branch whose PR could not be opened: the issue was labelled and explained
+  # above, and the run is recorded FAILED (trigger health, inbox) rather than completed, so it is neither
+  # auto-archived nor mistaken for a success. Declared AFTER the lease was released.
+  - id: ended_failed
+    type: save_message
+    outcome: failure
+    args:
+      role: assistant
+      display_style: warning
+      content: "issue-worker could not finish {{ inputs.repo }}#{{ inputs.issue_number }}: {{ nodes.outcome.kind == 'done' ? 'the branch was pushed but the PR could not be opened' : nodes.outcome.kind }}."
+
 edges:
   - from: check
     cases:
@@ -679,3 +690,39 @@ edges:
     default: recheck_pointer
   - from: recheck_pointer
     default: finished
+  - from: finished
+    cases:
+      - to: [ended_failed]
+        condition: "nodes.outcome.kind != 'done' || nodes.?pr.is_error.orValue(false) == true"
+        label: not_done
+
+# A failed run tells the issue ONCE, unless this run already explained itself there (the punted / blocked
+# comment above names exactly what is missing). The note is once-per-issue by its marker, and is written as
+# whoever the run acts as. Nothing is posted for a run that was never valid for an enabled repository.
+on_failure:
+  sequence:
+    - id: why
+      type: compute
+      outputs:
+        valid: "{{ nodes.?check.valid.orValue(false) == true }}"
+        explained: "{{ nodes.?issue_comment_failed.is_error.orValue(true) == false }}"
+        error: >-
+          {{ failure.node_id == 'ended_failed' ? 'the attempt ended without a pull request' : failure.error }}
+    - id: note
+      type: workflow
+      condition: "nodes.why.valid == true && nodes.why.explained != true"
+      ref: builtin://autopilot-failure-note
+      args:
+        repo: "{{ inputs.repo }}"
+        number: "{{ inputs.issue_number }}"
+        kind: issue
+        workflow_name: autopilot-issue-worker
+        what: "this issue"
+        error: "{{ nodes.why.error }}"
+        retry: "Re-add `{{ inputs.ready_label }}` once it is addressed to have Autopilot try again."
+    - id: recorded
+      type: save_message
+      args:
+        role: assistant
+        display_style: warning
+        content: "issue-worker failed on {{ inputs.repo }}#{{ inputs.issue_number }}: {{ nodes.why.error }}{{ nodes.why.valid != true ? ' (not an issue this automation covers, so nothing was posted)' : (nodes.why.explained == true ? ' (the issue already carries the explanation)' : '') }}."

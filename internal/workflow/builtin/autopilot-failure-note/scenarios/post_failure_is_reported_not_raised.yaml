@@ -1,0 +1,14 @@
+name: post_failure_is_reported_not_raised
+description: A comment write that fails is reported in the output; the block still completes (the caller's run is already failed).
+inputs: {"repo": "reliant-labs/forge", "number": 101, "kind": "pr", "workflow_name": "autopilot-pr-review", "what": "the review", "error": "boom", "retry": "x"}
+events:
+  - node: head
+    output: {"is_error": false, "data": {"head": {"sha": "0123456789abcdef0123456789abcdef01234567"}}}
+  - node: comments
+    output: {"is_error": false, "data": {"items": []}}
+  - node: post
+    output: {"is_error": true, "content": "forbidden"}
+expect:
+  outcome: completed
+  node_outputs:
+    final: {status: post_failed}

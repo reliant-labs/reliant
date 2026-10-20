@@ -25,7 +25,16 @@ events:
     output: {"recheck_found": 0, "other_live_lease": false}
 expect:
   outcome: completed
-  completed: [file.report, file.publish, file.release]
+  completed: [file.report, file.publish, file.release, problems, ended_failed]
+  # A stub was published, but the investigator produced nothing: the run is FAILED so it is neither
+  # auto-archived nor mistaken for a triage.
+  on_failure:
+    ran: true
+    node_id: ended_failed
+  messages:
+    on_failure.recorded:
+      count: 1
+      content_contains: ["the investigator ended without a result"]
   node_outputs:
     file.report:
       r:

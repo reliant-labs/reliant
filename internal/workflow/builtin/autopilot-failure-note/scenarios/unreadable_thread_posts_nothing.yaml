@@ -1,0 +1,15 @@
+name: unreadable_thread_posts_nothing
+description: >-
+  The comments cannot be read, so whether a note exists is unknown: nothing is posted. Never commenting twice
+  outranks always commenting once.
+inputs: {"repo": "reliant-labs/forge", "number": 101, "kind": "pr", "workflow_name": "autopilot-pr-review", "what": "the review", "error": "boom", "retry": "x"}
+events:
+  - node: head
+    output: {"is_error": false, "data": {"head": {"sha": "0123456789abcdef0123456789abcdef01234567"}}}
+  - node: comments
+    output: {"is_error": true, "content": "rate limited"}
+expect:
+  outcome: completed
+  not_reached: [post]
+  node_outputs:
+    final: {status: unreadable}

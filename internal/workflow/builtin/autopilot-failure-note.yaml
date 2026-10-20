@@ -1,0 +1,120 @@
+name: autopilot-failure-note
+title: Autopilot · failure note
+hidden: true
+automation_only: true
+apiVersion: "0.0.5"
+description: |
+  Tells the people on a pull request or issue that an Autopilot run could not finish, once. Building block
+  of the Autopilot pack's on_failure handlers; not meant to be started on its own.
+
+  The comment starts with a marker naming the workflow and the subject (the pull request's head commit, or
+  the issue), and the thread is searched for that marker first: a second failure for the same head commit
+  posts nothing. If the thread cannot be read nothing is posted either, because the one thing this must
+  never do is comment twice. It writes as whoever the run acts as (the owner or the Reliant bot), like any
+  other integration write of the run.
+
+inputs:
+  repo:
+    type: string
+    description: owner/name of the repository
+  number:
+    type: integer
+    description: The pull request or issue number
+  kind:
+    type: string
+    default: pr
+    description: "pr, to key the note on the pull request's head commit, or issue"
+  workflow_name:
+    type: string
+    description: Which Autopilot workflow failed, shown in the comment and in its marker
+  what:
+    type: string
+    description: What it could not complete, e.g. "the review"
+  error:
+    type: string
+    default: ""
+    description: The failure as one line
+  retry:
+    type: string
+    default: ""
+    description: How to ask for another attempt, shown after the error
+
+outputs:
+  status: "{{ nodes.final.status }}"
+  marker: "{{ nodes.subject.marker }}"
+
+entry: [head]
+
+nodes:
+  # A pull request's head commit is what a note is once-per-. The caller may be failing before it ever
+  # read the PR, so the commit is read here.
+  - id: head
+    type: action
+    condition: "inputs.kind == 'pr'"
+    uses: github/pr.get@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      pull_number: "{{ inputs.number }}"
+
+  - id: sha
+    type: compute
+    outputs:
+      value: >-
+        {{ inputs.kind == 'pr' && nodes.?head.is_error.orValue(true) == false && nodes.?head.data.head.sha.hasValue()
+             ? string(nodes.head.data.head.sha) : 'unknown' }}
+
+  - id: subject
+    type: compute
+    outputs:
+      key: "{{ inputs.kind == 'pr' ? nodes.sha.value : 'issue-' + string(inputs.number) }}"
+      marker: "{{ '<!-- autopilot-failure ' + inputs.workflow_name + ':' + (inputs.kind == 'pr' ? nodes.sha.value : 'issue-' + string(inputs.number)) + ' -->' }}"
+
+  - id: comments
+    type: action
+    uses: github/issue.comment.list@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      issue_number: "{{ inputs.number }}"
+
+  - id: existing
+    type: compute
+    outputs:
+      unreadable: "{{ nodes.comments.is_error }}"
+      found: "{{ !nodes.comments.is_error && nodes.comments.data.items.exists(c, c.body.contains(nodes.subject.marker)) }}"
+
+  - id: post
+    type: action
+    condition: "nodes.existing.unreadable != true && nodes.existing.found != true"
+    uses: github/issue.comment@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      issue_number: "{{ inputs.number }}"
+      body: |
+        {{ nodes.subject.marker }}
+        <!-- autopilot -->
+        🤖 Autopilot couldn't complete {{ inputs.what }}{{ inputs.kind == 'pr' && nodes.subject.key != 'unknown' ? ' for `' + nodes.subject.key.substring(0, math.least(7, size(nodes.subject.key))) + '`' : '' }}{{ inputs.error != '' ? ': ' + inputs.error.substring(0, math.least(240, size(inputs.error))) : '' }}.{{ inputs.retry != '' ? ' ' + inputs.retry : '' }}
+
+  - id: final
+    type: compute
+    outputs:
+      status: >-
+        {{ nodes.existing.unreadable == true ? 'unreadable'
+           : (nodes.existing.found == true ? 'already_noted'
+           : (nodes.?post.is_error.orValue(true) == false ? 'posted' : 'post_failed')) }}
+
+edges:
+  - from: head
+    default: sha
+  - from: sha
+    default: subject
+  - from: subject
+    default: comments
+  - from: comments
+    default: existing
+  - from: existing
+    default: post
+  - from: post
+    default: final
