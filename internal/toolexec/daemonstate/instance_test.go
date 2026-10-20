@@ -19,7 +19,7 @@ func TestInstanceKeyRoundTripsThroughInitReadAndSetStream(t *testing.T) {
 	dir := instanceDir(t, root, "http-localhost-8090-1d4f2c90", "_default", "reliant-9a3b1f22")
 	const key = "http-localhost-8090-1d4f2c90/_default/reliant-9a3b1f22"
 
-	require.NoError(t, Init(dir, "http://localhost:8090", "h2c", false))
+	require.NoError(t, Init(dir, Startup{GatewayURL: "http://localhost:8090", TLSMode: "h2c"}))
 	initial, err := Read(dir)
 	require.NoError(t, err)
 	require.Equal(t, key, initial.Instance)
@@ -60,7 +60,7 @@ func TestInstanceKeyIsSerializedAsInstanceAndOmittedWhenAbsent(t *testing.T) {
 	withInstancesRoot(t, root)
 	dir := instanceDir(t, root, "origin-aaaaaaaa", "_default", "ws-bbbbbbbb")
 
-	require.NoError(t, Init(dir, "http://localhost:8090", "h2c", false))
+	require.NoError(t, Init(dir, Startup{GatewayURL: "http://localhost:8090", TLSMode: "h2c"}))
 	raw, err := os.ReadFile(Path(dir))
 	require.NoError(t, err)
 
@@ -72,7 +72,7 @@ func TestInstanceKeyIsSerializedAsInstanceAndOmittedWhenAbsent(t *testing.T) {
 	// means "unknown" and must be absent from the JSON, never an empty string
 	// a reader could compare against.
 	plain := t.TempDir()
-	require.NoError(t, Init(plain, "http://localhost:8090", "h2c", false))
+	require.NoError(t, Init(plain, Startup{GatewayURL: "http://localhost:8090", TLSMode: "h2c"}))
 	raw, err = os.ReadFile(Path(plain))
 	require.NoError(t, err)
 	fields = map[string]any{}

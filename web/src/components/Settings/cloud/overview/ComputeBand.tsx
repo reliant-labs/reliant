@@ -248,7 +248,7 @@ export function ComputeBand({
         {grantedMinutesRemaining > 0 && (
           <div className="flex flex-col gap-1 rounded-md border border-border/60 bg-background px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-medium text-foreground">Coupon minutes</p>
+              <p className="font-medium text-foreground">Coupon hours</p>
               <p className="text-xs text-muted-foreground">
                 One-time, does not renew — spent after included hours, before
                 overage

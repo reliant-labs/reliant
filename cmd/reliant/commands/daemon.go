@@ -208,13 +208,14 @@ func daemonCredsExpiringSoon(creds *auth.DaemonCredentials, now time.Time) bool 
 	return !creds.ExpiresAt.After(now.Add(daemonPATRenewBefore))
 }
 
-// ensureDaemonCredentials returns existing daemon credentials or creates new ones.
-// This is the shared credential resolution logic used by both `open` and `daemon start`.
+// ensureDaemonCredentials returns `daemon start`'s stored daemon credential,
+// or registers one.
 //
-// If no credentials exist, runs the registration flow: prompts for sign-in
-// (if not already, and unless nonInteractive is set — see registerDaemon),
-// then mints a daemon credential via TokenService.CreateToken. Most users will
-// instead use `--token` to paste a daemon token minted from the web UI.
+// If none is stored (or it has expired), it runs registerDaemon: a browser
+// login of its own that mints a daemon:connect token — unless nonInteractive
+// is set, when it returns cliauth.ErrInteractiveRequired instead. A CLI
+// session from `reliant auth login` is a different credential and is never
+// reused for this.
 func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, nonInteractive bool) (*auth.DaemonCredentials, error) {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
 
@@ -545,8 +546,9 @@ func newDaemonRegisterCmd() *cobra.Command {
 		Short: "Register this machine as a daemon",
 		Long: `Registers this machine to connect to the Reliant cloud platform as a daemon.
 
-If not already logged in, opens your browser for OAuth authentication.
-Creates a long-lived access token for the daemon and stores it locally.
+Opens your browser to sign in and approve a long-lived daemon credential, which
+is stored locally. This is its own login: a 'reliant auth login' session is a
+different credential and is not reused.
 
 After registering, run 'reliant daemon start' to connect.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -701,7 +703,6 @@ func watchShutdownSignals(sigCh <-chan os.Signal, w io.Writer, cancel context.Ca
 
 func newDaemonStartCmd() *cobra.Command {
 	var (
-		background bool
 		useToken   bool
 		daemonName string
 	)
@@ -709,22 +710,25 @@ func newDaemonStartCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "Start the tools daemon",
-		Long: `Starts the tools daemon in the foreground (default) or background.
+		Long: `Starts the tools daemon in the foreground. It runs until interrupted
+(Ctrl+C) or stopped with 'reliant daemon stop'; to keep it running after the
+terminal closes, run it under your OS's service manager, tmux, or nohup.
 
 The daemon connects to the Reliant cloud platform and provides local tool
 execution capabilities.
 
 Credential resolution order:
-  1. Daemon credentials file (created by 'reliant daemon register')
-  2. If logged in but not registered, auto-registers and creates credentials
-  3. If not logged in, prompts for login and then auto-registers — unless
-     --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE) is set, in which
-     case the daemon never opens a browser or runs the login flow itself. It
-     instead stays resident and idle, publishing "awaiting_credentials" in its
-     runtime state, and polls for a credentials file to appear on disk (see
-     'reliant daemon status' and internal/toolexec/daemonstate). This is the
-     mode Electron spawns in: its own login page owns interactive sign-in, and
-     the daemon must never pop a second one.
+  1. --token: an access token read from stdin (create one under Settings →
+     Access Tokens in the app).
+  2. The stored daemon credential in ~/.reliant/daemon.json (written by an
+     earlier 'daemon start' or 'reliant daemon register').
+  3. Otherwise a browser login of its own that mints a daemon credential.
+     This is a separate credential from 'reliant auth login', which is never
+     reused here. With --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE)
+     the daemon never opens a browser: it stays resident and idle, publishing
+     "awaiting_credentials" in its runtime state (see 'reliant daemon
+     status'), and polls for a credential to appear on disk. Electron spawns
+     the daemon this way: its own login page owns interactive sign-in.
 
 One machine can serve several accounts. Each account keeps its own daemon
 identity (under ~/.reliant/instances/<server>/<account>/<workspace>/): with
@@ -734,10 +738,6 @@ applies. Two accounts can run side by side, even in the same workspace.
 To switch back to an account whose token is already stored:
   reliant daemon start --account <user-id>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if background {
-				// TODO: implement background fork/detach
-				return fmt.Errorf("--background is not yet implemented")
-			}
 			base, err := loadRootConfig(cmd)
 			if err != nil {
 				return err
@@ -938,7 +938,7 @@ To switch back to an account whose token is already stored:
 				}
 
 				// Register flow: stale creds get cleaned up and we re-run the
-				// Supabase login + TokenService.CreateToken(daemon) handshake.
+				// daemon's own browser login (registerDaemon).
 				logging.Warn("Daemon gateway authentication failed — deleting stale credentials and re-registering",
 					"error", err, "code", connect.CodeOf(err).String(), "gateway_url", daemonGRPCURL)
 				_ = auth.DeleteDaemonCredentials(conn.ServerURL, instance.account)
@@ -970,7 +970,6 @@ To switch back to an account whose token is already stored:
 	// --workspace) and the pod-only env settings: proto/config/v1 DaemonConfig.
 	config.RegisterDaemonConfigFlags(cmd)
 
-	cmd.Flags().BoolVar(&background, "background", false, "Run daemon in background (detached)")
 	cmd.Flags().BoolVar(&useToken, "token", false, "Read a PAT from stdin and use it as the daemon credential")
 	cmd.Flags().StringVar(&daemonName, "name", "", "Human-friendly daemon name (default: <instance-id>@<hostname>)")
 
@@ -1265,6 +1264,43 @@ func stopDaemonProcess(w io.Writer, pc processControl, dataDir string, pid int, 
 	return fmt.Errorf("daemon PID %d is still running after SIGTERM and SIGKILL", pid)
 }
 
+// refuseToStop is the check `daemon stop` makes on WHAT it is about to stop,
+// whatever path led it to the record.
+//
+// Which record stop reads is decided by --data-dir, DAEMON_DATA_DIR, or the
+// derived instance — and every one of those can name the daemon the command is
+// running under. A cloud machine exports DAEMON_DATA_DIR to every shell its
+// daemon starts; on a laptop, an agent working in the same worktree derives
+// the same instance as the daemon that runs it. Narrowing how the directory is
+// chosen therefore cannot make stop safe. Looking at the target does:
+//
+//   - the daemon is this process or one of its ancestors: stopping it ends the
+//     session that asked, mid-command, with nobody left to restart it;
+//   - the daemon is managed: the platform runs it, the CLI did not start it,
+//     and stopping it takes the machine offline.
+//
+// Neither has an override. --force chooses the signal, not whether to send it.
+// A record whose process is already gone is not refused: clearing it is
+// harmless.
+func refuseToStop(state daemonstate.State, dataDir string) error {
+	if !daemonProcessAlive(state.PID) {
+		return nil
+	}
+	if osutil.IsSelfOrAncestor(state.PID) {
+		return fmt.Errorf("refusing to stop daemon PID %d: this command runs inside it (record %s). "+
+			"Stopping it would end this session and everything else it is running; "+
+			"stop it from a terminal of your own, outside Reliant",
+			state.PID, daemonstate.Path(dataDir))
+	}
+	if state.Managed {
+		return fmt.Errorf("refusing to stop daemon PID %d: it is a managed daemon (record %s). "+
+			"Reliant runs this machine's daemon and restarts it; stopping it takes the machine offline. "+
+			"Restart the machine from its page under Settings → Machines in the Reliant app instead",
+			state.PID, daemonstate.Path(dataDir))
+	}
+	return nil
+}
+
 // clearDaemonRecord removes the runtime record of a process confirmed dead.
 func clearDaemonRecord(w io.Writer, dataDir string) error {
 	if err := daemonstate.Clear(dataDir); err != nil {
@@ -1289,7 +1325,13 @@ If the daemon does not exit within the grace period this escalates to SIGKILL,
 and if it survives that, the command exits non-zero and leaves the runtime
 record in place. A daemon reported as stopped while it is still running keeps
 its gateway registration, and the next 'daemon start' then registers a second
-daemon under the same identity — the two evict each other until one is killed.`,
+daemon under the same identity — the two evict each other until one is killed.
+
+Stop refuses two daemons outright, --force included: the one this command is
+running inside (an agent's shell is a descendant of the daemon running the
+agent, so stopping it ends the session that asked), and a managed daemon —
+a cloud machine's, which Reliant runs and restarts. Restart a cloud machine from
+Settings → Machines in the Reliant app.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadDaemonStopConfig(cmd)
 			if err != nil {
@@ -1312,6 +1354,9 @@ daemon under the same identity — the two evict each other until one is killed.
 					return nil
 				}
 				return fmt.Errorf("reading daemon runtime record: %w", err)
+			}
+			if err := refuseToStop(state, dataDir); err != nil {
+				return err
 			}
 			return stopDaemonProcess(cmd.OutOrStdout(), realProcessControl(), dataDir, state.PID, force)
 		},

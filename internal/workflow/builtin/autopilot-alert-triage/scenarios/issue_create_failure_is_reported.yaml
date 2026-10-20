@@ -12,5 +12,15 @@ events:
     output: {"is_error": true, "content": "GitHub validation failed"}
 expect:
   outcome: completed
-  completed: [file.created, file.create_failed]
+  completed: [file.created, file.create_failed, problems, ended_failed]
   not_reached: [file.lease, file.agent]
+  # No issue exists for the alert: the run is FAILED. alert-triage posts nothing to GitHub; the handler only
+  # records the failure and which alert it was.
+  on_failure:
+    ran: true
+    node_id: ended_failed
+    error_code: outcome
+  messages:
+    on_failure.recorded:
+      count: 1
+      content_contains: ["alert-triage failed at ended_failed", "the issue could not be filed"]

@@ -47,12 +47,7 @@ If Reliant refuses the token you piped in, the daemon stops, tells you, and dele
 
 ## 3. Keep it running
 
-`reliant daemon start` runs in the foreground and stops when its terminal closes. The `--background` flag is listed in `--help`, but it is not implemented yet:
-
-```text
-$ reliant daemon start --background
---background is not yet implemented
-```
+`reliant daemon start` runs in the foreground and stops when its terminal closes. It has no flag to detach itself: keeping a process alive is your service manager's job, and it does that better (restarts, logs, start at boot).
 
 For a quick session, run it in `tmux` or `screen`. For a machine that should always be available, let your service manager run it. With systemd, a user service looks like this:
 
@@ -126,9 +121,15 @@ reliant daemon stop
 
 `stop` asks the daemon to shut down and **waits until the process has exited** before saying it stopped. If the daemon has not exited after 12 seconds, `stop` kills it. If the process survives even that, `stop` exits non-zero and keeps the runtime record, so the next `status` still shows the daemon. This matters because two daemons with the same identity disconnect each other until one is gone. `--force` kills immediately. If you used systemd, stop the service instead (`systemctl --user stop reliant-daemon`), or the service manager will start the daemon again.
 
-<Warning>
-On a Reliant **cloud machine**, the shell already contains the settings of the daemon that runs the machine. There, `reliant daemon stop` stops that daemon, which disconnects every chat on the machine, including the one you typed the command from. `status` and `logs` are safe to run there. Don't run `stop`.
-</Warning>
+`stop` refuses two daemons, `--force` included:
+
+- **The daemon it is running under.** An agent's shell is started by the daemon that runs the agent, so stopping that daemon would end the agent's own session mid-command. Stop a daemon from a terminal of your own.
+- **A cloud machine's daemon.** On a Reliant cloud machine, every shell carries the settings of the daemon that runs the machine, so a bare `reliant daemon stop` there finds that daemon. Reliant runs it and restarts it, and stopping it would disconnect every chat on the machine. `stop` says so and does nothing; restart the machine from **Settings → Machines** instead. `status` and `logs` work as usual there.
+
+```text
+$ reliant daemon stop
+Error: refusing to stop daemon PID 241: it is a managed daemon (record /home/workspace/.reliant-data/daemon-state.json). Reliant runs this machine's daemon and restarts it; stopping it takes the machine offline. Restart the machine from its page under Settings → Machines in the Reliant app instead
+```
 
 ## Several daemons on one computer
 
@@ -143,7 +144,7 @@ RUNNING  PID  STREAM  UPTIME  INSTANCE
 -        -    -       -       https-api.reliantapi.com-c9232e15/_default/tmp-e9671acd
 ```
 
-Each instance is named by server, account (`_default` until you use more than one) and workspace: here, a checkout called `reliant-labs` and the `/tmp` directory, neither currently running. **RUNNING** comes from a lock the operating system releases when the process dies, so it is never stale even when a runtime record is left behind.
+Each instance is named by server, account (`_default` until you use more than one) and workspace: here, a checkout called `reliant-labs` and the `/tmp` directory, neither currently running. A folder appears only once a daemon has started there: `status`, `logs` and `stop` look without creating anything. **RUNNING** comes from a lock the operating system releases when the process dies, so it is never stale even when a runtime record is left behind.
 
 ## Related topics
 

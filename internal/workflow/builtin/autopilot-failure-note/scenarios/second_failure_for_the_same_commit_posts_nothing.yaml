@@ -1,0 +1,16 @@
+name: second_failure_for_the_same_commit_posts_nothing
+description: >-
+  The thread already carries this workflow's marker for this head commit: nothing is posted, so a re-run that
+  fails the same way does not comment twice.
+inputs: {"repo": "reliant-labs/forge", "number": 101, "kind": "pr", "workflow_name": "autopilot-pr-review", "what": "the review", "error": "boom", "retry": "x"}
+events:
+  - node: head
+    output: {"is_error": false, "data": {"head": {"sha": "0123456789abcdef0123456789abcdef01234567"}}}
+  - node: comments
+    output: {"is_error": false, "data": {"items": [{"id": 5, "user": "reliant-01", "body": "<!-- autopilot-failure autopilot-pr-review:0123456789abcdef0123456789abcdef01234567 -->\n🤖 Autopilot couldn't complete the review"}]}}
+expect:
+  outcome: completed
+  completed: [comments, existing, final]
+  not_reached: [post]
+  node_outputs:
+    final: {status: already_noted}

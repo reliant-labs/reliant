@@ -1,24 +1,22 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { diskAllowanceGib, provisionedDiskGib } from '../daemonUsage';
+import { provisionedDiskGib } from '../daemonUsage';
 import { MachinePricingLine, PlanTileRow, commonPlanHours, type ComputePlanOption } from '../PlanTiles';
 import { diskGrowPrice } from '@/components/Settings/cloud/diskGrow';
 import { formatMachineMinutes, formatMachineMinutesShort } from '@/lib/formatMachineMinutes';
 
-const pricing = { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }], suspendedDiskCentsPerGibMonth: '25', placeholder: false };
+const pricing = { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 60 }], storageCentsPerGibMonth: '25', placeholder: false };
 const plan: ComputePlanOption = { planId: 'small', label: 'Small', detail: '2 GB · 0.5 CPU', size: 'small', monthlyPriceCents: 1500, includedMinutes: 9600, overageCentsPerMinute: 999, includedHours: '160' };
 
 describe('machine pricing disclosure', () => {
-  it('derives the whole grown disk from observed data capacity, not desired or standard capacity', () => {
-    expect(diskAllowanceGib(pricing, 'small', 20)).toBe(100);
-    expect(provisionedDiskGib(pricing, 'small', { capacityGib: 70, includedGib: 20 })).toBe(170);
-    const before = { ...pricing, sizes: [{ ...pricing.sizes[0], storageGib: 20 }] };
-    expect(provisionedDiskGib(before, 'small', { capacityGib: 70, includedGib: 20 })).toBe(70);
-    expect(provisionedDiskGib(pricing, 'small', { capacityGib: 0, includedGib: 20 })).toBeNull();
-    expect(provisionedDiskGib(undefined, 'small', { capacityGib: 70, includedGib: 20 })).toBeNull();
+  it('reads a machine disk as the one provisioned disk', () => {
+    expect(provisionedDiskGib({ capacityGib: 170 })).toBe(170);
+    expect(provisionedDiskGib({ capacityGib: 0 })).toBeNull();
+    expect(provisionedDiskGib(undefined)).toBeNull();
   });
-  it('prices whole disks while preserving the same growth delta and running excess', () => {
-    expect(diskGrowPrice(pricing, { currentGib: 170, targetGib: 180, includedGib: 120 })).toEqual({ added: '+$2.50/mo', running: '$15.00/mo', runningGib: 60, stopped: '$45.00/mo' });
+  it('prices a grow at the most it can add, never more than the GB added', () => {
+    expect(diskGrowPrice(pricing, { currentGib: 170, targetGib: 180 })).toEqual({ added: '+$2.50/mo' });
+    expect(diskGrowPrice(undefined, { currentGib: 170, targetGib: 180 })).toBeNull();
   });
   it('puts only name, spec and monthly price on a plan row', () => {
     render(<PlanTileRow plan={plan} selected={false} onSelect={() => {}} />);
@@ -41,8 +39,9 @@ describe('machine pricing disclosure', () => {
       'Includes 160 hours a month. Extra hours and storage are billed separately.',
     );
   });
-  it('names coupon time as small-machine-hours, not unweighted machine time', () => {
-    expect(formatMachineMinutes(600)).toBe('10 small-machine-hours');
-    expect(formatMachineMinutesShort(90)).toBe('1.5 small-machine-hours');
+  it('names coupon time as hours on a Small machine, never jargon', () => {
+    expect(formatMachineMinutes(600)).toBe('10 hours on a Small machine');
+    expect(formatMachineMinutes(60)).toBe('1 hour on a Small machine');
+    expect(formatMachineMinutesShort(90)).toBe('1.5 h (Small)');
   });
 });

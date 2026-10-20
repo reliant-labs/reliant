@@ -130,20 +130,18 @@ The tools daemon runs as a separate `reliant daemon` process on a machine the us
 
 ```bash
 reliant daemon register   # one-time: sign in and create the daemon's credential
-reliant daemon start      # connect (add --background to detach)
+reliant daemon start      # connect; runs in the foreground until stopped
 ```
 
-`daemon register` opens a browser to sign in if you are not already, creates a long-lived access token for the daemon, and stores it locally. The token is scoped to your user and can be revoked independently of your main session, in **Settings → Access Tokens**. Each daemon keeps its own identity under `~/.reliant/instances/<server>/<account>/<workspace>/`, so one machine can serve several accounts, and several workspaces, side by side.
+`daemon register` opens a browser to sign in and approve a long-lived access token for the daemon, and stores it locally. It is a login of its own: a `reliant auth login` session is a different credential and is never reused for a daemon. The token is scoped to your user and can be revoked independently of your main session, in **Settings → Access Tokens**. Each daemon keeps its own identity under `~/.reliant/instances/<server>/<account>/<workspace>/`, so one machine can serve several accounts, and several workspaces, side by side.
 
 ### Credential Resolution
 
 `daemon start` resolves credentials in order:
 
-1. **The daemon's credentials file**, created by `daemon register`.
-2. **Auto-register**: if you are logged in (`reliant auth login`) but not registered, it creates a credential automatically.
-3. **Interactive login**: otherwise it opens a browser to sign in and then registers. With `--non-interactive` (how the desktop app starts it) it never opens a browser; it stays idle, reporting that it is awaiting credentials, until a credentials file appears.
-
-`--token` reads an access token from stdin and uses it instead, which is the form for automation.
+1. **`--token`**: an access token read from stdin, which is the form for automation.
+2. **The daemon's credentials file** (`~/.reliant/daemon.json`), written by an earlier `daemon start` or by `daemon register`.
+3. **Its own browser login**: otherwise it opens a browser to sign in and registers, exactly as `daemon register` does. Being logged in with `reliant auth login` does not skip this. With `--non-interactive` (how the desktop app starts it) it never opens a browser; it stays idle, reporting that it is awaiting credentials, until a credentials file appears.
 
 ### TLS
 
@@ -158,7 +156,7 @@ A user can have several daemons connected at once (one per machine or workspace)
 ```bash
 reliant daemon status   # whether the daemon's gateway stream is established (exits non-zero if not)
 reliant daemon ls       # every daemon instance on this machine, and whether each is running
-reliant daemon stop     # graceful shutdown (--force for SIGKILL)
+reliant daemon stop     # graceful shutdown (--force for SIGKILL); refuses a managed daemon and the one it runs under
 reliant daemon logs     # tail logs (follows by default)
 ```
 

@@ -54,9 +54,9 @@ const defaultRule = (alert: string, defaultId: string, severity: string, summary
 });
 
 const DEFAULTS: DeclaredAlertRule[] = [
-  defaultRule("ServiceErrorRateHigh", "service-error-rate", "critical", "{{ $labels.service }} fails {{ $value | humanizePercentage }} of requests"),
+  defaultRule("ServiceErrorRateHigh", "error-rate", "critical", "{{ $labels.service }} fails {{ $value | humanizePercentage }} of requests"),
   defaultRule("ServiceSilent", "service-silent", "warning", "{{ $labels.service }} received no requests for 15 minutes", "15m"),
-  defaultRule("ContainerOOMKilled", "container-oom-killed", "warning", "{{ $labels.container }} was OOMKilled"),
+  defaultRule("WorkloadOOMKilled", "oom-killed", "warning", "{{ $labels.container }} was OOMKilled"),
 ];
 
 /** What each fixture environment declares: prod adds the project's own rule; dev opted out of observability. */
@@ -129,9 +129,9 @@ export function createAlertingFixture(
           },
           {
             envId: PROD,
-            rule: "ContainerOOMKilled",
+            rule: "WorkloadOOMKilled",
             fingerprint: "b7d912",
-            labels: { alertname: "ContainerOOMKilled", severity: "warning", container: "api", workload: "api" },
+            labels: { alertname: "WorkloadOOMKilled", severity: "warning", container: "api", workload: "api" },
             annotations: { summary: "api was OOMKilled" },
             state: "firing",
             activeAtMs: t0 - 16 * min,
@@ -164,8 +164,8 @@ export function createAlertingFixture(
   });
   const history: AlertEvent[] = [
     event(PROD, "CheckoutP95High", "a1f0c3", { severity: "critical", service: "api" }, "firing", 1.42, 13),
-    event(PROD, "ContainerOOMKilled", "b7d912", { severity: "warning", container: "api" }, "firing", 3, 11),
-    event(PROD, "ContainerOOMKilled", "b7d912", { severity: "warning", container: "api" }, "pending", 1, 16),
+    event(PROD, "WorkloadOOMKilled", "b7d912", { severity: "warning", container: "api" }, "firing", 3, 11),
+    event(PROD, "WorkloadOOMKilled", "b7d912", { severity: "warning", container: "api" }, "pending", 1, 16),
     event(PROD, "CheckoutP95High", "a1f0c3", { severity: "critical", service: "api" }, "pending", 0.91, 23),
     event(STAGING, "ServiceErrorRateHigh", "c4e7aa", { severity: "critical", service: "worker" }, "pending", 0.073, 2),
     event(PROD, "ServiceSilent", "d00e11", { severity: "warning", service: "worker" }, "resolved", 0, 95),
@@ -210,7 +210,7 @@ export function createAlertingFixture(
     mode === "quiet"
       ? []
       : [
-          { id: "n3", envId: PROD, status: "firing", alertname: "ContainerOOMKilled", severity: "warning", labels: { container: "api" }, annotations: { summary: "api was OOMKilled" }, startsAtMs: t0 - 11 * min, receivedAtMs: t0 - 11 * min, read: false },
+          { id: "n3", envId: PROD, status: "firing", alertname: "WorkloadOOMKilled", severity: "warning", labels: { container: "api" }, annotations: { summary: "api was OOMKilled" }, startsAtMs: t0 - 11 * min, receivedAtMs: t0 - 11 * min, read: false },
           { id: "n2", envId: PROD, status: "firing", alertname: "CheckoutP95High", severity: "critical", labels: { service: "api" }, annotations: { summary: "checkout p95 is 1.42s" }, startsAtMs: t0 - 13 * min, receivedAtMs: t0 - 13 * min, read: false },
           { id: "n1", envId: PROD, status: "resolved", alertname: "ServiceSilent", severity: "warning", labels: { service: "worker" }, annotations: { summary: "worker received requests again" }, startsAtMs: t0 - 140 * min, receivedAtMs: t0 - 95 * min, read: true },
         ];

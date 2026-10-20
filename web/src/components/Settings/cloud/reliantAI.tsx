@@ -358,7 +358,7 @@ function ReliantAIPanel() {
                       Billing
                     </button>
                     , which is also where coupon codes are redeemed — one code
-                    can add credit or machine minutes, and that page shows both.
+                    can add credit or machine hours, and that page shows both.
                   </p>
                 </div>
               </CardContent>

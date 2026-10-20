@@ -37907,7 +37907,7 @@
           "Flag": "account",
           "DefaultValue": "",
           "Required": false,
-          "Description": "Account (Supabase subject) this daemon runs as; selects among several accounts on one server",
+          "Description": "Account (user id) this daemon runs as; selects among several accounts on one server",
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "config/v1/daemon_config.proto"
@@ -38316,7 +38316,7 @@
           "Flag": "account",
           "DefaultValue": "",
           "Required": false,
-          "Description": "Account (Supabase subject) to register; separate accounts on one server keep separate credentials",
+          "Description": "Account (user id) to register; separate accounts on one server keep separate credentials",
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "config/v1/daemon_config.proto"

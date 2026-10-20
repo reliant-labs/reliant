@@ -112,7 +112,7 @@ func gitWorktreeRoot() string {
 }
 
 // resolveDaemonDataDir returns the directory this invocation's daemon state
-// lives in.
+// lives in, for the commands that only look at a daemon: status, stop, logs.
 //
 // An explicit --data-dir or DAEMON_DATA_DIR wins outright and is returned
 // untouched: containers mount a volume at /data and must keep working, and an
@@ -120,13 +120,20 @@ func gitWorktreeRoot() string {
 // derivation could. Otherwise the directory is derived from the instance key,
 // which is the same for every subcommand and every working directory.
 //
-// The directory is created when derived. `daemon status` and `daemon stop`
-// create it too, which is deliberate — an empty directory is a truthful "no
-// daemon here", whereas the alternative is each subcommand growing its own
-// not-exists special case and drifting apart again.
+// It creates nothing. A directory that does not exist reads exactly like an
+// empty one — no runtime record, no log — so each command already reports "no
+// daemon here" truthfully; creating it made `daemon ls` list an instance that
+// had only ever been asked about. Only `daemon start` creates (daemonDataDir).
 func resolveDaemonDataDir(f daemonInstanceFlags, serverURL string) (string, error) {
 	f.account = resolveInstanceAccount(f.account, serverURL)
-	return daemonDataDir(f, serverURL)
+	if dir := strings.TrimSpace(f.dataDir); dir != "" {
+		return dir, nil
+	}
+	key, err := resolveDaemonInstance(f, serverURL)
+	if err != nil {
+		return "", fmt.Errorf("resolving daemon instance: %w", err)
+	}
+	return key.DataDir()
 }
 
 // resolveInstanceAccount returns the account component of the instance key:
@@ -236,8 +243,8 @@ func tokenRejectedError(conn *connection, code connect.Code) error {
 		conn.describeGateway(), code.String(), conn.describeServer())
 }
 
-// daemonDataDir derives the data directory from f exactly as given; callers
-// resolve the account first (resolveDaemonDataDir does).
+// daemonDataDir derives `daemon start`'s data directory from f exactly as
+// given, creating it; the caller resolves the account first.
 func daemonDataDir(f daemonInstanceFlags, serverURL string) (string, error) {
 	if dir := strings.TrimSpace(f.dataDir); dir != "" {
 		return dir, nil

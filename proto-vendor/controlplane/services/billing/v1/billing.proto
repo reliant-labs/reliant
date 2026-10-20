@@ -832,10 +832,23 @@ message GetCurrentUserComputeUsageResponse {
   google.protobuf.Timestamp exhausts_at = 16;
   // Running usage per size this period, cheapest first.
   repeated SizeUsage by_size = 17;
-  // Suspended-disk usage this period. Billed outside the overage cap (Q4).
-  SuspendedDiskUsage suspended_disk = 18;
+  // 18 was suspended_disk: there is no suspended-disk fee any more; see
+  // storage.
+  reserved 18;
+  reserved "suspended_disk";
   // The last meter tick this answer includes ("as of HH:MM").
   google.protobuf.Timestamp measured_through = 19;
+  // Machine disk this period: provisioned vs the plan's pooled allowance, and
+  // what the excess costs. Billed running or suspended, outside the compute
+  // overage cap. Unset when usage_measured is false.
+  StorageUsage storage = 20;
+  // What this period's invoice is projected to total, in cents, as an exact
+  // decimal string: the plan's monthly price + compute overage so far +
+  // storage so far + the current excess disk carried to period end. Hosted
+  // infrastructure overage is not included. Empty when usage_measured is false.
+  string projected_period_total_cents = 21;
+  // The subscribed plan's monthly price, in cents (0 with no plan).
+  int64 plan_price_cents = 22;
 }
 
 // SizeUsage is one size's running usage within a period (design §6.1).
@@ -854,19 +867,25 @@ message SizeUsage {
   string overage_cost_cents = 6;
 }
 
-// SuspendedDiskUsage is the disk-fee half of a period (design §6.1). Despite
-// the name it covers every billed disk GiB: the whole disk of a suspended
-// machine, and the part of a running machine's disk above its size's standard
-// (a grown disk; the hourly price includes the standard). Same fee, one meter.
-message SuspendedDiskUsage {
-  // billed disk GiB × seconds this period.
-  int64 gib_seconds = 1;
-  // gib_seconds priced at the catalog's GiB-month fee (a month = 30 days),
-  // in cents, as an exact decimal string rounded half-up to 4 places.
-  string cost_cents = 2;
-  // billed disk GiB right now: suspended machines' disks plus running
-  // machines' disk above their standard.
-  int64 current_gib = 3;
+// StorageUsage is machine disk against the plan's pooled allowance
+// (docs/design/pricing-v2.md §5). Every GiB of disk the org's machines hold,
+// running or suspended, counts; the plan includes its own size's disk; the
+// rest bills at the storage price continuously.
+message StorageUsage {
+  // Total provisioned disk of the org's machines right now, in GiB.
+  int64 provisioned_gib = 1;
+  // The plan's pooled allowance, in GiB (0 with no plan).
+  int64 included_gib = 2;
+  // max(0, provisioned − included): what bills right now.
+  int64 extra_gib = 3;
+  // Billed excess GiB × seconds so far this period.
+  int64 extra_gib_seconds = 4;
+  // extra_gib_seconds priced, in cents, exact decimal rounded half-up to 4 dp.
+  string cost_cents = 5;
+  // cost_cents plus extra_gib carried to the end of the period.
+  string projected_cost_cents = 6;
+  // The price per GiB-month (730 hours), in cents, exact decimal.
+  string cents_per_gib_month = 7;
 }
 
 // === Compute eligibility ===

@@ -57,6 +57,11 @@ var toolHints = map[string]string{
 	"hidden": "A building block other workflows ref: true keeps it out of every picker and default listing while it " +
 		"stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. " +
 		"Unset means the workflow is listed.",
+	"on_failure": "A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an " +
+		"unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). " +
+		"Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, " +
+		"error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends " +
+		"FAILED; an error in the handler is logged and never recursive.",
 }
 
 func main() {

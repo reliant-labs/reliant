@@ -237,6 +237,12 @@ nodes:
         labels: "{{ has(nodes.issue_labels) ? nodes.issue_labels.names.join(',') : '' }}"
         issue: "{{ has(nodes.created) && has(nodes.created.data) ? nodes.created.data.number : 0 }}"
         status: "{{ has(nodes.publish) ? 'published' : (has(nodes.lease) ? 'lease_' + nodes.lease.status : 'filed') }}"
+        # What went wrong for this alert, or '': the issue could not be filed, or the investigator ended
+        # without a result (a stub was published). Read after the loop by `problems`.
+        problem: >-
+          {{ has(nodes.created) && nodes.created.is_error ? 'the issue could not be filed'
+             : (has(nodes.report) && !(has(nodes.agent) && has(nodes.agent.response) && nodes.agent.response != null)
+                ? 'the investigator ended without a result' : '') }}
       nodes:
         - id: labels
           type: workflow
@@ -494,11 +500,35 @@ nodes:
         - from: release
           default: done
 
+  # What did not work, across both passes. A search that failed means the alert was neither deduplicated nor
+  # filed; a create that failed means no issue exists for it; an investigator without a result left a stub.
+  - id: problems
+    type: compute
+    outputs:
+      list: >-
+        {{ nodes.plan.alerts.filter(a, a.valid && a.fp in nodes.classify._results
+                && nodes.classify._results[a.fp].action == 'search_failed')
+             .map(a, a.name + ' (' + a.fp + '): the open-issue search failed')
+           + nodes.plan.alerts.filter(a, a.valid && a.fp in nodes.file._results
+                && string(nodes.file._results[a.fp].problem) != '')
+             .map(a, a.name + ' (' + a.fp + '): ' + string(nodes.file._results[a.fp].problem))
+           + (nodes.file._failed > 0
+                ? [string(nodes.file._failed) + ' alert(s) failed while being filed or investigated (the issue could not be filed)'] : []) }}
+
   - id: summary
     type: save_message
     args:
       role: assistant
       content: "alert-triage done: {{ size(nodes.plan.alerts) }} alert(s); {{ size(nodes.fresh.new) }} new ({{ size(nodes.capped.to_investigate) }} investigated)."
+
+  - id: ended_failed
+    type: save_message
+    outcome: failure
+    args:
+      role: assistant
+      display_style: warning
+      content: >-
+        alert-triage finished with {{ size(nodes.problems.list) }} problem(s): {{ nodes.problems.list.join('; ') }}
 
 edges:
   - from: plan
@@ -520,4 +550,24 @@ edges:
   - from: capped
     default: file
   - from: file
+    default: problems
+  - from: problems
     default: summary
+  - from: summary
+    cases:
+      - to: [ended_failed]
+        condition: "size(nodes.problems.list) > 0"
+        label: problems
+
+# Nothing is posted anywhere for a failed triage: an alert is not a person, and a comment on an issue that may
+# not exist helps nobody. The failure is recorded in the run (and the run is FAILED, so it is not auto-archived
+# and shows in trigger health), with the node it stopped at and, for per-alert problems, which alerts.
+on_failure:
+  sequence:
+    - id: recorded
+      type: save_message
+      args:
+        role: assistant
+        display_style: warning
+        content: >-
+          alert-triage failed{{ failure.node_id != '' ? ' at ' + failure.node_id : '' }}: {{ failure.error }}{{ has(nodes.problems) && size(nodes.problems.list) > 0 ? ' [' + nodes.problems.list.join('; ') + ']' : '' }}

@@ -131,13 +131,17 @@ function renderFromKCL(env) {
   }
   const { arg, unavailable } = forgeModuleArg();
   if (unavailable) return { unavailable };
+  // The JSON goes to a file, not stdout: kcl prints "waiting for package-cache
+  // lock..." to stdout while another kcl holds the shared package cache, which
+  // a concurrent gate step always might.
+  const out = join(mkdtempSync(join(tmpdir(), "release-config-")), "release_config.json");
   try {
-    const out = execFileSync(
+    execFileSync(
       "kcl",
-      ["run", KCL_ENTRYPOINT, "-E", arg, "-D", `env=${env}`, "-S", "release_config", "--format", "json"],
+      ["run", KCL_ENTRYPOINT, "-E", arg, "-D", `env=${env}`, "-S", "release_config", "--format", "json", "-o", out],
       { cwd: CONTROL_PLANE_DIR, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
     );
-    return { config: JSON.parse(out) };
+    return { config: JSON.parse(readFileSync(out, "utf8")) };
   } catch (err) {
     if (err.code === "ENOENT") return { unavailable: "kcl is not installed" };
     fail(`kcl render failed for env=${env}:\n${err.stderr || err.message}`);

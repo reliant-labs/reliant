@@ -48,8 +48,14 @@ func TestBuiltinWorkflowScenarios(t *testing.T) {
 		require.NoError(t, result.AsError(), "Workflow validation failed for %s", workflowFile)
 
 		scenarios, err := loadScenariosForWorkflow(t, layout, workflowName)
-		if err != nil || len(scenarios) == 0 {
-			continue // no scenarios is fine
+		if err != nil {
+			// "no scenarios" is fine; a scenario file that does not parse is not. Skipping it
+			// silently dropped every scenario of the workflow, including the ones that parse.
+			require.Contains(t, err.Error(), "no scenarios found", "scenarios of %s", workflowName)
+			continue
+		}
+		if len(scenarios) == 0 {
+			continue
 		}
 		ran += len(scenarios)
 

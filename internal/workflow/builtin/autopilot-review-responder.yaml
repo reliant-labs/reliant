@@ -190,6 +190,15 @@ nodes:
       outputs:
         again: "{{ has(nodes.release) && has(nodes.release.recheck_found) && nodes.release.recheck_found > 0 }}"
         status: "{{ has(nodes.plan) ? nodes.plan.status : 'error' }}"
+        # The round ended without doing its job: the agent was blocked (or its gate failed, or the checkout
+        # was stale), or the round cap left feedback waiting for a human. The loop body cannot declare
+        # `outcome:`, so the verdict is published here and a node after the loop carries it.
+        failed: >-
+          {{ (has(nodes.outcome) && nodes.outcome.kind == 'blocked')
+             || (has(nodes.plan) && nodes.plan.status == 'round_cap' && has(nodes.capped_comment)) }}
+        reason: >-
+          {{ has(nodes.outcome) && nodes.outcome.kind == 'blocked' ? 'the agent could not address the feedback'
+             : (has(nodes.plan) && nodes.plan.status == 'round_cap' ? 'the round cap was reached with feedback still waiting' : '') }}
       nodes:
         - id: me
           type: action
@@ -770,6 +779,48 @@ nodes:
         - from: release
           default: finished
 
+  # The loop ended on a blocked round or the round cap. The PR was already labelled and explained in the round;
+  # outcome: failure records the run FAILED (trigger health, inbox) instead of completed, so it is not
+  # auto-archived as a success.
+  - id: ended_failed
+    type: save_message
+    outcome: failure
+    args:
+      role: assistant
+      display_style: warning
+      content: "review-responder could not finish {{ inputs.repo }}#{{ inputs.pr_number }}: {{ nodes.rounds.reason }}."
+
+# A failed run tells the PR ONCE per head commit, unless a round already explained itself there (the round
+# summary and the blocked label say what happened). The note is once-per-commit by its marker and is written
+# as whoever the run acts as. Nothing is posted for a run that was never valid for an enabled repository.
+on_failure:
+  sequence:
+    - id: why
+      type: compute
+      outputs:
+        valid: "{{ nodes.?check.valid.orValue(false) == true }}"
+        explained: "{{ failure.node_id == 'ended_failed' }}"
+        error: >-
+          {{ failure.node_id == 'ended_failed' ? nodes.?rounds.reason.orValue('the run did not finish') : failure.error }}
+    - id: note
+      type: workflow
+      condition: "nodes.why.valid == true && nodes.why.explained != true"
+      ref: builtin://autopilot-failure-note
+      args:
+        repo: "{{ inputs.repo }}"
+        number: "{{ inputs.pr_number }}"
+        kind: pr
+        workflow_name: autopilot-review-responder
+        what: "the review follow-up"
+        error: "{{ nodes.why.error }}"
+        retry: "Comment on the pull request to ask for another round."
+    - id: recorded
+      type: save_message
+      args:
+        role: assistant
+        display_style: warning
+        content: "review-responder failed on {{ inputs.repo }}#{{ inputs.pr_number }}: {{ nodes.why.error }}{{ nodes.why.valid != true ? ' (not a PR this automation covers, so nothing was posted)' : (nodes.why.explained == true ? ' (the round already explained itself on the PR)' : '') }}."
+
 edges:
   - from: check
     cases:
@@ -779,3 +830,8 @@ edges:
       - to: [invalid]
         condition: "true"
         label: invalid
+  - from: rounds
+    cases:
+      - to: [ended_failed]
+        condition: "nodes.rounds.failed == true"
+        label: failed

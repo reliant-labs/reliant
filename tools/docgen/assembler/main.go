@@ -533,7 +533,31 @@ installed there, the App lacks a permission, the deployment has no App key, or m
 so a workflow that must keep going should handle the action's error output. When you hand a workflow to the user, say that
 a reviewer or triager can be enabled as the bot so the owner can approve and merge what it opens; otherwise the default is
 fine. A self-hosted deployment has no App and acts as the owner. Comments written by Reliant's own bot never fire
-` + bt + `issue_comment.created` + bt + ` or ` + bt + `pull_request_review_comment.created` + bt + `, so a run that comments cannot trigger itself; other bots' comments do.`
+` + bt + `issue_comment.created` + bt + ` or ` + bt + `pull_request_review_comment.created` + bt + `, so a run that comments cannot trigger itself; other bots' comments do.
+
+### When a run fails: ` + bt + `on_failure:` + bt + `
+
+A workflow-level ` + bt + `on_failure:` + bt + ` is a finally-style handler: an inline graph (` + bt + `entry` + bt + `, ` + bt + `nodes` + bt + `, ` + bt + `edges` + bt + `, or ` + bt + `sequence:` + bt + `) that runs ONCE when a run
+FAILS, so the people waiting on it are told instead of finding a silent dead end.
+
+` + "```yaml" + `
+on_failure:
+  sequence:
+    - id: note
+      type: save_message
+      args:
+        role: assistant
+        display_style: warning
+        content: "Failed at {{ failure.node_id }} ({{ failure.error_code }}): {{ failure.error }}. prep: {{ nodes.?prep.n.orValue('-') }}."
+` + "```" + `
+
+- **It runs when** a node's error was not handled (a config that will not evaluate, a sub-workflow that failed, an agent that never produced its response and ended the step), or the graph reached a node that declares ` + bt + `outcome: failure` + bt + `. It does not run when the run completes, pauses (a step that exhausts its retries pauses the run, it does not fail it), or is cancelled.
+- **` + bt + `failure` + bt + `** exists only inside the handler: ` + bt + `failure.node_id` + bt + `, ` + bt + `failure.node_path` + bt + ` (dotted, through loops and sub-workflows), ` + bt + `failure.error` + bt + ` (one line), ` + bt + `failure.error_code` + bt + ` (` + bt + `node_error` + bt + `, ` + bt + `outcome` + bt + ` or ` + bt + `panic` + bt + `), ` + bt + `failure.attempt` + bt + ` (the loop iteration, 1 if none). ` + bt + `inputs` + bt + ` are the run's. ` + bt + `nodes` + bt + ` are the outputs the run had produced when it failed, as a read-only copy.
+- **Guard every ` + bt + `nodes.<main node>` + bt + ` read** with ` + bt + `has()` + bt + ` or ` + bt + `.?` + bt + `: whichever node failed, the ones after it never ran, and validation rejects an unguarded read. A handler node may not reuse a main-graph node id, and ` + bt + `on_failure` + bt + ` itself is a reserved id.
+- **It cannot mask the failure.** The run still ends FAILED. An error inside the handler (or a handler that outlives its 5-minute budget) is logged and recorded, never handled and never recursive; it has no ` + bt + `outputs` + bt + `, ` + bt + `inputs` + bt + ` or nested ` + bt + `on_failure` + bt + `. It can contain actions, ` + bt + `save_message` + bt + `, sub-workflows and agents, but no ` + bt + `approval` + bt + ` or ` + bt + `ask_question` + bt + `: nobody is answering.
+- **Make a failure visible.** A run that ends on a path labelled "blocked", "punted" or "no result" but finishes normally is a success to the platform: it is auto-archived and never reaches the handler. Route those paths to a terminal node with ` + bt + `outcome: failure` + bt + `.
+- **Tell a person once.** The Autopilot pack's ` + bt + `builtin://autopilot-failure-note` + bt + ` posts one comment per pull request head commit (or issue): it searches the thread for its own marker first, posts nothing if the thread cannot be read, and writes as whoever the run acts as.
+- **Test it.** A scenario names the handler's nodes ` + bt + `on_failure.<node>` + bt + ` in ` + bt + `events` + bt + `, ` + bt + `reached` + bt + `, ` + bt + `completed` + bt + ` and ` + bt + `messages` + bt + `, and asserts ` + bt + `expect.on_failure: {ran, node_id, node_path, error_code, attempt, error_contains, handler_failed}` + bt + `.`
 }
 
 func generateGotchas() string {

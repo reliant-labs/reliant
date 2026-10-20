@@ -219,6 +219,46 @@ type Expectation struct {
 	//	  audited_loop.save_approved_response:
 	//	    saved: false
 	Messages map[string]MessageExpectation `json:"messages,omitempty" yaml:"messages,omitempty"`
+
+	// OnFailure asserts on the workflow's `on_failure` handler: whether it ran
+	// and what it ran for. Its nodes are named `on_failure.<node>` in reached,
+	// completed, node_outputs, messages and in the scenario's events.
+	//
+	//	on_failure:
+	//	  ran: true
+	//	  node_id: work
+	//	  error_code: node_error
+	//	  error_contains: "no such key"
+	OnFailure *OnFailureExpectation `json:"on_failure,omitempty" yaml:"on_failure,omitempty"`
+}
+
+// OnFailureExpectation asserts on an on_failure handler's run.
+type OnFailureExpectation struct {
+	// Ran: true requires the handler to have run, false requires it not to
+	// (the run completed, paused or was cancelled). Omit to assert only on the
+	// fields below, which imply it ran.
+	Ran *bool `json:"ran,omitempty" yaml:"ran,omitempty"`
+	// NodeID, NodePath, ErrorCode and Attempt are the `failure` fields.
+	NodeID    string `json:"node_id,omitempty" yaml:"node_id,omitempty"`
+	NodePath  string `json:"node_path,omitempty" yaml:"node_path,omitempty"`
+	ErrorCode string `json:"error_code,omitempty" yaml:"error_code,omitempty"`
+	Attempt   int    `json:"attempt,omitempty" yaml:"attempt,omitempty"`
+	// ErrorContains must appear in `failure.error`.
+	ErrorContains string `json:"error_contains,omitempty" yaml:"error_contains,omitempty"`
+	// HandlerFailed: true requires the handler itself to have errored (the run
+	// still ends failed); false requires it to have finished cleanly.
+	HandlerFailed *bool `json:"handler_failed,omitempty" yaml:"handler_failed,omitempty"`
+}
+
+// OnFailureObserved is what the run's on_failure handler did.
+type OnFailureObserved struct {
+	Ran          bool   `json:"ran"`
+	NodeID       string `json:"node_id,omitempty"`
+	NodePath     string `json:"node_path,omitempty"`
+	Error        string `json:"error,omitempty"`
+	ErrorCode    string `json:"error_code,omitempty"`
+	Attempt      int    `json:"attempt,omitempty"`
+	HandlerError string `json:"handler_error,omitempty"`
 }
 
 // MessageExpectation asserts on the messages one node saved during a run.
@@ -354,6 +394,10 @@ type ExecutionDetails struct {
 
 	// SavedMessages lists every message the run saved, in order.
 	SavedMessages []SavedMessage `json:"saved_messages,omitempty"`
+
+	// OnFailure is what the run's on_failure handler did; nil when the
+	// workflow declares none.
+	OnFailure *OnFailureObserved `json:"on_failure,omitempty"`
 }
 
 // ErrorDetails contains information about an error that occurred

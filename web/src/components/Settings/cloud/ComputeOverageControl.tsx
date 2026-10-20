@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "./ui";
 import { formatCentsAsDollars } from "./billingUtils";
-import { hourlyPriceShort, MACHINE_BILLING_POLICY, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
+import { centsDecimalToDollars, hourlyPriceShort, MACHINE_BILLING_POLICY, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
 import { cn } from "@/lib/utils";
 
 /**
@@ -53,6 +53,13 @@ export interface ComputeOverageControlProps {
   overageSpentCents: number | null;
   /** Plan's monthly price in cents, used only to suggest a starting limit. */
   monthlyPriceCents: number | null;
+  /**
+   * The org's storage against its plan's included amount, from the usage
+   * response. Storage is NOT limited by this control — a cap can pause
+   * machines but cannot stop us holding their disks — so it is shown as its
+   * own always-on line rather than folded into the cap. Absent when unmeasured.
+   */
+  storage?: { includedGib: number; extraGib: number };
   disabled?: boolean;
   saving?: boolean;
   disabledReason?: string;
@@ -99,6 +106,7 @@ export function ComputeOverageControl({
   pricing,
   overageSpentCents,
   monthlyPriceCents,
+  storage,
   disabled = false,
   saving = false,
   disabledReason,
@@ -181,6 +189,7 @@ export function ComputeOverageControl({
         <p className="text-xs text-muted-foreground">
           Extra machine time is charged at {rateLabel}.
         </p>
+        <StorageLine pricing={pricing} storage={storage} />
       </div>
 
       <fieldset
@@ -341,5 +350,30 @@ function OverageOption({
         {children}
       </span>
     </label>
+  );
+}
+
+/**
+ * Storage, always on and outside the cap: "Storage: $5.00/mo for 20 GB beyond
+ * your included 60 GB — billed separately, not limited by this cap."
+ */
+export function StorageLine({
+  pricing,
+  storage,
+}: {
+  pricing?: DaemonPricingLike;
+  storage?: { includedGib: number; extraGib: number };
+}) {
+  const perGib = Number(pricing?.storageCentsPerGibMonth);
+  if (!storage || !Number.isFinite(perGib)) return null;
+  const rate = centsDecimalToDollars(String(perGib));
+  const text =
+    storage.extraGib > 0
+      ? `Storage: ${centsDecimalToDollars(String(perGib * storage.extraGib))}/mo for ${storage.extraGib} GB beyond your included ${storage.includedGib} GB`
+      : `Storage: ${storage.includedGib} GB included, then ${rate}/GB-month`;
+  return (
+    <p className="text-xs text-muted-foreground" data-testid="overage-storage-line">
+      {text} — billed separately, not limited by this cap.
+    </p>
   );
 }

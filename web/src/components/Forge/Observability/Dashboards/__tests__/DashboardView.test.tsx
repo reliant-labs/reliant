@@ -104,7 +104,7 @@ describe("a workspace dashboard", () => {
     const user = userEvent.setup();
     renderDashboard(ref("workspace", "checkout-latency"));
     const header = await screen.findByTestId("dashboard-header");
-    await waitFor(() => expect(header).toHaveTextContent("v4 · edited 2h ago by sean"));
+    await waitFor(() => expect(header).toHaveTextContent("v4 · edited 2h ago by ada"));
     expect(header).toHaveTextContent("all environments");
     await user.click(screen.getByTestId("dashboard-history"));
     const v2 = await screen.findByRole("menuitem", { name: /v2 — Add orders/ });

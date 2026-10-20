@@ -22,7 +22,7 @@ import { Minus, Plus } from "lucide-react";
 
 import { Modal } from "@/components/ui/Modal";
 import { CardInset } from "@/components/forge-ui/card";
-import { suspendedFeeLabel, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
+import { type DaemonPricingLike } from "@/components/Billing/daemonUsage";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui";
 import { DISK_CEILING_GIB, DISK_GROW_STEP_GIB, diskGrowPrice, diskGrowRange, type DiskGrowStatus } from "./diskGrow";
@@ -41,14 +41,9 @@ const STAGE_COPY: Record<GrowStage, string> = {
 export interface GrowDiskModalProps {
   open: boolean;
   machineName: string;
-  /** The disk's current data size: DaemonDisk.requested_gib. */
+  /** The disk's current size: DaemonDisk.requested_gib. */
   currentGib: number;
   provisionedGib: number | null;
-  /** The disk the machine size's hourly price includes: DaemonDisk.included_gib. */
-  includedGib: number;
-  /** Server price-list standard less included DATA; null when unknown. */
-  allowanceGib: number | null;
-  hourlyLabel: string | null;
   /** The plan's limit (eligibility max_daemon_storage_gib); 0 while loading. */
   maxGib: number;
   limitLoading: boolean;
@@ -72,9 +67,6 @@ export function GrowDiskModal({
   machineName,
   currentGib,
   provisionedGib,
-  includedGib,
-  allowanceGib,
-  hourlyLabel,
   maxGib,
   limitLoading,
   running,
@@ -106,8 +98,8 @@ export function GrowDiskModal({
   }, [open]);
 
   const chosen = range ? Math.min(Math.max(target ?? range.min, range.min), range.max) : null;
-  const whole = (dataGib: number) => allowanceGib === null ? `${dataGib} GiB data (whole disk unavailable)` : `${dataGib + allowanceGib} GiB`;
-  const price = chosen !== null && allowanceGib !== null && provisionedGib !== null ? diskGrowPrice(pricing, { currentGib: provisionedGib, targetGib: chosen + allowanceGib, includedGib: includedGib + allowanceGib }) : null;
+  const whole = (gib: number) => `${gib} GB`;
+  const price = chosen !== null && provisionedGib !== null ? diskGrowPrice(pricing, { currentGib: provisionedGib, targetGib: chosen }) : null;
   const restartNow = running && restartable && restart;
   const atCeiling = maxGib >= DISK_CEILING_GIB;
   const step = (delta: number) => range && chosen !== null && setTarget(chosen + delta);
@@ -116,8 +108,7 @@ export function GrowDiskModal({
     <Modal isOpen={open} onClose={() => !isPending && onClose()} title="Grow disk" size="md">
       <div className="flex flex-col gap-4" data-testid="grow-disk-dialog">
         <p className="text-sm text-muted-foreground">
-          <span className="font-semibold text-foreground">{machineName}</span>&apos;s disk is {provisionedGib === null ? "not yet measured" : `${provisionedGib} GiB`}. Requested size: {whole(currentGib)}. {hourlyLabel && `${hourlyLabel} past included hours.`}
-          {provisionedGib !== null && ` ${suspendedFeeLabel(pricing, provisionedGib) ?? "Fee unavailable"} while suspended until deleted.`}
+          <span className="font-semibold text-foreground">{machineName}</span>&apos;s disk is {provisionedGib === null ? "not yet measured" : `${provisionedGib} GB`}. Requested size: {whole(currentGib)}.
         </p>
 
         {limitLoading ? (
@@ -131,7 +122,7 @@ export function GrowDiskModal({
               <Button
                 size="sm"
                 variant="outline"
-                aria-label={`${DISK_GROW_STEP_GIB} GiB smaller`}
+                aria-label={`${DISK_GROW_STEP_GIB} GB smaller`}
                 disabled={isPending || chosen <= range.min}
                 onClick={() => step(-DISK_GROW_STEP_GIB)}
               >
@@ -152,7 +143,7 @@ export function GrowDiskModal({
               <Button
                 size="sm"
                 variant="outline"
-                aria-label={`${DISK_GROW_STEP_GIB} GiB larger`}
+                aria-label={`${DISK_GROW_STEP_GIB} GB larger`}
                 disabled={isPending || chosen >= range.max}
                 onClick={() => step(DISK_GROW_STEP_GIB)}
               >
@@ -163,7 +154,7 @@ export function GrowDiskModal({
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              +{chosen - currentGib} GiB · your plan allows up to {whole(range.max)}
+              +{chosen - currentGib} GB · your plan allows up to {whole(range.max)}
             </p>
           </div>
         ) : (
@@ -182,11 +173,9 @@ export function GrowDiskModal({
 
         {price && chosen !== null && (
           <CardInset className="text-sm" data-testid="grow-disk-price">
-            <p className="font-medium text-foreground">Adds {price.added}</p>
+            <p className="font-medium text-foreground">Up to {price.added}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Running: {price.running} for the {price.runningGib} GiB above the {whole(includedGib)} the hourly price
-              includes. Suspended: {price.stopped} for the whole {whole(chosen)} disk until deleted.
-              {pricing?.placeholder && " These prices are provisional."}
+              Only storage beyond your plan&apos;s included storage is billed.
             </p>
           </CardInset>
         )}
@@ -330,7 +319,7 @@ export function DiskGrowNotice({
         className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive-ink"
         data-testid="disk-grow-notice"
       >
-        Couldn&apos;t grow the disk to {status.targetGib} GiB.{" "}
+        Couldn&apos;t grow the disk to {status.targetGib} GB.{" "}
         {status.message ? `${status.message} ` : ""}Nothing extra is billed until it succeeds.
       </div>
     );
@@ -342,11 +331,11 @@ export function DiskGrowNotice({
       data-testid="disk-grow-notice"
     >
       {status.kind === "expanding" ? (
-        <span>Growing the disk to {status.targetGib} GiB…</span>
+        <span>Growing the disk to {status.targetGib} GB…</span>
       ) : (
         <>
           <span>
-            Restart {machineName} to use the extra {status.extraGib} GiB on its disk.
+            Restart {machineName} to use the extra {status.extraGib} GB on its disk.
           </span>
           {restartable && (
             <Button size="sm" variant="outline" onClick={onRestart}>

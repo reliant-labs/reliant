@@ -1,0 +1,16 @@
+name: issue_note_is_keyed_on_the_issue
+description: >-
+  For an issue there is no head commit to read: the marker is keyed on the issue number and the PR is never
+  fetched.
+inputs: {"repo": "reliant-labs/forge", "number": 7, "kind": "issue", "workflow_name": "autopilot-issue-worker", "what": "this issue", "error": "boom", "retry": "Re-add `agent:ready`."}
+events:
+  - node: comments
+    output: {"is_error": false, "data": {"items": []}}
+  - node: post
+    output: {"is_error": false, "data": {"id": 11}}
+expect:
+  outcome: completed
+  completed: [post, final]
+  skipped: [head]
+  node_outputs:
+    subject: {marker: "<!-- autopilot-failure autopilot-issue-worker:issue-7 -->"}

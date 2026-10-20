@@ -225,9 +225,9 @@ message DaemonDisk {
   // observed. Below requested_gib while a grow is in flight. Zero when not
   // yet observed.
   int32 capacity_gib = 2;
-  // included_gib is the machine size's standard DATA disk. The hourly price
-  // includes the standard whole disk (this plus the docker/cache allowance);
-  // data requested above this is billed while running too.
+  // included_gib is the machine size's standard disk: what a new machine of
+  // the size gets. Storage is billed per org (pooled), not per machine; see
+  // GetCurrentUserComputeUsageResponse.storage.
   int32 included_gib = 3;
   DaemonDiskState state = 4;
   // message is user-facing text explaining a FAILED (or slow) grow.
@@ -465,33 +465,49 @@ message PlanLimits {
 
   // Small-daemon-hours this plan includes per billing period (per-daemon
   // billing, design §6.1). A large daemon burns them at its multiplier — four
-  // hours of a 4× size is sixteen small-daemon-hours. Projected from the
-  // daemon-pricing catalog (internal/plansconfig/daemon_pricing.yaml), never
-  // from plans.limits, so the UI and the meter read one number. Zero for a
-  // plan the catalog does not declare: no allowance, never "unlimited".
+  // hours of a 4× size is sixteen small-daemon-hours. Derived from
+  // internal/plansconfig/pricing.yaml (included_hours × the plan size's
+  // multiplier), so the UI and the meter read one number. Zero for a plan with
+  // no machine: no allowance, never "unlimited".
   int64 included_small_daemon_hours = 34;
 
-  // The largest disk, in GiB of data, a machine on this plan may grow to
+  // The largest disk, in GiB, a machine on this plan may grow to
   // (DaemonService.GrowDaemonDisk). Zero means growth is off: every machine
   // keeps its size's standard disk. A platform ceiling of 1024 applies
   // whatever a plan declares.
   int32 max_daemon_storage_gib = 35;
+
+  // The plan's own machine size ("small" … "2xl"): the largest size it may
+  // run, and the size its included hours and storage are counted at. Empty
+  // for a plan with no machine.
+  string machine_size = 36;
+  // Machine-hours a month included at machine_size (160 on every plan).
+  int64 machine_included_hours = 37;
+  // GiB of machine disk included, POOLED across every machine the org has,
+  // running or suspended: machine_size's disk. Disk above it bills at
+  // DaemonPricing.storage_cents_per_gib_month.
+  int64 machine_included_storage_gib = 38;
 }
 
-// DaemonPricing is the per-daemon price list, projected from the one catalog
-// file the owner edits (internal/plansconfig/daemon_pricing.yaml), so a client
-// never restates a multiplier, a price or a disk size (design §6.1).
+// DaemonPricing is the per-daemon price list, projected from the one pricing
+// file the owner edits (internal/plansconfig/pricing.yaml), so a client never
+// restates a multiplier, a price or a disk size (docs/design/pricing-v2.md).
 //
 // ⚠️ PRICES ARE PLACEHOLDERS while `placeholder` is true (per-daemon billing
 // §13 Q1 open). A client should say so rather than present them as final.
 message DaemonPricing {
   // One row per size the product sells, cheapest first.
   repeated DaemonSizePrice sizes = 1;
-  // The suspended-disk fee, in cents per GiB-month, as an exact decimal
-  // string (never a float: it is money).
-  string suspended_disk_cents_per_gib_month = 2;
+  // 2 was suspended_disk_cents_per_gib_month: there is no suspended-disk fee;
+  // disk above a plan's pooled allowance bills the same running or suspended.
+  reserved 2;
+  reserved "suspended_disk_cents_per_gib_month";
   // True while the catalog's numbers are placeholders.
   bool placeholder = 3;
+  // What a GiB of machine disk above the org's pooled allowance costs per
+  // month (730 hours), running or suspended, in cents, as an exact decimal
+  // string (never a float: it is money).
+  string storage_cents_per_gib_month = 4;
 }
 
 // DaemonSizePrice is one size's row of DaemonPricing.
@@ -502,10 +518,8 @@ message DaemonSizePrice {
   // Overage price per wall-clock hour at this size, in cents, as an exact
   // decimal string: multiplier × the small hourly price.
   string hourly_price_cents = 3;
-  // The standard disk a daemon of this size is given, in GiB
-  // (WorkspaceConfig.DaemonTierDiskGiB): the tier's data volume plus the
-  // docker/cache allowance every daemon's single disk also carries — the number
-  // the suspended-disk fee is charged on. Both parts are billed.
+  // The disk a new machine of this size is provisioned with, in GiB: ONE disk,
+  // used for anything. A plan of this size includes this much storage.
   int64 storage_gib = 4;
 }
 

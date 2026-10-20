@@ -1,0 +1,18 @@
+name: first_failure_posts_one_note
+description: >-
+  No note exists for this head commit yet: exactly one comment is posted, starting with the marker for the
+  workflow and the commit, naming the short sha, the error and how to retry.
+inputs: {"repo": "reliant-labs/forge", "number": 101, "kind": "pr", "workflow_name": "autopilot-pr-review", "what": "the review", "error": "the reviewer finished without submitting a review", "retry": "Re-run with `/autopilot re-review`."}
+events:
+  - node: head
+    output: {"is_error": false, "data": {"head": {"sha": "0123456789abcdef0123456789abcdef01234567"}}}
+  - node: comments
+    output: {"is_error": false, "data": {"items": [{"id": 1, "user": "someone", "body": "LGTM"}]}}
+  - node: post
+    output: {"is_error": false, "data": {"id": 9}}
+expect:
+  outcome: completed
+  completed: [head, comments, post, final]
+  node_outputs:
+    subject: {marker: "<!-- autopilot-failure autopilot-pr-review:0123456789abcdef0123456789abcdef01234567 -->"}
+    final: {status: posted}

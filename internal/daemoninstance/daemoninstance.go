@@ -27,7 +27,7 @@
 //
 //	  - origin    which backend this daemon talks to, collapsed to
 //	    scheme://host:port. Separates dev, staging and prod.
-//	  - sub       the Supabase subject the credentials belong to. Separates
+//	  - sub       the account (user id) the credentials belong to. Separates
 //	    accounts on a shared machine, so each keeps its own saved daemon
 //	    id. The CLI resolves it from the credential: --account, else the
 //	    owner the gateway names for a pasted --token (WhoAmI), else the

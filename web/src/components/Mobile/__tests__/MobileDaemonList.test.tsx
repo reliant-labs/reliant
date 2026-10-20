@@ -36,7 +36,7 @@ vi.mock("../../../store/mobileDrawerStore", () => ({
     selector({ open: vi.fn() }),
 }));
 
-vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { includedSmallDaemonSeconds: 576000n } }), usePlans: () => ({ data: { daemonPricing: { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }], suspendedDiskCentsPerGibMonth: '25', placeholder: false } } }) }));
+vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { includedSmallDaemonSeconds: 576000n } }), usePlans: () => ({ data: { daemonPricing: { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }], storageCentsPerGibMonth: '25', placeholder: false } } }) }));
 
 vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQuery: () => ({ data: { allowedDaemonSizes: ['small'] } }) }));
 

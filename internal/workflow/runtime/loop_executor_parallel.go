@@ -695,11 +695,13 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 						}))
 						continue
 					}
+					recordFailedNode(gCtx, joinNodePath(e.nodePath(), running.StepID), index+1)
 					result.Error = fmt.Errorf("step %s exhausted retries: %w", running.StepID, stepEvent.Error)
 					return result
 				}
 
 				if routingErr := EnsureStepEventRoutable(stepEvent); routingErr != nil {
+					recordFailedNode(gCtx, joinNodePath(e.nodePath(), stepEvent.StepID), index+1)
 					result.Error = routingErr
 					return result
 				}
@@ -791,6 +793,7 @@ func (e *InlineLoopExecutor) buildParallelIterationInputs(
 	propagateUnattended(e.workflowInputs, iterInputs)
 	propagateActingIdentity(e.workflowInputs, iterInputs)
 	propagateTrigger(e.workflowInputs, iterInputs)
+	propagateFailure(e.workflowInputs, iterInputs)
 	propagateProviderPreference(e.workflowInputs, iterInputs)
 	iterInputs["loop"] = map[string]interface{}{"iteration": index}
 	iterInputs["iter"] = model.BuildParallelIterContext(index, item, key)

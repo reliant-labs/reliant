@@ -116,11 +116,11 @@ func TestListReportsEachInstanceUnderItsOwnKey(t *testing.T) {
 	alphaLock, err := Acquire(alpha)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = alphaLock.Release() })
-	require.NoError(t, Init(alpha, "http://localhost:8090", "h2c", false))
+	require.NoError(t, Init(alpha, Startup{GatewayURL: "http://localhost:8090", TLSMode: "h2c"}))
 	require.NoError(t, SetStream(alpha, StreamConnected, ""))
 
 	// beta has a record but no holder — a corpse.
-	require.NoError(t, Init(beta, "http://localhost:8090", "h2c", false))
+	require.NoError(t, Init(beta, Startup{GatewayURL: "http://localhost:8090", TLSMode: "h2c"}))
 
 	// gamma has neither.
 	_ = gamma

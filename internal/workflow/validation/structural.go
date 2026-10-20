@@ -174,6 +174,8 @@ func validateStructure(wf *reliantv1.Workflow, result *Result) {
 		validateInlineWorkflows(node, nodePath, result)
 	}
 
+	validateOnFailureStructure(wf, seenNodeIDs, result)
+
 	// === Router Node Routing References ===
 
 	for i, node := range nodes {

@@ -33,7 +33,7 @@ describe("firing", () => {
     expect(checkout).toHaveTextContent("checkout p95 is 1.42s");
     expect(checkout).toHaveTextContent("team=payments");
     expect(within(checkout).getByTestId("obs-rule-source")).toHaveTextContent("Your rule");
-    expect(within(screen.getByTestId("obs-alert-ContainerOOMKilled")).getByTestId("obs-rule-source")).toHaveTextContent("forge default · container-oom-killed");
+    expect(within(screen.getByTestId("obs-alert-WorkloadOOMKilled")).getByTestId("obs-rule-source")).toHaveTextContent("forge default · oom-killed");
     expect(screen.getByTestId("obs-alert-ServiceErrorRateHigh")).toHaveAttribute("data-state", "pending");
     expect(screen.getByTestId("obs-alerts-tab-firing")).toHaveTextContent("2");
 

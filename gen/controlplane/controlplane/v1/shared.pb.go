@@ -984,9 +984,9 @@ type DaemonDisk struct {
 	// observed. Below requested_gib while a grow is in flight. Zero when not
 	// yet observed.
 	CapacityGib int32 `protobuf:"varint,2,opt,name=capacity_gib,json=capacityGib,proto3" json:"capacity_gib,omitempty"`
-	// included_gib is the machine size's standard DATA disk. The hourly price
-	// includes the standard whole disk (this plus the docker/cache allowance);
-	// data requested above this is billed while running too.
+	// included_gib is the machine size's standard disk: what a new machine of
+	// the size gets. Storage is billed per org (pooled), not per machine; see
+	// GetCurrentUserComputeUsageResponse.storage.
 	IncludedGib int32           `protobuf:"varint,3,opt,name=included_gib,json=includedGib,proto3" json:"included_gib,omitempty"`
 	State       DaemonDiskState `protobuf:"varint,4,opt,name=state,proto3,enum=controlplane.v1.DaemonDiskState" json:"state,omitempty"`
 	// message is user-facing text explaining a FAILED (or slow) grow.
@@ -1724,18 +1724,28 @@ type PlanLimits struct {
 	InfraOveragePolicy *InfraOveragePolicy `protobuf:"bytes,32,opt,name=infra_overage_policy,json=infraOveragePolicy,proto3" json:"infra_overage_policy,omitempty"`
 	// Small-daemon-hours this plan includes per billing period (per-daemon
 	// billing, design §6.1). A large daemon burns them at its multiplier — four
-	// hours of a 4× size is sixteen small-daemon-hours. Projected from the
-	// daemon-pricing catalog (internal/plansconfig/daemon_pricing.yaml), never
-	// from plans.limits, so the UI and the meter read one number. Zero for a
-	// plan the catalog does not declare: no allowance, never "unlimited".
+	// hours of a 4× size is sixteen small-daemon-hours. Derived from
+	// internal/plansconfig/pricing.yaml (included_hours × the plan size's
+	// multiplier), so the UI and the meter read one number. Zero for a plan with
+	// no machine: no allowance, never "unlimited".
 	IncludedSmallDaemonHours int64 `protobuf:"varint,34,opt,name=included_small_daemon_hours,json=includedSmallDaemonHours,proto3" json:"included_small_daemon_hours,omitempty"`
-	// The largest disk, in GiB of data, a machine on this plan may grow to
+	// The largest disk, in GiB, a machine on this plan may grow to
 	// (DaemonService.GrowDaemonDisk). Zero means growth is off: every machine
 	// keeps its size's standard disk. A platform ceiling of 1024 applies
 	// whatever a plan declares.
 	MaxDaemonStorageGib int32 `protobuf:"varint,35,opt,name=max_daemon_storage_gib,json=maxDaemonStorageGib,proto3" json:"max_daemon_storage_gib,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// The plan's own machine size ("small" … "2xl"): the largest size it may
+	// run, and the size its included hours and storage are counted at. Empty
+	// for a plan with no machine.
+	MachineSize string `protobuf:"bytes,36,opt,name=machine_size,json=machineSize,proto3" json:"machine_size,omitempty"`
+	// Machine-hours a month included at machine_size (160 on every plan).
+	MachineIncludedHours int64 `protobuf:"varint,37,opt,name=machine_included_hours,json=machineIncludedHours,proto3" json:"machine_included_hours,omitempty"`
+	// GiB of machine disk included, POOLED across every machine the org has,
+	// running or suspended: machine_size's disk. Disk above it bills at
+	// DaemonPricing.storage_cents_per_gib_month.
+	MachineIncludedStorageGib int64 `protobuf:"varint,38,opt,name=machine_included_storage_gib,json=machineIncludedStorageGib,proto3" json:"machine_included_storage_gib,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *PlanLimits) Reset() {
@@ -1908,9 +1918,30 @@ func (x *PlanLimits) GetMaxDaemonStorageGib() int32 {
 	return 0
 }
 
-// DaemonPricing is the per-daemon price list, projected from the one catalog
-// file the owner edits (internal/plansconfig/daemon_pricing.yaml), so a client
-// never restates a multiplier, a price or a disk size (design §6.1).
+func (x *PlanLimits) GetMachineSize() string {
+	if x != nil {
+		return x.MachineSize
+	}
+	return ""
+}
+
+func (x *PlanLimits) GetMachineIncludedHours() int64 {
+	if x != nil {
+		return x.MachineIncludedHours
+	}
+	return 0
+}
+
+func (x *PlanLimits) GetMachineIncludedStorageGib() int64 {
+	if x != nil {
+		return x.MachineIncludedStorageGib
+	}
+	return 0
+}
+
+// DaemonPricing is the per-daemon price list, projected from the one pricing
+// file the owner edits (internal/plansconfig/pricing.yaml), so a client never
+// restates a multiplier, a price or a disk size (docs/design/pricing-v2.md).
 //
 // ⚠️ PRICES ARE PLACEHOLDERS while `placeholder` is true (per-daemon billing
 // §13 Q1 open). A client should say so rather than present them as final.
@@ -1918,13 +1949,14 @@ type DaemonPricing struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// One row per size the product sells, cheapest first.
 	Sizes []*DaemonSizePrice `protobuf:"bytes,1,rep,name=sizes,proto3" json:"sizes,omitempty"`
-	// The suspended-disk fee, in cents per GiB-month, as an exact decimal
-	// string (never a float: it is money).
-	SuspendedDiskCentsPerGibMonth string `protobuf:"bytes,2,opt,name=suspended_disk_cents_per_gib_month,json=suspendedDiskCentsPerGibMonth,proto3" json:"suspended_disk_cents_per_gib_month,omitempty"`
 	// True while the catalog's numbers are placeholders.
-	Placeholder   bool `protobuf:"varint,3,opt,name=placeholder,proto3" json:"placeholder,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Placeholder bool `protobuf:"varint,3,opt,name=placeholder,proto3" json:"placeholder,omitempty"`
+	// What a GiB of machine disk above the org's pooled allowance costs per
+	// month (730 hours), running or suspended, in cents, as an exact decimal
+	// string (never a float: it is money).
+	StorageCentsPerGibMonth string `protobuf:"bytes,4,opt,name=storage_cents_per_gib_month,json=storageCentsPerGibMonth,proto3" json:"storage_cents_per_gib_month,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *DaemonPricing) Reset() {
@@ -1964,18 +1996,18 @@ func (x *DaemonPricing) GetSizes() []*DaemonSizePrice {
 	return nil
 }
 
-func (x *DaemonPricing) GetSuspendedDiskCentsPerGibMonth() string {
-	if x != nil {
-		return x.SuspendedDiskCentsPerGibMonth
-	}
-	return ""
-}
-
 func (x *DaemonPricing) GetPlaceholder() bool {
 	if x != nil {
 		return x.Placeholder
 	}
 	return false
+}
+
+func (x *DaemonPricing) GetStorageCentsPerGibMonth() string {
+	if x != nil {
+		return x.StorageCentsPerGibMonth
+	}
+	return ""
 }
 
 // DaemonSizePrice is one size's row of DaemonPricing.
@@ -1987,10 +2019,8 @@ type DaemonSizePrice struct {
 	// Overage price per wall-clock hour at this size, in cents, as an exact
 	// decimal string: multiplier × the small hourly price.
 	HourlyPriceCents string `protobuf:"bytes,3,opt,name=hourly_price_cents,json=hourlyPriceCents,proto3" json:"hourly_price_cents,omitempty"`
-	// The standard disk a daemon of this size is given, in GiB
-	// (WorkspaceConfig.DaemonTierDiskGiB): the tier's data volume plus the
-	// docker/cache allowance every daemon's single disk also carries — the number
-	// the suspended-disk fee is charged on. Both parts are billed.
+	// The disk a new machine of this size is provisioned with, in GiB: ONE disk,
+	// used for anything. A plan of this size includes this much storage.
 	StorageGib    int64 `protobuf:"varint,4,opt,name=storage_gib,json=storageGib,proto3" json:"storage_gib,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3848,7 +3878,8 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x18notify_threshold_percent\x18\x01 \x01(\x01R\x16notifyThresholdPercent\x12.\n" +
 	"\x13overage_grace_hours\x18\x02 \x01(\x05R\x11overageGraceHours\x12,\n" +
 	"\x12suspend_on_overage\x18\x03 \x01(\bR\x10suspendOnOverage\x12A\n" +
-	"\x1dnon_suspendable_dimension_ids\x18\x04 \x03(\tR\x1anonSuspendableDimensionIds\"\xea\b\n" +
+	"\x1dnon_suspendable_dimension_ids\x18\x04 \x03(\tR\x1anonSuspendableDimensionIds\"\x84\n" +
+	"\n" +
 	"\n" +
 	"PlanLimits\x12\x1b\n" +
 	"\tmax_seats\x18\x01 \x01(\x05R\bmaxSeats\x12%\n" +
@@ -3872,11 +3903,14 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x17max_memory_gib_per_vcpu\x18\x1f \x01(\x01R\x13maxMemoryGibPerVcpu\x12U\n" +
 	"\x14infra_overage_policy\x18  \x01(\v2#.controlplane.v1.InfraOveragePolicyR\x12infraOveragePolicy\x12=\n" +
 	"\x1bincluded_small_daemon_hours\x18\" \x01(\x03R\x18includedSmallDaemonHours\x123\n" +
-	"\x16max_daemon_storage_gib\x18# \x01(\x05R\x13maxDaemonStorageGib\"\xb4\x01\n" +
+	"\x16max_daemon_storage_gib\x18# \x01(\x05R\x13maxDaemonStorageGib\x12!\n" +
+	"\fmachine_size\x18$ \x01(\tR\vmachineSize\x124\n" +
+	"\x16machine_included_hours\x18% \x01(\x03R\x14machineIncludedHours\x12?\n" +
+	"\x1cmachine_included_storage_gib\x18& \x01(\x03R\x19machineIncludedStorageGib\"\xd1\x01\n" +
 	"\rDaemonPricing\x126\n" +
-	"\x05sizes\x18\x01 \x03(\v2 .controlplane.v1.DaemonSizePriceR\x05sizes\x12I\n" +
-	"\"suspended_disk_cents_per_gib_month\x18\x02 \x01(\tR\x1dsuspendedDiskCentsPerGibMonth\x12 \n" +
-	"\vplaceholder\x18\x03 \x01(\bR\vplaceholder\"\x94\x01\n" +
+	"\x05sizes\x18\x01 \x03(\v2 .controlplane.v1.DaemonSizePriceR\x05sizes\x12 \n" +
+	"\vplaceholder\x18\x03 \x01(\bR\vplaceholder\x12<\n" +
+	"\x1bstorage_cents_per_gib_month\x18\x04 \x01(\tR\x17storageCentsPerGibMonthJ\x04\b\x02\x10\x03R\"suspended_disk_cents_per_gib_month\"\x94\x01\n" +
 	"\x0fDaemonSizePrice\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\tR\x04size\x12\x1e\n" +
 	"\n" +

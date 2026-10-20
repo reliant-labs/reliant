@@ -651,6 +651,39 @@ edges:
 
 ---
 
+## When a run fails: `on_failure`
+
+A workflow-level `on_failure:` is a finally-style handler. It is an inline graph that runs **once** when the run fails, so the people waiting on it are told instead of finding a silent dead end.
+
+```yaml
+name: nightly-digest
+entry: [collect]
+nodes:
+  - id: collect
+    type: workflow
+    ref: builtin://agent
+on_failure:
+  sequence:
+    - id: tell
+      type: action
+      uses: github/issue.comment@1
+      with:
+        owner: acme
+        repo: app
+        issue_number: "{{ inputs.issue }}"
+        body: "The digest failed at {{ failure.node_id }}: {{ failure.error }}"
+```
+
+**When it runs.** The run fails: a node's error was not handled (a config that will not evaluate, a sub-workflow that failed, an agent that ended without its required response), or the graph reached a node that declares `outcome: failure`. It does not run when the run completes, pauses (a step that exhausts its retries pauses the run) or is cancelled.
+
+**What it can read.** `failure.{node_id, node_path, error, error_code, attempt}` (see [`failure.*`](/reference/cel-expressions#failure)), the run's `inputs`, and the `nodes` outputs produced before the failure. Guard every read of a main-graph node with `has()` or `.?`: the nodes after the failed one never ran, and validation rejects an unguarded read.
+
+**What it cannot do.** It cannot change the verdict: the run still ends failed. An error in the handler is logged and recorded, never handled again, and a handler is cut off after five minutes. It has no `inputs`, `outputs` or nested `on_failure`, shares no node ids with the main graph, and may not contain `approval` or `ask_question` nodes.
+
+**Make failures reach it.** A path that ends normally after a "blocked" or "could not finish" message is a success to the platform: it is auto-archived and never reaches the handler. Give that terminal node `outcome: failure`.
+
+**Testing.** Name the handler's nodes `on_failure.<node>` in a scenario's `events`, `completed` and `messages`, and assert `expect.on_failure` (`ran`, `node_id`, `error_code`, `attempt`, `error_contains`, `handler_failed`).
+
 ## Combining Techniques
 
 These techniques compose naturally. A sophisticated workflow might combine: pipeline (improve prompt → implement → verify), parallel execution in isolated worktrees, retry loops while tests fail, escalation to senior agent on failure, and multi-model review.

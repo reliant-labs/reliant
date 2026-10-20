@@ -49,7 +49,17 @@ events:
     output: {"recheck_found": 0, "other_live_lease": false}
 expect:
   outcome: completed
-  completed: [rounds.gate_retry, rounds.pick, rounds.blocked_label, rounds.release]
+  completed: [rounds.gate_retry, rounds.pick, rounds.blocked_label, rounds.release, ended_failed]
   not_reached: [rounds.publish]
   node_outputs:
     rounds.outcome: {kind: blocked}
+  # A blocked round is a failed run: the PR was labelled and the round summary posted, so the handler records
+  # the failure without a second comment.
+  on_failure:
+    ran: true
+    node_id: ended_failed
+    error_code: outcome
+  messages:
+    on_failure.recorded:
+      count: 1
+      content_contains: ["the agent could not address the feedback"]

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,6 +46,12 @@ func oneSlotClient(t *testing.T) (*LocalClient, string) {
 	return NewLocalClient().WithHeavyGate(g), slots
 }
 
+// holderTimeout bounds the slot holder. It only has to outlive the test (the
+// holder is released through release() or cleanup), and it is far longer than
+// any wall-clock skew a test applies to time out a queued command, so that
+// skew never times the holder out and frees the slot.
+const holderTimeout = 24 * time.Hour
+
 // holdSlot runs a heavy command that holds the only slot until release().
 func holdSlot(t *testing.T, c *LocalClient) (release func()) {
 	t.Helper()
@@ -55,7 +62,7 @@ func holdSlot(t *testing.T, c *LocalClient) (release func()) {
 		defer close(done)
 		res, err := c.RunCommand(context.Background(), &RunCommandRequest{
 			Command:   ": > " + started + "; while [ ! -f " + flag + " ]; do sleep 0.02; done",
-			TimeoutMs: 60_000,
+			TimeoutMs: int(holderTimeout.Milliseconds()),
 			Heavy:     true,
 		})
 		if err != nil || res.ExitCode != 0 {
@@ -134,18 +141,59 @@ func TestRunCommand_SecondHeavyCommandWaitsForTheSlot(t *testing.T) {
 	}
 }
 
+// The queued command's timeout is fired by the test, once the command is
+// provably waiting in the slot queue, through the exec wall clock — not by a
+// short TimeoutMs. A fixed budget had to cover starting this (-race) test
+// binary as the slot wrapper as well as the wait, and on a loaded machine the
+// start alone used it up: the command timed out before the wrapper queued or
+// could explain itself.
 func TestRunCommand_TimeoutWhileQueuedSaysSo(t *testing.T) {
-	c, _ := oneSlotClient(t)
+	c, slots := oneSlotClient(t)
+
+	// The test owns the wall clock every command's deadline is checked on.
+	// The skew below stays far inside the holder's timeout.
+	var skew atomic.Int64
+	prevClock, prevInterval := ExecWallClock, ExecWallClockCheckInterval
+	ExecWallClock = func() time.Time { return time.Now().Round(0).Add(time.Duration(skew.Load())) }
+	ExecWallClockCheckInterval = 20 * time.Millisecond
+	t.Cleanup(func() { ExecWallClock, ExecWallClockCheckInterval = prevClock, prevInterval })
 	holdSlot(t, c)
 
-	res, err := c.RunCommand(context.Background(), &RunCommandRequest{
-		Command:   "echo RAN-$((1+1))",
-		TimeoutMs: 1500,
-		Heavy:     true,
-	})
-	if err != nil {
-		t.Fatal(err)
+	// A timeout no machine load reaches: only the test ends the wait.
+	const queuedTimeout = 10 * time.Minute
+	type result struct {
+		res *CommandResult
+		err error
 	}
+	done := make(chan result, 1)
+	go func() {
+		res, err := c.RunCommand(context.Background(), &RunCommandRequest{
+			Command:   "echo RAN-$((1+1))",
+			TimeoutMs: int(queuedTimeout.Milliseconds()),
+			Heavy:     true,
+		})
+		done <- result{res, err}
+	}()
+
+	// Once the wrapper's ticket is in the queue its signal handler is
+	// installed and it prints its waiting lines before it next looks at its
+	// cancellation, so the timeout below cannot beat its explanation.
+	for queued := false; !queued; {
+		select {
+		case r := <-done:
+			t.Fatalf("the heavy command returned before it queued for the held slot: %+v (err %v)", r.res, r.err)
+		case <-time.After(20 * time.Millisecond):
+		}
+		queued = waiters(t, slots) == 1
+	}
+
+	// Its timeout elapses now; the holder's does not.
+	skew.Store(int64(queuedTimeout + time.Minute))
+	r := <-done
+	if r.err != nil {
+		t.Fatal(r.err)
+	}
+	res := r.res
 	if !res.TimedOut || strings.Contains(res.Stdout, "RAN-2") {
 		t.Fatalf("want a timeout before the command ran, got %+v", res)
 	}

@@ -155,8 +155,8 @@ func resolveConnection(cmd *cobra.Command) (*connection, error) {
 	}
 	cred, path, err := cliauth.Lookup(conn.ServerURL)
 	if errors.Is(err, cliauth.ErrNotLoggedIn) {
-		return nil, fmt.Errorf("not logged in to %s (%v) — run 'reliant auth login%s', or set %s",
-			conn.describeServer(), err, conn.serverFlagHint(), envToken)
+		return nil, fmt.Errorf("not logged in to %s%s — run 'reliant auth login%s', or set %s",
+			conn.describeServer(), notLoggedInReason(err), conn.serverFlagHint(), envToken)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading credentials: %w", err)

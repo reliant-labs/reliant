@@ -279,6 +279,20 @@ an empty `dir` becomes `rm -rf "/"`.
 When a value is genuinely optional, write an expression that says what empty
 means, for example `{{has(inputs.flags) ? inputs.flags : ''}}`.
 
+### failure.*
+
+What failed, for the nodes of a workflow's [`on_failure` handler](/workflows/patterns#when-a-run-fails-on_failure) and nowhere else: the namespace is undeclared in the main graph, so `failure` there is a compile error.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `failure.node_id` | string | The node that failed; empty when the run failed outside any node |
+| `failure.node_path` | string | Its dotted path through loops and sub-workflows (`loop.body.node`) |
+| `failure.error` | string | The failure as one line |
+| `failure.error_code` | string | `node_error`, `outcome` (the graph reached an `outcome: failure` node) or `panic` |
+| `failure.attempt` | int | The loop iteration the node was in, 1-based; 1 outside a loop |
+
+All five are always present, so a handler never fails reporting a failure. Reads of the main graph's `nodes.*` inside the handler must be guarded (`has()` or `.?`): the nodes after the failed one never ran.
+
 ### trigger.*
 
 The event that started the run, fixed at launch. Also the only namespace a trigger's `filter`, `origin_filter`, `inputs` and `prompt` can read. A chat started by a person has `trigger.kind` of `chat.start`.

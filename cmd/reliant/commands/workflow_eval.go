@@ -262,6 +262,14 @@ func dryRunTriggers(result *validateResult, path string, sample *triggerSample) 
 	if err != nil {
 		return
 	}
+	dryRunTriggersOn(result, data, sample)
+}
+
+// dryRunTriggersOn is dryRunTriggers for a definition already in hand.
+func dryRunTriggersOn(result *validateResult, data []byte, sample *triggerSample) {
+	if sample == nil {
+		return
+	}
 	wf, err := parseWorkflowForDryRun(data)
 	if err != nil || len(wf.GetTriggers()) == 0 {
 		return

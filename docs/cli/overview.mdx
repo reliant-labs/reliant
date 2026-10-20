@@ -46,7 +46,7 @@ The credential comes from the `RELIANT_TOKEN` environment variable if it is set,
 
 ```text
 $ reliant project list
-not logged in to https://api.reliantapi.com (default — no --server flag and no RELIANT_SERVER_URL) (not logged in) — run 'reliant auth login', or set RELIANT_TOKEN
+not logged in to https://api.reliantapi.com (default — no --server flag and no RELIANT_SERVER_URL) — run 'reliant auth login', or set RELIANT_TOKEN
 ```
 
 Daemons are the exception. A daemon authenticates with its **own** credential, made when you register the machine, so signing the CLI out does not disconnect a running daemon. [Sign in and tokens](/cli/sign-in) explains the three kinds of credential and when to use each.

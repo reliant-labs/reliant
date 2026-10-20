@@ -262,8 +262,11 @@ nodes:
       role: assistant
       content: "Posted a {{ nodes.decide.event }} review on {{ inputs.repo }}#{{ inputs.pr_number }}: {{ has(nodes.post.data) && has(nodes.post.data.html_url) ? nodes.post.data.html_url : '(no URL returned)' }}"
 
+  # outcome: failure on every path where no review was posted: the run is recorded FAILED, and on_failure
+  # tells the PR once.
   - id: post_failed
     type: save_message
+    outcome: failure
     args:
       role: assistant
       display_style: warning
@@ -299,6 +302,38 @@ nodes:
       labels: >-
         {{ [{'name': inputs.skip_label, 'color': 'bfd4f2', 'description': 'Autopilot does not review this PR'},
             {'name': inputs.re_review_label, 'color': 'fbca04', 'description': 'Ask Autopilot to review this PR again'}] }}
+
+# A run that fails (an unhandled error, or no_review / post_failed above) tells the pull request ONCE per head
+# commit that no review came, and how to ask again. The note searches the thread for its own marker first and
+# posts nothing if it was already left, or if the thread cannot be read. It is written as whoever the run acts
+# as. Nothing is posted for a run that never got as far as a valid PR in an enabled repository.
+on_failure:
+  sequence:
+    - id: why
+      type: compute
+      outputs:
+        valid: "{{ nodes.?check.valid.orValue(false) == true }}"
+        error: >-
+          {{ failure.node_id == 'no_review' ? 'the reviewer finished without submitting a review'
+             : (failure.node_id == 'post_failed' ? 'posting the review failed' : failure.error) }}
+    - id: note
+      type: workflow
+      condition: "nodes.why.valid == true"
+      ref: builtin://autopilot-failure-note
+      args:
+        repo: "{{ inputs.repo }}"
+        number: "{{ inputs.pr_number }}"
+        kind: pr
+        workflow_name: autopilot-pr-review
+        what: "the review"
+        error: "{{ nodes.why.error }}"
+        retry: "Re-run with `/autopilot re-review`."
+    - id: recorded
+      type: save_message
+      args:
+        role: assistant
+        display_style: warning
+        content: "pr-review failed on {{ inputs.repo }}#{{ inputs.pr_number }}: {{ nodes.why.error }}{{ nodes.why.valid == true ? '' : ' (not a PR this automation covers, so nothing was posted)' }}."
 
 edges:
   - from: check

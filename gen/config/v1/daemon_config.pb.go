@@ -522,12 +522,12 @@ var File_config_v1_daemon_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_daemon_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1dconfig/v1/daemon_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\"\xf0\x03\n" +
+	"\x1dconfig/v1/daemon_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\"\xe5\x03\n" +
 	"\x14DaemonInstanceConfig\x12\x8a\x01\n" +
 	"\bdata_dir\x18\x01 \x01(\tBo\x82\xce\x18k\n" +
-	"\x0fDAEMON_DATA_DIR\x12\bdata-dir*NData directory (default: this instance's directory under ~/.reliant/instances)R\adataDir\x12\xa1\x01\n" +
-	"\aaccount\x18\x02 \x01(\tB\x86\x01\x82\xce\x18\x81\x01\n" +
-	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*\\Account (Supabase subject) this daemon runs as; selects among several accounts on one serverR\aaccount\x12\xa6\x01\n" +
+	"\x0fDAEMON_DATA_DIR\x12\bdata-dir*NData directory (default: this instance's directory under ~/.reliant/instances)R\adataDir\x12\x96\x01\n" +
+	"\aaccount\x18\x02 \x01(\tB|\x82\xce\x18x\n" +
+	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*SAccount (user id) this daemon runs as; selects among several accounts on one serverR\aaccount\x12\xa6\x01\n" +
 	"\tworkspace\x18\x03 \x01(\tB\x87\x01\x82\xce\x18\x82\x01\n" +
 	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xf9\x17\n" +
 	"\fDaemonConfig\x12;\n" +
@@ -586,10 +586,10 @@ const file_config_v1_daemon_config_proto_rawDesc = "" +
 	"\areliant\x12\x06daemon\x12\x04stop\"l\n" +
 	"\x10DaemonLogsConfig\x12;\n" +
 	"\binstance\x18\x01 \x01(\v2\x1f.config.v1.DaemonInstanceConfigR\binstance:\x1b\xca\xc1\x18\x17\n" +
-	"\areliant\x12\x06daemon\x12\x04logs\"\xe0\x01\n" +
-	"\x14DaemonRegisterConfig\x12\xa6\x01\n" +
-	"\aaccount\x18\x01 \x01(\tB\x8b\x01\x82\xce\x18\x86\x01\n" +
-	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*aAccount (Supabase subject) to register; separate accounts on one server keep separate credentialsR\aaccount:\x1f\xca\xc1\x18\x1b\n" +
+	"\areliant\x12\x06daemon\x12\x04logs\"\xd6\x01\n" +
+	"\x14DaemonRegisterConfig\x12\x9c\x01\n" +
+	"\aaccount\x18\x01 \x01(\tB\x81\x01\x82\xce\x18}\n" +
+	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*XAccount (user id) to register; separate accounts on one server keep separate credentialsR\aaccount:\x1f\xca\xc1\x18\x1b\n" +
 	"\areliant\x12\x06daemon\x12\bregisterB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 
 var (

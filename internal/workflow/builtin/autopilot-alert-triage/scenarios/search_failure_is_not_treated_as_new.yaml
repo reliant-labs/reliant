@@ -7,8 +7,16 @@ events:
     output: {"is_error": true, "content": "rate limited"}
 expect:
   outcome: completed
-  completed: [classify, fresh]
+  completed: [classify, fresh, problems, ended_failed]
   not_reached: [file.created, file.agent]
   node_outputs:
     verdicts: {summary: "1111111111111111=search_failed"}
     fresh: {new: []}
+  # The alert was neither deduplicated nor filed, so the run is FAILED and says which alert.
+  on_failure:
+    ran: true
+    node_id: ended_failed
+  messages:
+    on_failure.recorded:
+      count: 1
+      content_contains: ["the open-issue search failed"]

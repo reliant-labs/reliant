@@ -264,6 +264,7 @@ func populateCELNamespaces() {
 		{"outputs", "Loop iteration outputs for while condition evaluation"},
 		{"trigger", "The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>, trigger.sender.{kind,id,display_name,verified}, trigger.origin.{caused_by_reliant,confidence,run_id,workflow,trigger_name,same_workflow,actor,lineage_depth}). Interactive chats have kind chat.start. A trigger's filter, inputs and prompt can also read trigger.activation.params.<input>, trigger.activation.id and trigger.activation.owner.{user_id,github_id}; nodes cannot"},
 		{"thread", "Current thread context (token_count, message_count)"},
+		{"failure", "What failed, inside a workflow's on_failure handler only (failure.node_id, failure.node_path, failure.error, failure.error_code, failure.attempt). Undeclared everywhere else"},
 	}
 
 	for _, dn := range dynamicNamespaces {

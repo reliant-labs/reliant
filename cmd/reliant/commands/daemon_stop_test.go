@@ -4,9 +4,11 @@ package commands
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,7 +44,7 @@ func (b *lockedBuffer) String() string {
 // would, so `stop` has something to read.
 func writeRecordForPID(t *testing.T, dataDir string, pid int) {
 	t.Helper()
-	require.NoError(t, daemonstate.Init(dataDir, "http://localhost:29190", "h2c", false))
+	require.NoError(t, daemonstate.Init(dataDir, daemonstate.Startup{GatewayURL: "http://localhost:29190", TLSMode: "h2c"}))
 	state, err := daemonstate.Read(dataDir)
 	require.NoError(t, err)
 	state.PID = pid
@@ -221,6 +223,67 @@ func TestStopClearsAStaleRecordWithoutSignalling(t *testing.T) {
 
 	_, readErr := daemonstate.Read(dataDir)
 	require.True(t, os.IsNotExist(readErr))
+}
+
+// The incident: on a cloud machine every shell inherits the managed daemon's
+// DAEMON_DATA_DIR, so a bare `daemon stop` in an agent's shell resolved to the
+// machine's own daemon and stopped it. A managed daemon's lifecycle belongs to
+// the platform; stop refuses it and signals nothing.
+func TestStopRefusesAManagedDaemon(t *testing.T) {
+	dataDir := t.TempDir()
+	pid := startUnrelatedProcess(t, `sh -c ': >"$READY"; while :; do sleep 0.2; done'`)
+	writeRecordForPID(t, dataDir, pid)
+	state, err := daemonstate.Read(dataDir)
+	require.NoError(t, err)
+	state.Managed = true
+	data, err := json.Marshal(state)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(daemonstate.Path(dataDir), data, 0o644))
+
+	out, err := runDaemonStop(t, dataDir)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "managed")
+	require.NotContains(t, out, "Stopping daemon")
+	require.True(t, daemonProcessAlive(pid), "a refused stop must not signal the daemon")
+	_, readErr := daemonstate.Read(dataDir)
+	require.NoError(t, readErr, "a refused stop leaves the record alone")
+}
+
+// TestDaemonStopAncestorHelper is the child half of
+// TestStopRefusesTheDaemonItRunsUnder: it names its own parent as the daemon
+// and runs `daemon stop` against it.
+func TestDaemonStopAncestorHelper(t *testing.T) {
+	dataDir := os.Getenv("STOP_ANCESTOR_HELPER_DATA_DIR")
+	if dataDir == "" {
+		t.Skip("helper process for TestStopRefusesTheDaemonItRunsUnder")
+	}
+	writeRecordForPID(t, dataDir, os.Getppid())
+	out, err := runDaemonStop(t, dataDir)
+	fmt.Print(out)
+	if err != nil {
+		fmt.Println("STOP-ERROR:", err)
+	}
+}
+
+// The general form of the incident, laptop or cloud: a shell an agent runs is
+// a descendant of the daemon that runs the agent, so stopping that daemon ends
+// the session that asked. The daemon here is a disposable shell whose child
+// runs `daemon stop` against it; without the refusal the shell is signalled
+// and never prints that it survived.
+func TestStopRefusesTheDaemonItRunsUnder(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("process ancestry is read on linux and darwin only")
+	}
+	shell := exec.Command("sh", "-c",
+		`"$0" -test.run='^TestDaemonStopAncestorHelper$' -test.count=1; echo SHELL-SURVIVED`, os.Args[0])
+	shell.Env = append(os.Environ(), "STOP_ANCESTOR_HELPER_DATA_DIR="+t.TempDir())
+	out, _ := shell.CombinedOutput()
+
+	require.Contains(t, string(out), "STOP-ERROR", "stop must refuse")
+	require.Contains(t, string(out), "runs inside", "and say why")
+	require.NotContains(t, string(out), "Stopping daemon")
+	require.Contains(t, string(out), "SHELL-SURVIVED", "the daemon it runs under must not be signalled")
 }
 
 func TestStopWithoutARecordSaysSo(t *testing.T) {

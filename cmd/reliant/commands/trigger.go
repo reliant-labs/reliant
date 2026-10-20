@@ -235,13 +235,14 @@ func newTriggerCreateCmd() *cobra.Command {
 		Use:     "create",
 		PreRunE: refuseFromAgentShell,
 		Short:   "Create a schedule trigger",
-		Example: `  # Every weekday at 9am, in the project in the working directory
-  reliant trigger create --name "morning audit" --cron "0 9 * * 1-5" \
+		Example: `  # Every weekday at 9am, in the project in the working directory, on the
+  # machine with hostname "build-box"
+  reliant trigger create --name "morning audit" --cron "0 9 * * 1-5" --daemon build-box \
     --message "Review yesterday's CI failures and open issues for anything actionable."
 
   # Every 30 minutes, with a workflow and an input
-  reliant trigger create --name sweep --interval 30m --workflow builtin://agent \
-    --param depth=2 --message "Sweep the dependency tree."`,
+  reliant trigger create --name sweep --interval 30m --daemon build-box \
+    --workflow builtin://agent --param depth=2 --message "Sweep the dependency tree."`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			conn, err := resolveConnection(cmd)
 			if err != nil {

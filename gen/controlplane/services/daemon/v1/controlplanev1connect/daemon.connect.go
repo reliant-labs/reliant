@@ -101,9 +101,8 @@ type DaemonServiceClient interface {
 	// is a successful no-op. Disks only grow: a downsize keeps the larger disk,
 	// which is billed at its bound capacity.
 	ResizeDaemon(context.Context, *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error)
-	// GrowDaemonDisk grows a MANAGED daemon's disk so it holds storage_gib of
-	// data; the docker/cache allowance is added on top, and the whole disk is
-	// billed. Disks only grow: a smaller target is InvalidArgument, the current
+	// GrowDaemonDisk grows a MANAGED daemon's one disk to storage_gib. Disk
+	// above the org's pooled allowance is billed as storage. Disks only grow: a smaller target is InvalidArgument, the current
 	// size is a successful no-op. Running or suspended: the cloud disk grows at
 	// once, and a running machine uses the space after its next restart.
 	//
@@ -319,9 +318,8 @@ type DaemonServiceHandler interface {
 	// is a successful no-op. Disks only grow: a downsize keeps the larger disk,
 	// which is billed at its bound capacity.
 	ResizeDaemon(context.Context, *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error)
-	// GrowDaemonDisk grows a MANAGED daemon's disk so it holds storage_gib of
-	// data; the docker/cache allowance is added on top, and the whole disk is
-	// billed. Disks only grow: a smaller target is InvalidArgument, the current
+	// GrowDaemonDisk grows a MANAGED daemon's one disk to storage_gib. Disk
+	// above the org's pooled allowance is billed as storage. Disks only grow: a smaller target is InvalidArgument, the current
 	// size is a successful no-op. Running or suspended: the cloud disk grows at
 	// once, and a running machine uses the space after its next restart.
 	//

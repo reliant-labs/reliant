@@ -114,6 +114,9 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 		case "triggers":
 			wf.Triggers, err = unmarshalWorkflowTriggers(val)
 
+		case "on_failure", "onFailure":
+			wf.OnFailure, err = unmarshalWorkflow(val)
+
 		// Syntactic sugar: sequence: is a shorthand for entry + nodes + edges
 		// for linear chains. See sugar.go for documentation.
 		case "sequence":
@@ -502,6 +505,15 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 			edgesNode.Content = append(edgesNode.Content, en)
 		}
 		m.Content = append(m.Content, scalarNode("edges", ""), edgesNode)
+	}
+
+	// on_failure — the finally-style handler, after the graph it guards.
+	if wf.OnFailure != nil {
+		handlerNode, err := marshalWorkflow(wf.OnFailure)
+		if err != nil {
+			return nil, fmt.Errorf("on_failure: %w", err)
+		}
+		m.Content = append(m.Content, scalarNode("on_failure", ""), handlerNode)
 	}
 
 	// ui
