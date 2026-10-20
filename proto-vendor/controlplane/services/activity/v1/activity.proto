@@ -1,0 +1,169 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/activity/v1;activityv1";
+
+// === ActivityService ===
+//
+// The typed activity stream (console v3 decision D3, PROPOSAL G12): who did
+// what to which object, where and through what. "sean promoted v1.7.44 to prod
+// via CLI" is one ActivityEvent. The console's Activity page and every object's
+// History panel read it.
+//
+// WHO WRITES IT. Nobody calls a write rpc. Every control-plane rpc declares in
+// its proto the event it records (`(forge.v1.method).activity`), and one
+// interceptor writes it when the handler succeeds. The converger and alert
+// evaluation write their own observations: an environment converging, an alert
+// opening or resolving. `forge lint` fails an rpc that changes something and
+// declares nothing, so a new mutation cannot ship without saying what it
+// records. audit_log stays the raw security trail; this is product history.
+//
+// SCOPE IS K1's, AS DeliveryInsightsService READS IT. scope.org_id is required
+// and the caller must be a member (PermissionDenied otherwise). Every
+// scope.env_ids entry must be a live environment of that org, and of
+// scope.project_id when set.
+//   - With scope.project_id set, the feed is that project's events plus the
+//     org-wide ones (an alert receiver, a token); env_ids narrows it to events
+//     in those environments.
+//   - Unset, the feed is the whole org's: every project, every org-wide event.
+//
+// ERRORS: InvalidArgument (a bad range or page token), PermissionDenied (not a
+// member, or an environment that is not this org's), Unavailable (no database
+// on this server).
+service ActivityService {
+  option (forge.v1.service) = {
+    name: "ActivityService"
+    version: "1.0.0"
+    description: "The typed activity stream: who changed what, where and how"
+  };
+
+  // ListActivity returns the scope's events, newest first, a page at a time.
+  // Paging is by keyset, so a page never repeats or skips an event while new
+  // ones arrive.
+  rpc ListActivity(ListActivityRequest) returns (ListActivityResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+}
+
+// ActivityTimeRange is a half-open range [start, end). Either end may be unset
+// (unbounded on that side).
+message ActivityTimeRange {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+}
+
+// ActivityScope is console contract K1 as this service reads it. Field numbers
+// match ObservabilityService's QueryScope and DeliveryInsightsService's
+// DeliveryScope, so the console sends the one scope it builds; the
+// telemetry-only fields are reserved.
+message ActivityScope {
+  reserved 2, 3, 7;
+  reserved "env_id", "services", "filters";
+  // The org whose activity is read. The caller MUST be a member; verified
+  // server-side, never assumed.
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The window. Unset = all time.
+  ActivityTimeRange time_range = 4;
+  // The forge project whose activity is read, with the org-wide events. Unset
+  // = the whole org; set to "" = the project-less environments.
+  optional string project_id = 5 [(buf.validate.field).string.max_len = 128];
+  // Control-plane environment ids (deploy_environments.id). Empty = not
+  // narrowed by environment.
+  repeated string env_ids = 6 [(buf.validate.field).repeated.max_items = 50];
+}
+
+message ListActivityRequest {
+  ActivityScope scope = 1 [(buf.validate.field).required = true];
+  // Filters, AND-combined. Each matches exactly; unset does not filter.
+  optional string actor_id = 2 [(buf.validate.field).string.max_len = 256];
+  optional ActivityActorKind actor_kind = 3;
+  // A verb token: "promote", "rotate", "restart".
+  optional string verb = 4 [(buf.validate.field).string.max_len = 64];
+  // A target kind ("release") and, optionally, one object of it ("v1.7.44"):
+  // the History panel's pre-filtered link.
+  optional string target_kind = 5 [(buf.validate.field).string.max_len = 64];
+  optional string target_id = 6 [(buf.validate.field).string.max_len = 256];
+  // A channel: "console", "cli", "ci", "api", "reliant".
+  optional string via = 7 [(buf.validate.field).string.max_len = 32];
+  // Unset or 0 = 50; max 500.
+  int32 page_size = 8 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 500
+  ];
+  // next_page_token from the previous page.
+  string page_token = 9 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListActivityResponse {
+  repeated ActivityEvent events = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+}
+
+// ActivityEvent is one entry: "<actor> <verb> <target> [in <env>] via <via>".
+message ActivityEvent {
+  string id = 1;
+  google.protobuf.Timestamp at = 2;
+  ActivityActor actor = 3;
+  // The action, a lower_snake token ("promote", "set_run_state"). Stored as
+  // written in the rpc's declaration; the client phrases it ("promoted").
+  string verb = 4;
+  ActivityEventTarget target = 5;
+  // The environment the action happened in; unset for a project- or org-wide
+  // event.
+  ActivityEnvironment env = 6;
+  // The forge project the event belongs to; "" for an org-wide event.
+  string project = 7;
+  // How it arrived: "console", "cli", "ci", "api", or "reliant" for the
+  // platform's own observations.
+  string via = 8;
+  // Small declared extras, e.g. {"from_environment_name": "e2e"} on a
+  // promotion, {"state": "converged"} on an observation.
+  map<string, string> detail = 9;
+  // The rpc that recorded it, when one did.
+  string procedure = 10;
+}
+
+message ActivityActor {
+  string id = 1;
+  // A person's name (else email), a credential's name, or a system's name.
+  // Falls back to the id.
+  string name = 2;
+  ActivityActorKind kind = 3;
+}
+
+enum ActivityActorKind {
+  ACTIVITY_ACTOR_KIND_UNSPECIFIED = 0;
+  // A person, in the console or through the CLI (a CLI token acts as the
+  // person it was minted for).
+  ACTIVITY_ACTOR_KIND_USER = 1;
+  // A credential acting for no person: CI, an API key.
+  ACTIVITY_ACTOR_KIND_MACHINE = 2;
+  // The platform itself: the converger, alert evaluation.
+  ACTIVITY_ACTOR_KIND_SYSTEM = 3;
+}
+
+message ActivityEventTarget {
+  // The object's type, a lower_snake token: "release", "environment",
+  // "workload", "secret", "alert", "receiver", "dashboard", "domain".
+  string kind = 1;
+  // Identifies the object within its kind (a release's version, a secret's
+  // name, an environment's id); the client links to it.
+  string id = 2;
+  // What to show. Falls back to the id.
+  string label = 3;
+}
+
+message ActivityEnvironment {
+  string id = 1;
+  // The environment's current name; "" when it no longer exists.
+  string name = 2;
+}
