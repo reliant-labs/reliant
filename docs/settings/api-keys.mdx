@@ -34,7 +34,7 @@ If you already pay for Claude, ChatGPT or GitHub Copilot, you can use that subsc
 
 | Provider | How you connect |
 |----------|-----------------|
-| **Claude Code** | Sign in with your Claude account in the browser |
+| **Claude subscription** (shown as Claude Code during setup) | Sign in with your Claude account in the browser |
 | **Codex (ChatGPT)** | Sign in with your ChatGPT account in the browser |
 | **GitHub Copilot** | Enter a short code at GitHub to authorize Reliant |
 | **Antigravity** | Sign in in your browser |
@@ -74,7 +74,7 @@ If you use your own key or login, you pay the provider directly and their rate l
 
 You can run models on your own hardware with Ollama, LM Studio or any server that speaks the OpenAI API (llama.cpp and vLLM work too) and use them from Reliant.
 
-Because Reliant's servers make the model calls, a local model is reached through a **daemon** running on the machine that can see the model server, usually your own computer. The desktop app runs one for you; otherwise start one with `reliant daemon start` (see [Remote Daemons](/machines/overview)). A cloud machine can't see a server on your laptop, so connect your laptop as a machine, too.
+Because Reliant's servers make the model calls, a local model is reached through a **daemon** running on the machine that can see the model server, usually your own computer. The desktop app runs one for you; otherwise start one with `reliant daemon start` (see [Your own computer](/machines/your-computer)). A cloud machine can't see a server on your laptop, so connect your laptop as a machine, too.
 
 Then open **Settings → AI → Custom & local models**. Reliant looks for model servers on that machine and lists the models it finds. If yours isn't detected, use **Add endpoint** and enter its address, for example:
 
@@ -101,9 +101,9 @@ Check that you copied the whole key with no spaces, that it belongs to the right
 
 The local helper isn't running. Run `reliant auth serve` in a terminal and keep it open; see [Signing in from the web app](#signing-in-from-the-web-app).
 
-### Rate limit errors
+### Rate limits and usage limits
 
-These come from your provider, not Reliant. Wait a few minutes, switch to another model or source, or check your limits in the provider's dashboard.
+These come from your provider, not Reliant. When a subscription or key hits a usage limit, the run doesn't fail: the chat shows which provider is limited and when it resets, and carries on by itself at the reset. **Retry now** tries again straight away, **Stop** ends the run, and if another provider you've connected can serve the chat, the card offers to use its model in the meantime. Check your limits in the provider's dashboard if this happens often.
 
 ### A model you expect isn't offered
 

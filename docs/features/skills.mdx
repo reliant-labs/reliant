@@ -22,32 +22,39 @@ description: A short description of what this skill does
 ---
 
 Your skill instructions go here as markdown.
-Agents will follow these instructions when the skill is active.
+Agents will follow these instructions when they load the skill.
 ```
 
-That's it — Reliant discovers and loads it automatically.
+That's it — Reliant discovers it automatically and offers it to agents. Write the description for the agent: it is what an agent reads when deciding whether the skill applies to the task in front of it.
+
+## How agents use skills
+
+Every agent turn carries a short list of the skills available in the project, each with its path and the start of its description. When a task matches one, the agent loads it with the `skill` tool and the skill's instructions join the conversation. The tool can also list skills and search them by keyword, and it can read a large skill one section at a time, so a long skill doesn't have to fill the context at once.
+
+Because loading is the agent's decision, a good description matters more than anything else in the file. You can also simply ask: "load the release skill and follow it" works in any chat.
+
+A workflow can skip the decision and preload skills into a model call with the `skills` field of a [Call LLM](/reference/nodes#call-llm) node, so the model starts with their instructions already in context.
 
 ## How discovery works
 
-Reliant looks for skills in four locations, checked in order. When two skills share the same name, the first one found wins:
+Reliant discovers skills on the chat's [machine](/machines/overview), in the project and in your home directory. It reads its own skill folders and also the folders Claude Code and Codex use, so skills you already have there work without copying them:
 
-```mermaid
-flowchart LR
-    A[".reliant.local/skills"] --> B[".reliant/skills"]
-    B --> C["~/.reliant/skills"]
-    C --> D["Builtins"]
-    style A fill:#4a9,stroke:#333,color:#fff
-    style D fill:#888,stroke:#333,color:#fff
-```
-
-| Scope | Path | Use case |
+| Scope | Path | Priority |
 |---|---|---|
-| Project local | `.reliant.local/skills/` | Personal overrides (gitignored) |
-| Project | `.reliant/skills/` | Shared team skills (committed) |
-| Global | `~/.reliant/skills/` | Your skills across all projects |
-| Builtins | Embedded in Reliant | Default skills |
+| Project local | `.reliant.local/skills/` | 1 |
+| Project | `.reliant/skills/` | 2 |
+| Global | `~/.reliant/skills/` | 3 |
+| Built-in | Embedded in Reliant | 4 |
+| Project, other tools | `.agents/skills/`, `.codex/skills/`, `.claude/skills/` | 5, 6, 7 |
+| Global, other tools | `~/.codex/skills/`, `~/.claude/skills/` | 8, 9 |
 
-Only Reliant-managed roots are scanned at runtime. If you have skills in other tool folders (`.claude/skills`, `.codex/skills`, etc.), import them into a Reliant root first — see [Migration](#migrating-skills-from-other-tools) below.
+When two skills share a name, the one with the lower priority number wins, so a skill in `.reliant/skills/` overrides a Claude Code skill of the same name. Use `.reliant.local/skills/` (gitignored) for personal variants and `.reliant/skills/` for skills the team shares.
+
+In a project with several repositories, each repository's own skill folders are read too, and its skills are listed with the repository as a prefix (`api/deploy`, `web/deploy`).
+
+A `SKILL.md` in a subdirectory of a skill is a **sub-skill**: `.reliant/skills/go/error-handling/SKILL.md` becomes `go/error-handling`, listed under `go`.
+
+Reliant ships a few built-in skills of its own: `code-search`, `reliant-config` and `workflow-builder`. General-purpose methodology skills, such as code review, debugging and refactoring, come from Forge and are offered in every project; a [Forge](/features/deploy-and-host) project also gets Forge's own framework skills.
 
 ## SKILL.md format
 
@@ -61,104 +68,19 @@ Only Reliant-managed roots are scanned at runtime. If you have skills in other t
 - **`license`** — License identifier.
 - **`compatibility`** — 1–500 characters describing compatibility notes.
 - **`metadata`** — A string-to-string map for custom key-value pairs.
-- **`allowed-tools`** — Space-delimited tool list (e.g. `Bash(git:*) Read`). When set, Reliant restricts tools to this list for the skill's turn and warns about blocked tools.
+- **`allowed-tools`** — Space-delimited tool list (e.g. `Bash(git:*) Read`). When an agent loads the skill, these are shown to it as the tools the skill suggests. They are a hint, not a restriction: the agent's tools stay the same.
 
-Unknown frontmatter fields are rejected.
+Claude Code's `argument-hint`, `disable-model-invocation`, `user-invocable` and `paths` fields are accepted so Claude Code skills parse unchanged, but Reliant doesn't act on them.
+
+In Reliant's own folders, any other frontmatter field is an error and the skill is skipped. Skills in the Claude Code and Codex folders are read leniently, and unknown fields there are ignored.
 
 ## Supporting files
 
-Non-definition files in the skill directory are treated as supporting material and can be provided to agents when the skill is active:
-
-- `examples/*.md`
-- `templates/*.txt`
-- `reference.md`
-
-**What gets excluded:**
-
-- The `SKILL.md` definition itself
-- Legal/meta files (LICENSE, etc.)
-- OpenAI-specific metadata paths (`agents/**`)
-- Image assets under `assets/**`
-- Symlinks
-- Unreadable files (skipped with diagnostics)
-
-Content is bounded and truncated to stay within prompt limits.
-
-### Configuring limits
-
-Control how much supporting-file content gets loaded via any config scope (`~/.reliant/config.yaml`, `.reliant/config.yaml`, or `.reliant.local/config.yaml`):
-
-```yaml
-skills:
-  supportingFiles:
-    maxFiles: 8      # max files read from disk per skill
-    maxBytes: 4096   # max bytes per file
-  retrieval:
-    maxFiles: 8      # max files considered by retrieval ranking
-    maxChunks: 12    # max ranked chunks retained
-    chunkBytes: 1200 # chunk size for segmenting content
-    chunkOverlap: 200 # overlap between chunks
-    maxPromptBytes: 12000 # final prompt budget for supporting content
-```
-
-Safe defaults are applied if values are unset or invalid.
-
-## How skills are loaded into prompts
-
-Reliant keeps prompt usage efficient by loading skill content progressively:
-
-- A compact `<available_skills>` block is always injected so agents know what's available.
-- Discovery reads only metadata at startup — full content is deferred.
-- Full instructions are injected only for the **active** skill.
-- Supporting-file content goes through chunking, relevance ranking, and prompt-budget caps.
-- Warnings surface as `<skills_notice>` entries in the prompt and as chat notices.
-
-## Invocation
-
-### Activation mode
-
-Control how skills get activated via `skills.activationMode`:
-
-```yaml
-skills:
-  activationMode: auto   # auto | explicit
-```
-
-- **`auto`** (default) — Reliant picks the most relevant skill based on message context.
-- **`explicit`** — Skills only activate when you invoke one directly.
-
-### Explicit invocation
-
-You can always invoke a skill directly in chat:
-
-- `/skill-name` — exact match
-- `/skill skill-name` — unique prefix resolution
-
-If the invocation is missing or ambiguous, Reliant shows a notice in chat.
-
-### Integration mode
-
-Control how supporting files are surfaced via `skills.integrationMode`:
-
-```yaml
-skills:
-  integrationMode: filesystem   # filesystem | tool
-```
-
-- **`filesystem`** (default) — Include filesystem location hints and load supporting files into prompt context.
-- **`tool`** — Suppress filesystem hints and avoid injecting supporting-file content.
-
-## Migrating skills from other tools
-
-If you have skills in `.claude/skills`, `.codex/skills`, `.agents/skills`, or similar folders:
-
-1. Put shared/team skills in `.reliant/skills/`
-2. Put personal variants in `.reliant.local/skills/`
-3. Copy the folders into those roots yourself, or ask the agent in a chat to do it, or run [Import from Claude Code / Cursor](/guides/import)
+A skill directory can hold more than `SKILL.md`: examples, templates, reference notes, scripts. Mention them in the skill's instructions by relative path, and the agent reads them from the skill's directory when it needs them, like any other file. Only the `SKILL.md` body is loaded by the `skill` tool.
 
 ## Compatibility
 
-Reliant supports the shared Agent Skills format used by Claude and Codex, including `SKILL.md` with YAML frontmatter, supporting files, and multi-scope discovery.
+Reliant supports the shared Agent Skills format used by Claude and Codex, including `SKILL.md` with YAML frontmatter, supporting files, and discovery across project and global scopes.
 
 **What Reliant does not support:**
 
@@ -166,10 +88,11 @@ Reliant supports the shared Agent Skills format used by Claude and Codex, includ
 - Runtime side effects that bypass Reliant's tool governance
 - External installer behaviors that conflict with Reliant's installation model
 
-These boundaries exist to keep behavior predictable and the tool set secure. For Codex-specific ecosystem features (installer conventions, tool-specific metadata files), Reliant ingests what's portable, ignores what's tool-specific, and uses its own controls for policy, limits, and governance.
+To move skills into Reliant's own folders, for example to override them or share them with your team, copy them into `.reliant/skills/` or `.reliant.local/skills/` yourself, ask the agent in a chat to do it, or run [Import from Claude Code / Cursor](/guides/import).
 
 ## Related topics
 
+- [Memories & Context](/settings/memories)
 - [MCP Servers](/settings/mcp-servers)
 - [Custom Workflows](/workflows/custom-workflows)
 - [Presets](/workflows/presets)

@@ -7,14 +7,16 @@ Memories are markdown files that provide persistent context to every conversatio
 
 ## Context Files
 
-Reliant discovers two context files in your project root:
+Reliant reads these context files on the chat's [machine](/machines/overview):
 
 | File | Purpose | Git Status |
 | --- | --- | --- |
-| `reliant.md` | **Project context** — shared guidelines, architecture notes, conventions | Commit to repository |
-| `reliant.local.md` | **Personal context** — your local notes, preferences, shortcuts | Add to .gitignore |
+| `~/.reliant/reliant.md` | **Global context** — your preferences for every project on that machine | Not in a repository |
+| `reliant.md` in the project root | **Project context** — shared guidelines, architecture notes, conventions | Commit to repository |
+| `reliant.md` in each nested repository | **Repository context** — for a project made of several repositories | Commit to that repository |
+| `reliant.local.md` in each nested repository | **Personal context** for that repository — your local notes and preferences | Add to .gitignore |
 
-Both files are automatically loaded when present. Their contents are concatenated and included in every conversation.
+Every file that exists is loaded and included in every conversation. A `reliant.local.md` is read beside each nested repository's `reliant.md`; at the project root, only `reliant.md` is read.
 
 ## The `reliant.md` a new project starts with
 
@@ -58,7 +60,7 @@ Brief description of what this project does and its architecture.
 
 ### Personal Context (`reliant.local.md`)
 
-Include your personal preferences and local setup details:
+In a project made of several repositories, a `reliant.local.md` beside a repository's `reliant.md` holds your personal preferences and local setup for that repository. For preferences that apply everywhere, use the [global context file](#global-context) instead.
 
 ```markdown
 # My Setup
@@ -81,20 +83,11 @@ Include your personal preferences and local setup details:
 - Alice owns the billing module
 ```
 
-## Auto-Discovery
+## Projects with several repositories
 
-Reliant searches for context files in:
+A project can hold several git repositories side by side. Reliant finds each nested repository and loads its `reliant.md` and `reliant.local.md` as that repository's context, labelled with the repository's path, so the agent knows which rules apply where. Put what applies to the whole project in the root `reliant.md` and what applies to one repository in that repository's own file.
 
-1. Your project root directory
-2. Parent directories (for monorepos)
-
-Files are discovered in this order and concatenated:
-
-1. `reliant.md` from root
-2. `reliant.local.md` from root
-
-> [!TIP]
-> **Monorepo tip**: Place a `reliant.md` in your monorepo root with shared context, and additional `reliant.md` files in each package for package-specific context.
+Together, the repositories' files may take up to a tenth of the model's context window; any that don't fit are left out, and the agent is told where they are so it reads them before working in that repository. Parent directories above the project are not searched.
 
 ## Best Practices
 
@@ -102,7 +95,7 @@ Files are discovered in this order and concatenated:
 
 **Update regularly** — As your project evolves, keep context files current. Outdated information is worse than no information.
 
-**Separate concerns** — Put team knowledge in `reliant.md`, personal preferences in `reliant.local.md`.
+**Separate concerns** — Put team knowledge in `reliant.md` and personal preferences in your global `~/.reliant/reliant.md`.
 
 **Use structure** — Headings and bullet points are easier to scan than prose.
 
