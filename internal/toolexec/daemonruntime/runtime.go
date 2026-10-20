@@ -2237,7 +2237,6 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 	projectMCPPath := filepath.Join(projectPath, ".reliant", "mcp.json")
 	localMCPPath := filepath.Join(projectPath, ".reliant.local", "mcp.json")
 	globalMemoryPath := filepath.Join(userConfigDir, "reliant.md")
-	projectMemoryPath := filepath.Join(projectPath, "reliant.md")
 
 	userConfigYAML, _ := readOptionalFile(userConfigPath)
 	projectConfigYAML, _ := readOptionalFile(projectConfigPath)
@@ -2246,13 +2245,7 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 	projectMCP, _ := readOptionalFile(projectMCPPath)
 	localMCP, _ := readOptionalFile(localMCPPath)
 	globalMemory, _ := readOptionalFile(globalMemoryPath)
-	projectMemory, _ := readOptionalFile(projectMemoryPath)
-	// Inject the forge framework cheat-sheet (architecture, proto
-	// rules, "use forge skills" callout) when the project is a forge
-	// project — forge skips writing a top-level reliant.md so the
-	// only authoritative source is the embedded template, rendered
-	// here. For non-forge projects this is a no-op.
-	projectMemory = projectMemoryWithForgeFramework(projectPath, projectMemory)
+	projectMemory := readProjectMemory(projectPath)
 
 	layout, workflowsDir := readWorkflowLayout(projectPath)
 	workflows, workflowBytes := indexWorkflows(layout, workflowsDir)
@@ -2299,6 +2292,34 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 	}, nil
 }
 
+// localMemoryFile is the personal, uncommitted companion of a reliant.md. It
+// is read beside EVERY reliant.md — the project root's and each nested repo's
+// — and placed after it, so personal notes have the last word.
+const localMemoryFile = "reliant.local.md"
+
+// withLocalMemory returns md followed by dir's reliant.local.md, if any. The
+// root and the nested repos share this one rule: a root that skipped it left a
+// single-repo project's local file silently unread.
+func withLocalMemory(dir string, md []byte) []byte {
+	local, _ := readOptionalFile(filepath.Join(dir, localMemoryFile))
+	if len(local) == 0 {
+		return md
+	}
+	if len(md) == 0 {
+		return local
+	}
+	return prependMemory(md, local)
+}
+
+// readProjectMemory is the project root's memory: the forge framework guide
+// (forge projects only — forge writes no top-level reliant.md, so the embedded
+// template rendered here is the authoritative source), then reliant.md, then
+// reliant.local.md.
+func readProjectMemory(projectPath string) []byte {
+	md, _ := readOptionalFile(filepath.Join(projectPath, "reliant.md"))
+	return withLocalMemory(projectPath, projectMemoryWithForgeFramework(projectPath, md))
+}
+
 // collectRepoMemories reads reliant.md and reliant.local.md for each nested
 // repo and returns a map[repoRelPath]->content suitable for the proto snapshot.
 // The second return value is a deterministic byte summary for version hashing.
@@ -2332,7 +2353,6 @@ func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
 			continue
 		}
 		repoDir := filepath.Join(projectPath, rel)
-		var parts []string
 		md, _ := readOptionalFile(filepath.Join(repoDir, "reliant.md"))
 		if hasForgeYAML(repoDir) {
 			switch {
@@ -2347,16 +2367,11 @@ func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
 				}
 			}
 		}
-		if len(md) > 0 {
-			parts = append(parts, string(md))
-		}
-		if local, _ := readOptionalFile(filepath.Join(repoDir, "reliant.local.md")); len(local) > 0 {
-			parts = append(parts, string(local))
-		}
-		if len(parts) == 0 {
+		md = withLocalMemory(repoDir, md)
+		if len(md) == 0 {
 			continue
 		}
-		content := strings.Join(parts, "\n\n")
+		content := string(md)
 		sum := hashBytes([]byte(content))
 		if first, dup := seen[sum]; dup {
 			content = fmt.Sprintf("This repo's memory is identical to the `%s` repo's memory; see that entry.", first)

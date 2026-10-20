@@ -138,7 +138,7 @@ ask_user answer (#24).
 Read on the **daemon**, not the server (`internal/toolexec/daemonruntime/config_store.go:56-117`):
 
 - `~/.reliant/reliant.md` → `GlobalMemoryMD` (`config_store.go:61`)
-- `<project>/reliant.md` → `ProjectMemoryMD` (`config_store.go:62`)
+- `<project>/reliant.md` + `<project>/reliant.local.md` → `ProjectMemoryMD` (`readProjectMemory` in `runtime.go`)
 - `<repo>/reliant.md` + `<repo>/reliant.local.md` per nested repo → `RepoMemories`
   (`runtime.go:1725-1766`)
 - Forge framework memory auto-prepended when `forge.yaml` exists (`forge_memory.go:25-49`)

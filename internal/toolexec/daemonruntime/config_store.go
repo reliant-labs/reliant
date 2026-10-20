@@ -60,7 +60,7 @@ func (f *filesystemConfigStore) GetProjectConfigRecord(ctx context.Context, proj
 	projectConfigYAML, _ := readOptionalFile(filepath.Join(projectPath, ".reliant", "config.yaml"))
 	localConfigYAML, _ := readOptionalFile(filepath.Join(projectPath, ".reliant.local", "config.yaml"))
 	globalMemory, _ := readOptionalFile(filepath.Join(userConfigDir, "reliant.md"))
-	projectMemory, _ := readOptionalFile(filepath.Join(projectPath, "reliant.md"))
+	projectMemory := readProjectMemory(projectPath)
 
 	userMCP, _ := readOptionalFile(filepath.Join(userConfigDir, "mcp.json"))
 	projectMCP, _ := readOptionalFile(filepath.Join(projectPath, ".reliant", "mcp.json"))

@@ -1547,7 +1547,8 @@ export type ProjectConfigSnapshot = Message<"reliant.v1.ProjectConfigSnapshot"> 
   globalMemoryMd: Uint8Array;
 
   /**
-   * {project_path}/reliant.md
+   * The project root's memory: the forge framework guide (forge projects
+   * only), then {project_path}/reliant.md, then {project_path}/reliant.local.md.
    *
    * @generated from field: bytes project_memory_md = 12;
    */

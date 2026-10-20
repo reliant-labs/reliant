@@ -2855,8 +2855,10 @@ type ProjectConfigSnapshot struct {
 	Presets               []*IndexedPreset       `protobuf:"bytes,9,rep,name=presets,proto3" json:"presets,omitempty"`
 	Scenarios             []*IndexedScenario     `protobuf:"bytes,10,rep,name=scenarios,proto3" json:"scenarios,omitempty"`
 	// Memory files that must be available to cloud workers.
-	GlobalMemoryMd  []byte          `protobuf:"bytes,11,opt,name=global_memory_md,json=globalMemoryMd,proto3" json:"global_memory_md,omitempty"`    // ~/.reliant/reliant.md
-	ProjectMemoryMd []byte          `protobuf:"bytes,12,opt,name=project_memory_md,json=projectMemoryMd,proto3" json:"project_memory_md,omitempty"` // {project_path}/reliant.md
+	GlobalMemoryMd []byte `protobuf:"bytes,11,opt,name=global_memory_md,json=globalMemoryMd,proto3" json:"global_memory_md,omitempty"` // ~/.reliant/reliant.md
+	// The project root's memory: the forge framework guide (forge projects
+	// only), then {project_path}/reliant.md, then {project_path}/reliant.local.md.
+	ProjectMemoryMd []byte          `protobuf:"bytes,12,opt,name=project_memory_md,json=projectMemoryMd,proto3" json:"project_memory_md,omitempty"`
 	Skills          []*IndexedSkill `protobuf:"bytes,13,rep,name=skills,proto3" json:"skills,omitempty"`
 	// Per-repo memory: maps repo relative path (e.g. "api", "forge") to the
 	// concatenated content of {repo}/reliant.md + {repo}/reliant.local.md.

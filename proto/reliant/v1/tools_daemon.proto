@@ -560,7 +560,9 @@ message ProjectConfigSnapshot {
 
   // Memory files that must be available to cloud workers.
   bytes global_memory_md = 11;  // ~/.reliant/reliant.md
-  bytes project_memory_md = 12; // {project_path}/reliant.md
+  // The project root's memory: the forge framework guide (forge projects
+  // only), then {project_path}/reliant.md, then {project_path}/reliant.local.md.
+  bytes project_memory_md = 12;
 
   repeated IndexedSkill skills = 13;
 
