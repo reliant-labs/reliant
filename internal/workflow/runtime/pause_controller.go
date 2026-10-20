@@ -37,6 +37,12 @@ type PauseController struct {
 	// (tests).
 	DaemonOffline *DaemonOfflineCircuitBreaker
 
+	// RepeatedToolErrors ends an unattended agent whose tool calls keep
+	// failing with the same error (repeated_tool_error_breaker.go). One per
+	// run, shared like DaemonOffline, keyed by thread inside. nil when not
+	// wired (tests).
+	RepeatedToolErrors *RepeatedToolErrorBreaker
+
 	// Cancelled reports whether the user asked to cancel the thread this
 	// controller belongs to. Spawned threads run INLINE inside the parent's
 	// Temporal execution (executeSpawnInline, via workflow.Go), so there is no
@@ -102,6 +108,17 @@ func (pc *PauseController) DoRequestPause() {
 	if pc != nil && pc.RequestPause != nil {
 		pc.RequestPause()
 	}
+}
+
+// ObserveRepeatedToolErrors feeds a completed step to the repeated-tool-error
+// breaker, if one is wired, and returns the error that ends the agent when the
+// same failure has repeated too often. Nil-safe on both the receiver and the
+// breaker.
+func (pc *PauseController) ObserveRepeatedToolErrors(thread, activityName string, stepEvent *StepEvent) error {
+	if pc == nil {
+		return nil
+	}
+	return pc.RepeatedToolErrors.Observe(thread, activityName, stepEvent)
 }
 
 // ObserveDaemonOfflineStep feeds a completed step to the daemon-offline

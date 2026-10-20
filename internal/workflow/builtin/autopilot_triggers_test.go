@@ -485,3 +485,21 @@ func packNeedsMachine(t *testing.T, name string) bool {
 	t.Logf("%s needs a machine: %v (hard: %v, tools: %v)", name, !req.None(), req.Hard, req.Tools)
 	return !req.None()
 }
+
+// A pack workflow whose agent never produced its required response must end
+// FAILED, not completed: Node.outcome is the run's verdict, and the firing's
+// run_status (trigger health, inbox) follows it. The scenario tests cannot see
+// this — their `outcome:` is the Temporal lifecycle, which finishes either way.
+func TestAutopilotNoResponseTerminalsDeclareFailure(t *testing.T) {
+	wf := packWorkflow(t, "autopilot-pr-review")
+	var found bool
+	for _, n := range wf.GetNodes() {
+		if n.GetId() != "no_review" {
+			continue
+		}
+		found = true
+		assert.Equal(t, "failure", n.GetOutcome(),
+			"the reviewer finishing without a review is a failed run, not a completed one")
+	}
+	require.True(t, found, "autopilot-pr-review has a no_review terminal")
+}

@@ -281,12 +281,18 @@ func (a *WorkflowStatusActivity) recordLaunchRunStatus(ctx context.Context, inpu
 		return
 	}
 	var status string
-	switch input.Status {
-	case "completed":
-		status = core.TriggerRunCompleted
-	case "failed":
+	switch {
+	// The Temporal execution finished, but the graph reached a node that
+	// declares the run did not pass (Node.outcome: failure). The firing's
+	// run_status is what trigger health, failure streaks and the inbox read, so
+	// recording "completed" here called a run that never did its job a success.
+	case input.Status == "completed" && input.Outcome == model.OutcomeFailure:
 		status = core.TriggerRunFailed
-	case "cancelled":
+	case input.Status == "completed":
+		status = core.TriggerRunCompleted
+	case input.Status == "failed":
+		status = core.TriggerRunFailed
+	case input.Status == "cancelled":
 		status = core.TriggerRunCancelled
 	default:
 		return

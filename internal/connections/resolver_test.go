@@ -6,6 +6,10 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/db"
 
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -187,4 +191,37 @@ func TestResolver_TriggerFireIsAttributed(t *testing.T) {
 		connections.Ref{ConnectionID: conn.ID})
 	require.NoError(t, err)
 	require.Equal(t, 1, e.count(`SELECT count(*) FROM connection_events WHERE connection_id=$1 AND kind='used' AND actor='trigger:trg1'`, conn.ID))
+}
+
+// An integration call identifies its run by its THREAD. A nested
+// `type: workflow` node with `thread: {mode: new}` runs inline under its
+// parent's workflow row on a thread of its own, so that thread id names no
+// workflow. The owner must still resolve — through the thread's workflow, then
+// its chat — or every integration tool of a nested agent is withheld
+// ("run not found") and the agent is told it has none.
+func TestResolver_OwnerOfANestedWorkflowThread(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	conn := e.connect("alice", "a")
+	root := e.newRun("alice")
+
+	nested := uuid.NewString()
+	rootWorkflow := root
+	_, err := e.repo.CreateThread(ctx, &db.Thread{
+		ID: nested, ChatID: root, WorkflowID: &rootWorkflow, Origin: db.ThreadOriginNode, CreatedAt: time.Now().UTC(),
+	})
+	require.NoError(t, err)
+
+	owner, err := e.resolver.OwnerOf(ctx, nested)
+	require.NoError(t, err, "a thread with no workflow row of its own resolves through its parent run")
+	require.Equal(t, "alice", owner)
+
+	got, err := e.resolver.Usable(ctx, connections.CallSite{RunID: nested, Placement: connections.PlacementServer},
+		[]connections.Ref{{IntegrationID: "github"}})
+	require.NoError(t, err)
+	require.NoError(t, got[connections.Ref{IntegrationID: "github"}], "the owner's connection %s is usable from the nested thread", conn.ID)
+
+	// An id that is neither a run nor a thread still reads like no run.
+	_, err = e.resolver.OwnerOf(ctx, uuid.NewString())
+	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
 }
