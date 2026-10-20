@@ -320,7 +320,8 @@ func automationTrigger(chat *db.Chat) string {
 // started it and is waiting on it. Empty is a chat from before launch kinds
 // were recorded, which was always interactive.
 func isInteractiveLaunchKind(kind string) bool {
-	return kind == "" || kind == string(core.TriggerEventKindChatStart) || kind == string(core.TriggerEventKindBuilderTest)
+	return kind == "" || kind == string(core.TriggerEventKindChatStart) ||
+		kind == string(core.TriggerEventKindBuilderTest) || kind == string(core.TriggerEventKindManualRun)
 }
 
 // reviveThreadForNewRun moves this run's thread out of a terminal status,

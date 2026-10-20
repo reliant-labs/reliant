@@ -102,6 +102,17 @@ service TriggerService {
   // CALLER's own credential for the integration. GitHub only; a caller with
   // no usable GitHub credential is FailedPrecondition.
   rpc ResolveTriggerSenders(ResolveTriggerSendersRequest) returns (ResolveTriggerSendersResponse) {}
+
+  // ListReplayEvents lists the recent events the caller's activations of a
+  // workflow's declared triggers received, newest first, so one can be run
+  // again with ChatService.RunNow.
+  rpc ListReplayEvents(ListReplayEventsRequest) returns (ListReplayEventsResponse) {}
+
+  // PreviewReplay maps a past event through a declared trigger's inputs and
+  // prompt, as a fire of that event would. Only the mapping applies: the
+  // trigger's filter and origin_filter are not evaluated, because the person
+  // replaying has decided the event is wanted.
+  rpc PreviewReplay(PreviewReplayRequest) returns (PreviewReplayResponse) {}
 }
 
 // TriggerKind is the source a stored trigger listens to.
@@ -148,6 +159,10 @@ enum TriggerEventKind {
   TRIGGER_EVENT_KIND_INTEGRATION = 6;
   // WORKFLOW_EVENT is another run reaching an outcome.
   TRIGGER_EVENT_KIND_WORKFLOW_EVENT = 7;
+  // MANUAL_RUN is a run a person started with "Run now" on a workflow
+  // (RunService.RunNow). Attended, with the chat id as its dedupe key. When it
+  // replays a past event, its payload names that event.
+  TRIGGER_EVENT_KIND_MANUAL_RUN = 8;
 }
 
 // TriggerEventOutcome records what a firing did.
@@ -1044,4 +1059,45 @@ message ResolveTriggerSendersResponse {
   // One per handle or id the provider knows. One it does not know (no such
   // user, or an organization, which never sends an event) is absent.
   repeated ResolvedTriggerSender senders = 1;
+}
+
+message ListReplayEventsRequest {
+  string project_id = 1;
+  string workflow = 2;
+
+  // Limit caps the events returned across all of the workflow's triggers.
+  // Default 20, maximum 50.
+  int32 limit = 3;
+}
+
+message ReplayCandidate {
+  // Event is the recorded firing: id, kind, time, outcome, payload and sender.
+  TriggerEvent event = 1;
+
+  // TriggerName is the declared trigger the event arrived through.
+  string trigger_name = 2;
+}
+
+message ListReplayEventsResponse {
+  repeated ReplayCandidate events = 1;
+}
+
+message PreviewReplayRequest {
+  string project_id = 1;
+  string workflow = 2;
+  ReplayEvent replay = 3;
+
+  // Sender is who sent the original event, for templates that read
+  // trigger.sender. Carried here rather than on ReplayEvent because
+  // trigger.proto imports chat.proto, not the reverse.
+  optional TriggerSender sender = 4;
+}
+
+message PreviewReplayResponse {
+  // Inputs are the workflow inputs the declared trigger maps from the event.
+  map<string, google.protobuf.Value> inputs = 1;
+
+  // Prompt is the trigger's prompt rendered against the event. Empty when the
+  // declaration has none.
+  string prompt = 2;
 }

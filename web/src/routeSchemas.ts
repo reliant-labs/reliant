@@ -713,7 +713,7 @@ export type RunStateFilterKey = (typeof RUN_STATE_FILTER_KEYS)[number];
  * kind chip pressed it leaves builder.test out: a test run from the workflow
  * builder is scratch work, listed only under the "Tests" chip.
  */
-export const RUN_KIND_FILTER_KEYS = ["chat.start", "schedule", "agent.start_run", "builder.test"] as const;
+export const RUN_KIND_FILTER_KEYS = ["chat.start", "manual.run", "schedule", "agent.start_run", "builder.test"] as const;
 
 export const RUN_RANGE_KEYS = ["24h", "7d", "30d", "all"] as const;
 export type RunRangeKey = (typeof RUN_RANGE_KEYS)[number];

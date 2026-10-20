@@ -5770,6 +5770,19 @@
           "OutputProtoFile": "reliant/v1/chat.proto"
         },
         {
+          "Name": "RunNow",
+          "InputType": "RunNowRequest",
+          "OutputType": "RunNowResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.RunNowRequest",
+          "OutputTypeFQ": "reliant.v1.RunNowResponse",
+          "InputProtoFile": "reliant/v1/chat.proto",
+          "OutputProtoFile": "reliant/v1/chat.proto"
+        },
+        {
           "Name": "AdoptChat",
           "InputType": "AdoptChatRequest",
           "OutputType": "AdoptChatResponse",
@@ -6779,6 +6792,77 @@
           {
             "Name": "woken",
             "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "RunNowRequest": [
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "workflow",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "inputs",
+            "ProtoType": "message",
+            "IsOptional": false
+          },
+          {
+            "Name": "presets",
+            "ProtoType": "message",
+            "IsOptional": false
+          },
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "no_machine",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "replay",
+            "ProtoType": "message",
+            "IsOptional": true,
+            "MessageType": "reliant.v1.ReplayEvent"
+          },
+          {
+            "Name": "client_message_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          }
+        ],
+        "RunNowResponse": [
+          {
+            "Name": "chat",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.Chat"
+          },
+          {
+            "Name": "workflow_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "run_id",
+            "ProtoType": "string",
             "IsOptional": false
           }
         ],
@@ -8218,6 +8302,29 @@
             "repeated": true
           }
         ],
+        "reliant.v1.ReplayEvent": [
+          {
+            "name": "trigger_name",
+            "kind": "string"
+          },
+          {
+            "name": "event_id",
+            "kind": "string"
+          },
+          {
+            "name": "kind",
+            "kind": "string"
+          },
+          {
+            "name": "occurred_at",
+            "kind": "string"
+          },
+          {
+            "name": "payload",
+            "kind": "message",
+            "type_name": "google.protobuf.Struct"
+          }
+        ],
         "reliant.v1.ResumeChatRequest": [
           {
             "name": "chat_id",
@@ -8266,6 +8373,73 @@
           {
             "name": "woken",
             "kind": "bool"
+          }
+        ],
+        "reliant.v1.RunNowRequest": [
+          {
+            "name": "project_id",
+            "kind": "string"
+          },
+          {
+            "name": "workflow",
+            "kind": "string"
+          },
+          {
+            "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "inputs",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "message",
+            "map_value_type_name": "google.protobuf.Value"
+          },
+          {
+            "name": "presets",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          },
+          {
+            "name": "worktree_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "no_machine",
+            "kind": "bool"
+          },
+          {
+            "name": "replay",
+            "kind": "message",
+            "type_name": "reliant.v1.ReplayEvent",
+            "optional": true
+          },
+          {
+            "name": "client_message_id",
+            "kind": "string",
+            "optional": true
+          }
+        ],
+        "reliant.v1.RunNowResponse": [
+          {
+            "name": "chat",
+            "kind": "message",
+            "type_name": "reliant.v1.Chat"
+          },
+          {
+            "name": "workflow_id",
+            "kind": "string"
+          },
+          {
+            "name": "run_id",
+            "kind": "string"
           }
         ],
         "reliant.v1.SearchChatsRequest": [
@@ -8942,10 +9116,13 @@
         "reliant.v1.PauseChatResponse": "reliant/v1/chat.proto",
         "reliant.v1.ProviderPolicy": "reliant/v1/chat.proto",
         "reliant.v1.QueuedAgentMessage": "reliant/v1/chat.proto",
+        "reliant.v1.ReplayEvent": "reliant/v1/chat.proto",
         "reliant.v1.ResumeChatRequest": "reliant/v1/chat.proto",
         "reliant.v1.ResumeChatResponse": "reliant/v1/chat.proto",
         "reliant.v1.RetryUsageLimitWaitRequest": "reliant/v1/chat.proto",
         "reliant.v1.RetryUsageLimitWaitResponse": "reliant/v1/chat.proto",
+        "reliant.v1.RunNowRequest": "reliant/v1/chat.proto",
+        "reliant.v1.RunNowResponse": "reliant/v1/chat.proto",
         "reliant.v1.SearchChatsRequest": "reliant/v1/chat.proto",
         "reliant.v1.SearchChatsResponse": "reliant/v1/chat.proto",
         "reliant.v1.SendAgentMessageRequest": "reliant/v1/chat.proto",
@@ -16131,6 +16308,32 @@
           "OutputTypeFQ": "reliant.v1.ResolveTriggerSendersResponse",
           "InputProtoFile": "reliant/v1/trigger.proto",
           "OutputProtoFile": "reliant/v1/trigger.proto"
+        },
+        {
+          "Name": "ListReplayEvents",
+          "InputType": "ListReplayEventsRequest",
+          "OutputType": "ListReplayEventsResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.ListReplayEventsRequest",
+          "OutputTypeFQ": "reliant.v1.ListReplayEventsResponse",
+          "InputProtoFile": "reliant/v1/trigger.proto",
+          "OutputProtoFile": "reliant/v1/trigger.proto"
+        },
+        {
+          "Name": "PreviewReplay",
+          "InputType": "PreviewReplayRequest",
+          "OutputType": "PreviewReplayResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.PreviewReplayRequest",
+          "OutputTypeFQ": "reliant.v1.PreviewReplayResponse",
+          "InputProtoFile": "reliant/v1/trigger.proto",
+          "OutputProtoFile": "reliant/v1/trigger.proto"
         }
       ],
       "ProtoFile": "reliant/v1/trigger.proto",
@@ -16312,6 +16515,31 @@
             "MessageType": "reliant.v1.Trigger"
           }
         ],
+        "ListReplayEventsRequest": [
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "workflow",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "limit",
+            "ProtoType": "int32",
+            "IsOptional": false
+          }
+        ],
+        "ListReplayEventsResponse": [
+          {
+            "Name": "events",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ReplayCandidate"
+          }
+        ],
         "ListTriggerEventsRequest": [
           {
             "Name": "trigger_id",
@@ -16360,6 +16588,42 @@
             "ProtoType": "[]message",
             "IsOptional": false,
             "MessageType": "reliant.v1.Trigger"
+          }
+        ],
+        "PreviewReplayRequest": [
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "workflow",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "replay",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ReplayEvent"
+          },
+          {
+            "Name": "sender",
+            "ProtoType": "message",
+            "IsOptional": true,
+            "MessageType": "reliant.v1.TriggerSender"
+          }
+        ],
+        "PreviewReplayResponse": [
+          {
+            "Name": "inputs",
+            "ProtoType": "message",
+            "IsOptional": false
+          },
+          {
+            "Name": "prompt",
+            "ProtoType": "string",
+            "IsOptional": false
           }
         ],
         "ResolveTriggerSendersRequest": [
@@ -16635,6 +16899,28 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.ListReplayEventsRequest": [
+          {
+            "name": "project_id",
+            "kind": "string"
+          },
+          {
+            "name": "workflow",
+            "kind": "string"
+          },
+          {
+            "name": "limit",
+            "kind": "int32"
+          }
+        ],
+        "reliant.v1.ListReplayEventsResponse": [
+          {
+            "name": "events",
+            "kind": "message",
+            "type_name": "reliant.v1.ReplayCandidate",
+            "repeated": true
+          }
+        ],
         "reliant.v1.ListTriggerEventsRequest": [
           {
             "name": "trigger_id",
@@ -16684,6 +16970,74 @@
             "kind": "message",
             "type_name": "reliant.v1.Trigger",
             "repeated": true
+          }
+        ],
+        "reliant.v1.PreviewReplayRequest": [
+          {
+            "name": "project_id",
+            "kind": "string"
+          },
+          {
+            "name": "workflow",
+            "kind": "string"
+          },
+          {
+            "name": "replay",
+            "kind": "message",
+            "type_name": "reliant.v1.ReplayEvent"
+          },
+          {
+            "name": "sender",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerSender",
+            "optional": true
+          }
+        ],
+        "reliant.v1.PreviewReplayResponse": [
+          {
+            "name": "inputs",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "message",
+            "map_value_type_name": "google.protobuf.Value"
+          },
+          {
+            "name": "prompt",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.ReplayCandidate": [
+          {
+            "name": "event",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerEvent"
+          },
+          {
+            "name": "trigger_name",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.ReplayEvent": [
+          {
+            "name": "trigger_name",
+            "kind": "string"
+          },
+          {
+            "name": "event_id",
+            "kind": "string"
+          },
+          {
+            "name": "kind",
+            "kind": "string"
+          },
+          {
+            "name": "occurred_at",
+            "kind": "string"
+          },
+          {
+            "name": "payload",
+            "kind": "message",
+            "type_name": "google.protobuf.Struct"
           }
         ],
         "reliant.v1.ResolveTriggerSendersRequest": [
@@ -17290,10 +17644,16 @@
         "reliant.v1.GetTriggerRequest": "reliant/v1/trigger.proto",
         "reliant.v1.GetTriggerResponse": "reliant/v1/trigger.proto",
         "reliant.v1.IntegrationSource": "reliant/v1/trigger.proto",
+        "reliant.v1.ListReplayEventsRequest": "reliant/v1/trigger.proto",
+        "reliant.v1.ListReplayEventsResponse": "reliant/v1/trigger.proto",
         "reliant.v1.ListTriggerEventsRequest": "reliant/v1/trigger.proto",
         "reliant.v1.ListTriggerEventsResponse": "reliant/v1/trigger.proto",
         "reliant.v1.ListTriggersRequest": "reliant/v1/trigger.proto",
         "reliant.v1.ListTriggersResponse": "reliant/v1/trigger.proto",
+        "reliant.v1.PreviewReplayRequest": "reliant/v1/trigger.proto",
+        "reliant.v1.PreviewReplayResponse": "reliant/v1/trigger.proto",
+        "reliant.v1.ReplayCandidate": "reliant/v1/trigger.proto",
+        "reliant.v1.ReplayEvent": "reliant/v1/chat.proto",
         "reliant.v1.ResolveTriggerSendersRequest": "reliant/v1/trigger.proto",
         "reliant.v1.ResolveTriggerSendersResponse": "reliant/v1/trigger.proto",
         "reliant.v1.ResolvedTriggerSender": "reliant/v1/trigger.proto",
@@ -17343,7 +17703,8 @@
           "TRIGGER_EVENT_KIND_BUILDER_TEST",
           "TRIGGER_EVENT_KIND_WEBHOOK",
           "TRIGGER_EVENT_KIND_INTEGRATION",
-          "TRIGGER_EVENT_KIND_WORKFLOW_EVENT"
+          "TRIGGER_EVENT_KIND_WORKFLOW_EVENT",
+          "TRIGGER_EVENT_KIND_MANUAL_RUN"
         ],
         "reliant.v1.TriggerEventOutcome": [
           "TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
@@ -17413,7 +17774,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "reliant.v1.TriggerEventOutcome": [
           0,
@@ -35017,6 +35379,11 @@
           {
             "name": "automation_only",
             "kind": "bool"
+          },
+          {
+            "name": "on_failure",
+            "kind": "message",
+            "type_name": "reliant.v1.Workflow"
           }
         ],
         "reliant.v1.WorkflowEventSource": [
@@ -37828,5 +38195,5 @@
       "Line": 20
     }
   ],
-  "source_hash": "0166099606146256f72a705d547ad1030f71d17ef88d0843a405c61a964cc4b9"
+  "source_hash": "afaf63231a4e1f7afac087c60e4d6d4666259e6e950394bcc957c4593faec4f6"
 }

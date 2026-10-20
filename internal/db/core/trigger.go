@@ -77,6 +77,11 @@ const (
 	TriggerEventKindIntegration TriggerEventKind = "integration"
 	// TriggerEventKindWorkflowEvent is another run reaching an outcome.
 	TriggerEventKindWorkflowEvent TriggerEventKind = "workflow_event"
+	// TriggerEventKindManualRun is a run a person started with "Run now" on a
+	// workflow: attended, owned by the caller, and the only way to run an
+	// automation-only workflow by hand. Its dedupe key is the chat id. A replay
+	// of a past event records the event it replayed in its payload.
+	TriggerEventKindManualRun TriggerEventKind = "manual.run"
 )
 
 // IsInbound reports whether events of this kind are recorded by a receiver as
@@ -128,6 +133,7 @@ var eventKindUnattended = map[TriggerEventKind]bool{
 	TriggerEventKindChatStart:     false,
 	TriggerEventKindAgentStartRun: false,
 	TriggerEventKindBuilderTest:   false,
+	TriggerEventKindManualRun:     false,
 }
 
 // TriggerEventOutcome records what a firing did.

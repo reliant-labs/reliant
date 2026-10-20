@@ -37,6 +37,8 @@ const (
 const (
 	// ChatServiceStartChatProcedure is the fully-qualified name of the ChatService's StartChat RPC.
 	ChatServiceStartChatProcedure = "/reliant.v1.ChatService/StartChat"
+	// ChatServiceRunNowProcedure is the fully-qualified name of the ChatService's RunNow RPC.
+	ChatServiceRunNowProcedure = "/reliant.v1.ChatService/RunNow"
 	// ChatServiceAdoptChatProcedure is the fully-qualified name of the ChatService's AdoptChat RPC.
 	ChatServiceAdoptChatProcedure = "/reliant.v1.ChatService/AdoptChat"
 	// ChatServiceUnadoptChatProcedure is the fully-qualified name of the ChatService's UnadoptChat RPC.
@@ -136,6 +138,15 @@ type ChatServiceClient interface {
 	// "a chat starts exactly once" is a database invariant rather than client
 	// discipline. See research/TRIGGERS.md.
 	StartChat(context.Context, *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error)
+	// RunNow starts a workflow by hand, from its detail page's "Run now". It is
+	// StartChat's attended start with its own launch kind (manual.run), and it
+	// works for a workflow whose Chat trigger is off (automation_only): pressing
+	// the button is how such a workflow is run by hand.
+	//
+	// Owner-only by construction: the run is the caller's, resolved against the
+	// caller's workflows. It is not an agent tool, and manual.run is not a launch
+	// kind StartChat can be asked for.
+	RunNow(context.Context, *connect.Request[v1.RunNowRequest]) (*connect.Response[v1.RunNowResponse], error)
 	// AdoptChat takes a run (typically an automation's) into the caller's own
 	// chats: sets adopted_at, which lists it in the sidebar, and makes the NEXT
 	// root run started by SendMessage attended. Idempotent; owner-only.
@@ -267,6 +278,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceStartChatProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("StartChat")),
+			connect.WithClientOptions(opts...),
+		),
+		runNow: connect.NewClient[v1.RunNowRequest, v1.RunNowResponse](
+			httpClient,
+			baseURL+ChatServiceRunNowProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("RunNow")),
 			connect.WithClientOptions(opts...),
 		),
 		adoptChat: connect.NewClient[v1.AdoptChatRequest, v1.AdoptChatResponse](
@@ -467,6 +484,7 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 // chatServiceClient implements ChatServiceClient.
 type chatServiceClient struct {
 	startChat                *connect.Client[v1.StartChatRequest, v1.StartChatResponse]
+	runNow                   *connect.Client[v1.RunNowRequest, v1.RunNowResponse]
 	adoptChat                *connect.Client[v1.AdoptChatRequest, v1.AdoptChatResponse]
 	unadoptChat              *connect.Client[v1.UnadoptChatRequest, v1.UnadoptChatResponse]
 	listChats                *connect.Client[v1.ListChatsRequest, v1.ListChatsResponse]
@@ -504,6 +522,11 @@ type chatServiceClient struct {
 // StartChat calls reliant.v1.ChatService.StartChat.
 func (c *chatServiceClient) StartChat(ctx context.Context, req *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error) {
 	return c.startChat.CallUnary(ctx, req)
+}
+
+// RunNow calls reliant.v1.ChatService.RunNow.
+func (c *chatServiceClient) RunNow(ctx context.Context, req *connect.Request[v1.RunNowRequest]) (*connect.Response[v1.RunNowResponse], error) {
+	return c.runNow.CallUnary(ctx, req)
 }
 
 // AdoptChat calls reliant.v1.ChatService.AdoptChat.
@@ -680,6 +703,15 @@ type ChatServiceHandler interface {
 	// "a chat starts exactly once" is a database invariant rather than client
 	// discipline. See research/TRIGGERS.md.
 	StartChat(context.Context, *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error)
+	// RunNow starts a workflow by hand, from its detail page's "Run now". It is
+	// StartChat's attended start with its own launch kind (manual.run), and it
+	// works for a workflow whose Chat trigger is off (automation_only): pressing
+	// the button is how such a workflow is run by hand.
+	//
+	// Owner-only by construction: the run is the caller's, resolved against the
+	// caller's workflows. It is not an agent tool, and manual.run is not a launch
+	// kind StartChat can be asked for.
+	RunNow(context.Context, *connect.Request[v1.RunNowRequest]) (*connect.Response[v1.RunNowResponse], error)
 	// AdoptChat takes a run (typically an automation's) into the caller's own
 	// chats: sets adopted_at, which lists it in the sidebar, and makes the NEXT
 	// root run started by SendMessage attended. Idempotent; owner-only.
@@ -807,6 +839,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceStartChatProcedure,
 		svc.StartChat,
 		connect.WithSchema(chatServiceMethods.ByName("StartChat")),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceRunNowHandler := connect.NewUnaryHandler(
+		ChatServiceRunNowProcedure,
+		svc.RunNow,
+		connect.WithSchema(chatServiceMethods.ByName("RunNow")),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceAdoptChatHandler := connect.NewUnaryHandler(
@@ -1005,6 +1043,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		switch r.URL.Path {
 		case ChatServiceStartChatProcedure:
 			chatServiceStartChatHandler.ServeHTTP(w, r)
+		case ChatServiceRunNowProcedure:
+			chatServiceRunNowHandler.ServeHTTP(w, r)
 		case ChatServiceAdoptChatProcedure:
 			chatServiceAdoptChatHandler.ServeHTTP(w, r)
 		case ChatServiceUnadoptChatProcedure:
@@ -1080,6 +1120,10 @@ type UnimplementedChatServiceHandler struct{}
 
 func (UnimplementedChatServiceHandler) StartChat(context.Context, *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.StartChat is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) RunNow(context.Context, *connect.Request[v1.RunNowRequest]) (*connect.Response[v1.RunNowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.RunNow is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) AdoptChat(context.Context, *connect.Request[v1.AdoptChatRequest]) (*connect.Response[v1.AdoptChatResponse], error) {

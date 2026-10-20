@@ -146,7 +146,17 @@ service ChatService {
   // "a chat starts exactly once" is a database invariant rather than client
   // discipline. See research/TRIGGERS.md.
   rpc StartChat(StartChatRequest) returns (StartChatResponse) {}
-  
+
+  // RunNow starts a workflow by hand, from its detail page's "Run now". It is
+  // StartChat's attended start with its own launch kind (manual.run), and it
+  // works for a workflow whose Chat trigger is off (automation_only): pressing
+  // the button is how such a workflow is run by hand.
+  //
+  // Owner-only by construction: the run is the caller's, resolved against the
+  // caller's workflows. It is not an agent tool, and manual.run is not a launch
+  // kind StartChat can be asked for.
+  rpc RunNow(RunNowRequest) returns (RunNowResponse) {}
+
   // AdoptChat takes a run (typically an automation's) into the caller's own
   // chats: sets adopted_at, which lists it in the sidebar, and makes the NEXT
   // root run started by SendMessage attended. Idempotent; owner-only.
@@ -543,6 +553,66 @@ message StartChatRequest {
 
 // StartChatResponse returns the started chat and the ids of its root run.
 message StartChatResponse {
+  Chat chat = 1;
+  string workflow_id = 2;
+  string run_id = 3;
+}
+
+// ReplayEvent is a past trigger event a run is started against: the event as
+// recorded, with the payload the person may have edited. It travels whole
+// rather than as an id because editing it before the replay is the point.
+message ReplayEvent {
+  // TriggerName is the declared trigger whose inputs and prompt map the event.
+  string trigger_name = 1;
+
+  // EventId is the recorded event this replays, kept on the new run's launch
+  // event so a replay can be traced to its origin. Empty for a hand-written
+  // payload.
+  string event_id = 2;
+
+  // Kind is the event's launch kind as TriggerEventKind names it on the wire
+  // ("webhook", "integration", "schedule", "workflow_event").
+  string kind = 3;
+
+  // OccurredAt is RFC3339 UTC. Empty means now.
+  string occurred_at = 4;
+
+  google.protobuf.Struct payload = 5;
+}
+
+// RunNowRequest starts a workflow by hand.
+message RunNowRequest {
+  string project_id = 1;
+
+  // Workflow is the workflow to run, as the Library names it.
+  string workflow = 2;
+
+  // Message is what the run starts from. When the run replays an event it is
+  // the trigger's rendered prompt (PreviewReplay), possibly edited. Empty
+  // starts from "Run now."
+  string message = 3;
+
+  map<string, google.protobuf.Value> inputs = 4;
+  map<string, string> presets = 5;
+
+  // WorktreeId is the workspace the run uses; unset is the main checkout.
+  optional string worktree_id = 6;
+
+  // DaemonId picks the machine; unset is the runtime's default resolution.
+  optional string daemon_id = 7;
+
+  // NoMachine runs without any machine. Mutually exclusive with daemon_id.
+  bool no_machine = 8;
+
+  // Replay, when set, appends the event to the message as a labelled
+  // <trigger_event> block and records it on the run's launch event.
+  optional ReplayEvent replay = 9;
+
+  // Client-chosen UUID that makes the start idempotent, as on StartChatRequest.
+  optional string client_message_id = 10;
+}
+
+message RunNowResponse {
   Chat chat = 1;
   string workflow_id = 2;
   string run_id = 3;

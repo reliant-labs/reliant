@@ -233,6 +233,8 @@ export interface LaunchEvent {
   triggerName?: string;
   /** A "Run now" fire of a schedule. */
   manual: boolean;
+  /** A manual.run that replayed a past trigger event. */
+  replayedEvent?: boolean;
   /** The chat whose agent started this run. */
   parentChatId?: string;
   /** A provider event's integration ("github"). */
@@ -252,6 +254,7 @@ const LAUNCH_EVENT_KINDS: Record<TriggerEventKind, string> = {
   [TriggerEventKind.SCHEDULE]: "schedule",
   [TriggerEventKind.AGENT_START_RUN]: "agent.start_run",
   [TriggerEventKind.BUILDER_TEST]: "builder.test",
+  [TriggerEventKind.MANUAL_RUN]: "manual.run",
   [TriggerEventKind.WEBHOOK]: "webhook",
   [TriggerEventKind.INTEGRATION]: "integration",
   [TriggerEventKind.WORKFLOW_EVENT]: "workflow_event",
@@ -298,6 +301,7 @@ export function launchEventFromProto(event: ProtoTriggerEvent): LaunchEvent {
     firedAt: optionalString(payload.fired_at),
     triggerName: optionalString(payload.trigger_name),
     manual: payload.manual === true,
+    replayedEvent: isRecord(payload.replay) ? true : undefined,
     parentChatId: optionalString(payload.parent_chat_id),
     integration: integration ? optionalString(payload.integration) : undefined,
     providerEvent: integration ? optionalString(payload.event) : undefined,

@@ -44,7 +44,7 @@ import EmptyState from "../../forge-ui/empty_state";
 import PageHeader from "../../forge-ui/page_header";
 import { Button } from "../../ui/Button";
 import { Modal } from "../../ui/Modal";
-import { RunWorkflowDialog } from "../../workflow/run/RunWorkflowDialog";
+import { RunNowDialog } from "../../workflow/run/RunNowDialog";
 import { workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
 import { splitFindings } from "../../workflow/workflowDraftStatus";
@@ -530,7 +530,7 @@ function LibraryBody({ projectId }: { projectId: string }) {
         }}
       />
 
-      <RunWorkflowDialog
+      <RunNowDialog
         open={runRef !== null}
         onClose={() => setRunRef(null)}
         projectId={projectId}

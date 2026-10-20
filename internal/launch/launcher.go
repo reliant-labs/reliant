@@ -717,11 +717,11 @@ func effectiveStart(chat *db.Chat, spec Spec) (workflowName string, presets map[
 }
 
 // isAttendedStartKind reports whether a launch kind is a human starting a chat
-// by hand: the interactive start, and a test run pressed in the workflow
-// builder. Both dedupe on the chat id, so a second call with different content
+// by hand: the interactive start, a test run pressed in the workflow builder,
+// and "Run now" on a workflow. All dedupe on the chat id, so a second call with different content
 // is a second thing the user said rather than a retry.
 func isAttendedStartKind(kind core.TriggerEventKind) bool {
-	return kind == core.TriggerEventKindChatStart || kind == core.TriggerEventKindBuilderTest
+	return kind == core.TriggerEventKindChatStart || kind == core.TriggerEventKindBuilderTest || kind == core.TriggerEventKindManualRun
 }
 
 // isRetryOf reports whether a call carrying fingerprint is a retry of the

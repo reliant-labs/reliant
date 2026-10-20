@@ -20,11 +20,13 @@
  * renaming a webhook trigger cannot turn it into an empty schedule.
  */
 
-import { create, type MessageInitShape } from "@bufbuild/protobuf";
+import { create, toJson, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
+import { StructSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { grpcClient } from "./grpc-client";
 import { jsToProtoValue, protoValueToJs } from "./proto-utils";
+import { replayEventToProto, type ReplayEventInput } from "./chat-grpc";
 import {
   ActingIdentity,
   CreateTriggerRequestSchema,
@@ -34,14 +36,18 @@ import {
   FireTriggerRequestSchema,
   GetTriggerRequestSchema,
   ListTriggerEventsRequestSchema,
+  ListReplayEventsRequestSchema,
+  PreviewReplayRequestSchema,
   ListTriggersRequestSchema,
   ResolveTriggerSendersRequestSchema,
   RotateWebhookTokenRequestSchema,
   ScheduleSourceSchema,
   SetTriggerEnabledRequestSchema,
   TriggerDefinitionSchema,
+  TriggerEventKind,
   TriggerEventOutcome,
   TriggerHealthStatus,
+  TriggerSenderSchema,
   TriggerOverlapPolicy,
   UpdateTriggerRequestSchema,
   WorkflowTriggerOutcome,
@@ -110,6 +116,28 @@ export interface TriggerSchedule {
   overlap: OverlapPolicy;
   /** Go duration; unset means the server default (10m). */
   catchupWindow?: string;
+}
+
+/** A past event a workflow could be run against again. */
+export interface ReplayCandidate {
+  /** The declared trigger the event arrived through. */
+  triggerName: string;
+  event: TriggerEvent;
+  /** The event's kind as ReplayEvent.kind names it ("integration", "webhook", ...). */
+  kind: string;
+  /** The recorded payload, to show and edit. */
+  payload: Record<string, unknown>;
+}
+
+const REPLAY_KINDS: Partial<Record<TriggerEventKind, string>> = {
+  [TriggerEventKind.SCHEDULE]: "schedule",
+  [TriggerEventKind.WEBHOOK]: "webhook",
+  [TriggerEventKind.INTEGRATION]: "integration",
+  [TriggerEventKind.WORKFLOW_EVENT]: "workflow_event",
+};
+
+function eventKindToWire(kind: TriggerEventKind): string {
+  return REPLAY_KINDS[kind] ?? "";
 }
 
 export interface TriggerEvent {
@@ -787,6 +815,48 @@ export const triggerGrpc = {
   async fire(id: string): Promise<string> {
     const response = await grpcClient.trigger().fireTrigger(create(FireTriggerRequestSchema, { id }));
     return response.fireWorkflowId;
+  },
+
+  /**
+   * The recent events the caller's activations of a workflow's declared
+   * triggers received, newest first, to run the workflow against again.
+   */
+  async listReplayEvents(projectId: string, workflow: string, limit = 20): Promise<ReplayCandidate[]> {
+    const response = await grpcClient
+      .trigger()
+      .listReplayEvents(create(ListReplayEventsRequestSchema, { projectId, workflow, limit }));
+    return response.events.map((candidate) => ({
+      triggerName: candidate.triggerName,
+      event: eventFromProto(candidate.event!),
+      kind: eventKindToWire(candidate.event?.kind ?? TriggerEventKind.UNSPECIFIED),
+      payload: (candidate.event?.payload ? (toJson(StructSchema, candidate.event.payload) as JsonObject) : {}) as Record<string, unknown>,
+    }));
+  },
+
+  /**
+   * Maps a past event through a declared trigger's inputs and prompt, as a fire
+   * would. The filter is not applied: the person replaying has decided the
+   * event is wanted.
+   */
+  async previewReplay(
+    projectId: string,
+    workflow: string,
+    replay: ReplayEventInput,
+    sender?: TriggerSender,
+  ): Promise<{ inputs: Record<string, unknown>; prompt: string }> {
+    const response = await grpcClient.trigger().previewReplay(
+      create(PreviewReplayRequestSchema, {
+        projectId,
+        workflow,
+        replay: replayEventToProto(replay),
+        sender: sender
+          ? create(TriggerSenderSchema, { kind: sender.kind, id: sender.id, displayName: sender.displayName, verified: sender.verified })
+          : undefined,
+      }),
+    );
+    const inputs: Record<string, unknown> = {};
+    for (const [name, value] of Object.entries(response.inputs)) inputs[name] = protoValueToJs(value);
+    return { inputs, prompt: response.prompt };
   },
 
   async listEvents(triggerId: string, limit = 50): Promise<TriggerEvent[]> {

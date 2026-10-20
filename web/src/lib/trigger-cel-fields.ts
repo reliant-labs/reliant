@@ -37,6 +37,7 @@ export const TRIGGER_KINDS = [
   'webhook',
   'integration',
   'workflow_event',
+  'manual.run',
 ] as const
 
 /**

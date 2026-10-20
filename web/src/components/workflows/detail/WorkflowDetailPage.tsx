@@ -2,7 +2,7 @@
 
 /**
  * /workflows/library/$workflowRef — one workflow: what it does, how it is
- * used, and Run… (WORKFLOW_UI.md §2.3). Every surface that names a workflow
+ * used, and Run now (WORKFLOW_UI.md §2.3). Every surface that names a workflow
  * can link here.
  *
  * Main column: recent runs (the Runs tab's own RunList, so the two cannot
@@ -12,7 +12,8 @@
  * old hub, with the global list in Settings → Presets), and Used by: the
  * workflows that call this one through `ref:`.
  *
- * Actions live in the page header and nowhere else: Run… (RunWorkflowDialog),
+ * Actions live in the page header and nowhere else: Run now (RunNowDialog, which
+ * also runs a workflow whose Chat trigger is off),
  * Edit (the builder) and New automation (AutomationFormDialog, prefilled with
  * this workflow). The Definition card used to repeat Edit twice more ("Open in
  * builder", and the diagram's own pencil under a second header); one action,
@@ -39,7 +40,7 @@ import { Button } from "../../ui/Button";
 import { AutomationRow } from "../../Automations/AutomationRow";
 import { AutomationFormDialog } from "../../Automations/AutomationFormDialog";
 import { RunList } from "../../runs/RunList";
-import { RunWorkflowDialog } from "../../workflow/run/RunWorkflowDialog";
+import { RunNowDialog } from "../../workflow/run/RunNowDialog";
 import { WorkflowViewerPanel } from "../../workflow/WorkflowViewerPanel";
 import { workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
@@ -98,11 +99,7 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
       ? "This workflow's definition has errors, so it cannot run."
       : isDraft
         ? `${DRAFT_NOT_RUNNABLE} Open it in the editor to publish it.`
-        : // Run… starts the run as a chat, so a workflow whose Chat trigger is
-          // off cannot be run from here; its triggers (or a Test run) start it.
-          listing?.automationOnly
-          ? "Its Chat trigger is off, so only its triggers start it. Turn Chat on in the builder to run it from here."
-          : null;
+        : null;
   const openBuilder = () =>
     void navigate({ to: "/workflow/$workflowName", params: { workflowName: workflowRef } });
   const declared = definition.workflowDef ? declaredTriggers(definition.workflowDef) : [];
@@ -192,7 +189,7 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
                     : []),
                 ]),
             {
-              label: "Run…",
+              label: "Run now",
               variant: "primary",
               icon: <Play className="h-4 w-4" aria-hidden="true" />,
               onClick: () => setRunning(true),
@@ -252,7 +249,7 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
         declared={declared}
         defaultProjectId={projectId}
       />
-      <RunWorkflowDialog open={running} onClose={() => setRunning(false)} projectId={projectId} workflowRef={workflowRef} />
+      <RunNowDialog open={running} onClose={() => setRunning(false)} projectId={projectId} workflowRef={workflowRef} />
       <AutomationFormDialog
         open={creatingAutomation}
         onClose={() => setCreatingAutomation(false)}

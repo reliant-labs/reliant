@@ -25,7 +25,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { presetGrpc, type Preset } from "@/api/preset-grpc";
 import { worktreeGrpc } from "@/api/worktree-grpc";
-import { buildDaemonChoices, daemonLabel } from "@/components/Automations/daemonChoices";
+import { buildDaemonChoices, daemonLabel, NO_MACHINE } from "@/components/Automations/daemonChoices";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useProjectDaemonInstalls } from "@/hooks/trigger-queries";
 import { CardInset } from "@/components/forge-ui/card";
@@ -85,6 +85,15 @@ export interface RunWorkflowFormProps {
    */
   showMachinePicker?: boolean;
   /**
+   * Add "No machine" to the machine picker: the run uses only tools that run on
+   * Reliant's servers. The value is the NO_MACHINE sentinel in `daemonId`, which
+   * the host turns into the request's no_machine flag. `noMachineBlocker` is the
+   * reason it cannot be chosen for this workflow, shown beside the disabled
+   * option.
+   */
+  offerNoMachine?: boolean;
+  noMachineBlocker?: string;
+  /**
    * Inputs the host sets some other way and this form must neither show nor
    * require — an activation's inputs a declared trigger maps from each event,
    * which the server refuses as params (they would be overwritten every fire).
@@ -102,6 +111,8 @@ export function RunWorkflowForm({
   showValidation = false,
   applyDefaultPresets = false,
   showMachinePicker = false,
+  offerNoMachine = false,
+  noMachineBlocker,
   excludeInputs,
   disabled = false,
 }: RunWorkflowFormProps) {
@@ -268,6 +279,8 @@ export function RunWorkflowForm({
           projectId={projectId}
           daemonId={value.daemonId}
           disabled={disabled}
+          offerNoMachine={offerNoMachine}
+          noMachineBlocker={noMachineBlocker}
           onChange={(daemonId) => onChange({ ...valueRef.current, daemonId })}
         />
       )}
@@ -421,10 +434,12 @@ interface MachineFieldProps {
   projectId: string;
   daemonId: string | undefined;
   disabled: boolean;
+  offerNoMachine: boolean;
+  noMachineBlocker?: string;
   onChange: (daemonId: string | undefined) => void;
 }
 
-function MachineField({ id, projectId, daemonId, disabled, onChange }: MachineFieldProps) {
+function MachineField({ id, projectId, daemonId, disabled, offerNoMachine, noMachineBlocker, onChange }: MachineFieldProps) {
   const { daemons, loading: daemonsLoading } = useDaemonStatus();
   const installsQuery = useProjectDaemonInstalls();
   const ready = !daemonsLoading && !installsQuery.isLoading;
@@ -439,7 +454,7 @@ function MachineField({ id, projectId, daemonId, disabled, onChange }: MachineFi
   // A prefilled machine (a re-run's original) stays selectable even when it no
   // longer qualifies, so the field shows what will be sent instead of reading
   // "Default machine" over an id it still submits.
-  const storedUnlisted = daemonId && ready && !choices.some((c) => c.daemonId === daemonId);
+  const storedUnlisted = daemonId && daemonId !== NO_MACHINE && ready && !choices.some((c) => c.daemonId === daemonId);
   const storedLabel = storedUnlisted
     ? `${daemonLabel(daemons.find((d) => d.daemonId === daemonId), daemonId)} (unavailable)`
     : undefined;
@@ -465,13 +480,20 @@ function MachineField({ id, projectId, daemonId, disabled, onChange }: MachineFi
             {choice.installed ? ", project installed" : ""})
           </option>
         ))}
+        {offerNoMachine && (
+          <option value={NO_MACHINE} disabled={!!noMachineBlocker}>
+            {noMachineBlocker ? `No machine (unavailable: ${noMachineBlocker})` : "No machine (server tools only)"}
+          </option>
+        )}
       </select>
       <p id={`${id}-hint`} className={hintClass}>
-        {!ready
-          ? "Loading your machines…"
-          : choices.length === 0
-            ? "No machine of yours has this project installed; the run uses the default."
-            : "The machine the run's tools execute on."}
+        {daemonId === NO_MACHINE
+          ? "The run uses only web, integration and planning tools; nothing touches files."
+          : !ready
+            ? "Loading your machines…"
+            : choices.length === 0
+              ? "No machine of yours has this project installed; the run uses the default."
+              : "The machine the run's tools execute on."}
       </p>
     </div>
   );
