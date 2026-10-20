@@ -4,8 +4,11 @@ package toolexec
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -35,17 +38,90 @@ func freeLocalPort(t *testing.T) int {
 	return l.Addr().(*net.TCPAddr).Port
 }
 
+// routePort picks the port a member's route listener binds. A variable so a
+// test can hand out a port that is already taken.
+var routePort = freeLocalPort
+
+// errRoutePortTaken: a member could not bind the route port picked for it.
+// Every member's routes name every other member's port, so the ports must be
+// chosen before any member starts, and freeLocalPort releases its pick for the
+// member to bind. In between, another process can take it — an outbound
+// connection draws its local port from the same ephemeral range — and that
+// member then never listens for routes.
+var errRoutePortTaken = errors.New("route port was taken before its member could bind it")
+
+// fatalRecorder is a member's logger. It keeps the first fatal error, which
+// nats-server reports only through its logger — a member that cannot bind its
+// route port simply never becomes ready — and drops everything else, as NoLog
+// did.
+type fatalRecorder struct {
+	mu    sync.Mutex
+	first string
+}
+
+func (r *fatalRecorder) Fatalf(format string, v ...any) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.first == "" {
+		r.first = fmt.Sprintf(format, v...)
+	}
+}
+
+func (r *fatalRecorder) fatal() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.first
+}
+
+func (*fatalRecorder) Noticef(string, ...any) {}
+func (*fatalRecorder) Warnf(string, ...any)   {}
+func (*fatalRecorder) Errorf(string, ...any)  {}
+func (*fatalRecorder) Debugf(string, ...any)  {}
+func (*fatalRecorder) Tracef(string, ...any)  {}
+
 func startNATSCluster(t *testing.T, n int) *natsTestCluster {
+	t.Helper()
+	// A taken route port is retried on fresh ports; it is the machine being
+	// busy, not the cluster misbehaving. Any other startup failure is not.
+	const attempts = 3
+	var c *natsTestCluster
+	var routesPerPeer int
+	for attempt := 1; ; attempt++ {
+		var err error
+		c, routesPerPeer, err = bootNATSCluster(t, n)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, errRoutePortTaken) || attempt == attempts {
+			t.Fatalf("NATS cluster did not start (attempt %d of %d): %v", attempt, attempts, err)
+		}
+		t.Logf("NATS cluster attempt %d: %v; retrying on fresh route ports", attempt, err)
+	}
+	waitClusterFormed(t, c, n, routesPerPeer)
+	return c
+}
+
+// bootNATSCluster starts n members routed to each other and waits until each
+// is listening. A member that reports a fatal error fails it at once rather
+// than at the readiness timeout, with every member it started shut down.
+//
+// routesPerPeer is how many route connections a member holds to each peer once
+// the mesh is complete: one per pool slot plus one per pinned account.
+// NewServer fills both defaults into the options it is given.
+func bootNATSCluster(t *testing.T, n int) (_ *natsTestCluster, routesPerPeer int, _ error) {
 	t.Helper()
 	routePorts := make([]int, n)
 	for i := range routePorts {
-		routePorts[i] = freeLocalPort(t)
+		routePorts[i] = routePort(t)
 	}
 	c := &natsTestCluster{}
-	// routesPerPeer is how many route connections a member holds to each
-	// peer once the mesh is complete: one per pool slot plus one per pinned
-	// account. NewServer fills both defaults into the options it is given.
-	var routesPerPeer int
+	shutdown := func() {
+		for _, s := range c.servers {
+			s.Shutdown()
+		}
+	}
+	t.Cleanup(shutdown)
+	recorders := make([]*fatalRecorder, n)
 	for i := 0; i < n; i++ {
 		var routes []string
 		for j, p := range routePorts {
@@ -69,18 +145,39 @@ func startNATSCluster(t *testing.T, n int) *natsTestCluster {
 		opts.Routes = server.RoutesFromStr(joinCSV(routes))
 		srv, err := server.NewServer(opts)
 		require.NoError(t, err)
+		recorders[i] = &fatalRecorder{}
+		srv.SetLogger(recorders[i], false, false)
 		routesPerPeer = max(opts.Cluster.PoolSize, 1) + len(opts.Cluster.PinnedAccounts)
 		go srv.Start()
 		c.servers = append(c.servers, srv)
 	}
-	t.Cleanup(func() {
-		for _, s := range c.servers {
-			s.Shutdown()
-		}
-	})
+	deadline := time.Now().Add(20 * time.Second)
 	for _, s := range c.servers {
-		require.True(t, s.ReadyForConnections(20*time.Second), "cluster member not ready")
+		// 50ms, not less: ReadyForConnections sleeps between checks only
+		// when given more than 25ms, and spins otherwise.
+		for !s.ReadyForConnections(50 * time.Millisecond) {
+			for i, rec := range recorders {
+				msg := rec.fatal()
+				if msg == "" {
+					continue
+				}
+				shutdown()
+				if strings.Contains(msg, "Error listening on router port") {
+					return nil, 0, fmt.Errorf("%w: %s: %s", errRoutePortTaken, c.servers[i].Name(), msg)
+				}
+				return nil, 0, fmt.Errorf("%s: %s", c.servers[i].Name(), msg)
+			}
+			if time.Now().After(deadline) {
+				shutdown()
+				return nil, 0, fmt.Errorf("cluster member %s not ready after 20s", s.Name())
+			}
+		}
 	}
+	return c, routesPerPeer, nil
+}
+
+func waitClusterFormed(t *testing.T, c *natsTestCluster, n, routesPerPeer int) {
+	t.Helper()
 	// Wait for the COMPLETE route mesh, not just a JetStream meta leader.
 	//
 	// The members start together, so some of their first route dials are
@@ -115,7 +212,6 @@ func startNATSCluster(t *testing.T, n int) *natsTestCluster {
 		}
 		return leader
 	}, 60*time.Second, 200*time.Millisecond, "JetStream meta layer never formed")
-	return c
 }
 
 func joinCSV(s []string) string {
@@ -418,4 +514,34 @@ func TestDrainPendingCommands_Cluster_SurvivesGatewayRestart(t *testing.T) {
 	b3.drainPendingCommands(context.Background(), pendingDrainUser, daemon)
 	assert.Empty(t, requestIDs(mgr2))
 	env.cluster.assertHealthy(t, "after restart drains")
+}
+
+// A route port is picked before its member binds it, so on a busy machine
+// another process can take it in between — an outbound connection draws its
+// local port from the same ephemeral range. The member then never listens for
+// routes, and with NoLog nothing says why: CI saw only "cluster member not
+// ready" after the full 20s. Startup must notice and move to fresh ports.
+func TestStartNATSCluster_RecoversWhenARoutePortIsTaken(t *testing.T) {
+	if testing.Short() {
+		t.Skip("-short: boots a 3-node NATS cluster; runs in the full lane")
+	}
+	taken, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = taken.Close() })
+
+	var handedOut atomic.Bool
+	prev := routePort
+	routePort = func(t *testing.T) int {
+		if handedOut.CompareAndSwap(false, true) {
+			return taken.Addr().(*net.TCPAddr).Port
+		}
+		return prev(t)
+	}
+	t.Cleanup(func() { routePort = prev })
+
+	start := time.Now()
+	c := startNATSCluster(t, 3)
+	require.Len(t, c.servers, 3)
+	assert.Less(t, time.Since(start), 15*time.Second,
+		"a lost route port must be detected when the bind fails, not after the readiness timeout")
 }

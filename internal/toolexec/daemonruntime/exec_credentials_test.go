@@ -73,23 +73,35 @@ func TestExecBGStart_CredentialsNone_ChildEnvironmentHasNoCredentials(t *testing
 	if err := json.Unmarshal(raw, &started); err != nil {
 		t.Fatal(err)
 	}
+	// Read the output once the process has finished, not as soon as some of
+	// it is there: a partial `env` listing can lack the very lines asserted.
 	mgr := shell.GetBackgroundManager()
 	deadline := time.Now().Add(20 * time.Second)
 	for {
-		lines, err := mgr.GetCombinedOutput(started.ProcessID)
-		if err == nil && len(lines) > 3 {
-			var sb strings.Builder
-			for _, l := range lines {
-				sb.WriteString(l.Text + "\n")
+		status, complete, _, err := mgr.GetProcessStatus(started.ProcessID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if complete {
+			if status != "completed" {
+				t.Fatalf("env finished with status %q", status)
 			}
-			assertNoCredentials(t, sb.String())
-			return
+			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("background process produced no output: %v", err)
+			t.Fatalf("env still %q after 20s", status)
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
+	lines, err := mgr.GetCombinedOutput(started.ProcessID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sb strings.Builder
+	for _, l := range lines {
+		sb.WriteString(l.Text + "\n")
+	}
+	assertNoCredentials(t, sb.String())
 }
 
 func assertNoCredentials(t *testing.T, envOutput string) {

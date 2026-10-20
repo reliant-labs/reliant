@@ -9,12 +9,10 @@
 package shell
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os/exec"
 	"sync"
 	"time"
@@ -38,6 +36,22 @@ var ErrPersistenceSkipped = errors.New("persistence skipped")
 // attribution. Inert (all checks answer false) on hosts without cgroup v2
 // memory files — macOS and uncontained local daemons.
 var bgMemReader = cgroupmem.NewReader(cgroupmem.DefaultRoot)
+
+// BackgroundWaitDelay bounds how long a background process's output keeps
+// draining AFTER the process itself has exited — the cmd.WaitDelay the
+// background path shares with exec.run (daemon.ExecWaitDelay, whose comment
+// has the full reasoning).
+//
+// Normally the drain ends at once: the last writer of the output pipe is the
+// process, and its exit is EOF. A command that leaves a child running with the
+// inherited stdout (`server & exit 0`) holds the pipe open past its own exit;
+// without a bound the process would read as running for the child's whole
+// lifetime. A variable so tests can shrink it.
+var BackgroundWaitDelay = 10 * time.Second
+
+// maxOutputLineBytes caps one line of captured output. A longer run without a
+// newline is split into lines of this size rather than buffered without limit.
+const maxOutputLineBytes = 64 << 10
 
 // OutputLine represents a single line of output with its source
 type OutputLine struct {
@@ -417,19 +431,6 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
-	// Create pipes for real-time output capture
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
-	}
-
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to create stderr pipe: %w", err)
-	}
-
 	process := &BackgroundProcess{
 		ID:             processID,
 		Command:        opts.Command,
@@ -451,6 +452,19 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	}
 
 	process.oomSnap = bgMemReader.SnapshotOOMKills()
+
+	// Output is captured by writers that os/exec feeds from its own copying
+	// goroutines, NOT by reading cmd.StdoutPipe(). Wait closes a StdoutPipe as
+	// soon as the process exits, so a reader still behind lost the rest of the
+	// output — all of it, for a command as quick as `env`. With writers, Wait
+	// itself returns only once the output has drained (to EOF, or for
+	// BackgroundWaitDelay after the exit), so completion is never reported
+	// ahead of the output it completes.
+	stdoutLines := &outputLineWriter{process: process, buffer: stdout, outputType: "stdout"}
+	stderrLines := &outputLineWriter{process: process, buffer: stderr, outputType: "stderr"}
+	cmd.Stdout = stdoutLines
+	cmd.Stderr = stderrLines
+	cmd.WaitDelay = BackgroundWaitDelay
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
@@ -474,12 +488,8 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		}
 	}
 
-	// Start goroutines to capture output
-	go m.captureOutput(stdoutPipe, stdout, "stdout", process)
-	go m.captureOutput(stderrPipe, stderr, "stderr", process)
-
 	// Start goroutine to wait for process completion
-	go m.waitForProcess(process)
+	go m.waitForProcess(process, stdoutLines, stderrLines)
 
 	// Store process in map
 	m.mu.Lock()
@@ -522,44 +532,92 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	return process, nil
 }
 
-// captureOutput reads from a pipe and writes to a buffer, also appending to combined output
-// and broadcasting to any subscribers
-func (m *BackgroundManager) captureOutput(pipe io.Reader, buffer *bytes.Buffer, outputType string, process *BackgroundProcess) {
-	scanner := bufio.NewScanner(pipe)
-	for scanner.Scan() {
-		line := scanner.Text()
+// outputLineWriter splits one output stream of a background process into
+// lines, appending each to the process's buffer and combined output and
+// broadcasting it to subscribers. os/exec calls Write from a single copying
+// goroutine per stream, so partial needs no lock of its own.
+type outputLineWriter struct {
+	process    *BackgroundProcess
+	buffer     *bytes.Buffer
+	outputType string
+	partial    []byte // the current line, not yet terminated by a newline
+}
 
-		// Update output buffers
-		process.outputMu.Lock()
-		buffer.WriteString(line)
-		buffer.WriteByte('\n')
-		process.outputSeq++
-		outputLine := OutputLineWithSeq{
-			Type:     outputType,
-			Text:     line,
-			Sequence: process.outputSeq,
-		}
-		process.combinedOutput = append(process.combinedOutput, outputLine)
-		process.outputMu.Unlock()
-
-		// Broadcast to subscribers (non-blocking)
-		process.subscribersMu.RLock()
-		for _, ch := range process.subscribers {
-			select {
-			case ch <- outputLine:
-				// Sent successfully
-			default:
-				// Channel full, subscriber too slow - skip this line for them
-				// They can still see it via GetCombinedOutput
+func (w *outputLineWriter) Write(p []byte) (int, error) {
+	written := len(p)
+	for len(p) > 0 {
+		newline := bytes.IndexByte(p, '\n')
+		if newline < 0 {
+			w.partial = append(w.partial, p...)
+			for len(w.partial) >= maxOutputLineBytes {
+				w.emit(w.partial[:maxOutputLineBytes])
+				w.partial = append(w.partial[:0], w.partial[maxOutputLineBytes:]...)
 			}
+			break
 		}
-		process.subscribersMu.RUnlock()
+		w.partial = append(w.partial, p[:newline]...)
+		w.emit(w.partial)
+		w.partial = w.partial[:0]
+		p = p[newline+1:]
+	}
+	return written, nil
+}
+
+// flush emits a final line the stream did not terminate with a newline. Call
+// it only once os/exec has stopped writing, i.e. after cmd.Wait returns.
+func (w *outputLineWriter) flush() {
+	if len(w.partial) > 0 {
+		w.emit(w.partial)
+		w.partial = w.partial[:0]
 	}
 }
 
-// waitForProcess waits for a process to complete and updates its status
-func (m *BackgroundManager) waitForProcess(process *BackgroundProcess) {
+func (w *outputLineWriter) emit(raw []byte) {
+	// Same line shape bufio.ScanLines produced: no trailing carriage return.
+	line := string(bytes.TrimSuffix(raw, []byte{'\r'}))
+	process := w.process
+
+	process.outputMu.Lock()
+	w.buffer.WriteString(line)
+	w.buffer.WriteByte('\n')
+	process.outputSeq++
+	outputLine := OutputLineWithSeq{
+		Type:     w.outputType,
+		Text:     line,
+		Sequence: process.outputSeq,
+	}
+	process.combinedOutput = append(process.combinedOutput, outputLine)
+	process.outputMu.Unlock()
+
+	// Broadcast to subscribers (non-blocking)
+	process.subscribersMu.RLock()
+	for _, ch := range process.subscribers {
+		select {
+		case ch <- outputLine:
+			// Sent successfully
+		default:
+			// Channel full, subscriber too slow - skip this line for them
+			// They can still see it via GetCombinedOutput
+		}
+	}
+	process.subscribersMu.RUnlock()
+}
+
+// waitForProcess waits for a process to complete and updates its status.
+// cmd.Wait returns only after the output writers have stopped being written,
+// so flushing them first puts every line in place before the status changes.
+func (m *BackgroundManager) waitForProcess(process *BackgroundProcess, outputs ...*outputLineWriter) {
 	err := process.cmd.Wait()
+	for _, output := range outputs {
+		output.flush()
+	}
+	if errors.Is(err, exec.ErrWaitDelay) {
+		// The process exited 0 but something it left running still held its
+		// output open when BackgroundWaitDelay ran out. Collection stopped
+		// there; the command itself succeeded and is reported as it exited.
+		logging.Debug("Background process output drain cut off by a lingering child", "id", process.ID)
+		err = nil
+	}
 	m.handleProcessCompletion(process, err)
 }
 

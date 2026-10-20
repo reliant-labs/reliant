@@ -1505,6 +1505,11 @@ func reportOrNil(report json.RawMessage, hasReport bool) json.RawMessage {
 }
 
 func startForgeDeployJob(job *forgeDeployJob, args []string) {
+	// Resolve the runner seam HERE, in the starting goroutine, not inside the
+	// job: the job outlives the call that started it, so a read of the
+	// package-level seam from the job goroutine races whoever swaps it next —
+	// in tests, the following test installing its own stub.
+	run := runForgeDeploy
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), forgeDeployInvocationTimeout)
 		defer cancel()
@@ -1513,7 +1518,7 @@ func startForgeDeployJob(job *forgeDeployJob, args []string) {
 		if dir == "" {
 			dir = job.projectPath
 		}
-		res, err := runForgeDeploy(ctx, dir, args)
+		res, err := run(ctx, dir, args)
 
 		report := bytes.TrimSpace(res.Stdout)
 		hasReport := len(report) > 0 && json.Valid(report)
