@@ -188,12 +188,13 @@ func TestWorktreeCreate_BaseNowhereIsBaseNotFound(t *testing.T) {
 // A base shaped like an option is never handed to git as one: it resolves to
 // nothing, and the create answers base_not_found without running git on it.
 func TestWorktreeCreate_RefusesOptionShapedBase(t *testing.T) {
+	t.Parallel()
 	_, found := resolveWorktreeStartPoint(context.Background(), t.TempDir(), "--upload-pack=x")
 	assert.False(t, found)
 
 	resp := createFor(t, map[string]any{
 		"project_path": diagnoseRepo(t),
-		"workspace_id": "ws-option-base",
+		"workspace_id": uniqueWorkspaceID(t, "ws-option-base"),
 		"name":         "option",
 		"branch":       "feat/new",
 		"base_branch":  "--upload-pack=x",

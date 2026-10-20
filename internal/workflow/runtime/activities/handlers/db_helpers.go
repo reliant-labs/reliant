@@ -129,7 +129,7 @@ func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, rep
 	}
 
 	if violations := ValidateToolPairing(msgs); len(violations) > 0 {
-		logging.Warn("[ToolPairing] Loaded history violates the tool-call/tool-result invariant; repairing in memory",
+		logging.WarnContext(ctx, "[ToolPairing] Loaded history violates the tool-call/tool-result invariant; repairing in memory",
 			"chatID", chatID,
 			"thread", thread,
 			"violationCount", len(violations),
@@ -179,7 +179,7 @@ func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, rep
 	// the transcript keeps whatever the user saw, and a read path that quietly
 	// rewrites history is far harder to reason about than one that filters.
 	if kept, dropped := dropBlocklessAssistantMessages(msgs); dropped > 0 {
-		logging.Warn("[LoadHistory] Dropped blockless assistant message(s) from loaded history",
+		logging.WarnContext(ctx, "[LoadHistory] Dropped blockless assistant message(s) from loaded history",
 			"chatID", chatID,
 			"thread", thread,
 			"dropped", dropped,
@@ -191,7 +191,7 @@ func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, rep
 	// The invariant must hold from here on. A violation now means repair itself
 	// is broken, which is ours to fix, not the conversation's to absorb.
 	if violations := ValidateToolPairing(msgs); len(violations) > 0 {
-		logging.Error("[ToolPairing] INVARIANT VIOLATION after repair — refusing to build an LLM request",
+		logging.ErrorContext(ctx, "[ToolPairing] INVARIANT VIOLATION after repair — refusing to build an LLM request",
 			"chatID", chatID,
 			"thread", thread,
 			"violationCount", len(violations),
@@ -348,7 +348,7 @@ func recoverPersistedToolResults(ctx context.Context, repo db.Repository, msgs [
 	if recovered == 0 {
 		return msgs
 	}
-	logging.Warn("[LoadHistory] Recovered tool result(s) from tool_call_results that were missing from message history",
+	logging.WarnContext(ctx, "[LoadHistory] Recovered tool result(s) from tool_call_results that were missing from message history",
 		"recovered", recovered,
 		"messageCountBefore", len(msgs),
 		"messageCountAfter", len(out))

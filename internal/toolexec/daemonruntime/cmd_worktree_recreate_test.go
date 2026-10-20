@@ -23,17 +23,10 @@ func rcGit(t *testing.T, dir string, args ...string) string {
 	return string(out)
 }
 
+// newRepo puts a repo on main with one commit (a.txt) at dir.
 func newRepo(t *testing.T, dir string) {
 	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	rcGit(t, dir, "init", "-q", "-b", "main")
-	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	rcGit(t, dir, "add", ".")
-	rcGit(t, dir, "commit", "-q", "-m", "init")
+	repoFromTemplate(t, dir, "a.txt on main", buildCommittedRepo("a.txt", "a\n"))
 }
 
 func recreate(t *testing.T, req worktreeRecreateRequest) worktreeRecreateResponse {
@@ -53,7 +46,7 @@ func recreate(t *testing.T, req worktreeRecreateRequest) worktreeRecreateRespons
 // F3: when the second repo fails, the first checkout is removed again, from its
 // own repository (its parent directory is not a git repo).
 func TestRecreate_PartialFailureRollsBackEarlierCheckouts(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Parallel()
 	base := t.TempDir()
 	api, web := filepath.Join(base, "api"), filepath.Join(base, "web")
 	newRepo(t, api)
@@ -77,7 +70,7 @@ func TestRecreate_PartialFailureRollsBackEarlierCheckouts(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp := recreate(t, worktreeRecreateRequest{
-		WorktreePath: ws, Branch: "feat/x", WorktreeID: "id1",
+		WorktreePath: ws, Branch: "feat/x", WorktreeID: uniqueWorkspaceID(t, "id1"),
 		Repos: []worktreeRecreateRepo{{RepoPath: api, Rel: "api"}, {RepoPath: web, Rel: "blocker/web"}},
 	})
 	if resp.Success {
@@ -94,8 +87,7 @@ func TestRecreate_PartialFailureRollsBackEarlierCheckouts(t *testing.T) {
 // A checkout parked by an interrupted clean-up is moved back by recreate, which
 // would otherwise fail: its branch is still checked out in quarantine.
 func TestRecreate_MovesAParkedCheckoutBack(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	t.Parallel()
 	base := t.TempDir()
 	repo := filepath.Join(base, "repo")
 	newRepo(t, repo)
@@ -105,7 +97,10 @@ func TestRecreate_MovesAParkedCheckoutBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q := filepath.Join(rc.Root, ".reclaim", "id2", "root-1-aa")
+	// Parked under TestMain's shared worktree root, so under an ID no other
+	// test uses: recreate recovers only its own worktree's checkouts.
+	id := uniqueWorkspaceID(t, "id2")
+	q := filepath.Join(rc.Root, ".reclaim", id, "root-1-aa")
 	if err := os.MkdirAll(filepath.Dir(q), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -113,11 +108,11 @@ func TestRecreate_MovesAParkedCheckoutBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	rcGit(t, repo, "worktree", "move", ws, q)
-	if err := worktreereclaim.LockCheckout(context.Background(), q, "id2"); err != nil {
+	if err := worktreereclaim.LockCheckout(context.Background(), q, id); err != nil {
 		t.Fatal(err)
 	}
 	resp := recreate(t, worktreeRecreateRequest{
-		WorktreePath: ws, Branch: "feat/p", WorktreeID: "id2", Fence: "5",
+		WorktreePath: ws, Branch: "feat/p", WorktreeID: id, Fence: "5",
 		Repos: []worktreeRecreateRepo{{RepoPath: repo, Rel: ""}},
 	})
 	if !resp.Success {
@@ -138,13 +133,14 @@ func TestRecreate_MovesAParkedCheckoutBack(t *testing.T) {
 // checked out"), so recreate could never rebuild it. The stale registration of
 // a path that is gone is dropped first.
 func TestRecreate_RebuildsACheckoutDeletedOutFromUnderGit(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Parallel()
 	base := t.TempDir()
 	repo := filepath.Join(base, "repo")
 	newRepo(t, repo)
 	ws := filepath.Join(base, "ws")
 	rcGit(t, repo, "worktree", "add", "-q", "-b", "feat/gone", ws, "main")
-	if err := worktreereclaim.LockCheckout(context.Background(), ws, "id3"); err != nil {
+	id := uniqueWorkspaceID(t, "id3")
+	if err := worktreereclaim.LockCheckout(context.Background(), ws, id); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.RemoveAll(ws); err != nil {
@@ -152,7 +148,7 @@ func TestRecreate_RebuildsACheckoutDeletedOutFromUnderGit(t *testing.T) {
 	}
 
 	resp := recreate(t, worktreeRecreateRequest{
-		WorktreePath: ws, Branch: "feat/gone", WorktreeID: "id3",
+		WorktreePath: ws, Branch: "feat/gone", WorktreeID: id,
 		Repos: []worktreeRecreateRepo{{RepoPath: repo, Rel: ""}},
 	})
 	if !resp.Success {
@@ -167,7 +163,7 @@ func TestRecreate_RebuildsACheckoutDeletedOutFromUnderGit(t *testing.T) {
 // into a local branch) is still recoverable: git creates the local branch
 // tracking it.
 func TestRecreate_UsesARemoteOnlyBranch(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Parallel()
 	base := t.TempDir()
 	origin := filepath.Join(base, "origin")
 	newRepo(t, origin)

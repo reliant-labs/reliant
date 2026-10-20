@@ -130,12 +130,12 @@ func (s *Service) CreateSetting(ctx context.Context, req *connect.Request[relian
 	}
 
 	if err := s.deps.Repo.CreateSetting(ctx, setting); err != nil {
-		logging.Error("Failed to create setting", "error", err)
+		logging.ErrorContext(ctx, "Failed to create setting", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create setting"))
 	}
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after CreateSetting", "error", err)
+		logging.WarnContext(ctx, "Failed to emit config_health refetch after CreateSetting", "error", err)
 	}
 
 	return connect.NewResponse(&reliantv1.CreateSettingResponse{
@@ -154,7 +154,7 @@ func (s *Service) ListSettings(ctx context.Context, req *connect.Request[reliant
 
 	settings, err := s.deps.Repo.ListSettings(ctx, userID, projectID)
 	if err != nil {
-		logging.Error("Failed to list settings", "error", err)
+		logging.ErrorContext(ctx, "Failed to list settings", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list settings"))
 	}
 
@@ -224,12 +224,12 @@ func (s *Service) UpdateSetting(ctx context.Context, req *connect.Request[relian
 	setting.UpdatedAt = time.Now().UTC()
 
 	if err := s.deps.Repo.UpdateSetting(ctx, setting); err != nil {
-		logging.Error("Failed to update setting", "error", err, "key", req.Msg.Key)
+		logging.ErrorContext(ctx, "Failed to update setting", "error", err, "key", req.Msg.Key)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update setting"))
 	}
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after UpdateSetting", "error", err)
+		logging.WarnContext(ctx, "Failed to emit config_health refetch after UpdateSetting", "error", err)
 	}
 
 	return connect.NewResponse(&reliantv1.UpdateSettingResponse{
@@ -279,7 +279,7 @@ func (s *Service) BatchUpsertSettings(ctx context.Context, req *connect.Request[
 		}
 
 		if err := s.deps.Repo.CreateSetting(ctx, setting); err != nil {
-			logging.Error("Failed to upsert setting in batch", "error", err, "key", write.GetKey())
+			logging.ErrorContext(ctx, "Failed to upsert setting in batch", "error", err, "key", write.GetKey())
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to upsert setting %q", write.GetKey()))
 		}
 
@@ -288,7 +288,7 @@ func (s *Service) BatchUpsertSettings(ctx context.Context, req *connect.Request[
 
 	if len(written) > 0 {
 		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
-			logging.Warn("Failed to emit config_health refetch after BatchUpsertSettings", "error", err)
+			logging.WarnContext(ctx, "Failed to emit config_health refetch after BatchUpsertSettings", "error", err)
 		}
 	}
 
@@ -316,12 +316,12 @@ func (s *Service) DeleteSetting(ctx context.Context, req *connect.Request[relian
 	}
 
 	if err := s.deps.Repo.DeleteSetting(ctx, setting.ID); err != nil {
-		logging.Error("Failed to delete setting", "error", err, "key", req.Msg.Key)
+		logging.ErrorContext(ctx, "Failed to delete setting", "error", err, "key", req.Msg.Key)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete setting"))
 	}
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after DeleteSetting", "error", err)
+		logging.WarnContext(ctx, "Failed to emit config_health refetch after DeleteSetting", "error", err)
 	}
 
 	return connect.NewResponse(&reliantv1.DeleteSettingResponse{
@@ -356,7 +356,7 @@ func (s *Service) UpdateShortcuts(ctx context.Context, req *connect.Request[reli
 	userID := auth.MustGetUserID(ctx)
 
 	if err := s.upsertSetting(ctx, userID, nil, "shortcuts", req.Msg.Shortcuts); err != nil {
-		logging.Error("Failed to update shortcuts", "error", err)
+		logging.ErrorContext(ctx, "Failed to update shortcuts", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update shortcuts"))
 	}
 
@@ -482,7 +482,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "features.streaming_enabled", value); err != nil {
-			logging.Error("Failed to update streaming_enabled", "error", err)
+			logging.ErrorContext(ctx, "Failed to update streaming_enabled", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preferences"))
 		}
 		markChanged("features.streaming_enabled")
@@ -494,7 +494,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid worktree_archive_mode. Must be 'ask_me', 'always_cleanup', or 'always_keep'"))
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "worktree.archive_cleanup_mode", mode); err != nil {
-			logging.Error("Failed to update worktree.archive_cleanup_mode", "error", err)
+			logging.ErrorContext(ctx, "Failed to update worktree.archive_cleanup_mode", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preferences"))
 		}
 		markChanged("worktree.archive_cleanup_mode")
@@ -506,7 +506,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "worktree.default_delete_branch", value); err != nil {
-			logging.Error("Failed to update worktree.default_delete_branch", "error", err)
+			logging.ErrorContext(ctx, "Failed to update worktree.default_delete_branch", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preferences"))
 		}
 		markChanged("worktree.default_delete_branch")
@@ -519,7 +519,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "chat.default_auto_approve", value); err != nil {
-			logging.Error("Failed to update chat.default_auto_approve", "error", err)
+			logging.ErrorContext(ctx, "Failed to update chat.default_auto_approve", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preferences"))
 		}
 		markChanged("chat.default_auto_approve")
@@ -532,7 +532,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "worktree.branch_copy_uncommitted_files_default", value); err != nil {
-			logging.Error("Failed to update worktree.branch_copy_uncommitted_files_default", "error", err)
+			logging.ErrorContext(ctx, "Failed to update worktree.branch_copy_uncommitted_files_default", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preferences"))
 		}
 		markChanged("worktree.branch_copy_uncommitted_files_default")
@@ -542,7 +542,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	for key, value := range req.Msg.Additional {
 		prefKey := fmt.Sprintf("preference.%s", key)
 		if err := s.upsertSetting(ctx, userID, nil, prefKey, value); err != nil {
-			logging.Error("Failed to update preference", "key", key, "error", err)
+			logging.ErrorContext(ctx, "Failed to update preference", "key", key, "error", err)
 			// Don't fail the whole request for one preference
 			continue
 		}
@@ -553,7 +553,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	if req.Msg.DefaultMcpScope != nil {
 		scopeValue := req.Msg.DefaultMcpScope.String()
 		if err := s.upsertSetting(ctx, userID, nil, "config.default_mcp_scope", scopeValue); err != nil {
-			logging.Error("Failed to update config.default_mcp_scope", "error", err)
+			logging.ErrorContext(ctx, "Failed to update config.default_mcp_scope", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preferences"))
 		}
 		markChanged("config.default_mcp_scope")
@@ -563,7 +563,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	if req.Msg.DefaultWorkflowScope != nil {
 		scopeValue := req.Msg.DefaultWorkflowScope.String()
 		if err := s.upsertSetting(ctx, userID, nil, "config.default_workflow_scope", scopeValue); err != nil {
-			logging.Error("Failed to update config.default_workflow_scope", "error", err)
+			logging.ErrorContext(ctx, "Failed to update config.default_workflow_scope", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preferences"))
 		}
 		markChanged("config.default_workflow_scope")
@@ -572,7 +572,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	// Handle default workflow
 	if req.Msg.DefaultWorkflow != nil {
 		if err := s.upsertSetting(ctx, userID, nil, "config.default_workflow", *req.Msg.DefaultWorkflow); err != nil {
-			logging.Error("Failed to update config.default_workflow", "error", err)
+			logging.ErrorContext(ctx, "Failed to update config.default_workflow", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preferences"))
 		}
 		markChanged("config.default_workflow")
@@ -585,7 +585,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "ui.hide_builtin_workflows", value); err != nil {
-			logging.Error("Failed to update ui.hide_builtin_workflows", "error", err)
+			logging.ErrorContext(ctx, "Failed to update ui.hide_builtin_workflows", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preferences"))
 		}
 		markChanged("ui.hide_builtin_workflows")
@@ -598,7 +598,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "ui.hide_builtin_presets", value); err != nil {
-			logging.Error("Failed to update ui.hide_builtin_presets", "error", err)
+			logging.ErrorContext(ctx, "Failed to update ui.hide_builtin_presets", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preferences"))
 		}
 		markChanged("ui.hide_builtin_presets")
@@ -613,7 +613,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	}
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after UpdatePreferences", "error", err)
+		logging.WarnContext(ctx, "Failed to emit config_health refetch after UpdatePreferences", "error", err)
 	}
 
 	return connect.NewResponse(&reliantv1.UpdatePreferencesResponse{
@@ -640,7 +640,7 @@ func (s *Service) SetHiddenItem(ctx context.Context, req *connect.Request[relian
 	// hidden=true means is_visible=false, hidden=false means is_visible=true
 	isVisible := !req.Msg.Hidden
 	if err := s.deps.Repo.SetVisibilityOverride(ctx, userID, int32(req.Msg.ItemType), req.Msg.Slug, isVisible); err != nil {
-		logging.Error("Failed to set visibility override", "error", err, "type", req.Msg.ItemType, "slug", req.Msg.Slug)
+		logging.ErrorContext(ctx, "Failed to set visibility override", "error", err, "type", req.Msg.ItemType, "slug", req.Msg.Slug)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update hidden state"))
 	}
 
@@ -719,7 +719,7 @@ func (s *Service) GetPrompts(ctx context.Context, req *connect.Request[reliantv1
 
 	if setting.Value != "" {
 		if err := json.Unmarshal([]byte(setting.Value), &prompts); err != nil {
-			logging.Error("Failed to unmarshal prompts", "error", err)
+			logging.ErrorContext(ctx, "Failed to unmarshal prompts", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse prompts"))
 		}
 	}
@@ -771,12 +771,12 @@ func (s *Service) SavePrompts(ctx context.Context, req *connect.Request[reliantv
 	}
 
 	if err := s.upsertSetting(ctx, userID, nil, "global.prompts", string(promptsJSON)); err != nil {
-		logging.Error("Failed to save prompts", "error", err)
+		logging.ErrorContext(ctx, "Failed to save prompts", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save prompts"))
 	}
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after SavePrompts", "error", err)
+		logging.WarnContext(ctx, "Failed to emit config_health refetch after SavePrompts", "error", err)
 	}
 
 	return connect.NewResponse(&reliantv1.SavePromptsResponse{
@@ -850,7 +850,7 @@ func (s *Service) GetProviderStatuses(ctx context.Context, req *connect.Request[
 
 	accounts, err := s.deps.Repo.ListProviderAccounts(ctx, userID)
 	if err != nil {
-		logging.Error("Failed to list provider accounts", "error", err)
+		logging.ErrorContext(ctx, "Failed to list provider accounts", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get provider statuses"))
 	}
 	total := map[string]int32{}
@@ -943,7 +943,7 @@ func (s *Service) CompleteCodexOAuth(ctx context.Context, req *connect.Request[r
 
 	tokens, err := s.deps.ExchangeCodexCode(code, codeVerifier, redirectURI)
 	if err != nil {
-		logging.Error("Codex OAuth code exchange failed", "error", err)
+		logging.ErrorContext(ctx, "Codex OAuth code exchange failed", "error", err)
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Codex OAuth: %w", err))
 	}
 
@@ -977,7 +977,7 @@ func (s *Service) CompleteAntigravityOAuth(ctx context.Context, req *connect.Req
 
 	tokens, err := s.deps.ExchangeAntigravityCode(code, codeVerifier, redirectURI)
 	if err != nil {
-		logging.Error("Antigravity OAuth code exchange failed", "error", err)
+		logging.ErrorContext(ctx, "Antigravity OAuth code exchange failed", "error", err)
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Antigravity OAuth: %w", err))
 	}
 
@@ -1007,7 +1007,7 @@ func (s *Service) StartCopilotDeviceAuth(ctx context.Context, req *connect.Reque
 
 	deviceAuth, err := copilot.StartDeviceAuth(ctx)
 	if err != nil {
-		logging.Error("Failed to start Copilot device authorization", "error", err)
+		logging.ErrorContext(ctx, "Failed to start Copilot device authorization", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to start GitHub Copilot login"))
 	}
 
@@ -1046,7 +1046,7 @@ func (s *Service) PollCopilotDeviceAuth(ctx context.Context, req *connect.Reques
 				Status: reliantv1.PollCopilotDeviceAuthResponse_STATUS_DENIED,
 			}), nil
 		default:
-			logging.Error("Copilot device authorization poll failed", "error", err)
+			logging.ErrorContext(ctx, "Copilot device authorization poll failed", "error", err)
 			return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
 				Status:       reliantv1.PollCopilotDeviceAuthResponse_STATUS_ERROR,
 				ErrorMessage: err.Error(),
@@ -1066,7 +1066,7 @@ func (s *Service) PollCopilotDeviceAuth(ctx context.Context, req *connect.Reques
 		gh, ghErr := s.deps.GitHubIdentity(gctx, tokens.AccessToken)
 		cancel()
 		if ghErr != nil {
-			logging.Warn("GitHub identity read failed; the Copilot account stays unlabelled", "error", ghErr)
+			logging.WarnContext(ctx, "GitHub identity read failed; the Copilot account stays unlabelled", "error", ghErr)
 		} else if gh.ID != 0 {
 			u.IdentityKey = core.GitHubIdentityKey(strconv.FormatInt(gh.ID, 10))
 			u.ExternalAccountID, u.Email, label = strconv.FormatInt(gh.ID, 10), gh.Email, gh.Login
@@ -1102,7 +1102,7 @@ func (s *Service) CompleteClaudeOAuth(ctx context.Context, req *connect.Request[
 
 	tokens, err := s.deps.ExchangeClaudeCode(code, codeVerifier, redirectURI, state)
 	if err != nil {
-		logging.Error("Claude OAuth code exchange failed", "error", err)
+		logging.ErrorContext(ctx, "Claude OAuth code exchange failed", "error", err)
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Claude OAuth: %w", err))
 	}
 
@@ -1142,7 +1142,7 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 
 	key, err := s.deps.ControlPlane.MintLLMKey(ctx, jwt, controlplane.ReliantProviderKeyName)
 	if err != nil {
-		logging.Error("Failed to mint Reliant LLM key via control-plane", "error", err)
+		logging.ErrorContext(ctx, "Failed to mint Reliant LLM key via control-plane", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to mint Reliant LLM key: %w", err))
 	}
 	plaintext := strings.TrimSpace(key.Plaintext)
@@ -1155,12 +1155,12 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 		KeyHint: core.KeyHint(plaintext), Secrets: core.AccountSecrets{Secret: plaintext},
 	})
 	if err != nil {
-		logging.Error("Failed to persist Reliant provider API key", "error", err)
+		logging.ErrorContext(ctx, "Failed to persist Reliant provider API key", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to persist Reliant API key"))
 	}
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after SyncReliantProvider", "error", err)
+		logging.WarnContext(ctx, "Failed to emit config_health refetch after SyncReliantProvider", "error", err)
 	}
 
 	created := !key.Rotated
@@ -1191,7 +1191,7 @@ func (s *Service) GetPrivacySettings(ctx context.Context, req *connect.Request[r
 
 	analyticsEnabled, crashReportingEnabled, err := s.deps.Repo.GetPrivacySettings(ctx, userID)
 	if err != nil {
-		logging.Error("Failed to get privacy settings", "error", err)
+		logging.ErrorContext(ctx, "Failed to get privacy settings", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get privacy settings"))
 	}
 
@@ -1208,7 +1208,7 @@ func (s *Service) UpdatePrivacySettings(ctx context.Context, req *connect.Reques
 	// Get current settings
 	analyticsEnabled, crashReportingEnabled, err := s.deps.Repo.GetPrivacySettings(ctx, userID)
 	if err != nil {
-		logging.Error("Failed to get current privacy settings", "error", err)
+		logging.ErrorContext(ctx, "Failed to get current privacy settings", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update privacy settings"))
 	}
 
@@ -1222,11 +1222,11 @@ func (s *Service) UpdatePrivacySettings(ctx context.Context, req *connect.Reques
 
 	// Save the updated settings
 	if err := s.deps.Repo.SetPrivacySettings(ctx, userID, analyticsEnabled, crashReportingEnabled); err != nil {
-		logging.Error("Failed to save privacy settings", "error", err)
+		logging.ErrorContext(ctx, "Failed to save privacy settings", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save privacy settings"))
 	}
 
-	logging.Info("Privacy settings updated", "userID", userID, "analyticsEnabled", analyticsEnabled, "crashReportingEnabled", crashReportingEnabled)
+	logging.InfoContext(ctx, "Privacy settings updated", "userID", userID, "analyticsEnabled", analyticsEnabled, "crashReportingEnabled", crashReportingEnabled)
 
 	return connect.NewResponse(&reliantv1.UpdatePrivacySettingsResponse{
 		Success:               true,

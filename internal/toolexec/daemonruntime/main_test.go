@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/heavyjob"
@@ -19,6 +21,18 @@ import (
 // So TestMain gives every test a private HOME and git config before any test
 // runs. (Whether Start behaves as a pod is its StartOptions.Host, never the
 // environment the test binary inherited.)
+//
+// That HOME is also what lets the git-heavy tests run in parallel. Every git
+// process costs a fork and an exec, which on a loaded machine is hundreds of
+// milliseconds, and a worktree test runs dozens. A test that needs its own
+// HOME must t.Setenv it, and t.Setenv forbids t.Parallel — so a parallel test
+// shares this one and keeps its checkouts apart by workspace ID instead
+// (uniqueWorkspaceID).
+
+// testRoot is the directory runIsolated creates for the whole test binary;
+// fixtures built once per binary (cloneOrigin, copyOfRepoTemplate) live
+// under it.
+var testRoot string
 
 func TestMain(m *testing.M) {
 	// This test binary also stands in for the reliant binary as the
@@ -34,6 +48,7 @@ func runIsolated(m *testing.M) int {
 		return 1
 	}
 	defer os.RemoveAll(root)
+	testRoot = root
 
 	home := filepath.Join(root, "home")
 	if err := os.MkdirAll(home, 0o755); err != nil {
@@ -54,3 +69,25 @@ func runIsolated(m *testing.M) int {
 	}
 	return m.Run()
 }
+
+// testWorktreePath is where worktree.create puts workspaceID under the
+// shared $HOME.
+func testWorktreePath(t *testing.T, workspaceID string) string {
+	t.Helper()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(home, ".reliant", "worktrees", workspaceID)
+}
+
+// uniqueWorkspaceID suffixes id with the test's name and a sequence number,
+// so a parallel test's worktrees under the shared $HOME/.reliant/worktrees
+// never meet another test's, nor an earlier run's under -count.
+func uniqueWorkspaceID(t *testing.T, id string) string {
+	t.Helper()
+	name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name())
+	return fmt.Sprintf("%s-%s-%d", id, name, workspaceSeq.Add(1))
+}
+
+var workspaceSeq atomic.Int64

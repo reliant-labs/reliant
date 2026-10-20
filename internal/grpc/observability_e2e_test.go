@@ -61,7 +61,7 @@ func TestConnectAndHTTPInstrumentationPropagateTrace(t *testing.T) {
 		_, err = io.Copy(io.Discard, resp.Body)
 		require.NoError(t, err)
 		return connect.NewResponse(&emptypb.Empty{}), nil
-	}, connect.WithInterceptors(newInterceptors(&testNamedInterceptor{})...))
+	}, connect.WithInterceptors(userChainInterceptors(t)...))
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -103,7 +103,7 @@ func TestUntrustedServerStartsNewRootAndLinksRemoteTrace(t *testing.T) {
 				require.NoError(t, provider.Shutdown(context.Background()))
 			})
 
-			chain := newInterceptors(&testNamedInterceptor{})
+			chain := userChainInterceptors(t)
 			if !tc.trust {
 				daemonTrace, err := newDaemonTraceInterceptor()
 				require.NoError(t, err)

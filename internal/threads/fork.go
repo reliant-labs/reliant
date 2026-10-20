@@ -103,7 +103,7 @@ func (s *Service) forkThreadInternal(ctx context.Context, opts ForkThreadOpts, w
 	// recoverable (the next seed, or a save, raises it), whereas failing the
 	// fork outright loses the branch the user just asked for.
 	if err := s.repo.SeedSeqCounterForFork(ctx, opts.ChatID, opts.ForkAtContextWindowID); err != nil {
-		logging.Warn("[ForkThread] Failed to seed seq counter for fork",
+		logging.WarnContext(ctx, "[ForkThread] Failed to seed seq counter for fork",
 			"error", err,
 			"chatID", opts.ChatID,
 			"threadID", threadID,
@@ -111,7 +111,7 @@ func (s *Service) forkThreadInternal(ctx context.Context, opts ForkThreadOpts, w
 	}
 
 	// FORK-DEBUG: Log forked thread and context window creation
-	logging.Debug("[Fork] forkThreadInternal created forked thread and CW",
+	logging.DebugContext(ctx, "[Fork] forkThreadInternal created forked thread and CW",
 		"threadID", createdThread.ID,
 		"parentThreadID", opts.ParentThreadID,
 		"forkAtMessageID", opts.ForkAtMessageID,

@@ -607,6 +607,9 @@ type Querier interface {
 	HasMessagesBeforeInContextWindow(ctx context.Context, arg HasMessagesBeforeInContextWindowParams) (bool, error)
 	IsCommandFavorite(ctx context.Context, arg IsCommandFavoriteParams) (int32, error)
 	// Newest run of each workflow name. Same columns and display_state as ListRuns.
+	// Archived runs count: an automation archives each run it finishes
+	// successfully, so leaving them out would make a healthy automation's
+	// workflow read as never having run.
 	LastRunPerWorkflow(ctx context.Context, arg LastRunPerWorkflowParams) ([]LastRunPerWorkflowRow, error)
 	// Every enabled integration trigger of one integration whose OWNER can see
 	// the event's (account, resource) per a snapshot refreshed after
@@ -624,6 +627,11 @@ type Querier interface {
 	// List archived chats with worktree info. Reads chats_with_activity (not chats)
 	// so the root workflow state and last_message_at come back like every other
 	// chat read; falls back to project name if worktree name is unavailable.
+	//
+	// The sidebar's Archived tab, so it lists what the sidebar lists: the
+	// list_in_sidebar policy, as ListChats applies it with sidebar_only. An
+	// automation archives its own runs once they succeed; those are history in
+	// Runs (ListRuns with include_archived), not chats the user put away.
 	ListArchivedChats(ctx context.Context, userID string) ([]ListArchivedChatsRow, error)
 	ListAttachmentsByUser(ctx context.Context, arg ListAttachmentsByUserParams) ([]Attachment, error)
 	// Every backgrounded call whose outcome lives in a daemon's process table:

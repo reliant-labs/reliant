@@ -44,7 +44,7 @@ func ResumeInputFromDurableState(ctx context.Context, repo durableResumeSource, 
 
 	checkpoint, err := repo.GetWorkflowCheckpoint(ctx, rootWorkflowID)
 	if err != nil {
-		logging.Warn("Failed to load workflow checkpoint - resuming with engine fallbacks",
+		logging.WarnContext(ctx, "Failed to load workflow checkpoint - resuming with engine fallbacks",
 			"workflowID", rootWorkflowID, "error", err)
 	}
 	if checkpoint != nil {
@@ -54,14 +54,14 @@ func ResumeInputFromDurableState(ctx context.Context, repo durableResumeSource, 
 
 	spawns, err := ResumableSpawnsFromDurableState(ctx, repo, rootWorkflowID)
 	if err != nil {
-		logging.Warn("Failed to derive live background spawns - resuming without them",
+		logging.WarnContext(ctx, "Failed to derive live background spawns - resuming without them",
 			"workflowID", rootWorkflowID, "error", err)
 	}
 	resume.Spawns = spawns
 
 	grants, err := ToolGrantsFromDurableState(ctx, repo, chatID)
 	if err != nil {
-		logging.Warn("Failed to recover load_tool grants - resuming without them; the agent reloads what it needs",
+		logging.WarnContext(ctx, "Failed to recover load_tool grants - resuming without them; the agent reloads what it needs",
 			"chatID", chatID, "workflowID", rootWorkflowID, "error", err)
 	}
 	resume.ToolGrants = grants

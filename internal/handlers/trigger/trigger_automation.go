@@ -36,18 +36,18 @@ func (g *automationGrants) ensure(ctx context.Context, userID, daemonID string) 
 	}
 	jwt, ok := auth.GetUserJWT(userID)
 	if !ok || strings.TrimSpace(jwt) == "" {
-		logging.Warn("automation access not granted: no signed-in session to mint a daemon:resume token",
+		logging.WarnContext(ctx, "automation access not granted: no signed-in session to mint a daemon:resume token",
 			"user_id", userID, "daemon_id", daemonID)
 		return
 	}
 	tok, err := g.client.MintDaemonResumeToken(ctx, jwt, daemonID, automationcred.KeyName)
 	if err != nil || strings.TrimSpace(tok.Plaintext) == "" {
-		logging.Warn("automation access not granted: could not mint daemon:resume token",
+		logging.WarnContext(ctx, "automation access not granted: could not mint daemon:resume token",
 			"user_id", userID, "daemon_id", daemonID, "error", err)
 		return
 	}
 	if err := g.keys.SetAutomationToken(ctx, userID, daemonID, tok.Plaintext); err != nil {
-		logging.Warn("automation access not granted: could not store daemon:resume token",
+		logging.WarnContext(ctx, "automation access not granted: could not store daemon:resume token",
 			"user_id", userID, "daemon_id", daemonID, "error", err)
 	}
 }
@@ -60,7 +60,7 @@ func (g *automationGrants) releaseIfUnused(ctx context.Context, userID, daemonID
 	}
 	all, err := g.triggers.ListTriggers(ctx, core.TriggerFilters{UserID: userID})
 	if err != nil {
-		logging.Warn("could not check remaining triggers before revoking automation token",
+		logging.WarnContext(ctx, "could not check remaining triggers before revoking automation token",
 			"user_id", userID, "daemon_id", daemonID, "error", err)
 		return
 	}
@@ -71,14 +71,14 @@ func (g *automationGrants) releaseIfUnused(ctx context.Context, userID, daemonID
 	}
 	if jwt, ok := auth.GetUserJWT(userID); ok && strings.TrimSpace(jwt) != "" {
 		if err := g.client.RevokeDaemonResumeTokens(ctx, jwt, daemonID); err != nil {
-			logging.Warn("could not revoke daemon:resume token at the control plane",
+			logging.WarnContext(ctx, "could not revoke daemon:resume token at the control plane",
 				"user_id", userID, "daemon_id", daemonID, "error", err)
 		}
 	} else {
-		logging.Warn("daemon:resume token forgotten locally but not revoked remotely: no signed-in session",
+		logging.WarnContext(ctx, "daemon:resume token forgotten locally but not revoked remotely: no signed-in session",
 			"user_id", userID, "daemon_id", daemonID)
 	}
 	if err := g.keys.DeleteAutomationToken(ctx, userID, daemonID); err != nil {
-		logging.Warn("could not delete stored automation token", "user_id", userID, "daemon_id", daemonID, "error", err)
+		logging.WarnContext(ctx, "could not delete stored automation token", "user_id", userID, "daemon_id", daemonID, "error", err)
 	}
 }

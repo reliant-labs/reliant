@@ -91,11 +91,11 @@ func (c *AnthropicClient) SendMessages(ctx context.Context, prompts []string, me
 	if c.options.SessionID != nil && *c.options.SessionID != "" {
 		logFields = append(logFields, "session_id", *c.options.SessionID)
 	}
-	logging.Debug("=== Anthropic: Sending messages ===", logFields...)
+	logging.DebugContext(ctx, "=== Anthropic: Sending messages ===", logFields...)
 
 	anthropicResponse, err := c.newMessage(ctx, preparedMessages)
 	if err != nil {
-		logging.Error("Error in Anthropic API call", "error", err)
+		logging.ErrorContext(ctx, "Error in Anthropic API call", "error", err)
 		observability.LLMRequestsTotal.WithLabelValues("anthropic", "error").Inc()
 		observability.LLMRequestDuration.WithLabelValues("anthropic").Observe(time.Since(start).Seconds())
 		return nil, err
@@ -108,18 +108,18 @@ func (c *AnthropicClient) SendMessages(ctx context.Context, prompts []string, me
 		}
 	}
 
-	logging.Debug("Anthropic SendMessages: Response details",
+	logging.DebugContext(ctx, "Anthropic SendMessages: Response details",
 		"stop_reason", anthropicResponse.StopReason,
 		"stop_sequence", anthropicResponse.StopSequence,
 		"content_blocks", len(anthropicResponse.Content))
 
 	finishReason := c.finishReason(string(anthropicResponse.StopReason))
-	logging.Debug("Anthropic SendMessages: Finish reason result", "finish_reason", finishReason)
+	logging.DebugContext(ctx, "Anthropic SendMessages: Finish reason result", "finish_reason", finishReason)
 
 	toolCalls, err := c.toolCalls(*anthropicResponse)
 	if err != nil {
 		// MalformedJSONError indicates transient streaming corruption
-		logging.Warn("Anthropic SendMessages: Tool call JSON validation failed (will retry)", "error", err)
+		logging.WarnContext(ctx, "Anthropic SendMessages: Tool call JSON validation failed (will retry)", "error", err)
 		observability.LLMRequestsTotal.WithLabelValues("anthropic", "error").Inc()
 		observability.LLMRequestDuration.WithLabelValues("anthropic").Observe(time.Since(start).Seconds())
 		return nil, err
@@ -153,7 +153,7 @@ func (c *AnthropicClient) StreamResponse(ctx context.Context, prompts []string, 
 	if c.options.SessionID != nil && *c.options.SessionID != "" {
 		logFields = append(logFields, "session_id", *c.options.SessionID)
 	}
-	logging.Debug("=== Anthropic: Streaming messages ===", logFields...)
+	logging.DebugContext(ctx, "=== Anthropic: Streaming messages ===", logFields...)
 
 	return c.streamResponseInternal(ctx, preparedMessages)
 }
@@ -163,7 +163,7 @@ func (c *AnthropicClient) Model() models.Model {
 }
 
 func (c *AnthropicClient) ValidateKey(ctx context.Context) error {
-	logging.Debug("Validating Anthropic API key with Claude 3.5 Haiku model...")
+	logging.DebugContext(ctx, "Validating Anthropic API key with Claude 3.5 Haiku model...")
 	testMessages := []message.Message{
 		{
 			Role: message.User,

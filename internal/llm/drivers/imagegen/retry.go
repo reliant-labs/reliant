@@ -39,7 +39,7 @@ func generateWithRetry(
 			return nil, err
 		}
 
-		logging.Warn("Retrying image generation request",
+		logging.WarnContext(ctx, "Retrying image generation request",
 			"attempt", attemptNumber,
 			"max_attempts", defaultMaxAttempts,
 			"after_ms", delay.Milliseconds(),

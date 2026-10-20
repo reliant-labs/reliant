@@ -237,7 +237,7 @@ func StartDeviceAuth(ctx context.Context) (*DeviceAuth, error) {
 		dc.Interval = 5 // GitHub default poll interval
 	}
 
-	logging.Info("[Copilot][auth] device/code response",
+	logging.InfoContext(ctx, "[Copilot][auth] device/code response",
 		"status", resp.StatusCode,
 		"verification_uri", dc.VerificationURI,
 		"has_user_code", dc.UserCode != "",
@@ -314,7 +314,7 @@ func PollDeviceAuthOnce(ctx context.Context, deviceCode string) (*GitHubTokens, 
 	}
 
 	keys, redacted := summarizeJSONResponse(body)
-	logging.Info("[Copilot][auth] oauth/access_token response (authorized)",
+	logging.InfoContext(ctx, "[Copilot][auth] oauth/access_token response (authorized)",
 		"status", resp.StatusCode,
 		"keys", keys,
 		"fields", redacted)

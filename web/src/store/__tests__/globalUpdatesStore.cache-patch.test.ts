@@ -273,6 +273,25 @@ describe("globalUpdatesStore cache patching", () => {
     expect(useChatStore.getState().activeChatId).toBeNull();
   });
 
+  it("an automation run archiving itself on success keeps whoever is watching it on it", () => {
+    useChatStore.setState({ activeChatId: "c1" });
+
+    useGlobalUpdatesStore.getState().handleUpdate([
+      buildUpdate({
+        worktree_id: "wt-1",
+        data: {
+          state: ChatState.ARCHIVED,
+          previous_state: ChatState.IDLE,
+          reason: "automation_succeeded",
+        },
+      }),
+    ]);
+
+    expect(useChatStore.getState().activeChatId).toBe("c1");
+    // The caches still learn the new state.
+    expect(queryClient.getQueryData<{ state: ChatState }>(chatKeys.detail("c1"))?.state).toBe(ChatState.ARCHIVED);
+  });
+
   it("archiving a chat the user is not viewing leaves the selection alone", () => {
     const otherChat = buildChat({ id: "c2", title: "Other" });
     queryClient.setQueryData(chatKeys.detail("c2"), otherChat);

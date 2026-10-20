@@ -185,7 +185,7 @@ func newResilientTransport() *http.Transport {
 			}
 			// Cached IP might be stale (host migrated), evict and do fresh lookup
 			evictDNS(host)
-			logging.Debug("[Transport] Cached DNS entry failed, doing fresh lookup", "host", host, "cachedIP", cachedIP, "error", connErr)
+			logging.DebugContext(ctx, "[Transport] Cached DNS entry failed, doing fresh lookup", "host", host, "cachedIP", cachedIP, "error", connErr)
 		}
 
 		// Layer 1: Try system resolver with retries
@@ -215,7 +215,7 @@ func newResilientTransport() *http.Transport {
 		}
 
 		// Layer 2: Fallback to public DNS servers
-		logging.Warn("[Transport] System DNS failed, trying public DNS fallback",
+		logging.WarnContext(ctx, "[Transport] System DNS failed, trying public DNS fallback",
 			"host", host,
 			"attempts", dnsRetryAttempts,
 			"error", lastErr,
@@ -224,11 +224,11 @@ func newResilientTransport() *http.Transport {
 		conn, dialErr := fallbackDialer.DialContext(ctx, network, addr)
 		if dialErr == nil {
 			cacheResolvedHost(host)
-			logging.Info("[Transport] Public DNS fallback succeeded", "host", host)
+			logging.InfoContext(ctx, "[Transport] Public DNS fallback succeeded", "host", host)
 			return conn, nil
 		}
 
-		logging.Error("[Transport] All DNS resolution attempts failed",
+		logging.ErrorContext(ctx, "[Transport] All DNS resolution attempts failed",
 			"host", host,
 			"systemError", lastErr,
 			"fallbackError", dialErr,

@@ -52,7 +52,7 @@ import { useWorktreeList } from "../../hooks/useWorktreeList";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { sortActiveWorkspaces } from "../Worktrees/workspaceStatus";
 import { useWorkflows } from "../../store/globalDataStore";
-import { isChatLaunchable } from "../../api/workflow-grpc";
+import { isOfferedInChatPicker } from "../../api/workflow-grpc";
 import {
   DEFAULT_WORKFLOW,
   usePreferencesStore,
@@ -155,7 +155,7 @@ export function MobileNewChat() {
     const seen = new Set<string>();
     const unique = workflows.filter((w) => {
       if (isWorkflowHidden(w.name)) return false;
-      if (!isChatLaunchable(w)) return false;
+      if (!isOfferedInChatPicker(w)) return false;
       const key = normalizeWorkflowRef(w.name).toLowerCase().trim();
       if (seen.has(key)) return false;
       seen.add(key);

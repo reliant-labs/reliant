@@ -340,6 +340,7 @@ func TestLocalModelConfiguredEndpoints(t *testing.T) {
 }
 
 func TestLocalModelChangeOnlyPublication(t *testing.T) {
+	t.Parallel()
 	srv := fakeOllama(t)
 	m := newLocalModelManager()
 	m.prober = proberFor(srv.URL, localModelsConfig{})

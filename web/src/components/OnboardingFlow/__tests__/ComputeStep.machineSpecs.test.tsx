@@ -93,6 +93,7 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           structuredLimits: {
             allowedDaemonSizes: ["small", "medium"],
             daemonComputeIncludedMinutes: 2520,
+            includedSmallDaemonHours: 68n,
             daemonOveragePerMinuteCents: 2,
           },
         },
@@ -104,6 +105,7 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           structuredLimits: {
             allowedDaemonSizes: ["small", "medium", "large"],
             daemonComputeIncludedMinutes: 2520,
+            includedSmallDaemonHours: 272n,
             daemonOveragePerMinuteCents: 2,
           },
         },
@@ -115,10 +117,21 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           structuredLimits: {
             allowedDaemonSizes: ["small", "medium", "large", "xl"],
             daemonComputeIncludedMinutes: 2520,
+            includedSmallDaemonHours: 1088n,
             daemonOveragePerMinuteCents: 2,
           },
         },
       ],
+      daemonPricing: {
+        sizes: [
+          { size: "small", multiplier: 1n, hourlyPriceCents: "13", storageGib: 25n },
+          { size: "medium", multiplier: 2n, hourlyPriceCents: "26", storageGib: 50n },
+          { size: "large", multiplier: 4n, hourlyPriceCents: "52", storageGib: 100n },
+          { size: "xl", multiplier: 8n, hourlyPriceCents: "104", storageGib: 200n },
+        ],
+        suspendedDiskCentsPerGibMonth: "25",
+        placeholder: false,
+      },
     },
   }),
 }));
@@ -299,59 +312,26 @@ describe("ComputeStep — every size says what it gives you", () => {
   });
 
   /**
-   * A size is a machine SHAPE. It is not an hours allowance.
-   *
-   * ── The report ────────────────────────────────────────────────────────
-   *
-   * > "they're still saying the wrong number of hours. the size is purely the
-   * > cpu/mem shape. remove the hours note" — and, decisively: "they all get
-   * > 160 hours / month".
-   *
-   * The rows read "17 hours included each month" / "42 hours" / "83 hours" /
-   * "Unlimited hours included". Every one of those was wrong, and the shape of
-   * the error is why the per-row line cannot come back. control-plane grants
-   * `daemon_compute_included_minutes: 9600` — 160 h — at small, medium, large
-   * and xl alike (internal/plansconfig/plans.yaml). The figures on screen came
-   * from a dev database still seeded with migration 00054's superseded
-   * per-plan values, so the UI rendered stale data faithfully and stated a
-   * product claim nobody had made: that a bigger machine buys more time.
-   *
-   * A quantity that does not vary per row must not be PRINTED per row. Stated
-   * four times it implies four allowances, and it turns any lag between config
-   * and a database into user-visible pricing copy. The fixture above keeps
-   * that hazard alive on purpose — its plans carry 1020 and 2520 minutes, so
-   * a reintroduced per-row line would render "17 hours" beside "42 hours"
-   * again and fail here.
+   * Each row: name, spec, monthly price. Nothing about hours, rates, disk or
+   * suspension — that is the single footnote.
    */
-  it("does not put an hours figure on any machine row", () => {
+  it("puts nothing but name, spec and monthly price on a row", () => {
     renderStep();
 
     for (const size of ["Small", "Medium", "Large", "XL"]) {
       const row = screen.getByRole("button", { name: new RegExp(`^${size} `) });
-      expect(row).not.toHaveTextContent(/hours/i);
-      expect(row).toHaveTextContent(/Included runtime, hourly price and disk cost unavailable/i);
+      expect(row).not.toHaveTextContent(/hrs|hours|\/hr|GiB|suspended|included|shared|small-daemon/i);
     }
   });
 
-  /**
-   * The allowance is still SAID — once, and as a property of every machine.
-   *
-   * Deleting the per-row line must not delete the fact. It moves beside the
-   * burst ceiling, which is stated once for exactly the same reason, and it is
-   * still read from the catalog rather than hardcoded so it tracks 9600 if
-   * control-plane changes it.
-   */
-  // Per-daemon billing (design §6.2): small-daemon-hours, burned faster by
-  // bigger machines — the note no longer says "on every size".
-  it("states the included small-daemon-hours once, not 'on every size'", () => {
+  it("prints the one footnote once, with hours only when every plan agrees", () => {
     renderStep();
 
-    const note = screen.getByTestId("compute-step-hours-note");
-    // 1020 min = 17 h, from the fixture's own catalog — not a constant.
-    expect(note).toHaveTextContent(/Included runtime unavailable/i);
-    expect(note).toHaveTextContent(/shared across your machines/i);
-    expect(note).not.toHaveTextContent(/every size/i);
-    expect(screen.getAllByTestId("compute-step-hours-note")).toHaveLength(1);
+    // 17 / 68 / 272 / 1088 small hours are 17 / 34 / 68 / 136 at each plan's
+    // own size: they differ, so the footnote claims no hours.
+    const note = screen.getByTestId("machine-pricing-line");
+    expect(note).toHaveTextContent(/^Extra hours and storage are billed separately\.$/);
+    expect(screen.getAllByTestId("machine-pricing-line")).toHaveLength(1);
   });
 
   /**

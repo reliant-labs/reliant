@@ -35,7 +35,9 @@ Best for: Fine-tuning workflows, understanding exactly what's happening, version
 
 ### Visual Editor
 
-The visual editor provides a graphical interface for building workflows. You can drag and drop nodes, draw edges between them, and configure node properties through forms. The visual editor reads and writes the same YAML format, so you can switch between the visual editor and hand-editing YAML at any time.
+The visual editor provides a graphical interface for building workflows. Open it from **Workflows → Library** with **New workflow**, or **Edit** on a workflow. You can drag and drop nodes, draw edges between them, and configure node properties through forms; a workflow's triggers appear as cards on the canvas. The visual editor reads and writes the same YAML format, so you can switch between the visual editor and hand-editing YAML at any time.
+
+A workflow made in the app is a **Draft** until you **Publish** it. A draft is saved as it is, problems and all, but it cannot be run from a chat, referenced by another workflow, or enabled. Publishing checks it first: a workflow with validation errors stays a draft and the builder lists what to fix. You can still try a draft with the builder's **Test run**, which runs exactly what you saved and lets you watch each step on the canvas.
 
 Best for: Exploring workflow structure visually, quickly prototyping node graphs, understanding how edges route execution.
 
@@ -79,7 +81,9 @@ Reliant automatically discovers workflow files in your project's `.reliant/workf
 
 **Scenarios**: A workflow's [scenario tests](/workflows/testing) live in `<name>/scenarios/` next to it, one scenario per file, where `<name>` is the workflow's `name:` as a slug.
 
-**Discovery**: When you start Reliant, it scans for `.yaml` files in `.reliant/workflows/`. Changes require restarting Reliant or reloading workflows.
+**Discovery**: The machine your project is on watches `.reliant/workflows/` and syncs it to Reliant every couple of seconds, so a saved file shows up in the workflow selector and the library without a restart. A file that does not parse is listed in the library under **Failed to load**, with the error.
+
+**Your workflows and the project's**: Workflows you create in the app (in the builder, or by asking an agent) belong to your account rather than to a file. When one of yours has the same `name:` as a project workflow, yours wins for you, in chats, refs and scenarios alike.
 
 Commit your `.reliant/workflows/` directory to version control to share workflows with your team.
 
@@ -313,7 +317,7 @@ the write ledger with its sha before it is made, so the `push` and `pull_request
 are recognized as this run's own (`trigger.origin`). Outputs: `pushed`, `sha`, `branch`, `base_sha`,
 `files_changed`, `insertions`, `deletions`, `refused`, `refusal`.
 
-Today the push is made with your own GitHub token, through the same connection an `action` node uses.
+The push is made as whoever the run writes as. By default that is you, through your own GitHub connection, the same one an `action` node uses. An [automation that writes as the Reliant bot](/automations/overview#who-an-automation-acts-as) pushes with the bot's token for that one repository instead; if that token cannot be had, the push is refused and nothing is pushed, never made as you.
 
 **Shells without credentials.** A workflow that should never push, merge or deploy can say so for the
 shell its agents use and for its `run` nodes. With `credentials: none`, the command's environment has no
@@ -813,7 +817,7 @@ edges:
         label: failure
 ```
 
-Cases are evaluated in order—the first matching condition wins. A case without a condition acts as a default fallback.
+Cases are evaluated in order—the first matching condition wins. Every case needs a `condition`; for a fallback when none matches, give the edge a `default:` alongside its `cases:`.
 
 ### Available Context in Conditions
 
@@ -969,7 +973,6 @@ Thread configuration controls how agents share context:
   ref: builtin://agent
   thread:
     mode: new
-    key: racer_1
 
 # Forked - starts with context, then independent
 - id: alternative
@@ -1082,13 +1085,14 @@ When invoking sub-workflows, you can apply [Presets](/workflows/presets) to conf
 
 ### Basic Preset Usage
 
-Use the `presets` field on workflow or loop nodes:
+Use the `presets` field on workflow or loop nodes. It maps an input group to a preset, and `default` is the workflow's ungrouped inputs:
 
 ```yaml
 - id: research_agent
   type: workflow
   ref: builtin://agent
-  presets: research # Apply the "research" preset
+  presets:
+    default: researcher # Apply the built-in "researcher" preset
   args:
     model: "{{inputs.model}}" # Args override preset values
 ```
@@ -1130,10 +1134,11 @@ The `default` key targets ungrouped inputs (or inputs matching the workflow's `p
 - id: agent
   type: workflow
   ref: builtin://agent
-  presets: research # Base configuration
+  presets:
+    default: researcher # Base configuration
   args:
     model: "{{inputs.model}}" # Dynamic override
-    temperature: 0.9 # Specific override
+    system_prompt: "Research {{inputs.topic}}" # Specific override
 ```
 
 ---
@@ -1425,7 +1430,7 @@ Use the `condition` field to save messages only in certain cases:
     role: assistant
     content: |
       Analysis: {{nodes.analyze.response_text}}
-      Time: {{workflow.started_at}}
+      Workflow: {{workflow.name}}
 ```
 
 ---
@@ -1478,12 +1483,14 @@ edges:
 Cases are evaluated in order. If you need **parallel execution**, create multiple edges:
 
 ```yaml
-# WRONG: Only first matching case runs
+# WRONG: Only the first matching case runs
 edges:
   - from: start
     cases:
       - to: agent_a
+        condition: "true"
       - to: agent_b
+        condition: "true"
 
 # CORRECT: Multiple edges for parallel
 edges:
@@ -1584,14 +1591,12 @@ edges:
   ref: builtin://agent
   thread:
     mode: fork
-    key: agent_a
 
 - id: agent_b
   type: workflow
   ref: builtin://agent
   thread:
     mode: fork
-    key: agent_b
 ```
 
 ### Skipped Node Outputs
@@ -1608,34 +1613,34 @@ content: "Result: {{nodes.optional_step.result}}"
 content: "{{has(nodes.optional_step.skipped) ? 'Skipped' : nodes.optional_step.result}}"
 ```
 
-### Response Tools Require ExecuteTools
+### Reading a Response Tool's Answer
 
-When using `response_tool`, you must execute the tool call to get the structured data:
+A `response_tool` is a tool only the model can call, whose input is the structured answer you asked for. Its `schema` is a JSON Schema; the call's input is parsed into the Call LLM node's `response_data`, so you can branch on it directly:
 
 ```yaml
-# Define response tool on CallLLM
 - id: review
   type: call_llm
   args:
+    model: {tags: [flagship]}
     response_tool:
       name: verdict
-      options:
-        pass: "Code looks good"
-        fail: "Issues found"
+      description: Submit your verdict on the change
+      schema:
+        type: object
+        properties:
+          choice: {type: string, enum: [pass, fail]}
+          value: {type: string, description: Why}
+        required: [choice, value]
 
-# MUST execute to get the data
-- id: execute
-  type: execute_tools
-  args:
-    tool_calls: "{{nodes.review.tool_calls}}"
-
-# Now access the structured response
 edges:
-  - from: execute
+  - from: review
     cases:
       - to: approve
-        condition: nodes.execute.response_data.verdict.choice == 'pass'
+        condition: has(nodes.review.response_data.choice) && nodes.review.response_data.choice == 'pass'
+    default: request_changes
 ```
+
+A model can answer in text instead of calling the tool, so guard the read. If the node is part of an agent loop that runs its tool calls with `execute_tools`, the same answer is also on that node, keyed by the tool's name: `nodes.<execute_node>.response_data.verdict.choice`. For an agent that must keep working until it answers through the tool, use `builtin://structured-agent`, which re-prompts the model until it does and returns the answer as `response`.
 
 ## Next Steps
 

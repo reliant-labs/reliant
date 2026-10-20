@@ -212,7 +212,7 @@ func (a *GreenfieldProbeActivity) Execute(ctx context.Context, input GreenfieldP
 	if err != nil {
 		attrs = append(attrs, "error", err)
 	}
-	logging.Info("[GreenfieldProbe] Probe finished", attrs...)
+	logging.InfoContext(ctx, "[GreenfieldProbe] Probe finished", attrs...)
 	return out, nil
 }
 

@@ -117,11 +117,11 @@ func (s *Service) UploadAttachment(
 	}
 
 	if err := s.deps.Repo.CreateAttachment(ctx, dbAttachment); err != nil {
-		logging.Error("Failed to save attachment to database", "error", err, "attachmentID", attachmentID)
+		logging.ErrorContext(ctx, "Failed to save attachment to database", "error", err, "attachmentID", attachmentID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save attachment"))
 	}
 
-	logging.Debug("File uploaded successfully via gRPC",
+	logging.DebugContext(ctx, "File uploaded successfully via gRPC",
 		"attachmentID", attachmentID,
 		"size", len(content),
 		"mime_type", mimeType,
@@ -200,11 +200,11 @@ func (s *Service) DeleteAttachment(
 	}
 
 	if err := s.deps.Repo.DeleteAttachment(ctx, attachmentID); err != nil {
-		logging.Error("Failed to delete attachment from database", "error", err, "attachmentID", attachmentID)
+		logging.ErrorContext(ctx, "Failed to delete attachment from database", "error", err, "attachmentID", attachmentID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete attachment"))
 	}
 
-	logging.Debug("Attachment deleted via gRPC", "attachmentID", attachmentID, "userID", userID)
+	logging.DebugContext(ctx, "Attachment deleted via gRPC", "attachmentID", attachmentID, "userID", userID)
 
 	return connect.NewResponse(&reliantv1.DeleteAttachmentResponse{
 		Message: "Attachment deleted successfully",
@@ -280,11 +280,11 @@ func (s *Service) CreateFileReference(
 	}
 
 	if err := s.deps.Repo.CreateAttachment(ctx, dbAttachment); err != nil {
-		logging.Error("Failed to save file reference to database", "error", err, "attachmentID", attachmentID)
+		logging.ErrorContext(ctx, "Failed to save file reference to database", "error", err, "attachmentID", attachmentID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create file reference"))
 	}
 
-	logging.Debug("File reference created via gRPC",
+	logging.DebugContext(ctx, "File reference created via gRPC",
 		"attachmentID", attachmentID,
 		"size", len(content),
 		"mime_type", mimeType,

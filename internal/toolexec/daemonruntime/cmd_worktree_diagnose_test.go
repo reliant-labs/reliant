@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/worktreeerr"
@@ -33,29 +34,8 @@ func diagnoseRepo(t *testing.T, branches ...string) string {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
-	dir := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@e.com",
-			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@e.com",
-		)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	run("init", "-b", "main")
-	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("hi\n"), 0o644); err != nil {
-		t.Fatalf("seed file: %v", err)
-	}
-	run("add", ".")
-	run("commit", "-m", "init")
-	for _, b := range branches {
-		run("branch", b)
-	}
-	return dir
+	return copyOfRepoTemplate(t, "f.txt on main, branches "+strings.Join(branches, ","),
+		buildCommittedRepo("f.txt", "hi\n", branches...))
 }
 
 type diagnosedCreate struct {
@@ -65,9 +45,10 @@ type diagnosedCreate struct {
 	ErrorDetail string             `json:"error_detail"`
 }
 
+// createFor runs worktree.create under TestMain's shared $HOME; callers give
+// it a workspace_id from uniqueWorkspaceID.
 func createFor(t *testing.T, req map[string]any) diagnosedCreate {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
 	payload, err := json.Marshal(req)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -84,14 +65,14 @@ func createFor(t *testing.T, req map[string]any) diagnosedCreate {
 }
 
 func TestWorktreeCreate_DiagnosesTheCallersMistake(t *testing.T) {
-	repo := diagnoseRepo(t, "release/compute-tier-redesign", "rel")
-
+	t.Parallel()
 	cases := []struct {
 		name       string
 		branch     string
 		base       string
 		wantCode   worktreeerr.Reason
 		wantDetail string
+		detailRepo bool // wantDetail is the case's repo path
 	}{
 		{
 			// The prod event: a base branch that does not exist.
@@ -113,14 +94,21 @@ func TestWorktreeCreate_DiagnosesTheCallersMistake(t *testing.T) {
 		{
 			// `main` is checked out in the repo's own checkout.
 			name: "branch is checked out in another worktree", branch: "main", base: "main",
-			wantCode: worktreeerr.BranchCheckedOut, wantDetail: repo,
+			wantCode: worktreeerr.BranchCheckedOut, detailRepo: true,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// Each case its own repo: concurrent creates in one repo would
+			// contend for its ref and worktree locks.
+			repo := diagnoseRepo(t, "release/compute-tier-redesign", "rel")
+			if tc.detailRepo {
+				tc.wantDetail = repo
+			}
 			resp := createFor(t, map[string]any{
 				"project_path": repo,
-				"workspace_id": "ws-diagnose",
+				"workspace_id": uniqueWorkspaceID(t, "ws-diagnose"),
 				"name":         "diagnose",
 				"branch":       tc.branch,
 				"base_branch":  tc.base,
@@ -144,13 +132,14 @@ func TestWorktreeCreate_DiagnosesTheCallersMistake(t *testing.T) {
 // A failure that is not the caller's to fix carries no code: the server must
 // keep treating it as its own fault and report it.
 func TestWorktreeCreate_LeavesRealFailuresUndiagnosed(t *testing.T) {
+	t.Parallel()
 	t.Run("destination already populated", func(t *testing.T) {
+		t.Parallel()
 		// The workspace path is ours (name + random suffix), never the
 		// caller's choice, so a collision is our bug.
 		repo := diagnoseRepo(t)
-		home := t.TempDir()
-		t.Setenv("HOME", home)
-		dest := filepath.Join(home, ".reliant", "worktrees", "ws-taken")
+		workspaceID := uniqueWorkspaceID(t, "ws-taken")
+		dest := testWorktreePath(t, workspaceID)
 		if err := os.MkdirAll(dest, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -158,7 +147,7 @@ func TestWorktreeCreate_LeavesRealFailuresUndiagnosed(t *testing.T) {
 			t.Fatal(err)
 		}
 		payload, _ := json.Marshal(map[string]any{
-			"project_path": repo, "workspace_id": "ws-taken", "name": "taken",
+			"project_path": repo, "workspace_id": workspaceID, "name": "taken",
 			"branch": "feature/ok", "base_branch": "main",
 		})
 		raw, err := handleWorktreeCreate(context.Background(), payload)
@@ -176,14 +165,14 @@ func TestWorktreeCreate_LeavesRealFailuresUndiagnosed(t *testing.T) {
 	})
 
 	t.Run("auto-detected base", func(t *testing.T) {
+		t.Parallel()
 		// Only a base the CALLER named is theirs to fix. One the daemon
 		// picked itself that fails is the daemon's bug, so a missing base is
 		// diagnosed only when it was supplied. Here nothing was supplied and
 		// the failure is the path, so there must be no BaseNotFound.
 		repo := diagnoseRepo(t)
-		home := t.TempDir()
-		t.Setenv("HOME", home)
-		dest := filepath.Join(home, ".reliant", "worktrees", "ws-auto")
+		workspaceID := uniqueWorkspaceID(t, "ws-auto")
+		dest := testWorktreePath(t, workspaceID)
 		if err := os.MkdirAll(dest, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -191,7 +180,7 @@ func TestWorktreeCreate_LeavesRealFailuresUndiagnosed(t *testing.T) {
 			t.Fatal(err)
 		}
 		payload, _ := json.Marshal(map[string]any{
-			"project_path": repo, "workspace_id": "ws-auto", "name": "auto", "branch": "feature/auto",
+			"project_path": repo, "workspace_id": workspaceID, "name": "auto", "branch": "feature/auto",
 		})
 		raw, err := handleWorktreeCreate(context.Background(), payload)
 		if err != nil {

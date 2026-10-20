@@ -1,0 +1,73 @@
+---
+title: "The reliant command line"
+description: "What the reliant CLI is for, how it decides which server and credential to use, and where it keeps its files"
+---
+
+Most of Reliant happens in the app: you chat, pick a machine, review changes. The `reliant` command line tool covers the jobs that belong in a terminal. It turns a computer you own into a machine your agents can work on. It signs you in where there is no app, such as an SSH session or a CI runner. It lets you build and test workflows next to the code they live with, and start or supervise runs from scripts. It also ships Forge, so `reliant forge …` builds and deploys your apps signed in as you.
+
+This section is organised by job rather than by command. Each page follows one job from start to finish, with real output. For every command and flag, see the generated [CLI reference](/reference/cli).
+
+| You want to… | Read |
+|---|---|
+| Sign the CLI in, including on a machine with no browser, and make tokens for scripts | [Sign in and tokens](/cli/sign-in) |
+| Run a daemon on a workstation, server or Raspberry Pi and keep it healthy | [Run a machine from the terminal](/cli/run-a-machine) |
+| Write, validate and test a workflow, then run and supervise it | [Workflows from the terminal](/cli/workflows) |
+| Build and deploy with Forge without a separate login | [Forge through Reliant](/cli/forge) |
+| Get the URL of a dev server an agent started on a cloud machine | [Preview a running app](/cli/previews) |
+| Use the CLI from CI or a script: JSON output, exit codes, tokens | [Scripting and CI](/cli/scripting) |
+
+## Getting the CLI
+
+The desktop app installs `reliant` and puts it on your `PATH`; [Installation](/getting-started/installation#command-line-tool) covers each platform. On a Reliant cloud machine it is already there. To check which build you have, and which Forge it carries:
+
+```bash
+$ reliant version
+reliant version v1.8.3-0.20261020032426-61cfe193a8e2
+  commit:  61cfe193a8e2 (clean)
+  built:   unknown
+  forge:   v0.1.46-0.20261020021425-45d38939f475
+  go:      go1.27.2
+  os/arch: linux/amd64
+```
+
+The `forge:` line matters more than it looks: `reliant forge` runs exactly that Forge version, as [Forge through Reliant](/cli/forge) explains.
+
+## Which server, which credential
+
+Every command that talks to Reliant first decides **where** to talk and **as whom**. The CLI keeps no "current server" setting that a previous command could leave behind. It works the server out again on every run, in this order:
+
+1. the `--server` flag,
+2. the `RELIANT_SERVER_URL` environment variable,
+3. the default compiled into the binary, which is Reliant's hosted service (`https://api.reliantapi.com`).
+
+You almost never set either of the first two. They exist for people running their own Reliant stack.
+
+The credential comes from the `RELIANT_TOKEN` environment variable if it is set, and otherwise from the login stored **for that server**. A login made against one server is never sent to another. When a command fails, the error names both the server and where that choice came from, which tells you straight away whether the problem is the credential or the target:
+
+```text
+$ reliant project list
+not logged in to https://api.reliantapi.com (default — no --server flag and no RELIANT_SERVER_URL) (not logged in) — run 'reliant auth login', or set RELIANT_TOKEN
+```
+
+Daemons are the exception. A daemon authenticates with its **own** credential, made when you register the machine, so signing the CLI out does not disconnect a running daemon. [Sign in and tokens](/cli/sign-in) explains the three kinds of credential and when to use each.
+
+## Where the CLI keeps things
+
+| Path | What is in it |
+|---|---|
+| `~/.config/forge/credentials.json` (under `$XDG_CONFIG_HOME` if set) | Your CLI login, one entry per server. Shared with Forge, which is why `reliant forge` needs no second login. |
+| `~/.reliant/daemon.json` | Daemon credentials, one per server and account. |
+| `~/.reliant/instances/` | One folder per daemon instance, holding its runtime record (`daemon-state.json`) and logs (`logs/tools-daemon.log`). |
+| `~/.reliant/forge-token-cache.json` | Short-lived Forge deploy tokens exchanged from your session. |
+
+You rarely need to open these files. `reliant auth status` and `reliant daemon status` print the path they read, so you can see which file a command used.
+
+## Shell completion
+
+`reliant completion bash|zsh|fish|powershell` prints a completion script. `reliant completion <shell> --help` explains where to put it for your shell.
+
+## Related topics
+
+- [CLI reference](/reference/cli): every command and flag, generated from the binary
+- [Machines overview](/machines/overview): what a machine is and how agents use it
+- [Installation](/getting-started/installation)

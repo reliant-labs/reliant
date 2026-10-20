@@ -54,7 +54,7 @@ func aggregateAvailableModels(ctx context.Context, available models.AvailableDri
 
 		infos, err := availableModelsForDriver(ctx, driverID, cfg, build)
 		if errors.Is(err, registry.ErrCredentialRejected) {
-			logging.Warn("[ListAvailableModels] provider rejected the stored credential; omitting its models",
+			logging.WarnContext(ctx, "[ListAvailableModels] provider rejected the stored credential; omitting its models",
 				"driver", driver, "error", err)
 			continue
 		}
@@ -62,7 +62,7 @@ func aggregateAvailableModels(ctx context.Context, available models.AvailableDri
 			// Fail open: fall back to this provider's static registry list so a
 			// transient error (e.g. a dynamic provider's catalog fetch failing)
 			// never removes the provider from the picker.
-			logging.Warn("[ListAvailableModels] provider availability failed; using static list (fail-open)",
+			logging.WarnContext(ctx, "[ListAvailableModels] provider availability failed; using static list (fail-open)",
 				"driver", driver, "error", err)
 			out = append(out, reg.ModelsForDriver(driver)...)
 			continue
@@ -79,7 +79,7 @@ func aggregateAvailableModels(ctx context.Context, available models.AvailableDri
 func ListAvailableModelsOrEmpty(ctx context.Context, userID string) []models.ModelInfo {
 	infos, err := ListAvailableModels(ctx, userID)
 	if err != nil {
-		logging.Warn("[ListAvailableModels] failed; proceeding with no availability info", "error", err)
+		logging.WarnContext(ctx, "[ListAvailableModels] failed; proceeding with no availability info", "error", err)
 		return nil
 	}
 	return infos

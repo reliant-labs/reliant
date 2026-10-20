@@ -46,7 +46,7 @@ func (r *Repo) ContentBlockPayloads(ctx context.Context, blocks []*MessageConten
 			// Non-fatal: the block still renders, it just won't carry durable
 			// status. Logged rather than swallowed so a systematic failure is
 			// visible instead of showing up as spawns that never preview.
-			logging.Warn("Failed to load tool calls for content block payload", "error", err)
+			logging.WarnContext(ctx, "Failed to load tool calls for content block payload", "error", err)
 		} else {
 			for _, call := range calls {
 				toolCallsByID[call.ID] = call

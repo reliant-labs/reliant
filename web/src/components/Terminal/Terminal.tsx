@@ -17,6 +17,7 @@ import { NoMachineState } from "../NoMachineState";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { getGRPCBaseURLPublic } from "../../api/grpc-client";
+import { pageActivity } from "../../lib/pageActivity";
 
 interface TerminalProps {
   sessionId: string;
@@ -41,6 +42,16 @@ const WS_MAX_RECONNECT_ATTEMPTS = 10;
 // real reconnect trigger in that state is the daemon-status subscription
 // flipping to online; this timer only guards against stale client-side status.
 const DAEMON_OFFLINE_RETRY_DELAY = 30000;
+// How long an OPEN socket gets to answer a liveness ping after the page wakes.
+// A laptop that slept can leave the browser holding a dead socket in OPEN state
+// until TCP notices, minutes later; a live one answers in a round trip.
+const WAKE_PROBE_TIMEOUT = 4000;
+// Wake signals arrive in bursts (visibilitychange, pageshow, online within one
+// wake); act on the first.
+const WAKE_DEDUPE_WINDOW = 1000;
+// A socket still CONNECTING this long after a wake was started before the
+// sleep or is stuck; younger than this it is the attempt the wake just made.
+const WAKE_CONNECT_GRACE = 5000;
 // How long the daemon must stay offline before the terminal tears down a
 // session over it.
 //
@@ -125,6 +136,13 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
   // away, so ws.onclose can tell that close apart from a shell exiting.
   const closedForDaemonOfflineRef = useRef(false);
   const connectWebSocketRef = useRef<(() => Promise<(() => void) | undefined>) | null>(null);
+  // Armed while a wake-time liveness ping is unanswered.
+  const probeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set when the shell ended on its own (clean close), so a wake does not
+  // respawn a shell the user exited.
+  const shellExitedRef = useRef(false);
+  const lastWakeAtRef = useRef(0);
+  const socketCreatedAtRef = useRef(0);
   const updateSessionPID = useTerminalStore((state) => state.updateSessionPID);
   const setDaemonSessionId = useTerminalStore((state) => state.setDaemonSessionId);
   const activeSessionId = useTerminalStore((state) => state.activeSessionId);
@@ -139,7 +157,9 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
   // dropped", and to reconnect promptly when the daemon comes online instead
   // of hammering the server while it is down. While the status is still
   // loading we assume online — the server's own error is the stronger signal.
-  const { activeDaemon, loading: daemonStatusLoading } = useDaemonStatus();
+  const { activeDaemon, loading: daemonStatusLoading, refresh: refreshDaemonStatus } = useDaemonStatus();
+  const refreshDaemonStatusRef = useRef(refreshDaemonStatus);
+  refreshDaemonStatusRef.current = refreshDaemonStatus;
   const daemonOnline = !!activeDaemon || daemonStatusLoading;
   const daemonOnlineRef = useRef(daemonOnline);
 
@@ -250,7 +270,12 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
     workingDirMissingRef.current = false;
     noMachineRef.current = false;
     workingDirAttemptsRef.current = 0;
+    shellExitedRef.current = false;
     updateConnectionState("connecting");
+
+    // Latest connect call wins: a call that finds a newer one started while it
+    // awaited the auth token drops out instead of opening a second socket.
+    let connectSeq = 0;
 
     // Get theme colors from CSS variables
     const getColor = (variable: string) => {
@@ -419,6 +444,31 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
     // Connect to WebSocket
     const connectWebSocket = async () => {
       if (disposed) return;
+      const seq = ++connectSeq;
+
+      // One connection in flight: any pending retry and any socket this call
+      // replaces are retired first. Detached before closing, so the old
+      // socket's close cannot schedule a retry of its own — a wake that
+      // replaces a dead socket must not leave two connections racing.
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (probeTimerRef.current) {
+        clearTimeout(probeTimerRef.current);
+        probeTimerRef.current = null;
+      }
+      const previous = wsRef.current;
+      if (previous) {
+        previous.onopen = null;
+        previous.onmessage = null;
+        previous.onerror = null;
+        previous.onclose = null;
+        if (previous.readyState === WebSocket.OPEN || previous.readyState === WebSocket.CONNECTING) {
+          previous.close();
+        }
+        wsRef.current = null;
+      }
 
       // Per-attempt evidence: cleared here, set by this attempt's messages.
       daemonUnavailableRef.current = false;
@@ -426,6 +476,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
       workingDirMissingRef.current = false;
       noMachineRef.current = false;
       closedForDaemonOfflineRef.current = false;
+      shellExitedRef.current = false;
 
       // Use the main gRPC base URL for terminal WebSocket connections.
       const baseURL = getGRPCBaseURLPublic();
@@ -443,6 +494,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
       // Get auth token
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
+      if (disposed || seq !== connectSeq) return () => {};
 
       const params = new URLSearchParams();
       if (workingDir) params.append("workingDir", workingDir);
@@ -456,6 +508,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
+      socketCreatedAtRef.current = Date.now();
 
       ws.onopen = () => {
         logger.info("[Terminal] WebSocket connected");
@@ -483,6 +536,11 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
       };
 
       ws.onmessage = (event) => {
+        // Anything from the server proves the connection is alive.
+        if (probeTimerRef.current) {
+          clearTimeout(probeTimerRef.current);
+          probeTimerRef.current = null;
+        }
         try {
           // Try to parse as JSON - only handle if it's an object with a type property
           const data = JSON.parse(event.data);
@@ -506,6 +564,8 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
               if (typeof data.session_id === "string" && data.session_id) {
                 setDaemonSessionId(sessionId, data.session_id);
               }
+            } else if (data.type === "pong") {
+              // Answer to a wake-time liveness ping; handled above.
             } else if (data.type === "output") {
               term.write(data.data);
             } else if (data.type === "error") {
@@ -580,6 +640,13 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
         // terminal instance is disposed, do nothing.
         if (disposed) return;
 
+        // The close answers any pending liveness ping, and its handling below
+        // owns the retry.
+        if (probeTimerRef.current) {
+          clearTimeout(probeTimerRef.current);
+          probeTimerRef.current = null;
+        }
+
         // We closed this socket ourselves because the daemon went offline.
         // Checked BEFORE the 1000 branch: our own close() reports code 1000,
         // which would otherwise read as "the shell exited cleanly" and both
@@ -628,6 +695,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
         // Normal exit (e.g. shell exited) — code 1000 means clean close.
         if (event.code === 1000 && !closedForDaemonOffline) {
           term.write("\r\n\x1b[93mSession ended\x1b[0m\r\n");
+          shellExitedRef.current = true;
           updateConnectionState("disconnected");
           return;
         }
@@ -732,6 +800,10 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
       }
+      if (probeTimerRef.current) {
+        clearTimeout(probeTimerRef.current);
+        probeTimerRef.current = null;
+      }
 
       resizeObserver.disconnect();
 
@@ -750,6 +822,60 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
       if (fitAddonRef.current === fitAddon) fitAddonRef.current = null;
     };
   }, [sessionId, workingDir, worktreeId, projectId, updateSessionPID, setDaemonSessionId, updateConnectionState]); // updateConnectionState is a stable setter
+
+  // The page came back from sleep, a background stretch, or an offline spell.
+  //
+  // Waiting out the ordinary machinery after a long sleep took ~2 minutes in
+  // prod: the browser kept a dead socket OPEN until TCP noticed, a stale daemon
+  // status sent the retry down the 30s path, and a long absence spent the whole
+  // attempt budget so only a manual Reconnect was left. A wake is new evidence
+  // that supersedes all three, so it resets the budget and reconnects at once.
+  // A socket that still reads OPEN is asked to prove it (the server answers a
+  // "ping" with a "pong") and replaced if it stays silent.
+  useEffect(() => {
+    const resetBudget = () => {
+      reconnectAttemptsRef.current = 0;
+      workingDirAttemptsRef.current = 0;
+      daemonUnavailableRef.current = false;
+      workingDirUnavailableRef.current = false;
+      workingDirMissingRef.current = false;
+      noMachineRef.current = false;
+    };
+
+    const reconnectNow = (reason: string) => {
+      logger.info("[Terminal] Page woke, reconnecting now", { sessionId, reason });
+      lastWakeAtRef.current = Date.now();
+      // The daemon list may be as stale as the socket; its flip back to
+      // online reconnects too, and a second connect only supersedes this one.
+      refreshDaemonStatusRef.current?.();
+      resetBudget();
+      updateConnectionState(connectionStateRef.current === "connected" ? "reconnecting" : "connecting");
+      void connectWebSocketRef.current?.();
+    };
+
+    return pageActivity().onResume(({ reason }) => {
+      const state = connectionStateRef.current;
+      if (state === "folder_missing" || shellExitedRef.current) return;
+      if (probeTimerRef.current) return; // already checking
+
+      const ws = wsRef.current;
+      if (state === "connected" && ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "ping" }));
+        probeTimerRef.current = setTimeout(() => {
+          probeTimerRef.current = null;
+          if (connectionStateRef.current !== "connected" || wsRef.current !== ws) return;
+          logger.warn("[Terminal] Liveness ping unanswered after wake, replacing socket", { sessionId, reason });
+          reconnectNow(reason);
+        }, WAKE_PROBE_TIMEOUT);
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastWakeAtRef.current < WAKE_DEDUPE_WINDOW) return;
+      if (ws?.readyState === WebSocket.CONNECTING && now - socketCreatedAtRef.current < WAKE_CONNECT_GRACE) return;
+      reconnectNow(reason);
+    });
+  }, [sessionId, updateConnectionState]);
 
   // Listen for theme changes and update terminal colors
   useEffect(() => {

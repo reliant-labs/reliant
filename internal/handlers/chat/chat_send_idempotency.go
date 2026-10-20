@@ -281,7 +281,7 @@ func (s *Service) enqueueHumanMessage(ctx context.Context, msg *db.AgentMessage,
 		}
 		return existing, false, nil
 	}
-	logging.Warn("Could not settle which row holds a client message id", "messageID", msg.ID, "chatID", msg.ChatID)
+	logging.WarnContext(ctx, "Could not settle which row holds a client message id", "messageID", msg.ID, "chatID", msg.ChatID)
 	return nil, false, fmt.Errorf("could not queue message %s", msg.ID)
 }
 

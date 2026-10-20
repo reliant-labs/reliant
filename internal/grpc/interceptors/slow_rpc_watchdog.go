@@ -59,7 +59,7 @@ func (i *SlowRPCWatchdogInterceptor) WrapUnary(next connect.UnaryFunc) connect.U
 				case <-done:
 					return
 				case <-timer.C:
-					logging.Warn("[SlowRPC] unary handler still in flight",
+					logging.WarnContext(ctx, "[SlowRPC] unary handler still in flight",
 						"procedure", procedure,
 						"elapsed", time.Since(start).Round(time.Second).String())
 					observability.SlowRPCTotal.WithLabelValues(procedure, "in_flight").Inc()
@@ -72,7 +72,7 @@ func (i *SlowRPCWatchdogInterceptor) WrapUnary(next connect.UnaryFunc) connect.U
 		close(done)
 
 		if elapsed := time.Since(start); elapsed >= threshold {
-			logging.Warn("[SlowRPC] unary handler completed slowly",
+			logging.WarnContext(ctx, "[SlowRPC] unary handler completed slowly",
 				"procedure", procedure,
 				"elapsed", elapsed.Round(time.Millisecond).String(),
 				"failed", err != nil)

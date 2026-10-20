@@ -66,7 +66,7 @@ func (s *Service) ResolveTriggerSenders(
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("connect GitHub (or reconnect it) in Settings to look people up by their GitHub login"))
 	default:
-		logging.Warn("looking GitHub people up failed", "user_id", userID, "error", err)
+		logging.WarnContext(ctx, "looking GitHub people up failed", "user_id", userID, "error", err)
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("GitHub could not be reached to look people up; try again"))
 	}
 	out := make([]*reliantv1.ResolvedTriggerSender, 0, len(found))

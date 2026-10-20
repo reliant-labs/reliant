@@ -65,6 +65,7 @@ func TestSendRegistrationPassesThroughOtherCases(t *testing.T) {
 // daemon does not trust. Before this change the session error was only
 // "write envelope: EOF"; the x509 failure is the part an operator needs.
 func TestRunSessionNamesTLSFailureInsteadOfEOF(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewTLSServer(http.NotFoundHandler()) // self-signed; the default client does not trust it
 	defer srv.Close()
 

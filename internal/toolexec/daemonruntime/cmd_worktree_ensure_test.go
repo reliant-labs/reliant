@@ -4,9 +4,11 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
@@ -17,40 +19,59 @@ import (
 // workspace over them, created exactly as the server creates one: a
 // worktree.create per repo into <HOME>/.reliant/worktrees/<workspace>/<rel>.
 type ensureFixture struct {
-	home    string
-	project string
-	root    string // the workspace root, the chat's working directory
-	branch  string
-	rels    []string
+	home       string
+	project    string
+	root       string // the workspace root, the chat's working directory
+	branch     string
+	worktreeID string
+	rels       []string
 }
 
+// newEnsureFixture builds the workspace under TestMain's shared $HOME, named
+// for the test, so the tests that use it can run in parallel.
 func newEnsureFixture(t *testing.T, rels ...string) *ensureFixture {
 	t.Helper()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
 	project := filepath.Join(t.TempDir(), "proj")
-	f := &ensureFixture{home: home, project: project, branch: "feat/recover", rels: rels}
+	f := &ensureFixture{home: home, project: project, branch: "feat/recover", worktreeID: uniqueWorkspaceID(t, "wt-1"), rels: rels}
 	for _, rel := range rels {
 		newRepo(t, filepath.Join(project, rel))
 	}
-	const workspaceID = "proj/recover-1a2b3c4d"
-	for _, rel := range rels {
-		payload, _ := json.Marshal(worktreeCreateRequest{
-			ProjectPath: filepath.Join(project, rel),
-			WorkspaceID: workspaceID,
-			SubPath:     rel,
-			Name:        "recover",
-			Branch:      f.branch,
-			BaseBranch:  "main",
-			WorktreeID:  "wt-1",
-		})
-		raw, err := handleWorktreeCreate(context.Background(), payload)
+	workspaceID := uniqueWorkspaceID(t, "proj/recover-1a2b3c4d")
+	// One create per repo, as the server sends them, but at once rather than
+	// in turn: each runs about seven git processes in its own repository.
+	errs := make([]error, len(rels))
+	var wg sync.WaitGroup
+	for i, rel := range rels {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			payload, _ := json.Marshal(worktreeCreateRequest{
+				ProjectPath: filepath.Join(project, rel),
+				WorkspaceID: workspaceID,
+				SubPath:     rel,
+				Name:        "recover",
+				Branch:      f.branch,
+				BaseBranch:  "main",
+				WorktreeID:  f.worktreeID,
+			})
+			raw, err := handleWorktreeCreate(context.Background(), payload)
+			var resp worktreeCreateResponse
+			if err == nil {
+				err = json.Unmarshal(raw, &resp)
+			}
+			if err != nil || !resp.Success {
+				errs[i] = fmt.Errorf("worktree.create %q: %s (%v)", rel, raw, err)
+			}
+		}()
+	}
+	wg.Wait()
+	for _, err := range errs {
 		if err != nil {
 			t.Fatal(err)
-		}
-		var resp worktreeCreateResponse
-		if err := json.Unmarshal(raw, &resp); err != nil || !resp.Success {
-			t.Fatalf("worktree.create %q: %s (%v)", rel, raw, err)
 		}
 	}
 	f.root = filepath.Join(home, ".reliant", "worktrees", filepath.FromSlash(workspaceID))
@@ -61,7 +82,7 @@ func (f *ensureFixture) request(audience string) toolexec.WorkspaceEnsureRequest
 	req := toolexec.WorkspaceEnsureRequest{
 		Path:         f.root,
 		Repair:       true,
-		WorktreeID:   "wt-1",
+		WorktreeID:   f.worktreeID,
 		Branch:       f.branch,
 		FallbackPath: f.project,
 		Audience:     audience,
@@ -93,6 +114,7 @@ func commitIn(t *testing.T, dir, file string) {
 // nothing ever repairs it. After an ensure the workspace is back on its branch
 // with its commits, and the same command runs.
 func TestEnsure_DeletedWorktreeIsRecreatedAndCommandsRunAgain(t *testing.T) {
+	t.Parallel()
 	f := newEnsureFixture(t, "")
 	commitIn(t, f.root, "committed.txt")
 	if err := os.WriteFile(filepath.Join(f.root, "uncommitted.txt"), []byte("x"), 0o644); err != nil {
@@ -139,6 +161,7 @@ func TestEnsure_DeletedWorktreeIsRecreatedAndCommandsRunAgain(t *testing.T) {
 // A multi-repo workspace is one directory holding a checkout per nested repo;
 // losing it means rebuilding every one, each from its own repository.
 func TestEnsure_RecreatesEveryCheckoutOfAMultiRepoWorkspace(t *testing.T) {
+	t.Parallel()
 	f := newEnsureFixture(t, "api", "web")
 	commitIn(t, filepath.Join(f.root, "web"), "web-work.txt")
 	if err := os.RemoveAll(f.root); err != nil {
@@ -165,6 +188,7 @@ func TestEnsure_RecreatesEveryCheckoutOfAMultiRepoWorkspace(t *testing.T) {
 // One nested checkout deleted while its siblings survive: only that one is
 // rebuilt, and nothing that was there is touched.
 func TestEnsure_RebuildsOnlyTheMissingNestedCheckout(t *testing.T) {
+	t.Parallel()
 	f := newEnsureFixture(t, "api", "web")
 	dirty := filepath.Join(f.root, "api", "dirty.txt")
 	if err := os.WriteFile(dirty, []byte("keep me"), 0o644); err != nil {
@@ -186,6 +210,7 @@ func TestEnsure_RebuildsOnlyTheMissingNestedCheckout(t *testing.T) {
 // The branch is gone too, so there is nothing to recreate from. The call
 // still runs — in the project's main checkout — and the notice says why.
 func TestEnsure_FallsBackToTheMainCheckoutWhenTheBranchIsGone(t *testing.T) {
+	t.Parallel()
 	f := newEnsureFixture(t, "")
 	if err := os.RemoveAll(f.root); err != nil {
 		t.Fatal(err)
@@ -213,6 +238,7 @@ func TestEnsure_FallsBackToTheMainCheckoutWhenTheBranchIsGone(t *testing.T) {
 // worktrees is gone. There is nothing to recreate from and no main checkout;
 // calls run in $HOME rather than not at all.
 func TestEnsure_FallsBackToHomeWhenTheProjectIsGoneToo(t *testing.T) {
+	t.Parallel()
 	f := newEnsureFixture(t, "api", "web")
 	if err := os.RemoveAll(f.root); err != nil {
 		t.Fatal(err)
@@ -233,6 +259,7 @@ func TestEnsure_FallsBackToHomeWhenTheProjectIsGoneToo(t *testing.T) {
 // A directory where the checkout belongs, holding files that are not a
 // checkout (agents in prod created one to "recover"): never overwritten.
 func TestEnsure_NeverOverwritesADirectoryThatIsNotACheckout(t *testing.T) {
+	t.Parallel()
 	f := newEnsureFixture(t, "")
 	if err := os.RemoveAll(f.root); err != nil {
 		t.Fatal(err)
@@ -258,6 +285,7 @@ func TestEnsure_NeverOverwritesADirectoryThatIsNotACheckout(t *testing.T) {
 // on the same worktree, so it is told about the repair it did not trigger; a
 // caller with no audience (the user's repair button) consumes nothing.
 func TestEnsure_NoticeReachesEachThreadExactlyOnce(t *testing.T) {
+	t.Parallel()
 	f := newEnsureFixture(t, "")
 	if err := os.RemoveAll(f.root); err != nil {
 		t.Fatal(err)
@@ -310,6 +338,7 @@ func TestEnsure_ReportsAWorkspaceThatCameBack(t *testing.T) {
 
 // A healthy workspace costs a stat and changes nothing.
 func TestEnsure_PresentWorkspaceIsANoOp(t *testing.T) {
+	t.Parallel()
 	f := newEnsureFixture(t, "api", "web")
 	resp := ensureVia(t, newWorkspaceEnsurer(), f.request("thread-a"))
 	if resp.Status != toolexec.WorkspacePresent || resp.Path != f.root || resp.Notice != nil {
@@ -321,6 +350,7 @@ func TestEnsure_PresentWorkspaceIsANoOp(t *testing.T) {
 // workspace and say which one is missing, rather than moving the chat away
 // from the checkout that survived.
 func TestEnsure_ReportsAnIncompleteWorkspaceInPlace(t *testing.T) {
+	t.Parallel()
 	f := newEnsureFixture(t, "api", "web")
 	web := filepath.Join(f.root, "web")
 	if err := os.RemoveAll(web); err != nil {

@@ -121,7 +121,7 @@ func (s *Service) CreateProjectFromRepo(
 		// (FailedPrecondition for a missing GitHub credential, NotFound for
 		// someone else's daemon), so pass them through rather than
 		// flattening everything to Internal.
-		logging.Error("CreateProjectFromRepo: clone dispatch failed",
+		logging.ErrorContext(ctx, "CreateProjectFromRepo: clone dispatch failed",
 			"error", err, "daemon_id", daemonID, "clone_url", gitremote.Redacted(cloneURL))
 		return nil, err
 	}
@@ -150,13 +150,13 @@ func (s *Service) CreateProjectFromRepo(
 		if err := s.deps.Repo.UpsertQueuedProjectDaemon(
 			ctx, project.ID, daemonID, clonedPath, branchPtr, requestID,
 		); err != nil {
-			logging.Error("CreateProjectFromRepo: failed to record queued install",
+			logging.ErrorContext(ctx, "CreateProjectFromRepo: failed to record queued install",
 				"error", err, "project_id", project.ID, "daemon_id", daemonID)
 			return nil, connect.NewError(connect.CodeInternal,
 				fmt.Errorf("failed to record project installation"))
 		}
 	} else if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, daemonID, clonedPath, branchPtr); err != nil {
-		logging.Error("CreateProjectFromRepo: failed to record install",
+		logging.ErrorContext(ctx, "CreateProjectFromRepo: failed to record install",
 			"error", err, "project_id", project.ID, "daemon_id", daemonID)
 		return nil, connect.NewError(connect.CodeInternal,
 			fmt.Errorf("failed to record project installation"))
@@ -170,7 +170,7 @@ func (s *Service) CreateProjectFromRepo(
 		InstallState:  installState,
 	}
 
-	logging.Info("CreateProjectFromRepo: project added",
+	logging.InfoContext(ctx, "CreateProjectFromRepo: project added",
 		"project_id", project.ID, "daemon_id", daemonID,
 		"queued", cloneResult.Queued, "repo", gitremote.Redacted(cloneURL))
 
@@ -229,7 +229,7 @@ func (s *Service) createProjectForRepo(
 		project.DefaultBranch = &branch
 	}
 	if err := s.deps.Repo.CreateProject(ctx, project); err != nil {
-		logging.Error("CreateProjectFromRepo: failed to create project",
+		logging.ErrorContext(ctx, "CreateProjectFromRepo: failed to create project",
 			"error", err, "name", name, "path", path)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create project"))
 	}

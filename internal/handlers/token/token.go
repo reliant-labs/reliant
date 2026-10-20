@@ -77,7 +77,7 @@ func (s *Service) widenDaemonCredential(ctx context.Context, userID, tokenID str
 	}
 	info, err := s.deps.Authority.UpdateForUser(ctx, userID, tokenID, nil, daemonCeiling())
 	if err != nil {
-		logging.Warn("daemon credential minted without control-plane authority", "user_id", userID,
+		logging.WarnContext(ctx, "daemon credential minted without control-plane authority", "user_id", userID,
 			"token_id", tokenID, "error", tokenauthority.Describe(err))
 		return nil
 	}
@@ -177,7 +177,7 @@ func (s *Service) CreateToken(
 			scopes = widened
 		}
 	}
-	logging.Info("access token created", "user_id", userID, "token_id", minted.TokenID, "scopes", strings.Join(scopes, " "))
+	logging.InfoContext(ctx, "access token created", "user_id", userID, "token_id", minted.TokenID, "scopes", strings.Join(scopes, " "))
 	return connect.NewResponse(&reliantv1.CreateTokenResponse{
 		Info: &reliantv1.TokenInfo{
 			Id:          minted.TokenID,
@@ -242,7 +242,7 @@ func (s *Service) RevokeToken(
 	if err := s.deps.Authority.RevokeForUser(ctx, userID, id); err != nil {
 		return nil, authorityError("revoke", err)
 	}
-	logging.Info("access token revoked", "user_id", userID, "token_id", id)
+	logging.InfoContext(ctx, "access token revoked", "user_id", userID, "token_id", id)
 	return connect.NewResponse(&reliantv1.RevokeTokenResponse{}), nil
 }
 
@@ -302,7 +302,7 @@ func (s *Service) UpdateToken(
 	if err != nil {
 		return nil, authorityError("update", err)
 	}
-	logging.Info("access token updated", "user_id", userID, "token_id", id,
+	logging.InfoContext(ctx, "access token updated", "user_id", userID, "token_id", id,
 		"renamed", name != nil, "rescoped", scopes != nil)
 	return connect.NewResponse(&reliantv1.UpdateTokenResponse{Info: tokenInfoProto(info)}), nil
 }

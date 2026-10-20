@@ -57,11 +57,11 @@ const projectDirHealConsumerName = "api-server-project-dir-heal"
 // mkdir is idempotent, so JetStream redelivery on a missed Ack is harmless.
 func (s *Service) StartDaemonEventConsumer(ctx context.Context, nc *nats.Conn) error {
 	if s == nil || s.deps.Router == nil {
-		logging.Warn("daemon-events consumer not started: ProjectService has no daemon router")
+		logging.WarnContext(ctx, "daemon-events consumer not started: ProjectService has no daemon router")
 		return nil
 	}
 	if nc == nil {
-		logging.Warn("daemon-events consumer not started: nil NATS connection")
+		logging.WarnContext(ctx, "daemon-events consumer not started: nil NATS connection")
 		return nil
 	}
 
@@ -77,7 +77,7 @@ func (s *Service) StartDaemonEventConsumer(ctx context.Context, nc *nats.Conn) e
 	stream, err := js.Stream(ctx, daemonevents.StreamDaemonEvents)
 	if err != nil {
 		if errors.Is(err, jetstream.ErrStreamNotFound) {
-			logging.Warn("daemon-events consumer not started: DAEMON_EVENTS stream does not exist yet (daemon-gateway will create it)")
+			logging.WarnContext(ctx, "daemon-events consumer not started: DAEMON_EVENTS stream does not exist yet (daemon-gateway will create it)")
 			return nil
 		}
 		return fmt.Errorf("look up %s stream: %w", daemonevents.StreamDaemonEvents, err)
@@ -101,7 +101,7 @@ func (s *Service) StartDaemonEventConsumer(ctx context.Context, nc *nats.Conn) e
 	cc, err := consumer.Consume(func(msg jetstream.Msg) {
 		var evt daemonevents.Event
 		if err := json.Unmarshal(msg.Data(), &evt); err != nil {
-			logging.Warn("daemon-events consumer: failed to unmarshal event, acking to avoid poison loop", "error", err)
+			logging.WarnContext(ctx, "daemon-events consumer: failed to unmarshal event, acking to avoid poison loop", "error", err)
 			_ = msg.Ack()
 			return
 		}
@@ -117,14 +117,14 @@ func (s *Service) StartDaemonEventConsumer(ctx context.Context, nc *nats.Conn) e
 	}
 	defer cc.Stop()
 
-	logging.Info("daemon-events consumer started",
+	logging.InfoContext(ctx, "daemon-events consumer started",
 		"stream", daemonevents.StreamDaemonEvents,
 		"subject", daemonevents.SubjectConnected,
 		"durable", projectDirHealConsumerName,
 	)
 
 	<-ctx.Done()
-	logging.Info("daemon-events consumer stopped")
+	logging.InfoContext(ctx, "daemon-events consumer stopped")
 	return nil
 }
 
@@ -269,7 +269,7 @@ func (s *Service) verifyProjectDirectoryExists(ctx context.Context, userID, proj
 		Exists bool `json:"exists"`
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "fs.stat", map[string]string{"path": path}, &stat); err != nil {
-		logging.Warn("Could not verify project directory via daemon; proceeding",
+		logging.WarnContext(ctx, "Could not verify project directory via daemon; proceeding",
 			"error", err, "path", path, "projectID", projectID)
 		return nil
 	}
@@ -414,7 +414,7 @@ func (s *Service) CreateProject(
 	// enqueue path (the reconcile-on-connect flow writes the row later).
 	resolvedDaemonID, resolveErr := s.resolveDaemonID(ctx, userID)
 	if resolveErr != nil {
-		logging.Info("No daemon resolvable for new project; will rely on pending-command + reconcile", "path", req.Msg.Path, "error", resolveErr)
+		logging.InfoContext(ctx, "No daemon resolvable for new project; will rely on pending-command + reconcile", "path", req.Msg.Path, "error", resolveErr)
 	}
 
 	// daemonConnected is set only when the synchronous mkdir succeeds. That
@@ -424,14 +424,14 @@ func (s *Service) CreateProject(
 	daemonConnected := false
 	mkdirPayload := map[string]string{"path": req.Msg.Path}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", mkdirPayload, nil); err != nil {
-		logging.Warn("Failed to mkdir project path via daemon; enqueueing for delivery on next connect", "error", err, "path", req.Msg.Path)
+		logging.WarnContext(ctx, "Failed to mkdir project path via daemon; enqueueing for delivery on next connect", "error", err, "path", req.Msg.Path)
 		payloadBytes, marshalErr := json.Marshal(mkdirPayload)
 		if marshalErr != nil {
-			logging.Warn("Failed to marshal mkdir payload for enqueue", "error", marshalErr, "path", req.Msg.Path)
+			logging.WarnContext(ctx, "Failed to marshal mkdir payload for enqueue", "error", marshalErr, "path", req.Msg.Path)
 		} else if n, enqErr := s.enqueueDaemonCommand(ctx, userID, "fs.mkdir", payloadBytes); enqErr != nil {
-			logging.Warn("Failed to enqueue mkdir for daemon", "error", enqErr, "path", req.Msg.Path)
+			logging.WarnContext(ctx, "Failed to enqueue mkdir for daemon", "error", enqErr, "path", req.Msg.Path)
 		} else {
-			logging.Info("Queued fs.mkdir on DAEMON_PENDING_COMMANDS", "path", req.Msg.Path, "daemons", n)
+			logging.InfoContext(ctx, "Queued fs.mkdir on DAEMON_PENDING_COMMANDS", "path", req.Msg.Path, "daemons", n)
 		}
 	} else {
 		daemonConnected = true
@@ -453,7 +453,7 @@ func (s *Service) CreateProject(
 		ForgeProjectName string           `json:"forge_project_name"`
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "repo.discover", map[string]interface{}{"path": req.Msg.Path}, &discoverResp); err != nil {
-		logging.Warn("Failed to discover repos via daemon, project will start with zero repos", "error", err, "path", req.Msg.Path)
+		logging.WarnContext(ctx, "Failed to discover repos via daemon, project will start with zero repos", "error", err, "path", req.Msg.Path)
 	}
 	isGitRepo := len(discoverResp.Discovered) > 0
 
@@ -496,13 +496,13 @@ func (s *Service) CreateProject(
 			Error   string `json:"error,omitempty"`
 		}
 		if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_git_repo", gitInitPayload, &gitInitResp); err != nil {
-			logging.Warn("Failed to auto git-init project via daemon; enqueueing for delivery on next connect", "error", err, "path", req.Msg.Path)
+			logging.WarnContext(ctx, "Failed to auto git-init project via daemon; enqueueing for delivery on next connect", "error", err, "path", req.Msg.Path)
 			if payloadBytes, marshalErr := json.Marshal(gitInitPayload); marshalErr != nil {
-				logging.Warn("Failed to marshal git-init payload for enqueue", "error", marshalErr, "path", req.Msg.Path)
+				logging.WarnContext(ctx, "Failed to marshal git-init payload for enqueue", "error", marshalErr, "path", req.Msg.Path)
 			} else if n, enqErr := s.enqueueDaemonCommand(ctx, userID, "project.init_git_repo", payloadBytes); enqErr != nil {
-				logging.Warn("Failed to enqueue git-init for daemon", "error", enqErr, "path", req.Msg.Path)
+				logging.WarnContext(ctx, "Failed to enqueue git-init for daemon", "error", enqErr, "path", req.Msg.Path)
 			} else {
-				logging.Info("Queued project.init_git_repo on DAEMON_PENDING_COMMANDS", "path", req.Msg.Path, "daemons", n)
+				logging.InfoContext(ctx, "Queued project.init_git_repo on DAEMON_PENDING_COMMANDS", "path", req.Msg.Path, "daemons", n)
 			}
 		} else if gitInitResp.Success {
 			isGitRepo = true
@@ -513,7 +513,7 @@ func (s *Service) CreateProject(
 			discoverResp.Discovered = append(discoverResp.Discovered,
 				discoveredRepo{RelativePath: "", Name: req.Msg.Name})
 		} else {
-			logging.Info("Auto git-init skipped (non-empty dir or precondition)", "reason", gitInitResp.Error, "path", req.Msg.Path)
+			logging.InfoContext(ctx, "Auto git-init skipped (non-empty dir or precondition)", "reason", gitInitResp.Error, "path", req.Msg.Path)
 		}
 	}
 
@@ -562,10 +562,10 @@ func (s *Service) CreateProject(
 		// UNIQUE violation. Surface that as AlreadyExists so the client can
 		// open the existing project instead of seeing an opaque Internal.
 		if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "duplicate key") {
-			logging.Info("Project already exists at path (unique constraint)", "userID", userID, "path", req.Msg.Path)
+			logging.InfoContext(ctx, "Project already exists at path (unique constraint)", "userID", userID, "path", req.Msg.Path)
 			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("a project already exists at this path"))
 		}
-		logging.Error("Failed to create project", "error", err)
+		logging.ErrorContext(ctx, "Failed to create project", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create project"))
 	}
 
@@ -578,10 +578,10 @@ func (s *Service) CreateProject(
 	// never fails creation; the reconcile path heals it.
 	if daemonConnected && resolvedDaemonID != "" {
 		if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, resolvedDaemonID, project.Path, project.DefaultBranch); err != nil {
-			logging.Warn("Failed to record project_daemons row at creation; reconcile will heal it",
+			logging.WarnContext(ctx, "Failed to record project_daemons row at creation; reconcile will heal it",
 				"error", err, "project_id", project.ID, "daemon_id", resolvedDaemonID, "path", project.Path)
 		} else {
-			logging.Info("Recorded project_daemons row at creation",
+			logging.InfoContext(ctx, "Recorded project_daemons row at creation",
 				"project_id", project.ID, "daemon_id", resolvedDaemonID, "path", project.Path)
 		}
 	}
@@ -612,7 +612,7 @@ func (s *Service) CreateProject(
 			UpdatedAt:    now,
 		}
 		if err := s.deps.Repo.CreateRepo(ctx, repoRecord); err != nil {
-			logging.Warn("Failed to persist discovered repo", "error", err, "project_id", project.ID, "relative_path", found.RelativePath)
+			logging.WarnContext(ctx, "Failed to persist discovered repo", "error", err, "project_id", project.ID, "relative_path", found.RelativePath)
 		}
 	}
 
@@ -627,9 +627,9 @@ func (s *Service) CreateProject(
 		"default_content": defaultProjectReliantMD,
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_files", initPayload, &initFilesResp); err != nil {
-		logging.Warn("Failed to initialize project files via daemon", "error", err, "path", req.Msg.Path)
+		logging.WarnContext(ctx, "Failed to initialize project files via daemon", "error", err, "path", req.Msg.Path)
 	} else if initFilesResp.Error != "" {
-		logging.Warn("Failed to initialize project files", "error", initFilesResp.Error, "path", req.Msg.Path)
+		logging.WarnContext(ctx, "Failed to initialize project files", "error", initFilesResp.Error, "path", req.Msg.Path)
 	}
 
 	// In multi-repo projects, also init .reliant/ in each nested repo so
@@ -650,9 +650,9 @@ func (s *Service) CreateProject(
 			"skip_reliant_md": true,
 		}
 		if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_files", repoInitPayload, &repoInitResp); err != nil {
-			logging.Warn("Failed to initialize repo files via daemon", "error", err, "path", repoPath)
+			logging.WarnContext(ctx, "Failed to initialize repo files via daemon", "error", err, "path", repoPath)
 		} else if repoInitResp.Error != "" {
-			logging.Warn("Failed to initialize repo files", "error", repoInitResp.Error, "path", repoPath)
+			logging.WarnContext(ctx, "Failed to initialize repo files", "error", repoInitResp.Error, "path", repoPath)
 		}
 	}
 
@@ -674,7 +674,7 @@ func (s *Service) CreateProject(
 	}
 
 	if err := s.deps.Repo.CreateWorktree(ctx, mainWorktree); err != nil {
-		logging.Error("Failed to create main worktree", "error", err, "project_id", project.ID)
+		logging.ErrorContext(ctx, "Failed to create main worktree", "error", err, "project_id", project.ID)
 		// Don't fail the entire project creation if main worktree fails
 	}
 
@@ -686,7 +686,7 @@ func (s *Service) CreateProject(
 		DaemonID:  config.SeedDaemonID,
 	}
 	if err := s.deps.Repo.UpsertProjectConfigRecord(ctx, seedRecord); err != nil {
-		logging.Error("Failed to seed project config record", "error", err, "project_id", project.ID)
+		logging.ErrorContext(ctx, "Failed to seed project config record", "error", err, "project_id", project.ID)
 	}
 
 	// Tell the daemon to load real configs for this project path.
@@ -694,7 +694,7 @@ func (s *Service) CreateProject(
 	// can start even if the daemon hasn't responded yet.
 	if s.deps.Router != nil {
 		if err := s.deps.Router.SendLoadProjectConfigs(ctx, userID, req.Msg.Path, uuid.New().String()); err != nil {
-			logging.Warn("Failed to request daemon config load for new project",
+			logging.WarnContext(ctx, "Failed to request daemon config load for new project",
 				"error", err,
 				"project_id", project.ID,
 				"path", req.Msg.Path,
@@ -705,7 +705,7 @@ func (s *Service) CreateProject(
 		// config snapshots — only the one-shot load above fires (and may
 		// silently fail if the daemon hasn't indexed the path yet).
 		if err := s.deps.Router.SendWatchProjectConfigs(ctx, userID, req.Msg.Path, true); err != nil {
-			logging.Warn("Failed to request daemon config watch for new project",
+			logging.WarnContext(ctx, "Failed to request daemon config watch for new project",
 				"error", err,
 				"project_id", project.ID,
 				"path", req.Msg.Path,
@@ -740,7 +740,7 @@ func (s *Service) ListProjects(
 		Offset: offset,
 	})
 	if err != nil {
-		logging.Error("Failed to list projects", "error", err)
+		logging.ErrorContext(ctx, "Failed to list projects", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list projects"))
 	}
 
@@ -783,9 +783,9 @@ func (s *Service) GetProject(
 		IsGitRepo bool `json:"is_git_repo"`
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "project.check_git", map[string]string{"path": project.Path}, &checkGitResp); err != nil {
-		logging.Warn("GetProject: failed to live-check git status, using DB value", "error", err, "projectID", project.ID)
+		logging.WarnContext(ctx, "GetProject: failed to live-check git status, using DB value", "error", err, "projectID", project.ID)
 	} else if err := projectfacts.ReconcileGitRepo(ctx, s.deps.Repo, project, checkGitResp.IsGitRepo); err != nil {
-		logging.Warn("GetProject: failed to persist updated git status", "error", err, "projectID", project.ID)
+		logging.WarnContext(ctx, "GetProject: failed to persist updated git status", "error", err, "projectID", project.ID)
 	}
 
 	analyticsClient := analytics.GetClientForUser(ctx, userID)
@@ -830,7 +830,7 @@ func (s *Service) UpdateProject(
 	project.LastActive = time.Now().UTC()
 
 	if err := s.deps.Repo.UpdateProject(ctx, project, userID); err != nil {
-		logging.Error("Failed to update project", "error", err)
+		logging.ErrorContext(ctx, "Failed to update project", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update project"))
 	}
 
@@ -851,7 +851,7 @@ func (s *Service) DeleteProject(
 	}
 
 	if err := s.deps.Repo.DeleteProject(ctx, req.Msg.ProjectId, userID); err != nil {
-		logging.Error("Failed to delete project", "error", err)
+		logging.ErrorContext(ctx, "Failed to delete project", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete project"))
 	}
 
@@ -873,14 +873,14 @@ func (s *Service) TouchProject(
 	}
 
 	if err := s.deps.Repo.TouchProject(ctx, req.Msg.ProjectId, userID); err != nil {
-		logging.Error("Failed to touch project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to touch project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update project activity"))
 	}
 
 	if s.deps.Router != nil {
 		project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 		if err != nil {
-			logging.Warn("TouchProject: failed to load project for MCP warmup", "projectID", req.Msg.ProjectId, "error", err)
+			logging.WarnContext(ctx, "TouchProject: failed to load project for MCP warmup", "projectID", req.Msg.ProjectId, "error", err)
 		} else if project != nil && strings.TrimSpace(project.Path) != "" {
 			projectID := project.ID
 			projectPath := project.Path
@@ -891,7 +891,7 @@ func (s *Service) TouchProject(
 				// Send mcp.ensure_loaded daemon command to warmup MCP servers on the user's machine
 				payload, _ := json.Marshal(map[string]string{"project_path": projectPath})
 				if _, err := s.deps.Router.SendDaemonCommand(warmupCtx, userID, "mcp.ensure_loaded", payload, 90000); err != nil {
-					logging.Warn("Project MCP warmup via daemon failed", "projectID", projectID, "error", err)
+					logging.WarnContext(ctx, "Project MCP warmup via daemon failed", "projectID", projectID, "error", err)
 				}
 			}()
 		}
@@ -916,7 +916,7 @@ func (s *Service) GetProjectMetadata(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
@@ -952,7 +952,7 @@ func (s *Service) UpdateProjectMetadata(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
@@ -962,7 +962,7 @@ func (s *Service) UpdateProjectMetadata(
 	}
 
 	if err := s.deps.Repo.UpdateProject(ctx, project, userID); err != nil {
-		logging.Error("Failed to update project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to update project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update project"))
 	}
 
@@ -984,7 +984,7 @@ func (s *Service) GetProjectGitInfo(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
@@ -1014,7 +1014,7 @@ func (s *Service) GetProjectGitInfo(
 		Behind         int32    `json:"behind"`
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_info", map[string]string{"path": repoPath}, &gitInfo); err != nil {
-		logging.Error("Failed to get git info via daemon", "error", err, "projectID", project.ID)
+		logging.ErrorContext(ctx, "Failed to get git info via daemon", "error", err, "projectID", project.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get git info"))
 	}
 
@@ -1046,7 +1046,7 @@ func (s *Service) GetProjectGitBranches(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
@@ -1075,7 +1075,7 @@ func (s *Service) GetProjectGitBranches(
 		Branches []daemonBranch `json:"branches"`
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_branches", map[string]string{"path": repoPath}, &branchResp); err != nil {
-		logging.Error("Failed to get git branches via daemon", "error", err, "projectID", project.ID)
+		logging.ErrorContext(ctx, "Failed to get git branches via daemon", "error", err, "projectID", project.ID)
 		return connect.NewResponse(&reliantv1.GetProjectGitBranchesResponse{
 			Branches: []*reliantv1.GitBranch{},
 		}), nil
@@ -1112,7 +1112,7 @@ func (s *Service) GetProjectInitStatus(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
@@ -1126,7 +1126,7 @@ func (s *Service) GetProjectInitStatus(
 		IsGitRepo bool   `json:"is_git_repo"`
 	}{Path: project.Path, IsGitRepo: project.IsGitRepo}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "project.check_init_status", initPayload, &initStatus); err != nil {
-		logging.Error("Failed to check init status via daemon", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to check init status via daemon", "error", err, "projectID", req.Msg.ProjectId)
 		// Fallback: assume initialized since it exists in the database
 		initStatus.Initialized = true
 		initStatus.Message = "Project is initialized"
@@ -1152,7 +1152,7 @@ func (s *Service) InitializeProject(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
@@ -1178,7 +1178,7 @@ func (s *Service) GetProjectChanges(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
@@ -1215,7 +1215,7 @@ func (s *Service) GetProjectChanges(
 		TotalFiles int32              `json:"total_files"`
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_changes", map[string]string{"path": repoPath}, &changesResp); err != nil {
-		logging.Error("Failed to get git changes via daemon", "error", err, "projectID", req.Msg.ProjectId, "path", project.Path)
+		logging.ErrorContext(ctx, "Failed to get git changes via daemon", "error", err, "projectID", req.Msg.ProjectId, "path", project.Path)
 		return connect.NewResponse(&reliantv1.GetProjectChangesResponse{
 			Branch:     "",
 			Files:      []*reliantv1.FileChange{},
@@ -1275,7 +1275,7 @@ func (s *Service) GetProjectPrompts(
 	var prompts []promptData
 	if setting.Value != "" {
 		if err := json.Unmarshal([]byte(setting.Value), &prompts); err != nil {
-			logging.Error("Failed to unmarshal project prompts", "error", err, "projectID", req.Msg.ProjectId)
+			logging.ErrorContext(ctx, "Failed to unmarshal project prompts", "error", err, "projectID", req.Msg.ProjectId)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse prompts"))
 		}
 	}
@@ -1344,7 +1344,7 @@ func (s *Service) SaveProjectPrompts(
 			UpdatedAt: time.Now().UTC(),
 		}
 		if err := s.deps.Repo.CreateSetting(ctx, newSetting); err != nil {
-			logging.Error("Failed to create project prompts", "error", err, "projectID", req.Msg.ProjectId)
+			logging.ErrorContext(ctx, "Failed to create project prompts", "error", err, "projectID", req.Msg.ProjectId)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save prompts"))
 		}
 	} else {
@@ -1352,7 +1352,7 @@ func (s *Service) SaveProjectPrompts(
 		setting.Value = string(promptsJSON)
 		setting.UpdatedAt = time.Now().UTC()
 		if err := s.deps.Repo.UpdateSetting(ctx, setting); err != nil {
-			logging.Error("Failed to update project prompts", "error", err, "projectID", req.Msg.ProjectId)
+			logging.ErrorContext(ctx, "Failed to update project prompts", "error", err, "projectID", req.Msg.ProjectId)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save prompts"))
 		}
 	}
@@ -1376,15 +1376,15 @@ func (s *Service) InitializeGitRepo(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
-	logging.Debug("Attempting to initialize git repository", "projectID", req.Msg.ProjectId, "path", project.Path, "is_git_repo", project.IsGitRepo)
+	logging.DebugContext(ctx, "Attempting to initialize git repository", "projectID", req.Msg.ProjectId, "path", project.Path, "is_git_repo", project.IsGitRepo)
 
 	// Check if already a git repository
 	if project.IsGitRepo {
-		logging.Warn("Project is already marked as git repository", "projectID", req.Msg.ProjectId)
+		logging.WarnContext(ctx, "Project is already marked as git repository", "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("project is already a git repository"))
 	}
 
@@ -1414,11 +1414,11 @@ func (s *Service) InitializeGitRepo(
 		InitialCommit:     req.Msg.InitialCommit,
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_git_repo", initPayload, &initResp); err != nil {
-		logging.Error("Failed to initialize git repository via daemon", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to initialize git repository via daemon", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to initialize git repository: %v", err))
 	}
 	if !initResp.Success {
-		logging.Error("Daemon reported git init failure", "error", initResp.Error, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Daemon reported git init failure", "error", initResp.Error, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s", initResp.Error))
 	}
 
@@ -1428,7 +1428,7 @@ func (s *Service) InitializeGitRepo(
 	project.DefaultBranch = &actualBranch
 
 	if err := s.deps.Repo.UpdateProject(ctx, project, userID); err != nil {
-		logging.Error("Failed to update project", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to update project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update project"))
 	}
 
@@ -1445,7 +1445,7 @@ func (s *Service) InitializeGitRepo(
 	// out an extra checkout for a repo the user never asked for.
 	existingRepos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
 	if err != nil {
-		logging.Warn("Failed to list repos after git init; skipping root repo registration",
+		logging.WarnContext(ctx, "Failed to list repos after git init; skipping root repo registration",
 			"error", err, "projectID", project.ID)
 	} else if len(existingRepos) == 0 {
 		now := time.Now().UTC()
@@ -1458,7 +1458,7 @@ func (s *Service) InitializeGitRepo(
 			UpdatedAt:    now,
 		}
 		if err := s.deps.Repo.CreateRepo(ctx, rootRepo); err != nil {
-			logging.Warn("Failed to register root repo after git init", "error", err, "projectID", project.ID)
+			logging.WarnContext(ctx, "Failed to register root repo after git init", "error", err, "projectID", project.ID)
 		}
 	}
 
@@ -1469,7 +1469,7 @@ func (s *Service) InitializeGitRepo(
 		ProjectID: &req.Msg.ProjectId,
 	})
 	if err != nil {
-		logging.Warn("Failed to list worktrees for branch update", "error", err, "projectID", req.Msg.ProjectId)
+		logging.WarnContext(ctx, "Failed to list worktrees for branch update", "error", err, "projectID", req.Msg.ProjectId)
 	} else {
 		for _, wt := range worktrees {
 			if wt.IsMain {
@@ -1478,9 +1478,9 @@ func (s *Service) InitializeGitRepo(
 				wt.Name = actualBranch // Update name to match branch
 				wt.UpdatedAt = time.Now().UTC()
 				if err := s.deps.Repo.UpdateWorktree(ctx, wt); err != nil {
-					logging.Warn("Failed to update main worktree branch", "error", err, "worktreeID", wt.ID)
+					logging.WarnContext(ctx, "Failed to update main worktree branch", "error", err, "worktreeID", wt.ID)
 				} else {
-					logging.Info("Updated main worktree branch", "worktreeID", wt.ID, "branch", actualBranch)
+					logging.InfoContext(ctx, "Updated main worktree branch", "worktreeID", wt.ID, "branch", actualBranch)
 				}
 				break
 			}
@@ -1539,7 +1539,7 @@ func (s *Service) ListProjectDaemonsForDaemon(
 
 	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, req.Msg.DaemonId)
 	if err != nil {
-		logging.Error("Failed to list project_daemons for daemon", "error", err, "daemon_id", req.Msg.DaemonId)
+		logging.ErrorContext(ctx, "Failed to list project_daemons for daemon", "error", err, "daemon_id", req.Msg.DaemonId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list project_daemons"))
 	}
 
@@ -1572,7 +1572,7 @@ func (s *Service) ListProjectDaemons(
 
 	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID})
 	if err != nil {
-		logging.Error("Failed to list projects for ListProjectDaemons", "error", err, "user_id", userID)
+		logging.ErrorContext(ctx, "Failed to list projects for ListProjectDaemons", "error", err, "user_id", userID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list project_daemons"))
 	}
 
@@ -1580,7 +1580,7 @@ func (s *Service) ListProjectDaemons(
 	for _, p := range projects {
 		rows, err := s.deps.Repo.ListProjectDaemonsForProject(ctx, p.ID)
 		if err != nil {
-			logging.Error("Failed to list project_daemons for project",
+			logging.ErrorContext(ctx, "Failed to list project_daemons for project",
 				"error", err, "project_id", p.ID, "user_id", userID)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list project_daemons"))
 		}
@@ -1619,7 +1619,7 @@ func (s *Service) MarkProjectInstalled(
 	}
 
 	if err := s.deps.Repo.UpsertProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId, req.Msg.Path, defaultBranch); err != nil {
-		logging.Error("Failed to upsert project_daemons row",
+		logging.ErrorContext(ctx, "Failed to upsert project_daemons row",
 			"error", err,
 			"project_id", req.Msg.ProjectId,
 			"daemon_id", req.Msg.DaemonId,
@@ -1663,7 +1663,7 @@ func (s *Service) ListRepositoriesForDaemon(
 	}
 	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, req.Msg.DaemonId)
 	if err != nil {
-		logging.Error("ListRepositoriesForDaemon: failed to list project_daemons", "error", err, "daemon_id", req.Msg.DaemonId)
+		logging.ErrorContext(ctx, "ListRepositoriesForDaemon: failed to list project_daemons", "error", err, "daemon_id", req.Msg.DaemonId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repositories"))
 	}
 	out := make([]*reliantv1.DaemonRepository, 0, len(rows))
@@ -1750,7 +1750,7 @@ func (s *Service) PullProjectOnDaemon(
 	// Refresh cloned_at so the admin UI shows "just now" after a successful
 	// pull. Errors here are non-fatal — the pull already landed.
 	if err := s.deps.Repo.UpsertProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId, pd.Path, pd.DefaultBranch); err != nil {
-		logging.Warn("PullProjectOnDaemon: failed to refresh cloned_at", "error", err, "project_id", req.Msg.ProjectId, "daemon_id", req.Msg.DaemonId)
+		logging.WarnContext(ctx, "PullProjectOnDaemon: failed to refresh cloned_at", "error", err, "project_id", req.Msg.ProjectId, "daemon_id", req.Msg.DaemonId)
 	}
 	return connect.NewResponse(&reliantv1.PullProjectOnDaemonResponse{
 		Output: pullResp.Output,
@@ -1786,7 +1786,7 @@ func (s *Service) RemoveProjectFromDaemon(
 	if err := s.sendProjectDaemonCommand(ctx, userID, "git.remove", payload, &removeResp); err != nil {
 		// On-disk remove failure: still try to drop the DB row so the UI
 		// stops listing a ghost. Log so an operator can investigate.
-		logging.Warn("RemoveProjectFromDaemon: on-disk remove failed (will still drop project_daemons row)", "error", err, "path", pd.Path)
+		logging.WarnContext(ctx, "RemoveProjectFromDaemon: on-disk remove failed (will still drop project_daemons row)", "error", err, "path", pd.Path)
 	}
 	if err := s.deps.Repo.DeleteProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete project_daemons row: %w", err))
@@ -1831,7 +1831,7 @@ func (s *Service) RecloneProjectOnDaemon(
 	// Refresh cloned_at — the row's path/branch are unchanged but the
 	// "Last cloned/pulled" column should now show "just now".
 	if err := s.deps.Repo.UpsertProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId, pd.Path, pd.DefaultBranch); err != nil {
-		logging.Warn("RecloneProjectOnDaemon: failed to refresh cloned_at", "error", err, "project_id", req.Msg.ProjectId, "daemon_id", req.Msg.DaemonId)
+		logging.WarnContext(ctx, "RecloneProjectOnDaemon: failed to refresh cloned_at", "error", err, "project_id", req.Msg.ProjectId, "daemon_id", req.Msg.DaemonId)
 	}
 	return connect.NewResponse(&reliantv1.RecloneProjectOnDaemonResponse{
 		Path: recloneResp.Path,

@@ -1,18 +1,19 @@
 ---
 title: "Workflow Control"
-description: "Pause, resume, and update parameters while workflows run"
+description: "Pause, resume, steer and update parameters while workflows run"
 ---
 
-Reliant gives you control over running workflows. You can pause execution, update parameters on the fly, and send messages to specific threads.
+Reliant gives you control over running workflows. You can pause execution, update parameters on the fly, and send messages to the main agent or to any sub-agent while it works.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Running
     Running --> Paused: Esc / Stop button
     Running --> Paused: Step failure
-    Paused --> Running: Resume / Send message
+    Running --> Running: Queue a message / Message a sub-agent
+    Running --> Running: Update parameters
+    Paused --> Running: Send message / Resume
     Paused --> Paused: Update parameters
-    Paused --> Paused: Message sub-agent thread
     Paused --> Paused: Branch conversation
 ```
 
@@ -22,18 +23,18 @@ Pause a running workflow when you need to:
 
 - Review what's happening before it continues
 - Update parameters before the next step
-- Send a message to a specific sub-agent thread
 - Take a break and continue later
 
-**To pause:** Click the stop button in the chat input or press `Esc`.
+**To pause:** Click the stop button in the chat composer (its tooltip reads "Stop generation") or press `Esc`. Work in flight is stopped first, including any command running on your machine, and then the workflow pauses.
 
-**To resume:** Click resume on the send button, or simply send a new message. Sending a message to a paused workflow automatically resumes it.
+**To resume:** Send a message. Sending a message to a paused workflow resumes it, with your message added to the conversation. The run's page under **Workflows → Runs** also has **Pause** and **Resume** buttons.
 
 **What happens when paused:**
 - The workflow stops at its current point
 - All state is preserved—it will continue exactly where it left off
-- The send button changes to "Resume"
 - You can view the conversation, update parameters, or branch
+
+**Stopping for good** is different from pausing. **Stop** on the run's page in **Workflows → Runs** ends the run; it cannot be resumed afterwards, though **Re-run (current definition)** starts a fresh run of the same workflow.
 
 ## Updating Parameters While Running
 
@@ -42,32 +43,23 @@ You can change workflow parameters without stopping the workflow. Changes take e
 ![Update parameters like model, temperature, or mode on the fly](/images/screenshots/workflow-params-update.png)
 
 **Common parameter updates:**
-- **mode**: Switch from `auto` to `manual` for more control, or to `plan` for read-only
-- **temperature**: Adjust creativity/focus
-- **model**: Switch to a different model
+- **mode**: Switch from `auto` to `manual` to approve each tool call, or to `plan` to have the agent plan rather than change code
+- **model**: Switch to a different model, or change its thinking level or temperature
 
 **To update parameters:**
-1. Open the parameters panel (click the gear icon in the chat input)
-2. Change the values you want to update
-3. Changes are applied immediately via a signal to the running workflow
+1. Change the mode in the composer toolbar, the model with the model button, or anything else under **Show all settings**
+2. Changes are applied immediately via a signal to the running workflow
 
 **When changes take effect:**
 - Most parameter changes apply on the next LLM call
 - Mode changes affect the next tool execution decision
 - The current in-flight operation completes with old parameters
 
-## Messaging Specific Threads
+## Messaging a Running Workflow
 
-When a workflow spawns sub-agents, each runs in its own thread. While the workflow is paused, you can send messages to specific threads.
+You do not need to pause to steer an agent. A message sent while it works is **queued**: the composer shows it in a strip above the input with how long it has waited, and the agent reads it at its next turn, before it calls the model again. Each queued message can be removed before it is read. If the agent is in the middle of something long, **Interrupt & send now** stops the work in flight so it reads your queued messages now.
 
-**To message a sub-agent thread:**
-1. Pause the workflow
-2. Select the thread you want to message (from the thread selector)
-3. Type your message and send
-4. The workflow resumes with your message added to that thread
-
-**Why only while paused?**
-When a workflow is running, the active agent is writing to its thread. Sending a message while the agent is mid-thought could create confusion. Pausing ensures clean handoff—you send your message, then the agent continues with the new context.
+When a workflow spawns sub-agents, each runs in its own thread, and each sub-agent's card in the chat has its own message box. A message sent there goes to that sub-agent alone, and it reads the message at its next step, while the rest of the chat keeps working. A sub-agent that stopped on an error can be messaged too: the message resumes it.
 
 **Use cases:**
 - Provide additional guidance to a stuck sub-agent
@@ -76,12 +68,16 @@ When a workflow is running, the active agent is writing to its thread. Sending a
 
 ## Automatic Pause on Failure
 
-When a workflow step fails after retries, Reliant automatically pauses the workflow instead of failing completely. This gives you a chance to:
+When a step of the main agent fails after its retries, Reliant pauses the workflow instead of failing it. The chat says what failed and why, such as an expired provider login, and ends with "Workflow paused — send a message to retry". This gives you a chance to:
 - Review what went wrong
-- Fix the underlying issue (file permissions, network, etc.)
-- Resume to retry the failed step
+- Fix the underlying issue (reconnect a provider, switch model, free up the machine)
+- Send a message to retry the failed step
 
-The chat shows what failed and why. After fixing the issue, click resume to continue.
+A provider usage limit is not a failure and does not pause the run: the run waits until the limit resets and then retries by itself.
+
+A sub-agent whose step fails is different: that sub-agent fails on its own and its parent is told, so the rest of the chat keeps going. Message the sub-agent to resume it.
+
+Runs that nobody is watching, such as [automations](/automations/overview), resume themselves after a failure like this, waiting longer each time, because a rate limit or a disconnected machine usually clears on its own. If the failure survives about half an hour of retries, the run stays paused where a person can see it, in **Workflows → Runs**, and a message resumes it.
 
 ## Manual Intervention Pattern
 
@@ -90,12 +86,13 @@ For workflows that need human guidance, you can use pause/resume as a collaborat
 1. Agent works autonomously
 2. You pause when you see something interesting
 3. Review the state, add context via message
-4. Resume to let the agent continue with your input
+4. The message resumes the agent with your input
 
 This is especially useful with multi-agent workflows where you want to guide the direction without micromanaging every step.
 
 ## Related Topics
 
 - [Threads](/features/threads) — Understanding thread structure
+- [Spawning sub-agents](/workflows/spawn) — How sub-agents run and report back
 - [Execution Modes](/workflows/overview#execution-modes) — Control tool execution
 - [Workflows Overview](/workflows/overview) — How workflows power Reliant

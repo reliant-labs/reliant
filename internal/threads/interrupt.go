@@ -139,7 +139,7 @@ func (s *Service) InterruptThread(ctx context.Context, opts InterruptThreadOpts)
 	// then tell the workflow it may proceed.
 	executing, err := s.inFlightToolCallsForThread(ctx, opts.ChatID, opts.ThreadID)
 	if err != nil {
-		logging.Error("Failed to read executing tool calls for interrupt",
+		logging.ErrorContext(ctx, "Failed to read executing tool calls for interrupt",
 			"error", err, "chatID", opts.ChatID, "threadID", opts.ThreadID)
 		return InterruptThreadResult{}, fmt.Errorf("failed to read tool calls: %w", err)
 	}
@@ -153,7 +153,7 @@ func (s *Service) InterruptThread(ctx context.Context, opts InterruptThreadOpts)
 		return InterruptThreadResult{}, err
 	}
 
-	logging.Info("Interrupted thread",
+	logging.InfoContext(ctx, "Interrupted thread",
 		"chatID", opts.ChatID,
 		"threadID", opts.ThreadID,
 		"cancelledToolCalls", result.CancelledToolCalls,
@@ -231,7 +231,7 @@ func (s *Service) recordToolCallCancelled(ctx context.Context, call *db.ToolCall
 			UpdatedAt:  now,
 		})
 	}); err != nil {
-		logging.Warn("Could not record tool cancellation durably; the activity will write it when it unwinds",
+		logging.WarnContext(ctx, "Could not record tool cancellation durably; the activity will write it when it unwinds",
 			"error", err, "toolCallID", call.ID)
 	}
 }
@@ -333,7 +333,7 @@ func (s *Service) cancelToolCalls(ctx context.Context, userID string, calls []*d
 			if err := s.toolCanceler.SendToolExecutionCancel(ctx, userID, call.ID, reason); err != nil {
 				// Not fatal, and not silently swallowed either. The tool may run to
 				// completion and report a real outcome rather than a cancel.
-				logging.Warn("Could not deliver tool cancel to daemon",
+				logging.WarnContext(ctx, "Could not deliver tool cancel to daemon",
 					"error", err, "toolCallID", call.ID)
 				delivered = false
 			}

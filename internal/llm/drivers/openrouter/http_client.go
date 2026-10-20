@@ -204,7 +204,7 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	logging.Debug("OpenRouter request with cache control",
+	logging.DebugContext(ctx, "OpenRouter request with cache control",
 		"model", request.Model,
 		"hasTools", len(convertedTools) > 0,
 		"messageCount", len(request.Messages),
@@ -230,7 +230,7 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 			return nil, fmt.Errorf("failed to read response: %w", err)
 		}
 
-		logging.Debug("OpenRouter response", "status", resp.StatusCode, "bodySize", len(body))
+		logging.DebugContext(ctx, "OpenRouter response", "status", resp.StatusCode, "bodySize", len(body))
 
 		if resp.StatusCode == http.StatusOK {
 			break
@@ -241,7 +241,7 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 		}
 
 		delay := retryDelay(attempt, resp)
-		logging.Warn("OpenRouter retrying request",
+		logging.WarnContext(ctx, "OpenRouter retrying request",
 			"status", resp.StatusCode,
 			"attempt", attempt,
 			"maxRetries", models.MaxRetries,
@@ -278,7 +278,7 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 	for _, rd := range choice.Message.ReasoningDetails {
 		if rd.ID != "" {
 			reasoningByID[rd.ID] = rd
-			logging.Debug("OpenRouter reasoning detail found",
+			logging.DebugContext(ctx, "OpenRouter reasoning detail found",
 				"id", rd.ID,
 				"type", rd.Type,
 				"hasData", rd.Data != "")
@@ -305,7 +305,7 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 			// For encrypted type, the data field contains the thought signature
 			if rd.Type == "reasoning.encrypted" && rd.Data != "" {
 				toolCall.ThoughtSignature = rd.Data
-				logging.Debug("OpenRouter associated thought signature with tool call",
+				logging.DebugContext(ctx, "OpenRouter associated thought signature with tool call",
 					"toolCallID", tc.ID,
 					"toolName", tc.Function.Name,
 					"signatureLength", len(rd.Data))
@@ -329,7 +329,7 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 	cacheReadTokens := openRouterResp.Usage.CacheReadInputTokens
 
 	// Log usage details for debugging
-	logging.Debug("OpenRouter token usage parsing",
+	logging.DebugContext(ctx, "OpenRouter token usage parsing",
 		"promptTokens", inputTokens,
 		"cachedTokens", cachedTokens,
 		"cacheCreationInputTokens", cacheCreationTokens,
@@ -391,7 +391,7 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 		request.Reasoning = &ReasoningConfig{
 			Effort: c.Options.ReasoningEffort,
 		}
-		logging.Debug("OpenRouter Gemini request with reasoning",
+		logging.DebugContext(ctx, "OpenRouter Gemini request with reasoning",
 			"effort", c.Options.ReasoningEffort)
 	}
 
@@ -401,7 +401,7 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	logging.Debug("OpenRouter Gemini request",
+	logging.DebugContext(ctx, "OpenRouter Gemini request",
 		"model", request.Model,
 		"hasTools", len(convertedTools) > 0,
 		"messageCount", len(request.Messages),
@@ -428,7 +428,7 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 			return nil, fmt.Errorf("failed to read response: %w", err)
 		}
 
-		logging.Debug("OpenRouter Gemini response", "status", resp.StatusCode, "bodySize", len(body))
+		logging.DebugContext(ctx, "OpenRouter Gemini response", "status", resp.StatusCode, "bodySize", len(body))
 
 		if resp.StatusCode == http.StatusOK {
 			break
@@ -439,7 +439,7 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 		}
 
 		delay := retryDelay(attempt, resp)
-		logging.Warn("OpenRouter retrying Gemini request",
+		logging.WarnContext(ctx, "OpenRouter retrying Gemini request",
 			"status", resp.StatusCode,
 			"attempt", attempt,
 			"maxRetries", models.MaxRetries,
@@ -475,7 +475,7 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 	for _, rd := range choice.Message.ReasoningDetails {
 		if rd.ID != "" {
 			reasoningByID[rd.ID] = rd
-			logging.Debug("OpenRouter Gemini reasoning detail found",
+			logging.DebugContext(ctx, "OpenRouter Gemini reasoning detail found",
 				"id", rd.ID,
 				"type", rd.Type,
 				"hasData", rd.Data != "")
@@ -500,7 +500,7 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 		if rd, ok := reasoningByID[tc.ID]; ok {
 			if rd.Type == "reasoning.encrypted" && rd.Data != "" {
 				toolCall.ThoughtSignature = rd.Data
-				logging.Debug("OpenRouter Gemini associated thought signature with tool call",
+				logging.DebugContext(ctx, "OpenRouter Gemini associated thought signature with tool call",
 					"toolCallID", tc.ID,
 					"toolName", tc.Function.Name,
 					"signatureLength", len(rd.Data))

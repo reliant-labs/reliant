@@ -167,7 +167,11 @@ describe('machine detail — resize', () => {
     expect(within(dialog).getByTestId('resize-size-medium')).toBeDisabled()
     expect(within(dialog).getByTestId('resize-size-medium')).toHaveTextContent(/current/i)
     expect(within(dialog).queryByTestId('resize-size-xl')).not.toBeInTheDocument()
-    expect(within(dialog).getByTestId('resize-size-large')).toHaveTextContent('40 Large hours/month included')
+    expect(within(dialog).getByTestId('resize-size-large')).not.toHaveTextContent(/\$|hrs|GiB|suspended|included/i)
+    // Plan includes 160 small hours; largest allowed size here is large (x4).
+    expect(within(dialog).getByTestId('resize-pricing-note')).toHaveTextContent(
+      'Includes 40 hours a month. Extra hours and storage are billed separately.',
+    )
     expect(dialog).not.toHaveTextContent(/×|uses included hours|burn/i)
     // Nothing is chosen until the user chooses.
     expect(within(dialog).getByRole('button', { name: /^resize$/i })).toBeDisabled()
@@ -250,8 +254,6 @@ describe('machine detail — resize', () => {
     await user.click(within(dialog).getByTestId('resize-size-small'))
     expect(within(dialog).getByTestId('resize-disk-note')).toHaveTextContent(/above the new size's standard is billed while running/i)
     const small = within(dialog).getByTestId('resize-size-small');
-    expect(small).toHaveTextContent('$0.13/hr');
-    expect(small).toHaveTextContent('300 GiB disk · $75.00/mo while suspended');
-    expect(small).toHaveTextContent('$45.00/mo extra disk while running');
+    expect(small).not.toHaveTextContent(/\$|hrs|GiB|suspended/i);
   })
 })

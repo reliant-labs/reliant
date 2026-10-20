@@ -74,6 +74,40 @@ func Log(level slog.Level, msg string, args ...any) {
 	slog.Log(context.Background(), level, msg, args...)
 }
 
+// The *Context variants are what a call site with a ctx in scope uses: the
+// trace handler every process logger carries (see install) reads the span
+// from ctx and stamps trace_id/span_id on the record, which is what joins a
+// log line to its trace. The ctx-less helpers above cannot, so their lines
+// carry no trace id.
+
+func InfoContext(ctx context.Context, msg string, args ...any) {
+	slog.InfoContext(ctx, msg, args...)
+}
+
+func DebugContext(ctx context.Context, msg string, args ...any) {
+	slog.DebugContext(ctx, msg, args...)
+}
+
+func TraceContext(ctx context.Context, msg string, args ...any) {
+	if !TraceEnabled {
+		return
+	}
+	slog.Log(ctx, slog.LevelDebug-4, msg, args...)
+}
+
+func WarnContext(ctx context.Context, msg string, args ...any) {
+	slog.WarnContext(ctx, msg, args...)
+}
+
+func ErrorContext(ctx context.Context, msg string, args ...any) {
+	slog.ErrorContext(ctx, msg, args...)
+}
+
+// LogContext is Log with the caller's ctx.
+func LogContext(ctx context.Context, level slog.Level, msg string, args ...any) {
+	slog.Log(ctx, level, msg, args...)
+}
+
 // logFormatEnv selects the line format (Settings.Format): "json" writes one
 // JSON object per line, which is what a log pipeline indexes; "text" writes
 // key=value, which is what a person greps. It is the variable forge's config
@@ -134,10 +168,15 @@ func install(output io.Writer, s Settings, level slog.Level, options ...installO
 	} else {
 		handler = slog.NewTextHandler(output, opts)
 	}
+	// Every process gets the trace handler, not only the daemon: it is what
+	// stamps trace_id/span_id on a record logged with a span in its context,
+	// and without it the API server, worker and gateway logs cannot be joined
+	// to their traces at all. It sits inside withReporting, as in serverkit's
+	// logger, so it sees the level the error-class policy decided.
+	handler = observe.NewTraceHandler(handler)
 	handler = withReporting(handler)
 	if cfg.fields != nil {
 		handler = newIdentityHandler(handler, cfg.fields)
-		handler = observe.NewTraceHandler(handler)
 	}
 	slog.SetDefault(slog.New(handler))
 
@@ -165,8 +204,7 @@ type installConfig struct {
 	allowProdDebug bool
 	// redact masks secrets and caps attribute and message sizes.
 	redact bool
-	// fields, when set, stamps the daemon's identity on every record and adds
-	// trace_id/span_id for records logged with a span in their context.
+	// fields, when set, stamps the daemon's identity on every record.
 	fields *DaemonFields
 }
 

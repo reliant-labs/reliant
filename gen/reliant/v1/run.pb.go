@@ -173,8 +173,13 @@ type Run struct {
 	// ParentChatTitle is that parent chat's title. Unset when parent_chat_id is,
 	// or when the parent chat no longer exists or is not the caller's.
 	ParentChatTitle *string `protobuf:"bytes,22,opt,name=parent_chat_title,json=parentChatTitle,proto3,oneof" json:"parent_chat_title,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Archived is set when the run's chat is archived: a person put it away, or
+	// it is an automation run that finished successfully and was archived on
+	// its own. Filled by the cross-cutting list like title above. An archived
+	// run is history, still listed when the request asks for archived runs.
+	Archived      bool `protobuf:"varint,23,opt,name=archived,proto3" json:"archived,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Run) Reset() {
@@ -359,6 +364,13 @@ func (x *Run) GetParentChatTitle() string {
 		return *x.ParentChatTitle
 	}
 	return ""
+}
+
+func (x *Run) GetArchived() bool {
+	if x != nil {
+		return x.Archived
+	}
+	return false
 }
 
 type StartRunRequest struct {
@@ -1482,7 +1494,7 @@ var File_reliant_v1_run_proto protoreflect.FileDescriptor
 const file_reliant_v1_run_proto_rawDesc = "" +
 	"\n" +
 	"\x14reliant/v1/run.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\"\xec\x06\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\"\x88\a\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_name\x18\x02 \x01(\tR\fworkflowName\x12\x16\n" +
@@ -1511,7 +1523,8 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\bactivity\x18\x13 \x01(\x0e2\x18.reliant.v1.ChatActivityR\bactivity\x12@\n" +
 	"\rdisplay_state\x18\x14 \x01(\x0e2\x1b.reliant.v1.RunDisplayStateR\fdisplayState\x12)\n" +
 	"\x0eparent_chat_id\x18\x15 \x01(\tH\x00R\fparentChatId\x88\x01\x01\x12/\n" +
-	"\x11parent_chat_title\x18\x16 \x01(\tH\x01R\x0fparentChatTitle\x88\x01\x01B\x11\n" +
+	"\x11parent_chat_title\x18\x16 \x01(\tH\x01R\x0fparentChatTitle\x88\x01\x01\x12\x1a\n" +
+	"\barchived\x18\x17 \x01(\bR\barchivedB\x11\n" +
 	"\x0f_parent_chat_idB\x14\n" +
 	"\x12_parent_chat_title\"\xaa\x03\n" +
 	"\x0fStartRunRequest\x12\x1a\n" +

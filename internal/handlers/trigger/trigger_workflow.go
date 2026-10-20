@@ -206,7 +206,7 @@ func (s *Service) undoEnable(ctx context.Context, steps []*enableStep, results [
 	for n := len(undo) - 1; n >= 0; n-- {
 		r := results[written[n]]
 		if err := undo[n](ctx); err != nil {
-			logging.Error("could not undo a workflow enable; the trigger is still running",
+			logging.ErrorContext(ctx, "could not undo a workflow enable; the trigger is still running",
 				"trigger", r.Trigger, "error", err)
 			r.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED
 			r.Message = "Enabling failed and this trigger could not be switched back off: " + connectMessage(err) + " Disable it from Automations."

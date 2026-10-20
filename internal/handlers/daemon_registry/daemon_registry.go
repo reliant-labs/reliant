@@ -83,7 +83,7 @@ func (s *Service) ListDaemons(
 func (s *Service) attachedDaemonSet(ctx context.Context, userID string) (map[string]*db.DaemonAttachment, error) {
 	attachments, err := s.deps.Repo.ListFreshDaemonAttachmentsForUser(ctx, userID, AttachmentStaleThreshold)
 	if err != nil {
-		logging.Warn("[DaemonRegistry] Failed to list attached daemons", "error", err, "userID", userID)
+		logging.WarnContext(ctx, "[DaemonRegistry] Failed to list attached daemons", "error", err, "userID", userID)
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("reading daemon liveness: %w", err))
 	}
 	attached := make(map[string]*db.DaemonAttachment, len(attachments))
@@ -130,7 +130,7 @@ func (s *Service) GetDaemon(
 func (s *Service) storedDiskReports(ctx context.Context, userID string) map[string]string {
 	reports, err := s.deps.Repo.ListDaemonStorageState(ctx, userID)
 	if err != nil {
-		logging.Warn("[DaemonRegistry] Failed to list stored disk reports", "error", err, "userID", userID)
+		logging.WarnContext(ctx, "[DaemonRegistry] Failed to list stored disk reports", "error", err, "userID", userID)
 		return map[string]string{}
 	}
 	return reports
@@ -176,7 +176,7 @@ func (s *Service) ClearMachineCaches(
 func (s *Service) storedLocalModels(ctx context.Context, userID string) map[string]string {
 	inventories, err := s.deps.Repo.ListDaemonLocalModels(ctx, userID)
 	if err != nil {
-		logging.Warn("[DaemonRegistry] Failed to list stored local models", "error", err, "userID", userID)
+		logging.WarnContext(ctx, "[DaemonRegistry] Failed to list stored local models", "error", err, "userID", userID)
 		return map[string]string{}
 	}
 	return inventories

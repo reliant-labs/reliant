@@ -46,7 +46,7 @@ func (s *Service) fallBackFromUnservableModels(ctx context.Context, userID, chat
 func (s *Service) moveUnservableModels(ctx context.Context, userID, chatID, projectID, workflowName, workflowID string, inputs map[string]interface{}) []launch.ModelSubstitution {
 	subs := s.launcher().SubstituteUnservableModels(ctx, userID, workflowName, projectID, inputs)
 	for _, sub := range subs {
-		logging.Info("Send moved a model input off a provider that cannot serve it",
+		logging.InfoContext(ctx, "Send moved a model input off a provider that cannot serve it",
 			"chatID", chatID, "workflowID", workflowID, "input", sub.Input, "from", sub.From, "to", sub.To)
 	}
 	return subs
@@ -59,7 +59,7 @@ func (s *Service) postModelFallbackNotices(ctx context.Context, chatID, workflow
 	for _, sub := range subs {
 		if _, err := s.deps.Repo.SaveMessageToThread(ctx, chatID, thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sub.Notice, &workflowID, nil, &warning); err != nil {
 			// The switch itself already happened; only the notice is lost.
-			logging.Warn("Failed to save the model fallback notice", "error", err, "chatID", chatID)
+			logging.WarnContext(ctx, "Failed to save the model fallback notice", "error", err, "chatID", chatID)
 		}
 	}
 }
@@ -132,7 +132,7 @@ func (s *Service) runInputsForSend(ctx context.Context, workflowID, runID string
 	defer cancel()
 	inputs, err := s.queryRunInputs(queryCtx, workflowID, runID)
 	if err != nil {
-		logging.Info("Could not read the run's inputs; checking only the send's own params against the user's providers",
+		logging.InfoContext(ctx, "Could not read the run's inputs; checking only the send's own params against the user's providers",
 			"workflowID", workflowID, "error", err)
 		return nil
 	}

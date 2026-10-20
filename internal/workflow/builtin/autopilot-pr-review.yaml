@@ -269,8 +269,11 @@ nodes:
       display_style: warning
       content: "Posting the review on {{ inputs.repo }}#{{ inputs.pr_number }} failed: {{ nodes.post.content }}"
 
+  # outcome: failure records the run as FAILED (trigger health, inbox) rather than completed: a reviewer that
+  # produced no review did not do the job.
   - id: no_review
     type: save_message
+    outcome: failure
     args:
       role: assistant
       display_style: warning

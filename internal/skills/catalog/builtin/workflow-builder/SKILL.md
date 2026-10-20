@@ -329,7 +329,15 @@ dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a s
 
 **Chat is a trigger too, on by default.** Set top-level `automation_only: true` for a workflow only its
 `triggers:` should start: chat pickers stop offering it and starting it from a chat is refused
-(a builder test run still works). Leave it unset for anything a person starts by chatting.
+(a builder test run still works). Leave it unset for anything a person starts by chatting. A helper that only
+other workflows `ref:` sets `hidden: true` as well: hidden keeps it out of every picker and listing, and
+the pair marks it as an automation's internal step.
+
+**Where an automation's runs go.** A run a trigger fires is a chat, but not one in the chat list: it is listed under
+Workflows → Runs, named by its automation. Once it finishes successfully it archives itself (still in Runs, marked
+Archived). A failed run, a completion into a declared `outcome: failure`, a cancelled run and one awaiting input stay
+unarchived so they surface. So route a blocked or punted path to a terminal node with `outcome: failure` when a person
+should look at it. An automation with "notify me when it finishes" keeps its successful runs too.
 
 What `trigger.payload` holds, by source:
 
@@ -716,7 +724,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `transition_to` | string | No | - |
 | `triggers` | WorkflowTrigger[] | No | *WHEN the workflow runs: a list of {name, description, one source (schedule \| webhook \| integration \| workflow_event), filter (raw CEL over `trigger`), inputs (templates over `trigger`), prompt (template over `trigger`: the message each run starts from)}. Declaring one fires nothing; the user enables it in the app. See the workflow-builder skill's Triggers section.* |
 | `title` | string | No | - |
-| `hidden` | boolean | No | - |
+| `hidden` | boolean | No | *A building block other workflows ref: true keeps it out of every picker and default listing while it stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. Unset means the workflow is listed.* |
 | `automation_only` | boolean | No | *The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat start of it, so only its triggers (or a builder test run) start it. Unset means a chat can start it.* |
 
 ## Edge
@@ -775,7 +783,7 @@ SimulatedEvent represents a single mocked event in a test scenario.
 | `type` | string | No | Type specifies the event type for automatic conversion. |
 | `text` | string | No | Text is the LLM response text (for type: llm_response). |
 | `tool_calls` | SimToolCall[] | No | ToolCalls are tool invocations from the LLM (for type: llm_response). |
-| `tool` | string | No | Tool is the tool name (for type: tool_result or tool_error). |
+| `tool` | string | No | Tool is the tool name (for type: tool_result). |
 | `tool_output` | object | No | ToolOutput is the tool execution result (for type: tool_result). |
 | `is_error` | boolean | No | IsError marks a tool_result as failed (for type: tool_result). |
 | `black_box` | boolean | No | BlackBox mocks a loop or workflow node AS A UNIT: its body is not |
@@ -819,11 +827,9 @@ Events are always keyed by node path, never by ref URL: `node: "builtin://agent"
 
 | Type | Description | Required Fields |
 |------|-------------|-----------------|
-| `llm_response` | Simulate LLM returning text and/or tool_calls | `text` or `tool_calls` |
-| `tool_result` | Simulate tool returning output | `tool`, `tool_output` |
-| `tool_error` | Simulate tool error | `tool`, `tool_output` (with error) |
-| `llm_error` | Simulate LLM error | `output` (with error structure) |
-| `user_input` | Simulate user message | `text` |
+| `llm_response` | Simulate a Call LLM node returning text and/or tool_calls | `text` or `tool_calls` |
+| `tool_result` | Simulate an Execute Tools node returning one tool's result; add `is_error: true` for a failed call | `tool`, `tool_output` (`output` is accepted as a shorthand) |
+| (none) | Any other node: `output` is the node's whole output, checked against its output schema (an approval's `status`, an ask_question's `response`, a run's `exit_code`) | `output` |
 
 ### Use the raw `output:` form, not `type:`
 

@@ -60,7 +60,7 @@ func ResetExpiredWorkflow(ctx context.Context, tempClient client.Client, workflo
 	}
 	resetEventID := point.eventID
 
-	logging.Info("[ResetExpiredWorkflow] Resetting workflow",
+	logging.InfoContext(ctx, "[ResetExpiredWorkflow] Resetting workflow",
 		"workflowID", workflowID,
 		"runID", runID,
 		"resetEventID", resetEventID,
@@ -82,7 +82,7 @@ func ResetExpiredWorkflow(ctx context.Context, tempClient client.Client, workflo
 		return ResetResult{}, fmt.Errorf("failed to reset workflow execution: %w", err)
 	}
 
-	logging.Info("[ResetExpiredWorkflow] Workflow reset successfully",
+	logging.InfoContext(ctx, "[ResetExpiredWorkflow] Workflow reset successfully",
 		"workflowID", workflowID,
 		"oldRunID", runID,
 		"newRunID", resp.RunId,
@@ -125,7 +125,7 @@ func ResetInterruptedWorkflow(ctx context.Context, tempClient client.Client, wor
 	}
 	resetEventID := point.eventID
 
-	logging.Info("[ResetInterruptedWorkflow] Resetting interrupted workflow",
+	logging.InfoContext(ctx, "[ResetInterruptedWorkflow] Resetting interrupted workflow",
 		"workflowID", workflowID,
 		"runID", runID,
 		"status", status.String(),
@@ -148,7 +148,7 @@ func ResetInterruptedWorkflow(ctx context.Context, tempClient client.Client, wor
 		return ResetResult{}, fmt.Errorf("failed to reset workflow execution: %w", err)
 	}
 
-	logging.Info("[ResetInterruptedWorkflow] Workflow reset successfully",
+	logging.InfoContext(ctx, "[ResetInterruptedWorkflow] Workflow reset successfully",
 		"workflowID", workflowID,
 		"oldRunID", runID,
 		"newRunID", resp.RunId,

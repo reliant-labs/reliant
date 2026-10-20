@@ -41,11 +41,11 @@ func (r *AccountRouting) credentialRejection(ctx context.Context, err error, uc 
 	}
 	reason := "the provider rejected the saved API key: " + err.Error()
 	if merr := r.Credentials.MarkNeedsSignIn(ctx, uc.UserID, cfg.AccountID, reason); merr != nil {
-		logging.Warn("[Failover] Could not take a rejected API key out of rotation",
+		logging.WarnContext(ctx, "[Failover] Could not take a rejected API key out of rotation",
 			"userID", uc.UserID, "provider", string(uc.Driver), "accountID", cfg.AccountID, "error", merr)
 		return nil
 	}
-	logging.Warn("[Failover] The provider rejected an account's API key; account needs sign-in",
+	logging.WarnContext(ctx, "[Failover] The provider rejected an account's API key; account needs sign-in",
 		"userID", uc.UserID, "provider", string(uc.Driver), "accountID", cfg.AccountID)
 
 	facts := types.UsageLimitFacts{Provider: string(uc.Driver), AccountID: cfg.AccountID, AccountLabel: accountName(cfg)}

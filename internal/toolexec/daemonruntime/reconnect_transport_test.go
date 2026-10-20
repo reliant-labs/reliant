@@ -70,6 +70,7 @@ func (g *hangUpGateway) ConnectDaemon(_ context.Context, stream *connect.BidiStr
 // carrying a stream. A flapping daemon is exactly when this compounds, and a
 // long forge run is exactly when a flap happens.
 func TestReconnectingDaemonReusesOneGatewayConnection(t *testing.T) {
+	t.Parallel()
 	gateway := &hangUpGateway{}
 
 	mux := http.NewServeMux()

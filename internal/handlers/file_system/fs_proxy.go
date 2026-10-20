@@ -128,7 +128,7 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 		case errors.Is(err, core.ErrWorktreeNotFound):
 			// A missing row means "no owner", as it does for tool routing.
 		case err != nil:
-			logging.Error("[FSProxy] Failed to load worktree to route request", "error", err, "worktreeID", *worktreeID)
+			logging.ErrorContext(ctx, "[FSProxy] Failed to load worktree to route request", "error", err, "worktreeID", *worktreeID)
 			return machinewake.Target{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the workspace's machine"))
 		default:
 			worktree = wt
@@ -146,7 +146,7 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 		// routing a request without a chat gets rather than fail the tree.
 		return machinewake.Target{DaemonID: owner}, nil
 	case err != nil:
-		logging.Error("[FSProxy] Failed to load chat to route request", "error", err, "chatID", *chatID)
+		logging.ErrorContext(ctx, "[FSProxy] Failed to load chat to route request", "error", err, "chatID", *chatID)
 		return machinewake.Target{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
 	case chat.UserID != userID:
 		return machinewake.Target{}, connect.NewError(connect.CodeNotFound, errors.New("chat not found"))
@@ -161,7 +161,7 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 	}
 	daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
 	if err != nil {
-		logging.Error("[FSProxy] Failed to resolve the chat's machine", "error", err, "chatID", chat.ID)
+		logging.ErrorContext(ctx, "[FSProxy] Failed to resolve the chat's machine", "error", err, "chatID", chat.ID)
 		return machinewake.Target{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
 	}
 	if daemonID != "" {
@@ -606,7 +606,7 @@ func (s *Service) previewInfo(ctx context.Context, userID string, target machine
 		// The daemon-side error text is the contract
 		// here (cmd_fs.go returns "path is a directory: <path>").
 		if strings.Contains(err.Error(), "path is a directory") {
-			logging.Debug("[FSProxy] preview requested for a directory", "path", requestedPath)
+			logging.DebugContext(ctx, "[FSProxy] preview requested for a directory", "path", requestedPath)
 			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("path is a directory"))
 		}
 		return nil, err

@@ -1,6 +1,7 @@
 name: autopilot-set-labels
 title: Autopilot · add and remove labels
 hidden: true
+automation_only: true
 apiVersion: "0.0.5"
 description: |
   Adds and removes labels on an issue or pull request, one atomic request per label.

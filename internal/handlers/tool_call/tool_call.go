@@ -35,14 +35,14 @@ func (s *Service) CancelToolCall(
 	// Find the content block by tool_call_id
 	block, err := s.deps.Repo.GetContentBlockByToolCallID(ctx, toolCallID)
 	if err != nil {
-		logging.Error("[CancelToolCall] Failed to find tool call", "error", err, "toolCallID", toolCallID)
+		logging.ErrorContext(ctx, "[CancelToolCall] Failed to find tool call", "error", err, "toolCallID", toolCallID)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("tool call not found: %s", toolCallID))
 	}
 
 	// Get the message to find the chat ID
 	msg, err := s.deps.Repo.GetMessage(ctx, block.MessageID)
 	if err != nil {
-		logging.Error("[CancelToolCall] Failed to find message for tool call", "error", err, "messageID", block.MessageID)
+		logging.ErrorContext(ctx, "[CancelToolCall] Failed to find message for tool call", "error", err, "messageID", block.MessageID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to find message for tool call"))
 	}
 
@@ -73,7 +73,7 @@ func (s *Service) CancelToolCall(
 	// completion and reports its real outcome.
 	if s.deps.Router != nil {
 		if err := s.deps.Router.SendToolExecutionCancel(ctx, userID, toolCallID, "user cancelled tool call"); err != nil {
-			logging.Warn("[CancelToolCall] Could not deliver cancel to daemon; relying on cancel signal",
+			logging.WarnContext(ctx, "[CancelToolCall] Could not deliver cancel to daemon; relying on cancel signal",
 				"error", err, "toolCallID", toolCallID)
 		}
 	}
@@ -83,7 +83,7 @@ func (s *Service) CancelToolCall(
 	// marking the call cancelled — a cancel that says it worked and didn't is
 	// worse than one that admits it couldn't.
 	if err := s.cancelChildWorkflowForToolCall(ctx, toolCallID); err != nil {
-		logging.Warn("[CancelToolCall] Could not deliver spawn cancellation",
+		logging.WarnContext(ctx, "[CancelToolCall] Could not deliver spawn cancellation",
 			"toolCallID", toolCallID, "error", err)
 		return nil, connect.NewError(connect.CodeUnavailable,
 			fmt.Errorf("could not cancel this spawn: %w", err))
@@ -141,7 +141,7 @@ func (s *Service) CancelToolCall(
 func (s *Service) cancelChildWorkflowForToolCall(ctx context.Context, toolCallID string) error {
 	calls, err := s.deps.Repo.ListToolCallsByIDs(ctx, []string{toolCallID})
 	if err != nil {
-		logging.Warn("[CancelToolCall] Could not read tool call; cannot check for a child workflow",
+		logging.WarnContext(ctx, "[CancelToolCall] Could not read tool call; cannot check for a child workflow",
 			"toolCallID", toolCallID, "error", err)
 		return nil
 	}
@@ -228,14 +228,14 @@ func (s *Service) ConvertToBackground(
 	// Find the content block by tool_call_id
 	block, err := s.deps.Repo.GetContentBlockByToolCallID(ctx, toolCallID)
 	if err != nil {
-		logging.Error("[ConvertToBackground] Failed to find tool call", "error", err, "toolCallID", toolCallID)
+		logging.ErrorContext(ctx, "[ConvertToBackground] Failed to find tool call", "error", err, "toolCallID", toolCallID)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("tool call not found: %s", toolCallID))
 	}
 
 	// Get the message to find the chat ID
 	msg, err := s.deps.Repo.GetMessage(ctx, block.MessageID)
 	if err != nil {
-		logging.Error("[ConvertToBackground] Failed to find message for tool call", "error", err, "messageID", block.MessageID)
+		logging.ErrorContext(ctx, "[ConvertToBackground] Failed to find message for tool call", "error", err, "messageID", block.MessageID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to find message for tool call"))
 	}
 
@@ -295,7 +295,7 @@ func (s *Service) ConvertToBackground(
 		// Do not claim success. The command is still running in the foreground,
 		// and reporting otherwise is what made this look like a working feature
 		// for months.
-		logging.Warn("[ConvertToBackground] Could not deliver background request to daemon",
+		logging.WarnContext(ctx, "[ConvertToBackground] Could not deliver background request to daemon",
 			"error", err, "toolCallID", toolCallID)
 		return nil, connect.NewError(connect.CodeUnavailable,
 			fmt.Errorf("could not reach the machine running this command: %w", err))
@@ -334,7 +334,7 @@ func (s *Service) emitToolCallCancelled(ctx context.Context, chatID, toolCallID,
 		Status:     db.ToolCallStatusCancelled,
 	}
 	if err := s.deps.Repo.EmitToolCallCancelledUpdate(ctx, chatID, update); err != nil {
-		logging.Error("[CancelToolCall] Failed to create chat update", "error", err)
+		logging.ErrorContext(ctx, "[CancelToolCall] Failed to create chat update", "error", err)
 	}
 }
 
@@ -386,7 +386,7 @@ func (s *Service) persistToolCallStatus(
 	}
 
 	if err := db.UpsertToolCallStatus(ctx, s.deps.Repo, call); err != nil {
-		logging.Error("[ToolCallService] Failed to persist tool call status",
+		logging.ErrorContext(ctx, "[ToolCallService] Failed to persist tool call status",
 			"error", err, "toolCallID", toolCallID, "status", status)
 	}
 }
@@ -399,7 +399,7 @@ func (s *Service) emitToolCallBackgrounded(ctx context.Context, chatID, toolCall
 		Status:     db.ToolCallStatusBackgrounded,
 	}
 	if err := s.deps.Repo.EmitToolCallBackgroundedUpdate(ctx, chatID, update); err != nil {
-		logging.Error("[ConvertToBackground] Failed to create chat update", "error", err)
+		logging.ErrorContext(ctx, "[ConvertToBackground] Failed to create chat update", "error", err)
 	}
 }
 

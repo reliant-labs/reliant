@@ -326,7 +326,7 @@ func (r *RepoDirectory) ConfiguredEndpoints(ctx context.Context, userID string) 
 	for _, row := range rows {
 		ms, err := DecodeEndpointModels(row.ModelsJSON)
 		if err != nil {
-			logging.Warn("[ModelEndpoints] Skipping endpoint with unreadable models", "endpoint", row.ID, "error", err)
+			logging.WarnContext(ctx, "[ModelEndpoints] Skipping endpoint with unreadable models", "endpoint", row.ID, "error", err)
 			continue
 		}
 		cfg := EndpointConfig{

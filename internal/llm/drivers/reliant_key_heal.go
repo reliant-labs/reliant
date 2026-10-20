@@ -94,7 +94,7 @@ func (h *ReliantKeyHealer) Heal(ctx context.Context, userID string) (key string,
 	}); err != nil {
 		return "", false, fmt.Errorf("could not store the replacement key: %w", err)
 	}
-	logging.Info("Healed legacy reliant provider key", "user_id", userID)
+	logging.InfoContext(ctx, "Healed legacy reliant provider key", "user_id", userID)
 	return fresh, true, nil
 }
 
@@ -130,7 +130,7 @@ func (h *ReliantKeyHealer) Sweep(ctx context.Context) (healed, failed int, err e
 		switch {
 		case herr != nil:
 			failed++
-			logging.Warn("Reliant key sweep: heal failed", "user_id", id, "error", herr)
+			logging.WarnContext(ctx, "Reliant key sweep: heal failed", "user_id", id, "error", herr)
 		case did:
 			healed++
 		}
@@ -173,10 +173,10 @@ func RunReliantKeySweeps(ctx context.Context, h *ReliantKeyHealer, interval time
 	run := func() {
 		healed, failed, err := h.Sweep(ctx)
 		if err != nil {
-			logging.Warn("Reliant key sweep failed", "error", err)
+			logging.WarnContext(ctx, "Reliant key sweep failed", "error", err)
 			return
 		}
-		logging.Info("Reliant key sweep finished", "healed", healed, "failed", failed)
+		logging.InfoContext(ctx, "Reliant key sweep finished", "healed", healed, "failed", failed)
 	}
 	run()
 	t := time.NewTicker(interval)
@@ -192,12 +192,13 @@ func RunReliantKeySweeps(ctx context.Context, h *ReliantKeyHealer, interval time
 }
 
 // InstallReliantKeyHealer wires the healer for a hosted deployment (a
-// control-plane URL and internal-service secret) and, when sweepEvery > 0,
-// starts the background sweep. It is a no-op otherwise: a self-hosted reliant
-// has no control-plane to mint from.
-func InstallReliantKeyHealer(ctx context.Context, repo *db.Repo, baseURL, internalSecret string, sweepEvery time.Duration) {
+// control-plane URL and internal-service secret) and returns it, for a caller
+// that also runs the background sweep (RunReliantKeySweeps). It is a no-op
+// returning nil otherwise: a self-hosted reliant has no control-plane to mint
+// from.
+func InstallReliantKeyHealer(repo *db.Repo, baseURL, internalSecret string) *ReliantKeyHealer {
 	if baseURL == "" || internalSecret == "" {
-		return
+		return nil
 	}
 	minter := accesstokenclient.New(accesstokenclient.Deps{
 		BaseURL: baseURL,
@@ -205,7 +206,5 @@ func InstallReliantKeyHealer(ctx context.Context, repo *db.Repo, baseURL, intern
 	})
 	h := NewReliantKeyHealer(repo, minter)
 	SetReliantKeyHealer(h)
-	if sweepEvery > 0 {
-		go RunReliantKeySweeps(ctx, h, sweepEvery)
-	}
+	return h
 }

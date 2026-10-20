@@ -339,10 +339,13 @@ func TestLastRunPerWorkflow(t *testing.T) {
 	for _, item := range items {
 		got[item.WorkflowName] = item.ChatID
 	}
-	assert.Equal(t, map[string]string{"wf-one": "one-new", "wf-two": "two-only", "wf-three": "three-p2"}, got,
-		"one newest run per workflow, only the caller's, archived ignored")
-	assert.Equal(t, RunDisplayFailed, items[0].DisplayState) // ordered by workflow name: wf-one first
+	// Archived runs count: an automation archives each run it finishes
+	// successfully, and that run is still its workflow's last run.
+	assert.Equal(t, map[string]string{"wf-one": "one-archived", "wf-two": "two-only", "wf-three": "three-p2"}, got,
+		"one newest run per workflow, only the caller's, archived included")
+	assert.Equal(t, RunDisplayCompleted, items[0].DisplayState) // ordered by workflow name: wf-one first
 	assert.Equal(t, "wf-one", items[0].WorkflowName)
+	assert.True(t, items[0].Archived)
 
 	p2 := "p2"
 	items, err = repo.LastRunPerWorkflow(ctx, RunListFilters{UserID: "test-user", ProjectID: &p2})

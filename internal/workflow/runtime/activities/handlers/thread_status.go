@@ -185,7 +185,7 @@ func (a *ThreadStatusActivity) Execute(ctx context.Context, input ThreadStatusIn
 func (a *ThreadStatusActivity) resolveMailbox(ctx context.Context, threadID string) {
 	resolved, err := a.repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, threadID)
 	if err != nil {
-		logging.Warn("[ThreadStatus] Failed to resolve mailbox for terminated thread",
+		logging.WarnContext(ctx, "[ThreadStatus] Failed to resolve mailbox for terminated thread",
 			"threadID", threadID,
 			"error", err)
 		return
@@ -195,7 +195,7 @@ func (a *ThreadStatusActivity) resolveMailbox(ctx context.Context, threadID stri
 		// agent sent that will never be read. It is rare, it is a real loss
 		// of intent, and it is the signal that says how often this race
 		// actually fires.
-		logging.Error("[ThreadStatus] Thread exited with undelivered mailbox messages — queued after its last loop boundary",
+		logging.ErrorContext(ctx, "[ThreadStatus] Thread exited with undelivered mailbox messages — queued after its last loop boundary",
 			"threadID", threadID,
 			"rows", resolved)
 	}

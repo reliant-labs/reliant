@@ -165,7 +165,7 @@ func loadAccount(ctx context.Context, store AccountTokenStore, userID, accountID
 	a, err := store.GetProviderAccountWithSecrets(ctx, userID, accountID)
 	if err != nil {
 		if !errors.Is(err, core.ErrProviderAccountNotFound) {
-			logging.Warn("Failed to read persisted account tokens", "user_id", userID, "account_id", accountID, "error", err)
+			logging.WarnContext(ctx, "Failed to read persisted account tokens", "user_id", userID, "account_id", accountID, "error", err)
 		}
 		return nil
 	}
@@ -189,7 +189,7 @@ func refreshAndPersistAccount(ctx context.Context, store AccountTokenStore, user
 	if stored != nil {
 		provider = stored.Provider
 		if live, ok := newerLive(stored, held); ok {
-			logging.Info("Account tokens already rotated elsewhere; adopting persisted tokens instead of refreshing",
+			logging.InfoContext(ctx, "Account tokens already rotated elsewhere; adopting persisted tokens instead of refreshing",
 				"user_id", userID, "account_id", accountID, "expires_at", live.ExpiresAt)
 			return live, nil
 		}
@@ -219,7 +219,7 @@ func refreshAndPersistAccount(ctx context.Context, store AccountTokenStore, user
 		// rather than surface a terminal error for a session that is actually fine.
 		adopted, retryWith := adoptNewerLineage(ctx, store, userID, accountID, held, consumed)
 		if adopted != nil {
-			logging.Warn("Account token refresh failed but another writer rotated the tokens; adopting them",
+			logging.WarnContext(ctx, "Account token refresh failed but another writer rotated the tokens; adopting them",
 				"user_id", userID, "account_id", accountID, "error", rerr)
 			return *adopted, nil
 		}
@@ -247,20 +247,20 @@ func refreshAndPersistAccount(ctx context.Context, store AccountTokenStore, user
 	case casErr != nil:
 		// Still return the fresh tokens: a persistence failure must not fail the request that
 		// triggered the refresh.
-		logging.Warn("Failed to persist refreshed account tokens; continuing with in-memory tokens",
+		logging.WarnContext(ctx, "Failed to persist refreshed account tokens; continuing with in-memory tokens",
 			"user_id", userID, "account_id", accountID, "error", casErr)
 	case !swapped:
 		// A concurrent rotation was persisted first (or the account was removed). Prefer the
 		// persisted lineage when it is live; otherwise use ours in memory only.
 		if live, ok := newerLive(loadAccount(ctx, store, userID, accountID), llm.OAuthTokens{}); ok {
-			logging.Warn("Account token refresh raced a concurrent rotation; adopting persisted tokens",
+			logging.WarnContext(ctx, "Account token refresh raced a concurrent rotation; adopting persisted tokens",
 				"user_id", userID, "account_id", accountID)
 			return live, nil
 		}
-		logging.Warn("Account token rotation not persisted (stored refresh token changed or account removed); continuing with in-memory tokens",
+		logging.WarnContext(ctx, "Account token rotation not persisted (stored refresh token changed or account removed); continuing with in-memory tokens",
 			"user_id", userID, "account_id", accountID)
 	default:
-		logging.Info("Account OAuth tokens refreshed and persisted", "user_id", userID, "account_id", accountID, "expires_at", next.ExpiresAt)
+		logging.InfoContext(ctx, "Account OAuth tokens refreshed and persisted", "user_id", userID, "account_id", accountID, "expires_at", next.ExpiresAt)
 		rewriteIdentity(ctx, store, stored, next, newState)
 	}
 	return newState, nil
@@ -284,11 +284,11 @@ func markNeedsReauth(ctx context.Context, store AccountTokenStore, userID, accou
 	reason := "the provider rejected the saved sign-in: " + cause.Error()
 	if _, err := store.PatchProviderAccount(ctx, userID, accountID, core.AccountPatch{NeedsReauth: &reason}); err != nil {
 		if !errors.Is(err, core.ErrProviderAccountNotFound) {
-			logging.Warn("Failed to mark an account as needing sign-in", "user_id", userID, "account_id", accountID, "error", err)
+			logging.WarnContext(ctx, "Failed to mark an account as needing sign-in", "user_id", userID, "account_id", accountID, "error", err)
 		}
 		return
 	}
-	logging.Warn("Account refresh token rejected and no newer lineage exists; account needs sign-in",
+	logging.WarnContext(ctx, "Account refresh token rejected and no newer lineage exists; account needs sign-in",
 		"user_id", userID, "account_id", accountID)
 }
 
@@ -320,7 +320,7 @@ func rewriteIdentity(ctx context.Context, store AccountTokenStore, before *core.
 		ReplaceIdentityOf: before.IdentityKey,
 	})
 	if err != nil {
-		logging.Warn("Failed to rewrite the account's placeholder identity after refresh",
+		logging.WarnContext(ctx, "Failed to rewrite the account's placeholder identity after refresh",
 			"user_id", before.UserID, "account_id", before.ID, "error", err)
 	}
 }

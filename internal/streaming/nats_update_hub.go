@@ -74,7 +74,7 @@ func (h *NATSUpdateHub[T]) Publish(ctx context.Context, event UpdateEvent[T]) {
 	data, err := json.Marshal(event)
 	if err != nil {
 		observability.StreamingErrorsTotal.WithLabelValues("marshal").Inc()
-		logging.Warn("[NATSUpdateHub:"+h.name+"] Failed to marshal event",
+		logging.WarnContext(ctx, "[NATSUpdateHub:"+h.name+"] Failed to marshal event",
 			"key", truncateKey(event.Key),
 			"error", err)
 		return
@@ -84,7 +84,7 @@ func (h *NATSUpdateHub[T]) Publish(ctx context.Context, event UpdateEvent[T]) {
 	msg := observability.NATSPublishMsg(ctx, subject, data)
 	if err := h.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("updates", "publish").Inc()
-		logging.Warn("[NATSUpdateHub:"+h.name+"] Failed to publish",
+		logging.WarnContext(ctx, "[NATSUpdateHub:"+h.name+"] Failed to publish",
 			"subject", subject,
 			"error", err)
 		return
@@ -117,7 +117,7 @@ func (h *NATSUpdateHub[T]) Subscribe(ctx context.Context, key string) UpdateSubs
 	natsSub, err := h.nc.SubscribeSync(subject)
 	if err != nil {
 		observability.StreamingErrorsTotal.WithLabelValues("subscribe").Inc()
-		logging.Error("[NATSUpdateHub:"+h.name+"] Failed to subscribe",
+		logging.ErrorContext(ctx, "[NATSUpdateHub:"+h.name+"] Failed to subscribe",
 			"subject", subject,
 			"error", err)
 		// Return a dead subscription — events channel will never receive.
@@ -130,7 +130,7 @@ func (h *NATSUpdateHub[T]) Subscribe(ctx context.Context, key string) UpdateSubs
 	}
 	sub.natsSub = natsSub
 
-	logging.Debug("[NATSUpdateHub:"+h.name+"] New subscriber",
+	logging.DebugContext(ctx, "[NATSUpdateHub:"+h.name+"] New subscriber",
 		"subject", subject,
 		"subscriberID", id)
 
@@ -175,7 +175,7 @@ func (h *NATSUpdateHub[T]) consumeLoop(ctx context.Context, sub *natsUpdateSubsc
 
 			var event UpdateEvent[T]
 			if err := json.Unmarshal(msg.Data, &event); err != nil {
-				logging.Warn("[NATSUpdateHub:"+h.name+"] Failed to unmarshal event",
+				logging.WarnContext(ctx, "[NATSUpdateHub:"+h.name+"] Failed to unmarshal event",
 					"subject", subject,
 					"error", err)
 				return
@@ -188,7 +188,7 @@ func (h *NATSUpdateHub[T]) consumeLoop(ctx context.Context, sub *natsUpdateSubsc
 			case sub.events <- event:
 			default:
 				observability.StreamingErrorsTotal.WithLabelValues("slow_consumer").Inc()
-				logging.Warn("[NATSUpdateHub:"+h.name+"] Dropped event (slow consumer)",
+				logging.WarnContext(ctx, "[NATSUpdateHub:"+h.name+"] Dropped event (slow consumer)",
 					"key", truncateKey(sub.key),
 					"subscriberID", sub.id,
 					"seq", event.SequenceNumber)

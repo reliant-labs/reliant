@@ -66,11 +66,11 @@ func (s *Service) notifyHistoryLimitRestart(ctx context.Context, chatID, workflo
 
 	payload, err := json.Marshal(errorData)
 	if err != nil {
-		logging.Warn("Failed to marshal history-limit notice", "chatID", chatID, "error", err)
+		logging.WarnContext(ctx, "Failed to marshal history-limit notice", "chatID", chatID, "error", err)
 		return
 	}
 	if err := s.deps.Repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeError, errorID, string(payload)); err != nil {
-		logging.Warn("Failed to emit history-limit notice", "chatID", chatID, "error", err)
+		logging.WarnContext(ctx, "Failed to emit history-limit notice", "chatID", chatID, "error", err)
 	}
 }
 
@@ -216,7 +216,7 @@ func applyRequestPresets(chat *db.Chat, requestPresets map[string]string) bool {
 func (s *Service) persistChatPresets(ctx context.Context, chat *db.Chat) {
 	chat.UpdatedAt = time.Now().UTC()
 	if err := s.deps.Repo.UpdateChat(ctx, chat); err != nil {
-		logging.Error("Failed to update chat presets", "error", err, "chatID", chat.ID)
+		logging.ErrorContext(ctx, "Failed to update chat presets", "error", err, "chatID", chat.ID)
 	}
 }
 
@@ -276,7 +276,7 @@ func (s *Service) resumeFailedQuestionWorkflow(
 	marked := markResumeAnswer(userContent)
 	responseData, err := questionResumeResponseData(marked)
 	if err != nil {
-		logging.Error("Failed to build question resume response data", "error", err, "questionID", question.ID)
+		logging.ErrorContext(ctx, "Failed to build question resume response data", "error", err, "questionID", question.ID)
 		return nil, false, ""
 	}
 
@@ -284,7 +284,7 @@ func (s *Service) resumeFailedQuestionWorkflow(
 	// and persist the messages so the resumed run reads them at its next LLM
 	// boundary.
 	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, &responseData); err != nil {
-		logging.Warn("Failed to resolve question during resume", "error", err, "questionID", question.ID)
+		logging.WarnContext(ctx, "Failed to resolve question during resume", "error", err, "questionID", question.ID)
 	}
 	if err := s.deps.Repo.EmitQuestionUpdate(ctx, question.ChatID, db.QuestionUpdate{
 		QuestionID: question.ID,
@@ -293,7 +293,7 @@ func (s *Service) resumeFailedQuestionWorkflow(
 		StepID:     question.StepID,
 		Status:     "resolved",
 	}); err != nil {
-		logging.Warn("Failed to emit question update during resume", "error", err, "questionID", question.ID)
+		logging.WarnContext(ctx, "Failed to emit question update during resume", "error", err, "questionID", question.ID)
 	}
 
 	// Persist to the QUESTION's thread — the thread the parked ask_question (and
@@ -311,7 +311,7 @@ func (s *Service) resumeFailedQuestionWorkflow(
 	// nothing, and the queued rows are untouched either way.
 	presavedID, saveErr := s.saveIncomingMessages(ctx, req, answerThread, workflowID, systemMessages, marked, true)
 	if saveErr != nil {
-		logging.Warn("Failed to save resume messages during question resume", "error", saveErr)
+		logging.WarnContext(ctx, "Failed to save resume messages during question resume", "error", saveErr)
 	}
 
 	// Deliver the answer. The run service reset-replays the dead run (honoring
@@ -329,13 +329,13 @@ func (s *Service) resumeFailedQuestionWorkflow(
 		InputUpdate: inputUpdate,
 	})
 	if err != nil || outcome.Kind != runs.OutcomeResumed {
-		logging.Info("Question-parked workflow not reset-resumable - coarse restart at position",
+		logging.InfoContext(ctx, "Question-parked workflow not reset-resumable - coarse restart at position",
 			"chatID", req.Msg.ChatId, "workflowID", workflowID, "questionID", question.ID, "error", err)
 		return nil, false, presavedID
 	}
 	newRunID := outcome.RunID
 
-	logging.Info("Question-parked workflow reset-and-resumed via answer (precise nested resume)",
+	logging.InfoContext(ctx, "Question-parked workflow reset-and-resumed via answer (precise nested resume)",
 		"chatID", req.Msg.ChatId, "workflowID", workflowID, "questionID", question.ID, "newRunID", newRunID)
 
 	workflowStatus := fmt.Sprintf("%d", db.Active())
@@ -424,7 +424,7 @@ func (s *Service) resurrectGhostWorkflow(
 	// left there: the resurrected run's first call_llm delivers it.
 	savedMessageID, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 	if err != nil {
-		logging.Error("[Ghost Recovery] Failed to save messages", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "[Ghost Recovery] Failed to save messages", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
@@ -463,12 +463,12 @@ func (s *Service) resurrectGhostWorkflow(
 	// Step 5: Start fresh Temporal execution
 	workflowRun, err := s.deps.Temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
-		logging.Error("[Ghost Recovery] Failed to start workflow", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
+		logging.ErrorContext(ctx, "[Ghost Recovery] Failed to start workflow", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resurrect workflow"))
 	}
 
 	runID := workflowRun.GetRunID()
-	logging.Info("[Ghost Recovery] Successfully resurrected workflow",
+	logging.InfoContext(ctx, "[Ghost Recovery] Successfully resurrected workflow",
 		"chatID", req.Msg.ChatId,
 		"workflowID", workflowID,
 		"newRunID", runID,
@@ -479,7 +479,7 @@ func (s *Service) resurrectGhostWorkflow(
 	// Step 6: Update run IDs and workflow status
 	s.runs.RecordRun(ctx, req.Msg.ChatId, workflowID, runID)
 	if err := s.deps.Repo.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-		logging.Warn("[Ghost Recovery] Failed to update workflow status", "error", err, "workflowID", workflowID)
+		logging.WarnContext(ctx, "[Ghost Recovery] Failed to update workflow status", "error", err, "workflowID", workflowID)
 		// Non-fatal - workflow is running in Temporal
 	}
 
@@ -522,7 +522,7 @@ func (s *Service) SendMessage(
 	// Get chat with ownership check (defense-in-depth via single query)
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
-		logging.Error("Failed to get chat", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to get chat", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
@@ -552,14 +552,14 @@ func (s *Service) SendMessage(
 		// An attended send wakes the machine, so a daemon-pending marker left
 		// by an earlier run no longer describes it. The next tool call re-sets
 		// it if the machine is still unreachable.
-		logging.Warn("Failed to clear daemon-pending marker on send", "error", err, "chatID", chat.ID)
+		logging.WarnContext(ctx, "Failed to clear daemon-pending marker on send", "error", err, "chatID", chat.ID)
 	}
 	// A message queued for the machine is read by whichever run this send
 	// starts, resumes or wakes — the run reads the thread, where it already
 	// is — so it is no longer waiting on the machine to be delivered. If that
 	// run's machine is still down, its preflight queues both again.
 	if _, err := s.deps.Repo.SetChatQueuedForMachine(ctx, chat.ID, false); err != nil {
-		logging.Warn("Failed to clear queued-for-machine marker on send", "error", err, "chatID", chat.ID)
+		logging.WarnContext(ctx, "Failed to clear queued-for-machine marker on send", "error", err, "chatID", chat.ID)
 	}
 
 	// Note: Previously checked if workflow completed and thread is closed.
@@ -639,7 +639,7 @@ func (s *Service) SendMessage(
 				temporalState, temporalErr := s.runs.State(ctx, workflowID)
 				if temporalErr != nil {
 					// Temporal query failed - this is an error we should surface
-					logging.Error("Failed to query Temporal for workflow status",
+					logging.ErrorContext(ctx, "Failed to query Temporal for workflow status",
 						"error", temporalErr,
 						"chatID", req.Msg.ChatId,
 						"workflowID", workflowID,
@@ -651,7 +651,7 @@ func (s *Service) SendMessage(
 					// Ghost workflow detected - Temporal lost the workflow but DB says running
 					// RESURRECT: Start a fresh Temporal execution with the same workflow ID
 					// This allows the conversation to continue seamlessly
-					logging.Info("[Ghost Recovery] Resurrecting ghost workflow",
+					logging.InfoContext(ctx, "[Ghost Recovery] Resurrecting ghost workflow",
 						"chatID", req.Msg.ChatId,
 						"workflowID", workflowID,
 						"dbStatus", existingWorkflow.Status,
@@ -664,7 +664,7 @@ func (s *Service) SendMessage(
 						// Paused workflow whose Temporal execution timed out or completed.
 						// Keep status as paused — the paused handler uses PauseService.ResumeWorkflow
 						// which handles reset-based resume for expired executions.
-						logging.Info("Paused workflow Temporal execution not running - will attempt reset-based resume",
+						logging.InfoContext(ctx, "Paused workflow Temporal execution not running - will attempt reset-based resume",
 							"workflowID", workflowID,
 							"chatID", req.Msg.ChatId,
 							"temporalStatus", temporalState.Status,
@@ -738,7 +738,7 @@ func (s *Service) SendMessage(
 				if err != nil {
 					// The message itself failed to save — there is nothing to
 					// resume the workflow FOR, so this really is fatal.
-					logging.Error("Failed to save messages while resuming paused workflow",
+					logging.ErrorContext(ctx, "Failed to save messages while resuming paused workflow",
 						"error", err, "workflowID", workflowID, "chatID", req.Msg.ChatId)
 					return nil, connect.NewError(connect.CodeInternal, err)
 				}
@@ -763,7 +763,7 @@ func (s *Service) SendMessage(
 					hiddenStyle := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
 					_, err := s.deps.Repo.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), "Some of your params have changed, which may include mode, tools, temperature, or something else. Please continue as planned.", &workflowID, nil, &hiddenStyle)
 					if err != nil {
-						logging.Warn("Failed to save system message about param changes", "error", err, "chatID", req.Msg.ChatId)
+						logging.WarnContext(ctx, "Failed to save system message about param changes", "error", err, "chatID", req.Msg.ChatId)
 					}
 				}
 
@@ -780,13 +780,13 @@ func (s *Service) SendMessage(
 					// shows work in progress, and nothing is executing. Report
 					// it instead — the user's message is already durable, so a
 					// retry resumes from exactly here.
-					logging.Error("Failed to resume paused workflow",
+					logging.ErrorContext(ctx, "Failed to resume paused workflow",
 						"error", resumeErr, "workflowID", workflowID, "chatID", req.Msg.ChatId)
 					return nil, connect.NewError(connect.CodeInternal,
 						fmt.Errorf("failed to resume paused workflow: %w", resumeErr))
 				}
 				if outcome.Kind != runs.OutcomeResumed {
-					logging.Warn("Paused workflow could not be resumed in place during SendMessage - resuming at position with a new run",
+					logging.WarnContext(ctx, "Paused workflow could not be resumed in place during SendMessage - resuming at position with a new run",
 						"workflowID", workflowID, "chatID", req.Msg.ChatId)
 					// The paused run was lost (infra failure, not user
 					// intent) — start a new run that resumes at position.
@@ -807,7 +807,7 @@ func (s *Service) SendMessage(
 				// converge it, and a stale row is not worth failing a request
 				// that already did the important part.
 				if err := s.deps.Repo.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-					logging.Warn("Resumed workflow but failed to mark it running — status will be corrected by the workflow or the reconciler",
+					logging.WarnContext(ctx, "Resumed workflow but failed to mark it running — status will be corrected by the workflow or the reconciler",
 						"error", err, "workflowID", workflowID, "chatID", req.Msg.ChatId)
 				}
 
@@ -869,7 +869,7 @@ func (s *Service) SendMessage(
 				for _, sysMsg := range systemMessages {
 					_, err := s.deps.Repo.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle))
 					if err != nil {
-						logging.Error("Failed to save system message to running workflow", "error", err)
+						logging.ErrorContext(ctx, "Failed to save system message to running workflow", "error", err)
 						return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save system message: %w", err))
 					}
 				}
@@ -905,7 +905,7 @@ func (s *Service) SendMessage(
 					// (the wake below is what the first may not have reached).
 					queued, _, err := s.enqueueHumanMessage(ctx, queuedMsg, clientID != "")
 					if err != nil {
-						logging.Error("Failed to queue message for running workflow", "error", err)
+						logging.ErrorContext(ctx, "Failed to queue message for running workflow", "error", err)
 						return nil, asConnectError(connect.CodeInternal, fmt.Errorf("failed to save message: %w", err))
 					}
 					queuedMsg = queued
@@ -929,13 +929,13 @@ func (s *Service) SendMessage(
 						hiddenStyle := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
 						_, err := s.deps.Repo.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), "Some of your params have changed, which may include mode, tools, temperature, or something else. Please continue as planned.", &workflowID, nil, &hiddenStyle)
 						if err != nil {
-							logging.Error("Failed to save system message about param changes", "error", err, "chatID", req.Msg.ChatId)
+							logging.ErrorContext(ctx, "Failed to save system message about param changes", "error", err, "chatID", req.Msg.ChatId)
 							// Non-fatal, continue to signal
 						}
 					}
 
 					if err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, runID, "update_workflow_state", stateUpdate); err != nil {
-						logging.Warn("Failed to signal workflow with param updates", "error", err, "workflowID", workflowID)
+						logging.WarnContext(ctx, "Failed to signal workflow with param updates", "error", err, "workflowID", workflowID)
 					}
 				}
 
@@ -962,7 +962,7 @@ func (s *Service) SendMessage(
 				// wake that reaches no run starts one for the message — so it
 				// is never left for the user's next send to discover.
 				if queuedMsg != nil && s.wakeLiveRun(ctx, chat, targetThread, threadwake.ReasonMailbox) {
-					logging.Info("Run finished before a message to it could wake it; starting a run for the message",
+					logging.InfoContext(ctx, "Run finished before a message to it could wake it; starting a run for the message",
 						"chatID", req.Msg.ChatId, "workflowID", workflowID, "threadID", targetThread)
 					resumeMessagesSaved = true
 					resumePresavedMessageID = queuedMsg.ID
@@ -1007,7 +1007,7 @@ func (s *Service) SendMessage(
 				// cannot be restarted - user must branch to continue.
 				inspection, inspectErr := s.runs.Inspect(ctx, req.Msg.ChatId)
 				if inspectErr != nil {
-					logging.Error("Failed to inspect run", "error", inspectErr, "chatID", req.Msg.ChatId)
+					logging.ErrorContext(ctx, "Failed to inspect run", "error", inspectErr, "chatID", req.Msg.ChatId)
 					return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to check workflow status: %w", inspectErr))
 				}
 				if inspection.Stuck {
@@ -1133,7 +1133,7 @@ func (s *Service) SendMessage(
 				// replayable history (ghost) or the reset guard gave up.
 				resumeInput = v2.ResumeInputFromDurableState(ctx, s.deps.Repo, req.Msg.ChatId, workflowID)
 				resumeThread = existingWorkflow.Thread
-				logging.Info("Interrupted workflow detected - new run will resume at position",
+				logging.InfoContext(ctx, "Interrupted workflow detected - new run will resume at position",
 					"chatID", req.Msg.ChatId,
 					"workflowID", workflowID,
 					"checkpointNode", resumeInput.NodeID,
@@ -1262,7 +1262,7 @@ func (s *Service) SendMessage(
 
 		saved, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 		if err != nil {
-			logging.Error("Failed to save messages for new workflow", "error", err, "chatID", req.Msg.ChatId)
+			logging.ErrorContext(ctx, "Failed to save messages for new workflow", "error", err, "chatID", req.Msg.ChatId)
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		savedMessageID = saved
@@ -1284,7 +1284,7 @@ func (s *Service) SendMessage(
 	// run's first call_llm delivers it.
 	if lateRunThread != "" {
 		if _, err := s.deps.Repo.ReviveThread(ctx, lateRunThread); err != nil {
-			logging.Warn("Could not revive the thread a late message was queued to; starting its run anyway",
+			logging.WarnContext(ctx, "Could not revive the thread a late message was queued to; starting its run anyway",
 				"error", err, "chatID", req.Msg.ChatId, "threadID", lateRunThread)
 		}
 	}
@@ -1302,7 +1302,7 @@ func (s *Service) SendMessage(
 
 	workflowRun, err := s.deps.Temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
-		logging.Error("Failed to start workflow", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
+		logging.ErrorContext(ctx, "Failed to start workflow", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to start workflow"))
 	}
 
@@ -1504,7 +1504,7 @@ func (s *Service) SendAgentMessage(
 	// revive it anyway.
 	if restartMainRun {
 		if _, err := s.deps.Repo.ReviveThread(ctx, req.Msg.ThreadId); err != nil {
-			logging.Warn("Could not revive the main thread before queueing to its ended run",
+			logging.WarnContext(ctx, "Could not revive the main thread before queueing to its ended run",
 				"error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
 		}
 	}
@@ -1535,7 +1535,7 @@ func (s *Service) SendAgentMessage(
 		if connect.CodeOf(err) != connect.CodeUnknown {
 			return nil, err
 		}
-		logging.Error("Failed to queue agent message", "error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
+		logging.ErrorContext(ctx, "Failed to queue agent message", "error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to queue message"))
 	}
 	msg = queued
@@ -1589,7 +1589,7 @@ func (s *Service) owningWorkflow(ctx context.Context, thread *db.Thread) *db.Wor
 	}
 	wf, err := s.deps.Repo.GetWorkflow(ctx, workflowID)
 	if err != nil || wf == nil {
-		logging.Warn("Could not read owning workflow for agent-message liveness check; allowing the queue",
+		logging.WarnContext(ctx, "Could not read owning workflow for agent-message liveness check; allowing the queue",
 			"error", err, "chatID", thread.ChatID, "threadID", thread.ID, "workflowID", workflowID)
 		return nil
 	}
@@ -1645,11 +1645,11 @@ func (s *Service) notifyThreadWake(ctx context.Context, chat *db.Chat, threadID 
 		Thread: threadID,
 		Reason: reason,
 	}); err != nil {
-		logging.Warn("Could not wake thread",
+		logging.WarnContext(ctx, "Could not wake thread",
 			"error", err, "chatID", chat.ID, "threadID", threadID, "workflowID", workflowID, "reason", string(reason))
 		return err
 	}
-	logging.Info("Woke thread",
+	logging.InfoContext(ctx, "Woke thread",
 		"chatID", chat.ID, "threadID", threadID, "workflowID", workflowID, "reason", string(reason))
 	return nil
 }
@@ -1675,10 +1675,10 @@ func (s *Service) notifyThreadWake(ctx context.Context, chat *db.Chat, threadID 
 func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threadID, messageID string) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
 	workflowID := chat.MainThreadID()
 	refuse := func(cause error) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
-		logging.Warn("Could not start a run for a message queued to a run that closed; withdrawing it",
+		logging.WarnContext(ctx, "Could not start a run for a message queued to a run that closed; withdrawing it",
 			"error", cause, "chatID", chat.ID, "workflowID", workflowID)
 		if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, messageID, chat.ID); err != nil {
-			logging.Warn("Could not withdraw the queued message", "error", err, "chatID", chat.ID, "messageID", messageID)
+			logging.WarnContext(ctx, "Could not withdraw the queued message", "error", err, "chatID", chat.ID, "messageID", messageID)
 		}
 		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
 			Success: false,
@@ -1729,7 +1729,7 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 		return refuse(err)
 	}
 	s.runs.RecordRun(ctx, chat.ID, workflowID, run.GetRunID())
-	logging.Info("Started a run for a message queued as the previous one closed",
+	logging.InfoContext(ctx, "Started a run for a message queued as the previous one closed",
 		"chatID", chat.ID, "workflowID", workflowID, "runID", run.GetRunID())
 	return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
 		Success: true,
@@ -1772,7 +1772,7 @@ func (s *Service) wakeLiveRun(ctx context.Context, chat *db.Chat, threadID strin
 	}
 	state, err := s.runs.State(ctx, workflowID)
 	if err != nil {
-		logging.Warn("Could not tell whether a run that refused its wake is still open; leaving the input for its next turn",
+		logging.WarnContext(ctx, "Could not tell whether a run that refused its wake is still open; leaving the input for its next turn",
 			"error", err, "chatID", chat.ID, "workflowID", workflowID)
 		return false
 	}
@@ -1819,7 +1819,7 @@ func (s *Service) ListQueuedAgentMessages(
 
 	queued, err := s.deps.Repo.ListQueuedAgentMessagesForThread(ctx, req.Msg.ThreadId)
 	if err != nil {
-		logging.Error("Failed to list queued agent messages", "error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
+		logging.ErrorContext(ctx, "Failed to list queued agent messages", "error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list queued messages"))
 	}
 
@@ -1872,7 +1872,7 @@ func (s *Service) CancelQueuedAgentMessage(
 
 	cancelled, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, req.Msg.MessageId, req.Msg.ChatId)
 	if err != nil {
-		logging.Error("Failed to cancel queued agent message", "error", err, "chatID", req.Msg.ChatId, "messageID", req.Msg.MessageId)
+		logging.ErrorContext(ctx, "Failed to cancel queued agent message", "error", err, "chatID", req.Msg.ChatId, "messageID", req.Msg.MessageId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to cancel message"))
 	}
 

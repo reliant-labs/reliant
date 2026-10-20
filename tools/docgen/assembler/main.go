@@ -443,7 +443,15 @@ dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a s
 
 **Chat is a trigger too, on by default.** Set top-level ` + bt + `automation_only: true` + bt + ` for a workflow only its
 ` + bt + `triggers:` + bt + ` should start: chat pickers stop offering it and starting it from a chat is refused
-(a builder test run still works). Leave it unset for anything a person starts by chatting.
+(a builder test run still works). Leave it unset for anything a person starts by chatting. A helper that only
+other workflows ` + bt + `ref:` + bt + ` sets ` + bt + `hidden: true` + bt + ` as well: hidden keeps it out of every picker and listing, and
+the pair marks it as an automation's internal step.
+
+**Where an automation's runs go.** A run a trigger fires is a chat, but not one in the chat list: it is listed under
+Workflows → Runs, named by its automation. Once it finishes successfully it archives itself (still in Runs, marked
+Archived). A failed run, a completion into a declared ` + bt + `outcome: failure` + bt + `, a cancelled run and one awaiting input stay
+unarchived so they surface. So route a blocked or punted path to a terminal node with ` + bt + `outcome: failure` + bt + ` when a person
+should look at it. An automation with "notify me when it finishes" keeps its successful runs too.
 
 What ` + bt + `trigger.payload` + bt + ` holds, by source:
 

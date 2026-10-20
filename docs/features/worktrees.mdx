@@ -1,132 +1,75 @@
 ---
 title: "Worktrees & Workspaces"
-description: "Managing isolated development environments (Git worktrees)"
+description: "Isolated checkouts for parallel work: creating, branching into, archiving and cleaning up workspaces"
 ---
 
-Workspaces let you work on multiple branches simultaneously. They're built on Git worktrees: isolated working directories for each branch, sharing the same repository.
+Workspaces let you work on several branches of a project at once. Each one is a git worktree: its own working directory and branch, sharing the repository's history with the main checkout. Two agents in two workspaces can edit, install dependencies, build and commit without stepping on each other, and without you stashing anything.
 
 > [!NOTE]
 > In Reliant, we call these **Workspaces**. Under the hood, they are standard Git worktrees.
 
-![Workspaces panel showing list of workspaces with branch names, status badges, and Create Workspace button](/images/screenshots/workspace-page.png)
+A workspace lives on the disk of one [machine](/machines/overview), the machine of the chat it was created for, and every chat that works in it runs there. That is also what a **branched chat** is: a chat whose workspace is its own branch on disk.
 
-## What are Workspaces?
+## Creating a workspace
 
-A Workspace corresponds to a Git worktree: a separate working directory for a specific branch, linked to the same repository. You can have multiple checkouts of your project active at once, each with its own files, build artifacts, and dependencies.
+There are three ways to get one, and you will mostly use the first.
 
-When you switch workspaces, the AI's context switches too. Your code and your conversations are isolated together.
+**Branch a chat into one.** On any message, the branch menu offers **Branch to New Workspace**, which creates a workspace and opens a new chat in it with the conversation up to that message, or **Branch to Existing Workspace**, which puts the new chat in a workspace you already have. See [Branching](/features/branching).
 
-## Creating Workspaces
+**Create one directly.** Open the **Workspaces** panel (the workspaces button in the header, or **Settings → Workspaces**) and choose **New workspace**. Give it a name, and optionally a branch name (it defaults to the name) and a base branch (left blank, Reliant uses the repository's default branch). In a project with several repositories you pick a base branch per repository.
 
-### From the Workspace Panel
+**Bring in one that already exists.** **Import existing** finds git worktrees already on the machine's disk that Reliant didn't make, and adds the ones you choose. **Clone repository** clones another repository onto the machine.
 
-![Create workspace dialog with branch name, workspace name, base branch, and path fields](/images/screenshots/create-workspace.png)
+If a branch or base name is wrong, for example a base branch that doesn't exist, the workspace isn't created and the dialog tells you what to fix.
 
-Navigate to the **Workspaces** tab and click **Create Workspace**. Provide a branch name, choose the base branch, and the workspace becomes available immediately.
+## Working in a workspace
 
-## Workspaces in Workflows
+A chat runs in one workspace, and everything it does happens there: file reads and edits, shell commands, the [Processes](/features/processes) tab, and git. The **Changes** tab shows that workspace's changes and is where you commit, push and open a pull request; see [Git Integration](/features/git-integration). You can start several chats in the same workspace, each with its own history and the same files.
 
-Workspaces integrate with Reliant's workflow system through the **CreateWorktree** activity, allowing automated workspace creation in larger workflows.
+A chat with no workspace runs on the project's main checkout. Its Changes tab is read-only, so work you want to commit belongs in a workspace.
 
-### The CreateWorktree Activity
+## The workspace page
 
-In the Workflow Editor, the CreateWorktree activity programmatically creates workspaces. It accepts a name, optional base branch, and files to copy from the source repository.
+Selecting a workspace in the Workspaces panel opens its page. The **Working tree** card shows uncommitted changes and how far the branch is from its upstream, **Commits on this branch** lists commits not yet on the base branch, **Details** shows the location on disk (with a copy button), the base branch and when it was created and last active, and **Chats** lists the chats working in it.
 
-The activity handles branch creation, directory setup, and file copying automatically. After execution, workspace information (path, branch name, metadata) is stored in the workflow context.
+The header holds the actions:
 
-### Parallel Implementation Patterns
+| Action | What it does |
+|--------|--------------|
+| Status | Marks the workspace **Active**, **Merging**, **Completed** or **Abandoned**. It is your own label for where the work stands; nothing acts on it automatically. |
+| **New window** | Opens the workspace in its own window, with its own chats. Desktop app only. |
+| **Archive** | Archives the workspace and its chats. The main checkout can't be archived. |
+| **Open workspace** | Switches the app to this workspace. |
 
-The built-in **Best of Three** workflow (`parallel-compete`) uses workspaces to run multiple agents on the same task independently. Each agent gets its own environment and implements its solution, and the workflow compares the results.
+Archived workspaces are listed under the **Archived** tab of **Settings → Workspaces**, where **Restore** brings a workspace and its chats back.
 
-It works like this:
+## Cleaning up
 
-1. Create three workspaces from the same base branch
-2. Run a separate agent in each workspace
-3. Give every agent the same implementation task
-4. Wait for all of them to complete
-5. Have a reviewer pick the winner, or merge the best parts of each
+Worktrees take disk space, so archive a workspace when you are done with it and Reliant reclaims its directory without losing work. An archived workspace is removed from disk once nothing in it would be lost: it has no uncommitted changes and its branch is pushed or already merged, including by a squash or rebase merge. Commits that exist only in that workspace are saved in the repository before its directory is removed. One that still holds work Reliant can't save that way, such as uncommitted changes, is kept, though rebuildable files like `node_modules` and build output are deleted from it. Restoring a workspace whose directory was removed checks it out again.
 
-Each agent has its own files, can install dependencies, run builds, and make commits without affecting the other.
+When a machine's disk runs low, the **Inbox** shows a storage item for it, and its **Clean up** action removes the archived worktrees you confirm.
 
-### Copying Configuration Files
+## Workspaces in workflows
 
-Many projects have local configuration files that shouldn't be committed but are needed for development—files like `.env`, `.env.local`, or local database configurations. The CreateWorktree activity supports a **copy_files** parameter that handles this automatically.
+A workflow can create workspaces itself with the [Create Worktree](/reference/nodes#create-worktree) node. It takes a name, an optional base branch and files to copy, and stores the new workspace's path and branch for later steps. Workspaces a workflow creates appear in the Workspaces panel next to yours.
+
+The built-in **Best of Three** workflow (`parallel-compete`) works this way. It creates three workspaces from the same base branch, runs a separate agent with the same task in each, waits for all of them, and has a reviewer pick the winner or merge the best parts of each. Each agent has its own files and can install dependencies, build and commit without affecting the others.
+
+### Copying configuration files
+
+Many projects have local files that aren't committed but are needed to run, such as `.env` or `.env.local`. The Create Worktree node's **copy_files** parameter copies them into the new workspace.
 
 Each entry is an exact path from the workspace root, copied to the same place in the new workspace. Nothing is searched for: `.env` copies only the `.env` at the root, so a project with `frontend/.env` and `backend/.env` lists both paths. A directory is copied whole, which makes `web/node_modules` a valid entry, and a path that does not exist is skipped. In a multi-repo project, prefix the repo's folder: `api/.env`.
 
-### Workspace Lifecycle in Workflows
+## Best practices
 
-Workspaces created by workflows follow a managed lifecycle. The workflow system tracks which workspaces it creates, and you can configure cleanup behavior. Some workflows might delete workspaces after merging successful implementations, while others keep them for review.
+Use descriptive branch names that follow your team's conventions, such as `feature/user-authentication` or `bugfix/login-redirect`, so it is clear what each workspace contains. Create one workspace per feature or fix, and keep the main checkout clean for reference.
 
-In the Workspaces panel, workflow-created workspaces appear alongside manually created ones. You can manage them the same way—switch to them, view their status, or delete them when no longer needed.
+When designing a workflow that creates workspaces, list the files a working checkout needs in `copy_files`, and give each workspace a name that says which approach it holds, so comparing the results is easy.
 
-## Integration with Chat
+## Related topics
 
-Workspaces and chat sessions are tightly integrated in Reliant. The workspace you have selected determines the context for your AI conversations.
-
-### Context Switching
-
-When you switch workspaces, the AI assistant's context switches with you. The assistant sees the files, Git history, and project state of the selected workspace. If you ask about recent changes or want to modify code, the assistant works with the workspace you have selected.
-
-This means you can have different conversations happening in different workspaces. Switch to your feature branch workspace to work on new functionality, then switch to your bugfix workspace to address an issue—each conversation picks up where you left off in that context.
-
-### Tool Paths and Operations
-
-All file operations from the AI assistant use paths relative to the current workspace. When the assistant reads files, makes edits, or runs commands, those operations happen in the selected workspace's directory. This ensures changes go to the right place and prevents accidentally modifying the wrong branch.
-
-The same applies to Git operations. Commits, pushes, and status checks all reflect the selected workspace's state.
-
-### Starting Fresh Conversations
-
-Sometimes you want a completely fresh start in a workspace. You can create a new chat session while keeping the same workspace selected, giving you a clean conversation history while maintaining the same code context.
-
-## Managing Workspaces
-
-### Workspace List
-
-The Workspaces panel displays all your workspaces with their name, associated Git branch, base branch, and current status. Click any workspace to select it and see its details.
-
-### Status Types
-
-Workspaces have status indicators:
-
-- **Active** — Work in progress
-- **Completed** — Ready for merge
-- **Abandoned** — No longer needed
-- **Merging** — Currently being merged to base branch
-
-### Detail View
-
-Selecting a workspace reveals detailed information including the full working directory path (with a copy button for easy access), current Git status showing modified, staged, and untracked files, and sync status indicating commits ahead or behind the remote.
-
-### Actions
-
-Each workspace supports several actions. **New Window** opens the workspace in a separate Reliant window, letting you work on multiple workspaces simultaneously with their own chat sessions. **Delete Workspace** removes the workspace when you're done with it, cleaning up the directory and branch reference.
-
-## Git Operations
-
-The workspace detail view provides direct access to common Git operations.
-
-**Commit** opens a dialog where you can write a commit message and commit staged changes. **Push** sends your commits to the remote repository and updates the ahead/behind status. **Create PR** opens a dialog for creating a pull request, letting you write a title and description before submitting to your Git platform.
-
-The Git status display updates in real-time as you work, showing exactly what files have changed and their staging state.
-
-## Best Practices
-
-### Naming and Organization
-
-Use descriptive branch names that follow your team's conventions—patterns like `feature/user-authentication` or `bugfix/login-redirect` make it clear what each workspace contains. Keep workspace display names concise but meaningful.
-
-Update workspace status as work progresses. Marking a workspace as completed signals it's ready for review, while abandoned status helps identify cleanup candidates. Regular cleanup of old workspaces keeps your environment organized and frees disk space.
-
-### Effective Parallel Development
-
-Keep a clean main branch workspace available for reference and comparison. Create one workspace per feature or bug fix to maintain clear separation. When you need to switch contexts quickly, workspaces eliminate the need for stashing—just click and you're there.
-
-For projects with complex dependencies, each workspace can maintain its own installed packages. This is particularly valuable when testing upgrades or when different features require different dependency versions.
-
-### Workflow Integration
-
-When designing workflows that create workspaces, always specify the files that need copying for a functional development environment. Consider the cleanup strategy—will workspaces be deleted automatically, or should they persist for review?
-
-For parallel implementation patterns, give each workspace a descriptive name that indicates its purpose or the approach being tried. This makes comparison easier when reviewing results.
+- [Branching](/features/branching)
+- [Git Integration](/features/git-integration)
+- [Processes](/features/processes)
+- [Machines](/machines/overview)

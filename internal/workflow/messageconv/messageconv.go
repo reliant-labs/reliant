@@ -158,7 +158,7 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 		if block.Content != nil {
 			attachment, err := LoadAttachment(ctx, chatID, *block.Content, repo)
 			if err != nil {
-				logging.Error("Failed to load attachment for LLM context",
+				logging.ErrorContext(ctx, "Failed to load attachment for LLM context",
 					"attachment_id", *block.Content,
 					"chat_id", chatID,
 					"error", err)
@@ -183,7 +183,7 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 			attachmentID := *block.Content
 			attachment, err := LoadAttachment(ctx, chatID, attachmentID, repo)
 			if err != nil {
-				logging.Error("Failed to load document attachment for LLM context",
+				logging.ErrorContext(ctx, "Failed to load document attachment for LLM context",
 					"attachment_id", attachmentID,
 					"chat_id", chatID,
 					"error", err)
@@ -203,7 +203,7 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 			attachmentID := *block.Content
 			fileContent, filename, err := LoadFileReference(ctx, chatID, attachmentID, repo)
 			if err != nil {
-				logging.Error("Failed to load file reference for LLM context",
+				logging.ErrorContext(ctx, "Failed to load file reference for LLM context",
 					"attachment_id", attachmentID,
 					"chat_id", chatID,
 					"error", err)
@@ -305,7 +305,7 @@ func LoadFileReference(ctx context.Context, chatID string, attachmentID string, 
 		data = att.Content
 	} else {
 		// Legacy fallback: read from filesystem
-		logging.Warn("File reference has no stored content, falling back to filesystem read",
+		logging.WarnContext(ctx, "File reference has no stored content, falling back to filesystem read",
 			"attachment_id", attachmentID,
 			"filename", att.Filename)
 

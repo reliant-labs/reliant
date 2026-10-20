@@ -164,7 +164,7 @@ func (s *Service) handleLocalModelInventory(ctx context.Context, conn *daemonCon
 
 	encoded, err := protojson.MarshalOptions{}.Marshal(inv)
 	if err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to encode local model inventory", "error", err, "daemonID", conn.daemonID)
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to encode local model inventory", "error", err, "daemonID", conn.daemonID)
 		return
 	}
 	encodedJSON := string(encoded)
@@ -172,7 +172,7 @@ func (s *Service) handleLocalModelInventory(ctx context.Context, conn *daemonCon
 		return
 	}
 	if err := s.deps.Repo.SetDaemonLocalModels(ctx, conn.daemonID, encodedJSON); err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to store local model inventory", "error", err, "daemonID", conn.daemonID)
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to store local model inventory", "error", err, "daemonID", conn.daemonID)
 		return
 	}
 	conn.lastInventoryJSON = encodedJSON

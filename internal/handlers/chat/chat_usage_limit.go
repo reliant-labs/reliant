@@ -80,10 +80,10 @@ func (s *Service) RetryUsageLimitWait(
 		signal.UseModel = useModel
 	}
 	if err := s.deps.Temporal.SignalWorkflow(ctx, *chat.WorkflowID, "", v2.UsageLimitRetrySignalName, signal); err != nil {
-		logging.Warn("Could not wake a run waiting on a usage limit",
+		logging.WarnContext(ctx, "Could not wake a run waiting on a usage limit",
 			"error", err, "chatID", chat.ID, "workflowID", *chat.WorkflowID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to wake the run"))
 	}
-	logging.Info("Woke a run waiting on a usage limit", "chatID", chat.ID, "workflowID", *chat.WorkflowID)
+	logging.InfoContext(ctx, "Woke a run waiting on a usage limit", "chatID", chat.ID, "workflowID", *chat.WorkflowID)
 	return connect.NewResponse(&reliantv1.RetryUsageLimitWaitResponse{Woken: true}), nil
 }

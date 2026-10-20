@@ -13,6 +13,11 @@ import (
 // in about a second instead of ten. It does NOT change what is being tested:
 // the assertions are all "bounded well below the lingering child's lifetime",
 // which is false for any value when the bound is missing entirely.
+//
+// It writes a variable every exec.run reads, so a test that calls it must not
+// be t.Parallel: it would race the parallel tests' commands. So the tests
+// below share one serial parent that sets it, and run in parallel with each
+// other: each mostly waits on a sleeping shell.
 func shortWaitDelay(t *testing.T) {
 	t.Helper()
 	prev := daemon.ExecWaitDelay
@@ -28,12 +33,25 @@ func shortWaitDelay(t *testing.T) {
 // until the LAST holder of the write end exits, not when bash does.
 const lingeringChildCommand = `echo "work done"; sleep 25 & exit 0`
 
-// TestHandleExecRun_LingeringChildDoesNotHangWait is the regression test for
+func TestHandleExecRun_PipeDrainBound(t *testing.T) {
+	shortWaitDelay(t)
+	for name, test := range map[string]func(*testing.T){
+		"LingeringChildDoesNotHangWait":          testHandleExecRun_LingeringChildDoesNotHangWait,
+		"LingeringChildKeepsOutputAndExitCode":   testHandleExecRun_LingeringChildKeepsOutputAndExitCode,
+		"TimeoutIsEnforcedDespiteLingeringChild": testHandleExecRun_TimeoutIsEnforcedDespiteLingeringChild,
+		"SlowButWorkingCommandIsNotCut":          testHandleExecRun_SlowButWorkingCommandIsNotCut,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			test(t)
+		})
+	}
+}
+
+// testHandleExecRun_LingeringChildDoesNotHangWait is the regression test for
 // the hang. Before the fix this returned after ~25s (the grandchild's
 // lifetime); the command's own work took milliseconds.
-func TestHandleExecRun_LingeringChildDoesNotHangWait(t *testing.T) {
-	shortWaitDelay(t)
-
+func testHandleExecRun_LingeringChildDoesNotHangWait(t *testing.T) {
 	start := time.Now()
 	res := runExec(t, daemon.RunCommandRequest{
 		Command:    lingeringChildCommand,
@@ -57,12 +75,10 @@ func TestHandleExecRun_LingeringChildDoesNotHangWait(t *testing.T) {
 	}
 }
 
-// TestHandleExecRun_LingeringChildKeepsOutputAndExitCode pins what the bound
+// testHandleExecRun_LingeringChildKeepsOutputAndExitCode pins what the bound
 // costs. Cutting the drain short must not lose output already written, and
 // must not invent a failure: the command really did succeed.
-func TestHandleExecRun_LingeringChildKeepsOutputAndExitCode(t *testing.T) {
-	shortWaitDelay(t)
-
+func testHandleExecRun_LingeringChildKeepsOutputAndExitCode(t *testing.T) {
 	res := runExec(t, daemon.RunCommandRequest{
 		Command:    lingeringChildCommand,
 		WorkingDir: t.TempDir(),
@@ -81,13 +97,11 @@ func TestHandleExecRun_LingeringChildKeepsOutputAndExitCode(t *testing.T) {
 	}
 }
 
-// TestHandleExecRun_TimeoutIsEnforcedDespiteLingeringChild covers the broader
+// testHandleExecRun_TimeoutIsEnforcedDespiteLingeringChild covers the broader
 // instance of the same bug: without the bound, SIGKILLing the shell on timeout
 // orphans its live children, which keep the pipe open — so TimeoutMs did not
 // actually bound anything. Here the timeout is 2s and the child lives 25s.
-func TestHandleExecRun_TimeoutIsEnforcedDespiteLingeringChild(t *testing.T) {
-	shortWaitDelay(t)
-
+func testHandleExecRun_TimeoutIsEnforcedDespiteLingeringChild(t *testing.T) {
 	start := time.Now()
 	res := runExec(t, daemon.RunCommandRequest{
 		Command:    `echo "started"; sleep 25 & sleep 25`,
@@ -108,7 +122,7 @@ func TestHandleExecRun_TimeoutIsEnforcedDespiteLingeringChild(t *testing.T) {
 	}
 }
 
-// TestHandleExecRun_SlowButWorkingCommandIsNotCut is the regression guard that
+// testHandleExecRun_SlowButWorkingCommandIsNotCut is the regression guard that
 // matters most: the bound must never truncate a command that is simply slow.
 // It cannot, structurally — WaitDelay's clock starts only once the process has
 // exited or the context is done — and this pins that with a command that runs
@@ -116,9 +130,7 @@ func TestHandleExecRun_TimeoutIsEnforcedDespiteLingeringChild(t *testing.T) {
 // conclusive as four times: a bound that started counting before exit would
 // cut it either way. The bound itself stays at 1s, because after exit it must
 // still cover the pipe drain on a loaded machine.
-func TestHandleExecRun_SlowButWorkingCommandIsNotCut(t *testing.T) {
-	shortWaitDelay(t) // 1s bound, 2s command
-
+func testHandleExecRun_SlowButWorkingCommandIsNotCut(t *testing.T) { // 1s bound, 2s command
 	res := runExec(t, daemon.RunCommandRequest{
 		Command:    `echo start; sleep 2; echo end`,
 		WorkingDir: t.TempDir(),
@@ -143,6 +155,7 @@ func TestHandleExecRun_SlowButWorkingCommandIsNotCut(t *testing.T) {
 // returns the command's own runtime, which is the number the shell tool
 // compares against its wall clock.
 func TestHandleExecRun_DurationIsReported(t *testing.T) {
+	t.Parallel()
 	res := runExec(t, daemon.RunCommandRequest{
 		Command:    `sleep 1`,
 		WorkingDir: t.TempDir(),

@@ -135,7 +135,7 @@ func (s *Service) UpdateWorkflowParams(
 		}
 	}
 
-	logging.Debug("Updated workflow params",
+	logging.DebugContext(ctx, "Updated workflow params",
 		"chatID", req.Msg.ChatId,
 		"workflowID", workflowID,
 		"live", live,
@@ -169,7 +169,7 @@ func (s *Service) signalParamUpdate(ctx context.Context, chatID, workflowID, run
 	if stale := staleWorkflowSignalError(err); stale != nil {
 		return stale
 	}
-	logging.Error("Failed to signal workflow for param update",
+	logging.ErrorContext(ctx, "Failed to signal workflow for param update",
 		"chatID", chatID,
 		"workflowID", workflowID,
 		"threadID", threadID,
@@ -235,7 +235,7 @@ func (s *Service) GetWorkflowExecutions(
 	// Get all workflows for this chat
 	workflows, err := s.deps.Repo.ListWorkflowsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		logging.Error("Failed to list workflows", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to list workflows", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list workflows"))
 	}
 
@@ -268,7 +268,7 @@ func (s *Service) GetWorkflowExecutions(
 		steps, err = s.deps.Repo.GetBasicStepExecutionsForChat(ctx, req.Msg.ChatId)
 	}
 	if err != nil {
-		logging.Error("Failed to get step executions", "error", err, "chatID", req.Msg.ChatId)
+		logging.ErrorContext(ctx, "Failed to get step executions", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get step executions"))
 	}
 	stepsByWorkflow := make(map[string][]*db.ChatStepExecution)
@@ -310,7 +310,7 @@ func (s *Service) GetWorkflowExecutions(
 		// read: a partial timeline beats an error page. Logged loudly because
 		// the symptom (spawned threads rendering inline) is otherwise
 		// unattributable; each workflow also logs its own missing thread.
-		logging.Error("[WorkflowTree] Failed to list threads; thread origin will be empty and threads without a workflow row will be missing from the timeline",
+		logging.ErrorContext(ctx, "[WorkflowTree] Failed to list threads; thread origin will be empty and threads without a workflow row will be missing from the timeline",
 			"error", threadsErr, "chatID", req.Msg.ChatId)
 	}
 	threadsByID := make(map[string]*db.Thread, len(threads))
@@ -330,7 +330,7 @@ func (s *Service) GetWorkflowExecutions(
 	if len(childThreadIDs) > 0 {
 		forkedIDs, err := s.deps.Repo.ListForkedThreadIDs(ctx, childThreadIDs)
 		if err != nil {
-			logging.Error("[WorkflowTree] Failed to resolve forked threads; ForkedFromThread will be empty",
+			logging.ErrorContext(ctx, "[WorkflowTree] Failed to resolve forked threads; ForkedFromThread will be empty",
 				"error", err, "chatID", req.Msg.ChatId)
 		}
 		for _, id := range forkedIDs {
@@ -446,7 +446,7 @@ func (s *Service) GetThreadWorkflowInputs(
 				}
 			}
 		} else {
-			logging.Debug("Failed to query thread inputs", "error", err, "rootWorkflowID", rootWorkflowID, "thread", req.Msg.ThreadId)
+			logging.DebugContext(ctx, "Failed to query thread inputs", "error", err, "rootWorkflowID", rootWorkflowID, "thread", req.Msg.ThreadId)
 		}
 	}
 

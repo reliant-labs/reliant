@@ -193,7 +193,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		ProjectID:  &project.ID,
 		WorktreeID: &wt.ID,
 	}); err != nil {
-		logging.Error("Failed to emit worktree refetch", "error", err, "worktreeID", wt.ID)
+		logging.ErrorContext(ctx, "Failed to emit worktree refetch", "error", err, "worktreeID", wt.ID)
 	}
 	if finishErr != nil {
 		return CreateWorktreeOutput{}, finishErr
@@ -375,12 +375,12 @@ func (a *DeleteWorktreeActivity) Execute(ctx context.Context, input DeleteWorktr
 			}, 30_000,
 		)
 		if err != nil {
-			logging.Warn("Per-repo worktree delete failed (continuing)",
+			logging.WarnContext(ctx, "Per-repo worktree delete failed (continuing)",
 				"repo", repo.ID, "checkout", checkoutPath, "error", err)
 			continue
 		}
 		if !resp.Deleted {
-			logging.Warn("Per-repo worktree delete reported not deleted (continuing)",
+			logging.WarnContext(ctx, "Per-repo worktree delete reported not deleted (continuing)",
 				"repo", repo.ID, "checkout", checkoutPath)
 		}
 	}
@@ -391,10 +391,10 @@ func (a *DeleteWorktreeActivity) Execute(ctx context.Context, input DeleteWorktr
 		worktreeRemoveWorkspaceDaemonRequest{WorkspacePath: worktree.Path}, 30_000,
 	)
 	if err != nil {
-		logging.Warn("Workspace dir removal failed (continuing)",
+		logging.WarnContext(ctx, "Workspace dir removal failed (continuing)",
 			"workspace", worktree.Path, "error", err)
 	} else if !wsResp.Deleted && wsResp.Error != "" {
-		logging.Warn("Workspace dir removal reported error (continuing)",
+		logging.WarnContext(ctx, "Workspace dir removal reported error (continuing)",
 			"workspace", worktree.Path, "error", wsResp.Error)
 	}
 

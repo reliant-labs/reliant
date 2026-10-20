@@ -196,7 +196,7 @@ func ParseModelIDWithDriver(modelID string) (string, string) {
 func tokenRefresherForAccount(ctx context.Context, driverID models.DriverID, userID, accountID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {
 	refresh, ok := providerRefreshers[driverID]
 	if !ok {
-		logging.Warn("OAuth driver has a refresh token but no registered refresher; token will not be refreshed",
+		logging.WarnContext(ctx, "OAuth driver has a refresh token but no registered refresher; token will not be refreshed",
 			"driver_id", driverID, "user_id", userID)
 		return nil, nil
 	}
@@ -209,7 +209,7 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 	if ReplayMode.Enabled && ReplayMode.Driver != nil {
 		return ReplayMode.Driver, nil
 	}
-	logging.Debug("calling defaultGetDriver", "preferences", preferences)
+	logging.DebugContext(ctx, "calling defaultGetDriver", "preferences", preferences)
 	// lastErr captures the most recent per-preference failure reason so the
 	// terminal "no suitable models available" error is actionable instead of
 	// opaque (previously every failure was swallowed by `continue`).
@@ -220,13 +220,13 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		baseModelID, explicitDriverID := ParseModelIDWithDriver(string(pref.ModelID))
 		modelID := models.ModelID(baseModelID)
 
-		logging.Debug("parsing model preference", "original", pref.ModelID, "baseModel", baseModelID, "explicitDriver", explicitDriverID)
+		logging.DebugContext(ctx, "parsing model preference", "original", pref.ModelID, "baseModel", baseModelID, "explicitDriver", explicitDriverID)
 
 		// Get model details from registry
 		registry := models.MustGetRegistry()
 		def, ok := registry.GetDefinition(string(modelID))
 		if !ok {
-			logging.Debug("model not found", "modelID", modelID)
+			logging.DebugContext(ctx, "model not found", "modelID", modelID)
 			continue
 		}
 		model := def.ToModel()
@@ -256,13 +256,13 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 			}
 			driverConfig = config
 			found = true
-			logging.Debug("using explicit driver", "driver", explicitDriverID, "model", modelID)
+			logging.DebugContext(ctx, "using explicit driver", "driver", explicitDriverID, "model", modelID)
 		} else {
 			// No provider named: the caller asked for a model, so pick the
 			// best configured provider for it.
 			driverConfig, found = models.SelectBestDriver(model.ID, availableDrivers)
 			// DriverID only: DriverConfig carries the API key and OAuth refresh token.
-			logging.Debug("auto-selected driver", "driver", driverConfig.DriverID, "found", found)
+			logging.DebugContext(ctx, "auto-selected driver", "driver", driverConfig.DriverID, "found", found)
 		}
 
 		if !found {
@@ -280,7 +280,7 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		driverOpts := append(PreferenceDriverOptions(model, pref), opts...)
 
 		agentProvider, err := GetDriverForAccount(ctx, userID, driverConfig, model, driverOpts...)
-		logging.Debug("provider, err", "provider", agentProvider, "err", err)
+		logging.DebugContext(ctx, "provider, err", "provider", agentProvider, "err", err)
 		if err != nil {
 			lastErr = fmt.Errorf("model %q@%s: %w", modelID, driverConfig.DriverID, err)
 			continue

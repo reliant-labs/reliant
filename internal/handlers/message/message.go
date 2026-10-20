@@ -27,7 +27,7 @@ func (s *Service) GetMessage(
 	// Get message from database
 	msg, err := s.deps.Repo.GetMessage(ctx, messageID)
 	if err != nil {
-		logging.Error("Failed to get message", "error", err, "messageID", messageID)
+		logging.ErrorContext(ctx, "Failed to get message", "error", err, "messageID", messageID)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("message not found"))
 	}
 
@@ -47,7 +47,7 @@ func (s *Service) GetMessage(
 	// Get content blocks for this message
 	blocks, err := s.deps.Repo.ListContentBlocks(ctx, msg.ID)
 	if err != nil {
-		logging.Error("Failed to list content blocks", "error", err, "messageID", msg.ID)
+		logging.ErrorContext(ctx, "Failed to list content blocks", "error", err, "messageID", msg.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load message content"))
 	}
 
@@ -66,7 +66,7 @@ func (s *Service) GetMessage(
 		}
 		attachmentData, err := s.deps.Repo.GetAttachmentsByIDs(ctx, attachmentIDs)
 		if err != nil {
-			logging.Warn("Failed to get attachments for message", "error", err, "messageID", msg.ID)
+			logging.WarnContext(ctx, "Failed to get attachments for message", "error", err, "messageID", msg.ID)
 		} else {
 			attachments = attachmentData
 		}
@@ -90,7 +90,7 @@ func (s *Service) GetMessage(
 	toolCallStatusByCallID := make(map[string]*db.ToolCall)
 	toolCalls, err := s.deps.Repo.ListToolCallsByMessageIDs(ctx, []string{msg.ID})
 	if err != nil {
-		logging.Warn("Failed to list tool calls for message", "error", err, "messageID", msg.ID)
+		logging.WarnContext(ctx, "Failed to list tool calls for message", "error", err, "messageID", msg.ID)
 	} else {
 		for _, call := range toolCalls {
 			toolCallStatusByCallID[call.ID] = call

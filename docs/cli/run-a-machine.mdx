@@ -1,0 +1,153 @@
+---
+title: "Run a machine from the terminal"
+description: "Turn a workstation, server or Raspberry Pi into a Reliant machine with reliant daemon, keep it running, and check that it is healthy"
+---
+
+A daemon is the process that makes a computer a Reliant machine. It connects out to Reliant, and when an agent in one of your chats reads a file or runs a command, the daemon does the work on that computer. The desktop app runs one for you. This page is for computers without the app: a box under your desk, a cloud VM, a Raspberry Pi, a workstation you only reach over SSH. It follows one setup from start to finish. [Your own computer](/machines/your-computer) covers the concepts and every `daemon start` flag.
+
+## 1. Start in the repository you want agents to work in
+
+A daemon serves one **workspace**: the git worktree root of the directory you start it from. Every subdirectory of a checkout is the same daemon, and a second worktree gets its own. So `cd` into the project first. `status`, `logs` and `stop` use the same rule, so run them from the same checkout, or pass `--workspace <path>`.
+
+```bash
+cd ~/src/my-service
+```
+
+## 2. Register and start
+
+On a computer where you can open a browser, just start the daemon. With no credential yet, it registers the machine on the spot:
+
+```text
+$ reliant daemon start
+No daemon credentials found. Registering...
+Registering this machine as a daemon — approve the login in your browser.
+Opening your browser to log in.
+If it does not open, visit:
+    https://admin.reliantapi.com/oauth/authorize?client_id=reliant-cli&…&scope=daemon%3Aconnect+deploy%3Aread+…
+```
+
+Once you approve, the daemon saves its credential to `~/.reliant/daemon.json` and connects. The computer appears in the app under **Settings → Machines**, named `<instance-id>@<hostname>` unless you passed `--name`. `reliant daemon register` does only the registration step, if you prefer to keep it separate.
+
+### On a machine with no browser
+
+The browser login redirects to `127.0.0.1` on the machine itself, so it cannot finish over SSH. Create a daemon credential in the app under **Settings → Access Tokens** and pipe it in:
+
+```bash
+echo "rlat_…" | reliant daemon start --token
+```
+
+The CLI asks Reliant which account the token belongs to, saves it, and connects. Later starts reuse the saved credential, so you only pipe the token in once. Anything that is not an `rlat_` token is rejected before anything is saved:
+
+```text
+$ echo hello | reliant daemon start --token
+invalid token format (expected an rlat_ daemon token)
+```
+
+If Reliant refuses the token you piped in, the daemon stops, tells you, and deletes that token. Because you chose the token, it does not switch to a browser login behind your back. A daemon that registered through the browser re-registers by itself instead.
+
+## 3. Keep it running
+
+`reliant daemon start` runs in the foreground and stops when its terminal closes. The `--background` flag is listed in `--help`, but it is not implemented yet:
+
+```text
+$ reliant daemon start --background
+--background is not yet implemented
+```
+
+For a quick session, run it in `tmux` or `screen`. For a machine that should always be available, let your service manager run it. With systemd, a user service looks like this:
+
+```ini
+# ~/.config/systemd/user/reliant-daemon.service
+[Unit]
+Description=Reliant daemon
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/src/my-service
+ExecStart=/usr/bin/reliant daemon start --non-interactive
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+Register once by hand (step 2) before enabling it with `systemctl --user enable --now reliant-daemon`. `--non-interactive` means a restart never waits on a browser login nobody will approve. If the credential is ever missing, the daemon stays up, reports that it is waiting for sign-in, and continues as soon as a credentials file appears. Use the path `command -v reliant` prints, and run `loginctl enable-linger` if the service should keep running after you log out.
+
+A short network outage needs no restart. The daemon reconnects by itself.
+
+## 4. Check that it is healthy
+
+`reliant daemon status` tells you whether the daemon can serve tool calls right now, which is not the same as whether its process exists:
+
+```text
+$ reliant daemon status
+Daemon is running and its gateway stream is established
+  PID:      244
+  Binary:   …/reliant (built 2026-10-19T06:04:08Z, 21h46m24s ago)
+  Gateway:  https://gateway.reliantapi.com (tls)
+  Stream:   connected for 11m32s
+  Stability: stable — no reconnects since this daemon started
+  Record:   …/daemon-state.json
+```
+
+The **Stream** line is the connection to Reliant. Agents' tool calls travel over it, so a daemon whose stream is down serves nothing, however healthy the process looks. **Stability** says whether the stream has held: a stream that dropped in the last few minutes is reported as `UNSTABLE`, because it is likely to drop again in the middle of a long tool call. **Binary** tells you which build is running, which helps after an upgrade.
+
+The exit code follows the same rule. `status` exits `0` only when the stream is established **and** stable, and non-zero otherwise, including when no daemon is running. That makes it a good pre-flight check before starting long work:
+
+```bash
+reliant daemon status >/dev/null && reliant workflow run …
+```
+
+When nothing is running, the output says so and names the record it looked for:
+
+```text
+$ reliant daemon status
+No daemon running (no runtime record found)
+  Record:   ~/.reliant/instances/https-api.reliantapi.com-c9232e15/_default/reliant-labs-967955db/daemon-state.json
+daemon not running
+```
+
+If you expected a daemon here, check that you are in the checkout it serves (step 1).
+
+## 5. Read its logs
+
+```bash
+reliant daemon logs                  # last 50 lines, then follow
+reliant daemon logs -n 200 --follow=false
+```
+
+The log is `logs/tools-daemon.log` in the instance's folder, and it is rotated for you. When an MCP server will not start, or a command an agent ran behaved oddly on this machine, this is the log to read. Add `--verbose` to `daemon start` to copy the log to the terminal as well.
+
+## 6. Stop it
+
+```bash
+reliant daemon stop
+```
+
+`stop` asks the daemon to shut down and **waits until the process has exited** before saying it stopped. If the daemon has not exited after 12 seconds, `stop` kills it. If the process survives even that, `stop` exits non-zero and keeps the runtime record, so the next `status` still shows the daemon. This matters because two daemons with the same identity disconnect each other until one is gone. `--force` kills immediately. If you used systemd, stop the service instead (`systemctl --user stop reliant-daemon`), or the service manager will start the daemon again.
+
+<Warning>
+On a Reliant **cloud machine**, the shell already contains the settings of the daemon that runs the machine. There, `reliant daemon stop` stops that daemon, which disconnects every chat on the machine, including the one you typed the command from. `status` and `logs` are safe to run there. Don't run `stop`.
+</Warning>
+
+## Several daemons on one computer
+
+You can run one daemon per checkout, and even one per account in the same checkout. `reliant daemon ls` lists every instance folder on the computer and whether a daemon is alive in it:
+
+```text
+$ reliant daemon ls
+~/.reliant/instances
+
+RUNNING  PID  STREAM  UPTIME  INSTANCE
+-        -    -       -       https-api.reliantapi.com-c9232e15/_default/reliant-labs-967955db
+-        -    -       -       https-api.reliantapi.com-c9232e15/_default/tmp-e9671acd
+```
+
+Each instance is named by server, account (`_default` until you use more than one) and workspace: here, a checkout called `reliant-labs` and the `/tmp` directory, neither currently running. **RUNNING** comes from a lock the operating system releases when the process dies, so it is never stale even when a runtime record is left behind.
+
+## Related topics
+
+- [Your own computer](/machines/your-computer): flags, accounts, TLS options and troubleshooting
+- [Machines overview](/machines/overview) and [Choosing a machine](/machines/choosing)
+- [Sign in and tokens](/cli/sign-in): daemon credentials compared with CLI logins
+- [CLI reference: `reliant daemon`](/reference/cli#reliant-daemon)

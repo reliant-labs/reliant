@@ -611,18 +611,18 @@ func (s *Service) recordDiskReport(ctx context.Context, conn *daemonConnection, 
 		if err != nil {
 			// Not fatal: the worst case is a running episode restarting,
 			// which re-raises the storage item once.
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to read stored disk report", "error", err, "daemonID", conn.daemonID)
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to read stored disk report", "error", err, "daemonID", conn.daemonID)
 		}
 		conn.lastDiskStored, conn.lastDiskLoaded = diskwatch.Decode(raw), true
 	}
 	stamped := diskwatch.Stamp(rep, conn.lastDiskStored, now)
 	stored, err := diskwatch.Encode(stamped)
 	if err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to encode disk report", "error", err, "daemonID", conn.daemonID)
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to encode disk report", "error", err, "daemonID", conn.daemonID)
 		return
 	}
 	if err := s.deps.Repo.SetDaemonStorageState(ctx, conn.daemonID, stored); err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record disk report", "error", err, "daemonID", conn.daemonID)
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record disk report", "error", err, "daemonID", conn.daemonID)
 		return
 	}
 	urgent := diskwatch.UrgentSignature(rep)
@@ -673,7 +673,7 @@ func (s *Service) PublishDaemonListChanged(ctx context.Context, userID, daemonID
 		}
 		d, err := s.deps.Repo.GetDaemon(ctx, daemonID)
 		if err != nil || d == nil {
-			logging.Debug(LOG_PREFIX_TOOLS_DAEMON+" No registry row to announce a daemon change for", "daemonID", daemonID, "error", err)
+			logging.DebugContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" No registry row to announce a daemon change for", "daemonID", daemonID, "error", err)
 			return
 		}
 		userID = d.UserID
@@ -805,12 +805,12 @@ func resolveUnboundDaemonID(ctx context.Context, repo daemonHostnameLookup, user
 	if hostname != "" && repo != nil {
 		existing, lookupErr := repo.ListDaemonsByUserID(ctx, userID)
 		if lookupErr != nil {
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to lookup existing daemons for hostname reuse",
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to lookup existing daemons for hostname reuse",
 				"error", lookupErr, "userID", userID, "hostname", hostname)
 		} else {
 			for _, d := range existing {
 				if d.Hostname != nil && *d.Hostname == hostname {
-					logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Reusing existing daemon_id for unbound PAT",
+					logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Reusing existing daemon_id for unbound PAT",
 						"daemonID", d.ID, "userID", userID, "hostname", hostname)
 					return d.ID
 				}
@@ -818,7 +818,7 @@ func resolveUnboundDaemonID(ctx context.Context, repo daemonHostnameLookup, user
 		}
 	}
 	id := uuid.NewString()
-	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Generated daemon_id for unbound PAT",
+	logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Generated daemon_id for unbound PAT",
 		"daemonID", id, "userID", userID, "hostname", hostname)
 	return id
 }
@@ -866,7 +866,7 @@ func (s *Service) rejectForeignDaemon(ctx context.Context, userID, daemonID stri
 		}
 		s.mu.RUnlock()
 	}
-	logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Rejected daemon registration for a daemon id owned by another user",
+	logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Rejected daemon registration for a daemon id owned by another user",
 		"daemonID", daemonID, "requestingUserID", userID, "ownerUserID", ownerID)
 	return bootstrap.NewForeignDaemonIDError()
 }
@@ -914,26 +914,26 @@ func (s *Service) ConnectDaemon(
 	// Wait for registration message
 	msg, err := stream.Receive()
 	if err != nil {
-		logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to receive registration", "error", err)
+		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to receive registration", "error", err)
 		return err
 	}
 
 	reg := msg.GetRegister()
 	if reg == nil {
-		logging.Error(LOG_PREFIX_TOOLS_DAEMON + " First message must be registration")
+		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" First message must be registration")
 		return connect.NewError(connect.CodeInvalidArgument, nil)
 	}
 
 	userID, err := daemonRegistrationUserID(ctx, reg)
 	if err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed daemon registration identity validation",
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed daemon registration identity validation",
 			"error", err,
 		)
 		return err
 	}
 
 	if err := validateAssertedDaemonID(reg.GetDaemonId()); err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Rejected malformed client-asserted daemon_id",
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Rejected malformed client-asserted daemon_id",
 			"userID", userID, "assertedDaemonID", truncateForLog(reg.GetDaemonId()))
 		return err
 	}
@@ -948,7 +948,7 @@ func (s *Service) ConnectDaemon(
 
 	requestedProjectPaths, err := s.listAllProjectPaths(ctx, userID)
 	if err != nil {
-		logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to list project paths", "error", err, "userID", userID)
+		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to list project paths", "error", err, "userID", userID)
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list project paths: %w", err))
 	}
 
@@ -974,7 +974,7 @@ func (s *Service) ConnectDaemon(
 		if errors.Is(err, db.ErrDaemonOwnedByAnotherUser) {
 			return s.rejectForeignDaemon(ctx, userID, daemonID)
 		}
-		logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to persist daemon registration", "error", err, "daemonID", daemonID)
+		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to persist daemon registration", "error", err, "daemonID", daemonID)
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to persist daemon registration: %w", err))
 	}
 
@@ -988,12 +988,12 @@ func (s *Service) ConnectDaemon(
 		// The stream is still accepted: the first keepalive re-creates the
 		// lease (renewLease) and says so. Until then the registry reports
 		// this daemon detached, so this is an error, not a warning.
-		logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to write the reachability lease for a new daemon stream; "+
+		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to write the reachability lease for a new daemon stream; "+
 			"the registry reports it detached until its first keepalive re-creates the lease",
 			"error", err, "daemonID", daemonID, "userID", userID)
 	}
 
-	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Daemon registered",
+	logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Daemon registered",
 		"userID", userID,
 		"daemonID", daemonID,
 		"hostname", reg.Hostname,
@@ -1066,7 +1066,7 @@ func (s *Service) ConnectDaemon(
 		},
 	}
 	if err := stream.Send(regAck); err != nil {
-		logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to send registration_ack", "error", err)
+		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to send registration_ack", "error", err)
 		return err
 	}
 
@@ -1084,7 +1084,7 @@ func (s *Service) ConnectDaemon(
 
 	for _, projectPath := range requestedProjectPaths {
 		if err := s.sendLoadAndWatchProjectConfig(ctx, conn, projectPath, true); err != nil {
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to request initial project config load/watch",
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to request initial project config load/watch",
 				"error", err,
 				"daemonID", conn.daemonID,
 				"projectPath", projectPath,
@@ -1097,7 +1097,7 @@ func (s *Service) ConnectDaemon(
 	// replace already removed the slot.
 	defer func() {
 		s.teardownConnection(conn, "inbound stream ended")
-		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Daemon disconnected", "userID", userID, "daemonID", daemonID)
+		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Daemon disconnected", "userID", userID, "daemonID", daemonID)
 	}()
 
 	// When the listener drains, tell this daemon to move.
@@ -1161,7 +1161,7 @@ func (s *Service) RegisterOutboundConnection(
 		LastStreamActivity: now,
 	}); err != nil {
 		// See the inbound path: the first keepalive re-creates it.
-		logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to write the reachability lease for a new daemon stream; "+
+		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to write the reachability lease for a new daemon stream; "+
 			"the registry reports it detached until its first keepalive re-creates the lease",
 			"error", err, "daemonID", daemonID, "userID", userID)
 	}
@@ -1205,7 +1205,7 @@ func (s *Service) RegisterOutboundConnection(
 
 	if oldConn != nil {
 		oldConn.closeDone()
-		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Replaced old daemon connection (outbound)", "userID", userID, "daemonID", daemonID)
+		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Replaced old daemon connection (outbound)", "userID", userID, "daemonID", daemonID)
 	}
 
 	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
@@ -1383,7 +1383,7 @@ func (s *Service) handleIncoming(ctx context.Context, conn *daemonConnection) er
 		// a silent stall here is indistinguishable from a dead daemon.
 		if time.Since(lastQueueFullLog) >= time.Minute {
 			lastQueueFullLog = time.Now()
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Inbound state queue full; stream reads are blocked until the state worker catches up",
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Inbound state queue full; stream reads are blocked until the state worker catches up",
 				"daemonID", conn.daemonID, "userID", conn.userID, "queued", len(stateQueue))
 		}
 		select {
@@ -1431,7 +1431,7 @@ func (s *Service) renewLease(ctx context.Context, conn *daemonConnection, stream
 	// would take down the whole gateway rather than one renewal.
 	defer func() {
 		if r := recover(); r != nil {
-			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Panic renewing daemon reachability lease",
+			logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Panic renewing daemon reachability lease",
 				"panic", r, "daemonID", conn.daemonID)
 		}
 	}()
@@ -1458,7 +1458,7 @@ func (s *Service) renewLease(ctx context.Context, conn *daemonConnection, stream
 		})
 	}()
 	if err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to renew daemon reachability lease", "error", err, "daemonID", conn.daemonID)
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to renew daemon reachability lease", "error", err, "daemonID", conn.daemonID)
 		return
 	}
 	if !created {
@@ -1469,7 +1469,7 @@ func (s *Service) renewLease(ctx context.Context, conn *daemonConnection, stream
 	// nothing else would tell them to re-read before their slow fallback
 	// poll. The fresh row also lost the detected ports the state worker
 	// believes it already wrote.
-	logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Re-created a missing reachability lease for a live daemon stream",
+	logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Re-created a missing reachability lease for a live daemon stream",
 		"daemonID", conn.daemonID, "userID", conn.userID, "attachedAt", conn.attachedAt)
 	conn.leaseRecreated.Store(true)
 	s.publishDaemonListChanged(conn.userID, conn.daemonID)
@@ -1490,7 +1490,7 @@ func (s *Service) runInboundStateWorker(ctx context.Context, conn *daemonConnect
 func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection, msg *reliantv1.DaemonMessage, streamEnded <-chan struct{}) {
 	defer func() {
 		if r := recover(); r != nil {
-			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Panic applying daemon state message",
+			logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Panic applying daemon state message",
 				"panic", r, "daemonID", conn.daemonID, "messageType", fmt.Sprintf("%T", msg.GetMessage()))
 		}
 	}()
@@ -1533,7 +1533,7 @@ func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection,
 		if hb := m.Heartbeat; hb != nil && hb.MemoryLimitBytes > 0 {
 			if err := s.deps.Repo.UpdateDaemonAttachmentMemory(ctx, conn.daemonID,
 				int64(hb.MemoryUsedBytes), int64(hb.MemoryLimitBytes), hb.MemoryPressure); err != nil {
-				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon memory telemetry", "error", err, "daemonID", conn.daemonID)
+				logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon memory telemetry", "error", err, "daemonID", conn.daemonID)
 			}
 		}
 		// Persist the heartbeat's disk report on the daemon row, where the
@@ -1556,7 +1556,7 @@ func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection,
 			portsKey := fmt.Sprint(hb.DetectedPorts)
 			if portsKey != conn.lastDetectedPortsKey {
 				if err := s.deps.Repo.UpdateDaemonAttachmentPorts(ctx, conn.daemonID, hb.DetectedPorts); err != nil {
-					logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon detected ports", "error", err, "daemonID", conn.daemonID)
+					logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon detected ports", "error", err, "daemonID", conn.daemonID)
 				} else {
 					conn.lastDetectedPortsKey = portsKey
 				}
@@ -1565,17 +1565,17 @@ func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection,
 
 	case *reliantv1.DaemonMessage_ProjectDiscovery:
 		if err := s.handleProjectDiscovery(ctx, conn, m.ProjectDiscovery); err != nil {
-			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle project discovery", "error", err, "daemonID", conn.daemonID)
+			logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to handle project discovery", "error", err, "daemonID", conn.daemonID)
 		}
 
 	case *reliantv1.DaemonMessage_LoadProjectConfigsResponse:
 		if err := s.handleLoadProjectConfigsResponse(ctx, conn, m.LoadProjectConfigsResponse); err != nil {
-			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle load project configs response", "error", err, "daemonID", conn.daemonID)
+			logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to handle load project configs response", "error", err, "daemonID", conn.daemonID)
 		}
 
 	case *reliantv1.DaemonMessage_ProjectConfigDelta:
 		if err := s.handleProjectConfigDelta(ctx, conn, m.ProjectConfigDelta); err != nil {
-			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle project config delta", "error", err, "daemonID", conn.daemonID)
+			logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to handle project config delta", "error", err, "daemonID", conn.daemonID)
 		}
 
 	case *reliantv1.DaemonMessage_LocalModelInventory:
@@ -1583,16 +1583,16 @@ func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection,
 
 	case *reliantv1.DaemonMessage_FileSystemChanged:
 		if err := s.handleFileSystemChanged(ctx, conn, m.FileSystemChanged); err != nil {
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle filesystem changed", "error", err)
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to handle filesystem changed", "error", err)
 		}
 
 	case *reliantv1.DaemonMessage_DaemonCommandFailed:
 		if err := s.handleDaemonCommandFailed(ctx, conn, m.DaemonCommandFailed); err != nil {
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle daemon command failure", "error", err)
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to handle daemon command failure", "error", err)
 		}
 
 	default:
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Unknown message type", "userID", conn.userID)
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Unknown message type", "userID", conn.userID)
 	}
 }
 
@@ -1707,7 +1707,7 @@ func (s *Service) handleProjectDiscovery(ctx context.Context, conn *daemonConnec
 
 	daemon, err := s.deps.Repo.GetDaemon(ctx, conn.daemonID)
 	if err != nil {
-		logging.Debug(LOG_PREFIX_TOOLS_DAEMON+" Project discovery ignored for unknown daemon", "daemonID", conn.daemonID)
+		logging.DebugContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Project discovery ignored for unknown daemon", "daemonID", conn.daemonID)
 		return nil
 	}
 
@@ -1725,13 +1725,13 @@ func (s *Service) handleProjectDiscovery(ctx context.Context, conn *daemonConnec
 		// One unresolvable path must not abandon the rest of the daemon's
 		// projects, so this logs and moves on rather than returning.
 		if _, err := s.ensureOwnedProjectForPath(ctx, conn, path, discovered); err != nil {
-			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Skipped discovered project that could not be resolved",
+			logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Skipped discovered project that could not be resolved",
 				"error", err, "projectPath", path, "daemonID", conn.daemonID, "userID", conn.userID)
 			continue
 		}
 
 		if sendErr := s.sendLoadAndWatchProjectConfig(ctx, conn, path, true); sendErr != nil {
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed requesting config load/watch for discovered project",
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed requesting config load/watch for discovered project",
 				"error", sendErr,
 				"projectPath", path,
 				"daemonID", conn.daemonID,
@@ -1747,7 +1747,7 @@ func (s *Service) handleLoadProjectConfigsResponse(ctx context.Context, conn *da
 		return nil
 	}
 	if strings.TrimSpace(resp.Error) != "" {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Daemon returned load_project_configs error",
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Daemon returned load_project_configs error",
 			"requestID", resp.RequestId,
 			"error", resp.Error,
 			"daemonID", conn.daemonID,
@@ -1790,7 +1790,7 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 	// failure path, FileSystemChanged carries no request id — only the path
 	// — and the path is exactly what the queued row recorded.
 	if err := s.deps.Repo.MarkProjectDaemonInstalled(ctx, project.ID, conn.daemonID); err != nil {
-		logging.Warn("could not settle queued clone after filesystem change",
+		logging.WarnContext(ctx, "could not settle queued clone after filesystem change",
 			"error", err, "project_id", project.ID, "daemon_id", conn.daemonID)
 	} else {
 		// The clone just SUCCEEDED on this daemon, which means forge.yaml is
@@ -1907,7 +1907,7 @@ func (s *Service) handleDaemonCommandFailed(ctx context.Context, conn *daemonCon
 	// actually reacts to, and must be written either way.
 	if msg.CommandType == "git.clone" && msg.RequestId != "" {
 		if err := s.deps.Repo.ResolveQueuedProjectDaemon(ctx, msg.RequestId, cloneFailureReason(msg.ErrorMessage)); err != nil {
-			logging.Warn("could not mark queued clone failed",
+			logging.WarnContext(ctx, "could not mark queued clone failed",
 				"error", err, "request_id", msg.RequestId)
 		}
 	}
@@ -1994,7 +1994,7 @@ func (s *Service) persistProjectConfigSnapshot(ctx context.Context, conn *daemon
 		// therefore stays empty indefinitely. Log it as the data loss it is —
 		// the previous "project not found for path" wording sent debugging
 		// after a missing row when the row existed and was merely unresolvable.
-		logging.Error("[ToolsDaemon] Dropped project config snapshot — no project resolvable for this daemon's user",
+		logging.ErrorContext(ctx, "[ToolsDaemon] Dropped project config snapshot — no project resolvable for this daemon's user",
 			"error", err,
 			"projectPath", projectPath,
 			"daemonID", conn.daemonID,
@@ -2122,7 +2122,7 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 	// observed on disk (bidirectional; see projectfacts.ReconcileGitRepo).
 	if discovered != nil {
 		if updateErr := projectfacts.ReconcileGitRepo(ctx, s.deps.Repo, project, discovered.IsGitRepo); updateErr != nil {
-			logging.Warn("ensureOwnedProjectForPath: failed to update git status", "error", updateErr, "projectID", project.ID)
+			logging.WarnContext(ctx, "ensureOwnedProjectForPath: failed to update git status", "error", updateErr, "projectID", project.ID)
 		}
 	}
 
@@ -2581,7 +2581,7 @@ func (s *Service) ConnectedDaemonCountForUser(userID string) int {
 func (s *Service) SendToolRequest(ctx context.Context, userID, daemonID string, request *toolexec.ToolExecutionRequest) error {
 	conn, err := s.connForUser(userID, daemonID)
 	if err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Cannot send request - named daemon not connected",
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Cannot send request - named daemon not connected",
 			"userID", userID,
 			"daemonID", daemonID,
 			"requestID", request.RequestID)
@@ -2619,7 +2619,7 @@ func (s *Service) SendToolRequest(ctx context.Context, userID, daemonID string, 
 	case <-conn.done:
 		return fmt.Errorf("daemon connection closed for user %s while sending tool request %s", userID, request.RequestID)
 	default:
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Send buffer full",
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Send buffer full",
 			"userID", userID,
 			"requestID", request.RequestID)
 		return fmt.Errorf("daemon send buffer full for user %s, request %s dropped", userID, request.RequestID)

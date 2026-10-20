@@ -657,6 +657,12 @@ function parseChatState(state: unknown): ChatState {
 }
 
 
+/**
+ * The chat_state_changed reason of an automation run archiving itself on
+ * success (internal/workflow/runtime/activities/handlers ReasonAutomationSucceeded).
+ */
+export const AUTOMATION_SUCCEEDED_REASON = "automation_succeeded";
+
 function handleChatStateChange(update: UserUpdate) {
   const { chat_id } = update;
   if (!chat_id) return;
@@ -692,6 +698,11 @@ function handleChatStateChange(update: UserUpdate) {
     applyChatPatch(projectId, chat_id, { state: nextState });
     // The archived list needs a refetch — we can't construct an ArchivedChat row.
     queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
+
+    // An automation run that finished successfully archives itself. Nobody
+    // put it away, so whoever is watching it finish stays on it, with its
+    // messages: it is still their open run, and it was never a sidebar row.
+    if (data.reason === AUTOMATION_SUCCEEDED_REASON) return;
 
     // Archiving the chat the user is currently viewing has to move them off it:
     // it just left the sidebar, and the eviction below drops the messages the

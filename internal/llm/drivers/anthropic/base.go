@@ -644,11 +644,11 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 		for ; hasNext; hasNext = stream.Next() {
 			event := stream.Current()
 
-			logging.Debug("Stream event received",
+			logging.DebugContext(ctx, "Stream event received",
 				"event_type", fmt.Sprintf("%T", event.AsAny()))
 
 			if err := accumulated.Accumulate(event); err != nil {
-				logging.Warn("Stream accumulation error, will send accumulated message",
+				logging.WarnContext(ctx, "Stream accumulation error, will send accumulated message",
 					"error", err, "blocks", len(accumulated.Content))
 				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
 				break
@@ -681,7 +681,7 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 				if e.Delta.Type == "signature_delta" && e.Delta.Signature != "" {
 					// Manually accumulate signature - SDK's Accumulate may not handle this properly
 					manualThinkingSignature += e.Delta.Signature
-					logging.Debug("Received signature_delta",
+					logging.DebugContext(ctx, "Received signature_delta",
 						"delta_len", len(e.Delta.Signature),
 						"total_signature_len", len(manualThinkingSignature))
 					continue
@@ -723,14 +723,14 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 
 			case anthropic.MessageStopEvent:
 				gotMessageStop = true
-				logging.Debug("Message stop event",
+				logging.DebugContext(ctx, "Message stop event",
 					"reason", accumulated.StopReason,
 					"blocks", len(accumulated.Content))
 				eventChan <- b.buildCompleteEvent(accumulated, manualThinkingSignature)
 			}
 		}
 
-		logging.Debug("Stream loop exited",
+		logging.DebugContext(ctx, "Stream loop exited",
 			"gotMessageStop", gotMessageStop,
 			"accumulated_blocks", len(accumulated.Content),
 			"manual_signature_len", len(manualThinkingSignature))
@@ -743,13 +743,13 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 			streamErr = openErr
 		}
 		if err := streamErr; err != nil && !errors.Is(err, io.EOF) {
-			logging.Warn("Stream error", "error", err)
+			logging.WarnContext(ctx, "Stream error", "error", err)
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
 		}
 
 		// Always send complete event if not already sent
 		if !gotMessageStop {
-			logging.Warn("Stream ended without MessageStopEvent, using accumulated data",
+			logging.WarnContext(ctx, "Stream ended without MessageStopEvent, using accumulated data",
 				"blocks", len(accumulated.Content),
 				"manual_signature_len", len(manualThinkingSignature))
 			eventChan <- b.buildCompleteEvent(accumulated, manualThinkingSignature)

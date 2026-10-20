@@ -82,7 +82,7 @@ func (r *ManagedDaemonReconciler) Start(ctx context.Context) error {
 		return fmt.Errorf("create consumer: %w", err)
 	}
 
-	logging.Info(reconcilerLogPrefix + " started — subscribing to " + subjectManagedDaemonState)
+	logging.InfoContext(ctx, reconcilerLogPrefix+" started — subscribing to "+subjectManagedDaemonState)
 	defer r.connector.CloseAll()
 
 	cc, err := consumer.Consume(func(msg jetstream.Msg) {
@@ -94,7 +94,7 @@ func (r *ManagedDaemonReconciler) Start(ctx context.Context) error {
 	defer cc.Stop()
 
 	<-ctx.Done()
-	logging.Info(reconcilerLogPrefix + " stopped")
+	logging.InfoContext(ctx, reconcilerLogPrefix+" stopped")
 	return nil
 }
 
@@ -136,7 +136,7 @@ func (r *ManagedDaemonReconciler) createConsumerWithRetry(
 			return nil, ctx.Err()
 		}
 		if !logged {
-			logging.Info(reconcilerLogPrefix +
+			logging.InfoContext(ctx, reconcilerLogPrefix+
 				" DAEMON_STATE stream not found yet — waiting for control plane to create it; retrying consumer creation")
 			logged = true
 		}
@@ -167,7 +167,7 @@ func isStreamNotFound(err error) bool {
 func (r *ManagedDaemonReconciler) handleMessage(ctx context.Context, msg jetstream.Msg) {
 	var snap managedDaemonStateSnapshot
 	if err := json.Unmarshal(msg.Data(), &snap); err != nil {
-		logging.Error(reconcilerLogPrefix+" unmarshal snapshot failed", "error", err)
+		logging.ErrorContext(ctx, reconcilerLogPrefix+" unmarshal snapshot failed", "error", err)
 		_ = msg.Term()
 		return
 	}
@@ -221,7 +221,7 @@ func (r *ManagedDaemonReconciler) reconcile(ctx context.Context, snap managedDae
 	r.mu.Unlock()
 
 	if started > 0 || stopped > 0 {
-		logging.Info(reconcilerLogPrefix+" reconciled snapshot",
+		logging.InfoContext(ctx, reconcilerLogPrefix+" reconciled snapshot",
 			"desired", len(desired), "active", len(active), "started", started, "stopped", stopped)
 	}
 }

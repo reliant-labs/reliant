@@ -158,7 +158,7 @@ func (c *LocalClient) SendMessages(ctx context.Context, prompts []string, messag
 				return nil, c.wrapRequestError(retryErr)
 			}
 			if retry {
-				logging.Warn(fmt.Sprintf("Retrying local request... attempt %d of %d", attempts, models.MaxRetries))
+				logging.WarnContext(ctx, fmt.Sprintf("Retrying local request... attempt %d of %d", attempts, models.MaxRetries))
 				select {
 				case <-ctx.Done():
 					return nil, ctx.Err()
@@ -299,7 +299,7 @@ func (c *LocalClient) StreamResponse(ctx context.Context, prompts []string, mess
 			if err := stream.Err(); err != nil && !errors.Is(err, io.EOF) {
 				retry, after, retryErr := c.shouldRetry(attempts, err)
 				if retryErr == nil && retry && content.Len() == 0 && thinking.Len() == 0 && len(toolCalls) == 0 {
-					logging.Warn(fmt.Sprintf("Retrying local stream... attempt %d of %d", attempts, models.MaxRetries))
+					logging.WarnContext(ctx, fmt.Sprintf("Retrying local stream... attempt %d of %d", attempts, models.MaxRetries))
 					select {
 					case <-ctx.Done():
 						send(llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()})

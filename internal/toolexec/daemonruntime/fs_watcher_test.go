@@ -140,6 +140,7 @@ func TestHashWalkDir_EmptyDirectory(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHashGitFileTree_WorksInGitRepo(t *testing.T) {
+	t.Parallel()
 	dir := initGitRepo(t)
 	writeFile(t, filepath.Join(dir, "a.txt"), "hello")
 	gitAdd(t, dir, ".")
@@ -151,6 +152,7 @@ func TestHashGitFileTree_WorksInGitRepo(t *testing.T) {
 }
 
 func TestHashGitFileTree_DetectsUntrackedFile(t *testing.T) {
+	t.Parallel()
 	dir := initGitRepo(t)
 	writeFile(t, filepath.Join(dir, "a.txt"), "tracked")
 	gitAdd(t, dir, ".")
@@ -168,6 +170,7 @@ func TestHashGitFileTree_DetectsUntrackedFile(t *testing.T) {
 }
 
 func TestHashGitFileTree_DetectsModifiedTrackedFile(t *testing.T) {
+	t.Parallel()
 	dir := initGitRepo(t)
 	target := filepath.Join(dir, "a.txt")
 	writeFile(t, target, "original")
@@ -186,6 +189,7 @@ func TestHashGitFileTree_DetectsModifiedTrackedFile(t *testing.T) {
 }
 
 func TestHashGitFileTree_NonGitDirReturnsError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir() // not a git repo
 
 	_, err := hashGitFileTree(context.Background(), dir)
@@ -197,6 +201,7 @@ func TestHashGitFileTree_NonGitDirReturnsError(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHashFileTree_GitRepo(t *testing.T) {
+	t.Parallel()
 	dir := initGitRepo(t)
 	writeFile(t, filepath.Join(dir, "a.txt"), "hello")
 	gitAdd(t, dir, ".")

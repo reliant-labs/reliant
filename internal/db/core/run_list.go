@@ -85,6 +85,9 @@ type RunListItem struct {
 	// The title is empty when the parent chat is gone or not the caller's.
 	ParentChatID    string
 	ParentChatTitle string
+
+	// Archived is whether the run's chat is archived.
+	Archived bool
 }
 
 // RunStore reads the cross-cutting run list.

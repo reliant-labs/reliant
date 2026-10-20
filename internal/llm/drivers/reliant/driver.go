@@ -525,7 +525,7 @@ func (c *ReliantClient) SendMessages(ctx context.Context, prompts []string, mess
 				return nil, retryErr
 			}
 			if retry {
-				logging.Warn("Retrying Reliant API request",
+				logging.WarnContext(ctx, "Retrying Reliant API request",
 					"attempt", attempts,
 					"max_retries", models.MaxRetries,
 					"after_ms", wait.Delay.Milliseconds(),
@@ -628,7 +628,7 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 						toolCallResults = append(toolCallResults, c.toolCalls(acc.ChatCompletion)...)
 					}
 				} else if currentContent != "" {
-					logging.Warn(fmt.Sprintf("Stream ended without completion choices but has content (length: %d) - treating as interrupted stream", len(currentContent)))
+					logging.WarnContext(ctx, fmt.Sprintf("Stream ended without completion choices but has content (length: %d) - treating as interrupted stream", len(currentContent)))
 					eventChan <- llm.DriverEvent{
 						Type:  llm.EventError,
 						Error: fmt.Errorf("stream interrupted: incomplete response from Reliant proxy"),
@@ -636,7 +636,7 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 					close(eventChan)
 					return
 				} else {
-					logging.Error("Stream ended with no content and no completion data")
+					logging.ErrorContext(ctx, "Stream ended with no content and no completion data")
 					eventChan <- llm.DriverEvent{
 						Type:  llm.EventError,
 						Error: fmt.Errorf("empty response from Reliant proxy"),
@@ -673,7 +673,7 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 				return
 			}
 			if retry {
-				logging.Warn("Retrying Reliant API request",
+				logging.WarnContext(ctx, "Retrying Reliant API request",
 					"attempt", attempts,
 					"max_retries", models.MaxRetries,
 					"after_ms", wait.Delay.Milliseconds(),

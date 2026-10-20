@@ -51,12 +51,12 @@ func (s *Service) LockRunControl(ctx context.Context, chatID string) (release fu
 	start := time.Now()
 	release, err := s.repo.LockChatRunControl(ctx, chatID)
 	if err != nil {
-		logging.Warn("[runs] Could not take the run-control lock; proceeding unserialized — a concurrent pause and send may be applied out of order",
+		logging.WarnContext(ctx, "[runs] Could not take the run-control lock; proceeding unserialized — a concurrent pause and send may be applied out of order",
 			"chatID", chatID, "waited", time.Since(start), "error", err)
 		return func() {}
 	}
 	if waited := time.Since(start); waited > runControlWaitWorthLogging {
-		logging.Info("[runs] Waited for another run-control operation on this chat",
+		logging.InfoContext(ctx, "[runs] Waited for another run-control operation on this chat",
 			"chatID", chatID, "waited", waited)
 	}
 	return release
@@ -96,7 +96,7 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 	}
 
 	if err := s.repo.DeleteWorkflowCheckpoint(ctx, workflowID); err != nil {
-		logging.Warn("[runs] Failed to clear workflow checkpoint while terminating",
+		logging.WarnContext(ctx, "[runs] Failed to clear workflow checkpoint while terminating",
 			"workflowID", workflowID, "error", err)
 	}
 
@@ -107,7 +107,7 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 		return nil
 	}
 	if stateErr != nil {
-		logging.Warn("[runs] Could not read Temporal state before terminating; terminating anyway",
+		logging.WarnContext(ctx, "[runs] Could not read Temporal state before terminating; terminating anyway",
 			"workflowID", workflowID, "error", stateErr)
 	}
 
@@ -118,7 +118,7 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 		return fmt.Errorf("temporal client cannot terminate workflows")
 	}
 	if err := terminator.TerminateWorkflow(ctx, workflowID, "", "Workflow terminated by operator"); err != nil {
-		logging.Warn("[runs] Failed to terminate workflow in Temporal; continuing to reconcile DB",
+		logging.WarnContext(ctx, "[runs] Failed to terminate workflow in Temporal; continuing to reconcile DB",
 			"workflowID", workflowID, "error", err)
 	}
 
@@ -134,7 +134,7 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 // behind, the marker would read as a wait nobody is in.
 func (s *Service) clearUsageLimitWait(ctx context.Context, chatID string) {
 	if err := s.repo.ClearUsageLimitWait(ctx, chatID, "", time.Now()); err != nil {
-		logging.Warn("[runs] Failed to clear the usage-limit wait marker of a stopped run",
+		logging.WarnContext(ctx, "[runs] Failed to clear the usage-limit wait marker of a stopped run",
 			"chatID", chatID, "error", err)
 	}
 }
@@ -162,14 +162,14 @@ func (s *Service) Resume(ctx context.Context, chatID string, inputUpdate map[str
 	}
 
 	if s.isStuck(ctx, workflowID) {
-		logging.Warn("[runs] Refusing to resume stuck run — database says failed while Temporal says running",
+		logging.WarnContext(ctx, "[runs] Refusing to resume stuck run — database says failed while Temporal says running",
 			"chatID", chatID, "workflowID", workflowID)
 		return ResumeOutcome{Kind: OutcomeUnresumable, WorkflowID: workflowID}, nil
 	}
 
 	if err := s.pause.ResumeWorkflow(ctx, workflowID, chatID, inputUpdate); err != nil {
 		if errors.Is(err, workflow.ErrWorkflowNotFound) {
-			logging.Info("[runs] Run is gone from Temporal — caller must recover",
+			logging.InfoContext(ctx, "[runs] Run is gone from Temporal — caller must recover",
 				"chatID", chatID, "workflowID", workflowID)
 			return ResumeOutcome{Kind: OutcomeNeedsRecovery, WorkflowID: workflowID}, nil
 		}
@@ -209,7 +209,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, chatID string, inputUpd
 	newRunID, resumeErr := s.pause.ResumeInterruptedWorkflow(ctx, workflowID, chatID, inputUpdate)
 	if resumeErr == nil {
 		s.RecordRun(ctx, chatID, workflowID, newRunID)
-		logging.Info("[runs] Interrupted run reset-and-resumed (precise nested resume)",
+		logging.InfoContext(ctx, "[runs] Interrupted run reset-and-resumed (precise nested resume)",
 			"chatID", chatID, "workflowID", workflowID, "newRunID", newRunID)
 		return ResumeOutcome{Kind: OutcomeResumed, WorkflowID: workflowID, RunID: newRunID}, nil
 	}
@@ -218,7 +218,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, chatID string, inputUpd
 	// to tell the user: resetting forks from inside the oversized history and
 	// dies within a few events, so without an explanation the chat just stops.
 	if errors.Is(resumeErr, workflow.ErrHistoryLimitExceeded) {
-		logging.Warn("[runs] Run hit Temporal's history limit — restart at checkpoint",
+		logging.WarnContext(ctx, "[runs] Run hit Temporal's history limit — restart at checkpoint",
 			"chatID", chatID, "workflowID", workflowID)
 		return ResumeOutcome{
 			Kind:                 OutcomeNeedsRestart,
@@ -233,7 +233,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, chatID string, inputUpd
 	// fallbacks to the coarse restart.
 	if errors.Is(resumeErr, workflow.ErrNoReplayableHistory) || errors.Is(resumeErr, workflow.ErrResetAttemptsExhausted) ||
 		errors.Is(resumeErr, workflow.ErrReplayDiverged) {
-		logging.Info("[runs] Run is not reset-resumable — restart at checkpoint",
+		logging.InfoContext(ctx, "[runs] Run is not reset-resumable — restart at checkpoint",
 			"chatID", chatID, "workflowID", workflowID, "reason", resumeErr)
 		return ResumeOutcome{Kind: OutcomeNeedsRestart, WorkflowID: workflowID}, nil
 	}
@@ -242,7 +242,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, chatID string, inputUpd
 	// so it is reported as such rather than failing the caller's request —
 	// but it is logged at error, because unlike the cases above it is a bug
 	// or an outage rather than a designed fallback.
-	logging.Error("[runs] Reset-and-replay failed — restart at checkpoint",
+	logging.ErrorContext(ctx, "[runs] Reset-and-replay failed — restart at checkpoint",
 		"chatID", chatID, "workflowID", workflowID, "error", resumeErr)
 	return ResumeOutcome{Kind: OutcomeNeedsRestart, WorkflowID: workflowID}, nil
 }
@@ -257,14 +257,14 @@ func (s *Service) ResumeInterrupted(ctx context.Context, chatID string, inputUpd
 // restarts the run, and it has already succeeded.
 func (s *Service) ResumeViaSignal(ctx context.Context, in ResumeViaSignalInput) (ResumeOutcome, error) {
 	if err := s.pause.SignalWithRecovery(ctx, in.TargetWorkflowID, in.SignalName, in.SignalData, in.InputUpdate); err != nil {
-		logging.Info("[runs] Signal-parked run not reset-resumable — restart at checkpoint",
+		logging.InfoContext(ctx, "[runs] Signal-parked run not reset-resumable — restart at checkpoint",
 			"chatID", in.ChatID, "workflowID", in.WorkflowID,
 			"signal", in.SignalName, "error", err)
 		return ResumeOutcome{Kind: OutcomeNeedsRestart, WorkflowID: in.WorkflowID}, nil
 	}
 
 	if err := s.repo.UpdateWorkflowStatus(ctx, in.WorkflowID, db.Active()); err != nil {
-		logging.Warn("[runs] Resumed run but failed to mark it running — the workflow or reconciler will correct it",
+		logging.WarnContext(ctx, "[runs] Resumed run but failed to mark it running — the workflow or reconciler will correct it",
 			"workflowID", in.WorkflowID, "error", err)
 	}
 
@@ -360,7 +360,7 @@ func (s *Service) State(ctx context.Context, workflowID string) (RunState, error
 		isRunning = true
 	default:
 		// Unknown status — treat as completed to allow starting fresh.
-		logging.Warn("[runs] Unknown Temporal workflow status",
+		logging.WarnContext(ctx, "[runs] Unknown Temporal workflow status",
 			"workflowID", workflowID, "status", execStatus.String())
 		status = db.Completed()
 	}
@@ -375,7 +375,7 @@ func (s *Service) State(ctx context.Context, workflowID string) (RunState, error
 func (s *Service) RecordRun(ctx context.Context, chatID, workflowID, runID string) {
 	chat, err := s.repo.GetChat(ctx, chatID)
 	if err != nil {
-		logging.Error("[runs] Failed to load chat to record run ids",
+		logging.ErrorContext(ctx, "[runs] Failed to load chat to record run ids",
 			"chatID", chatID, "error", err)
 		return
 	}
@@ -383,7 +383,7 @@ func (s *Service) RecordRun(ctx context.Context, chatID, workflowID, runID strin
 	chat.WorkflowID = &workflowID
 	chat.RunID = &runID
 	if err := s.repo.UpdateChat(ctx, chat); err != nil {
-		logging.Error("[runs] Failed to record run ids on chat",
+		logging.ErrorContext(ctx, "[runs] Failed to record run ids on chat",
 			"chatID", chatID, "error", err)
 	}
 }
@@ -405,7 +405,7 @@ func (s *Service) Reconcile(ctx context.Context, workflowID string, dbStatus, te
 		return
 	}
 
-	logging.Debug("[runs] Reconciling run status: database differs from Temporal",
+	logging.DebugContext(ctx, "[runs] Reconciling run status: database differs from Temporal",
 		"workflowID", workflowID, "dbStatus", dbStatus, "temporalStatus", temporalStatus)
 
 	// The status and the cascade commit together: written apart, the
@@ -423,7 +423,7 @@ func (s *Service) Reconcile(ctx context.Context, workflowID string, dbStatus, te
 		return s.cascadeTerminal(txCtx, workflowID, temporalStatus.StopReason)
 	})
 	if err != nil {
-		logging.Warn("[runs] Failed to reconcile run status",
+		logging.WarnContext(ctx, "[runs] Failed to reconcile run status",
 			"workflowID", workflowID, "error", err)
 	}
 }
@@ -444,7 +444,7 @@ func (s *Service) cascadeTerminal(ctx context.Context, workflowID string, reason
 func (s *Service) reconcileStoppedRun(ctx context.Context, workflowID string, status db.WorkflowStatus) {
 	wf, err := s.repo.GetWorkflow(ctx, workflowID)
 	if err != nil {
-		logging.Warn("[runs] Failed to load workflow before stopped-run reconciliation",
+		logging.WarnContext(ctx, "[runs] Failed to load workflow before stopped-run reconciliation",
 			"workflowID", workflowID, "error", err)
 		return
 	}
@@ -480,7 +480,7 @@ func (s *Service) markTerminated(ctx context.Context, workflowID string) error {
 func (s *Service) voidPendingQuestion(ctx context.Context, chatID string) {
 	q, err := s.repo.GetPendingQuestionByChatID(ctx, chatID)
 	if err != nil {
-		logging.Warn("[runs] Failed to look up pending question while terminating",
+		logging.WarnContext(ctx, "[runs] Failed to look up pending question while terminating",
 			"chatID", chatID, "error", err)
 		return
 	}
@@ -490,7 +490,7 @@ func (s *Service) voidPendingQuestion(ctx context.Context, chatID string) {
 
 	terminatedResponse := `{"action":"terminated","reason":"workflow terminated by operator"}`
 	if err := s.repo.ResolveQuestion(ctx, q.ID, &terminatedResponse); err != nil {
-		logging.Warn("[runs] Failed to resolve pending question while terminating",
+		logging.WarnContext(ctx, "[runs] Failed to resolve pending question while terminating",
 			"chatID", chatID, "questionID", q.ID, "error", err)
 		return
 	}
@@ -503,7 +503,7 @@ func (s *Service) voidPendingQuestion(ctx context.Context, chatID string) {
 		StepID:     q.StepID,
 		Status:     "resolved",
 	}); err != nil {
-		logging.Warn("[runs] Failed to emit question resolved update while terminating",
+		logging.WarnContext(ctx, "[runs] Failed to emit question resolved update while terminating",
 			"chatID", chatID, "questionID", q.ID, "error", err)
 	}
 }
@@ -563,7 +563,7 @@ func (s *Service) refreshRunID(ctx context.Context, chatID, workflowID string) s
 func (s *Service) recordRunIfChanged(ctx context.Context, chatID, workflowID, runID string) {
 	chat, err := s.repo.GetChat(ctx, chatID)
 	if err != nil {
-		logging.Error("[runs] Failed to load chat to record run ids",
+		logging.ErrorContext(ctx, "[runs] Failed to load chat to record run ids",
 			"chatID", chatID, "error", err)
 		return
 	}
@@ -574,7 +574,7 @@ func (s *Service) recordRunIfChanged(ctx context.Context, chatID, workflowID, ru
 	chat.WorkflowID = &workflowID
 	chat.RunID = &runID
 	if err := s.repo.UpdateChat(ctx, chat); err != nil {
-		logging.Error("[runs] Failed to record run ids on chat",
+		logging.ErrorContext(ctx, "[runs] Failed to record run ids on chat",
 			"chatID", chatID, "error", err)
 	}
 }

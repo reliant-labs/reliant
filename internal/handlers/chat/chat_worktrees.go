@@ -48,7 +48,7 @@ func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string,
 	if len(ids) > 0 {
 		rows, err := s.deps.Repo.ListWorktreesByIDs(ctx, ids)
 		if err != nil {
-			logging.Warn("Failed to load the workspaces of a chat list", "error", err, "projectID", projectID)
+			logging.WarnContext(ctx, "Failed to load the workspaces of a chat list", "error", err, "projectID", projectID)
 		} else {
 			byID := make(map[string]*reliantv1.WorktreeSummary, len(rows))
 			for _, w := range rows {
@@ -69,7 +69,7 @@ func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string,
 	}
 	mains, err := s.deps.Repo.ListWorktrees(ctx, db.WorktreeFilters{ProjectID: &projectID, MainOnly: true, Limit: 1})
 	if err != nil {
-		logging.Warn("Failed to load the main workspace of a chat list", "error", err, "projectID", projectID)
+		logging.WarnContext(ctx, "Failed to load the main workspace of a chat list", "error", err, "projectID", projectID)
 		return nil
 	}
 	if len(mains) == 0 {
@@ -87,7 +87,7 @@ func (s *Service) attachWorktree(ctx context.Context, chat *db.Chat, out *relian
 	}
 	rows, err := s.deps.Repo.ListWorktreesByIDs(ctx, []string{*chat.WorktreeID})
 	if err != nil {
-		logging.Warn("Failed to load the chat's workspace", "error", err, "chatID", chat.ID)
+		logging.WarnContext(ctx, "Failed to load the chat's workspace", "error", err, "chatID", chat.ID)
 		return
 	}
 	if len(rows) > 0 {

@@ -1,0 +1,102 @@
+---
+title: "Adding a feature"
+description: "The everyday loop in a forge project: services, RPCs, entities, migrations, generate, lint and tests"
+---
+
+Most changes to a forge project follow the same loop: edit the inputs you own (a proto file or a migration), let forge regenerate the plumbing, write the logic, and run the gate. This page walks each kind of change. [Project anatomy](/forge/project-anatomy) explains where the resulting files live.
+
+## A new service
+
+```bash
+forge scaffold service billing
+```
+
+This writes `proto/services/billing/v1/billing.proto`, the handler directory `internal/handlers/billing/`, a subcommand on your binary, a test harness entry, and wires the service into `cmd/<binary>/main.go`. Nothing needs adding to the deploy files: in every environment, the binary's `server` command already serves every service on one port. Name services after a domain thing (`billing`, `order`), and scaffold several at once with `forge scaffold service billing invoices`.
+
+## A new entity
+
+Mark a message in the service's proto with `// forge:entity`, and run bare `forge scaffold`:
+
+```protobuf
+// forge:entity
+message Invoice {
+  string customer_id = 2;
+  int64 amount_cents = 3;
+  string currency = 4 [(buf.validate.field).string.len = 3];
+}
+```
+
+```bash
+forge scaffold --dry-run   # what it would create
+forge scaffold
+```
+
+You get the create-table migration, the five CRUD RPCs, the generated data access, the handler wiring, a lifecycle test and frontend pages. The proto is how you express nullability (`optional`), enums, validation (`buf.validate` rules) and markers such as `forge:read-only` (clients can read but never write the field) or `forge:secret` (stored but never returned). `forge project annotations` prints the full vocabulary.
+
+Once an entity exists, its migration is yours: forge never edits it, and later schema changes are new migrations.
+
+## A custom RPC
+
+Anything that is not plain create/read/update/delete is a custom RPC. Declare it in the service block and its messages, then scaffold it:
+
+```protobuf
+service BillingService {
+  rpc IssueInvoice(IssueInvoiceRequest) returns (IssueInvoiceResponse);
+}
+```
+
+```bash
+forge scaffold rpc billing IssueInvoice
+```
+
+The handler lands in its own file, `internal/handlers/billing/rpc_issue_invoice.go`, returning `Unimplemented` until you fill it in, along with a test row that fails as soon as you implement it, prompting you to write a real assertion. Forge never invents an RPC from a message pair: if the `service` block does not name it, it does not exist.
+
+An RPC named exactly `Create<Entity>`, `Get<Entity>`, `Update<Entity>`, `Delete<Entity>` or `List<Entities>` is wired as CRUD. If one of those needs custom behaviour (creating a task also creates its dependencies, say), put `// forge:custom` above it in the proto and it is scaffolded as a custom RPC instead.
+
+Every RPC requires a signed-in caller unless it is annotated `auth_required: false`. What the caller may do is checked in your handler; read who they are with `middleware.GetUser(ctx)`.
+
+## A schema change
+
+```bash
+forge db migration new add_invoice_due_date
+```
+
+This creates `db/migrations/<timestamp>_add_invoice_due_date.up.sql` with a fresh UTC version, so parallel branches never collide. Write plain Postgres DDL. There is no down migration: forge rolls forward, and a bad migration is fixed by another one. Because a deploy runs the migration while the previous release is still serving, mark whether that release survives it (`--backward-compatible "<why>"` or `--breaks-rollback "<why>"`); `forge lint --migration-safety` flags hazards such as adding a `NOT NULL` column to a populated table.
+
+Then run `forge generate` to update the generated structs, and add the field to the proto message if clients should see it. `forge env up` applies pending migrations locally; deployed environments apply them before any new pod serves.
+
+## Generate, lint, test
+
+Run this after any proto or migration change, and before you call anything done:
+
+```bash
+forge generate && forge lint && go build ./... && task test
+```
+
+- `forge generate` re-derives everything from your protos and applied migrations. It never touches your handlers, migrations or other owned files, and it does almost nothing when nothing changed, so run it whenever in doubt.
+- `forge lint` checks Go, proto and frontend code, migration safety, architecture conventions and edits to generated files. It fixes formatting in place first. `forge lint --quiet` prints only failures, with the verdict on the last line.
+- `task test` runs the Go tests with the race detector, against a real Postgres, plus every frontend's tests. While iterating, `task test:short -- ./internal/handlers/billing/...` runs one package's fast tests, cached.
+- `task ci` runs the whole pull-request gate locally: generated-code check, lint, build, vulnerability scan, environment rendering, unit and integration tests.
+
+Generated mocks live next to every interface you declare in a package's `contract.go`, and handler tests use a table-driven harness, so tests rarely need hand-written fakes.
+
+## Development data
+
+`forge env up` seeds an empty dev database with rows derived from your schema, consistent across foreign keys and within every constraint. Text it cannot infer reads as `sample_<column>_<n>` until you teach it your domain's words in `db/seeds/vocab.yaml`. `forge db seed status` shows what was seeded and `forge db reset` drops, recreates, migrates and reseeds the dev database.
+
+## Background work
+
+```bash
+forge scaffold worker invoice_sender                                     # a long-running worker
+forge scaffold worker nightly_report --kind cron --schedule "0 3 * * *"  # a scheduled one
+```
+
+Workers run inside the same `server` process as your services, locally and when hosted. `forge scaffold` also creates adapters (outbound clients for a third-party API), webhooks, frontends, packages, binaries and Kubernetes operators; `forge scaffold --help` lists them.
+
+## Configuration
+
+Settings are declared once, in `proto/config/v1/config.proto`, with their environment variable and default. `forge generate` turns them into a typed config your code receives, and per-environment values go in `deploy/kcl/<env>/`. A field marked `sensitive: true` becomes a secret reference with no place in git to paste a value; set it with [`forge secret set`](/forge/secrets).
+
+## Related topics
+
+[Environments & deploys](/forge/environments-and-deploys) for shipping the change, and [Troubleshooting](/forge/troubleshooting) when generate or lint stops you. Agents can load the `api`, `db`, `proto`, `testing` and `services` skills for the full conventions.

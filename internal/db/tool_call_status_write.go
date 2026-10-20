@@ -66,7 +66,7 @@ func UpsertToolCallStatus(ctx context.Context, repo ToolCallStatusStore, call *c
 
 	if existing, err := repo.GetToolCall(ctx, call.ID); err == nil && existing != nil {
 		if existing.ChatID != call.ChatID {
-			logging.Warn("[ToolCallStatus] Tool call id is already used by another chat's call; not recording this chat's status",
+			logging.WarnContext(ctx, "[ToolCallStatus] Tool call id is already used by another chat's call; not recording this chat's status",
 				"tool_call_id", call.ID, "chat_id", call.ChatID, "holding_chat_id", existing.ChatID, "status", call.Status)
 			return fmt.Errorf("%w: id %q, writing for chat %q", core.ErrToolCallIDInAnotherChat, call.ID, call.ChatID)
 		}

@@ -33,35 +33,39 @@ The LLM returns:
 
 ## Tool Call Requirements
 
-**Critical caveat:** When the LLM requests a tool, the tool must exist in the available tools list.
+A model can only use the tools it was offered on that turn. A `call_llm` node says what those are in `tools_config`:
 
 ```yaml
-# This will fail if 'bash' isn't in the tools list
 - id: call_llm
   type: call_llm
   args:
-    tools: ["view", "edit"]  # bash not included!
-    # If LLM tries to call 'bash', it will error
+    model: {tags: [flagship]}
+    tools_config:
+      preloaded_tools: ["view", "edit", "tag:shell"]   # handed to the model up front
+      loadable_tools: ["*"]                            # what load_tool may add later
 ```
 
 ### Tool Matching Rules
 
 1. Tool calls reference tools by name
-2. The name must exactly match an available tool
+2. The name must exactly match a tool offered on that turn
 3. Tool inputs must match the tool's schema
-4. Unknown tools cause execution errors
+4. A call to a tool that was not offered is refused, never executed: the model gets an error result saying so ("Tool 'write' was not offered on this turn") and can carry on
 
 ### Best Practice
 
-Use `tools: true` to include all default tools, or explicitly list needed tools:
+`preloaded_tools` is a starting bundle, not a boundary: list what the agent needs in hand, and let `loadable_tools` decide what it may reach for with `load_tool`. Leaving `loadable_tools` out means everything is loadable; an empty list means exactly what was preloaded and nothing more.
 
 ```yaml
-# Include all default tools
-tools: true
+# The standard coding set, with anything else loadable on demand
+preloaded_tools: ["tag:coding:default"]
 
-# Or be explicit
-tool_filter: ["tag:default"]
+# Exactly these tools, nothing more
+preloaded_tools: ["view", "tag:shell"]
+loadable_tools: []
 ```
+
+Entries can be tool names, tags (`tag:coding:default`, `tag:shell`, `tag:web`), globs (`mcp__github__*`) and exclusions (`!tag:shell`). The [Tools reference](/reference/tools) lists every tool and its tags.
 
 ## System Messages
 
@@ -69,11 +73,11 @@ System prompts set the LLM's behavior and context. They're sent first in every r
 
 ### Where System Prompts Come From
 
-1. **Workflow-level** `system_prompt` input
-2. **Preset** configuration
-3. **Node-level** override on `call_llm`
+1. **Node-level** `system_prompt` on a `call_llm` node
+2. **The workflow's `system_prompt` input**, which a workflow passes to its `call_llm` node. The built-in agent's is empty by default, which means Reliant's own default prompt
+3. **A preset** that sets `system_prompt`, and a node's `args`, which override the preset's value
 
-These are combined, with node-level taking precedence.
+Reliant adds context of its own to every agent call: the project or worktree it works in, its machine, and the project's [memory files](/settings/memories).
 
 ### System Prompt Best Practices
 
@@ -101,87 +105,37 @@ system_prompt: |
 
 ### Context Window
 
-Each model has a maximum context window (total tokens for input + output):
-
-| Model | Context Window |
-|-------|---------------|
-| claude-4.5-sonnet | 200K tokens |
-| claude-4.6-opus | 200K tokens |
-| gpt-4.1 | 128K tokens |
-| gpt-4o | 128K tokens |
-| gemini-2.5-pro | 1M tokens |
-| gemini-2.5-flash | 1M tokens |
+Each model has a maximum context window (total tokens for input + output). The [Models reference](/reference/models) lists every model Reliant knows with its context window, generated from the same registry Reliant selects models from.
 
 ### Token Counting
 
-Reliant tracks token usage per-thread. When context grows large:
+Reliant tracks token usage per thread. When context grows large:
 
-1. **Compaction** summarizes older messages
-2. **Filtering** reduces tool result verbosity
-3. **Truncation** as a last resort
+1. **Compaction** summarizes older messages once the thread passes the model's compaction threshold (`compaction_threshold` on the Call LLM node's output). The built-in agent does this on its own, with the loop's own model
+2. **Filtering** reduces tool result verbosity, when a workflow adds a filtering step (see [Multi-Agent Patterns](/workflows/patterns#context-management))
 
 ### Caching
 
-Some providers cache repeated prefixes for efficiency:
-
-| Provider | Caching |
-|----------|---------|
-| Anthropic | Prompt caching (automatic) |
-| OpenAI | No automatic caching |
-| Google | Context caching available |
-
-Reliant leverages caching automatically when available.
+Providers that support prompt caching reuse a repeated prefix (the system prompt, tools and earlier messages) at a lower price. Reliant uses it automatically wherever the provider offers it; the [Models reference](/reference/models) marks those models with 💾.
 
 ## Provider Differences
 
-### Anthropic (Claude)
-
-**Strengths:**
-- Excellent code understanding
-- Strong tool use
-- Good at following complex instructions
-
-**Caveats:**
-- Tool calls must include `thinking` for Opus models
-- Rate limits vary by tier
-- No image generation
-
-### OpenAI (GPT-4)
-
-**Strengths:**
-- Fast response times
-- Good general knowledge
-- Image understanding
-
-**Caveats:**
-- Different tool call format (function calling)
-- JSON mode requires explicit enabling
-- Rate limits per-minute
-
-### Google (Gemini)
-
-**Strengths:**
-- Large context window
-- Good multimodal support
-- Competitive pricing
-
-**Caveats:**
-- Different safety filter behavior
-- Tool use syntax differences
-- Regional availability varies
+Reliant drives every provider through the same request and output shape, so a workflow does not change when its model does: tool calls arrive as `tool_calls`, and every provider's way of ending a turn is mapped onto the same `stop_reason` values. What does differ between models is listed per model in the [Models reference](/reference/models): context window, attachments, prompt caching, and whether and how hard it can think (`thinking_level` is clamped to the levels a model supports). Select models by tag rather than by ID, as the built-in workflows and presets do, so a workflow keeps working with whichever providers a user has connected.
 
 ## Common Pitfalls
 
 ### 1. Tool Call Without Matching Tool
 
 ```yaml
-# Problem: LLM might call tools not in the list
-tools: ["view", "grep"]
+# Problem: the model needs a tool it was not offered, and loading is closed off
+tools_config:
+  preloaded_tools: ["view"]
+  loadable_tools: []
 
-# Solution: Include all tools the LLM might need
-tools: true
-# or
-tool_filter: ["tag:default"]
+# Solution: preload what it needs, or let it load the rest on demand
+tools_config:
+  preloaded_tools: ["tag:coding:default"]
+  loadable_tools: ["*"]
 ```
 
 ### 2. Context Overflow
@@ -237,18 +191,21 @@ condition: size(nodes.llm.tool_calls) > 0
 
 ## Response Tools
 
-Response tools force structured output from the LLM:
+A response tool asks the model for structured output: a tool only the model can call, whose input is the answer you described with a JSON Schema.
 
 ```yaml
 response_tool:
   name: decision
   description: Report your decision
-  options:
-    approve: "Code looks good - explain why"
-    reject: "Issues found - describe them"
+  schema:
+    type: object
+    required: [choice, value]
+    properties:
+      choice: {type: string, enum: [approve, reject]}
+      value: {type: string, description: Why}
 ```
 
-The LLM **must** call this tool to complete. Output is always:
+When the model calls it, the Call LLM node parses the call into `response_data`:
 
 ```json
 {
@@ -256,6 +213,8 @@ The LLM **must** call this tool to complete. Output is always:
   "value": "The code follows all conventions and has good test coverage."
 }
 ```
+
+The tool is offered, not forced, so a model can still answer in text. Guard reads with `has(nodes.<id>.response_data.choice)`, or use `builtin://structured-agent`, which keeps reminding the model until it answers through the tool.
 
 **Use for:**
 - Routing decisions
@@ -266,21 +225,16 @@ See [Workflow Examples](/examples/workflow-snippets) for patterns.
 
 ## Debugging LLM Issues
 
-### Check the Raw Response
+### Look at the Run
 
-In the UI, expand a message to see:
-- Full prompt sent
-- Raw LLM response
-- Token counts
-- Timing information
+Open the run in **Workflows → Runs**. Its page shows the transcript and how the run was launched, and **Diagram** shows the workflow's steps as they ran. The context gauge in the chat header shows how much of the model's window the thread is using. From a terminal, `reliant workflow status <execution-id>` prints a snapshot of a run and `reliant workflow follow <execution-id>` streams its events as they happen.
 
 ### Common Fixes
 
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
-| "Tool not found" | Tool not in available list | Add tool to `tools` or `tool_filter` |
-| "requires ... permission" | Tool permission level too low | Set `permission` to `mutating` or `orchestrator` |
-| Truncated output | Hit max_tokens | Increase limit or use streaming |
+| "Tool '…' was not offered on this turn" | Tool not preloaded, and not loadable | Add it to `preloaded_tools`, or allow it in `loadable_tools` |
+| Truncated output | Hit `max_tokens` | Raise `max_tokens` on the Call LLM node; loop on `stop_reason` so a truncated turn continues |
 | Repeated responses | No stop condition | Add iteration limits to loops |
 | Slow responses | Large context | Enable compaction or filter results |
 | Wrong tool called | Ambiguous prompt | Clarify in system prompt |

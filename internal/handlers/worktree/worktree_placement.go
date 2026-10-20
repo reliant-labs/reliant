@@ -36,7 +36,7 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 		}
 		daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
 		if err != nil {
-			logging.Error("Failed to resolve the chat's machine for worktree "+verb, "error", err, "chatID", chat.ID)
+			logging.ErrorContext(ctx, "Failed to resolve the chat's machine for worktree "+verb, "error", err, "chatID", chat.ID)
 			return machinewake.Target{}, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve the chat's machine"))
 		}
 		if daemonID != "" {
@@ -55,7 +55,7 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 	daemonID, err := s.deps.Router.ResolveDaemonID(ctx, userID)
 	if err != nil {
 		err = s.wake().AfterFailure(ctx, userID, machinewake.Target{NoMachine: noMachine}, err)
-		logging.Error("Failed to resolve daemon for worktree "+verb, "error", err, "userID", userID)
+		logging.ErrorContext(ctx, "Failed to resolve daemon for worktree "+verb, "error", err, "userID", userID)
 		return machinewake.Target{}, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon available to %s worktree: %w", verb, err))
 	}
 	return machinewake.Target{DaemonID: daemonID, NoMachine: noMachine}, nil

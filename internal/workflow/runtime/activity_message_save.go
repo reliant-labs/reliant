@@ -226,7 +226,7 @@ func (w *ActivityWrapper[I, O]) saveActivityMessage(
 	}
 	durationMs := time.Since(start).Milliseconds()
 
-	logging.Debug("[ActivityWrapper] Saved node message",
+	logging.DebugContext(ctx, "[ActivityWrapper] Saved node message",
 		"activityType", activityType,
 		"stepID", stepID,
 		"messageID", saveOutput.GetMessageId(),
@@ -346,7 +346,7 @@ func writeMessageWithRetry(
 		if ctx.Err() != nil || time.Now().Add(backoff).After(deadline) {
 			return nil, fmt.Errorf("writing message (after %d tries): %w", try, err)
 		}
-		logging.Warn("[ActivityWrapper] Message write failed, retrying",
+		logging.WarnContext(ctx, "[ActivityWrapper] Message write failed, retrying",
 			"stepID", rtx.StepID, "try", try, "backoff", backoff, "error", err)
 		select {
 		case <-ctx.Done():

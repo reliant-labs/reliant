@@ -160,7 +160,7 @@ func (c *VertexAIClient) sendMessagesClaude(ctx context.Context, prompts []strin
 
 	// Make the API request
 	endpoint := c.getClaudeEndpoint(false)
-	logging.Debug("Vertex AI Claude: Sending request", "endpoint", endpoint, "model", c.options.Model.APIModel)
+	logging.DebugContext(ctx, "Vertex AI Claude: Sending request", "endpoint", endpoint, "model", c.options.Model.APIModel)
 
 	respBody, err := c.makeClaudeRequest(ctx, endpoint, req, token)
 	if err != nil {
@@ -195,7 +195,7 @@ func (c *VertexAIClient) streamResponseClaude(ctx context.Context, prompts []str
 
 		// Make the streaming API request
 		endpoint := c.getClaudeEndpoint(true)
-		logging.Debug("Vertex AI Claude: Starting stream", "endpoint", endpoint, "model", c.options.Model.APIModel)
+		logging.DebugContext(ctx, "Vertex AI Claude: Starting stream", "endpoint", endpoint, "model", c.options.Model.APIModel)
 
 		resp, err := c.makeClaudeStreamRequest(ctx, endpoint, req, token)
 		if err != nil {
@@ -642,7 +642,7 @@ func (c *VertexAIClient) processClaudeStream(ctx context.Context, body io.Reader
 		// Check for context cancellation before each decode
 		select {
 		case <-ctx.Done():
-			logging.Debug("VertexAI Claude stream cancelled", "ctxErr", ctx.Err())
+			logging.DebugContext(ctx, "VertexAI Claude stream cancelled", "ctxErr", ctx.Err())
 			return
 		default:
 			// Not cancelled, continue
@@ -653,7 +653,7 @@ func (c *VertexAIClient) processClaudeStream(ctx context.Context, body io.Reader
 			if err != io.EOF {
 				// Don't warn if context was cancelled - that's expected
 				if ctx.Err() == nil {
-					logging.Warn("Stream decode error", "error", err)
+					logging.WarnContext(ctx, "Stream decode error", "error", err)
 				}
 			}
 			break
@@ -662,7 +662,7 @@ func (c *VertexAIClient) processClaudeStream(ctx context.Context, body io.Reader
 		switch event.Type {
 		case "message_start":
 			if event.Message != nil {
-				logging.Debug("Stream started", "model", event.Message.Model)
+				logging.DebugContext(ctx, "Stream started", "model", event.Message.Model)
 			}
 
 		case "content_block_start":

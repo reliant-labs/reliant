@@ -31,13 +31,13 @@ func (in *Intake) declaredDedupeKey(ctx context.Context, trigger *core.Trigger, 
 	}
 	window, err := triggerspec.ParseDedupeWindow(decl.DedupeWindow)
 	if err != nil {
-		logging.Warn("trigger dedupe_window unusable; using the receiver's dedupe key", "trigger_id", trigger.ID, "error", err)
+		logging.WarnContext(ctx, "trigger dedupe_window unusable; using the receiver's dedupe key", "trigger_id", trigger.ID, "error", err)
 		return ev.DedupeKey
 	}
 	root := FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, OccurredAt: occurredAt, Payload: ev.Payload, Sender: ev.Sender}.Root()
 	rendered, err := triggerspec.RenderDedupeKey(decl.DedupeKey, ActivationScope(ctx, in.repo, trigger, decl, root))
 	if err != nil {
-		logging.Warn("trigger dedupe_key did not render for a delivery; using the receiver's dedupe key",
+		logging.WarnContext(ctx, "trigger dedupe_key did not render for a delivery; using the receiver's dedupe key",
 			"trigger_id", trigger.ID, "error", err)
 		return ev.DedupeKey
 	}

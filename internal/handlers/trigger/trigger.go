@@ -107,7 +107,7 @@ func (s *Service) CreateTrigger(
 		cred, err = s.writeWebhookCredentials(ctx, trigger, def, true)
 		if err != nil {
 			if delErr := s.deps.Repo.DeleteTrigger(ctx, trigger.ID); delErr != nil {
-				logging.Error("failed to remove a webhook trigger whose credentials could not be written",
+				logging.ErrorContext(ctx, "failed to remove a webhook trigger whose credentials could not be written",
 					"trigger_id", trigger.ID, "error", err, "delete_error", delErr)
 			}
 			return nil, err
@@ -121,12 +121,12 @@ func (s *Service) CreateTrigger(
 		// sync fails only through a Syncer, so there is one to ask.
 		if s.deps.Syncer != nil {
 			if schedErr := s.deps.Syncer.Delete(ctx, trigger.ID); schedErr != nil {
-				logging.Error("failed to remove the schedule of a trigger that could not be created",
+				logging.ErrorContext(ctx, "failed to remove the schedule of a trigger that could not be created",
 					"trigger_id", trigger.ID, "sync_error", err, "delete_error", schedErr)
 			}
 		}
 		if delErr := s.deps.Repo.DeleteTrigger(ctx, trigger.ID); delErr != nil {
-			logging.Error("failed to remove a trigger whose schedule could not be created",
+			logging.ErrorContext(ctx, "failed to remove a trigger whose schedule could not be created",
 				"trigger_id", trigger.ID, "sync_error", err, "delete_error", delErr)
 		}
 		return nil, triggerSyncError(err)
@@ -189,13 +189,13 @@ func (s *Service) ListTriggers(
 	}
 	recent, err := s.deps.Repo.RecentTriggerFirings(ctx, userID, ids, triggers.HealthWindow)
 	if err != nil {
-		logging.Warn("could not resolve triggers' recent firings", "error", err)
+		logging.WarnContext(ctx, "could not resolve triggers' recent firings", "error", err)
 		recent = nil
 	}
 	// And one for every polled trigger's source state, which health folds in.
 	regs, err := s.deps.Repo.ListTriggerRegistrations(ctx, userID, ids)
 	if err != nil {
-		logging.Warn("could not resolve triggers' source state", "error", err)
+		logging.WarnContext(ctx, "could not resolve triggers' source state", "error", err)
 		regs = nil
 	}
 
@@ -812,11 +812,11 @@ func (s *Service) render(ctx context.Context, t *core.Trigger) *reliantv1.Trigge
 	}
 	recent, err := s.deps.Repo.RecentTriggerFirings(ctx, t.UserID, []string{t.ID}, triggers.HealthWindow)
 	if err != nil {
-		logging.Warn("could not resolve a trigger's recent firings", "trigger_id", t.ID, "error", err)
+		logging.WarnContext(ctx, "could not resolve a trigger's recent firings", "trigger_id", t.ID, "error", err)
 	}
 	regs, err := s.deps.Repo.ListTriggerRegistrations(ctx, t.UserID, []string{t.ID})
 	if err != nil {
-		logging.Warn("could not resolve a trigger's source state", "trigger_id", t.ID, "error", err)
+		logging.WarnContext(ctx, "could not resolve a trigger's source state", "trigger_id", t.ID, "error", err)
 	}
 	return s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], triggers.LaunchWorkflows{Repo: s.deps.Repo})
 }
@@ -837,7 +837,7 @@ func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firi
 		} else {
 			// The workflow could not be read right now; that says nothing
 			// about the trigger, so its firings still describe it.
-			logging.Warn("could not resolve a trigger's declaration", "trigger_id", t.ID, "error", err)
+			logging.WarnContext(ctx, "could not resolve a trigger's declaration", "trigger_id", t.ID, "error", err)
 		}
 	}
 	return proto
@@ -850,7 +850,7 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 	if s.deps.Syncer != nil && syncs(t.Kind) {
 		next, err := s.deps.Syncer.NextFireAt(ctx, t.ID)
 		if err != nil {
-			logging.Warn("could not resolve a trigger's next fire time", "trigger_id", t.ID, "error", err)
+			logging.WarnContext(ctx, "could not resolve a trigger's next fire time", "trigger_id", t.ID, "error", err)
 		} else {
 			nextFireAt = next
 		}
@@ -860,7 +860,7 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 	if err != nil {
 		// Params that will not round-trip through structpb. Report the trigger
 		// without them rather than failing the whole call.
-		logging.Error("could not fully render a trigger", "trigger_id", t.ID, "error", err)
+		logging.ErrorContext(ctx, "could not fully render a trigger", "trigger_id", t.ID, "error", err)
 		return &reliantv1.Trigger{Id: t.ID, Name: t.Name, ProjectId: t.ProjectID, Enabled: t.Enabled}
 	}
 	switch t.Kind {

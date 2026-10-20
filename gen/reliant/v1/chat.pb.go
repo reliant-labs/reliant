@@ -2776,7 +2776,11 @@ func (x *SearchChatsResponse) GetTotal() int32 {
 	return 0
 }
 
-// ListArchivedChatsRequest lists archived chats
+// ListArchivedChatsRequest lists the caller's archived chats: the sidebar's
+// Archived tab. It applies the same policy as ListChats' sidebar_only
+// (chats_with_activity.list_in_sidebar), so an archived automation run — an
+// automation archives its runs once they finish successfully — is not listed
+// here; it stays browsable in Runs (RunService.ListRuns, include_archived).
 type ListArchivedChatsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields

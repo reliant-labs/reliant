@@ -77,7 +77,7 @@ func (s *Service) find(ctx context.Context, userID, accountID string) (core.Prov
 // fails the change: the account store is already correct.
 func (s *Service) afterChange(ctx context.Context, userID, provider string) {
 	if err := s.deps.Store.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
-		logging.Warn("Failed to emit config_health refetch after provider account change", "provider", provider, "error", err)
+		logging.WarnContext(ctx, "Failed to emit config_health refetch after provider account change", "provider", provider, "error", err)
 	}
 }
 

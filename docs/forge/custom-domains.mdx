@@ -1,5 +1,5 @@
 ---
-title: "Custom Domains"
+title: "Custom domains"
 description: "Serve your project on a hostname you own — the DNS records to publish, why the TXT record exists, and how long each step takes"
 ---
 
@@ -8,7 +8,8 @@ By default a deployed project answers on a generated hostname like
 `hounders.club`, `api.hounders.club` — pointed at the same deployment, served
 over HTTPS with a certificate Reliant obtains for you.
 
-You manage them in the Reliant app under **Forge → Domains**.
+You manage them in the Reliant app under **Apps → Domains**, or from a terminal
+with `forge domain` (below).
 
 ## The two halves: a domain and a binding
 
@@ -32,7 +33,7 @@ including the verification you already paid for.
 
 ## Adding a domain
 
-In **Forge → Domains**, choose **Add domain**. You give the hostname and, in the
+In **Apps → Domains**, choose **Add domain**. You give the hostname and, in the
 same step, what it should serve:
 
 - **A workload or site** — pick an environment and a target. The target does
@@ -148,6 +149,24 @@ From the domain's detail view:
   verification and certificate are lost; re-adding it means publishing DNS and
   waiting again.
 
+## From the command line
+
+The same operations are `forge domain` commands. Each names an environment
+with `--env`, which tells forge which control plane to talk to (and, for
+`bind`, where the target lives):
+
+```bash
+forge domain add hounders.club --env prod          # claim it; prints the DNS records
+forge domain bind hounders.club --env prod --target web
+forge domain bind www.hounders.club --env prod --redirect-to hounders.club
+forge domain verify hounders.club --env prod       # same as Check DNS now
+forge domain show hounders.club --env prod         # state, binding and required records
+forge domain unbind hounders.club --env prod       # stop serving, keep the domain
+forge domain rm hounders.club --env prod           # remove it entirely
+```
+
+`--target` names a workload or frontend in that environment.
+
 ## Conflicts
 
 Ownership is decided at **verification**, not at creation. If another
@@ -182,4 +201,4 @@ the app shows you.
 
 ## Related topics
 
-[Deploy & host your app](/features/deploy-and-host) covers what gets hosted and what the deploy needs before a domain has anything to serve.
+[Hosting on Reliant](/forge/hosting) covers what gets hosted, and [Environments & deploys](/forge/environments-and-deploys) what a deploy needs before a domain has anything to serve.

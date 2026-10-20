@@ -331,7 +331,7 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 	// IMPORTANT: We extend the deadline but preserve cancellation from parent.
 	// This allows user-initiated cancellation to still work.
 	if ok && remaining < 15*time.Second {
-		logging.Debug("[GEMINI] Extending deadline for minimum timeout",
+		logging.DebugContext(ctx, "[GEMINI] Extending deadline for minimum timeout",
 			"originalRemaining", remaining,
 			"newTimeout", "15s")
 
@@ -362,14 +362,14 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 		}()
 	}
 
-	logging.Debug("[GEMINI] SendMessages called",
+	logging.DebugContext(ctx, "[GEMINI] SendMessages called",
 		"messageCount", len(messages),
 		"toolCount", len(tools))
 
 	geminiMessages := g.convertMessages(messages)
 
 	if len(geminiMessages) == 0 {
-		logging.Error("[GEMINI] Message conversion produced zero messages",
+		logging.ErrorContext(ctx, "[GEMINI] Message conversion produced zero messages",
 			"originalCount", len(messages))
 		return nil, fmt.Errorf("message conversion resulted in zero messages (received %d messages)", len(messages))
 	}
@@ -395,7 +395,7 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 		lastMsg = geminiMessages[0]
 	}
 
-	logging.Debug("[GEMINI] Sending request",
+	logging.DebugContext(ctx, "[GEMINI] Sending request",
 		"totalMessages", len(geminiMessages),
 		"historyCount", len(history),
 		"model", g.options.Model.APIModel,
@@ -418,7 +418,7 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 		thinkingConfig := g.buildThinkingConfig(g.options.Model.APIModel, g.options.ReasoningEffort)
 		if thinkingConfig != nil {
 			config.ThinkingConfig = thinkingConfig
-			logging.Debug("[GEMINI] Enabled thinking",
+			logging.DebugContext(ctx, "[GEMINI] Enabled thinking",
 				"model", g.options.Model.APIModel,
 				"effort", g.options.ReasoningEffort)
 		}
@@ -429,15 +429,15 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 	}
 	if toolConfig := g.buildToolConfig(tools); toolConfig != nil {
 		config.ToolConfig = toolConfig
-		logging.Debug("[GEMINI] Pinned tool choice", "tool", g.options.ForceToolChoice)
+		logging.DebugContext(ctx, "[GEMINI] Pinned tool choice", "tool", g.options.ForceToolChoice)
 	}
 	chat, err := g.client.Chats.Create(ctx, g.options.Model.APIModel, config, history)
 	if err != nil {
-		logging.Error("[GEMINI] Failed to create chat", "error", err, "model", g.options.Model.APIModel)
+		logging.ErrorContext(ctx, "[GEMINI] Failed to create chat", "error", err, "model", g.options.Model.APIModel)
 		return nil, fmt.Errorf("failed to create Gemini chat: %w", err)
 	}
 	if chat == nil {
-		logging.Error("[GEMINI] Chat is nil after creation", "model", g.options.Model.APIModel)
+		logging.ErrorContext(ctx, "[GEMINI] Chat is nil after creation", "model", g.options.Model.APIModel)
 		return nil, fmt.Errorf("gemini chat creation returned nil")
 	}
 
@@ -458,7 +458,7 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 				return nil, retryErr
 			}
 			if retry {
-				logging.Warn(fmt.Sprintf("Retrying due to rate limit... attempt %d of %d", attempts, models.MaxRetries))
+				logging.WarnContext(ctx, fmt.Sprintf("Retrying due to rate limit... attempt %d of %d", attempts, models.MaxRetries))
 				select {
 				case <-ctx.Done():
 					return nil, ctx.Err()
@@ -496,7 +496,7 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 			}
 		}
 
-		logging.Debug("[GEMINI] Response received",
+		logging.DebugContext(ctx, "[GEMINI] Response received",
 			"contentLength", len(content),
 			"toolCallCount", len(toolCalls))
 		finishReason := message.FinishReasonEndTurn
@@ -533,7 +533,7 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 		// CRITICAL: Always send completion event, even on errors/panics
 		defer func() {
 			if r := recover(); r != nil {
-				logging.Error("[GEMINI] Panic recovered in StreamResponse", "panic", r)
+				logging.ErrorContext(ctx, "[GEMINI] Panic recovered in StreamResponse", "panic", r)
 				eventChan <- llm.DriverEvent{
 					Type:  llm.EventError,
 					Error: fmt.Errorf("stream panic: %v", r),
@@ -542,7 +542,7 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 
 			if !sentComplete {
 				// Send fallback complete event with whatever we accumulated
-				logging.Warn("[GEMINI] Sending fallback complete event",
+				logging.WarnContext(ctx, "[GEMINI] Sending fallback complete event",
 					"hasContent", currentContent != "",
 					"toolCallCount", len(toolCalls))
 
@@ -567,11 +567,11 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 		}()
 
 		// Convert and validate messages
-		logging.Debug("[GEMINI] StreamResponse starting", "messageCount", len(messages))
+		logging.DebugContext(ctx, "[GEMINI] StreamResponse starting", "messageCount", len(messages))
 
 		geminiMessages := g.convertMessagesWithValidation(messages)
 		if len(geminiMessages) == 0 {
-			logging.Error("[GEMINI] Message conversion produced zero messages", "originalCount", len(messages))
+			logging.ErrorContext(ctx, "[GEMINI] Message conversion produced zero messages", "originalCount", len(messages))
 			eventChan <- llm.DriverEvent{
 				Type:  llm.EventError,
 				Error: fmt.Errorf("message conversion failed: received %d messages but produced 0", len(messages)),
@@ -601,7 +601,7 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 			lastMsg = geminiMessages[0]
 		}
 
-		logging.Debug("[GEMINI] Stream configuration",
+		logging.DebugContext(ctx, "[GEMINI] Stream configuration",
 			"totalMessages", len(geminiMessages),
 			"historyCount", len(history),
 			"model", g.options.Model.APIModel,
@@ -625,7 +625,7 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 			thinkingConfig := g.buildThinkingConfig(g.options.Model.APIModel, g.options.ReasoningEffort)
 			if thinkingConfig != nil {
 				config.ThinkingConfig = thinkingConfig
-				logging.Debug("[GEMINI] Enabled thinking for stream",
+				logging.DebugContext(ctx, "[GEMINI] Enabled thinking for stream",
 					"model", g.options.Model.APIModel,
 					"effort", g.options.ReasoningEffort)
 			}
@@ -633,17 +633,17 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 
 		if len(tools) > 0 {
 			config.Tools = g.convertTools(tools)
-			logging.Debug("[GEMINI] Tools configured", "toolCount", len(tools))
+			logging.DebugContext(ctx, "[GEMINI] Tools configured", "toolCount", len(tools))
 		}
 		if toolConfig := g.buildToolConfig(tools); toolConfig != nil {
 			config.ToolConfig = toolConfig
-			logging.Debug("[GEMINI] Pinned tool choice", "tool", g.options.ForceToolChoice)
+			logging.DebugContext(ctx, "[GEMINI] Pinned tool choice", "tool", g.options.ForceToolChoice)
 		}
 
 		// Create chat session
 		chat, err := g.client.Chats.Create(ctx, g.options.Model.APIModel, config, history)
 		if err != nil {
-			logging.Error("[GEMINI] Failed to create chat", "error", err)
+			logging.ErrorContext(ctx, "[GEMINI] Failed to create chat", "error", err)
 			eventChan <- llm.DriverEvent{
 				Type:  llm.EventError,
 				Error: fmt.Errorf("failed to create chat: %w", err),
@@ -651,7 +651,7 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 			return
 		}
 		if chat == nil {
-			logging.Error("[GEMINI] Chat creation returned nil")
+			logging.ErrorContext(ctx, "[GEMINI] Chat creation returned nil")
 			eventChan <- llm.DriverEvent{
 				Type:  llm.EventError,
 				Error: fmt.Errorf("chat creation returned nil"),
@@ -664,7 +664,7 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 		for {
 			attempts++
 			if attempts > 1 {
-				logging.Debug("[GEMINI] Retry attempt", "attempt", attempts)
+				logging.DebugContext(ctx, "[GEMINI] Retry attempt", "attempt", attempts)
 			}
 
 			// Reset per-attempt state
@@ -685,27 +685,27 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 			if streamErr != nil {
 				if errors.Is(streamErr, io.EOF) {
 					// Normal EOF - stream completed
-					logging.Debug("[GEMINI] Stream completed (EOF)")
+					logging.DebugContext(ctx, "[GEMINI] Stream completed (EOF)")
 					break
 				}
 
 				// Check if we should retry
 				retry, after, retryErr := g.shouldRetry(attempts, streamErr)
 				if retryErr != nil {
-					logging.Error("[GEMINI] Non-retriable error", "error", retryErr)
+					logging.ErrorContext(ctx, "[GEMINI] Non-retriable error", "error", retryErr)
 					eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
 					return
 				}
 
 				if retry {
-					logging.Warn("[GEMINI] Retriable error, backing off",
+					logging.WarnContext(ctx, "[GEMINI] Retriable error, backing off",
 						"attempt", attempts,
 						"maxRetries", models.MaxRetries,
 						"backoffMs", after)
 
 					select {
 					case <-ctx.Done():
-						logging.Debug("[GEMINI] Context cancelled during retry backoff")
+						logging.DebugContext(ctx, "[GEMINI] Context cancelled during retry backoff")
 						eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
 						return
 					case <-time.After(time.Duration(after) * time.Millisecond):
@@ -714,7 +714,7 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 				}
 
 				// Not retriable, emit error and exit
-				logging.Error("[GEMINI] Stream error", "error", streamErr)
+				logging.ErrorContext(ctx, "[GEMINI] Stream error", "error", streamErr)
 				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: streamErr}
 				return
 			}
@@ -747,7 +747,7 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 			}
 		}
 
-		logging.Debug("[GEMINI] Stream completed successfully",
+		logging.DebugContext(ctx, "[GEMINI] Stream completed successfully",
 			"contentLength", len(currentContent),
 			"toolCallCount", len(toolCalls),
 			"finishReason", finishReason)
@@ -785,7 +785,7 @@ func (g *GeminiClient) processStreamResponses(
 		// so we check explicitly to respond as soon as we get control back.
 		select {
 		case <-ctx.Done():
-			logging.Debug("[GEMINI] Context cancelled during stream processing")
+			logging.DebugContext(ctx, "[GEMINI] Context cancelled during stream processing")
 			return ctx.Err()
 		default:
 			// Not cancelled, continue processing
@@ -819,11 +819,11 @@ func (g *GeminiClient) processStreamResponses(
 
 					// Debug: Check if text parts have thought signatures
 					if len(part.ThoughtSignature) > 0 {
-						logging.Debug("[GEMINI] Received text part with thought signature",
+						logging.DebugContext(ctx, "[GEMINI] Received text part with thought signature",
 							"signatureLength", len(part.ThoughtSignature),
 							"textLen", len(delta))
 					} else {
-						logging.Debug("[GEMINI] Received text part without thought signature")
+						logging.DebugContext(ctx, "[GEMINI] Received text part without thought signature")
 					}
 				}
 
@@ -836,7 +836,7 @@ func (g *GeminiClient) processStreamResponses(
 				thoughtSig := ""
 				if len(part.ThoughtSignature) > 0 {
 					thoughtSig = base64.StdEncoding.EncodeToString(part.ThoughtSignature)
-					logging.Debug("[GEMINI] Received thought signature from model",
+					logging.DebugContext(ctx, "[GEMINI] Received thought signature from model",
 						"functionName", part.FunctionCall.Name,
 						"rawLength", len(part.ThoughtSignature),
 						"base64Length", len(thoughtSig))

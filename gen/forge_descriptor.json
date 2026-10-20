@@ -15728,6 +15728,10 @@
             "name": "parent_chat_title",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "archived",
+            "kind": "bool"
           }
         ],
         "reliant.v1.SignalRunRequest": [
@@ -37824,5 +37828,5 @@
       "Line": 20
     }
   ],
-  "source_hash": "3b3d2bace3b33170c67b2c9db56750991ac34babe9648f0679138ea06d57a145"
+  "source_hash": "310137f6b890df03a8565d3184ae01b391a1380df6b94aef8ad7508c3198e25a"
 }

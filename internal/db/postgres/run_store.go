@@ -73,7 +73,7 @@ func (s *runStore) ListRuns(ctx context.Context, filters core.RunListFilters) ([
 	for i, row := range rows {
 		items[i] = runItem(row.ChatID, row.RunID, row.Title, row.ProjectID, row.WorkflowName,
 			row.CreatedAt, row.LastActive, row.CompletedAt, row.Outcome, row.RootState, row.RootStopReason,
-			row.Activity, row.DisplayState, row.LaunchKind, row.TriggerID, row.TriggerName, row.ActiveDaemonID, row.ParentChatID, row.ParentChatTitle)
+			row.Activity, row.DisplayState, row.LaunchKind, row.TriggerID, row.TriggerName, row.ActiveDaemonID, row.ParentChatID, row.ParentChatTitle, row.ChatState)
 	}
 	return items, hasMore, nil
 }
@@ -94,7 +94,7 @@ func (s *runStore) LastRunPerWorkflow(ctx context.Context, filters core.RunListF
 	for i, row := range rows {
 		items[i] = runItem(row.ChatID, row.RunID, row.Title, row.ProjectID, row.WorkflowName,
 			row.CreatedAt, row.LastActive, row.CompletedAt, row.Outcome, row.RootState, row.RootStopReason,
-			row.Activity, row.DisplayState, row.LaunchKind, row.TriggerID, row.TriggerName, row.ActiveDaemonID, row.ParentChatID, row.ParentChatTitle)
+			row.Activity, row.DisplayState, row.LaunchKind, row.TriggerID, row.TriggerName, row.ActiveDaemonID, row.ParentChatID, row.ParentChatTitle, row.ChatState)
 	}
 	return items, nil
 }
@@ -114,7 +114,7 @@ func runItem(
 	createdAt, lastActive time.Time, completedAt sql.NullTime, outcome sql.NullString,
 	rootState, rootStop sql.NullInt32, activity, display int32,
 	launchKind, triggerID, triggerName, daemonID sql.NullString,
-	parentChatID string, parentChatTitle sql.NullString,
+	parentChatID string, parentChatTitle sql.NullString, chatState sql.NullInt32,
 ) *core.RunListItem {
 	return &core.RunListItem{
 		RunID:           runID,
@@ -135,5 +135,6 @@ func runItem(
 		DaemonID:        daemonID.String,
 		ParentChatID:    parentChatID,
 		ParentChatTitle: parentChatTitle.String,
+		Archived:        chatState.Valid && core.ChatState(chatState.Int32) == core.ChatStateArchived,
 	}
 }

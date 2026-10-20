@@ -90,7 +90,7 @@ func (r *Redriver) Run(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		if err := r.RedriveOnce(ctx); err != nil && ctx.Err() == nil {
-			logging.Warn("trigger event redrive pass failed", "error", err)
+			logging.WarnContext(ctx, "trigger event redrive pass failed", "error", err)
 		}
 		select {
 		case <-ctx.Done():

@@ -67,10 +67,10 @@ func (n *AgentMessageNotifier) NotifyAgentMessageQueued(ctx context.Context, cha
 
 	if err := n.client.SignalWorkflow(ctx, workflowID, "", threadwake.SignalName,
 		threadwake.Signal{Thread: toThreadID, Reason: threadwake.ReasonMailbox}); err != nil {
-		logging.Warn("Could not notify workflow of queued agent message; it will be delivered at the next loop boundary",
+		logging.WarnContext(ctx, "Could not notify workflow of queued agent message; it will be delivered at the next loop boundary",
 			"error", err, "chatID", chatID, "threadID", toThreadID, "workflowID", workflowID)
 		return
 	}
-	logging.Debug("Notified workflow of queued agent message",
+	logging.DebugContext(ctx, "Notified workflow of queued agent message",
 		"chatID", chatID, "threadID", toThreadID, "workflowID", workflowID)
 }

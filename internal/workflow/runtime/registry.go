@@ -635,7 +635,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	if w.outlivesHeartbeatRPCFailure {
 		var releaseShield func()
 		ctx, releaseShield = shieldFromSpuriousHeartbeatCancel(ctx, workerStopCh, &helpers, func(cause error) {
-			logging.Warn("[ActivityWrapper] Heartbeat RPC failed; activity keeps running instead of abandoning its work",
+			logging.WarnContext(ctx, "[ActivityWrapper] Heartbeat RPC failed; activity keeps running instead of abandoning its work",
 				"activityType", activityType,
 				"activityID", activityID,
 				"attemptNumber", attemptNumber,
@@ -649,7 +649,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		helpers.Go(func() {
 			select {
 			case <-workerStopCh:
-				logging.Info("[ActivityWrapper] Worker stopping, cancelling activity for fast re-dispatch",
+				logging.InfoContext(ctx, "[ActivityWrapper] Worker stopping, cancelling activity for fast re-dispatch",
 					"activityType", activityType,
 					"activityID", activityID)
 				cancelForWorkerStop()
@@ -672,7 +672,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// Extract chat_id for node execution events
 	chatID := extractChatID(input)
 
-	logging.Debug("[ActivityWrapper] Activity execution started",
+	logging.DebugContext(ctx, "[ActivityWrapper] Activity execution started",
 		"activityType", activityType,
 		"activityID", activityID,
 		"attemptNumber", attemptNumber,
@@ -726,7 +726,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			case <-heartbeatCtx.Done():
 				// Activity completed or context cancelled (worker stopped)
 				if ctx.Err() == context.Canceled {
-					logging.Debug("[ActivityWrapper] Heartbeat stopped due to worker shutdown",
+					logging.DebugContext(ctx, "[ActivityWrapper] Heartbeat stopped due to worker shutdown",
 						"activityType", activityType,
 						"activityID", activityID)
 				}
@@ -735,7 +735,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 				// Check for cancellation before sending heartbeat
 				// This helps detect worker shutdown faster
 				if ctx.Err() != nil {
-					logging.Debug("[ActivityWrapper] Context cancelled, stopping heartbeat",
+					logging.DebugContext(ctx, "[ActivityWrapper] Context cancelled, stopping heartbeat",
 						"activityType", activityType,
 						"activityID", activityID,
 						"error", ctx.Err())
@@ -770,7 +770,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 
 				if now := time.Now(); now.After(nextStallWarn) {
 					nextStallWarn = now.Add(activityStallWarnInterval)
-					logging.Warn("[ActivityWrapper] Activity still running after a long interval; it may be stalled",
+					logging.WarnContext(ctx, "[ActivityWrapper] Activity still running after a long interval; it may be stalled",
 						"activityType", activityType,
 						"activityID", activityID,
 						"workflowID", workflowID,
@@ -787,7 +787,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	defer func() {
 		// Recover from panics
 		if r := recover(); r != nil {
-			logging.Error("[ActivityWrapper] Activity panicked",
+			logging.ErrorContext(ctx, "[ActivityWrapper] Activity panicked",
 				"activityType", activityType,
 				"activityID", activityID,
 				"panic", r)
@@ -829,7 +829,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// the activity as failed, the loop unwinds, and the run settles at its
 	// stopped status instead of burning turns.
 	if decision := lifecycle.MayExecuteWork(ctx, w.repo, workflowID, w.workKind); !decision.Allowed {
-		logging.Warn("[ActivityWrapper] Refusing to execute activity for a stopped workflow",
+		logging.WarnContext(ctx, "[ActivityWrapper] Refusing to execute activity for a stopped workflow",
 			"activityType", activityType,
 			"workflowID", workflowID,
 			"chatID", chatID,
@@ -882,7 +882,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// deadline, so retry the step rather than letting a bogus context.Canceled
 	// reach the workflow and park the chat. See spuriousHeartbeatCancel.
 	if execErr != nil && spuriousHeartbeatCancel(ctx, workerStopCh) {
-		logging.Warn("[ActivityWrapper] Activity cancelled by a failed heartbeat RPC, returning retryable error",
+		logging.WarnContext(ctx, "[ActivityWrapper] Activity cancelled by a failed heartbeat RPC, returning retryable error",
 			"activityType", activityType,
 			"activityID", activityID,
 			"attemptNumber", attemptNumber,
@@ -901,7 +901,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	}
 
 	if execErr != nil && workerStopped(workerStopCh) {
-		logging.Info("[ActivityWrapper] Activity aborted by worker shutdown, returning retryable error",
+		logging.InfoContext(ctx, "[ActivityWrapper] Activity aborted by worker shutdown, returning retryable error",
 			"activityType", activityType,
 			"activityID", activityID,
 			"attemptNumber", attemptNumber,
@@ -974,12 +974,12 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// Saving here would write on a dead context, fail, and report the user's
 	// own pause as a chat error.
 	if ctx.Err() != nil {
-		logging.Info("[ActivityWrapper] Activity context cancelled; skipping node save_message",
+		logging.InfoContext(ctx, "[ActivityWrapper] Activity context cancelled; skipping node save_message",
 			"activityType", activityType,
 			"activityID", activityID,
 			"stepID", stepID)
 	} else if saveErr := w.saveActivityMessage(ctx, input, inputInfo, info, result); saveErr != nil {
-		logging.Warn("[ActivityWrapper] Node save_message failed; failing the activity so it retries",
+		logging.WarnContext(ctx, "[ActivityWrapper] Node save_message failed; failing the activity so it retries",
 			"activityType", activityType,
 			"activityID", activityID,
 			"stepID", stepID,
@@ -997,7 +997,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// workflow.
 	clearMessageOnlyFields(&result)
 
-	logging.Debug("[ActivityWrapper] Activity execution completed",
+	logging.DebugContext(ctx, "[ActivityWrapper] Activity execution completed",
 		"activityType", activityType,
 		"activityID", activityID,
 		"success", true,
@@ -1213,7 +1213,7 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 	// Extract chat_id from input if available
 	chatID := extractChatID(input)
 	if chatID == "" {
-		logging.Debug("[ActivityWrapper] Skipping error event write - no chat_id in input",
+		logging.DebugContext(ctx, "[ActivityWrapper] Skipping error event write - no chat_id in input",
 			"activityType", activityType,
 			"activityID", activityID)
 		return
@@ -1261,7 +1261,7 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 	// Marshal to JSON
 	errorDataJSON, marshalErr := json.Marshal(errorData)
 	if marshalErr != nil {
-		logging.Error("[ActivityWrapper] Failed to marshal error event data",
+		logging.ErrorContext(ctx, "[ActivityWrapper] Failed to marshal error event data",
 			"activityType", activityType,
 			"activityID", activityID,
 			"marshalError", marshalErr)
@@ -1277,7 +1277,7 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 
 	// Check if the original context was already cancelled (for logging purposes)
 	if ctx.Err() != nil {
-		logging.Warn("[ActivityWrapper] Original context was cancelled, using background context for error write",
+		logging.WarnContext(ctx, "[ActivityWrapper] Original context was cancelled, using background context for error write",
 			"activityType", activityType,
 			"activityID", activityID,
 			"chatID", chatID,
@@ -1286,7 +1286,7 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 
 	// Best-effort write to chat_updates
 	if writeErr := w.repo.CreateChatUpdate(writeCtx, chatID, db.UpdateTypeError, errorID, string(errorDataJSON)); writeErr != nil {
-		logging.Error("[ActivityWrapper] Failed to write error event to chat_updates",
+		logging.ErrorContext(ctx, "[ActivityWrapper] Failed to write error event to chat_updates",
 			"activityType", activityType,
 			"activityID", activityID,
 			"chatID", chatID,
@@ -1295,7 +1295,7 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 		return
 	}
 
-	logging.Info("[ActivityWrapper] Successfully wrote error event to chat_updates",
+	logging.InfoContext(ctx, "[ActivityWrapper] Successfully wrote error event to chat_updates",
 		"activityType", activityType,
 		"activityID", activityID,
 		"chatID", chatID,
@@ -1357,7 +1357,7 @@ func (w *ActivityWrapper[I, O]) emitNodeExecutionEvent(
 ) {
 	// Skip if we don't have the required IDs
 	if chatID == "" || nodeID == "" {
-		logging.Debug("[ActivityWrapper] Skipping node execution event - missing chat_id or node_id",
+		logging.DebugContext(ctx, "[ActivityWrapper] Skipping node execution event - missing chat_id or node_id",
 			"chatID", chatID,
 			"nodeID", nodeID,
 			"eventType", eventType)
@@ -1434,7 +1434,7 @@ func (w *ActivityWrapper[I, O]) emitNodeExecutionEvent(
 
 	// Best-effort write to chat_updates
 	if err := w.repo.EmitNodeExecutionEvent(writeCtx, eventType, nodeState); err != nil {
-		logging.Warn("[ActivityWrapper] Failed to emit node execution event",
+		logging.WarnContext(ctx, "[ActivityWrapper] Failed to emit node execution event",
 			"eventType", eventType,
 			"nodeID", nodeID,
 			"chatID", chatID,
@@ -1442,7 +1442,7 @@ func (w *ActivityWrapper[I, O]) emitNodeExecutionEvent(
 		return
 	}
 
-	logging.Debug("[ActivityWrapper] Emitted node execution event",
+	logging.DebugContext(ctx, "[ActivityWrapper] Emitted node execution event",
 		"eventType", eventType,
 		"nodeID", nodeID,
 		"nodeType", cleanNodeType,
@@ -1744,7 +1744,7 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, attempt 
 	workflowID, stepID, activityType := attempt.WorkflowID, attempt.StepID, attempt.ActivityType
 	// Skip if we don't have the required IDs
 	if workflowID == "" || stepID == "" {
-		logging.Debug("[ActivityWrapper] Skipping step execution write - missing workflow_id or step_id",
+		logging.DebugContext(ctx, "[ActivityWrapper] Skipping step execution write - missing workflow_id or step_id",
 			"workflowID", workflowID,
 			"stepID", stepID,
 			"activityType", activityType)
@@ -1763,13 +1763,13 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, attempt 
 
 	// Best-effort write to step_executions (don't fail activity if this fails)
 	if err := w.repo.CreateStepExecution(writeCtx, exec); err != nil {
-		logging.Error("[ActivityWrapper] Failed to create step execution",
+		logging.ErrorContext(ctx, "[ActivityWrapper] Failed to create step execution",
 			"error", err,
 			"workflowID", workflowID,
 			"stepID", stepID,
 			"activityType", activityType)
 	} else {
-		logging.Debug("[ActivityWrapper] Step execution recorded",
+		logging.DebugContext(ctx, "[ActivityWrapper] Step execution recorded",
 			"workflowID", workflowID,
 			"stepID", stepID,
 			"activityType", activityType,

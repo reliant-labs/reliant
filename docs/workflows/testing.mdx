@@ -30,9 +30,9 @@ Static validation checks for:
 | "entry node X not found" | `entry` lists a node that doesn't exist | Match entry names to node IDs |
 | "loop must have either 'workflow' or 'inline'" | Loop node missing its body | Add an `inline` definition or `workflow` reference |
 
-Static validation runs automatically—there's no separate command to invoke it. If your workflow has validation errors, Reliant reports them when loading the workflow and it won't appear in the workflow picker.
+Validation runs whenever a workflow is loaded or saved. A project workflow file with errors is listed in **Workflows → Library** under **Failed to load**, with the error, and is not offered in the workflow picker; a workflow in the builder with errors cannot be published until they are fixed. The workflow tools an agent uses (`create_workflow`, `edit_workflow`, `write_workflow`) validate every write and return the problems, and `get_workflow` reports whether a workflow is valid.
 
-You can also trigger validation explicitly using the `validate_workflow` tool in the workflow builder, which is useful when iterating on a workflow definition.
+To check a file yourself, run `reliant workflow validate path/to/workflow.yaml`. It follows every `ref:` transitively, exits non-zero on any error, and with `--trigger-payload` dry-runs the workflow's triggers against a sample event (see [Automations](/automations/overview)).
 
 ### When Static Validation Isn't Enough
 
@@ -64,7 +64,7 @@ start_at: execute_tools
 # Optional: pre-populate node outputs (for partial testing)
 state:
   call_llm:
-    tool_calls: [{name: bash, input: {command: ls}}]
+    tool_calls: [{name: shell, input: '{"command": "ls"}'}]
 
 # Simulated events (required)
 events:
@@ -81,11 +81,11 @@ expect:
 
 | Type | Fields | Description |
 |------|--------|-------------|
-| `llm_response` | `text`, `tool_calls` | Simulates an LLM returning a response |
-| `tool_result` | `tool`, `output` | Simulates a tool returning results |
-| `tool_error` | `tool`, `error` | Simulates a tool failing |
-| `llm_error` | `error` | Simulates an LLM API error |
-| `user_input` | `user_text` | Simulates user sending a message |
+| `llm_response` | `text`, `tool_calls` | Simulates a Call LLM node returning a response |
+| `tool_result` | `tool`, `tool_output` (or `output`), `is_error` | Simulates an Execute Tools node returning one tool's result. `is_error: true` makes it a failed call |
+| (no type) | `output` | Any other node: `output` is the node's whole output, such as an approval's `status`, an ask_question's `response` or a run node's `exit_code` |
+
+An event without a `type` must look like the real node's output: it is checked against that node type's output schema, so a mock cannot claim a shape the real node never produces.
 
 #### Event Fields
 
@@ -99,24 +99,25 @@ events:
   - type: llm_response
     text: "Let me check that..."
     tool_calls:
-      - name: bash
+      - name: shell
         input: {command: "ls -la"}
-      - name: read_file
-        input: {path: "/tmp/test.txt"}
+      - name: view
+        input: {file_path: "/tmp/test.txt"}
 
   # Tool returns successfully
   - type: tool_result
-    tool: bash
-    output: {result: "file1.txt\nfile2.txt"}
+    tool: shell
+    tool_output: {result: "file1.txt\nfile2.txt"}
 
-  # Tool returns an error
-  - type: tool_error
-    tool: bash
-    error: "Permission denied"
+  # Tool call fails
+  - type: tool_result
+    tool: shell
+    tool_output: {error: "Permission denied"}
+    is_error: true
 
-  # User sends input
-  - type: user_input
-    user_text: "Yes, please continue"
+  # Any other node: its raw output
+  - node: confirm
+    output: {status: approved}
 ```
 
 ### Targeting Nodes
@@ -130,7 +131,7 @@ events:
     text: "Hello!"
   - node: execute_tools
     type: tool_result
-    tool: bash
+    tool: shell
     output: {result: "ok"}
 ```
 
@@ -145,12 +146,12 @@ events:
   # Target the call_llm node inside agent_loop
   - node: agent_loop.call_llm
     type: llm_response
-    tool_calls: [{name: bash, input: {command: ls}}]
+    tool_calls: [{name: shell, input: '{"command": "ls"}'}]
 
   # Target execute_tools inside agent_loop
   - node: agent_loop.execute_tools
     type: tool_result
-    tool: bash
+    tool: shell
     output: {result: "file.txt"}
 
   # Second iteration: call_llm responds without tools (exits loop)
@@ -200,16 +201,21 @@ The `expect` section defines assertions:
 ```yaml
 expect:
   # Expected outcome
-  outcome: completed  # or "error"
+  outcome: completed  # or "error", or "failed"
 
-  # Nodes that must be executed
+  # Nodes that must have been scheduled: run, skipped or errored.
+  # This does not prove a node ran; use completed for that.
   reached:
     - call_llm
     - agent_loop.execute_tools  # inner loop nodes supported
     - planning.plan             # inline workflow inner nodes supported
     - save_result
 
-  # Nodes that must NOT be executed
+  # Nodes that must have run to completion
+  completed:
+    - save_result
+
+  # Nodes that must NOT be scheduled
   not_reached:
     - error_handler
     - agent_loop.fallback_step
@@ -228,12 +234,25 @@ expect:
       message:
         text: "Done!"
 
+  # Assert the workflow's declared outputs
+  outputs:
+    summary: "Done!"
+
+  # Assert the messages a node saved to the thread
+  messages:
+    save_result:
+      saved: true
+      role: assistant
+      content_contains: ["Done"]
+
   # Assert error message content
   error_contains: "CEL evaluation"
 
   # Assert which node produced the error
   error_node: call_llm
 ```
+
+A node's `messages` come from its `save_message:` block, or from the node itself for a `save_message` node, resolved by the real runtime against each mocked result. `saved: false` asserts it saved nothing; `count` asserts an exact number (a node in a loop saves once per iteration); `content_not_contains` rules text out.
 
 ### Partial Testing
 
@@ -247,7 +266,7 @@ start_at: execute_tools
 state:
   call_llm:
     tool_calls:
-      - name: bash
+      - name: shell
         input: {command: ls}
     message:
       role: assistant
@@ -255,7 +274,7 @@ state:
 
 events:
   - type: tool_result
-    tool: bash
+    tool: shell
     output: {result: "file.txt"}
 
 expect:
@@ -290,19 +309,19 @@ events:
   # Iteration 1: calls tool
   - node: agent_loop.call_llm
     type: llm_response
-    tool_calls: [{name: bash, input: {command: "echo 1"}}]
+    tool_calls: [{name: shell, input: {command: "echo 1"}}]
   - node: agent_loop.execute_tools
     type: tool_result
-    tool: bash
+    tool: shell
     output: {result: "1"}
 
   # Iteration 2: calls another tool
   - node: agent_loop.call_llm
     type: llm_response
-    tool_calls: [{name: bash, input: {command: "echo 2"}}]
+    tool_calls: [{name: shell, input: {command: "echo 2"}}]
   - node: agent_loop.execute_tools
     type: tool_result
-    tool: bash
+    tool: shell
     output: {result: "2"}
 
   # Iteration 3: exits loop
@@ -348,15 +367,16 @@ expect:
 
 ### Using Scenario Tools
 
-In the workflow builder, use these tools to manage scenarios:
+An agent manages scenarios with these workflow tools (in any chat, `load_tool(name="tag:workflow")` loads them):
 
 | Tool | Usage |
 |------|-------|
 | `list_scenarios` | See all scenarios and their status |
 | `view_scenario` | Examine a scenario's full YAML |
-| `create_scenario` | Create a new scenario and run it automatically |
+| `write_scenario` | Create a scenario, or replace one, from YAML |
 | `edit_scenario` | Make targeted edits to a scenario |
-| `run_scenario` | Re-run a scenario after workflow changes |
+| `delete_scenario` | Remove a scenario |
+| `run_scenario` | Run a scenario, for example after workflow changes |
 
 Scenarios are stored alongside the workflow and run instantly without network calls or LLM API usage.
 

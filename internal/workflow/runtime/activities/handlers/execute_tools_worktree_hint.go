@@ -58,7 +58,7 @@ func (a *ExecuteToolsActivity) memoryWorktreeRoots(ctx context.Context, projectI
 	}
 	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{ProjectID: projectID})
 	if err != nil {
-		logging.Warn("[ExecuteTools] Project memory could not be loaded; worktree rules in it are not consulted", "projectID", projectID, "error", err)
+		logging.WarnContext(ctx, "[ExecuteTools] Project memory could not be loaded; worktree rules in it are not consulted", "projectID", projectID, "error", err)
 		return nil
 	}
 	if cfg == nil {

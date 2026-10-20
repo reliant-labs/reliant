@@ -30,10 +30,10 @@ func SyncAllOnStartup(ctx context.Context, syncer *Syncer) {
 	for attempt := 1; attempt <= startupSyncAttempts; attempt++ {
 		err := syncer.SyncAll(ctx)
 		if err == nil {
-			logging.Info("trigger schedules converged", "attempt", attempt)
+			logging.InfoContext(ctx, "trigger schedules converged", "attempt", attempt)
 			return
 		}
-		logging.Warn("trigger schedule sync failed",
+		logging.WarnContext(ctx, "trigger schedule sync failed",
 			"attempt", attempt, "of", startupSyncAttempts, "error", err)
 
 		if attempt == startupSyncAttempts {
@@ -48,6 +48,6 @@ func SyncAllOnStartup(ctx context.Context, syncer *Syncer) {
 			backoff *= 2
 		}
 	}
-	logging.Error("trigger schedules did not converge at startup; " +
+	logging.ErrorContext(ctx, "trigger schedules did not converge at startup; "+
 		"existing schedules keep firing and the next write or restart will repair them")
 }

@@ -573,14 +573,14 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts TxOptions, f func(ctx 
 			// Begin transaction failed
 			if isRetryableError(err) && attempt < maxRetries {
 				metrics.totalRetries++
-				logging.Debug("Transaction begin failed, retrying",
+				logging.DebugContext(ctx, "Transaction begin failed, retrying",
 					"attempt", attempt+1,
 					"maxRetries", maxRetries,
 					"error", err)
 				r.backoffBeforeRetry(attempt)
 				continue
 			}
-			logging.Error("Failed to begin transaction", "error", err, "attempts", attempt+1)
+			logging.ErrorContext(ctx, "Failed to begin transaction", "error", err, "attempts", attempt+1)
 			return err
 		}
 
@@ -593,7 +593,7 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts TxOptions, f func(ctx 
 		if isRetryableError(result.err) && attempt < maxRetries {
 			metrics.totalRetries++
 			lastErr = result.err
-			logging.Debug("Transaction failed, retrying",
+			logging.DebugContext(ctx, "Transaction failed, retrying",
 				"attempt", attempt+1,
 				"maxRetries", maxRetries,
 				"error", result.err)
@@ -605,12 +605,12 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts TxOptions, f func(ctx 
 		// inside the tx) are expected control flow for callers — log them
 		// quietly so genuine transaction failures stand out.
 		if errors.Is(result.err, sql.ErrNoRows) {
-			logging.Debug("Transaction returned business error (not retryable)",
+			logging.DebugContext(ctx, "Transaction returned business error (not retryable)",
 				"error", result.err,
 				"attempts", attempt+1,
 				"duration", time.Since(metrics.txStartTime))
 		} else {
-			logging.Error("Transaction failed",
+			logging.ErrorContext(ctx, "Transaction failed",
 				"error", result.err,
 				"attempts", attempt+1,
 				"duration", time.Since(metrics.txStartTime))
@@ -619,7 +619,7 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts TxOptions, f func(ctx 
 	}
 
 	// All retries exhausted
-	logging.Error("Transaction failed after all retries",
+	logging.ErrorContext(ctx, "Transaction failed after all retries",
 		"retries", metrics.totalRetries,
 		"lastError", lastErr,
 		"duration", time.Since(metrics.txStartTime))
@@ -778,7 +778,7 @@ func (w *WrappedDBTX) execContextWithRetry(ctx context.Context, query string, ar
 		// Check if error is retryable and we have retries left
 		if isRetryableError(err) && attempt < maxRetries {
 			lastErr = err
-			logging.Debug("Database exec failed, retrying",
+			logging.DebugContext(ctx, "Database exec failed, retrying",
 				"attempt", attempt+1,
 				"maxRetries", maxRetries,
 				"error", err)
@@ -816,7 +816,7 @@ func (w *WrappedDBTX) queryContextWithRetry(ctx context.Context, query string, a
 		// Check if error is retryable and we have retries left
 		if isRetryableError(err) && attempt < maxRetries {
 			lastErr = err
-			logging.Debug("Database query failed, retrying",
+			logging.DebugContext(ctx, "Database query failed, retrying",
 				"attempt", attempt+1,
 				"maxRetries", maxRetries,
 				"error", err)
@@ -1235,7 +1235,7 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 					enrichedData, err := r.EnrichMessageUpdate(ctx, update)
 					if err != nil {
 						// Log error but continue with original data
-						logging.Warn("Failed to enrich message update",
+						logging.WarnContext(ctx, "Failed to enrich message update",
 							"error", err,
 							"messageID", update.EntityID,
 							"sequence", update.SequenceNumber)
@@ -1313,7 +1313,7 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 	if len(attachmentIDs) > 0 {
 		attachmentsData, err := r.GetAttachmentsByIDs(ctx, attachmentIDs)
 		if err != nil {
-			logging.Warn("Failed to fetch attachments for message update", "error", err, "messageID", messageID)
+			logging.WarnContext(ctx, "Failed to fetch attachments for message update", "error", err, "messageID", messageID)
 			// Continue anyway - we'll use placeholder data
 		} else {
 			for _, att := range attachmentsData {
@@ -1346,7 +1346,7 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 					defaultFilename = "image"
 					defaultMime = "image/jpeg"
 				}
-				logging.Warn("Attachment not found in database, using placeholder", "attachmentID", attachmentID, "messageID", messageID)
+				logging.WarnContext(ctx, "Attachment not found in database, using placeholder", "attachmentID", attachmentID, "messageID", messageID)
 				attachments = append(attachments, map[string]interface{}{
 					"id":        attachmentID,
 					"filename":  defaultFilename,
@@ -1706,7 +1706,7 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 
 	if err := r.CreateUserUpdate(ctx, userUpdate); err != nil {
 		// Log but don't fail - the state update succeeded
-		logging.Error("Failed to create user update for chat state change",
+		logging.ErrorContext(ctx, "Failed to create user update for chat state change",
 			"error", err,
 			"chatID", chatID,
 			"state", state)
@@ -1714,12 +1714,12 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 
 	// Also emit chat_activity_changed (with dedup) so the sidebar reflects updated activity
 	if emitErr := r.emitChatActivityIfChanged(ctx, chatID); emitErr != nil {
-		logging.Error("Failed to emit activity changed on chat state change",
+		logging.ErrorContext(ctx, "Failed to emit activity changed on chat state change",
 			"error", emitErr,
 			"chatID", chatID)
 	}
 
-	logging.Debug("Chat state updated",
+	logging.DebugContext(ctx, "Chat state updated",
 		"chatID", chatID,
 		"previousState", previousState,
 		"newState", state,
@@ -1850,13 +1850,13 @@ func (r *Repo) UpdateChatUnread(ctx context.Context, chatID string, unread bool,
 	}
 
 	if err := r.CreateUserUpdate(ctx, userUpdate); err != nil {
-		logging.Error("Failed to create user update for chat unread change",
+		logging.ErrorContext(ctx, "Failed to create user update for chat unread change",
 			"error", err,
 			"chatID", chatID,
 			"unread", unread)
 	}
 
-	logging.Debug("Chat unread updated",
+	logging.DebugContext(ctx, "Chat unread updated",
 		"chatID", chatID,
 		"unread", unread,
 		"reason", reason)

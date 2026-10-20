@@ -55,12 +55,10 @@ type SimulatedEvent struct {
 	Output map[string]interface{} `json:"output,omitempty" yaml:"output,omitempty"`
 
 	// Type specifies the event type for automatic conversion.
-	// Supported values:
+	// Supported values (EventOutput):
 	//   - llm_response: Simulate LLM returning text and/or tool_calls
-	//   - tool_result: Simulate tool returning output
-	//   - tool_error: Simulate tool error
-	//   - llm_error: Simulate LLM error
-	//   - user_input: Simulate user message
+	//   - tool_result: Simulate tool returning output (is_error for a failure)
+	// Any other node is mocked with a raw Output and no type.
 	Type string `json:"type,omitempty" yaml:"type,omitempty"`
 
 	// Text is the LLM response text (for type: llm_response).
@@ -71,7 +69,7 @@ type SimulatedEvent struct {
 	// Each tool call has a name and input parameters.
 	ToolCalls []SimToolCall `json:"tool_calls,omitempty" yaml:"tool_calls,omitempty"`
 
-	// Tool is the tool name (for type: tool_result or tool_error).
+	// Tool is the tool name (for type: tool_result).
 	// Must match the tool name from the corresponding tool call.
 	Tool string `json:"tool,omitempty" yaml:"tool,omitempty"`
 

@@ -291,14 +291,15 @@ test.describe('Onboarding Flow', () => {
     await loginWithApiKey(page);
   });
 
-  test('pricing shows concrete included runtime and storage at every size', async ({ page }, testInfo) => {
-    page.on('pageerror', error => console.error(error));
+  // Every plan includes 160 hours at its OWN size, so its small-hour total is
+  // 160 x that size's multiplier (the 2XL plan holds 2,560 small hours).
+  async function mockPricing(page: Page) {
     const sizes = ['small', 'medium', 'large', 'xl'];
     await page.route('**/controlplane.v1.BillingService/ListPlans', route => route.fulfill({
       json: {
         plans: sizes.map((size, index) => ({
-          id: `compute_${size}`, kind: 'compute', name: `Compute ${size}`, priceCents: String(1900 * (index + 1)), displayOrder: index,
-          structuredLimits: { allowedDaemonSizes: sizes.slice(0, index + 1), daemonComputeIncludedMinutes: 9600, includedSmallDaemonHours: '160' },
+          id: `compute_${size}`, kind: 'compute', name: `Compute ${size}`, priceCents: String(2000 * (index + 1)), displayOrder: index,
+          structuredLimits: { allowedDaemonSizes: sizes.slice(0, index + 1), daemonComputeIncludedMinutes: 9600, includedSmallDaemonHours: String(160 * 2 ** index) },
         })),
         daemonPricing: {
           sizes: sizes.map((size, index) => ({ size, multiplier: String(2 ** index), hourlyPriceCents: String(13 * 2 ** index), storageGib: String([120, 140, 180, 260][index]) })),
@@ -306,18 +307,52 @@ test.describe('Onboarding Flow', () => {
         },
       },
     }));
+  }
+
+  const FOOTNOTE = 'Includes 160 hours a month. Extra hours and storage are billed separately.';
+  const BANNED = /GiB|\/hr|hrs|while suspended|per month\b.*GB|after included hours|uses included hours|as fast|small-daemon|hours\/month included|2,?560|1,?280/;
+
+  test('onboarding plan rows: name, spec and monthly price only', async ({ page }, testInfo) => {
+    page.on('pageerror', error => console.error(error));
+    await mockPricing(page);
+    // Not covered by a coupon: every row shows its monthly price.
+    await page.route('**/controlplane.v1.BillingService/GetCurrentUserComputeEligibility', route =>
+      route.fulfill({ json: { eligible: false, hasActiveSubscription: false, grantedMinutesRemaining: '0', planName: '' } }));
     await gotoOnboarding(page);
-    for (const runtime of ['160 Small', '80 Medium', '40 Large', '20 XL']) {
-      await expect(page.getByText(`${runtime} hours/month included`, { exact: true })).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
+    for (const price of ['$20.00/mo', '$40.00/mo', '$60.00/mo', '$80.00/mo']) {
+      await expect(dialog.getByText(price, { exact: true })).toBeVisible();
     }
-    for (const disk of ['120 GiB disk', '140 GiB disk', '180 GiB disk', '260 GiB disk']) {
-      await expect(page.getByText(disk, { exact: false }).first()).toBeVisible();
+    for (const spec of ['2 GB RAM · 0.5 CPU', '4 GB RAM · 1 CPU', '8 GB RAM · 2 CPU', '16 GB RAM · 4 CPU']) {
+      await expect(dialog.getByText(spec, { exact: true })).toBeVisible();
     }
-    await expect(page.getByText('$30.00/mo while suspended', { exact: false }).first()).toBeVisible();
-    await expect(page.getByText('after included hours, with overage enabled', { exact: false }).first()).toBeVisible();
-    await expect(page.getByText('shared across your machines', { exact: false }).first()).toBeVisible();
-    await expect(page.getByText(/uses included hours|as fast|hour per hour|small-daemon-hours/)).toHaveCount(0);
-    await page.screenshot({ path: testInfo.outputPath('machine-pricing-160h.png'), fullPage: true });
+    await expect(dialog.getByTestId('machine-pricing-line')).toHaveText(FOOTNOTE);
+    await expect(dialog.getByText(BANNED)).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('onboarding-plan-rows.png'), fullPage: true });
+  });
+
+  test('create machine modal: name and spec per size, one footnote', async ({ page }, testInfo) => {
+    page.on('pageerror', error => console.error(error));
+    await mockPricing(page);
+    await page.route('**/controlplane.v1.UserService/GetCurrentUser', route =>
+      route.fulfill({ json: { user: { id: 'user_test', onboardingCompleted: true } } }));
+    await page.route('**/controlplane.v1.BillingService/GetCurrentUserComputeEligibility', route =>
+      route.fulfill({ json: { eligible: true, hasActiveSubscription: true, grantedMinutesRemaining: '0', planName: 'Compute xl', allowedDaemonSizes: ['small', 'medium', 'large', 'xl'] } }));
+    // The XL plan: 160 own-size hours = 1,280 small hours.
+    await page.route('**/controlplane.v1.BillingService/GetCurrentUserComputeUsage', route =>
+      route.fulfill({ json: { usageMeasured: true, includedSmallDaemonSeconds: String(1280 * 3600), remainingSmallDaemonSeconds: String(3 * 3600) } }));
+
+    await page.goto('/settings/machines');
+    await page.getByRole('button', { name: /new machine/i }).first().click();
+    const modal = page.getByRole('dialog').filter({ hasText: 'Create Machine' });
+    const sizes = modal.getByRole('radiogroup', { name: 'Size' });
+    for (const name of ['Small', 'Medium', 'Large', 'XL']) {
+      await expect(sizes.getByRole('radio', { name, exact: true })).toBeVisible();
+    }
+    await expect(sizes.getByText('$')).toHaveCount(0);
+    await expect(modal.getByTestId('size-pricing-note')).toHaveText(FOOTNOTE);
+    await expect(modal.getByText(BANNED)).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('create-machine-modal.png'), fullPage: true });
   });
 
   test('shows onboarding for a new (not-yet-onboarded) user at /onboarding', async ({ page }) => {

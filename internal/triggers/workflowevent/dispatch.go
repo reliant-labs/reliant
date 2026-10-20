@@ -394,7 +394,7 @@ func (d *Dispatcher) record(
 		return out, nil
 	}
 	if outcome != core.TriggerEventSkipped {
-		logging.Warn("[workflowevent] trigger did not launch",
+		logging.WarnContext(ctx, "[workflowevent] trigger did not launch",
 			"triggerID", trigger.ID, "runEventID", ev.ID, "outcome", outcome, "detail", detail)
 	}
 	return &Result{TriggerID: trigger.ID, Outcome: outcome, Detail: detail}, nil

@@ -65,7 +65,7 @@ Reliant supports models from multiple providers. Use the model ID in workflow co
 
 ## Model Tags
 
-Models are tagged to help with selection. You can also [bring your own model](/docs/settings/model-config#custom-models) with your own provider.
+Models are tagged to help with selection. You can also [bring your own model](/docs/settings/model-config#adding-custom-models) with your own provider.
 
 | Tag | Description |
 |-----|-------------|

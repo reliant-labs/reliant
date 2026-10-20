@@ -54,6 +54,9 @@ var toolHints = map[string]string{
 		"`trigger`: the message each run starts from)}. Declaring one fires nothing; the user enables it in the app. See the workflow-builder skill's Triggers section.",
 	"automation_only": "The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat " +
 		"start of it, so only its triggers (or a builder test run) start it. Unset means a chat can start it.",
+	"hidden": "A building block other workflows ref: true keeps it out of every picker and default listing while it " +
+		"stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. " +
+		"Unset means the workflow is listed.",
 }
 
 func main() {

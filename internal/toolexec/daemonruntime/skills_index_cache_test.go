@@ -37,6 +37,7 @@ func countForgeFrameworkSkills(projectPath string) int {
 // The guard drives the real cache: index a directory with no forge.yaml, create
 // the file, and require the very next index to see the forge skills.
 func TestIndexSkills_ForgeYamlAppearingInvalidatesTheCache(t *testing.T) {
+	t.Parallel()
 	projectPath := t.TempDir()
 	t.Cleanup(func() {
 		skillsIndexMu.Lock()

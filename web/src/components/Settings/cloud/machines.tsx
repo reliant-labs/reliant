@@ -107,12 +107,10 @@ import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { useComputeUsage, usePlans } from "@/hooks/useCloudBillingQueries";
 import {
   hourlyPriceShort,
-  sizeFacts,
-  suspendedFeeLabel,
+  machinePricingFootnote,
+  planOwnSizeHours,
   provisionedDiskGib,
   diskAllowanceGib,
-  MACHINE_BILLING_POLICY,
-  MACHINE_PRICING_NOTE,
   type DaemonPricingLike,
 } from "@/components/Billing/daemonUsage";
 import { formatMachineSpec } from "@/components/Billing/machineSpecs";
@@ -511,9 +509,9 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
   // The per-daemon price list (design §6.2), for the suspended-disk fee shown
   // beside Delete. Absent from an older server, in which case no fee renders.
   const daemonPricing = usePlans({ enabled: cloud }).data?.daemonPricing;
-  // The period's total plan entitlement remains valid even if metering is unavailable.
-  const usage = useComputeUsage("current", { enabled: cloud }).data;
-  const includedHours = usage?.includedSmallDaemonSeconds === undefined ? undefined : Number(usage.includedSmallDaemonSeconds) / 3600;
+  // The plan's monthly allowance (a server total, not what is left of it).
+  const includedSmallHours = useComputeUsage("current", { enabled: cloud }).data?.includedSmallDaemonSeconds;
+  const includedHours = includedSmallHours === undefined ? undefined : Number(includedSmallHours) / 3600;
   // Which machines outside AI apps can reach. Read once for the whole list
   // (ListConnectors is per user, not per machine) and counted per row.
   const appCounts = activeGrantCounts(useConnectors().data);
@@ -1024,7 +1022,7 @@ function CreateEnvironmentModal({
   // an empty list means exactly "no size may be started" and there is no
   // third, unknowable state to model.
   allowedSizes: DaemonSize[];
-  /** ListPlans' daemon_pricing — each size's hourly price and burn rate. */
+  /** ListPlans' daemon_pricing — each size's multiplier, for hours per size. */
   pricing?: DaemonPricingLike;
   includedHours?: number;
   onCreated: () => void;
@@ -1049,6 +1047,8 @@ function CreateEnvironmentModal({
     () => SIZE_TIERS.filter((t) => allowedSizes.includes(t.value)),
     [allowedSizes],
   );
+  // Hours the user's plan includes at its own (largest allowed) size.
+  const ownHours = planOwnSizeHours(pricing, tiers.map((t) => t.name), includedHours);
 
   // Keep the selection inside the plan's allowed set, and default to the
   // first allowed size rather than to a constant. Undefined when the plan
@@ -1086,10 +1086,6 @@ function CreateEnvironmentModal({
       setError(describeError(e, "Failed to create machine"));
     },
   });
-
-  // Prices come from the server's per-size list; a size it has no row for
-  // shows none rather than a guess.
-  const priced = tiers.some((t) => hourlyPriceShort(pricing, t.name) !== null);
 
   // The form wraps only the Name field, and Create submits it by `form` id.
   // The repository picker is the same RepoSelector the project picker and
@@ -1186,9 +1182,6 @@ function CreateEnvironmentModal({
         <div role="radiogroup" aria-label="Size" className="grid grid-cols-2 gap-2">
           {tiers.map((t) => {
             const selected = effectiveSize === t.value;
-            const price = hourlyPriceShort(pricing, t.name);
-            const facts = sizeFacts(pricing, t.name, includedHours);
-            const runtime = facts?.includedRuntimeLabel ?? "Included runtime unavailable";
             const labelId = `${formId}-size-${t.name}`;
             const detailId = `${labelId}-detail`;
             return (
@@ -1207,18 +1200,8 @@ function CreateEnvironmentModal({
                   selected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-muted-foreground/40",
                 )}
               >
-                <div className="flex items-baseline justify-between gap-2">
-                  <span id={labelId} className="text-sm font-semibold text-foreground">{t.label}</span>
-
-                </div>
-                <div id={detailId}>
-                  <div className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{t.specs}</div>
-                  {runtime && (
-                    <div className="mt-0.5 text-xs text-muted-foreground first-letter:uppercase">{runtime}</div>
-                  )}
-                  <div className="mt-0.5 text-xs text-muted-foreground" data-testid={`size-price-${t.name}`}>{price ? `${price} after included hours` : "Hourly price unavailable"}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">{facts ? `${facts.diskLabel} · ${facts.suspendedFeeLabel ?? "Fee unavailable"} while suspended` : "Disk cost unavailable"}</div>
-                </div>
+                <span id={labelId} className="block text-sm font-semibold text-foreground">{t.label}</span>
+                <div id={detailId} className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{t.specs}</div>
               </button>
             );
           })}
@@ -1226,22 +1209,9 @@ function CreateEnvironmentModal({
         {tiers.length === 0 && (
           <p className="text-xs text-muted-foreground">No sizes available on your current plan.</p>
         )}
-        {tiers.length > 0 && tiers.length < SIZE_TIERS.length && (
-          <p className="mt-2 text-xs text-muted-foreground">Larger sizes are gated by your compute plan.</p>
-        )}
-        {/* Per-daemon billing (control-plane docs/design/per-daemon-billing.md):
-            a size burns the shared included hours at its multiplier, and past
-            them bills at its own hourly price — the number on each card,
-            from ListPlans' daemon_pricing, the same list the billing page's
-            machine rows read. The server marks those numbers placeholders
-            while the prices are being finalised, and says to say so. */}
-        {priced && (
-          <p className="mt-2 text-xs text-muted-foreground" data-testid="size-pricing-note">
-            {MACHINE_PRICING_NOTE} {MACHINE_BILLING_POLICY}
-            {pricing?.placeholder && " These prices are provisional."}
-          </p>
-        )}
-        {!priced && <p className="mt-2 text-xs text-muted-foreground">Machine prices unavailable. {MACHINE_BILLING_POLICY}</p>}
+        <p className="mt-2 text-xs text-muted-foreground" data-testid="size-pricing-note">
+          {machinePricingFootnote(ownHours)}
+        </p>
       </Field>
 
       <Field
@@ -1435,7 +1405,6 @@ function RestartMachineModal({
 function ResizeMachineModal({
   target,
   currentSize,
-  targetDisk,
   running,
   allowedSizes,
   sizesLoading,
@@ -1450,7 +1419,6 @@ function ResizeMachineModal({
 }: {
   target: Daemon | null;
   currentSize: DaemonSize | undefined;
-  targetDisk?: { capacityGib: number; includedGib: number };
   running: boolean;
   allowedSizes: DaemonSize[];
   sizesLoading: boolean;
@@ -1475,6 +1443,11 @@ function ResizeMachineModal({
   const currentIndex = SIZE_TIERS.findIndex((t) => t.value === currentSize);
   const selectedIndex = SIZE_TIERS.findIndex((t) => t.value === selected);
   const shrinking = selected !== null && currentIndex >= 0 && selectedIndex < currentIndex;
+  const ownHours = planOwnSizeHours(
+    pricing,
+    SIZE_TIERS.filter((t) => allowedSizes.includes(t.value)).map((t) => t.name),
+    includedHours,
+  );
   const someDisallowed = !sizesLoading && SIZE_TIERS.some((t) => !allowedSizes.includes(t.value));
   const name = target ? daemonDisplayName(target) : "";
 
@@ -1501,13 +1474,6 @@ function ResizeMachineModal({
           const allowed = allowedSizes.includes(t.value);
           const choosable = !isCurrent && allowed && !sizesLoading && !isPending;
           const isSelected = selected === t.value;
-          const price = hourlyPriceShort(pricing, t.name);
-          const facts = sizeFacts(pricing, t.name, includedHours);
-          const held = target ? provisionedDiskGib(pricing, target.size, targetDisk) : null;
-          const standard = pricing?.sizes.find((s) => s.size === t.name);
-          const resizedGib = held !== null && standard ? Math.max(held, Number(standard.storageGib)) : null;
-          const fee = resizedGib === null ? null : suspendedFeeLabel(pricing, resizedGib);
-          const runtime = facts?.includedRuntimeLabel ?? "Included runtime unavailable";
           const labelId = `${groupId}-size-${t.name}`;
           const detailId = `${labelId}-detail`;
           return (
@@ -1532,25 +1498,14 @@ function ResizeMachineModal({
               <div className="flex items-baseline justify-between gap-2">
                 <span id={labelId} className="text-sm font-semibold text-foreground">{t.label}</span>
                 {isCurrent && <Badge label="Current" variant="neutral" />}
-
               </div>
-              <div id={detailId}>
-                <div className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{t.specs}</div>
-                {!allowed && !isCurrent && !sizesLoading ? (
-                  <div className="mt-0.5 text-xs text-muted-foreground">Not on your plan</div>
-                ) : (
-                  runtime && <div className="mt-0.5 text-xs text-muted-foreground first-letter:uppercase">{runtime}</div>
-                )}
-                <div className="mt-0.5 text-xs text-muted-foreground">{price ? `${price} after included hours` : "Hourly price unavailable"}</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">{resizedGib === null ? "Disk cost unavailable" : `${resizedGib} GiB disk · ${fee} while suspended`}</div>
-                {resizedGib !== null && standard && resizedGib > Number(standard.storageGib) && <div className="text-xs text-muted-foreground">{suspendedFeeLabel(pricing, resizedGib - Number(standard.storageGib))} extra disk while running</div>}
-              </div>
+              <div id={detailId} className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{t.specs}</div>
             </button>
           );
         })}
       </div>
 
-      <p className="mt-2 text-xs text-muted-foreground">{MACHINE_PRICING_NOTE} {MACHINE_BILLING_POLICY}</p>
+      <p className="mt-2 text-xs text-muted-foreground" data-testid="resize-pricing-note">{machinePricingFootnote(ownHours)}</p>
       {sizesLoading && <p className="mt-2 text-xs text-muted-foreground">Checking which sizes your plan includes…</p>}
       {someDisallowed && (
         <p className="mt-2 text-xs text-muted-foreground">
@@ -1839,8 +1794,9 @@ function EnvironmentDetail({
     [eligibilityQ.data?.allowedDaemonSizes],
   );
   const pricing = usePlans({ enabled: cloud }).data?.daemonPricing;
-  const usage = useComputeUsage("current", { enabled: cloud }).data;
-  const includedHours = usage?.includedSmallDaemonSeconds === undefined ? undefined : Number(usage.includedSmallDaemonSeconds) / 3600;
+  // The plan's monthly allowance (a server total, not what is left of it).
+  const includedSmallHours = useComputeUsage("current", { enabled: cloud }).data?.includedSmallDaemonSeconds;
+  const includedHours = includedSmallHours === undefined ? undefined : Number(includedSmallHours) / 3600;
   const disk = spec?.disk;
   const maxDiskGib = eligibilityQ.data?.maxDaemonStorageGib ?? 0;
   // Offered only where the plan grows disks at all. A machine already at
@@ -2114,7 +2070,6 @@ function EnvironmentDetail({
           <ResizeMachineModal
             target={resizeOpen ? daemon : null}
             currentSize={currentSize}
-            targetDisk={disk}
             running={daemon.status !== DaemonStatus.SUSPENDED}
             allowedSizes={resizeAllowed}
             sizesLoading={eligibilityQ.isLoading}

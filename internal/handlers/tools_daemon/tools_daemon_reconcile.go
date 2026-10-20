@@ -104,7 +104,7 @@ func reconcileProjectDaemons(
 ) {
 	projects, err := database.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1000, Offset: 0})
 	if err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to list projects",
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to list projects",
 			"error", err, "userID", userID, "daemonID", daemonID)
 		return
 	}
@@ -120,7 +120,7 @@ func reconcileProjectDaemons(
 
 		state, err := check(ctx, project.Path)
 		if err != nil {
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" reconcile: path check failed",
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: path check failed",
 				"error", err, "userID", userID, "daemonID", daemonID,
 				"projectID", project.ID, "path", project.Path)
 			skipped++
@@ -133,7 +133,7 @@ func reconcileProjectDaemons(
 		}
 
 		if err := database.UpsertProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch); err != nil {
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to upsert project_daemon",
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to upsert project_daemon",
 				"error", err, "userID", userID, "daemonID", daemonID, "projectID", project.ID)
 			skipped++
 			continue
@@ -149,7 +149,7 @@ func reconcileProjectDaemons(
 		}
 	}
 
-	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" reconcile: complete",
+	logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: complete",
 		"userID", userID, "daemonID", daemonID,
 		"reconciled", reconciled, "backfilled", backfilled, "skipped", skipped)
 }
@@ -162,13 +162,13 @@ func backfillProjectRemoteURL(ctx context.Context, database db.Repository, proje
 	existing, err := database.GetProjectByRemoteURLAndUser(ctx, remoteURL, project.UserID)
 	switch {
 	case err == nil && existing != nil && existing.ID != project.ID:
-		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" reconcile: skipping remote backfill, remote already claimed by another project",
+		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: skipping remote backfill, remote already claimed by another project",
 			"userID", project.UserID, "projectID", project.ID,
 			"otherProjectID", existing.ID, "remoteURL", gitremote.Redacted(remoteURL))
 		return false
 	case err != nil && !isNotFoundErr(err):
 		// Couldn't verify uniqueness — don't risk violating the index.
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" reconcile: remote uniqueness check failed, skipping backfill",
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: remote uniqueness check failed, skipping backfill",
 			"error", err, "userID", project.UserID, "projectID", project.ID, "remoteURL", gitremote.Redacted(remoteURL))
 		return false
 	}
@@ -177,7 +177,7 @@ func backfillProjectRemoteURL(ctx context.Context, database db.Repository, proje
 	ru := remoteURL
 	updated.RemoteURL = &ru
 	if err := database.UpdateProject(ctx, &updated, project.UserID); err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to backfill remote_url",
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to backfill remote_url",
 			"error", err, "userID", project.UserID, "projectID", project.ID, "remoteURL", gitremote.Redacted(remoteURL))
 		return false
 	}

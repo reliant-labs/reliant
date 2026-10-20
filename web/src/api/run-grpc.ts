@@ -70,6 +70,11 @@ export interface RunSummary {
   parentChatId?: string;
   /** That chat's title; unset when it is gone or not the caller's. */
   parentChatTitle?: string;
+  /**
+   * The run's chat is archived: a person put it away, or it is an automation
+   * run that finished successfully and archived itself.
+   */
+  archived: boolean;
 }
 
 export interface RunPage {
@@ -99,6 +104,7 @@ export function runFromProto(run: ProtoRun): RunSummary {
     completedAt: completedAt > 0 ? completedAt : undefined,
     parentChatId: run.parentChatId || undefined,
     parentChatTitle: run.parentChatTitle || undefined,
+    archived: run.archived,
   };
 }
 
@@ -183,7 +189,9 @@ export function buildListRunsRequest(
     parentChatId: filters.parentChatId || undefined,
     pageToken: options.pageToken || undefined,
     limit: options.limit ?? 0,
-    includeArchived: false,
+    // Runs is history: an automation archives each run it finishes
+    // successfully, and those must still be found here. Rows say so.
+    includeArchived: true,
   });
 }
 

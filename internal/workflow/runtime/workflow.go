@@ -1249,6 +1249,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// connects (queueddelivery marks the pause via PausedForMachine), or when
 	// the user sends a message (SendMessage routes paused chats through
 	// PauseService.ResumeWorkflow).
+	repeatedToolErrors := NewRepeatedToolErrorBreaker(RepeatedToolErrorLimit)
 	daemonOfflineBreaker := NewDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, func(callerCtx workflow.Context, streak int) {
 		logger.Warn("[Workflow Runtime] Pausing: daemon offline for consecutive steps",
 			"workflowID", workflowID,
@@ -1311,12 +1312,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 	makeThreadPauseCtrl := func(thread string) *PauseController {
 		return &PauseController{
-			CheckPause:    checkPause,
-			ActivityCtxFn: getActivityCtx,
-			RequestPause:  requestPause,
-			DaemonOffline: daemonOfflineBreaker,
-			UsageLimit:    usageLimitWaiter,
-			Cancelled:     func() bool { return cancelledThreads[thread] },
+			CheckPause:         checkPause,
+			ActivityCtxFn:      getActivityCtx,
+			RequestPause:       requestPause,
+			DaemonOffline:      daemonOfflineBreaker,
+			UsageLimit:         usageLimitWaiter,
+			RepeatedToolErrors: repeatedToolErrors,
+			Cancelled:          func() bool { return cancelledThreads[thread] },
 			ResetCancelled: func() {
 				delete(cancelledThreads, thread)
 			},
@@ -1363,11 +1365,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 	// STEP 8.6: Create shared PauseController for all executors
 	pauseCtrl := &PauseController{
-		CheckPause:    checkPause,
-		ActivityCtxFn: getActivityCtx,
-		RequestPause:  requestPause,
-		DaemonOffline: daemonOfflineBreaker,
-		UsageLimit:    usageLimitWaiter,
+		CheckPause:         checkPause,
+		ActivityCtxFn:      getActivityCtx,
+		RequestPause:       requestPause,
+		DaemonOffline:      daemonOfflineBreaker,
+		UsageLimit:         usageLimitWaiter,
+		RepeatedToolErrors: repeatedToolErrors,
 	}
 
 	// STEP 8.7: Create step executor for unified step lifecycle

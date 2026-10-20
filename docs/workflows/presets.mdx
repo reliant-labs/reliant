@@ -51,6 +51,7 @@ When you run a workflow with this preset, Reliant selects the best matching mode
 
 Available tags describe model characteristics:
 
+- `powerful` — The frontier tier, for when capability matters more than cost; its models run at the highest thinking level
 - `flagship` — Best quality for complex tasks
 - `moderate` — Good balance of quality and cost
 - `fast` — Quick responses for simple tasks
@@ -97,7 +98,7 @@ Reliant includes fifteen built-in presets. They are available immediately withou
 | `migrate` | flagship | `tag:coding:default` | Guides the move from Claude Code, Cursor, Codex or Windsurf. Used by [Import](/guides/import). |
 | `workflow_builder` | flagship | `tag:workflow`, `tag:shell`, `tag:web`, `skill`, `view` | Builds and edits workflows, with the `workflow-builder` skill loaded. Used by [Create a Workflow](/guides/create-a-workflow). |
 
-This table is generated from the preset files in the Reliant source (`make generate-presets`), so it tracks them exactly. The complete tool lists and spawn lists for each preset are in that generated reference.
+The table summarizes the preset files that ship in the Reliant source (`internal/workflow/builtin/presets/`). For a preset's complete tool list, spawn list and system prompt, open **Settings → Presets** and choose **View** on it.
 
 ### Detailed Examples
 
@@ -120,9 +121,9 @@ params:
     tags: [flagship]  # Use the best available model for thorough review
     temperature: 0.2
   tools:
-    - tag:search
     - view
-    - shell
+    - tag:shell
+    - code_context
   system_prompt: |
     You are a meticulous code reviewer with extremely high standards.
 
@@ -157,17 +158,17 @@ The `tag` field determines which workflows and groups this preset can configure.
 
 ### Configurable Parameters
 
-**model**: The AI model to use. Specify by explicit ID (`{ id: "<model id>" }`, from the [Models reference](/reference/models)), by semantic tags (`{ tags: [flagship] }`), or constrain to a specific provider (`{ tags: [moderate], provider: "anthropic" }`). Tag-based selection makes presets provider-agnostic—they work with whatever providers you have configured. Available tags include `flagship`, `moderate`, `fast`, `cheap`, `reasoning`, and `codex` for code-optimized model selection where supported.
+**model**: The AI model to use. Specify by explicit ID (`{ id: "<model id>" }`, from the [Models reference](/reference/models)), by semantic tags (`{ tags: [flagship] }`), or constrain to a specific provider (`{ tags: [moderate], provider: "anthropic" }`). Tag-based selection makes presets provider-agnostic—they work with whatever providers you have configured. The tags are the ones listed [above](#provider-agnostic-model-selection).
 
-**temperature**: A setting of the `model` block (`model: { tags: [flagship], temperature: 0.2 }`), not a parameter of its own. Response randomness from 0.0 to 1.0. Lower values (0.1-0.3) produce focused, deterministic output for research and debugging. Higher values (0.7-1.0) increase creativity for brainstorming.
+**temperature** and **thinking_level**: Settings of the `model` block (`model: { tags: [flagship], temperature: 0.2, thinking_level: high }`), not parameters of their own. Temperature runs from 0 to 2: lower values (0.1-0.3) produce focused, repeatable output for research and debugging, higher values (0.7-1.0) more varied output for brainstorming. `thinking_level` is `low`, `medium`, `high` or `xhigh`, clamped to what the chosen model supports.
 
 **system_prompt**: Instructions defining the agent's role, approach, and constraints. This is where you customize behavior most significantly.
 
-**tools**: Tools the agent can access. Specify by name (`view`, `edit`, `shell`) or by tag (`tag:search`, `tag:coding:default`, `tag:mcp`).
+**tools**: Tools the agent can access. Specify by name (`view`, `edit`, `shell`) or by tag (`tag:coding:default`, `tag:shell`, `tag:web`, `tag:mcp`).
 
-**compaction_threshold**: Token count that triggers conversation compaction.
+**spawn_presets** and **skills**: The presets this agent may [spawn](/workflows/spawn) as sub-agents (empty disables spawning), and the [skills](/features/skills) preloaded into it.
 
-**max_turns**: Maximum conversation turns before the agent stops.
+A preset can set only what the target workflow declares as an input. The built-in `agent` workflow takes `mode`, `model`, `tools`, `spawn_presets`, `skills` and `system_prompt`; other workflows declare their own, and a group's inputs are whatever that group lists.
 
 ### Provider policy: `providers:`
 
@@ -207,9 +208,9 @@ params:
     - shell
 
     # Tool groups by tag
-    - tag:coding:default    # The standard coding set: files, shell, search, web, planning
-    - tag:search     # grep, glob for code exploration
-    - tag:web        # fetch for web requests
+    - tag:coding:default    # The standard coding set: files, shell, web, planning
+    - tag:shell      # The shell, plus shell_output, shell_wait, shell_kill and shell_list
+    - tag:web        # fetch and web search
 ```
 
 Using tags lets you reference logical groups without listing each tool.
@@ -234,36 +235,19 @@ Presets in `.reliant/presets/` are regular files that can be checked into versio
 
 **Override built-ins**: Project presets with the same name as built-in presets take precedence. Create a `general.yaml` in your project to customize the general preset without changing Reliant itself.
 
-### Preset Loading Order
+### Where presets come from
 
-1. Built-in presets (embedded in Reliant)
-2. Project presets (from `.reliant/presets/`)
+A project sees three kinds of preset:
 
-Project presets override built-in presets with the same name.
+| Kind | Where it lives | Shared | Edited |
+|------|----------------|--------|--------|
+| **Built-in** | Shipped with Reliant | Everyone | Never; copy it to a new preset instead |
+| **Project** | `.reliant/presets/*.yaml` in the project | Through git | In your editor. The app shows them but does not change the files |
+| **Yours** | Your Reliant account, per project | No | In the app |
 
-### Configuration Precedence
+A project preset with a built-in's name replaces that built-in. Your own presets cannot reuse a built-in or project preset's name: saving one with a taken name is refused, so a name always means one preset.
 
-Reliant uses a layered configuration system where higher-priority sources override lower ones:
-
-1. **Runtime overrides** — Values set via UI or API
-2. **Project config** — `.reliant/` in your project
-3. **Global config** — `~/.reliant/` in your home directory
-4. **Built-in defaults** — Shipped with Reliant
-
-| Aspect | Database | File Config |
-|--------|----------|-------------|
-| **Storage** | Reliant's database | `.reliant/` directory |
-| **Sharing** | Per-user | Via git |
-| **Editing** | Via UI | Via text editor |
-| **Use case** | Personal settings | Team standards |
-
-**Conversations and settings** are stored in the database and are not shareable.
-
-**Workflows and presets** can be stored in either location:
-- Database: Created via UI, personal to you
-- Files: Created in `.reliant/`, shareable via git
-
-If the same workflow or preset name exists in both locations, the file version wins. This lets you override built-in items with customized versions or test changes before committing.
+The machine the project is on syncs `.reliant/presets/` to Reliant every couple of seconds, so a preset file you save is available without a restart. Workflows follow a different rule: a workflow of your own shadows a project workflow of the same `name:` (see [Workflow file location](/workflows/custom-workflows#workflow-file-location)).
 
 ## Examples
 
@@ -281,7 +265,6 @@ params:
     temperature: 0.1
   tools:
     - tag:coding:default
-    - tag:search
   system_prompt: |
     You are debugging a complex issue. Before attempting any fix:
 
@@ -341,9 +324,9 @@ params:
     tags: [flagship, reasoning]  # Security requires deep analysis
     temperature: 0.2
   tools:
-    - tag:search
     - view
-    - shell
+    - tag:shell
+    - code_context
   system_prompt: |
     You are a security auditor reviewing code for vulnerabilities.
 
@@ -363,53 +346,36 @@ params:
     - Recommended remediation
 ```
 
-## Managing Presets in the UI
+## Managing Presets in the App
 
-While presets can be created as YAML files, Reliant also provides UI-based management.
+Presets can be created as YAML files, and the app has three places to pick and manage them.
 
-### Viewing Presets
+### Picking a preset in a chat
 
-Open the Workflow/Preset selector in the app header (top-left). All available presets appear organized into:
+The chat composer's settings (the **Show all settings** button beside the model) have a **Preset** page listing the presets that fit the selected workflow, grouped as **User**, **Project** and **Built-in**. Choosing one applies all of its parameters; **None (use defaults)** goes back to the workflow's own defaults.
 
-- **Your Presets** - Custom presets you've created
-- **Built-in Presets** - System presets that come with Reliant
+### Settings → Presets
 
-Each preset card displays the name, description, source badge, and target tag.
+**Settings → Presets** lists every preset in the current project: **Your presets** (yours and the project's), **Built-in**, and any that **Failed to load**, with the reason. Each row's menu has **View**, which shows everything the preset sets; **Copy to new preset** on a built-in; **Edit** and **Delete** on your own; and **Hide from preset picker**, which keeps a preset out of the composer without deleting it. Project presets are changed by editing their YAML files, so the app offers no edit or delete for them.
 
-### Editing Presets
+### A workflow's presets
 
-Hover over any non-built-in preset to reveal edit and delete buttons. Click the pencil icon to modify the name and description. For project presets (YAML files in `.reliant/presets/`), editing updates the file directly.
+In **Workflows → Library**, open a workflow: its **Presets** section lists the presets that fit it, and **Default presets…** sets which preset each of its groups starts with when a chat or run begins.
 
-> Note: Built-in presets can't be edited. To customize one, create a project preset with the same name—it will override the built-in version.
+## Creating Presets in the App
 
-### Deleting Presets
+Wherever the app shows a workflow's input group as a form, such as **Run…** on a workflow's page, the Enable dialog, or a step in the workflow builder, changing the group's values marks it **Modified from** the preset it started from, and offers two ways to keep the change:
 
-Click the trash icon on any custom preset to delete it. For project presets, this removes the YAML file. Deletion can't be undone.
+- **Save as new** asks for a name and saves the group's current values as a new preset of your own.
+- **Update**, shown with the preset's name, writes them back into the preset you started from, when it is one of yours.
 
-### Setting Default Presets
+You can also start from a built-in: in **Settings → Presets**, choose **Copy to new preset** on it and edit the copy.
 
-Default presets automatically apply when you start a new chat:
-
-1. Go to the **Workflows** tab
-2. Hover over a workflow with a preset badge
-3. Click the gear icon
-4. Select your preferred preset
-5. Click **Save**
-
-## Creating Presets from Chat
-
-The easiest way to create a preset is to save your current configuration:
-
-1. Configure your workflow parameters (model, tools, system prompt)
-2. Click **Save as Preset** in the parameters panel
-3. Enter a name and description
-4. Click **Save**
-
-The preset saves to `.reliant/presets/` and becomes available immediately.
+Presets made in the app are saved to your account, in the current project, and are available immediately. To share one with your team, write it as a file in `.reliant/presets/` instead.
 
 ### What Gets Saved
 
-- Model (including its temperature), tools, system prompt
+- Model (including its temperature and thinking level), tools, system prompt
 - Tag (inherited from current workflow/group)
 
 Only explicitly configured parameters are saved. Default values aren't included, so the preset works across different workflows sharing the same tag.
@@ -425,5 +391,5 @@ Only explicitly configured parameters are saved. Default values aren't included,
 ## Related Topics
 
 - [Multi-Agent Patterns](/workflows/patterns) - How presets configure agents in multi-agent workflows
-- [Workflows](/workflows) - Overview of the workflow system
+- [Workflows](/workflows/overview) - Overview of the workflow system
 - [Creating Custom Workflows](/workflows/custom-workflows) - Build workflows that use your presets

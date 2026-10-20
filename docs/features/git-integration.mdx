@@ -1,33 +1,36 @@
 ---
 title: "Git Integration"
-description: "GitHub CLI requirements and source control features"
+description: "Commit, push and open pull requests from a chat, and what needs the GitHub CLI"
 ---
 
-Reliant integrates with Git for status, branching, worktrees, and pull-request workflows. Some GitHub-specific actions require the GitHub CLI (`gh`).
+Reliant works with the git repository on the chat's [machine](/machines/overview). The **Changes** tab in the right sidebar of a chat shows the branch you are on, how far it is ahead of or behind its upstream, and the files that changed, grouped as **Staged**, **Changes** and **Untracked**. From there you can stage or discard files, commit, push, pull and open a pull request.
 
-## What requires GitHub CLI
+## Committing and pushing
+
+Committing happens in a [workspace](/features/worktrees). The Changes tab of a chat that runs in a workspace has a commit box: write a message and choose **Commit**, or use the arrow button beside it (`Cmd+Shift+Enter`) to commit and push in one step. When the branch has commits the remote doesn't, a **Push** button shows how many; when the remote has commits you don't, **Pull** does the same. A chat on the project's main checkout shows its changes read-only, because writes go through a workspace.
+
+Pushing uses plain `git push` to `origin`. On a Reliant cloud machine, git gets your GitHub token from Reliant at the moment it needs one, through the connection in **Settings → GitHub**, and no token is ever stored on the machine. On your own computer, git uses whatever credentials that computer already has for the remote.
+
+## Pull requests
+
+Once a workspace's branch is pushed, the Changes tab offers to open a pull request for it, with a title and description you write. If the branch already has one, the same button opens it on GitHub instead.
+
+Creating a pull request, and finding the one a branch already has, use the GitHub CLI (`gh`) on the chat's machine. If `gh` isn't installed, the button says so and links to [cli.github.com](https://cli.github.com/). Everything else in the Changes tab works without it.
 
 | Feature | Requires `gh` |
 | --- | --- |
-| Create PR from workspace | Yes |
-| Push branch to remote | Yes |
-| Detect repository default branch | Yes |
-| View git status | No |
-| Create commits | No |
-| Create or switch branches | No |
+| Create a pull request | Yes |
+| Show a branch's existing pull request | Yes |
+| View status, stage and discard files | No |
+| Commit, push and pull | No |
 | Create workspaces | No |
 
-## Installing GitHub CLI
-
-### macOS
+### Installing GitHub CLI
 
 ```bash
+# macOS
 brew install gh
-```
 
-### Linux
-
-```bash
 # Debian/Ubuntu
 sudo apt install gh
 
@@ -35,43 +38,20 @@ sudo apt install gh
 sudo dnf install gh
 ```
 
-### Windows
-
 ```powershell
+# Windows
 winget install GitHub.cli
 ```
 
-You can also download installers from [cli.github.com](https://cli.github.com/).
-
-## Authenticating
-
-After installation:
-
-```bash
-gh auth login
-```
-
-Follow the prompts to authenticate through the browser or a token-based flow.
-
-## Creating pull requests from workspaces
-
-![Create pull request dialog from a workspace](/images/screenshots/create-pr.png)
-
-A typical flow is:
-
-1. make changes in a workspace
-2. review status and commit
-3. push the branch
-4. create a PR from the workspace UI
-
-If `gh` is missing or unauthenticated, Reliant will surface an error and point you toward setup.
+Then sign it in on that machine with `gh auth login` and follow the prompts.
 
 ## Default branch detection
 
-Reliant uses `gh` to detect the repository’s default branch when available. If that fails, it falls back to conventional defaults such as `main` or `master`.
+To know what a workspace branches from and what a pull request targets, Reliant works out the repository's default branch. It reads `origin/HEAD` first, which a normal clone sets. If that isn't set, it asks `gh`, then `git remote show origin`, and finally falls back to `main` or `master`, whichever exists on the remote.
 
 ## Related topics
 
 - [Worktrees & Workspaces](/features/worktrees)
+- [GitHub integration](/integrations/github), for workflows that act on GitHub
 - [Processes](/features/processes)
 - [Branching](/features/branching)

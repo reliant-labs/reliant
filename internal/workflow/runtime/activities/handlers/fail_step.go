@@ -77,7 +77,7 @@ func (a *FailStepActivity) Category() schema.ActivityCategory {
 // policy (unlimited attempts, backing off to minutes apart): a test run with
 // one broken expression never ended, and never said it had failed.
 func (a *FailStepActivity) Execute(ctx context.Context, input FailStepInput) (FailStepOutput, error) {
-	logging.Warn("[FailStep] Workflow validation error", "error", input.Error)
+	logging.WarnContext(ctx, "[FailStep] Workflow validation error", "error", input.Error)
 	return FailStepOutput{}, temporal.NewNonRetryableApplicationError(
 		fmt.Sprintf("workflow validation failed: %s", input.Error), "", nil)
 }

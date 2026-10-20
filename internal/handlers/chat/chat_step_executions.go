@@ -43,7 +43,7 @@ func (s *Service) ListStepExecutions(
 	// One more than the limit says whether anything was left out.
 	rows, err := s.deps.Repo.ListStepExecutionRecordsForChat(ctx, req.Msg.ChatId, nodePath, stepExecutionRecordLimit+1)
 	if err != nil {
-		logging.Error("Failed to list step executions", "error", err, "chatID", req.Msg.ChatId, "nodePath", nodePath)
+		logging.ErrorContext(ctx, "Failed to list step executions", "error", err, "chatID", req.Msg.ChatId, "nodePath", nodePath)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list step executions"))
 	}
 	truncated := len(rows) > stepExecutionRecordLimit

@@ -95,7 +95,7 @@ func (s *Service) checkoutMissingError(
 		detail.RemoteUrl = strings.TrimSpace(*project.RemoteURL)
 	}
 	if rows, lerr := s.deps.Repo.ListProjectDaemonsForProject(ctx, projectID); lerr != nil {
-		logging.Warn("[FSProxy] Could not read clone records for a missing project directory",
+		logging.WarnContext(ctx, "[FSProxy] Could not read clone records for a missing project directory",
 			"error", lerr, "projectID", projectID)
 	} else {
 		detail.State, detail.InstallError = checkoutstate.On(rows, detail.DaemonId)

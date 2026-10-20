@@ -72,7 +72,7 @@ func (p *Poller) Tick(ctx context.Context) int {
 	ids, err := p.Store.LeaseUsagePolls(ctx, now, orDefaultInt(p.Batch, defaultLeaseBatch), orDefault(p.Lease, defaultLease))
 	if err != nil {
 		if ctx.Err() == nil {
-			logging.Warn("leasing usage polls failed", "error", err)
+			logging.WarnContext(ctx, "leasing usage polls failed", "error", err)
 		}
 		return 0
 	}
@@ -90,12 +90,12 @@ func (p *Poller) Tick(ctx context.Context) int {
 			defer func() { <-sem }()
 			defer func() {
 				if r := recover(); r != nil {
-					logging.Error("usage poll panicked", "account_id", id, "panic", r)
+					logging.ErrorContext(ctx, "usage poll panicked", "account_id", id, "panic", r)
 				}
 			}()
 			res := p.Fetcher.PollLeased(ctx, id)
 			if res.Outcome == OutcomeSkipped && res.Err != nil && ctx.Err() == nil {
-				logging.Warn("usage poll skipped", "account_id", id, "error", res.Err)
+				logging.WarnContext(ctx, "usage poll skipped", "account_id", id, "error", res.Err)
 			}
 		}()
 	}

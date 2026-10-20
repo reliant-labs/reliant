@@ -131,9 +131,11 @@ SELECT DISTINCT ON (r.workflow_name) r.* FROM (
               AND te.payload->>'parent_chat_id' = sqlc.narg('parent_chat_id')::text
               AND te.chat_id IS NOT NULL))
 ) r
+-- Archived runs count: an automation archives each run it finishes
+-- successfully, so leaving them out would make a healthy automation's
+-- workflow read as never having run.
 WHERE
-    r.chat_state IS DISTINCT FROM 3
-    AND r.launch_kind IS DISTINCT FROM 'builder.test'
+    r.launch_kind IS DISTINCT FROM 'builder.test'
     AND r.workflow_name <> ''
     AND (sqlc.narg('project_id')::text IS NULL OR r.project_id = sqlc.narg('project_id')::text)
     AND (cardinality(sqlc.arg('workflows')::text[]) = 0 OR r.workflow_name = ANY(sqlc.arg('workflows')::text[]))

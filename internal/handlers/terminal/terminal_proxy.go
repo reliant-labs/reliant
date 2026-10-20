@@ -64,11 +64,11 @@ func closeDaemonTerminalSession(ctx context.Context, router SessionRouter, userI
 
 	payload, err := json.Marshal(map[string]any{"session_id": sessionID})
 	if err != nil {
-		logging.Error("[Terminal] Failed to marshal session close", "error", err, "session_id", sessionID)
+		logging.ErrorContext(ctx, "[Terminal] Failed to marshal session close", "error", err, "session_id", sessionID)
 		return
 	}
 	if _, err := router.SendDaemonCommand(closeCtx, userID, "terminal.close", payload, int32(terminalCloseTimeout/time.Millisecond)); err != nil {
-		logging.Debug("[Terminal] Session close on disconnect did not complete (may already be closed)",
+		logging.DebugContext(ctx, "[Terminal] Session close on disconnect did not complete (may already be closed)",
 			"error", err, "session_id", sessionID)
 	}
 }
@@ -238,7 +238,7 @@ func (s *Service) StreamTerminal(
 		// The daemon refused the directory (see terminal.resolveWorkingDir).
 		// It is the caller's to fix or wait for, not a server fault.
 		if terminal.IsWorkingDirUnavailable(err) {
-			logging.Warn("[Terminal] Stream working directory unavailable",
+			logging.WarnContext(ctx, "[Terminal] Stream working directory unavailable",
 				"requested_working_dir", createReq.GetWorkingDir(), "user_id", userID, "error", err)
 			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("create terminal session: %w", err))
 		}
@@ -260,7 +260,7 @@ func (s *Service) StreamTerminal(
 	}
 
 	sessionID := createResp.SessionID
-	logging.Info("[Terminal] Stream session created",
+	logging.InfoContext(ctx, "[Terminal] Stream session created",
 		"session_id", sessionID,
 		"pid", createResp.PID,
 		"user_id", userID,

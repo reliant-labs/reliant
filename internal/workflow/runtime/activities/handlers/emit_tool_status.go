@@ -77,7 +77,7 @@ func (a *EmitToolCallStatusActivity) Execute(ctx context.Context, input EmitTool
 	a.persist(ctx, input)
 
 	if err := a.repo.EmitToolCallUpdate(ctx, input.ChatID, update); err != nil {
-		logging.Error("[EmitToolCallStatus] Failed", "error", err, "tool_call_id", input.ToolCallID, "status", input.Status)
+		logging.ErrorContext(ctx, "[EmitToolCallStatus] Failed", "error", err, "tool_call_id", input.ToolCallID, "status", input.Status)
 		return EmitToolCallStatusOutput{Success: false}, nil // best-effort, don't fail
 	}
 
@@ -126,7 +126,7 @@ func (a *EmitToolCallStatusActivity) persist(ctx context.Context, input EmitTool
 	}
 
 	if err := db.UpsertToolCallStatus(ctx, a.repo, call); err != nil {
-		logging.Error("[EmitToolCallStatus] Failed to persist tool call",
+		logging.ErrorContext(ctx, "[EmitToolCallStatus] Failed to persist tool call",
 			"error", err, "tool_call_id", input.ToolCallID, "status", input.Status)
 	}
 }

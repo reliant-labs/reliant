@@ -69,7 +69,11 @@ export interface LibraryView {
   noWorkflowsOfYourOwn: boolean;
   /** Definitions that failed to load, after search and source. */
   invalid: InvalidWorkflow[];
-  /** Hidden built-ins: run directly, not offered in the composer. Shown collapsed. */
+  /**
+   * Hidden built-ins a person can run directly, not offered in the composer.
+   * Shown collapsed. Automation-only ones are an automation's internal steps
+   * and are not listed.
+   */
   buildingBlocks: WorkflowResponse[];
   /** Per workflow ref (normalized): how many automations run it. */
   automationCounts: Map<string, number>;
@@ -122,8 +126,11 @@ export function libraryView({
 
   const query = q?.trim().toLowerCase() ?? "";
   const visible = workflows.filter((w) => !(w.source === "builtin" && w.isHidden));
+  // A hidden built-in that also refuses a chat start (automation_only) is a
+  // step inside an automation pack (Autopilot's lease and label helpers), not
+  // something a person runs: it is listed nowhere, only ref'd.
   const buildingBlocks = workflows
-    .filter((w) => w.source === "builtin" && w.isHidden)
+    .filter((w) => w.source === "builtin" && w.isHidden && !w.automationOnly)
     .filter((w) => !query || matches(query, workflowDisplayName(w), w.name, w.description));
   const searched = query
     ? visible.filter((w) => matches(query, workflowDisplayName(w), w.name, w.description))

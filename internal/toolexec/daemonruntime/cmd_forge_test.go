@@ -481,6 +481,7 @@ func TestForgeDeadlineIsReportedAsTimeoutNotFailure(t *testing.T) {
 // reports such a child as an *exec.ExitError (exit -1), which used to be read
 // as forge's exit code; the context must win.
 func TestRunForgeProcessKilledByDeadlineIsAContextError(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell child")
 	}
@@ -503,6 +504,7 @@ func TestRunForgeProcessKilledByDeadlineIsAContextError(t *testing.T) {
 // the full 30s of its `sleep`, and a real invocation would have outlived its
 // two-minute budget by however long the orphan ran.
 func TestRunForgeProcessDeadlineIsNotHeldByAGrandchild(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell child")
 	}
@@ -525,6 +527,7 @@ func TestRunForgeProcessDeadlineIsNotHeldByAGrandchild(t *testing.T) {
 // A forge that EXITS 0 but leaves a grandchild holding its pipes still
 // delivered its verdict: the exit and the output it wrote, promptly.
 func TestRunForgeProcessCleanExitIsNotHeldByAGrandchild(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell child")
 	}

@@ -56,6 +56,7 @@ func parityWorkflow(name string) string {
 }
 
 func TestProjectLayout_AppResolvesEveryRefAsTheCLIDoes(t *testing.T) {
+	t.Parallel()
 	project := writeProject(t, map[string]string{
 		"blog.yaml":         parityWorkflow("blog-content-pipeline"),
 		"content-next.yaml": parityWorkflow("content-next"),
@@ -121,6 +122,7 @@ func TestProjectLayout_AppResolvesEveryRefAsTheCLIDoes(t *testing.T) {
 }
 
 func TestProjectLayout_AppListsTheScenariosTheCLIRuns(t *testing.T) {
+	t.Parallel()
 	project := writeProject(t, map[string]string{
 		"blog.yaml":                                   parityWorkflow("blog-content-pipeline"),
 		"content-next.yaml":                           parityWorkflow("content-next"),

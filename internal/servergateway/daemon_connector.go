@@ -126,7 +126,7 @@ func (dc *DaemonConnector) connectWithRetry(ctx context.Context, daemonID, userI
 			dc.failPublisher.OnDaemonConnectFailed(userID, daemonID, err.Error())
 		}
 
-		logging.Warn(connectorLogPrefix+" Outbound connection lost, retrying",
+		logging.WarnContext(ctx, connectorLogPrefix+" Outbound connection lost, retrying",
 			"daemonId", daemonID, "error", err, "retryIn", delay)
 
 		select {
@@ -211,7 +211,7 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 
 	// Identity comes from the reconciler snapshot, not from the daemon.
 	// The daemon is untrusted — the gateway is the authority.
-	logging.Info(connectorLogPrefix+" Received registration from daemon",
+	logging.InfoContext(ctx, connectorLogPrefix+" Received registration from daemon",
 		"daemonId", daemonID, "userId", userID,
 		"hostname", reg.Hostname, "daemonType", reg.DaemonType)
 

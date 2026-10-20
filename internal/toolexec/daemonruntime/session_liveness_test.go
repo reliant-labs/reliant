@@ -170,6 +170,7 @@ var fastTiming = sessionTiming{
 // "connected" forever: the daemon notices its heartbeats going unacknowledged,
 // ends the session, and redials.
 func TestDaemonRedialsWhenTheGatewayStopsReadingItsStream(t *testing.T) {
+	t.Parallel()
 	gw := &stopsReadingGateway{}
 	client := newDaemonClientForTest(t, t.TempDir(), startGateway(t, gw))
 	client.timing = fastTiming
@@ -186,6 +187,7 @@ func TestDaemonRedialsWhenTheGatewayStopsReadingItsStream(t *testing.T) {
 // The same daemon behind a gateway that never acknowledges (older than the
 // ack field) and is otherwise healthy must keep its session.
 func TestDaemonKeepsItsSessionWithAGatewayThatNeverAcknowledges(t *testing.T) {
+	t.Parallel()
 	gw := &stopsReadingGateway{neverAck: true}
 	client := newDaemonClientForTest(t, t.TempDir(), startGateway(t, gw))
 	client.timing = fastTiming

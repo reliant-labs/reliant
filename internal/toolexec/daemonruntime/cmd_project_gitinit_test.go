@@ -50,6 +50,7 @@ func TestDirIsEffectivelyEmpty(t *testing.T) {
 // project initializes, but a non-empty folder is skipped (Success=false, no
 // error, no .git created) so the user is prompted instead.
 func TestHandleInitGitRepo_OnlyIfEmpty(t *testing.T) {
+	t.Parallel()
 	call := func(t *testing.T, path string) initGitRepoResponse {
 		t.Helper()
 		payload, _ := json.Marshal(initGitRepoRequest{

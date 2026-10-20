@@ -594,7 +594,7 @@ func (r *Repo) GetMaxContextSequenceInThread(ctx context.Context, threadID strin
 	// If so, inherit the parent's context_sequence at the fork point
 	threadRecord, _, err := r.GetThreadWithParent(ctx, threadID)
 	if err != nil {
-		logging.Debug("[GetMaxContextSequenceInThread] Error getting thread, defaulting to 0",
+		logging.DebugContext(ctx, "[GetMaxContextSequenceInThread] Error getting thread, defaulting to 0",
 			"threadID", threadID,
 			"error", err)
 		return 0, nil
@@ -607,7 +607,7 @@ func (r *Repo) GetMaxContextSequenceInThread(ctx context.Context, threadID strin
 		if err == nil && forkMsg != nil {
 			parentCW, err := r.GetContextWindow(ctx, forkMsg.ContextWindowID)
 			if err == nil && parentCW != nil {
-				logging.Debug("[GetMaxContextSequenceInThread] Inheriting context_sequence from parent fork point",
+				logging.DebugContext(ctx, "[GetMaxContextSequenceInThread] Inheriting context_sequence from parent fork point",
 					"threadID", threadID,
 					"forkAtMessageID", *threadRecord.ForkAtMessageID,
 					"parentContextWindowID", forkMsg.ContextWindowID,
@@ -615,7 +615,7 @@ func (r *Repo) GetMaxContextSequenceInThread(ctx context.Context, threadID strin
 				return parentCW.Sequence, nil
 			}
 		}
-		logging.Debug("[GetMaxContextSequenceInThread] Failed to get parent context_window at fork point",
+		logging.DebugContext(ctx, "[GetMaxContextSequenceInThread] Failed to get parent context_window at fork point",
 			"threadID", threadID,
 			"parentThreadID", *threadRecord.ParentThreadID,
 			"forkAtMessageID", *threadRecord.ForkAtMessageID,
@@ -929,7 +929,7 @@ func (r *Repo) MarkMessageBlocksComplete(ctx context.Context, messageID string) 
 
 	rowsAffected, err := result.RowsAffected()
 	if err == nil && rowsAffected > 0 {
-		logging.Debug("Marked message blocks as complete",
+		logging.DebugContext(ctx, "Marked message blocks as complete",
 			"messageID", messageID,
 			"blocksUpdated", rowsAffected)
 	}
@@ -3511,7 +3511,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 	if err != nil {
 		// Thread not found - try querying messages directly using thread as both chat_id and thread
 		// This handles legacy data where Thread records may not exist
-		logging.Debug("[GetThreadTokenCount] Thread record not found, trying direct query",
+		logging.DebugContext(ctx, "[GetThreadTokenCount] Thread record not found, trying direct query",
 			"thread", thread,
 			"error", err)
 		return r.getThreadTokenCountDirect(ctx, thread, thread, maxSeq)
@@ -3520,7 +3520,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 	// Get current context sequence for the thread
 	contextSeq, err := r.GetMaxContextSequenceInThread(ctx, thread)
 	if err != nil {
-		logging.Warn("[GetThreadTokenCount] Error getting context sequence",
+		logging.WarnContext(ctx, "[GetThreadTokenCount] Error getting context sequence",
 			"thread", thread,
 			"error", err)
 		contextSeq = 0
@@ -3535,7 +3535,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 	var localTokens int64
 	localTokens, err = r.tokenCounts.GetThreadTokenCountAtSeq(ctx, thread, int64(contextSeq), maxSeqSQL)
 	if err != nil {
-		logging.Warn("[GetThreadTokenCount] Error querying token count",
+		logging.WarnContext(ctx, "[GetThreadTokenCount] Error querying token count",
 			"thread", thread,
 			"contextSequence", contextSeq,
 			"maxSeq", maxSeq,
@@ -3545,7 +3545,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 
 	// If we have local token data, return it
 	if localTokens > 0 {
-		logging.Debug("[GetThreadTokenCount] Found local token data",
+		logging.DebugContext(ctx, "[GetThreadTokenCount] Found local token data",
 			"thread", thread,
 			"tokens", localTokens)
 		return localTokens, nil
@@ -3554,7 +3554,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 	// No local token data - check for fork inheritance
 	if threadRecord.ParentThreadID == nil || threadRecord.ForkAtMessageID == nil {
 		// No fork metadata, return 0
-		logging.Debug("[GetThreadTokenCount] No local tokens and no fork metadata",
+		logging.DebugContext(ctx, "[GetThreadTokenCount] No local tokens and no fork metadata",
 			"thread", thread)
 		return 0, nil
 	}
@@ -3563,7 +3563,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 
 	// Guard against self-referential forks
 	if parentThreadID == thread {
-		logging.Warn("[GetThreadTokenCount] Skipping self-referential fork",
+		logging.WarnContext(ctx, "[GetThreadTokenCount] Skipping self-referential fork",
 			"thread", thread)
 		return 0, nil
 	}
@@ -3574,7 +3574,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 	}
 
 	// Recursively get parent's token count at the fork point
-	logging.Debug("[GetThreadTokenCount] Inheriting tokens from parent",
+	logging.DebugContext(ctx, "[GetThreadTokenCount] Inheriting tokens from parent",
 		"thread", thread,
 		"parentThread", parentThreadID,
 		"forkAtMessageID", *threadRecord.ForkAtMessageID,
@@ -3817,13 +3817,13 @@ func (r *Repo) EnsureWorkflowRunning(ctx context.Context, workflowID, chatID str
 		return // Paused is a deliberate user action — don't override it
 	}
 
-	logging.Info("[EnsureWorkflowRunning] Workflow not marked active, correcting",
+	logging.InfoContext(ctx, "[EnsureWorkflowRunning] Workflow not marked active, correcting",
 		"workflowID", workflowID,
 		"chatID", chatID,
 		"currentStatus", wf.Status.Label(),
 	)
 	if err := r.UpdateWorkflowStatus(ctx, workflowID, Active()); err != nil {
-		logging.Warn("[EnsureWorkflowRunning] Failed to update workflow status",
+		logging.WarnContext(ctx, "[EnsureWorkflowRunning] Failed to update workflow status",
 			"workflowID", workflowID,
 			"error", err,
 		)

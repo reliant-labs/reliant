@@ -11,15 +11,15 @@ Every Reliant deployment consists of these components:
 
 <img src="/images/architecture/core-components.png" alt="Core Components" />
 
-**HTTP API Server** — Serves REST endpoints consumed by the web frontend. Handles CRUD operations for chats, messages, projects, workflows, and settings.
-
-**gRPC/ConnectRPC Server** — Provides RPC endpoints for real-time operations: streaming chat responses, file system browsing, terminal sessions, background process management, and daemon connectivity. Uses ConnectRPC for browser-compatible gRPC.
+**API Server** — Serves every client-facing RPC over ConnectRPC, browser-compatible gRPC: chats, messages, projects, workflows and settings, streaming chat updates, and the browser's view of a daemon (file browsing, terminal sessions, background processes), which it reaches through NATS. A WebSocket endpoint carries terminal I/O.
 
 **Temporal Engine** — The durable workflow orchestration layer. Workflows are defined as Temporal workflows, which means they automatically survive process crashes, restarts, and network failures. The engine manages workflow state, schedules activities, and handles retries.
 
 **Temporal Workers** — Execute the actual workflow activities: calling LLM providers (Anthropic, OpenAI, etc.), routing tool execution requests to the daemon, persisting messages and state to the database, and publishing streaming updates to the frontend.
 
-**Tools Daemon** — A process that provides direct access to the machine it runs on: the user's own machine, any machine they own, or a managed cloud machine. It executes shell commands, performs file operations, manages MCP server lifecycles, and hosts terminal sessions. It runs as a separate `reliant daemon` process that connects to the cloud via a bidirectional gRPC stream.
+**Tools Daemon** — A process that provides direct access to the machine it runs on: the user's own machine, any machine they own, or a managed cloud machine. It executes shell commands, performs file operations, manages MCP server lifecycles, and hosts terminal sessions. It runs as a separate `reliant daemon` process that connects to the cloud via a bidirectional gRPC stream to the daemon gateway.
+
+**Daemon Gateway** — Holds those daemon streams and bridges them to NATS, so any API server or worker can reach any connected daemon.
 
 **Database** — Stores chats, messages, content blocks, workflows, projects, and worktree associations. Postgres is the only supported database.
 
@@ -29,11 +29,11 @@ Every Reliant deployment consists of these components:
 
 Three separate process types split the workload:
 
-- **`reliant server api`** — Stateless HTTP + gRPC server. Connects to external Temporal, Postgres, and NATS. Runs as N replicas behind a load balancer.
+- **`reliant server api`** — Stateless ConnectRPC server. Connects to external Temporal, Postgres, and NATS. Runs as N replicas behind a load balancer.
 - **`reliant server worker`** — Temporal workflow worker. Executes activities (LLM calls, tool routing). Runs as N replicas for horizontal scaling.
 - **`reliant server gateway`** — Manages bidirectional gRPC streams to `reliant daemon` processes. Routes tool execution requests from API servers and workers to the correct daemon via NATS. Runs as a small number of stateful replicas.
 
-Users run `reliant daemon start` on any machine they own, which establishes a persistent gRPC stream to the gateway. Tool execution requests flow through NATS (`NATSDaemonRouter`) to the gateway, which forwards them to the appropriate daemon stream. Streaming updates propagate through `NATSUpdateHub` so all API server replicas can push events to their connected frontends.
+A daemon runs on any machine a user owns (started by the desktop app, or with `reliant daemon start`) or on a managed cloud machine, and keeps a persistent gRPC stream to a gateway. Tool execution requests flow through NATS (`NATSDaemonRouter`) to the gateway, which forwards them to the appropriate daemon stream. Streaming updates propagate through `NATSUpdateHub` so all API server replicas can push events to their connected frontends.
 
 ## Architecture Summary
 
@@ -53,12 +53,12 @@ A user message flows through the system in this sequence:
 
 <img src="/images/architecture/request-data-flow.png" alt="Request Data Flow" />
 
-1. The frontend sends the message via the gRPC server, which creates a chat workflow execution in Temporal.
+1. The frontend sends the message to the API server, which creates a chat workflow execution in Temporal.
 2. Temporal dispatches workflow activities to a worker. The worker calls the configured LLM provider with the conversation history and available tools.
 3. When the LLM responds with tool calls, the worker routes them to the tools daemon through NATS and the gateway.
 4. The daemon executes each tool (running a shell command, editing a file, calling an MCP server) and returns the results to the worker.
 5. The worker feeds tool results back to the LLM for the next iteration of the agent loop.
-6. At each step, the worker publishes streaming updates (message chunks, tool outputs, status changes) through the streaming layer. The gRPC server picks up these events and pushes them to the frontend over the active stream.
+6. At each step, the worker publishes streaming updates (message chunks, tool outputs, status changes) through the streaming layer. The API server picks up these events and pushes them to the frontend over the active stream.
 7. This loop continues until the LLM produces a final response with no further tool calls.
 
 Because Temporal manages the workflow state, any crash during this process resumes from the last completed activity rather than starting over.

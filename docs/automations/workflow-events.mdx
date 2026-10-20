@@ -27,9 +27,23 @@ nodes:
 | `workflows` | Which workflows' runs to watch, as a slug or `builtin://<name>`. Empty means any of your workflows |
 | `outcomes` | `finished`, `failed` or `blocked` (waiting on an approval or a question). Empty means all three |
 
-A workflow-event trigger never fires on a run that it started itself, or on that run's descendants, so two workflows cannot trigger each other forever. If a name in `workflows` does not resolve yet, validation warns that the trigger matches nothing until the workflow exists.
+A workflow-event trigger never fires on a run that it started itself, or on that run's descendants, so two workflows cannot trigger each other forever, and a chain of event-launched runs stops at five hops. If a name in `workflows` does not resolve yet, validation warns that the trigger matches nothing until the workflow exists.
 
-Use `filter` to narrow further, in the same way as for any other kind, and see [Automations](/automations/overview) for the shared fields.
+## What the run sees
+
+`trigger.payload` describes the run that reached the outcome. Every key is always present, empty when it does not apply:
+
+| Key | Holds |
+|-----|-------|
+| `run_id` (also `chat_id`) | The run that reached the outcome; open it in **Workflows → Runs** |
+| `workflow_name`, `workflow` | Its workflow, by name and as the reference `workflows` compares against |
+| `project_id`, `chat_title` | Where it ran, and its title |
+| `outcome` | `finished`, `failed` or `blocked` |
+| `summary` | The run's final summary, for `finished` |
+| `error` | Why it failed, for `failed` |
+| `blocked_on`, `prompt` | For `blocked`: `approval` or `question`, and what it asks |
+
+Use `filter` to narrow further, in the same way as for any other kind (`filter: "trigger.payload.error.contains('timeout')"`), and see [Automations](/automations/overview) for the shared fields.
 
 ## Related topics
 

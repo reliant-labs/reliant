@@ -207,7 +207,7 @@ func (a *GitPublishActivity) Execute(ctx context.Context, input ActivityInput) (
 		return out, nil
 	}
 	out.Pushed = push.Pushed
-	logging.Info("[GitPublish] Completed", "stepID", rtx.StepID, "repo", repo.String(),
+	logging.InfoContext(ctx, "[GitPublish] Completed", "stepID", rtx.StepID, "repo", repo.String(),
 		"branch", decision.Branch, "sha", prep.HeadSHA, "pushed", push.Pushed, "ledger", intent.IDs())
 	return out, nil
 }

@@ -89,13 +89,13 @@ func (s *service) MachineConnected(ctx context.Context, userID string) int {
 	n := 0
 	paused, err := s.store.ListChatsPausedForMachine(ctx, userID, perUserLimit)
 	if err != nil {
-		logging.Warn("[QueuedDelivery] Could not list the user's chats paused for their machine", "userID", userID, "error", err)
+		logging.WarnContext(ctx, "[QueuedDelivery] Could not list the user's chats paused for their machine", "userID", userID, "error", err)
 	} else {
 		n += s.resumePaused(ctx, paused)
 	}
 	queued, err := s.store.ListChatsQueuedForMachine(ctx, userID, perUserLimit)
 	if err != nil {
-		logging.Warn("[QueuedDelivery] Could not list the user's queued messages", "userID", userID, "error", err)
+		logging.WarnContext(ctx, "[QueuedDelivery] Could not list the user's queued messages", "userID", userID, "error", err)
 		return n
 	}
 	return n + s.deliver(ctx, queued)
@@ -130,14 +130,14 @@ func (s *service) ContinueQueued(ctx context.Context, chatID string) (bool, erro
 func (s *service) wakeWaitingRuns(ctx context.Context, userID string) {
 	waiting, err := s.store.ListChatsWaitingForMachine(ctx, userID)
 	if err != nil {
-		logging.Warn("[QueuedDelivery] Could not list the user's runs waiting for a machine", "userID", userID, "error", err)
+		logging.WarnContext(ctx, "[QueuedDelivery] Could not list the user's runs waiting for a machine", "userID", userID, "error", err)
 		return
 	}
 	for _, run := range waiting {
 		if err := s.signaler.SignalWorkflow(ctx, run.WorkflowID, "", machinewait.SignalName, machinewait.Signal{
 			Reason: machinewait.ReasonMachineConnected,
 		}); err != nil {
-			logging.Warn("[QueuedDelivery] Could not tell a waiting run its user's machine connected",
+			logging.WarnContext(ctx, "[QueuedDelivery] Could not tell a waiting run its user's machine connected",
 				"chatID", run.ChatID, "workflowID", run.WorkflowID, "error", err)
 		}
 	}
@@ -158,13 +158,13 @@ func (s *service) resumePaused(ctx context.Context, paused []db.PausedForMachine
 		}
 		ok, err := s.deliverer.ResumePausedForMachine(ctx, chat.ChatID)
 		if err != nil {
-			logging.Warn("[QueuedDelivery] Could not resume a chat paused for its machine; it stays paused",
+			logging.WarnContext(ctx, "[QueuedDelivery] Could not resume a chat paused for its machine; it stays paused",
 				"chatID", chat.ChatID, "error", err)
 			continue
 		}
 		if ok {
 			resumed++
-			logging.Info("[QueuedDelivery] The chat's machine is back; resumed the run the offline breaker paused",
+			logging.InfoContext(ctx, "[QueuedDelivery] The chat's machine is back; resumed the run the offline breaker paused",
 				"chatID", chat.ChatID, "userID", chat.UserID, "pausedFor", time.Since(chat.PausedAt).Round(time.Second))
 		}
 	}
@@ -186,13 +186,13 @@ func (s *service) deliver(ctx context.Context, queued []db.QueuedForMachineChat)
 		}
 		ok, err := s.deliverer.ContinueQueued(ctx, chat.ChatID)
 		if err != nil {
-			logging.Warn("[QueuedDelivery] Could not deliver a message queued for its machine; it stays queued",
+			logging.WarnContext(ctx, "[QueuedDelivery] Could not deliver a message queued for its machine; it stays queued",
 				"chatID", chat.ChatID, "error", err)
 			continue
 		}
 		if ok {
 			started++
-			logging.Info("[QueuedDelivery] The chat's machine is back; delivering the message queued for it",
+			logging.InfoContext(ctx, "[QueuedDelivery] The chat's machine is back; delivering the message queued for it",
 				"chatID", chat.ChatID, "userID", chat.UserID, "queuedFor", time.Since(chat.QueuedAt).Round(time.Second))
 		}
 	}
@@ -211,7 +211,7 @@ func (s *service) Run(ctx context.Context, nc *nats.Conn) error {
 	stream, err := js.Stream(ctx, daemonevents.StreamDaemonEvents)
 	if err != nil {
 		if errors.Is(err, jetstream.ErrStreamNotFound) {
-			logging.Warn("[QueuedDelivery] DAEMON_EVENTS stream does not exist yet; delivering from the sweep only")
+			logging.WarnContext(ctx, "[QueuedDelivery] DAEMON_EVENTS stream does not exist yet; delivering from the sweep only")
 			return nil
 		}
 		return fmt.Errorf("look up %s stream: %w", daemonevents.StreamDaemonEvents, err)
@@ -246,7 +246,7 @@ func (s *service) Run(ctx context.Context, nc *nats.Conn) error {
 		return fmt.Errorf("consume %s: %w", daemonevents.SubjectConnected, err)
 	}
 	defer cc.Stop()
-	logging.Info("[QueuedDelivery] Listening for machine connects",
+	logging.InfoContext(ctx, "[QueuedDelivery] Listening for machine connects",
 		"stream", daemonevents.StreamDaemonEvents, "subject", daemonevents.SubjectConnected, "durable", consumerName)
 	<-ctx.Done()
 	return nil

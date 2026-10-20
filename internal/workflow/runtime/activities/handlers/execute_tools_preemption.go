@@ -109,12 +109,12 @@ func (b *batchPreemption) arm(ctx context.Context) (context.Context, func() bool
 			if err != nil {
 				// A failed check is not a reason to stop checking: the wait
 				// may run for many minutes yet.
-				logging.Debug("[ExecuteTools] Preemption check failed; will retry",
+				logging.DebugContext(ctx, "[ExecuteTools] Preemption check failed; will retry",
 					"thread", b.thread, "error", err)
 				continue
 			}
 			if marked > 0 {
-				logging.Info("[ExecuteTools] A message arrived for the thread; preempting its waiting calls",
+				logging.InfoContext(ctx, "[ExecuteTools] A message arrived for the thread; preempting its waiting calls",
 					"thread", b.thread, "messages", marked)
 				b.fire()
 				return

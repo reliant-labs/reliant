@@ -110,10 +110,10 @@ func (r *Reconciler) Run(ctx context.Context) {
 	for {
 		report, err := r.ReconcileAll(ctx)
 		if err != nil {
-			logging.Warn("trigger declaration reconcile pass had failures; the next pass retries",
+			logging.WarnContext(ctx, "trigger declaration reconcile pass had failures; the next pass retries",
 				"checked", report.Checked, "updated", report.Updated, "broken", report.Broken, "error", err)
 		} else if report.Updated > 0 {
-			logging.Info("trigger declarations re-projected",
+			logging.InfoContext(ctx, "trigger declarations re-projected",
 				"checked", report.Checked, "updated", report.Updated, "broken", report.Broken)
 		}
 		select {

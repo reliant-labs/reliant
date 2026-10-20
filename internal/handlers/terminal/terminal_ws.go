@@ -136,7 +136,17 @@ func (c terminalWSConfig) workingDirMayAppear(ctx context.Context, router toolex
 	return state == reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONING
 }
 
-// wsResizeMessage is the JSON message the browser sends for resize events.
+// wsMessagePong answers a browser "ping". The browser cannot see protocol-level
+// ping frames, and a laptop that slept can keep a dead socket in OPEN state
+// until TCP notices; it pings after waking and replaces the socket when no
+// answer (or anything else) arrives.
+const (
+	wsClientPing = "ping"
+	wsServerPong = "pong"
+)
+
+// wsResizeMessage is the JSON message the browser sends for resize events and
+// liveness pings (Type "resize" / "ping").
 type wsResizeMessage struct {
 	Type string `json:"type"`
 	Cols uint32 `json:"cols"`
@@ -337,6 +347,10 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 			}
 		}()
 
+		// pongCh hands a browser ping to the output pump, the only goroutine
+		// that writes data frames: gorilla allows one concurrent writer.
+		pongCh := make(chan struct{}, 1)
+
 		// Output pump: daemon -> WebSocket
 		go func() {
 			defer wg.Done()
@@ -344,6 +358,8 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 				select {
 				case <-ctx.Done():
 					return
+				case <-pongCh:
+					writeWSJSON(conn, wsMessage{Type: wsServerPong})
 				case evt, ok := <-outputCh:
 					if !ok {
 						setPumpErr(nil)
@@ -382,10 +398,18 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 					return
 				}
 
-				// Try to parse as JSON resize message.
-				var resize wsResizeMessage
-				if json.Unmarshal(raw, &resize) == nil && resize.Type == "resize" {
-					if err := router.SendTerminalResize(ctx, userID, sessionID, resize.Cols, resize.Rows); err != nil {
+				// Try to parse as a JSON control message.
+				var ctl wsResizeMessage
+				ctlOK := json.Unmarshal(raw, &ctl) == nil
+				if ctlOK && ctl.Type == wsClientPing {
+					select {
+					case pongCh <- struct{}{}:
+					default: // a pong is already queued; it answers this ping too
+					}
+					continue
+				}
+				if ctlOK && ctl.Type == "resize" {
+					if err := router.SendTerminalResize(ctx, userID, sessionID, ctl.Cols, ctl.Rows); err != nil {
 						logging.Error("[TerminalWS] Send resize failed", append([]any{"error", err}, logFields...)...)
 						setPumpErr(err)
 						return
@@ -491,8 +515,8 @@ func logTerminalMachineState(ctx context.Context, router toolexec.DaemonRouter, 
 		fields = append(fields, "daemon_id", daemonID)
 	}
 	if state == terminalMachineNotAnswering {
-		logging.Error("[TerminalWS] Machine is connected but did not answer; the browser retries", fields...)
+		logging.ErrorContext(ctx, "[TerminalWS] Machine is connected but did not answer; the browser retries", fields...)
 		return
 	}
-	logging.Info("[TerminalWS] Machine not ready; the browser shows it and retries", fields...)
+	logging.InfoContext(ctx, "[TerminalWS] Machine not ready; the browser shows it and retries", fields...)
 }
