@@ -2,11 +2,8 @@
 package tools
 
 import (
-	"context"
 	"regexp"
 	"strings"
-
-	"github.com/reliant-labs/reliant/internal/features"
 )
 
 // Tool name constants
@@ -756,16 +753,12 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolRunScenario, (*ToolsFactory).RunScenario, []ToolTag{TagWorkflow}, PlacementServer, false},
 	}
 
-	// Only add project analyzer if not disabled
-	if !features.GetGlobalRegistry().EvaluateBool(context.Background(), "project_analyzer_disabled", false) {
-		tools = append(tools, projectAnalyzerDefinition())
-	}
+	tools = append(tools, projectAnalyzerDefinition())
 
 	return append(tools, integrationToolDefinitions()...)
 }
 
-// projectAnalyzerDefinition is split out so tests can inspect its placement
-// even while the feature flag keeps it out of the registry. It walks the
+// projectAnalyzerDefinition is split out so tests can inspect its placement. It walks the
 // checkout on disk, so it must run on the daemon.
 func projectAnalyzerDefinition() ToolDefinition {
 	return ToolDefinition{

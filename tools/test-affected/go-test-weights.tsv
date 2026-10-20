@@ -88,7 +88,6 @@
 0.7	github.com/reliant-labs/reliant/internal/workflow/builtin/presets
 0.7	github.com/reliant-labs/reliant/internal/triggers
 0.7	github.com/reliant-labs/reliant/internal/integrations/webhook
-0.7	github.com/reliant-labs/reliant/internal/features
 0.7	github.com/reliant-labs/reliant/internal/daemonquery
 0.6	github.com/reliant-labs/reliant/internal/workflow/workflowref
 0.6	github.com/reliant-labs/reliant/internal/workflow/celeval

@@ -18,8 +18,7 @@ import (
 // - Uses os.Stat for file existence checks.
 // - The daemon interface has GlobFiles() and StatFile() but no recursive Walk primitive,
 //   so migration would require GlobFiles("**/*") + StatFile per entry, which is inefficient.
-// - This tool is feature-flagged (project_analyzer_disabled) and disabled by default.
-// - Not worth investing in migration until the tool is enabled and actively used.
+// - Not worth investing in migration until the tool is actively used.
 
 // ProjectAnalyzer provides project analysis capabilities
 type ProjectAnalyzer struct {
