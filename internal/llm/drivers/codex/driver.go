@@ -92,6 +92,7 @@ func deriveInstallationID(userID, keyID string) string {
 type CodexClient struct {
 	options        llm.DriverOptions
 	client         openai.Client
+	baseURL        string // Backend the client talks to (CodexBaseURL outside tests)
 	accountID      string // Account ID extracted from JWT
 	accessToken    string // OAuth access token
 	sessionID      string
@@ -151,6 +152,7 @@ func NewClient(opts llm.DriverOptions) (*CodexClient, error) {
 	if strings.TrimSpace(opts.BaseURL) != "" {
 		baseURL = strings.TrimSpace(opts.BaseURL)
 	}
+	client.baseURL = baseURL
 	sdkOpts := []option.RequestOption{
 		option.WithBaseURL(baseURL),
 		option.WithHeader("version", CodexVersion),
