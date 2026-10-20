@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file forge/v1/forge.proto.
  */
 export const file_forge_v1_forge: GenFile = /*@__PURE__*/
-  fileDesc("ChRmb3JnZS92MS9mb3JnZS5wcm90bxIIZm9yZ2UudjEigAEKDUVudGl0eU9wdGlvbnMSDQoFdGFibGUYASABKAkSEwoLc29mdF9kZWxldGUYAiABKAgSEgoKdGltZXN0YW1wcxgDIAEoCBIjCgdpbmRleGVzGAQgAygLMhIuZm9yZ2UudjEuSW5kZXhEZWYSEgoKbWlkZGxld2FyZRgFIAMoCSI4CghJbmRleERlZhIMCgRuYW1lGAEgASgJEg4KBmZpZWxkcxgCIAMoCRIOCgZ1bmlxdWUYAyABKAgizQEKDEZpZWxkT3B0aW9ucxIKCgJwaxgBIAEoCBIgCgVzdG9yZRgDIAEoDjIRLmZvcmdlLnYxLlN0b3JlQXMSCwoDcmVmGAQgASgJEg4KBnVuaXF1ZRgFIAEoCBINCgVpbmRleBgGIAEoCBIVCg1kZWZhdWx0X3ZhbHVlGAcgASgJEgwKBHNraXAYCCABKAgSKwoIdmFsaWRhdGUYCSABKAsyGS5mb3JnZS52MS5WYWxpZGF0aW9uUnVsZXMSEQoJaW1tdXRhYmxlGAogASgIIq4BCg9WYWxpZGF0aW9uUnVsZXMSEAoIcmVxdWlyZWQYASABKAgSEgoKbWluX2xlbmd0aBgCIAEoBRISCgptYXhfbGVuZ3RoGAMgASgFEg8KB3BhdHRlcm4YBCABKAkSDgoGZm9ybWF0GAUgASgJEgsKA21pbhgGIAEoARILCgNtYXgYByABKAESFgoOYWxsb3dlZF92YWx1ZXMYCCADKAkSDgoGY3VzdG9tGAkgASgJIsEBCg5TZXJ2aWNlT3B0aW9ucxIMCgRuYW1lGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSLwoKdmlzaWJpbGl0eRgEIAEoDjIbLmZvcmdlLnYxLlNlcnZpY2VWaXNpYmlsaXR5EhQKDGRlcGVuZGVuY2llcxgFIAMoCRIiCgRhdXRoGAYgASgLMhQuZm9yZ2UudjEuQXV0aENvbmZpZxIQCghhdWRpZW5jZRgHIAEoCSI6CgpBdXRoQ29uZmlnEhUKDWF1dGhfcmVxdWlyZWQYASABKAgSFQoNYXV0aF9wcm92aWRlchgCIAEoCSKmAQoNTWV0aG9kT3B0aW9ucxIaCg1hdXRoX3JlcXVpcmVkGAEgASgISACIAQESEgoKaWRlbXBvdGVudBgDIAEoCBIqCgd0aW1lb3V0GAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhcKD2lkZW1wb3RlbmN5X2tleRgFIAEoCBIOCgZlcnJvcnMYBiADKAlCEAoOX2F1dGhfcmVxdWlyZWQimQIKEkNvbmZpZ0ZpZWxkT3B0aW9ucxIPCgdlbnZfdmFyGAEgASgJEgwKBGZsYWcYAiABKAkSFQoNZGVmYXVsdF92YWx1ZRgDIAEoCRIQCghyZXF1aXJlZBgEIAEoCBITCgtkZXNjcmlwdGlvbhgFIAEoCRIRCglzZW5zaXRpdmUYBiABKAgSEAoIY2F0ZWdvcnkYByABKAkSJwoEcm9sZRgIIAEoDjIZLmZvcmdlLnYxLkNvbmZpZ0ZpZWxkUm9sZRIWCg5hbGxvd2VkX3ZhbHVlcxgJIAMoCRIQCghvcHRpb25hbBgKIAEoCBIuCg9lbnZfdmFyX2FsaWFzZXMYCyADKAsyFS5mb3JnZS52MS5FbnZWYXJBbGlhcyIvCgtFbnZWYXJBbGlhcxIMCgRuYW1lGAEgASgJEhIKCmRlcHJlY2F0ZWQYAiABKAgiNgoTQmluYXJ5Q29uZmlnT3B0aW9ucxIOCgZiaW5hcnkYASABKAkSDwoHY29tbWFuZBgCIAMoCSIpChVGcm9udGVuZENvbmZpZ09wdGlvbnMSEAoIZnJvbnRlbmQYASABKAkqcQoHU3RvcmVBcxIYChRTVE9SRV9BU19VTlNQRUNJRklFRBAAEhIKDlNUT1JFX0FTX0pTT05CEAESEQoNU1RPUkVfQVNfVEVYVBACEhEKDVNUT1JFX0FTX0JMT0IQAxISCg5TVE9SRV9BU19UQUJMRRAEKnQKEVNlcnZpY2VWaXNpYmlsaXR5EiIKHlNFUlZJQ0VfVklTSUJJTElUWV9VTlNQRUNJRklFRBAAEhoKFlNFUlZJQ0VfVklTSUJJTElUWV9BUEkQARIfChtTRVJWSUNFX1ZJU0lCSUxJVFlfSU5URVJOQUwQAirhAQoPQ29uZmlnRmllbGRSb2xlEiEKHUNPTkZJR19GSUVMRF9ST0xFX1VOU1BFQ0lGSUVEEAASGgoWQ09ORklHX0ZJRUxEX1JPTEVfTU9ERRABEh4KGkNPTkZJR19GSUVMRF9ST0xFX1RMU19DRVJUEAISHQoZQ09ORklHX0ZJRUxEX1JPTEVfVExTX0tFWRADEiIKHkNPTkZJR19GSUVMRF9ST0xFX0NPUlNfT1JJR0lOUxAEEiwKKENPTkZJR19GSUVMRF9ST0xFX0NPUlNfQUxMT1dfQ1JFREVOVElBTFMQBTpSCgZlbnRpdHkSHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMYmIgDIAEoCzIXLmZvcmdlLnYxLkVudGl0eU9wdGlvbnNSBmVudGl0eTplCg1iaW5hcnlfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJmIAyABKAsyHS5mb3JnZS52MS5CaW5hcnlDb25maWdPcHRpb25zUgxiaW5hcnlDb25maWc6awoPZnJvbnRlbmRfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJqIAyABKAsyHy5mb3JnZS52MS5Gcm9udGVuZENvbmZpZ09wdGlvbnNSDmZyb250ZW5kQ29uZmlnOk0KBWZpZWxkEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxj8iAMgASgLMhYuZm9yZ2UudjEuRmllbGRPcHRpb25zUgVmaWVsZDpVCgZjb25maWcSHS5nb29nbGUucHJvdG9idWYuRmllbGRPcHRpb25zGOCJAyABKAsyHC5mb3JnZS52MS5Db25maWdGaWVsZE9wdGlvbnNSBmNvbmZpZzpVCgdzZXJ2aWNlEh8uZ29vZ2xlLnByb3RvYnVmLlNlcnZpY2VPcHRpb25zGNCGAyABKAsyGC5mb3JnZS52MS5TZXJ2aWNlT3B0aW9uc1IHc2VydmljZTpRCgZtZXRob2QSHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxi0hwMgASgLMhcuZm9yZ2UudjEuTWV0aG9kT3B0aW9uc1IGbWV0aG9kQo4BCgxjb20uZm9yZ2UudjFCCkZvcmdlUHJvdG9QAVoxZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvZm9yZ2UvcGtnL2ZvcmdlcGI7Zm9yZ2VwYqICA0ZYWKoCCEZvcmdlLlYxygIIRm9yZ2VcVjHiAhRGb3JnZVxWMVxHUEJNZXRhZGF0YeoCCUZvcmdlOjpWMWIGcHJvdG8z", [file_google_protobuf_descriptor, file_google_protobuf_duration]);
+  fileDesc("ChRmb3JnZS92MS9mb3JnZS5wcm90bxIIZm9yZ2UudjEigAEKDUVudGl0eU9wdGlvbnMSDQoFdGFibGUYASABKAkSEwoLc29mdF9kZWxldGUYAiABKAgSEgoKdGltZXN0YW1wcxgDIAEoCBIjCgdpbmRleGVzGAQgAygLMhIuZm9yZ2UudjEuSW5kZXhEZWYSEgoKbWlkZGxld2FyZRgFIAMoCSI4CghJbmRleERlZhIMCgRuYW1lGAEgASgJEg4KBmZpZWxkcxgCIAMoCRIOCgZ1bmlxdWUYAyABKAgizQEKDEZpZWxkT3B0aW9ucxIKCgJwaxgBIAEoCBIgCgVzdG9yZRgDIAEoDjIRLmZvcmdlLnYxLlN0b3JlQXMSCwoDcmVmGAQgASgJEg4KBnVuaXF1ZRgFIAEoCBINCgVpbmRleBgGIAEoCBIVCg1kZWZhdWx0X3ZhbHVlGAcgASgJEgwKBHNraXAYCCABKAgSKwoIdmFsaWRhdGUYCSABKAsyGS5mb3JnZS52MS5WYWxpZGF0aW9uUnVsZXMSEQoJaW1tdXRhYmxlGAogASgIIq4BCg9WYWxpZGF0aW9uUnVsZXMSEAoIcmVxdWlyZWQYASABKAgSEgoKbWluX2xlbmd0aBgCIAEoBRISCgptYXhfbGVuZ3RoGAMgASgFEg8KB3BhdHRlcm4YBCABKAkSDgoGZm9ybWF0GAUgASgJEgsKA21pbhgGIAEoARILCgNtYXgYByABKAESFgoOYWxsb3dlZF92YWx1ZXMYCCADKAkSDgoGY3VzdG9tGAkgASgJIsEBCg5TZXJ2aWNlT3B0aW9ucxIMCgRuYW1lGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSLwoKdmlzaWJpbGl0eRgEIAEoDjIbLmZvcmdlLnYxLlNlcnZpY2VWaXNpYmlsaXR5EhQKDGRlcGVuZGVuY2llcxgFIAMoCRIiCgRhdXRoGAYgASgLMhQuZm9yZ2UudjEuQXV0aENvbmZpZxIQCghhdWRpZW5jZRgHIAEoCSI6CgpBdXRoQ29uZmlnEhUKDWF1dGhfcmVxdWlyZWQYASABKAgSFQoNYXV0aF9wcm92aWRlchgCIAEoCSLTAQoNTWV0aG9kT3B0aW9ucxIaCg1hdXRoX3JlcXVpcmVkGAEgASgISACIAQESEgoKaWRlbXBvdGVudBgDIAEoCBIqCgd0aW1lb3V0GAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhcKD2lkZW1wb3RlbmN5X2tleRgFIAEoCBIOCgZlcnJvcnMYBiADKAkSKwoIYWN0aXZpdHkYByABKAsyGS5mb3JnZS52MS5BY3Rpdml0eU9wdGlvbnNCEAoOX2F1dGhfcmVxdWlyZWQirQEKD0FjdGl2aXR5T3B0aW9ucxIMCgR2ZXJiGAEgASgJEigKBnRhcmdldBgCIAEoCzIYLmZvcmdlLnYxLkFjdGl2aXR5VGFyZ2V0EgsKA2VudhgDIAEoCRINCgVzY29wZRgEIAEoCRIOCgZkZXRhaWwYBSADKAkSKAoGd3JpdGVyGAYgASgOMhguZm9yZ2UudjEuQWN0aXZpdHlXcml0ZXISDAoEbm9uZRgHIAEoCSI5Cg5BY3Rpdml0eVRhcmdldBIMCgRraW5kGAEgASgJEgoKAmlkGAIgASgJEg0KBWxhYmVsGAMgASgJIpkCChJDb25maWdGaWVsZE9wdGlvbnMSDwoHZW52X3ZhchgBIAEoCRIMCgRmbGFnGAIgASgJEhUKDWRlZmF1bHRfdmFsdWUYAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSEwoLZGVzY3JpcHRpb24YBSABKAkSEQoJc2Vuc2l0aXZlGAYgASgIEhAKCGNhdGVnb3J5GAcgASgJEicKBHJvbGUYCCABKA4yGS5mb3JnZS52MS5Db25maWdGaWVsZFJvbGUSFgoOYWxsb3dlZF92YWx1ZXMYCSADKAkSEAoIb3B0aW9uYWwYCiABKAgSLgoPZW52X3Zhcl9hbGlhc2VzGAsgAygLMhUuZm9yZ2UudjEuRW52VmFyQWxpYXMiLwoLRW52VmFyQWxpYXMSDAoEbmFtZRgBIAEoCRISCgpkZXByZWNhdGVkGAIgASgIIjYKE0JpbmFyeUNvbmZpZ09wdGlvbnMSDgoGYmluYXJ5GAEgASgJEg8KB2NvbW1hbmQYAiADKAkiKQoVRnJvbnRlbmRDb25maWdPcHRpb25zEhAKCGZyb250ZW5kGAEgASgJKnEKB1N0b3JlQXMSGAoUU1RPUkVfQVNfVU5TUEVDSUZJRUQQABISCg5TVE9SRV9BU19KU09OQhABEhEKDVNUT1JFX0FTX1RFWFQQAhIRCg1TVE9SRV9BU19CTE9CEAMSEgoOU1RPUkVfQVNfVEFCTEUQBCp0ChFTZXJ2aWNlVmlzaWJpbGl0eRIiCh5TRVJWSUNFX1ZJU0lCSUxJVFlfVU5TUEVDSUZJRUQQABIaChZTRVJWSUNFX1ZJU0lCSUxJVFlfQVBJEAESHwobU0VSVklDRV9WSVNJQklMSVRZX0lOVEVSTkFMEAIqbwoOQWN0aXZpdHlXcml0ZXISHwobQUNUSVZJVFlfV1JJVEVSX1VOU1BFQ0lGSUVEEAASHwobQUNUSVZJVFlfV1JJVEVSX0lOVEVSQ0VQVE9SEAESGwoXQUNUSVZJVFlfV1JJVEVSX0hBTkRMRVIQAirhAQoPQ29uZmlnRmllbGRSb2xlEiEKHUNPTkZJR19GSUVMRF9ST0xFX1VOU1BFQ0lGSUVEEAASGgoWQ09ORklHX0ZJRUxEX1JPTEVfTU9ERRABEh4KGkNPTkZJR19GSUVMRF9ST0xFX1RMU19DRVJUEAISHQoZQ09ORklHX0ZJRUxEX1JPTEVfVExTX0tFWRADEiIKHkNPTkZJR19GSUVMRF9ST0xFX0NPUlNfT1JJR0lOUxAEEiwKKENPTkZJR19GSUVMRF9ST0xFX0NPUlNfQUxMT1dfQ1JFREVOVElBTFMQBTpSCgZlbnRpdHkSHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMYmIgDIAEoCzIXLmZvcmdlLnYxLkVudGl0eU9wdGlvbnNSBmVudGl0eTplCg1iaW5hcnlfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJmIAyABKAsyHS5mb3JnZS52MS5CaW5hcnlDb25maWdPcHRpb25zUgxiaW5hcnlDb25maWc6awoPZnJvbnRlbmRfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJqIAyABKAsyHy5mb3JnZS52MS5Gcm9udGVuZENvbmZpZ09wdGlvbnNSDmZyb250ZW5kQ29uZmlnOk0KBWZpZWxkEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxj8iAMgASgLMhYuZm9yZ2UudjEuRmllbGRPcHRpb25zUgVmaWVsZDpVCgZjb25maWcSHS5nb29nbGUucHJvdG9idWYuRmllbGRPcHRpb25zGOCJAyABKAsyHC5mb3JnZS52MS5Db25maWdGaWVsZE9wdGlvbnNSBmNvbmZpZzpVCgdzZXJ2aWNlEh8uZ29vZ2xlLnByb3RvYnVmLlNlcnZpY2VPcHRpb25zGNCGAyABKAsyGC5mb3JnZS52MS5TZXJ2aWNlT3B0aW9uc1IHc2VydmljZTpRCgZtZXRob2QSHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxi0hwMgASgLMhcuZm9yZ2UudjEuTWV0aG9kT3B0aW9uc1IGbWV0aG9kQo4BCgxjb20uZm9yZ2UudjFCCkZvcmdlUHJvdG9QAVoxZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvZm9yZ2UvcGtnL2ZvcmdlcGI7Zm9yZ2VwYqICA0ZYWKoCCEZvcmdlLlYxygIIRm9yZ2VcVjHiAhRGb3JnZVxWMVxHUEJNZXRhZGF0YeoCCUZvcmdlOjpWMWIGcHJvdG8z", [file_google_protobuf_descriptor, file_google_protobuf_duration]);
 
 /**
  * EntityOptions defines how a protobuf message maps to a database table.
@@ -391,7 +391,12 @@ export type MethodOptions = Message<"forge.v1.MethodOptions"> & {
   idempotent: boolean;
 
   /**
-   * Server-side timeout for this method. Zero means use the service default.
+   * Server-side deadline for this method. forge projects it into
+   * pkg/middleware/procedures_gen.go (ProcedureDeadlines), which the
+   * scaffolded chain hands its Deadline slot; that slot runs ahead of
+   * authentication, so the deadline bounds the credential lookup too. Unset
+   * or zero is the slot's default (serverkit.DefaultUnaryDeadline for a unary
+   * rpc, none for a stream); negative is no server deadline.
    *
    * @generated from field: google.protobuf.Duration timeout = 4;
    */
@@ -422,6 +427,18 @@ export type MethodOptions = Message<"forge.v1.MethodOptions"> & {
    * @generated from field: repeated string errors = 6;
    */
   errors: string[];
+
+  /**
+   * Activity declares the typed activity event a successful call records:
+   * who (the caller) did what (verb) to which object (target), where (env)
+   * and through what (via). forge/pkg/activity's interceptor reads this
+   * option from the method descriptor and writes the event, so no handler
+   * writes one by hand; `forge lint` fails a mutating rpc that declares
+   * nothing (forgeconv-activity-declared). See ActivityOptions.
+   *
+   * @generated from field: forge.v1.ActivityOptions activity = 7;
+   */
+  activity?: ActivityOptions | undefined;
 };
 
 /**
@@ -430,6 +447,135 @@ export type MethodOptions = Message<"forge.v1.MethodOptions"> & {
  */
 export const MethodOptionsSchema: GenMessage<MethodOptions> = /*@__PURE__*/
   messageDesc(file_forge_v1_forge, 6);
+
+/**
+ * ActivityOptions declares the activity event an rpc records, or that it
+ * records none.
+ *
+ *   rpc PromoteRelease(PromoteReleaseRequest) returns (PromoteReleaseResponse) {
+ *     option (forge.v1.method) = {
+ *       activity: {
+ *         verb: "promote"
+ *         target: { kind: "release", id: "release_id", label: "response.release.version" }
+ *         env: "to_env"
+ *       }
+ *     };
+ *   }
+ *
+ * FIELD PATHS (target.id, target.label, env, scope, detail) are dotted proto
+ * field names resolved against the REQUEST, or against the RESPONSE when
+ * they start with "response." — a created object's id exists only in the
+ * response. Every path must end on a scalar or an enum field.
+ *
+ * A Create<E>, Update<E> or Delete<E> rpc whose messages have forge's CRUD
+ * shape needs no option: verb create/update/delete and target kind snake(E)
+ * are implied (forge/pkg/activity.Resolve). An explicit option wins.
+ *
+ * @generated from message forge.v1.ActivityOptions
+ */
+export type ActivityOptions = Message<"forge.v1.ActivityOptions"> & {
+  /**
+   * Verb is the action, a lower_snake token: "promote", "rotate",
+   * "restart". It is stored as written; the UI phrases it ("promoted").
+   *
+   * @generated from field: string verb = 1;
+   */
+  verb: string;
+
+  /**
+   * Target names the object the action was done to.
+   *
+   * @generated from field: forge.v1.ActivityTarget target = 2;
+   */
+  target?: ActivityTarget | undefined;
+
+  /**
+   * Env is the field path whose value is the environment the action
+   * happened in. Empty records a project-level event.
+   *
+   * @generated from field: string env = 3;
+   */
+  env: string;
+
+  /**
+   * Scope is the field path whose value is the scope (an org, a project)
+   * reads are filtered by. Empty takes the interceptor's
+   * ScopeFrom default (the caller's org).
+   *
+   * @generated from field: string scope = 4;
+   */
+  scope: string;
+
+  /**
+   * Detail lists field paths copied into the event's detail map, keyed by
+   * each path's last segment.
+   *
+   * @generated from field: repeated string detail = 5;
+   */
+  detail: string[];
+
+  /**
+   * Writer says who writes the event. The default, the interceptor, writes
+   * it after the handler succeeds. HANDLER means the handler calls
+   * activity.Record inside its own transaction, so the event commits or
+   * rolls back with the mutation.
+   *
+   * @generated from field: forge.v1.ActivityWriter writer = 6;
+   */
+  writer: ActivityWriter;
+
+  /**
+   * None records that this rpc changes nothing worth an activity event,
+   * and says why: `activity: { none: "dry run: computes a plan only" }`.
+   * It excludes every other field, and the reason must not be empty.
+   *
+   * @generated from field: string none = 7;
+   */
+  none: string;
+};
+
+/**
+ * Describes the message forge.v1.ActivityOptions.
+ * Use `create(ActivityOptionsSchema)` to create a new message.
+ */
+export const ActivityOptionsSchema: GenMessage<ActivityOptions> = /*@__PURE__*/
+  messageDesc(file_forge_v1_forge, 7);
+
+/**
+ * ActivityTarget names the object an activity event is about.
+ *
+ * @generated from message forge.v1.ActivityTarget
+ */
+export type ActivityTarget = Message<"forge.v1.ActivityTarget"> & {
+  /**
+   * Kind is the target's type, a lower_snake literal: "release", "secret".
+   *
+   * @generated from field: string kind = 1;
+   */
+  kind: string;
+
+  /**
+   * Id is the field path of the target's id. Required.
+   *
+   * @generated from field: string id = 2;
+   */
+  id: string;
+
+  /**
+   * Label is the field path of a human-readable label for the target.
+   * Empty falls back to the id.
+   *
+   * @generated from field: string label = 3;
+   */
+  label: string;
+};
+
+/**
+ * Describes the message forge.v1.ActivityTarget.
+ * Use `create(ActivityTargetSchema)` to create a new message.
+ */
+export const ActivityTargetSchema: GenMessage<ActivityTarget> = /*@__PURE__*/
+  messageDesc(file_forge_v1_forge, 8);
 
 /**
  * ConfigFieldOptions defines how a config protobuf field maps to runtime
@@ -473,7 +619,11 @@ export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
   defaultValue: string;
 
   /**
-   * Whether this field must be provided. Startup fails if missing.
+   * Whether this field must be provided. Loading fails if no layer (default,
+   * config file, env var, flag) gives it a value. It is the ONE runtime
+   * presence check, for every field kind: `sensitive` does not imply it (see
+   * `optional` for why). A credential the process cannot run without says
+   * `required: true` alongside `sensitive: true`.
    *
    * @generated from field: bool required = 4;
    */
@@ -491,7 +641,12 @@ export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
    * Kubernetes Secret (or equivalent) rather than a literal env-var, and
    * it is never written to forge.yaml inline. The deploy generator emits
    * a `secretKeyRef`-shaped EnvVar referencing a project-level Secret
-   * (default name: <project>-secrets, key: <env_var>).
+   * (default name: <project>-secrets, key: <env_var>), projected into a
+   * workload's env only when that workload names it in `config_secrets`.
+   * Sensitive says where a value comes from (a Secret, never a flag or an
+   * inline manifest value), not whether there must be one: that is
+   * `required`, at runtime, and the secret pre-flight for a ref a workload
+   * declares (see `optional`).
    *
    * @generated from field: bool sensitive = 6;
    */
@@ -520,7 +675,8 @@ export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
 
   /**
    * AllowedValues constrains a STRING field to a closed set of valid
-   * values, validated at startup by config.Validate. It is the
+   * values, enforced when the config loads (Load runs config.Validate, so
+   * an out-of-set value fails the load, naming the field). It is the
    * type/annotation-driven replacement for the old name-matched log-format
    * check ("json"/"text"): a string field carrying allowed_values is a
    * string ENUM, rejected when its resolved value is outside the set. The
@@ -534,15 +690,31 @@ export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
   allowedValues: string[];
 
   /**
-   * Optional marks a field the application TOLERATES being unset, and it is
-   * the only way a `sensitive` field is allowed to have no value.
+   * Optional marks a field the application TOLERATES being unset. It acts
+   * at DEPLOY time; at runtime presence is `required`'s alone.
    *
-   * WHY sensitive IMPLIES REQUIRED BY DEFAULT. A sensitive field projects to
-   * a secret_ref, and forge validates every declared ref against the env's
-   * store before anything starts (secrets.ValidateDeclaredRefs). That check
-   * exists because the alternative — discovering a missing production
-   * credential at runtime — is the failure it was built to prevent, so
-   * "declared but absent" must be an error by default.
+   *   - sensitive: a secret_ref a workload declares (by naming the field in
+   *     its `config_secrets`) is validated against the env's store before
+   *     anything starts (secrets.ValidateDeclaredRefs), and a declared ref
+   *     with no value is an error by default: discovering a missing
+   *     production credential at runtime is the failure the pre-flight
+   *     exists to prevent. `optional: true` exempts the field from that
+   *     check and marks the rendered ref optional (secretKeyRef.optional /
+   *     managedSecret.optional), so the pod starts without it.
+   *   - not sensitive: the env projection omits the field while its value is
+   *     the schema default, so a knob only some environments set does not
+   *     churn every other environment's manifests.
+   *
+   * WHY sensitive DOES NOT IMPLY REQUIRED AT RUNTIME. Whether a credential
+   * must exist is a property of the WORKLOAD that reads it, not of the
+   * field: one config is loaded by several workloads, and each projects only
+   * the secrets its `config_secrets` names. A runtime check implied by
+   * `sensitive` would refuse to start every workload that deliberately does
+   * not read one (a worker sharing the API server's config, a key source the
+   * process uses only when another is unset), forcing a fake value into the
+   * store. So the deploy pre-flight checks what a workload declares, and a
+   * field the PROCESS cannot run without says so with `required: true`, the
+   * same way any other field does.
    *
    * But an OPTIONAL-BY-DESIGN credential is a real thing, and forge had no
    * way to say so. The case that forced this: a config block whose
@@ -555,10 +727,10 @@ export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
    * puts a real-looking credential in the store and defeats the check for
    * everyone.
    *
-   * So: `optional: true` says the absence is intended. The secret-store
-   * validation skips the field, and the runtime required-check skips it too.
-   * It is deliberately an OPT-IN — the safe default stays "a declared secret
-   * must have a value", and an author has to state the exception.
+   * So: `optional: true` says the absence is intended, and the secret-store
+   * validation skips the field. It is deliberately an OPT-IN — the safe
+   * default stays "a declared secret must have a value", and an author has
+   * to state the exception.
    *
    * It is an ERROR to set both `required: true` and `optional: true`; they
    * are direct contradictions and forge rejects the pair rather than
@@ -606,7 +778,7 @@ export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
  * Use `create(ConfigFieldOptionsSchema)` to create a new message.
  */
 export const ConfigFieldOptionsSchema: GenMessage<ConfigFieldOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 7);
+  messageDesc(file_forge_v1_forge, 9);
 
 /**
  * EnvVarAlias is one fallback environment variable of a config field. See
@@ -640,7 +812,7 @@ export type EnvVarAlias = Message<"forge.v1.EnvVarAlias"> & {
  * Use `create(EnvVarAliasSchema)` to create a new message.
  */
 export const EnvVarAliasSchema: GenMessage<EnvVarAlias> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 8);
+  messageDesc(file_forge_v1_forge, 10);
 
 /**
  * BinaryConfigOptions binds a config message to the BINARY that loads it,
@@ -726,7 +898,7 @@ export type BinaryConfigOptions = Message<"forge.v1.BinaryConfigOptions"> & {
  * Use `create(BinaryConfigOptionsSchema)` to create a new message.
  */
 export const BinaryConfigOptionsSchema: GenMessage<BinaryConfigOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 9);
+  messageDesc(file_forge_v1_forge, 11);
 
 /**
  * FrontendConfigOptions binds a config message to the FRONTEND that loads
@@ -783,7 +955,7 @@ export type FrontendConfigOptions = Message<"forge.v1.FrontendConfigOptions"> & 
  * Use `create(FrontendConfigOptionsSchema)` to create a new message.
  */
 export const FrontendConfigOptionsSchema: GenMessage<FrontendConfigOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 10);
+  messageDesc(file_forge_v1_forge, 12);
 
 /**
  * StoreAs controls how complex or non-scalar protobuf types are persisted
@@ -872,6 +1044,44 @@ export const ServiceVisibilitySchema: GenEnum<ServiceVisibility> = /*@__PURE__*/
   enumDesc(file_forge_v1_forge, 1);
 
 /**
+ * ActivityWriter selects who writes a declared activity event.
+ *
+ * @generated from enum forge.v1.ActivityWriter
+ */
+export enum ActivityWriter {
+  /**
+   * ACTIVITY_WRITER_UNSPECIFIED is the interceptor (the default).
+   *
+   * @generated from enum value: ACTIVITY_WRITER_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * ACTIVITY_WRITER_INTERCEPTOR: the activity interceptor writes the event
+   * after the handler returns successfully, best-effort.
+   *
+   * @generated from enum value: ACTIVITY_WRITER_INTERCEPTOR = 1;
+   */
+  INTERCEPTOR = 1,
+
+  /**
+   * ACTIVITY_WRITER_HANDLER: the handler calls activity.Record, normally
+   * inside its RunTx so the event is transactional with the mutation. If
+   * the handler succeeds without recording, the interceptor writes the
+   * event itself. Streaming rpcs must use this or `none`.
+   *
+   * @generated from enum value: ACTIVITY_WRITER_HANDLER = 2;
+   */
+  HANDLER = 2,
+}
+
+/**
+ * Describes the enum forge.v1.ActivityWriter.
+ */
+export const ActivityWriterSchema: GenEnum<ActivityWriter> = /*@__PURE__*/
+  enumDesc(file_forge_v1_forge, 2);
+
+/**
  * ConfigFieldRole enumerates the semantic roles a config field can carry.
  * Today the only role is MODE (the runtime production/development switch
  * that gates dev ergonomics and the explicit auth bypass). Additional
@@ -935,7 +1145,7 @@ export enum ConfigFieldRole {
  * Describes the enum forge.v1.ConfigFieldRole.
  */
 export const ConfigFieldRoleSchema: GenEnum<ConfigFieldRole> = /*@__PURE__*/
-  enumDesc(file_forge_v1_forge, 2);
+  enumDesc(file_forge_v1_forge, 3);
 
 /**
  * @generated from extension: forge.v1.EntityOptions entity = 50200;
