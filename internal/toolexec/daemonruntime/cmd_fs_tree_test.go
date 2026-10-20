@@ -67,6 +67,7 @@ func getTree(t *testing.T, path string, showHidden bool, depth int) []*fsFileNod
 // ABSENT, and surviving files must report their real on-disk size — dissolving
 // both the staleness bug and the "size":0 that the git branch produced.
 func TestHandleFSGetTree_LiveWalkReflectsFilesystem(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
@@ -201,6 +202,7 @@ func TestHandleFSGetTree_ReportsNodeCountAndTruncation(t *testing.T) {
 // the project's own ignore rules already excluded the 8.2 GB build cache that
 // the walk was recursing into.
 func TestHandleFSGetTree_HonorsGitignore(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
@@ -230,6 +232,7 @@ func TestHandleFSGetTree_HonorsGitignore(t *testing.T) {
 // dir. This preserves the behavior the old git-index branch special-cased,
 // without emitting a zero-byte ghost file named after the directory.
 func TestHandleFSGetTree_EmbeddedRepoRecursion(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}

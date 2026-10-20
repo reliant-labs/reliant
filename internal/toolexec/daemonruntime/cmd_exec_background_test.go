@@ -21,6 +21,7 @@ import (
 // killed it anyway. Both exec paths share daemon.ExecDeadline so they cannot
 // drift on this.
 func TestHandleExecRun_DetachedCommandKeepsRunning(t *testing.T) {
+	t.Parallel()
 	asked := false
 	ctx := daemon.WithBackgroundProbe(context.Background(), func() (string, bool) {
 		if asked {

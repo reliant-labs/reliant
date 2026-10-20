@@ -34,7 +34,9 @@ func setWorktreeTestGitEnv(t *testing.T) {
 // worktree creation fail with "invalid reference: main". The daemon handler
 // must now seed a root commit and create the worktree successfully.
 func TestHandleWorktreeCreate_UnbornHEAD(t *testing.T) {
-	setWorktreeTestGitEnv(t)
+	// TestMain's git config sets no identity either, and its $HOME keeps the
+	// worktree out of the real one.
+	t.Parallel()
 
 	projectPath := t.TempDir()
 	initCmd := exec.Command("git", "init", "-b", "main", ".")
@@ -52,7 +54,7 @@ func TestHandleWorktreeCreate_UnbornHEAD(t *testing.T) {
 
 	payload, _ := json.Marshal(worktreeCreateRequest{
 		ProjectPath: projectPath,
-		WorkspaceID: "ws-unborn",
+		WorkspaceID: uniqueWorkspaceID(t, "ws-unborn"),
 		SubPath:     "",
 		Name:        "feature",
 		Branch:      "worktree/feature",

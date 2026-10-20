@@ -4,16 +4,19 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 )
 
-// setGitCloneTestEnv isolates git from the host config, mirroring
-// setWorktreeTestGitEnv in cmd_worktree_unborn_test.go.
+// setGitCloneTestEnv gives one test its own git config with an identity. A
+// test that needs nothing beyond TestMain's isolated config skips it, so it
+// can run in parallel.
 func setGitCloneTestEnv(t *testing.T) {
 	t.Helper()
 	cfg := filepath.Join(t.TempDir(), "gitconfig")
@@ -25,44 +28,70 @@ func setGitCloneTestEnv(t *testing.T) {
 	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 }
 
-// newTestOriginRepo creates a bare repo at dir/origin.git with one commit on
-// main, and returns its filesystem path (usable as a git.clone "repo" URL).
+// cloneOrigin is the bare repo the clone tests clone from. A clone only reads
+// its origin, so one is built per test binary and shared: building it costs a
+// dozen git processes, more than the clone under test.
+var cloneOrigin struct {
+	once sync.Once
+	path string
+	err  error
+}
+
+// newTestOriginRepo returns the path of a bare repo with one commit (README.md)
+// on main, usable as a git.clone "repo" URL. It is shared: never write to it.
 func newTestOriginRepo(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
-	originPath := filepath.Join(root, "origin.git")
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v: %s", args, err, out)
-		}
+	cloneOrigin.once.Do(func() {
+		cloneOrigin.path, cloneOrigin.err = buildTestOriginRepo(filepath.Join(testRoot, "clone-origin"))
+	})
+	if cloneOrigin.err != nil {
+		t.Fatalf("build the clone origin: %v", cloneOrigin.err)
 	}
-	run("init", "-q", "-b", "main", "--bare", originPath)
+	return cloneOrigin.path
+}
 
+// buildTestOriginRepo creates root/origin.git from a seed checkout. Its git
+// environment is fixed here rather than inherited, because whichever test
+// builds it first may have pointed the process's git config anywhere.
+func buildTestOriginRepo(root string) (string, error) {
+	originPath := filepath.Join(root, "origin.git")
 	seedDir := filepath.Join(root, "seed")
 	if err := os.MkdirAll(seedDir, 0o755); err != nil {
-		t.Fatal(err)
+		return "", err
 	}
-	seedRun := func(args ...string) {
-		t.Helper()
+	run := func(dir string, args ...string) error {
 		cmd := exec.Command("git", args...)
-		cmd.Dir = seedDir
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1",
+			"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@example.com",
+		)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v: %s", args, err, out)
+			return fmt.Errorf("git %v: %v: %s", args, err, out)
+		}
+		return nil
+	}
+	if err := run(root, "init", "-q", "-b", "main", "--bare", originPath); err != nil {
+		return "", err
+	}
+	if err := run(seedDir, "init", "-q", "-b", "main"); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(seedDir, "README.md"), []byte("hello"), 0o644); err != nil {
+		return "", err
+	}
+	for _, args := range [][]string{
+		{"add", "README.md"},
+		{"commit", "-q", "-m", "initial"},
+		{"remote", "add", "origin", originPath},
+		{"push", "-q", "origin", "main"},
+	} {
+		if err := run(seedDir, args...); err != nil {
+			return "", err
 		}
 	}
-	seedRun("init", "-q", "-b", "main")
-	if err := os.WriteFile(filepath.Join(seedDir, "README.md"), []byte("hello"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	seedRun("add", "README.md")
-	seedRun("commit", "-q", "-m", "initial")
-	seedRun("remote", "add", "origin", originPath)
-	seedRun("push", "-q", "origin", "main")
-
-	return originPath
+	return originPath, nil
 }
 
 // A redelivered git.clone (JetStream WorkQueue redelivery after a dispatch
@@ -71,7 +100,7 @@ func newTestOriginRepo(t *testing.T) string {
 // itself refuses to run into an existing non-empty directory and the retry
 // reports failure even though req.Path is a valid, complete clone.
 func TestHandleGitClone_RedeliveryAfterSuccessIsIdempotent(t *testing.T) {
-	setGitCloneTestEnv(t)
+	t.Parallel()
 	origin := newTestOriginRepo(t)
 	dest := filepath.Join(t.TempDir(), "dest")
 
@@ -120,7 +149,7 @@ func TestHandleGitClone_RedeliveryAfterSuccessIsIdempotent(t *testing.T) {
 // clone destination — must still fail loudly rather than being silently
 // treated as an already-completed clone.
 func TestHandleGitClone_NonGitConflictStillFails(t *testing.T) {
-	setGitCloneTestEnv(t)
+	t.Parallel()
 	origin := newTestOriginRepo(t)
 	dest := filepath.Join(t.TempDir(), "dest")
 	if err := os.MkdirAll(dest, 0o755); err != nil {
@@ -201,7 +230,7 @@ func TestHandleGitClone_KilledCloneLeavesNoPartialCheckout(t *testing.T) {
 // (git removes a destination it created itself on this kind of failure, so
 // this guards the atomic path's own cleanup rather than a git behavior.)
 func TestHandleGitClone_FailedCloneLeavesNoDirectory(t *testing.T) {
-	setGitCloneTestEnv(t)
+	t.Parallel()
 	origin := newTestOriginRepo(t)
 	parent := t.TempDir()
 	dest := filepath.Join(parent, "dest")
@@ -226,7 +255,7 @@ func TestHandleGitClone_FailedCloneLeavesNoDirectory(t *testing.T) {
 // natively; the atomic path renames onto it instead, which fails on an
 // existing directory unless it is cleared first — this pins that it is.
 func TestHandleGitClone_EmptyTargetIsAdopted(t *testing.T) {
-	setGitCloneTestEnv(t)
+	t.Parallel()
 	origin := newTestOriginRepo(t)
 	parent := t.TempDir()
 	dest := filepath.Join(parent, "dest")
@@ -252,7 +281,7 @@ func TestHandleGitClone_EmptyTargetIsAdopted(t *testing.T) {
 // target sweeps it rather than letting them accumulate — and lands the
 // checkout at the real path, never at the stale staging one.
 func TestHandleGitClone_SweepsStagingLeftByAKilledClone(t *testing.T) {
-	setGitCloneTestEnv(t)
+	t.Parallel()
 	origin := newTestOriginRepo(t)
 	parent := t.TempDir()
 	dest := filepath.Join(parent, "dest")

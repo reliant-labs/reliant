@@ -119,6 +119,7 @@ func writeRepoFile(t *testing.T, dir, name, body string) {
 }
 
 func TestCollectRepoMemories_FrameworkOnceAndIdenticalCollapsed(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	for _, n := range []string{"b-forge", "a-forge", "c-plain", "d-plain"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, n, ".git"), 0o755))
@@ -145,6 +146,7 @@ func TestCollectRepoMemories_FrameworkOnceAndIdenticalCollapsed(t *testing.T) {
 }
 
 func TestCollectRepoMemories_RootForgeCarriesFramework(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	writeRepoFile(t, root, "forge.yaml", "name: root\n")
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "x", ".git"), 0o755))

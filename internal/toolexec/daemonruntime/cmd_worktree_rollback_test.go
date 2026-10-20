@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -33,44 +32,21 @@ import (
 // error injection.
 func gitRepoWithConflictingRef(t *testing.T) string {
 	t.Helper()
-
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not on PATH")
-	}
-
-	dir := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@e.com",
-			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@e.com",
-		)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-
-	run("init", "-b", "main")
-	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("hi\n"), 0o644); err != nil {
-		t.Fatalf("seed file: %v", err)
-	}
-	run("add", ".")
-	run("commit", "-m", "init")
 	// The ref that makes `release` unusable as a branch name.
-	run("branch", "release/compute-tier-redesign")
-
-	return dir
+	return diagnoseRepo(t, "release/compute-tier-redesign")
 }
 
 func TestWorktreeCreate_FailedGitLeavesNoDirectoryBehind(t *testing.T) {
+	t.Parallel()
 	projectPath := gitRepoWithConflictingRef(t)
 
-	// handleWorktreeCreate builds the path under $HOME, so point HOME at a
-	// temp dir to keep the test off the real one.
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	// handleWorktreeCreate builds the path under $HOME — TestMain's, which
+	// other tests share. So the workspace is nested, as a real one is
+	// (<project>/<name>), under a parent no other test writes to: that
+	// parent stays empty, and a rollback that swept one level too far would
+	// remove it. Directly under the shared .../worktrees, other tests'
+	// checkouts would keep it non-empty and the assertion would pass anyway.
+	parentID := uniqueWorkspaceID(t, "proj")
 
 	// MULTI-REPO shape (sub_path set), which is what the real failure was:
 	// the project has control-plane/, forge/ and reliant/ repos, so
@@ -82,7 +58,7 @@ func TestWorktreeCreate_FailedGitLeavesNoDirectoryBehind(t *testing.T) {
 	// directory is left behind whether or not the rollback exists — an
 	// assertion there passes vacuously. An earlier draft of this test did
 	// exactly that and survived deleting the fix.
-	const workspaceID = "ws-rollback-test"
+	workspaceID := parentID + "/ws-rollback-test"
 	payload, err := json.Marshal(map[string]any{
 		"project_path": projectPath,
 		"workspace_id": workspaceID,
@@ -115,7 +91,7 @@ func TestWorktreeCreate_FailedGitLeavesNoDirectoryBehind(t *testing.T) {
 	}
 
 	// THE ASSERTION. The workspace root MkdirAll made must be gone.
-	workspaceRoot := filepath.Join(home, ".reliant", "worktrees", workspaceID)
+	workspaceRoot := testWorktreePath(t, workspaceID)
 	if _, statErr := os.Stat(workspaceRoot); !os.IsNotExist(statErr) {
 		entries, _ := os.ReadDir(workspaceRoot)
 		t.Fatalf("a failed create left %s behind (%d entries) — an empty directory with no .git "+
@@ -123,11 +99,12 @@ func TestWorktreeCreate_FailedGitLeavesNoDirectoryBehind(t *testing.T) {
 			"bound to a worktree that cannot be opened", workspaceRoot, len(entries))
 	}
 
-	// The shared parent must survive: it holds every other workspace.
-	sharedParent := filepath.Join(home, ".reliant", "worktrees")
+	// The shared parent must survive: it holds the project's other
+	// workspaces.
+	sharedParent := testWorktreePath(t, parentID)
 	if _, statErr := os.Stat(sharedParent); statErr != nil {
-		t.Fatalf("rollback removed the SHARED worktrees directory %s: %v — that would take every "+
-			"other workspace with it", sharedParent, statErr)
+		t.Fatalf("rollback removed the SHARED directory %s above the workspace root: %v — that "+
+			"would take every other workspace in it along", sharedParent, statErr)
 	}
 }
 
@@ -135,13 +112,11 @@ func TestWorktreeCreate_FailedGitLeavesNoDirectoryBehind(t *testing.T) {
 // checkout before failing, and under --force the directory can predate the
 // call entirely — deleting it could destroy work this function did not create.
 func TestWorktreeCreate_FailedGitKeepsNonEmptyDirectory(t *testing.T) {
+	t.Parallel()
 	projectPath := gitRepoWithConflictingRef(t)
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	const workspaceID = "ws-preexisting"
-	worktreePath := filepath.Join(home, ".reliant", "worktrees", workspaceID, "control-plane")
+	workspaceID := uniqueWorkspaceID(t, "ws-preexisting")
+	worktreePath := filepath.Join(testWorktreePath(t, workspaceID), "control-plane")
 	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
 		t.Fatalf("pre-create: %v", err)
 	}
@@ -172,12 +147,10 @@ func TestWorktreeCreate_FailedGitKeepsNonEmptyDirectory(t *testing.T) {
 
 // The happy path still works, so the rollback cannot pass by breaking creates.
 func TestWorktreeCreate_SucceedsForANonConflictingBranch(t *testing.T) {
+	t.Parallel()
 	projectPath := gitRepoWithConflictingRef(t)
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	const workspaceID = "ws-happy"
+	workspaceID := uniqueWorkspaceID(t, "ws-happy")
 	payload, _ := json.Marshal(map[string]any{
 		"project_path": projectPath,
 		"workspace_id": workspaceID,

@@ -144,6 +144,7 @@ func TestPolicyGate_AllowsGrantedPathAndCommand(t *testing.T) {
 
 // TestPolicyGate_ExecAllowlist checks shell confinement end to end.
 func TestPolicyGate_ExecAllowlist(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 
 	basePolicy := func() *reliantv1.ConnectorPolicy {
@@ -220,6 +221,7 @@ func TestPolicyGate_ExecAllowlist(t *testing.T) {
 // interpreted: the metacharacters arrive as literal arguments to the program,
 // so nothing chains, nothing expands, and nothing is written.
 func TestPolicyGate_ArgvBypassesTheShell(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	marker := filepath.Join(root, "planted.txt")
 

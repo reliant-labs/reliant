@@ -17,6 +17,7 @@ import (
 // forgets everything on restart, and the server closes those calls rather than
 // leaving them "running" forever.
 func TestHandleExecBGStatus_ReportsOutcomeAndForgottenProcesses(t *testing.T) {
+	t.Parallel()
 	mgr := shell.GetBackgroundManager()
 	process, err := mgr.StartProcess(context.Background(), shell.StartProcessOptions{
 		Command:    "exit 3",

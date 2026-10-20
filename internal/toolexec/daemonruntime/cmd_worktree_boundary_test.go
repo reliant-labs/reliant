@@ -46,7 +46,6 @@ func (registryMachine) Send(ctx context.Context, commandType string, payload, re
 func finishAcrossTheBoundary(t *testing.T, base string) (*db.Worktree, error) {
 	t.Helper()
 	repo := diagnoseRepo(t)
-	t.Setenv("HOME", t.TempDir())
 
 	var settled *db.Worktree
 	store := &workspacecreate.MockStore{
@@ -66,6 +65,7 @@ func finishAcrossTheBoundary(t *testing.T, base string) (*db.Worktree, error) {
 		Branch:        "feat/telemetry-delivery-c3",
 		BaseBranch:    base,
 		OwnerDaemonID: "d1",
+		WorkspaceID:   uniqueWorkspaceID(t, "reliant-telemetry"),
 	}
 	wt, err := workspacecreate.Insert(context.Background(), store, req)
 	if err != nil {
@@ -76,6 +76,7 @@ func finishAcrossTheBoundary(t *testing.T, base string) (*db.Worktree, error) {
 }
 
 func TestWorktreeCreate_UserErrorClassSurvivesTheDaemonBoundary(t *testing.T) {
+	t.Parallel()
 	row, err := finishAcrossTheBoundary(t, "feat/telemetry-delivery-c2")
 	if err == nil {
 		t.Fatal("expected the create to fail: the base branch does not exist")
@@ -101,6 +102,7 @@ func TestWorktreeCreate_UserErrorClassSurvivesTheDaemonBoundary(t *testing.T) {
 // The same path succeeds for a base that exists, so the test above cannot
 // pass by the boundary being broken in some other way.
 func TestWorktreeCreate_SucceedsAcrossTheDaemonBoundary(t *testing.T) {
+	t.Parallel()
 	row, err := finishAcrossTheBoundary(t, "main")
 	if err != nil {
 		t.Fatalf("create from main failed: %v", err)

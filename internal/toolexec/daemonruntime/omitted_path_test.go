@@ -22,6 +22,7 @@ import (
 // git_status/git_diff are in the DEFAULT read-only grant. Omission must resolve
 // to the allowed root, not to whatever the daemon happens to be sitting in.
 func TestOmittedPathStaysInsideTheGrant(t *testing.T) {
+	t.Parallel()
 	// A real repo inside the grant, so a correctly-confined command succeeds
 	// against it rather than failing for unrelated reasons.
 	root := t.TempDir()

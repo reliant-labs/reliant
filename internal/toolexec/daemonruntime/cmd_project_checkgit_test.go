@@ -17,6 +17,7 @@ import (
 // would persist false over the correct value on every GetProject, gating the
 // worktree UI behind "Git repository required".
 func TestHandleCheckGit(t *testing.T) {
+	t.Parallel()
 	call := func(t *testing.T, path string) bool {
 		t.Helper()
 		payload, err := json.Marshal(checkGitRequest{Path: path})
@@ -100,6 +101,7 @@ func TestHandleCheckGit(t *testing.T) {
 // older release made carries the user's token there; the report never does,
 // because the server returns it to the web and stores it.
 func TestHandleGitInfo_RemoteURLNeverCarriesACredential(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for _, args := range [][]string{
 		{"init", "-q"},
