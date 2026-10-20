@@ -36034,6 +36034,11 @@
           {
             "name": "automation_only",
             "kind": "bool"
+          },
+          {
+            "name": "on_failure",
+            "kind": "message",
+            "type_name": "reliant.v1.Workflow"
           }
         ],
         "reliant.v1.WorkflowEventSource": [
@@ -36922,7 +36927,11 @@
           "Description": "Scheme of subdomain-routed preview URLs",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/preview_config.proto"
+          "ProtoFile": "config/v1/preview_config.proto",
+          "AllowedValues": [
+            "http",
+            "https"
+          ]
         },
         {
           "Name": "workspace_url_port",
@@ -36986,7 +36995,10 @@
           "Description": "Database driver (postgres)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "config/v1/server_config.proto",
+          "AllowedValues": [
+            "postgres"
+          ]
         },
         {
           "Name": "max_open_conns",
@@ -37476,7 +37488,10 @@
           "Description": "Streaming driver (nats)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "config/v1/api_server_config.proto",
+          "AllowedValues": [
+            "nats"
+          ]
         },
         {
           "Name": "cors_allowed_origins",
@@ -37504,7 +37519,11 @@
           "Description": "Auth mode: supabase (JWTs) or apikey (one shared bearer key)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "config/v1/api_server_config.proto",
+          "AllowedValues": [
+            "supabase",
+            "apikey"
+          ]
         },
         {
           "Name": "auth_api_key",
@@ -37589,7 +37608,12 @@
           "Description": "Worktree auto-archive: dry-run, on or off",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "config/v1/api_server_config.proto",
+          "AllowedValues": [
+            "dry-run",
+            "on",
+            "off"
+          ]
         },
         {
           "Name": "integrations",
@@ -37833,7 +37857,12 @@
           "Description": "Run forge's storage reaper on a schedule: auto (managed daemons only), on, or off",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/config.proto"
+          "ProtoFile": "config/v1/config.proto",
+          "AllowedValues": [
+            "auto",
+            "on",
+            "off"
+          ]
         },
         {
           "Name": "interval",
@@ -37988,7 +38017,13 @@
           "Description": "TLS mode for the gateway connection: tls, insecure_tls_skip_verify, h2c or disabled",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "config/v1/daemon_config.proto",
+          "AllowedValues": [
+            "tls",
+            "insecure_tls_skip_verify",
+            "h2c",
+            "disabled"
+          ]
         },
         {
           "Name": "tls_cert_file",
@@ -38072,7 +38107,11 @@
           "Description": "Daemon type the platform declares: managed (an operator-created workspace pod) or self_hosted",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "config/v1/daemon_config.proto",
+          "AllowedValues": [
+            "managed",
+            "self_hosted"
+          ]
         },
         {
           "Name": "working_dir",
@@ -38142,7 +38181,11 @@
           "Description": "Priority of agent-started commands: low or normal",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "config/v1/daemon_config.proto",
+          "AllowedValues": [
+            "low",
+            "normal"
+          ]
         },
         {
           "Name": "worktree_dir",
@@ -38743,7 +38786,10 @@
           "Description": "Streaming driver (nats)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/worker_config.proto"
+          "ProtoFile": "config/v1/worker_config.proto",
+          "AllowedValues": [
+            "nats"
+          ]
         },
         {
           "Name": "integrations",
@@ -38845,5 +38891,5 @@
       "Line": 20
     }
   ],
-  "source_hash": "75f522f11c0e508e1c4e1c1c1c108fa739c74efc94ac13e8f495a29509a550ef"
+  "source_hash": "72ae6cab520b9225f1f60902b6e720d1aa7291c1a0bf14b86ffbadc6f0ef57eb"
 }
