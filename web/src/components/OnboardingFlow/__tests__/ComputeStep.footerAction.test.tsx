@@ -175,37 +175,3 @@ describe("ComputeStep — the way forward is in the card footer", () => {
     expect(within(footer).getByRole("button", { name: /Waiting for your computer/ })).toBeDisabled();
   });
 });
-
-describe("Plan rows — cost breakdown only on the selected row", () => {
-  it("shows size facts for the selected row and hides them for the rest", async () => {
-    // pricing facts come from daemonPricing, which the mock above omits, so
-    // this asserts the prop wiring through PlanTileRow directly.
-    const { PlanTileRow } = await import("@/components/Billing/PlanTiles");
-    const facts = {
-      includedRuntimeLabel: "40 Large hours/month included",
-      hourlyPriceLabel: "$0.52/h after included hours, with overage enabled",
-      diskLabel: "100 GiB disk",
-      suspendedFeeLabel: "$25.00/mo",
-    };
-    const option = {
-      planId: "p",
-      label: "Large",
-      detail: "8 GB RAM · 2 CPU",
-      monthlyPriceCents: 7900,
-      facts,
-    } as never;
-
-    const { rerender } = render(
-      <PlanTileRow plan={option} selected={false} showFacts="selected" onSelect={vi.fn()} />,
-    );
-    expect(screen.queryByTestId("plan-row-size-facts")).toBeNull();
-    expect(screen.getByText("8 GB RAM · 2 CPU")).toBeVisible();
-
-    rerender(<PlanTileRow plan={option} selected showFacts="selected" onSelect={vi.fn()} />);
-    expect(screen.getByTestId("plan-row-size-facts")).toHaveTextContent("100 GiB disk");
-
-    // Default stays "always" for the billing page's plan grid.
-    rerender(<PlanTileRow plan={option} selected={false} onSelect={vi.fn()} />);
-    expect(screen.getByTestId("plan-row-size-facts")).toBeVisible();
-  });
-});

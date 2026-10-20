@@ -115,6 +115,7 @@ const PLANS = [
     structuredLimits: {
       allowedDaemonSizes: ["small", "medium"],
       daemonComputeIncludedMinutes: 2600,
+      includedSmallDaemonHours: 80n,
       daemonOveragePerMinuteCents: 0.47,
     },
   },
@@ -127,6 +128,7 @@ const PLANS = [
     structuredLimits: {
       allowedDaemonSizes: ["small", "medium", "large"],
       daemonComputeIncludedMinutes: 5200,
+      includedSmallDaemonHours: 320n,
       daemonOveragePerMinuteCents: 0.91,
     },
   },
@@ -148,7 +150,19 @@ vi.mock("@/hooks/useCloudBillingQueries", async (importOriginal) => {
     useComputeSubscription: () => query(subState.current),
     useWalletOverview: () => query(undefined),
     useComputeUsage: () => query(undefined),
-    usePlans: () => query({ plans: PLANS }),
+    usePlans: () =>
+      query({
+        plans: PLANS,
+        daemonPricing: {
+          sizes: [
+            { size: "small", multiplier: 1n, hourlyPriceCents: "13", storageGib: 25n },
+            { size: "medium", multiplier: 2n, hourlyPriceCents: "26", storageGib: 50n },
+            { size: "large", multiplier: 4n, hourlyPriceCents: "52", storageGib: 100n },
+          ],
+          suspendedDiskCentsPerGibMonth: "25",
+          placeholder: false,
+        },
+      }),
     useCurrentUserInvoices: () => query(undefined),
     useBillingEmail: () => query(undefined),
     useSetComputeOverage: () => mutation(),
@@ -332,61 +346,27 @@ describe("the machine list", () => {
   });
 
   /**
-   * The other half — the hours — does NOT vary, and must not be printed per
-   * row.
-   *
-   * control-plane grants 9600 minutes at every size. The fixture keeps the
-   * hazard alive on purpose: its plans carry 1200 / 2600 / 5200 minutes, so a
-   * per-row line would render "20 hours" beside "43 hours" beside "87 hours"
-   * and state a product claim nobody made — that a bigger machine buys more
-   * time. That is exactly the defect that shipped once from a lagging dev
-   * database, and PlanTiles.tsx carries the long version.
+   * A plan row is the machine's name, its spec and the monthly price — nothing
+   * else. Hours, rates, disk and fees are not repeated per row.
    */
-  it("puts no hours figure on any machine row", async () => {
+  it("puts nothing but name, spec and monthly price on a row", async () => {
     const user = userEvent.setup();
     await openPlans(user);
 
     for (const size of ["Small", "Medium", "Large"]) {
-      expect(machineRow(size)).not.toHaveTextContent(/hours/i);
-      expect(machineRow(size)).toHaveTextContent(/Included runtime, hourly price and disk cost unavailable/i);
+      expect(machineRow(size)).not.toHaveTextContent(/hrs|hours|\/hr|GiB|suspended|included|shared|overage|small-daemon/i);
     }
   });
 
-  /**
-   * It is still SAID — once, beneath the list, and still read from the
-   * catalog so it tracks 9600 if control-plane changes it.
-   */
-  // Per-daemon billing (design §6.2): the allowance is SMALL-DAEMON-HOURS,
-  // which a bigger machine burns faster — so the note no longer claims the
-  // same hours on every size. Still said once, still from the catalog.
-  it("states the included small-daemon-hours once, not 'on every size'", async () => {
+  it("prints one short footnote beneath the list", async () => {
     const user = userEvent.setup();
     await openPlans(user);
 
-    const note = screen.getByTestId("plans-hours-note");
-    // 1200 min = 20 h, from the fixture's own catalog — not a constant.
-    expect(note).toHaveTextContent(/Included runtime unavailable/i);
-    expect(note).toHaveTextContent(/shared across your machines/i);
-    expect(note).not.toHaveTextContent(/every size/i);
-    expect(screen.getAllByTestId("plans-hours-note")).toHaveLength(1);
-  });
-
-  /**
-   * The overage RATE is the one uniform-looking fact that is not uniform:
-   * control-plane prices it per plan (0.25 / 0.6 / 1.0 / 1.7 cents per minute
-   * up the real ladder, and 0.25 / 0.47 / 0.91 in this fixture). Quoting one
-   * beneath a list of three machines would assert a uniformity that does not
-   * exist, in the currency the user is about to be charged in. The policy is
-   * stated without a number; the figure belongs in the checkout, where one
-   * machine is selected.
-   */
-  it("states the pause policy without quoting one machine's overage rate", async () => {
-    const user = userEvent.setup();
-    await openPlans(user);
-
-    expect(screen.getByText(/machines pause until next month/i)).toBeInTheDocument();
-    expect(screen.queryByText(/\$0\.15\/hour/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/\$0\.28\/hour/)).not.toBeInTheDocument();
+    // Every fixture plan includes 20 / 80 / 320 small hours, which are 20 / 40 / 80
+    // hours at each plan's own size: they differ, so no hours are claimed.
+    const note = screen.getByTestId("machine-pricing-line");
+    expect(note).toHaveTextContent(/^Extra hours and storage are billed separately\.$/);
+    expect(screen.getAllByTestId("machine-pricing-line")).toHaveLength(1);
   });
 
   /** Uniform too, so it is one sentence rather than three. */

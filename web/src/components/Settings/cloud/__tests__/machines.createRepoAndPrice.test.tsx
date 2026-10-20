@@ -317,7 +317,7 @@ describe("create-machine size prices", () => {
    * Odd numbers on purpose — 17¢ and 41¢ are in no client-side table, so a
    * card that shows them read them from the server's list.
    */
-  it("shows each size's hourly price from the server's price list", async () => {
+  it("shows no number on a size card, and one footnote with the plan's own-size hours", async () => {
     mocks.daemonPricing = {
       sizes: [
         { size: "small", multiplier: 1n, hourlyPriceCents: "17.0000", storageGib: 25n },
@@ -330,50 +330,28 @@ describe("create-machine size prices", () => {
     const modal = await openCreateModal(user);
     const sizes = within(modal).getByRole("radiogroup", { name: /size/i });
 
+    // Name + spec only.
     const small = within(sizes).getByRole("radio", { name: /^small$/i });
     const medium = within(sizes).getByRole("radio", { name: /^medium$/i });
-    expect(within(small).getByTestId("size-price-small")).toHaveTextContent("$0.17/hr");
-    expect(within(medium).getByTestId("size-price-medium")).toHaveTextContent("$0.41/hr");
-    // The burn rate the price is paired with, from the same row.
-    expect(small).toHaveTextContent('160 Small hours/month included');
-    expect(medium).toHaveTextContent('80 Medium hours/month included');
-    expect(medium).toHaveTextContent('$0.41/hr after included hours');
-    expect(modal).not.toHaveTextContent(/×|uses included hours|burn/i);
-    expect(small).toHaveTextContent('25 GiB disk · $6.25/mo while suspended');
-    expect(medium).toHaveTextContent('50 GiB disk · $12.50/mo while suspended');
-    expect(within(modal).getByTestId('size-pricing-note')).toHaveTextContent('billed until deleted');
-    expect(within(modal).getByTestId('size-pricing-note')).toHaveTextContent('unless you enable overage');
-    // The flat plan rate is not restated under per-size prices.
-    expect(within(modal).queryByText(/\/min/)).not.toBeInTheDocument();
-    expect(within(modal).getByTestId("size-pricing-note")).not.toHaveTextContent(/provisional/i);
+    expect(small).toHaveTextContent("2 GB");
+    for (const card of [small, medium]) {
+      expect(card).not.toHaveTextContent(/\$|hrs|\/hr|GiB|suspended|included|×/i);
+    }
+    // The fixture's plan includes 160 small hours; its largest allowed size is
+    // medium (x2), so the user is told 80 hours of their plan's own size.
+    expect(within(modal).getByTestId("size-pricing-note")).toHaveTextContent(
+      "Includes 80 hours a month. Extra hours and storage are billed separately.",
+    );
+    expect(within(modal).queryByText(/2,?560|small-daemon|GB per month/i)).not.toBeInTheDocument();
   });
 
-  it("says the prices are provisional while the server marks them placeholders", async () => {
-    mocks.daemonPricing = {
-      sizes: [
-        { size: "small", multiplier: 1n, hourlyPriceCents: "13", storageGib: 25n },
-        { size: "medium", multiplier: 2n, hourlyPriceCents: "26", storageGib: 50n },
-      ],
-      suspendedDiskCentsPerGibMonth: "25",
-      placeholder: true,
-    };
+  it("drops the hours clause when the plan's hours cannot be derived", async () => {
+    mocks.daemonPricing = undefined;
     const user = userEvent.setup();
     const modal = await openCreateModal(user);
 
-    expect(within(modal).getByTestId("size-pricing-note")).toHaveTextContent(/provisional/i);
-  });
-
-  it("shows no price for a size the server did not price", async () => {
-    mocks.daemonPricing = {
-      sizes: [{ size: "small", multiplier: 1n, hourlyPriceCents: "13", storageGib: 25n }],
-      suspendedDiskCentsPerGibMonth: "25",
-      placeholder: false,
-    };
-    const user = userEvent.setup();
-    const modal = await openCreateModal(user);
-
-    expect(within(modal).getByTestId("size-price-small")).toHaveTextContent("$0.13/hr");
-    expect(within(modal).getByTestId("size-price-medium")).toHaveTextContent("Hourly price unavailable");
-    expect(within(modal).getByRole("radio", { name: "Medium" })).toHaveTextContent("Included runtime unavailable");
+    expect(within(modal).getByTestId("size-pricing-note")).toHaveTextContent(
+      /^Extra hours and storage are billed separately\.$/,
+    );
   });
 });

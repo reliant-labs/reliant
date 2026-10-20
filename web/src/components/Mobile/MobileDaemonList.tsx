@@ -39,7 +39,7 @@ import { machineDisplayName } from "@/lib/machineName";
 import { useComputeUsage, usePlans } from "@/hooks/useCloudBillingQueries";
 import { useQuery } from "@tanstack/react-query";
 import { getComputeEligibility } from "@/services/controlPlane/billing";
-import { sizeFacts, MACHINE_BILLING_POLICY, MACHINE_PRICING_NOTE } from "@/components/Billing/daemonUsage";
+import { machinePricingFootnote, planOwnSizeHours } from "@/components/Billing/daemonUsage";
 import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { MachineCost } from "@/components/Billing/MachineCost";
 
@@ -91,10 +91,11 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState("");
 
   const pricing = usePlans().data?.daemonPricing;
-  const usage = useComputeUsage("current").data;
-  const includedHours = usage?.includedSmallDaemonSeconds === undefined ? undefined : Number(usage.includedSmallDaemonSeconds) / 3600;
+  const includedSmallHours = useComputeUsage("current").data?.includedSmallDaemonSeconds;
+  const includedHours = includedSmallHours === undefined ? undefined : Number(includedSmallHours) / 3600;
   const eligibility = useQuery({ queryKey: ["cp", "environments", "computeEligibility"], queryFn: getComputeEligibility, staleTime: 30_000 });
   const options = SIZE_OPTIONS.filter(option => eligibility.data?.allowedDaemonSizes.includes(option.name));
+  const ownHours = planOwnSizeHours(pricing, options.map((o) => o.name), includedHours);
   const effectiveSize = options.find(option => option.value === size)?.value ?? options[0]?.value;
   const create = useCreateDaemon();
   const accountGate = useAccountGate();
@@ -191,7 +192,6 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
             <div className="grid grid-cols-2 gap-2">
               {options.map((option) => {
                 const selected = option.value === effectiveSize;
-                const facts = sizeFacts(pricing, option.name, includedHours);
                 return (
                   <button
                     key={option.value}
@@ -207,12 +207,11 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
                   >
                     <p className="text-sm font-medium text-foreground">{option.label}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{formatMachineSpec(option.name)}</p>
-                    <p className="mt-1 text-xs font-medium text-foreground">{facts?.includedRuntimeLabel ?? "Included runtime unavailable"}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{facts ? `${facts.hourlyPriceLabel} · ${facts.diskLabel} · ${facts.suspendedFeeLabel} while suspended` : "Machine prices unavailable"}</p>
                   </button>
                 );
               })}
             </div>
+            <p className="mt-2 text-xs text-muted-foreground">{machinePricingFootnote(ownHours)}</p>
           </div>
 
           <div>
@@ -234,9 +233,6 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {MACHINE_BILLING_POLICY} {MACHINE_PRICING_NOTE}
-            </p>
           </div>
 
           <div>
