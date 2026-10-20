@@ -50,7 +50,7 @@ export interface ComputeBandDimension {
   capacity: ComputeCapacity | null;
   estimatedOverageCostLabel: string | null;
   /**
-   * The small-daemon-hours reading (per-daemon billing, design §6.2), when the
+   * The remaining-hours reading (per-daemon billing, design §6.2), when the
    * server sent the §6.1 fields. Each label is null when it has nothing true
    * to say — no burn line with nothing running, no "runs out" without an
    * exhausts_at — and the whole object is absent from an older server.

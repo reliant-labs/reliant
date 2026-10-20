@@ -1,0 +1,111 @@
+---
+title: "Forge through Reliant"
+description: "reliant forge runs the Forge built into your reliant binary, signed in as you, and refuses to build or rewrite a project that pins a different Forge"
+---
+
+Forge is the framework and command line tool Reliant uses to build and host apps: it scaffolds a project, generates its code, and deploys it to Reliant hosting. You do not install it separately. Every `reliant` binary contains a copy, and `reliant forge …` runs it. Anything you would type as `forge <command>` works as `reliant forge <command>`. Two differences make `reliant forge` the better way in: it is already signed in as you, and it is always the exact Forge version your `reliant` was built with.
+
+This page covers what is particular to running Forge through Reliant. To build and deploy an app, start with [Deploy & host with Forge](/features/deploy-and-host).
+
+## Which Forge you are running
+
+```text
+$ reliant forge --version
+forge version v0.1.46-0.20261020021425-45d38939f475 (embedded in github.com/reliant-labs/reliant v1.8.3-0.20261020032426-61cfe193a8e2 @61cfe193a8e2)
+```
+
+The Forge inside `reliant` changes only when `reliant` does: each Reliant release carries a newer Forge. `reliant version` shows the same Forge version on its `forge:` line. Installing a standalone `forge` binary does not change what `reliant forge` runs.
+
+## Starting a project
+
+`reliant forge project new` scaffolds a project and records the running Forge's version in `forge.yaml` as `forge_version`:
+
+```text
+$ reliant forge project new notes-app --mod github.com/acme/notes-app --service notes
+…
+✅ Project 'notes-app' created successfully!
+
+Next steps:
+  cd notes-app
+  declare your first entity in proto/services/notes/v1/notes.proto:
+
+      // forge:entity
+      message Item {
+        string name = 2;
+        int64 price_cents = 3;
+        bool active = 4;
+      }
+
+      ↳ the marker is the tablizing decision; custom RPCs go in the same file
+  reliant forge scaffold
+      ↳ births every marked message — migration pair + CRUD quintet — then generates
+  reliant forge env up dev
+      ↳ applies migrations, seeds demo rows, prints your URLs
+```
+
+Forge's own hints name the command the way you ran it (`reliant forge scaffold`, not `forge scaffold`), so you can copy them as printed. To generate and build, the scaffold also needs Go and `buf` on your `PATH`, plus Node if you add a frontend. If one is missing, the project is still created, and Forge warns and prints the command to run once you have installed it (`reliant forge generate && reliant forge build`).
+
+## Signed in as you
+
+Hosted Forge commands such as `env deploy`, `secret`, `domain`, `cloud` and `release` need a credential for Reliant's control plane. Under `reliant forge` there is no `forge login`: Forge asks Reliant for a short-lived token made from your [CLI login](/cli/sign-in). The token lasts at most an hour and carries only the deploy, secret and domain permissions your login holds. Shells your agents run on a daemon get the same arrangement through the daemon's credential. [Forge sign-in](/features/forge-sign-in) explains the exchange.
+
+`reliant forge cloud status <env>` shows where an environment deploys to and which credential a command would use. It never prints the token. On a computer that is not signed in, it says so and names the fix:
+
+```text
+$ reliant forge cloud status prod
+env "prod"
+  endpoint:  https://admin.reliantapi.com   (declared in deploy/kcl/prod/main.k)
+  token env: FORGE_CONTROL_PLANE_TOKEN
+  credential: NONE
+no control-plane credential for https://admin.reliantapi.com
+not signed in to Reliant on this machine — sign in to Reliant (`reliant auth login` / the app)
+for CI or a one-off, a token bypasses the helper: export FORGE_CONTROL_PLANE_TOKEN=<token>, or --token <token>
+```
+
+After `reliant auth login`, the same commands work without any further step. In CI, set the environment's token variable (`FORGE_CONTROL_PLANE_TOKEN` above) to an organization automation token from `reliant forge cloud token create`. Forge reads that before it asks Reliant.
+
+## When the project pins a different Forge
+
+The code a Forge project generates, and the artifacts it builds, depend on the Forge that produced them. So a project records its Forge in `forge.yaml`, and Forge compares that with itself before doing anything.
+
+**Read-only commands warn and continue.** `audit`, `lint`, `env status` and other commands that change nothing print one line and carry on:
+
+```text
+⚠️  this forge is v0.1.46-0.20261020021425-45d38939f475, but forge.yaml pins forge_version v0.1.40 — a different forge than the project's.
+   Install the pinned one: go install github.com/reliant-labs/forge/cmd/forge@v0.1.40
+```
+
+The `go install` suggestion applies to a standalone `forge`. It does not change what `reliant forge` runs. The options below do.
+
+**Commands that rewrite the project or produce artifacts refuse.** `generate`, `scaffold`, `build`, `env build` and `env deploy` stop rather than silently rewrite generated files the pinned Forge would have written differently. The refusal explains how to continue:
+
+```text
+$ reliant forge generate
+this forge is v0.1.46-0.20261020021425-45d38939f475, but …/forge.yaml pins forge_version v0.1.46-0.20261019120000-0123456789ab.
+  `forge generate` rewrites or produces files from the binary's own templates, so it runs only under the pinned forge —
+  a different one silently rewrites unrelated generated files.
+  Run it with the pinned forge, installing nothing:
+      go run github.com/reliant-labs/forge/cmd/forge@v0.1.46-0.20261019120000-0123456789ab generate
+  …
+  This forge is embedded in github.com/reliant-labs/reliant, so installing forge does not change `reliant forge`: use the `go run` form above,
+  or rebuild/upgrade github.com/reliant-labs/reliant so it embeds the pinned forge.
+  If the PIN is what is wrong, move it deliberately: `reliant forge project upgrade`.
+  To proceed anyway, knowingly (forge developers): --allow-version-skew, or FORGE_ALLOW_VERSION_SKEW=1
+```
+
+Which way to go depends on which side is behind:
+
+- **Your `reliant` is older than the project** (a teammate upgraded first): update Reliant. The desktop app checks for updates under **Reliant → Check for Updates**.
+- **The project is older than your `reliant`**: run `reliant forge project upgrade` to move the pin forward on purpose. It updates the project's Go modules to the running Forge, refreshes the scaffolded files you have not edited, and shows a diff for the ones you have, without overwriting them. Commit the result like any other change. `reliant forge upgrade list` shows any one-time migration guides that apply.
+- **You need the old Forge for one command**: use the `go run …@<pin>` line from the message. It runs the pinned version without installing anything.
+
+`--allow-version-skew` exists for people working on Forge itself. Avoid it on a real project: generating with the wrong Forge is exactly what the check prevents.
+
+A pin to a released version (such as `v0.1.40`) is handled a little more leniently than a pin to a specific commit. Commands that rewrite the project only warn, and build and deploy still refuse.
+
+## Related topics
+
+- [Deploy & host with Forge](/features/deploy-and-host)
+- [Forge sign-in](/features/forge-sign-in)
+- [Sign in and tokens](/cli/sign-in)
+- [CLI reference: `reliant forge`](/reference/cli#reliant-forge)

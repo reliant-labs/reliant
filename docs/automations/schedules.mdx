@@ -39,7 +39,9 @@ reliant trigger create --name sweep --interval 30m --workflow builtin://agent \
   --daemon my-workstation --param depth=2 --message "Sweep the dependency tree."
 ```
 
-`--daemon` (a machine id or hostname) and `--message` are required. `--project` defaults to the working directory. `--preset`, `--param`, `--timezone`, `--overlap`, `--catchup-window` and `--disabled` are optional.
+`--daemon` (a machine id or hostname) and `--message` are required. `--project` defaults to the working directory, `--workflow` to your default workflow and `--worktree` to the project's main checkout. `--preset`, `--param`, `--timezone`, `--overlap`, `--catchup-window` and `--disabled` are optional. Every subcommand takes a trigger by id or by name.
+
+Turning an automation on is yours to do, so `create`, `update` and `enable` refuse to run from an agent's shell. An agent can still list, inspect, fire and disable them.
 
 Manage them afterwards with:
 

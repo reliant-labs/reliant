@@ -454,6 +454,22 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// loops trip the breaker. May block until resume.
 	e.pauseCtrl.ObserveDaemonOfflineStep(e.ctx, running.ActivityName, stepEvent)
 
+	// Repeated-identical-tool-error breaker: an unattended agent that has been
+	// told the same thing three times and keeps asking is not going to get
+	// another answer. Ending its step makes the surrounding loop and run fail
+	// with the reason, instead of spending max_turns on it. The failing
+	// results are already persisted (save_message ran above), so the
+	// transcript shows exactly what it kept hitting. Attended chats are left
+	// alone: a person is there to redirect them.
+	if IsUnattended(e.workflowInputs) && stepEvent != nil && stepEvent.Error == nil {
+		if err := e.pauseCtrl.ObserveRepeatedToolErrors(e.GetThread(), running.ActivityName, stepEvent); err != nil &&
+			workflow.GetVersion(e.ctx, repeatedToolErrorChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+			e.logger.Error("[StepExecutor] Ending the agent: its tool calls keep failing identically",
+				"stepID", running.StepID, "thread", e.GetThread(), "error", err)
+			stepEvent.Error = err
+		}
+	}
+
 	return stepEvent
 }
 
@@ -760,6 +776,17 @@ func (e *StepExecutor) startAction(
 
 	// Special handling for ExecuteTools - intercept "spawn" tool calls
 	if node.GetType() == model.NodeTypeExecuteTools {
+		// expected_response_tools is `repeated string`, so ResolveCELFields
+		// leaves "{{ inputs.response_tool_name }}" as literal text. Resolve the
+		// simple input references here, from the same inputs the call_llm's
+		// response tool name resolves from: a literal template never matches a
+		// tool call, which sent the model's response-tool call down the
+		// regular tool path ("unknown tool: no placement") and discarded the
+		// result.
+		if etArgs := evalResult.GetExecuteTools(); etArgs != nil {
+			etArgs.ExpectedResponseTools = resolveInputTemplates(etArgs.GetExpectedResponseTools(), e.workflowInputs)
+		}
+
 		// Enrich the evaluated node with response tool info from upstream call_llm nodes
 		if expectedTools, schemas := e.detectResponseToolInfo(node); len(expectedTools) > 0 {
 			etArgs := evalResult.GetExecuteTools()

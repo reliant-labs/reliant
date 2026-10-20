@@ -16,25 +16,26 @@ Descriptions are extracted from proto annotations in workflow_v2.proto.
 
 ## Common Node Fields
 
-These fields are available on **all** node types. They provide shared functionality for node identification, conditional execution, thread management, and output handling.
+These fields are available on **all** node types. They provide shared functionality for node identification, conditional execution, machine placement, and output handling. Everything else a node takes is specific to its type, listed in its section below.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `id` | string | Yes |  |
-| `type` | string | Yes |  |
-| `condition` | string | No |  |
-| `timeout` | string | No |  |
-| `save_message` | SaveMessageConfig | No |  |
-| `daemon` | CelDaemonSelector | No |  |
-| `outcome` | string | No |  |
+| `id` | string | Yes | Unique within the workflow; other nodes read this node's outputs as nodes.`<id>`.* |
+| `type` | string | Yes | The node type, such as workflow, call_llm, run or loop; each section below names its own |
+| `condition` | string | No | Raw CEL (no \{`{ }`\}): the node runs only when it is true, and is skipped otherwise. On a join node, all or any |
+| `timeout` | string | No | Overrides the node's default timeout, as a duration such as 30s, 5m or 1h30m |
+| `save_message` | SaveMessageConfig | No | A message to save to the thread when the node completes, as a template over output.* |
+| `daemon` | CelDaemonSelector | No | Which machine runs this node's tools, overriding the workflow's daemon setting |
+| `outcome` | string | No | The verdict reaching this node stamps on the run: success or failure. The last node that runs with one decides the run's outcome (enum: success\|failure) |
 
 ### Thread Configuration
 
-The `thread` field controls conversation context:
+Workflow, loop and router nodes take a `thread` field that controls conversation context:
 
 ```yaml
 - id: analyze
-  type: call_llm
+  type: workflow
+  ref: builtin://agent
   thread:
     mode: fork      # fork, new, or inherit (default)
     memo: true      # reuse across loop iterations
@@ -51,7 +52,7 @@ Use `condition` to skip nodes based on runtime state:
 - id: cleanup
   type: run
   condition: "nodes.process.exit_code != 0"
-  run: "rm -rf temp/"
+  command: "rm -rf temp/"
 ```
 
 ### Automatic Message Saving
@@ -61,17 +62,19 @@ Use `save_message` to capture output without a separate save_message node:
 ```yaml
 - id: summarize
   type: workflow
-  ref: builtin://summarizer
+  ref: builtin://agent
   thread:
     mode: fork
   save_message:
     role: assistant
-    content: "{{output.summary}}"
+    content: "{{output.response_text}}"
 ```
 
 ---
 
 ## Action
+
+`type: action`
 
 Run an integration action (for example an HTTP request)
 
@@ -100,6 +103,8 @@ Run an integration action (for example an HTTP request)
 
 ## Agent
 
+`type: workflow`
+
 Invoke an agent or sub-workflow
 
 ### Inputs
@@ -117,9 +122,37 @@ Invoke an agent or sub-workflow
 |-------|------|-------------|
 | `outputs` | object | - |
 
+Each output the sub-workflow declares is also on the node, by name (`nodes.<id>.<output>`).
+
+---
+
+## Approval
+
+`type: approval`
+
+Pause workflow execution for user approval
+
+### Inputs
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `title` | string | No | - | What the approver is asked to decide, shown as the approval's title |
+| `timeout` | string | No | - | How long to wait for a decision before the step times out |
+
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `approval_id` | string | - |
+| `status` | string | - |
+| `action_taken` | string | - |
+| `data` | object | - |
+
 ---
 
 ## Ask Question
+
+`type: ask_question`
 
 Pause workflow execution to ask the user a question
 
@@ -139,6 +172,8 @@ Pause workflow execution to ask the user a question
 ---
 
 ## Call LLM
+
+`type: call_llm`
 
 Send a prompt to a language model and get a response
 
@@ -185,6 +220,8 @@ Send a prompt to a language model and get a response
 
 ## Compact
 
+`type: compact`
+
 Compact conversation context to reduce token usage
 
 ### Inputs
@@ -209,6 +246,8 @@ Compact conversation context to reduce token usage
 
 ## Compute
 
+`type: compute`
+
 Compute named values from CEL expressions: no model, no shell, no worker round trip. Each output is \{`{ expr }`\} (or a literal); a value that is exactly one \{`{ }`\} keeps its type. Read them as nodes.`<id>`.`<name>`. Outputs cannot read each other: chain two compute nodes when one feeds the next. A failing expression fails the node. Use it for deterministic logic (labels, sizes, expiry, parsing a node's JSON stdout) instead of a script
 
 ### Inputs
@@ -220,6 +259,8 @@ Compute named values from CEL expressions: no model, no shell, no worker round t
 ---
 
 ## Create Worktree
+
+`type: create_worktree`
 
 Create a git worktree for isolated development
 
@@ -248,17 +289,21 @@ Create a git worktree for isolated development
 
 ## Join
 
+`type: join`
+
 Wait for parallel branches to complete before continuing
 
 ### Outputs
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `sources` | array | - |
+| `_sources` | array | - |
 
 ---
 
 ## Loop
+
+`type: loop`
 
 Execute a sub-workflow in a loop with conditions
 
@@ -277,16 +322,19 @@ Execute a sub-workflow in a loop with conditions
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `iterations` | integer | - |
-| `outputs` | object | - |
-| `results` | map | - |
-| `completed` | integer | - |
-| `failed` | integer | - |
-| `parallel` | boolean | - |
+| `_iterations` | integer | - |
+| `_results` | map | - |
+| `_completed` | integer | - |
+| `_failed` | integer | - |
+| `_parallel` | boolean | - |
+
+A sequential loop also exposes each output its body declares, by name, from the last iteration (`nodes.<id>.<output>`). `_results`, `_completed`, `_failed` and `_parallel` are set by parallel loops.
 
 ---
 
 ## Publish Branch
+
+`type: git_publish`
 
 Commit a worktree's changes and push them to a feature branch. Refuses the default branch, protected branches, main, master and release/*, and any branch outside the allow list; refuses a fork head; never force-pushes. Nothing to commit is not an error (pushed is false). The credential is used for this one push and never reaches a shell, a file or the environment. Pair it with shell credentials: none
 
@@ -319,6 +367,8 @@ Commit a worktree's changes and push them to a feature branch. Refuses the defau
 
 ## Router
 
+`type: router`
+
 Route to a workflow or node based on LLM classification
 
 ### Inputs
@@ -345,6 +395,8 @@ Route to a workflow or node based on LLM classification
 
 ## Run Command
 
+`type: run`
+
 Execute a shell command
 
 ### Inputs
@@ -367,6 +419,8 @@ Execute a shell command
 ---
 
 ## Run LLM Tool Calls
+
+`type: execute_tools`
 
 Run the tool calls an upstream Call LLM step returned
 
@@ -400,6 +454,8 @@ Run the tool calls an upstream Call LLM step returned
 
 ## Run Tool
 
+`type: invoke_tool`
+
 Run one tool you pick, with parameters you set; no LLM involved
 
 ### Inputs
@@ -422,6 +478,8 @@ Run one tool you pick, with parameters you set; no LLM involved
 ---
 
 ## Save Message
+
+`type: save_message`
 
 Save a message to the conversation thread
 

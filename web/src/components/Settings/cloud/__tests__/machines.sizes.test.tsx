@@ -314,7 +314,7 @@ describe("no invented per-size price", () => {
   // which is an older control plane: the plan's flat rate is then the one rate
   // the server states. Per-size prices from daemon_pricing are pinned in
   // machines.createRepoAndPrice.test.tsx.
-  it("shows the plan's own overage rate, which the server does state", async () => {
+  it("states no hours when the server sent no price list", async () => {
     mocks.getComputeEligibility.mockResolvedValue(
       subscribedTo(["small", "medium"]),
     );
@@ -324,7 +324,10 @@ describe("no invented per-size price", () => {
 
     // $0.0047/min — a value no hardcoded tier table ever held.
     expect(within(modal).queryByText(/\$0\.005\/min/)).not.toBeInTheDocument();
-    expect(within(modal).getByText(/Machine prices unavailable/)).toBeInTheDocument();
+    // No price list: the footnote states no hours it cannot derive.
+    expect(within(modal).getByTestId("size-pricing-note")).toHaveTextContent(
+      /^Extra hours and storage are billed separately\.$/,
+    );
   });
 });
 

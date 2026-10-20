@@ -1,0 +1,68 @@
+---
+title: "Preview a running app"
+description: "Get the browser URL for a dev server running on a machine with reliant preview-url, and decide who can open it"
+---
+
+When an agent starts a dev server on a cloud machine (`npm run dev`, a Go API, a docs site), the server listens on a port inside that machine, and you need a URL to open it in your browser. `reliant preview-url <port>` prints that URL. It is meant to be run on the machine where the server is, usually by an agent finishing a task ("it's running, open it here") or by you in a terminal on that machine.
+
+## On a cloud machine
+
+Every cloud machine has its own preview address, and the port becomes part of the hostname:
+
+```text
+$ reliant preview-url 5173
+https://5173-<machine-id>.workspaces.reliantapi.com
+access: openable by the workspace owner (authenticated); make the port public to share beyond the owner
+```
+
+The URL is built on the machine from an address Reliant gives it when the machine starts, so the command makes no network call and works the same way every time. The URL goes to stdout and the note about access goes to stderr, so `URL=$(reliant preview-url 5173)` captures only the URL.
+
+By default only you can open a preview, after signing in to Reliant. To share it, open the ports menu in the app header, which appears as soon as the machine reports a listening port, and switch that port to **Public**. Anyone with the link can then open it, until you switch it back.
+
+## On your own computer
+
+On a daemon you run yourself, the port is on your own computer, so the URL is the plain loopback address:
+
+```text
+$ reliant preview-url 5173
+http://localhost:5173/
+```
+
+## When nothing is listening yet
+
+The command checks whether anything is listening on the port. If not, it still prints the URL, because the server may be starting, and warns on stderr. Add `--require-listening` to make that an error instead:
+
+```text
+$ reliant preview-url 3999
+warning: nothing detected listening on port 3999 yet (URL printed anyway)
+http://localhost:3999/
+
+$ reliant preview-url 3999 --require-listening
+nothing is listening on port 3999 yet
+```
+
+The second form exits `1`, which makes it useful as a readiness check in a script that starts a server and then hands the link on.
+
+## Structured output for handoffs
+
+`--json` prints the URL along with whether the port is listening and who can open it. `--built` and `--run` add what was built and the command that runs it. A workflow's final node, or an agent, can post this as the deliverable:
+
+```text
+$ reliant preview-url 5173 --json --built "Vite dev server" --run "npm run dev"
+{
+  "built": "Vite dev server",
+  "run_command": "npm run dev",
+  "port": 5173,
+  "url": "http://localhost:5173/",
+  "listening": true,
+  "access_level": "local"
+}
+```
+
+`access_level` is `owner` on a cloud machine and `local` on your own computer.
+
+## Related topics
+
+- [Cloud machines](/machines/cloud)
+- [Scripting and CI](/cli/scripting)
+- [CLI reference: `reliant preview-url`](/reference/cli#reliant-preview-url)

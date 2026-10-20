@@ -73,7 +73,7 @@ import {
 } from "@/components/Billing/ComputeSubscriptionCheckout";
 // The machine list, its derivation, and the uniform facts beneath it — shared
 // with the onboarding compute step so one choice has one presentation.
-import { PlanFinePrint, PlanTiles, describeIncludedHours } from "@/components/Billing/PlanTiles";
+import { MachinePricingLine, PlanTiles, commonPlanHours } from "@/components/Billing/PlanTiles";
 import {
   asOfLabel,
   burnLabel,
@@ -657,7 +657,7 @@ function OverviewTab({
         degraded || includedMinutes < 0
           ? null
           : sdh
-            ? `${(sdhIncluded / 3600).toFixed(1)} small-daemon-hours included`
+            ? `${(sdhIncluded / 3600).toFixed(1)} h included`
             : `${Math.round(includedMinutes / 60)} h included`,
       // null when unmeasured, NOT "0.0 h". Every consumer already treats null
       // as "render nothing", which is the same discipline `includedHoursLabel`
@@ -666,7 +666,7 @@ function OverviewTab({
         degraded || usageFailed
           ? null
           : sdh
-            ? `${(sdhUsed / 3600).toFixed(1)} small-daemon-hours`
+            ? `${(sdhUsed / 3600).toFixed(1)} h`
             : `${(usedMinutes / 60).toFixed(1)} h`,
       allowedSizesLabel: degraded ? null : formatAllowedSizes(d.allowedSizes),
       overageRateLabel: "Varies by machine size",
@@ -1284,15 +1284,9 @@ function PlansTab() {
             onSelect={(option) => setCheckoutPlanId(option.planId)}
           />
 
-          {/* Base plan allowance; each row states its own allowance and rate. */}
           {planOptions.length > 0 && (
             <div className="space-y-2 border-t border-border pt-4">
-              <p
-                className="text-xs leading-relaxed text-muted-foreground"
-                data-testid="plans-hours-note"
-              >
-                {describeIncludedHours(planOptions.find(option => option.planId === currentPlanId) ?? planOptions[0], plansQ.data?.daemonPricing)}
-              </p>
+              <MachinePricingLine hours={commonPlanHours(planOptions)} />
               {/* The burst ceiling. Rows print the RESERVED figures, which
                   undersell a machine that compiles on four times the cores it
                   reserves — and the headroom is uniform, so it is one
@@ -1311,8 +1305,6 @@ function PlansTab() {
                   cost.
                 </p>
               )}
-              {/* Hourly rates belong to machine sizes, not plan minute rates. */}
-              <PlanFinePrint plan={planOptions[0]} rateVariesBySize />
               <p className="text-xs text-muted-foreground">
                 Payment opens on this page — you won&apos;t leave Reliant.
               </p>

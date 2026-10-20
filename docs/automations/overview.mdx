@@ -31,9 +31,10 @@ You **enable** it in the app. Open **Workflows → Library**, open the workflow 
 - the [machine](/machines/overview) whose tools they use, or **No machine**;
 - for an integration event, which **connected account** it listens through, once per integration;
 - the workflow's own **inputs**, set on every run;
-- a **prompt**, for any trigger whose author wrote none.
+- a **prompt**, for any trigger whose author wrote none;
+- whether to **notify** you when a run completes. Off by default: finished runs land quietly in **Workflows → Runs**, while a failure always notifies you.
 
-A trigger that needs something different (another machine, another account, a prompt of its own) can be changed under **Advanced: per trigger**.
+When the workflow declares more than one trigger, a trigger that needs something different (another machine, another account, a prompt of its own) can be changed under **Advanced: per trigger**.
 
 Enabling is all or nothing. If one trigger cannot be turned on, say because a GitHub connection is missing, nothing is turned on, and the dialog names that trigger and why. A webhook's URL and token are shown once when it is enabled. **Disable** on the same page pauses all of the workflow's triggers; enabling again resumes them with the settings they had.
 
@@ -241,13 +242,13 @@ If an agent in a shell can write to GitHub as you, give the writing to an action
 
 ## Unattended by design
 
-Nobody is watching an automation's run. The agent is told to decide and proceed rather than ask, questions and approvals resolve immediately with no answer instead of waiting, and a run that hits trouble records it rather than parking forever. Design workflows for this: give them everything they need in the prompt and inputs, and assume nothing can be clarified mid-run.
+Nobody is watching an automation's run. The agent is told to decide and proceed rather than ask, questions and approvals resolve immediately with no answer instead of waiting, and a run that pauses on a failure (a rate limit, a machine that went away) resumes itself with a growing wait instead of waiting for someone to resume it. Only a failure that outlasts about half an hour of retries leaves it paused, in **Workflows → Runs**, for a person to look at. Design workflows for this: give them everything they need in the prompt and inputs, and assume nothing can be clarified mid-run.
 
 A workflow that should only ever start from its triggers, never from a chat, can set `automation_only: true`.
 
 ## Who an automation acts as
 
-An automation's integration actions, a node's `action` and an agent's integration tools alike, write as one of two identities, chosen under **Writes as** when you create or edit the automation:
+An automation's integration actions, a node's `action` and an agent's integration tools alike, write as one of two identities, chosen under **Writes as** in the automation's settings. Enabling a workflow starts every trigger as you; to change one, open it in **Workflows → Automations** and choose **Edit**:
 
 | Identity | Comments, reviews and pull requests appear as | When to choose it |
 |----------|-----------------------------------------------|-------------------|
@@ -285,6 +286,24 @@ A run that launched and then failed counts as a failure, not just a launch that 
 <Frame caption="An automation's run history. Example data.">
   <img src="/images/v2/p2-automation-schedule-run-history.png" alt="Run history for a scheduled automation" />
 </Frame>
+
+**Workflows → Runs** lists every run, whatever started it: a chat, an automation or an agent. Filter it by project, state, when it started and what started it, or open it from an automation or workflow to see only theirs. Open a run to see its transcript and how it was launched, and pause, resume or stop one that is still going. A finished run of an automation offers **Run automation now**, and any finished run **Re-run (current definition)**.
+
+### The Inbox
+
+The **Inbox**, in the sidebar, is everything waiting on you across your projects, and its badge counts the items that hold up a live run:
+
+| Section | What it means |
+|---------|---------------|
+| Approvals | A run is waiting for you to approve a tool call or a step |
+| Questions | An agent asked you something and is waiting for the answer |
+| Waiting for a machine | A run is blocked on a machine that is asleep or starting |
+| Failing automations | An automation's health turned **Failing** |
+| Automations that could not start | An automation's newest firing could not start a run |
+| Finished runs | A run of an automation that notifies on completion finished, and you have not opened it yet |
+| Storage | A machine is low on disk, or holds archived worktrees it will not remove on its own |
+
+Approvals (**Approve** / **Deny**) and questions (**Answer**) can be dealt with from the Inbox itself; the rest **Open** the run, automation or machine. Every item, or a whole section, can be dismissed, with Undo. It shows the current project by default, with every project one click away. A run started by an automation is unattended and never waits on you, so the approvals and questions here come from chats and runs someone started by hand.
 
 ## From the command line
 

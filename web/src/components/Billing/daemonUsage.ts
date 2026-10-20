@@ -64,15 +64,15 @@ export function sizeName(size: string): string {
 }
 
 /**
- * The usage headline: "41.5 small-daemon-hours left".
+ * The usage headline: "41.5 hours left".
  *
- * NULL WHEN UNMEASURED. "0.0 small-daemon-hours left" from a server that did
+ * NULL WHEN UNMEASURED. "0.0 hours left" from a server that did
  * not measure is the unknown-as-known defect usage_measured exists to close,
  * and here it would tell a user they are out when they may not be.
  */
 export function remainingHeadline(usage: DaemonUsageLike | undefined): string | null {
   if (!usage || !usage.usageMeasured) return null;
-  return `${hours(Number(usage.remainingSmallDaemonSeconds))} small-daemon-hours left`;
+  return `${hours(Number(usage.remainingSmallDaemonSeconds))} hours left`;
 }
 
 /**
@@ -147,9 +147,8 @@ export function suspendedFeeLabel(pricing: DaemonPricingLike | undefined, storag
 /**
  * One size's hourly price, short enough for a size card: "$0.26/hr".
  *
- * The same number `sizeFacts.hourlyPriceLabel` states in a sentence — what a
- * running hour of this size costs once included hours are used up — from the
- * same row of the server's price list. Null when the server sent no price
+ * What a running hour of this size costs once plan hours are used up, from
+ * the server's price list. Null when the server sent no price
  * for the size, so a card shows no price rather than a guessed one.
  */
 export function hourlyPriceShort(pricing: DaemonPricingLike | undefined, size: string): string | null {
@@ -160,22 +159,43 @@ export function hourlyPriceShort(pricing: DaemonPricingLike | undefined, size: s
 
 /** Running time and retained disks have separate meters. */
 export const MACHINE_BILLING_POLICY = "Running machines use included hours, even when idle. Suspended machines use no hours but keep their disk, billed until deleted.";
-export const MACHINE_PRICING_NOTE = "Included runtime is shared across your machines, not a separate allowance for each size. Machines pause when included hours run out unless you enable overage. The standard disk is included while running; extra disk is billed separately.";
 
-/** Monthly entitlement, NOT remaining usage. No catalog/legacy-minute fallback. */
-export function includedRuntimeLabel(
+/**
+ * Hours of `size` that `includedSmallHours` buys: the plan's allowance is in
+ * small-machine hours, and a size uses them at its server multiplier. Null
+ * when either input is missing — an allowance is never guessed.
+ */
+export function sizeHours(
   pricing: DaemonPricingLike | undefined,
   size: string,
-  includedSmallDaemonHours: number | undefined,
-): string {
+  includedSmallHours: number | undefined,
+): string | null {
   const multiplier = Number(pricing?.sizes.find((s) => s.size === size)?.multiplier);
-  if (includedSmallDaemonHours === undefined || !Number.isFinite(includedSmallDaemonHours) || includedSmallDaemonHours < 0 || !Number.isFinite(multiplier) || multiplier <= 0) {
-    return "Included runtime unavailable";
-  }
-  const runtime = includedSmallDaemonHours / multiplier;
-  // Round down to avoid promising more time than the server includes.
-  const formatted = (Math.floor(runtime * 10) / 10).toLocaleString("en-US", { maximumFractionDigits: 1 });
-  return `${formatted} ${sizeName(size)} hours/month included`;
+  if (includedSmallHours === undefined || !Number.isFinite(includedSmallHours) || includedSmallHours < 0) return null;
+  if (!Number.isFinite(multiplier) || multiplier <= 0) return null;
+  // Floor to a tenth so the footnote never promises more than the plan includes.
+  const hrs = Math.floor((includedSmallHours / multiplier) * 10) / 10;
+  return hrs.toLocaleString("en-US", { maximumFractionDigits: 1 });
+}
+
+/**
+ * The hours a plan includes, at the plan's OWN size: its largest allowed size.
+ * Null when the allowance or that size's multiplier is unknown.
+ */
+export function planOwnSizeHours(
+  pricing: DaemonPricingLike | undefined,
+  allowedSizes: string[],
+  includedSmallHours: number | undefined,
+): string | null {
+  const own = (pricing?.sizes ?? [])
+    .filter((s) => allowedSizes.includes(s.size))
+    .reduce<DaemonSizePriceLike | undefined>((top, s) => (!top || Number(s.multiplier) > Number(top.multiplier) ? s : top), undefined);
+  return own ? sizeHours(pricing, own.size, includedSmallHours) : null;
+}
+
+/** The one footnote under every machine picker. */
+export function machinePricingFootnote(hours: string | null): string {
+  return `${hours ? `Includes ${hours} hours a month. ` : ""}Extra hours and storage are billed separately.`;
 }
 
 /** DaemonDisk stays in DATA GiB, including after whole-disk billing (#1000).
@@ -191,36 +211,4 @@ export function provisionedDiskGib(pricing: DaemonPricingLike | undefined, size:
   if (!disk || disk.capacityGib <= 0) return null;
   const allowance = diskAllowanceGib(pricing, size, disk.includedGib);
   return allowance === null ? null : disk.capacityGib + allowance;
-}
-
-/** One size's picker facts: price, burn rate, disk, and its suspended fee. */
-export interface SizeFacts {
-  hourlyPriceLabel: string;
-  includedRuntimeLabel: string;
-  diskLabel: string;
-  suspendedFeeLabel: string | null;
-}
-
-export function sizeFacts(pricing: DaemonPricingLike | undefined, size: string, includedSmallDaemonHours?: number): SizeFacts | null {
-  const row = pricing?.sizes.find((s) => s.size === size);
-  if (!pricing || !row) return null;
-  const storage = Number(row.storageGib);
-  return {
-    hourlyPriceLabel: `${centsDecimalToDollars(row.hourlyPriceCents)}/h after included hours, with overage enabled`,
-    includedRuntimeLabel: includedRuntimeLabel(pricing, size, includedSmallDaemonHours),
-    diskLabel: `${storage} GiB disk`,
-    suspendedFeeLabel: suspendedFeeLabel(pricing, storage),
-  };
-}
-
-/** Concrete alternatives for eligible sizes, all drawing from ONE monthly pool. */
-export function includedHoursSentence(
-  includedSmallDaemonHours: number | undefined,
-  pricing: DaemonPricingLike | undefined,
-  allowedSizes?: string[],
-): string {
-  const sizes = pricing?.sizes.filter((s) => allowedSizes?.includes(s.size)) ?? [];
-  if (includedSmallDaemonHours === undefined || sizes.length === 0) return "Included runtime unavailable. Runtime is shared across your machines.";
-  const alternatives = sizes.map((s) => includedRuntimeLabel(pricing, s.size, includedSmallDaemonHours).replace("/month included", ""));
-  return `Each month: ${alternatives.join(" or ")}. Shared across your machines, not a separate allowance for each size.`;
 }

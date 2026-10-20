@@ -114,7 +114,15 @@ service ObservabilityService {
   // server-side to parameterized SQL over the known OTel columns; an unknown
   // field, operator or aggregation is InvalidArgument. Search panels are not
   // run here (use SearchLogs / ListTraces). Same guardrails as every other RPC.
-  // Max range 7 days for traces/logs panels, 30 days for metrics panels.
+  // Max range 7 days for traces/logs panels, 30 days for metrics and sql
+  // panels.
+  //
+  // A sql panel's statement runs as the org's own read-only ClickHouse user,
+  // confined to the org's database, under the alert-rule guard and limits
+  // (one SELECT; no writes, DDL, SETTINGS, FORMAT, system tables or outside
+  // table functions; the alert-rule timeout; at most 10,000 rows, more is
+  // ResourceExhausted). With
+  // `explain`, nothing is run: the response carries the compiled statements.
   rpc QueryPanel(QueryPanelRequest) returns (QueryPanelResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -850,24 +858,65 @@ message QueryPanelRequest {
   // control. Accepts the allowlisted keys of QueryScope as well as the panel
   // field vocabulary. PanelSeriesResult.group is keyed by what was asked for.
   repeated string group_by = 5 [(buf.validate.field).repeated.max_items = 3];
+  // Compile the panel without running it: the response carries compiled_sql
+  // and no data. The panel is still validated and the scope still checked.
+  // A metrics panel looks up each series' metric to choose its statement.
+  bool explain = 6;
+}
+
+// One statement a panel compiles to, as ClickHouse receives it: the SQL with
+// {name:Type} parameter placeholders, and the parameter values.
+message CompiledStatement {
+  string sql = 1;
+  // Parameter name -> value, as sent to ClickHouse.
+  map<string, string> params = 2;
+}
+
+// One cell of a heatmap panel: the events whose value fell in [low, high)
+// within the bucket that starts at `time` (step_seconds wide).
+message HeatmapCell {
+  google.protobuf.Timestamp time = 1;
+  double low = 2;
+  double high = 3;
+  double count = 4;
+}
+
+// One result column of a sql panel, in result order.
+message SqlColumn {
+  string name = 1;
+  // The ClickHouse type, e.g. "UInt64", "DateTime64(9)", "LowCardinality(String)".
+  string type = 2;
+  // A number: drawn as a value (a series point or a table cell).
+  bool numeric = 3;
+  // A date or time: as the first column, it makes the result a time series.
+  bool time = 4;
 }
 
 message QueryPanelResponse {
   string panel_id = 1;
-  // Echo of panel.kind: "line", "number", "table", "funnel", "issues" or
-  // "sessions".
+  // Echo of panel.kind: "line", "number", "table", "bar", "heatmap", "sql",
+  // "funnel", "issues" or "sessions".
   string kind = 2;
   string unit = 3;
   // line panels: one entry per (series x group); a ratio panel yields one
-  // entry per group labelled "ratio". number panels: one entry per series with
-  // `value` set (metrics panels: the most recent bucket's value).
+  // entry per group labelled "ratio", a formula panel one labelled "formula".
+  // number panels: one entry per series (or one "ratio" / "formula" entry)
+  // with `value` set over the whole range (metrics panels: the most recent
+  // bucket's value); an ungrouped number panel also fills `points`, a short
+  // series over the range for a sparkline (step_seconds wide).
+  // sql panels whose first column is a time: one entry per (numeric column x
+  // group of the string columns), with points.
   repeated PanelSeriesResult series = 4;
-  // table panels: the columns after the group-by columns, in series order.
+  // table and bar panels: the columns after the group-by columns, in series
+  // order, heaviest group first (bar: at most panel.limit, default 10).
+  // sql panels that are not a time series: the numeric columns; each row's
+  // group holds the other columns by name.
   repeated string columns = 5;
   repeated PanelTableRow rows = 6;
   int32 step_seconds = 7;
   // True when a cap cut the result (50 series, 200 table rows, 50 issues or
-  // sessions).
+  // sessions, the heatmap cell cap). A sql panel is never cut: a result over
+  // 10,000 rows is ResourceExhausted.
   bool truncated = 8;
   // funnel panels: one entry per step, in the funnel's order. Each count is the
   // number of sessions (or users) that reached that step and every step before
@@ -877,6 +926,15 @@ message QueryPanelResponse {
   repeated PanelIssue issues = 10;
   // sessions panels: browser sessions that started in the range, newest first.
   repeated PanelSession sessions = 11;
+  // With QueryPanelRequest.explain: what the panel compiles to, one entry per
+  // statement (a metrics panel runs one per series). Empty otherwise, and for
+  // the console kinds (funnel, issues, sessions), whose statements are the
+  // control plane's own.
+  repeated CompiledStatement compiled_sql = 12;
+  // heatmap panels: the non-empty cells, by time then value.
+  repeated HeatmapCell heatmap = 13;
+  // sql panels: the result's columns.
+  repeated SqlColumn sql_columns = 14;
 }
 
 message FunnelStepResult {
@@ -1019,7 +1077,12 @@ message Panel {
   string id = 1;
   string title = 2;
   string description = 3;
-  // number | line | table | search | funnel | issues | sessions
+  // number | line | table | bar | heatmap | sql | search | funnel | issues |
+  // sessions
+  //
+  // bar is a table drawn as top-N bars (needs group_by; limit). heatmap takes
+  // one count series whose `field` is the numeric value bucketed over time.
+  // sql carries its statement in `sql` and takes no series, where or group_by.
   //
   // funnel, issues and sessions are read by QueryPanel from the tenant's browser
   // tables (product_events, error_hourly, rum_sessions) instead of from series
@@ -1030,7 +1093,7 @@ message Panel {
   // are read over at most 90 days (funnel) or 30 days (issues, sessions).
   string kind = 4;
   // traces | metrics | logs. funnel, issues and sessions read browser telemetry:
-  // their signal is "traces" or empty.
+  // their signal is "traces" or empty. A sql panel's signal is optional.
   string signal = 5;
   repeated PanelSeries series = 6;
   bool ratio = 7;
@@ -1046,6 +1109,19 @@ message Panel {
   PanelFunnel funnel = 14;
   // sessions panels only: keep only sessions that hit an error.
   bool has_error = 15;
+  // line and number panels: plot this expression over the series instead of
+  // the series ("A / B * 100": A is series[0], B series[1], ...; numbers,
+  // + - * / and parentheses; x / 0 is 0). Not with ratio.
+  string formula = 16;
+  // table and bar panels: keep the top `limit` groups by series[0], 1 to 200.
+  // 0 is 10 for a bar and 200 for a table.
+  int32 limit = 17;
+  // sql panels only: one read-only SELECT over the org's telemetry tables
+  // (unqualified names: otel_traces, otel_logs, ...). It may use the
+  // dashboard's scope as ClickHouse parameters: {from:DateTime64(9)},
+  // {to:DateTime64(9)}, {step:UInt32}, {env_ids:Array(String)},
+  // {envs:Array(String)} and {services:Array(String)}.
+  string sql = 18;
 }
 
 // The definition a funnel panel draws (forge.Funnel): product event names in

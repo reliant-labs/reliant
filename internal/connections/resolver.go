@@ -61,6 +61,7 @@ type TriggerSite struct {
 // db.Repository.
 type runOwners interface {
 	GetWorkflow(ctx context.Context, id string) (*core.Workflow, error)
+	GetThread(ctx context.Context, id string) (*core.Thread, error)
 	GetChat(ctx context.Context, id string) (*core.Chat, error)
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 }
@@ -165,23 +166,52 @@ func (r *Resolved) RefreshAfterRejection(ctx context.Context) (*Resolved, error)
 // OwnerOf returns the user a run belongs to, read from the database. It tries
 // the run's recorded owner first and the chat second, the same order the rest
 // of the engine uses while both sources exist.
+//
+// runID is the id an integration call identifies its run by, which is the
+// call's THREAD (see tools.integrationRunID). That is a workflow id for the
+// root run and for a spawned agent, but not for a nested `type: workflow` node
+// with `thread: {mode: new}`: it runs inline under its parent's workflow row on
+// a thread of its own, so the thread id names no workflow at all. Such an id is
+// resolved through the thread's recorded workflow, then its chat.
 func (r *Resolver) OwnerOf(ctx context.Context, runID string) (string, error) {
 	if runID == "" {
 		return "", newError(CodeFailedPrecondition, "no run to resolve a connection for")
 	}
 	run, err := r.owners.GetWorkflow(ctx, runID)
-	if err != nil || run == nil {
-		return "", newError(CodeFailedPrecondition, "run %q not found", runID)
+	if err == nil && run != nil {
+		return r.ownerOfWorkflow(ctx, run)
 	}
+	if thread, terr := r.owners.GetThread(ctx, runID); terr == nil && thread != nil {
+		if thread.WorkflowID != nil && *thread.WorkflowID != "" {
+			if run, werr := r.owners.GetWorkflow(ctx, *thread.WorkflowID); werr == nil && run != nil {
+				return r.ownerOfWorkflow(ctx, run)
+			}
+		}
+		if owner := r.ownerOfChat(ctx, thread.ChatID); owner != "" {
+			return owner, nil
+		}
+	}
+	return "", newError(CodeFailedPrecondition, "run %q not found", runID)
+}
+
+func (r *Resolver) ownerOfWorkflow(ctx context.Context, run *core.Workflow) (string, error) {
 	if run.OwnerUserID != nil && *run.OwnerUserID != "" {
 		return *run.OwnerUserID, nil
 	}
-	if run.ChatID != "" {
-		if chat, err := r.owners.GetChat(ctx, run.ChatID); err == nil && chat != nil && chat.UserID != "" {
-			return chat.UserID, nil
-		}
+	if owner := r.ownerOfChat(ctx, run.ChatID); owner != "" {
+		return owner, nil
 	}
-	return "", newError(CodeFailedPrecondition, "run %q has no owner", runID)
+	return "", newError(CodeFailedPrecondition, "run %q has no owner", run.ID)
+}
+
+func (r *Resolver) ownerOfChat(ctx context.Context, chatID string) string {
+	if chatID == "" {
+		return ""
+	}
+	if chat, err := r.owners.GetChat(ctx, chatID); err == nil && chat != nil {
+		return chat.UserID
+	}
+	return ""
 }
 
 // ForCall resolves ref for the run's owner.

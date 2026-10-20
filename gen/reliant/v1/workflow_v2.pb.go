@@ -8086,15 +8086,22 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x03tag\x18\x01 \x01(\tB\x1d\x82\xb5\x18\x19\n" +
 	"\x17Tag for preset matchingR\x03tag\x123\n" +
 	"\adefault\x18\x02 \x01(\tB\x19\x82\xb5\x18\x15\n" +
-	"\x13Default preset slugR\adefault\"\xc6\t\n" +
-	"\x04Node\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x127\n" +
-	"\tcondition\x18\x03 \x01(\v2\x19.reliant.v1.DirectCelBoolR\tcondition\x12/\n" +
-	"\atimeout\x18\x05 \x01(\v2\x15.reliant.v1.CelStringR\atimeout\x12@\n" +
-	"\fsave_message\x18\x06 \x01(\v2\x1d.reliant.v1.SaveMessageConfigR\vsaveMessage\x125\n" +
-	"\x06daemon\x18\a \x01(\v2\x1d.reliant.v1.CelDaemonSelectorR\x06daemon\x12\x18\n" +
-	"\aoutcome\x18\b \x01(\tR\aoutcome\x124\n" +
+	"\x13Default preset slugR\adefault\"\x99\x0f\n" +
+	"\x04Node\x12f\n" +
+	"\x02id\x18\x01 \x01(\tBV\x82\xb5\x18R\n" +
+	"PUnique within the workflow; other nodes read this node's outputs as nodes.<id>.*R\x02id\x12r\n" +
+	"\x04type\x18\x02 \x01(\tB^\x82\xb5\x18Z\n" +
+	"XThe node type, such as workflow, call_llm, run or loop; each section below names its ownR\x04type\x12\xab\x01\n" +
+	"\tcondition\x18\x03 \x01(\v2\x19.reliant.v1.DirectCelBoolBr\x82\xb5\x18n\n" +
+	"lRaw CEL (no {{ }}): the node runs only when it is true, and is skipped otherwise. On a join node, all or anyR\tcondition\x12\x83\x01\n" +
+	"\atimeout\x18\x05 \x01(\v2\x15.reliant.v1.CelStringBR\x82\xb5\x18N\n" +
+	"LOverrides the node's default timeout, as a duration such as 30s, 5m or 1h30mR\atimeout\x12\x9c\x01\n" +
+	"\fsave_message\x18\x06 \x01(\v2\x1d.reliant.v1.SaveMessageConfigBZ\x82\xb5\x18V\n" +
+	"TA message to save to the thread when the node completes, as a template over output.*R\vsaveMessage\x12\x8b\x01\n" +
+	"\x06daemon\x18\a \x01(\v2\x1d.reliant.v1.CelDaemonSelectorBT\x82\xb5\x18P\n" +
+	"NWhich machine runs this node's tools, overriding the workflow's daemon settingR\x06daemon\x12\xb4\x01\n" +
+	"\aoutcome\x18\b \x01(\tB\x99\x01\x82\xb5\x18\x94\x01\n" +
+	"\x80\x01The verdict reaching this node stamps on the run: success or failure. The last node that runs with one decides the run's outcome\x12\x0fsuccess|failureR\aoutcome\x124\n" +
 	"\bcall_llm\x18\n" +
 	" \x01(\v2\x17.reliant.v1.CallLLMArgsH\x00R\acallLlm\x12C\n" +
 	"\rexecute_tools\x18\v \x01(\v2\x1c.reliant.v1.ExecuteToolsArgsH\x00R\fexecuteTools\x123\n" +

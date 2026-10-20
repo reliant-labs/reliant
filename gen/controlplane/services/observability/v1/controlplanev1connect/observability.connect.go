@@ -110,7 +110,15 @@ type ObservabilityServiceClient interface {
 	// server-side to parameterized SQL over the known OTel columns; an unknown
 	// field, operator or aggregation is InvalidArgument. Search panels are not
 	// run here (use SearchLogs / ListTraces). Same guardrails as every other RPC.
-	// Max range 7 days for traces/logs panels, 30 days for metrics panels.
+	// Max range 7 days for traces/logs panels, 30 days for metrics and sql
+	// panels.
+	//
+	// A sql panel's statement runs as the org's own read-only ClickHouse user,
+	// confined to the org's database, under the alert-rule guard and limits
+	// (one SELECT; no writes, DDL, SETTINGS, FORMAT, system tables or outside
+	// table functions; the alert-rule timeout; at most 10,000 rows, more is
+	// ResourceExhausted). With
+	// `explain`, nothing is run: the response carries the compiled statements.
 	QueryPanel(context.Context, *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error)
 	// ListAttributeValues returns the values a filterable attribute takes in the
 	// scope, most frequent first, optionally narrowed to a prefix: the console's
@@ -357,7 +365,15 @@ type ObservabilityServiceHandler interface {
 	// server-side to parameterized SQL over the known OTel columns; an unknown
 	// field, operator or aggregation is InvalidArgument. Search panels are not
 	// run here (use SearchLogs / ListTraces). Same guardrails as every other RPC.
-	// Max range 7 days for traces/logs panels, 30 days for metrics panels.
+	// Max range 7 days for traces/logs panels, 30 days for metrics and sql
+	// panels.
+	//
+	// A sql panel's statement runs as the org's own read-only ClickHouse user,
+	// confined to the org's database, under the alert-rule guard and limits
+	// (one SELECT; no writes, DDL, SETTINGS, FORMAT, system tables or outside
+	// table functions; the alert-rule timeout; at most 10,000 rows, more is
+	// ResourceExhausted). With
+	// `explain`, nothing is run: the response carries the compiled statements.
 	QueryPanel(context.Context, *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error)
 	// ListAttributeValues returns the values a filterable attribute takes in the
 	// scope, most frequent first, optionally narrowed to a prefix: the console's

@@ -239,28 +239,28 @@ message PresetsConfig {
 message Node {
   // ID is the unique identifier for this node within the workflow.
   // Must be unique across all nodes. Convention: kebab-case.
-  string id = 1;
+  string id = 1 [(reliant) = {description: "Unique within the workflow; other nodes read this node's outputs as nodes.<id>.*"}];
 
   // Type is the node type discriminator (call_llm, execute_tools, run, loop, etc.).
   // Used during YAML parsing to select the correct args oneof case.
-  string type = 2;
+  string type = 2 [(reliant) = {description: "The node type, such as workflow, call_llm, run or loop; each section below names its own"}];
 
   // Condition is a direct CEL expression controlling whether this node executes.
   // If omitted or evaluates to true, the node runs.
   // On Join nodes, the only valid values are the literals "all" and "any".
-  DirectCelBool condition = 3;
+  DirectCelBool condition = 3 [(reliant) = {description: "Raw CEL (no {{ }}): the node runs only when it is true, and is skipped otherwise. On a join node, all or any"}];
 
   // Timeout overrides the default activity timeout for this node.
   // Format: Go duration string (e.g., "5m", "1h30m", "30s").
-  CelString timeout = 5;
+  CelString timeout = 5 [(reliant) = {description: "Overrides the node's default timeout, as a duration such as 30s, 5m or 1h30m"}];
 
   // SaveMessage automatically saves a message to the thread after node completion.
-  SaveMessageConfig save_message = 6;
+  SaveMessageConfig save_message = 6 [(reliant) = {description: "A message to save to the thread when the node completes, as a template over output.*"}];
 
   // Daemon specifies which daemon should execute tools for this node.
   // Overrides the workflow-level daemon setting.
   // Supports: string shorthand ("local"), structured object ({type: "cloud"}), or CEL expression.
-  CelDaemonSelector daemon = 7;
+  CelDaemonSelector daemon = 7 [(reliant) = {description: "Which machine runs this node's tools, overriding the workflow's daemon setting"}];
 
   // Outcome is the VERDICT this node stamps on the run when it executes:
   // "success" or "failure". It is how a workflow says whether reaching this
@@ -273,7 +273,10 @@ message Node {
   // failure (most workflows declare nothing and are fine). The last executed
   // node carrying a declaration wins, and it is recorded on the workflow
   // execution as its outcome, alongside — not instead of — its lifecycle status.
-  string outcome = 8;
+  string outcome = 8 [(reliant) = {
+    description: "The verdict reaching this node stamps on the run: success or failure. The last node that runs with one decides the run's outcome"
+    enum_values: "success|failure"
+  }];
 
   // Type-specific arguments. Exactly one must be set, matching the type field.
   oneof args {

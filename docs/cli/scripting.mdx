@@ -1,0 +1,111 @@
+---
+title: "Scripting and CI"
+description: "Use the reliant CLI from scripts and CI: credentials without a browser, JSON output, exit codes, and event hooks"
+---
+
+The CLI follows a few rules that make it predictable in a script. Results go to stdout and diagnostics go to stderr. Commands that return data take `--json`. Exit codes are documented and mean something specific. And nothing depends on state left behind by an earlier command: the server and the credential are worked out again on every run, from flags and environment variables.
+
+## Credentials in automation
+
+A script authenticates with an **API token** in `RELIANT_TOKEN`. When it is set, the CLI uses it for every command and ignores any stored login. Create one on a computer with a browser and store it as a secret in your CI system:
+
+```bash
+reliant auth token create --name ci
+```
+
+The token lasts 90 days. Running the command again with the same `--name` replaces it, which is how you rotate it, and `reliant auth token revoke ci` withdraws it. There is deliberately no `--token` flag for this. A secret on a command line ends up in shell history and process listings, and `daemon start --token` already means "read a **daemon** credential from stdin". [Sign in and tokens](/cli/sign-in) compares the credential types.
+
+To target a server other than Reliant's hosted service, set `RELIANT_SERVER_URL` (or pass `--server`). The token must have been created on that same server.
+
+Forge commands in CI use their own variable, the one each environment declares (usually `FORGE_CONTROL_PLANE_TOKEN`), set to an organization automation token. See [Forge through Reliant](/cli/forge#signed-in-as-you).
+
+## Validate and test workflows on every pull request
+
+Workflow validation and scenario tests need no credential and no network, so they can run on every pull request with nothing but the `reliant` binary. Both exit `1` on failure and take `--json`:
+
+```yaml .github/workflows/reliant-workflows.yml
+name: reliant workflows
+on: pull_request
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: go install github.com/reliant-labs/reliant/cmd/reliant@latest
+      - run: reliant workflow validate
+      - run: reliant workflow scenario run
+```
+
+[Workflows from the terminal](/cli/workflows) shows what each command checks and what its failures look like.
+
+## JSON output
+
+These commands take `--json` and print a single JSON document on stdout:
+
+| Command | Document |
+|---|---|
+| `reliant auth status` | `logged_in`, `server`, `server_from`, plus `credential`, `token_prefix`, `scopes` and `expires_at` when signed in |
+| `reliant auth token list` | One object per token: `id`, `name`, `token_prefix`, `created_at`, `last_used_at`, `expires_at` |
+| `reliant project list` | Your projects |
+| `reliant version` | `version`, `commit`, `forge`, `go`, `os`, `arch`, … |
+| `reliant workflow list` | One object per workflow: `name`, `source`, `file`, `nodes`, `inputs` |
+| `reliant workflow validate`, `validate-tree` | One result per workflow: `file`, `name`, `valid`, node and edge counts, errors |
+| `reliant workflow scenario list`, `scenario run` | Scenarios per workflow, with `status` and `duration_ms` after a run |
+| `reliant workflow eval` | The value and its type |
+| `reliant workflow status` | The run's status, outcome, node tree and open gates |
+| `reliant workflow questions`, `wait-for-gate` | The open question or approval |
+| `reliant preview-url` | `port`, `url`, `listening`, `access_level`, plus `built` and `run_command` if given |
+
+For example:
+
+```text
+$ reliant workflow validate --json
+[
+  {
+    "file": "test-then-fix.yaml",
+    "name": "test-then-fix",
+    "valid": true,
+    "nodes": 3,
+    "edges": 1
+  }
+]
+```
+
+`reliant workflow follow` (and `run --follow`) streams instead: one JSON event per line, for each node and workflow state change, with every diagnostic on stderr. Pipe it straight into `jq` or a log shipper.
+
+## Exit codes
+
+`0` means success everywhere, and `1` means the command itself failed. The supervision commands use more codes, so a script can tell a run that failed from a command that failed:
+
+| Command | `0` | `1` | `2` | `3` |
+|---|---|---|---|---|
+| `workflow follow`, `run --follow`, `workflow watch` | Run completed **and** passed | Run failed, was cancelled, expired, ended at a failure node, or following errored | `--timeout` elapsed | A question or approval opened (`--exit-on-gate`) |
+| `workflow wait-for-gate` | Run completed and passed with no gate | Run failed or ended without passing | `--timeout` elapsed | A gate is open, and is printed |
+| `workflow status` | Run succeeded, or is still running | The command failed (server unreachable, no such run) | The run did **not** succeed | |
+| `workflow validate`, `validate-tree`, `scenario run`, `eval` | All valid / passed / evaluated | Any error or failure | | |
+| `auth status` | A credential is available | No credential | | |
+| `daemon status` | Stream connected and stable | Not running, not connected, or unstable | | |
+| `preview-url --require-listening` | Port is listening | Nothing listening | | |
+
+"Completed" is not the same as "passed". A run that reaches a terminal node declaring `outcome: failure` finished its graph cleanly, but the work did not pass. Every command in this table treats it as a failure, `1` (or `2` for `status`), so a script that checks the exit code never mistakes it for success.
+
+## Reacting to events with hooks
+
+`follow`, `watch` and `run --follow` can run a shell command when an event happens, so a script can react without parsing the stream itself:
+
+```bash
+reliant workflow watch "$ID" \
+  --hook 'on=workflow_failed cmd=./notify.sh' \
+  --hook 'on=question cmd=./answer.sh'
+```
+
+The event is one of `node_started`, `node_completed`, `node_failed`, `workflow_completed`, `workflow_failed`, `question`, `approval` or `any`. The hook gets the event's JSON on stdin and `RELIANT_EVENT_*` environment variables (`RELIANT_EVENT`, `RELIANT_EVENT_EXECUTION_ID`, `RELIANT_EVENT_NODE_ID`, `RELIANT_EVENT_STATE`, …). A failing hook is logged and never stops the stream.
+
+## Related topics
+
+- [Sign in and tokens](/cli/sign-in)
+- [Workflows from the terminal](/cli/workflows)
+- [CLI reference](/reference/cli), including [global flags](/reference/cli#global-flags)

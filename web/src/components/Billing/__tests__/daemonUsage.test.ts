@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   asOfLabel,
   burnLabel,
-  includedHoursSentence,
+  machinePricingFootnote,
+  planOwnSizeHours,
   remainingHeadline,
   runsOutLabel,
-  sizeFacts,
+  sizeHours,
   suspendedFeeLabel,
   type DaemonPricingLike,
   type DaemonUsageLike,
@@ -45,10 +46,10 @@ function usage(over: Partial<DaemonUsageLike> = {}): DaemonUsageLike {
 
 const ts = (d: Date) => ({ seconds: BigInt(Math.floor(d.getTime() / 1000)) });
 
-describe("usage headline (in small-daemon-hours)", () => {
-  it("reads remaining SDS as small-daemon-hours", () => {
+describe("usage headline", () => {
+  it("reads remaining SDS as hours", () => {
     expect(remainingHeadline(usage({ remainingSmallDaemonSeconds: BigInt(41.5 * 3600) }))).toBe(
-      "41.5 small-daemon-hours left",
+      "41.5 hours left",
     );
   });
 
@@ -107,21 +108,33 @@ describe("runs out / as of", () => {
   });
 });
 
-describe("machine picker facts", () => {
-  it("shows concrete runtime, qualified overage, disk and suspended fee", () => {
-    expect(sizeFacts(pricing, "large", 160)).toEqual({
-      hourlyPriceLabel: "$0.52/h after included hours, with overage enabled",
-      includedRuntimeLabel: "40 Large hours/month included",
-      diskLabel: "100 GiB disk",
-      suspendedFeeLabel: "$25.00/mo",
-    });
-    for (const [size, runtime] of [["small", 160], ["medium", 80], ["large", 40], ["xl", 20], ["2xl", 10]] as const) {
-      expect(sizeFacts(pricing, size, 160)?.includedRuntimeLabel).toMatch(new RegExp(`^${runtime} `));
+describe("hours in the footnote", () => {
+  it("converts the plan's small hours into hours of a size", () => {
+    for (const [size, hrs] of [["small", "160"], ["medium", "80"], ["large", "40"], ["xl", "20"], ["2xl", "10"]] as const) {
+      expect(sizeHours(pricing, size, 160)).toBe(hrs);
     }
-    expect(sizeFacts(pricing, "small")?.includedRuntimeLabel).toBe("Included runtime unavailable");
-    expect(sizeFacts(pricing, "small", 0)?.includedRuntimeLabel).toBe("0 Small hours/month included");
-    expect(sizeFacts({ ...pricing, sizes: [{ ...pricing.sizes[0], multiplier: 3 }] }, "small", 150)?.includedRuntimeLabel).toBe("50 Small hours/month included");
-    expect(sizeFacts(undefined, "large")).toBeNull();
+  });
+
+  it("never invents an allowance", () => {
+    expect(sizeHours(pricing, "small", undefined)).toBeNull();
+    expect(sizeHours(pricing, "small", Number.NaN)).toBeNull();
+    expect(sizeHours(undefined, "small", 160)).toBeNull();
+    expect(sizeHours(pricing, "unknown", 160)).toBeNull();
+    expect(sizeHours(pricing, "small", 0)).toBe("0");
+  });
+
+  it("rounds down rather than promise more than the plan includes", () => {
+    const p: DaemonPricingLike = { ...pricing, sizes: [{ ...pricing.sizes[0], multiplier: 3 }] };
+    expect(sizeHours(p, "small", 100)).toBe("33.3");
+  });
+
+  // A 2XL plan holds 2,560 small hours; the user is told 160 hours of 2XL.
+  it("states a plan's hours at its OWN (largest allowed) size, never in small units", () => {
+    expect(planOwnSizeHours(pricing, ["small"], 160)).toBe("160");
+    expect(planOwnSizeHours(pricing, ["small", "medium"], 160)).toBe("80");
+    expect(planOwnSizeHours(pricing, ["small", "medium", "large", "xl", "2xl"], 2560)).toBe("160");
+    expect(planOwnSizeHours(pricing, [], 160)).toBeNull();
+    expect(planOwnSizeHours(pricing, ["small"], undefined)).toBeNull();
   });
 
   it("prices a suspended disk from the server's per-GiB fee", () => {
@@ -130,13 +143,14 @@ describe("machine picker facts", () => {
   });
 });
 
-describe("plan tile sentence", () => {
-  // FAILS ON main: PlanTiles said "… machine hours are included each month,
-  // on every size", which stopped being true once sizes burn at different rates.
-  it("no longer says 'on every size' and states each multiplier from the server", () => {
-    const sentence = includedHoursSentence(160, pricing, ["small", "medium"]);
-    expect(sentence).not.toMatch(/×|burn|small-daemon|Large|XL/);
-    expect(sentence).toBe("Each month: 160 Small hours or 80 Medium hours. Shared across your machines, not a separate allowance for each size.");
-    expect(includedHoursSentence(undefined, pricing, ["small"])).toContain("unavailable");
+describe("footnote under every picker", () => {
+  it("is the owner's two sentences, with no rates, disks or fees", () => {
+    const line = machinePricingFootnote("160");
+    expect(line).toBe("Includes 160 hours a month. Extra hours and storage are billed separately.");
+    expect(line).not.toMatch(/\$|GiB|GB|×|suspended|small-daemon/i);
+  });
+
+  it("drops the hours clause rather than guess it", () => {
+    expect(machinePricingFootnote(null)).toBe("Extra hours and storage are billed separately.");
   });
 });

@@ -94,8 +94,12 @@ func detectResponseToolsFromWorkflow(
 
 // toolCallsSourceRegex matches nodes.X.tool_calls patterns.
 // Handles both bare expressions ("nodes.call_llm.tool_calls") and
-// template-wrapped expressions ("{{nodes.call_llm.tool_calls}}").
-var toolCallsSourceRegex = regexp.MustCompile(`^(?:\{\{)?nodes\.([a-zA-Z_][a-zA-Z0-9_]*)\.tool_calls(?:\}\})?$`)
+// template-wrapped expressions ("{{nodes.call_llm.tool_calls}}"), with or
+// without the spaces authors put inside the braces ("{{ nodes.call_llm.tool_calls }}").
+// The validator's pattern (validation/cel.go) is whitespace-tolerant; this one
+// must agree, or a workflow validates cleanly and then never gets its response
+// tools detected at run time.
+var toolCallsSourceRegex = regexp.MustCompile(`^\s*(?:\{\{\s*)?nodes\.([a-zA-Z_][a-zA-Z0-9_]*)\.tool_calls(?:\s*\}\})?\s*$`)
 
 // extractToolCallsSourceNode extracts a node ID from a tool_calls expression.
 // Accepts both template form and bare CEL expression form:
@@ -171,6 +175,25 @@ func extractResponseToolInfoProto(node *reliantv1.Node, workflowInputs map[strin
 	}
 
 	return info
+}
+
+// resolveInputTemplates replaces each "{{ inputs.X }}" entry with the named
+// input's value; any other entry is kept as is, and an entry that cannot be
+// resolved is kept too (filterUnresolvedTemplates drops it later).
+func resolveInputTemplates(items []string, inputs map[string]interface{}) []string {
+	if len(items) == 0 {
+		return items
+	}
+	out := make([]string, len(items))
+	for i, item := range items {
+		out[i] = item
+		if strings.Contains(item, "{{") {
+			if resolved := resolveSimpleInputExpr(item, inputs); resolved != "" {
+				out[i] = resolved
+			}
+		}
+	}
+	return out
 }
 
 // resolveSimpleInputExpr resolves simple "inputs.X" CEL expressions

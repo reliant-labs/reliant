@@ -75,7 +75,7 @@ import { cn } from "@/lib/utils";
 
 import { getStripe, isStripeConfigured } from "./stripe";
 import { checkoutAppearance } from "./stripeAppearance";
-import { PlanFinePrint, PlanTiles, type ComputePlanOption } from "./PlanTiles";
+import { PlanTiles, type ComputePlanOption } from "./PlanTiles";
 
 /** How long to wait for the webhook before saying we could not confirm. */
 const SETTLE_TIMEOUT_MS = 60_000;
@@ -169,7 +169,6 @@ export function ComputeSubscriptionCheckout({
           currentPlanId={currentPlanId}
           onSelect={onSelectPlan}
         />
-        {selected && <PlanFinePrint plan={selected} />}
       </section>
 
       <section className="space-y-3 border-t border-border p-5">

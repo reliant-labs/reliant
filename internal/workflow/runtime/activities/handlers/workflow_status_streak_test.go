@@ -348,3 +348,36 @@ func TestWorkflowStatus_AttendedRunIgnoresTheTriggersPolicy(t *testing.T) {
 		})
 	}
 }
+
+// A run that ends on a node declaring `outcome: failure` finished its Temporal
+// execution ("completed") but did not do its job. The firing's run_status is
+// what trigger health, failure streaks and the inbox read, so it must say
+// "failed" — a reviewer that never posted its review was recorded as
+// completed, and the automation read green while doing nothing.
+func TestWorkflowStatus_FailureOutcomeRecordsTheFiringAsFailed(t *testing.T) {
+	cases := []struct {
+		name, status, outcome, want string
+	}{
+		{"completed with failure outcome", "completed", "failure", core.TriggerRunFailed},
+		{"completed with success outcome", "completed", "success", core.TriggerRunCompleted},
+		{"completed with no declared outcome", "completed", "", core.TriggerRunCompleted},
+		{"failed", "failed", "", core.TriggerRunFailed},
+		{"cancelled", "cancelled", "", core.TriggerRunCancelled},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newStreakFixtureOfKind(t, core.TriggerKindIntegration, false)
+			chatID := f.launch(core.TriggerEventKindIntegration, db.Active())
+
+			var out WorkflowStatusOutput
+			require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(f.h.Repo()).Execute, WorkflowStatusInput{
+				ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Thread: chatID,
+				Status: tc.status, Outcome: tc.outcome, LaunchRun: true,
+			}, &out))
+
+			var got string
+			require.NoError(t, f.h.DB().QueryRow(`SELECT run_status FROM trigger_events WHERE chat_id = $1`, chatID).Scan(&got))
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}

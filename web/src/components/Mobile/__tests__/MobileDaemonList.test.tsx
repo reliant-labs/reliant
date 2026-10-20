@@ -79,8 +79,9 @@ describe("MobileDaemonList", () => {
 
     const [headerAction] = screen.getAllByRole("button", { name: /new machine/i });
     await user.click(headerAction!);
-    expect(screen.getByText(/\$0.13\/h after included hours, with overage enabled · 120 GiB disk · \$30.00\/mo while suspended/)).toBeInTheDocument();
-    expect(screen.getByText(/billed until deleted/)).toBeInTheDocument();
+    // Name + spec on the card; hours only in the footnote (160 small hours, small is the only size).
+    expect(screen.getByText("Includes 160 hours a month. Extra hours and storage are billed separately.")).toBeInTheDocument();
+    expect(screen.queryByText(/GiB|hrs|\/hr|per month/)).not.toBeInTheDocument();
     await user.clear(screen.getByLabelText(/^name$/i));
     await user.type(screen.getByLabelText(/^name$/i), "phone-box");
     await user.click(screen.getByRole("button", { name: /^create$/i }));

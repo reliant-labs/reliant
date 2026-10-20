@@ -23,12 +23,7 @@ import {
 } from "@/components/Settings/cloud/billingUtils";
 import { cn } from "@/lib/utils";
 
-import {
-  includedHoursSentence,
-  MACHINE_BILLING_POLICY,
-  type DaemonPricingLike,
-  type SizeFacts,
-} from "./daemonUsage";
+import { machinePricingFootnote } from "./daemonUsage";
 
 /**
  * One purchasable plan, reduced to what these tiles render.
@@ -59,18 +54,8 @@ export interface ComputePlanOption {
   includedMinutes: number;
   /** Per-minute overage rate, in cents. 0 when the plan defines none. */
   overageCentsPerMinute: number;
-  /**
-   * Small-daemon-hours the plan includes per period — the server's
-   * projection from the daemon-pricing catalog (PlanLimits field 34). Absent
-   * from an older server.
-   */
-  includedSmallDaemonHours?: number;
-  allowedSizes?: string[];
-  /**
-   * This size's price, burn rate, disk and suspended fee, from ListPlans'
-   * daemon_pricing (design §6.2). Absent when the server sent no price list.
-   */
-  facts?: SizeFacts;
+  /** Hours this plan includes at its own size ("160"), for the picker footnote. Never printed on the row. */
+  includedHours?: string | null;
 }
 
 export function PlanTiles({
@@ -157,7 +142,6 @@ export function PlanTileRow({
   selected,
   covered,
   current,
-  showFacts = "always",
   onSelect,
 }: {
   plan: ComputePlanOption;
@@ -165,18 +149,8 @@ export function PlanTileRow({
   covered?: boolean;
   /** The user already subscribes to this plan — see PlanTiles' currentPlanId. */
   current?: boolean;
-  /**
-   * When to print the cost breakdown line (burn rate, overage, disk,
-   * suspended fee). "always" suits a page about plans. "selected" suits a
-   * picker: the breakdown wraps to two lines and doubles every row's height,
-   * and every figure in it scales with the size the row already names, so a
-   * user comparing machines reads the spec and the price, then sees the full
-   * breakdown for the one they pick.
-   */
-  showFacts?: "always" | "selected";
   onSelect: () => void;
 }) {
-  const factsVisible = showFacts === "always" || selected || current;
   return (
     <button
       type="button"
@@ -196,7 +170,6 @@ export function PlanTileRow({
             : "border-border bg-background hover:border-primary/40 hover:bg-muted/50",
       )}
     >
-      {/* Compare plan allowance, machine costs and retained disk before buying. */}
       <span className="min-w-0">
         <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
           {plan.label}
@@ -210,19 +183,6 @@ export function PlanTileRow({
         {plan.detail && (
           <span className="block text-xs text-muted-foreground">
             {plan.detail}
-          </span>
-        )}
-        {/* What this size COSTS to run and to keep (design §6.2): the
-            concrete monthly runtime, qualified overage price, its
-            disk, and the fee while suspended — so keeping a machine's cost is
-            visible before it is created. All from the server's price list;
-            absent when the server sent none. */}
-        {!plan.facts && factsVisible && <span className="block text-xs text-muted-foreground">Included runtime, hourly price and disk cost unavailable.</span>}
-        {plan.facts && factsVisible && (
-          <span className="block text-xs text-muted-foreground" data-testid="plan-row-size-facts">
-            <span className="block font-medium text-foreground">{plan.facts.includedRuntimeLabel}</span>
-            <span className="block">{plan.facts.hourlyPriceLabel}</span>
-            <span className="block">{plan.facts.diskLabel}{plan.facts.suspendedFeeLabel && <> · {plan.facts.suspendedFeeLabel} while suspended</>}</span>
           </span>
         )}
       </span>
@@ -243,51 +203,24 @@ export function PlanTileRow({
   );
 }
 
-/** The chosen plan's server-supplied small-daemon-hour allowance. */
-export function describeIncludedHours(
-  plan: ComputePlanOption,
-  pricing?: DaemonPricingLike,
-): string {
-  if (plan.includedSmallDaemonHours === undefined) return "Included hours unavailable.";
-  return includedHoursSentence(plan.includedSmallDaemonHours, pricing, plan.allowedSizes ?? (plan.size ? [plan.size] : []));
+/** Hours every offered plan includes at its own size, or null when they differ or are unknown. */
+export function commonPlanHours(plans: ComputePlanOption[]): string | null {
+  const hours = new Set(plans.map((p) => p.includedHours ?? null));
+  const [only] = [...hours];
+  return hours.size === 1 ? (only ?? null) : null;
 }
 
-/** The per-daemon meter bills running pods, not gateway connections.
- * Suspension stops the hours meter, never the retained-disk meter. */
-export function PlanFinePrint({
-  plan,
-  rateVariesBySize,
+/** The one footnote beneath every machine picker. */
+export function MachinePricingLine({
+  hours,
+  testId = "machine-pricing-line",
 }: {
-  plan: ComputePlanOption;
-  /**
-   * True beneath a list: each card quotes its own hourly rate.
-   * False beside a chosen machine: quote that machine's server-derived rate.
-   */
-  rateVariesBySize?: boolean;
+  hours: string | null;
+  testId?: string;
 }) {
   return (
-    <ul className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
-      <li>
-        Included runtime is shared across your machines, not a separate allowance for each size. {MACHINE_BILLING_POLICY} The standard disk is included while running; grown disk above it costs extra. By default, machines auto-suspend after 30 idle minutes.
-      </li>
-      <li>
-        {rateVariesBySize ? (
-          <>
-            If your included hours run out, machines pause until next month — unless you turn on overage
-            billing, which keeps them running at that machine&apos;s
-            per-hour rate. Overage is off unless you switch it on, and you can
-            set a monthly cap.
-          </>
-        ) : (
-          <>
-            If your included hours run out, machines pause until next month — unless you turn on overage
-            billing, which keeps them running at{" "}
-            {plan.facts?.hourlyPriceLabel ?? "the machine’s per-hour rate (price unavailable)"}. Overage is off
-            unless you switch it on, and you can set a monthly cap.
-          </>
-        )}
-      </li>
-      <li>Change or cancel any time from billing settings.</li>
-    </ul>
+    <p className="mt-2 text-xs text-muted-foreground" data-testid={testId}>
+      {machinePricingFootnote(hours)}
+    </p>
   );
 }

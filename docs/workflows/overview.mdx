@@ -31,28 +31,29 @@ The `mode` parameter controls how tool execution is handled. This is a regular w
 
 | Mode | Behavior | Good for |
 |------|----------|----------|
-| **Auto** | Auto-approves all tool calls. Press Escape to cancel. | Large refactors, trusted tasks, autonomous work |
+| **Auto** | Auto-approves all tool calls. Press Escape to stop. | Large refactors, trusted tasks, autonomous work |
 | **Manual** | Requires your approval before each tool execution. | Learning Reliant, sensitive code, understanding what the agent is doing |
-| **Plan** | Read-only tools only. Can view files and search, but no edits or commands. | Exploring unfamiliar code, creating a plan before executing it |
+| **Plan** | Starts the agent with reading, search and planning tools plus the shell, under a prompt that tells it to plan rather than change code. Tool calls are auto-approved. This is guidance, not containment: the shell can still write files. | Exploring unfamiliar code, creating a plan before executing it |
 
 You can switch modes mid-conversation. A common pattern: start in plan mode to analyze and create a plan, then switch to auto to execute it.
 
 ## Running Workflows
 
-Workflows appear in the workflow selector in the chat interface. The default `agent` workflow is pre-selected, but you can choose others—including custom workflows you've created or advanced built-in workflows for specific patterns like TDD or code review.
+Workflows appear in the workflow selector in the chat composer. Your default workflow (`agent` unless you change it) is pre-selected, but you can choose others, including custom workflows you've created and the [built-in workflows](/guides/overview) for longer jobs. To change the default, open the workflow in **Workflows → Library** and choose **Set as default** from its menu.
 
-When you select a workflow, a parameters panel appears showing the configurable options:
+The composer shows the selected workflow's inputs. For the agent workflow these are:
 
-| Parameter | Purpose |
-|-----------|---------|
-| `mode` | Execution mode (auto, manual, or plan) |
-| `model` | Which LLM to use (Claude, GPT, etc.) |
-| `temperature` | Response randomness (0 = focused, 1 = creative) |
-| `thinking_level` | Extended thinking depth (low, medium, high, xhigh). `xhigh` is used on supporting models/providers and maps to the highest supported level elsewhere |
-| `tools` | Which tools the agent can access |
-| `spawn_presets` | Which presets are available for spawning sub-agents |
+| Input | Where | Purpose |
+|-------|-------|---------|
+| `mode` | The composer toolbar | Execution mode (auto, manual, or plan) |
+| `model` | The model button | Which LLM to use, chosen by tier (such as `flagship`) or by name |
+| `tools` | **Show all settings** | Which tools the agent can access |
+| `spawn_presets` | **Show all settings** | Which presets the agent may [spawn](/workflows/spawn) as sub-agents; empty disables spawning |
+| `skills` | **Show all settings** | [Skills](/features/skills) to preload |
 
-You can adjust these parameters before each conversation. A complex refactoring might warrant a higher thinking level and lower temperature, while brainstorming might benefit from higher temperature.
+The model button also sets the model's **thinking level** (low, medium, high, xhigh, limited to what the model supports) and **temperature**. These are settings of the model rather than inputs of their own, so they travel with it: a preset or workflow that sets `model: { tags: [flagship], thinking_level: high }` sets both at once. A complex refactoring might warrant a higher thinking level and lower temperature, while brainstorming might benefit from higher temperature.
+
+A [preset](/workflows/presets) sets several of these at once.
 
 ## Workflow Outputs
 
@@ -81,7 +82,9 @@ While the agent workflow handles most tasks, Reliant ships additional workflows 
 
 **Import from Claude Code / Cursor** (`migrate`) brings configuration across from Claude Code, Cursor, Codex, or Windsurf.
 
-Two more ship as **building blocks**: `structured-agent` (an agent that must answer through a response tool, for structured output) and `scope-conversation` (a reusable scoping conversation). They're hidden from the workflow selector, but any workflow can `ref:` them, and they appear under *Building blocks* in the workflow library.
+**Autopilot** is four workflows that run only as [automations](/automations/overview), never from a chat: PR review (`autopilot-pr-review`), issue worker (`autopilot-issue-worker`), review responder (`autopilot-review-responder`) and alert triage (`autopilot-alert-triage`). They are listed in the library, where you enable them; see [Autopilot](/guides/autopilot).
+
+The rest ship as **building blocks**: `structured-agent` (an agent that must answer through a response tool, for structured output), `scope-conversation` (a reusable scoping conversation), and the steps the Autopilot workflows share. They're hidden from the workflow selector, but any workflow can `ref:` them, and they appear under *Building blocks* in the workflow library.
 
 Multi-phase pipeline workflows can use [node routers](/workflows/routing#node-routing) for phase skipping, letting users jump directly to the relevant phase (planning, implementation, etc.) based on their request.
 

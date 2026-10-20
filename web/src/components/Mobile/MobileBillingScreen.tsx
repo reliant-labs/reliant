@@ -27,7 +27,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Cpu, Wallet } from "lucide-react";
-import { includedHoursSentence, remainingHeadline, sizeFacts } from "@/components/Billing/daemonUsage";
+import { remainingHeadline } from "@/components/Billing/daemonUsage";
 import {
   useComputeSubscription,
   useComputeUsage,
@@ -233,13 +233,10 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
             monthlyPriceCents: d.monthlyPriceCents,
             includedMinutes: d.includedMinutes,
             overageCentsPerMinute: d.overageCentsPerMinute,
-            includedSmallDaemonHours: plan.structuredLimits?.includedSmallDaemonHours === undefined ? undefined : Number(plan.structuredLimits.includedSmallDaemonHours),
-            allowedSizes: d.allowedSizes,
-            facts: sizeFacts(plansQ.data?.daemonPricing, d.allowedSizes.at(-1) ?? "", plan.structuredLimits?.includedSmallDaemonHours === undefined ? undefined : Number(plan.structuredLimits.includedSmallDaemonHours)) ?? undefined,
           },
         ];
       }),
-    [purchasablePlans, plansQ.data?.daemonPricing],
+    [purchasablePlans],
   );
 
   /**
@@ -408,11 +405,6 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                   {purchasablePlans.map((plan) => {
                     const d = derivePlanDisplay(plan);
                     const isCurrent = subscription?.plan?.id === plan.id;
-                    const hours = includedHoursSentence(
-                      plan.structuredLimits?.includedSmallDaemonHours === undefined ? undefined : Number(plan.structuredLimits.includedSmallDaemonHours),
-                      plansQ.data?.daemonPricing,
-                      d.allowedSizes,
-                    );
                     return (
                       <button
                         key={plan.id}
@@ -429,7 +421,7 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                             {/* Sizes are the reason to pick one plan over
                                 another, so they are on the row rather than a
                                 tap away on desktop. */}
-                            {formatAllowedSizes(d.allowedSizes)} · {hours}
+                            {formatAllowedSizes(d.allowedSizes)}
                           </span>
                         </span>
                         <span className="shrink-0 text-sm font-semibold text-foreground">
