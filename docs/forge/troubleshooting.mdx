@@ -1,0 +1,84 @@
+---
+title: "Troubleshooting"
+description: "What to check when a forge project does not generate, start, deploy or report as expected"
+---
+
+Forge's errors are written to be acted on: most say what was expected, what was found, the file and line, and the command that fixes it. Read the last lines of the output first. This page covers the cases where that is not enough.
+
+## Where to look first
+
+| Question | Command |
+|---|---|
+| What is running locally, on which port, and is it healthy? | `forge env status dev` |
+| Where is a service's output? | `.forge/logs/dev/<service>.log` |
+| What did the browser log? | `grep '\[browser:error\]' .forge/logs/dev/*.log` |
+| Which RPCs does the binary actually serve? | `forge project introspect handlers` |
+| How do I call one by hand? | `forge api curl <service.Method>` prints a ready-to-run `curl` (add your own token for an authenticated RPC) |
+| What configuration does a workload get? | `forge env config dev --workload api` |
+| Which database is this project using? | `forge env config dev --json`, and read `DATABASE_URL` |
+| Is the project itself well-formed? | `forge doctor` |
+| What does a deployed environment run? | `forge env status <env>` |
+
+In development, the frontend forwards every `console` call, uncaught error and unhandled promise rejection to its dev server, so a crash that never calls `console` still lands in `.forge/logs/dev/frontend_<name>.log` with its stack.
+
+## `forge generate` stops
+
+**"edited after forge wrote it".** You (or an agent) changed a generated file. Forge refuses to overwrite the edit. Move the change into the owned file beside it (for example `handlers_crud.go` rather than `handlers_crud_ops_gen.go`, or `<entity>_repo_ext.go` rather than the ORM file), then delete the edit. If the generated form genuinely cannot express it, `forge project disown <path> --reason "<why>"` takes the file over permanently.
+
+**The validation build fails.** `forge generate` compiles the tree before it finishes and rolls back if the build fails, naming the file. If the failing line is in your own code, a change to the proto or a library usually broke it: fix it and re-run. If it is in a file forge reconciles (such as `internal/app/compose.go`), fix what that line was derived from: the component's `Deps` or constructor.
+
+**This forge is not the version the project pins.** `forge.yaml`'s `forge_version` names the forge the project was generated with, and generated code expects the matching library. Use that forge version, or upgrade the project: `forge project upgrade list` shows the migration notes between versions. `--allow-version-skew` overrides the check deliberately.
+
+**A required dependency has no provider.** A component's `Deps` field names a type nothing in the project constructs. Add a provider function in `internal/app/providers.go`, or mark the field `// forge:optional-dep` if it may legitimately be nil.
+
+## `forge lint` fails
+
+Run `forge lint --quiet` to see only the failures, with the verdict on the last line. Each finding names its rule, and `forge project capabilities` explains every analyzer. Common ones:
+
+- **A list filter that is not `optional`.** Generated filters silently do nothing without presence, so a filter field on a `List…Request` must be `optional`.
+- **More than one service in a proto file.** Split it: one service per file.
+- **A migration hazard.** `forge lint --migration-safety` names the statement (a `NOT NULL` column on a populated table, a volatile default) and the comment that opts out when you mean it.
+- **The frontend cannot be a static export.** `forge lint --static-export` names the dynamic route, server action or `cookies()` call, with the fix.
+- **A tool is missing.** Lint fails rather than skipping when `golangci-lint` or `buf` is unavailable; `forge tools install` installs the code generators.
+
+## `forge env up` does not come up
+
+- **A port is busy.** Each worktree of a project gets its own block of ports, so parallel checkouts do not collide. `forge env ps` lists every stack running on the machine, across projects; stop the one you meant with `forge env down <env>` from its directory.
+- **"air is not installed".** The API runs under air for hot reload. Install it (`go install github.com/air-verse/air@latest`) or run once with `forge env up dev -D host_runner=go-run`.
+- **A service did not bind in time.** Startup includes compiling. On a slow machine, raise the wait with `--host-ready-timeout 5m`. A timeout is not a crash: the summary lists the pending ports and log files.
+- **The database is empty.** Seeding runs only on a fresh database where every table is empty. `forge db seed status` shows what is there; `forge db reset` drops, recreates, migrates and reseeds the dev database.
+- **Docker is not running.** Postgres, the dev identity provider and the observability stack run in Docker Compose.
+
+## A deploy does not go live
+
+`forge env deploy` exits with a code that says what happened:
+
+| Exit | Meaning | What to do |
+|---|---|---|
+| 1 | Failed: bad input, a missing release, or a workload that became unhealthy | Read the report; it names the stage and the workload. `forge env status <env>` shows the rollout. |
+| 2 | Could not determine: the control plane was unreachable or refused the credential | Check your sign-in (`forge cloud status <env>`) and retry. |
+| 3 | The environment moved since the plan was read | Someone else deployed. Look at `forge env status <env>` before deploying again. |
+| 4 | Another rollout is still in progress | Wait and retry, or `--supersede`. |
+| 5 | The plan was not confirmed | No terminal and no `--yes`. Nothing was deployed; add `--yes` (CI) or approve the printed plan. |
+| 7 | Queued on billing | Set up a compute plan; the deploy goes live by itself. See [Hosting on Reliant](/forge/hosting#queued-deploys). |
+| 8 | The wait ran out while the rollout was still progressing | Run `forge env status <env> --wait` to keep waiting; do not redeploy. |
+
+Other common causes:
+
+- **An unset secret.** A workload that declares a secret with no value cannot start. `forge secret list --env <env>` shows which are missing; set them with `forge secret set`.
+- **A workload hosting refuses.** Operators, cron-kind workloads, sidecars and volumes cannot run on shared hosting; the render names the workload and field. Bind it to a cluster you operate instead.
+- **A migration failed.** The deploy stops before any new pod serves and prints the command to read the migration's logs. Fix it with a new migration.
+- **"cannot authorize".** Your Reliant session lacks deploy permission. See [Forge sign-in](/forge/sign-in).
+
+## Nothing shows up in Observability
+
+- **Local environments have none.** `dev` keeps its telemetry in the ClickStack on your machine; `forge env status dev` prints the HyperDX URL and checks that traces, metrics and logs are arriving.
+- **Data appears a little after a deploy.** The first data arrives once the new pods are serving traffic.
+- **A category is switched off.** Check the environment's `observability` block for `enabled = False` or a signal set to `False`. Profiles and session replay are off on hosting until you turn them on.
+- **The frontend sends nothing.** A production build sends browser telemetry only when its OTLP endpoint is configured; a scaffolded frontend deployed to hosting is set up for it. `signals.browser = False` turns it off.
+- **Alerts never notify.** A route names a receiver that is not set up in **Observability → Alerts → Receivers**; that tab lists routes with no receiver.
+- **Usage is over the allowance.** Past it, an organization without a payment method has debug logs and routine traces dropped. **Project settings → Usage** shows the state.
+
+## Getting more detail
+
+`forge project audit` summarises the project's state, including drift between proto and schema and RPCs still returning `Unimplemented`. `forge debug start <service>` attaches the Delve debugger to a running service. Agents can load the `debug` skill, which covers forge's evidence sources in depth. If forge itself misbehaves, [send us feedback](/help/feedback) or report it on [GitHub](https://github.com/reliant-labs/forge/issues).

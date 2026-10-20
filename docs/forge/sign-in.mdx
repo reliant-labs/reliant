@@ -3,7 +3,7 @@ title: "Forge sign-in"
 description: "Hosted Forge commands use your Reliant sign-in, on your computer and on cloud machines"
 ---
 
-If you are signed in to Reliant, forge is signed in too. Hosted forge commands — `forge env deploy`, `forge secret`, `forge domain`, `forge cloud`, `forge release`, `forge env promote|verify|start|stop` — work without `forge login`, both when you run them as `reliant forge …` and when an agent runs them in a shell on a daemon, local or managed.
+If you are signed in to Reliant, forge is signed in too. Every forge command that talks to a hosted control plane — `forge env deploy`, `forge env status`, `forge env stop|start|delete`, `forge secret`, `forge domain`, `forge cloud`, `forge release`, `forge registry login` and `forge cluster connect` among them — works without `forge login`, both when you run them as `reliant forge …` and when an agent runs them in a shell on a daemon, local or managed.
 
 How it works:
 
@@ -12,7 +12,9 @@ How it works:
 3. The helper exchanges your Reliant session (the daemon's credential, or your `reliant auth login`) with the Reliant server for a **short-lived token** — valid for at most an hour, carrying only deploy, secret and domain permission, and only what your session itself holds. The server refuses to mint one for any control plane other than its own, so a repository cannot point forge somewhere else to collect a token.
 4. forge uses that token. Your session credential never leaves Reliant's own files, and tokens are cached in `~/.reliant/forge-token-cache.json` (readable only by you) so forge does not mint one per command.
 
-forge's own sources still come first, in this order: `--token`, the environment's token variable (CI), a stored `forge login`, then your Reliant session. `forge cloud status <env>` shows which one a command will use — never the token itself.
+forge's own sources still come first, in this order: `--token`, the environment's token variable (`FORGE_CONTROL_PLANE_TOKEN` by default, for CI), a stored `forge login`, then your Reliant session, which also takes over when a stored login has expired. `forge cloud status <env>` shows which one a command will use — never the token itself.
+
+CI has no Reliant session to exchange. Give it an organization automation token instead: `forge cloud token create --env prod --name github-actions --scopes deploy:read,deploy:write` prints the secret once, and `forge cloud token list` / `revoke` manage it afterwards.
 
 Third-party connectors that run commands on your daemon do **not** receive the helper: only your own agents can deploy as you.
 
@@ -24,5 +26,5 @@ A session needs deploy permission to be exchanged — a token can never grant au
 
 ## Related topics
 
-- [Deploy & host with Forge](/features/deploy-and-host)
+- [Environments & deploys](/forge/environments-and-deploys)
 - [Machines overview](/machines/overview)

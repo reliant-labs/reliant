@@ -9,3 +9,4 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 
 - `incidents/` — incident write-ups, referenced by path from code comments.
 - `pinning.md` — why reliant pins forge by commit pre-launch, and the commands.
+- `observability.md` — how reliant's own server binaries export traces, metrics and logs, and the known gaps.
