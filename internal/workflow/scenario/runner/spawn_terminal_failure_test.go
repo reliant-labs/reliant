@@ -43,7 +43,7 @@ import (
 // unrelated question. What must never regress is that the run ENDS.
 func TestSpawnTerminalFailure_DoesNotHangParentLoop(t *testing.T) {
 	wf := loadBuiltin(t, "structured-agent")
-	all := loadScenarios(t, "../../builtin/testdata/structured-agent_scenarios.yaml")
+	all := loadScenarios(t, "structured-agent")
 	sc := findScenario(t, all, "spawn_drops_response_data")
 
 	start := time.Now()

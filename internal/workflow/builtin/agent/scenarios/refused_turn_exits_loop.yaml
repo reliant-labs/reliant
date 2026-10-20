@@ -1,0 +1,21 @@
+# refused and error end the loop and yield to the user. Retrying a refusal
+# unchanged is refused again, and a provider error is surfaced to the user
+# rather than retried in a loop.
+name: refused_turn_exits_loop
+description: A refused turn with no tool calls exits after one iteration
+inputs:
+  mode: auto
+events:
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls: []
+      stop_reason: refused
+expect:
+  outcome: completed
+  node_outputs:
+    agent_loop:
+      _iterations: 1

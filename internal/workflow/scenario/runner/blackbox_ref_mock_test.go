@@ -20,7 +20,7 @@ import (
 // failure read as "the node ran but the scenario was ignored".
 func TestBlackBoxedRefNodeConsumesItsMock(t *testing.T) {
 	wf := loadBuiltin(t, "get-it-right")
-	all := loadScenarios(t, "../../builtin/testdata/get-it-right_scenarios.yaml")
+	all := loadScenarios(t, "get-it-right")
 	sc := findScenario(t, all, "happy_path_no_retry")
 
 	res := NewRunner(wf).Run(sc)
@@ -55,8 +55,8 @@ func TestBlackBoxedRefNodeConsumesItsMock(t *testing.T) {
 // ran off events meant for another node.
 func TestTransparencyGateIsPerNodeNotPerName(t *testing.T) {
 	wf := loadBuiltin(t, "get-it-right")
-	all := loadScenarios(t, "../../builtin/testdata/get-it-right_scenarios.yaml")
-	sc := findScenario(t, all, "one_retry_then_success")
+	all := loadScenarios(t, "get-it-right")
+	sc := findScenario(t, all, "one_retry_black_box_refactor")
 
 	// Both nodes are the SAME ref, so a name-keyed gate cannot separate them.
 	require.Equal(t, "builtin://agent", refAt(t, wf, "attempt", "implement"))
@@ -83,7 +83,7 @@ func TestTransparencyGateIsPerNodeNotPerName(t *testing.T) {
 // into the graph must not weaken it.
 func TestGraphRewriteKeepsUnmockedRefsOpaque(t *testing.T) {
 	wf := loadBuiltin(t, "get-it-right")
-	all := loadScenarios(t, "../../builtin/testdata/get-it-right_scenarios.yaml")
+	all := loadScenarios(t, "get-it-right")
 	sc := findScenario(t, all, "happy_path_no_retry")
 
 	rewritten := NewRunner(wf).runWorkflow(sc)

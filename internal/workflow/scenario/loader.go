@@ -23,18 +23,6 @@ type ScenarioFile struct {
 // whose layout lives in workflowref.
 const wrapperListKey = "scenarios"
 
-// LoadScenariosFromFile loads scenarios from a YAML file on disk.
-// Supports two formats:
-// 1. Multi-document YAML (separated by ---)
-// 2. Wrapper format: {apiVersion: "1.0", scenarios: [...]}
-func LoadScenariosFromFile(path string) ([]*Scenario, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read scenario file %s: %w", path, err)
-	}
-	return ParseScenarioYAML(data)
-}
-
 // scenarioDoc is one YAML document of a scenario file: a single scenario, or a
 // wrapper holding a list of them.
 type scenarioDoc struct {
@@ -133,8 +121,8 @@ func ParseScenarioYAML(data []byte) ([]*Scenario, error) {
 // The CLI and the app both read project scenarios with this. The app
 // identifies a project scenario by its file, so a file holding several would
 // silently lose all but the first there; it is an error here instead, on
-// both surfaces. (ParseScenarioYAML, which accepts many, is for the builtin
-// corpus under internal/workflow/builtin/testdata.)
+// both surfaces, and for the builtin scenarios, which use the same layout.
+// (ParseScenarioYAML, which accepts many, is for scenarios written inline.)
 func ParseScenarioFile(data []byte, defaultName string) (*Scenario, error) {
 	docs, err := readScenarioDocs(data)
 	if err != nil {

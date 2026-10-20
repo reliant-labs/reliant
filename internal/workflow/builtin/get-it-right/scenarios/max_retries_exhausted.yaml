@@ -105,6 +105,7 @@ expect:
   reached:
     - attempt
     - attempt.implement
+    - attempt.join_checks
     - attempt.review
     - attempt.refactor
   node_outputs:

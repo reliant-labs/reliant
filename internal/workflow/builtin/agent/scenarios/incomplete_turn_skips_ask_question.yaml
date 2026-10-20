@@ -1,0 +1,33 @@
+# An incomplete turn must not open the ask-user prompt: the model is not done,
+# so there is nothing to ask the user about yet. With ask=true the loop must
+# still continue straight into the next call_llm.
+name: incomplete_turn_skips_ask_question
+description: ask=true does not interrupt a paused turn with the continue/feedback prompt
+inputs:
+  mode: auto
+  ask: true
+events:
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Next I'll run the migration."
+      response_text: "Next I'll run the migration."
+      tool_calls: []
+      stop_reason: incomplete
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Migration applied."
+      response_text: "Migration applied."
+      tool_calls: []
+      stop_reason: done
+  - node: agent_loop.ask_question
+    output:
+      has_feedback: false
+expect:
+  outcome: completed
+  node_outputs:
+    agent_loop:
+      _iterations: 2

@@ -1,0 +1,68 @@
+# Parallel loop with degraded review - null response
+# When the review node runs but produces a null response (no strategy chosen),
+# the edge conditions correctly handle it: neither use_winner nor synthesize
+# matches, so the workflow completes without routing to either branch.
+name: loop_failure_null_review
+description: Parallel loop completes, review has null response, no edge matches
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Build a feature"
+      response_text: "Build a feature"
+      tool_calls: []
+
+  - node: implementations.create_wt
+    output:
+      path: "/wt/1"
+      branch: "b1"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Implementation 1 done"
+      response_text: "Implementation 1 done"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/2"
+      branch: "b2"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "ERROR: Failed"
+      response_text: "ERROR: Failed"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/3"
+      branch: "b3"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "ERROR: Failed"
+      response_text: "ERROR: Failed"
+      tool_calls: []
+
+  # Deliberate black box, and it must stay one. This scenario tests the PARENT's
+  # edge handling when review yields a null response, which means synthesizing a
+  # state the structured-agent body cannot itself produce: `completed` is derived
+  # from the presence of a response_data key, so a real body that set completed
+  # true would necessarily also have a non-null response. Executing the body
+  # would therefore replace the premise under test rather than exercise it.
+  - node: review
+    black_box: true
+    output:
+      response: null
+      completed: true
+
+expect:
+  outcome: completed
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - implementations
+    - review
