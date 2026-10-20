@@ -95,7 +95,7 @@ type FireStarter interface {
 }
 
 // AutomationTokens mints and revokes the delegated daemon:resume tokens of
-// automationGrants. controlplane.Client implements it.
+// automationGrants. controlplane.Service implements it.
 type AutomationTokens interface {
 	MintDaemonResumeToken(ctx context.Context, jwt, daemonID, name string) (controlplane.DaemonResumeToken, error)
 	RevokeDaemonResumeTokens(ctx context.Context, jwt, daemonID string) error

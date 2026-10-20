@@ -16,17 +16,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeControlPlaneClient is the controlplane.Client the settings tests drive.
-// internal/handlers/trigger keeps its own copy (fake_control_plane_client_test.go);
-// neither leaves _test.go (research/forge-migration/06-p3b-recipe.md §3.7).
+// fakeControlPlaneClient is the LLMKeyMinter the settings tests drive.
 type fakeControlPlaneClient struct {
 	issueKey       string
 	issueRotated   bool
 	issueErr       error
 	issueCallCount int
-	mints          []mintCall
-	mintErr        error
-	revokes        []string
 	lastIssueJWT   string
 	lastDevice     string
 }
@@ -38,20 +33,6 @@ func (f *fakeControlPlaneClient) MintLLMKey(_ context.Context, jwt, deviceName s
 		return controlplane.LLMKey{}, f.issueErr
 	}
 	return controlplane.LLMKey{Plaintext: f.issueKey, Rotated: f.issueRotated}, nil
-}
-
-// DeleteCurrentUserAccount satisfies controlplane.Client. The settings tests
-// never exercise account deletion; account.go's own tests cover that path.
-func (f *fakeControlPlaneClient) DeleteCurrentUserAccount(context.Context, string) (*controlplane.AccountDeletionResult, error) {
-	return &controlplane.AccountDeletionResult{}, nil
-}
-
-func (f *fakeControlPlaneClient) PreviewAccountDeletionWallet(context.Context, string) (*controlplane.AccountDeletionWalletQuote, error) {
-	return nil, nil
-}
-
-func (f *fakeControlPlaneClient) CloneRepoOntoDaemon(context.Context, string, controlplane.CloneRepoRequest) (controlplane.CloneRepoResult, error) {
-	return controlplane.CloneRepoResult{}, nil
 }
 
 func TestSettingsService_SyncReliantProvider_PersistsKeyAndEmitsRefetch(t *testing.T) {
@@ -149,19 +130,4 @@ func TestSettingsService_SyncReliantProvider_ControlPlaneErrorPropagates(t *test
 	_, err := svc.SyncReliantProvider(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
-}
-
-type mintCall struct{ JWT, DaemonID, Name string }
-
-func (f *fakeControlPlaneClient) MintDaemonResumeToken(_ context.Context, jwt, daemonID, name string) (controlplane.DaemonResumeToken, error) {
-	f.mints = append(f.mints, mintCall{jwt, daemonID, name})
-	if f.mintErr != nil {
-		return controlplane.DaemonResumeToken{}, f.mintErr
-	}
-	return controlplane.DaemonResumeToken{Plaintext: "rlat_resume_" + daemonID}, nil
-}
-
-func (f *fakeControlPlaneClient) RevokeDaemonResumeTokens(_ context.Context, _, daemonID string) error {
-	f.revokes = append(f.revokes, daemonID)
-	return nil
 }

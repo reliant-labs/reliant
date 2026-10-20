@@ -349,7 +349,7 @@ func NewAPI(cfg *Config) (*API, error) {
 	// user's behalf; self-hosted leaves ControlPlane nil.
 	var projectControlPlane project.CloneDispatcher
 	if cfg.ControlPlane.Hosted() {
-		projectControlPlane = controlplane.NewClient(cfg.ControlPlane.URL)
+		projectControlPlane = controlplane.New(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
 	}
 	projectService, err := project.New(project.Deps{
 		Logger:       handlerLogger,
@@ -436,7 +436,7 @@ func NewAPI(cfg *Config) (*API, error) {
 		Logger:                  handlerLogger,
 		Config:                  handlerConfig,
 		Repo:                    database,
-		ControlPlane:            controlplane.NewClient(cfg.ControlPlane.URL),
+		ControlPlane:            controlplane.New(controlplane.Deps{BaseURL: cfg.ControlPlane.URL}),
 		ExchangeClaudeCode:      claude.ExchangeClaudeAuthorizationCode,
 		ExchangeCodexCode:       codex.ExchangeCodexAuthorizationCode,
 		ExchangeAntigravityCode: antigravity.ExchangeAntigravityAuthorizationCode,
@@ -672,7 +672,7 @@ func NewAPI(cfg *Config) (*API, error) {
 	}
 	triggerDeps.Syncer, triggerDeps.Fires = trigger.TemporalBackend(cfg.TemporalClient, database, cfg.SharedTaskQueue, polled)
 	if cfg.ControlPlane.Hosted() {
-		triggerDeps.ControlPlane = controlplane.NewClient(cfg.ControlPlane.URL)
+		triggerDeps.ControlPlane = controlplane.New(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
 	}
 	triggerService, err := trigger.New(triggerDeps)
 	if err != nil {
@@ -749,7 +749,7 @@ func NewAPI(cfg *Config) (*API, error) {
 	// deployment fail deletion against a control plane that isn't there.
 	var accountControlPlane account.ControlPlane
 	if cfg.ControlPlane.Hosted() {
-		accountControlPlane = controlplane.NewClient(cfg.ControlPlane.URL)
+		accountControlPlane = controlplane.New(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
 	}
 	accountService, err := account.New(account.Deps{
 		Logger:       handlerLogger,

@@ -6,44 +6,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 )
 
-// fakeControlPlaneClient is the controlplane.Client trigger_automation_test.go
-// drives. internal/handlers/settings keeps its own copy
-// (research/forge-migration/06-p3b-recipe.md §3.7): a shared fake would have
-// to leave _test.go, which gives controlplane.Client a second implementation
-// and makes forge refuse controlplane's //forge:exclude-contract.
+// fakeControlPlaneClient is the AutomationTokens trigger_automation_test.go
+// drives.
 type fakeControlPlaneClient struct {
-	issueKey       string
-	issueRotated   bool
-	issueErr       error
-	issueCallCount int
-	mints          []mintCall
-	mintErr        error
-	revokes        []string
-	lastIssueJWT   string
-	lastDevice     string
-}
-
-func (f *fakeControlPlaneClient) MintLLMKey(_ context.Context, jwt, deviceName string) (controlplane.LLMKey, error) {
-	f.issueCallCount++
-	f.lastIssueJWT, f.lastDevice = jwt, deviceName
-	if f.issueErr != nil {
-		return controlplane.LLMKey{}, f.issueErr
-	}
-	return controlplane.LLMKey{Plaintext: f.issueKey, Rotated: f.issueRotated}, nil
-}
-
-// DeleteCurrentUserAccount satisfies controlplane.Client. The trigger tests
-// never exercise account deletion; account's own tests cover that path.
-func (f *fakeControlPlaneClient) DeleteCurrentUserAccount(context.Context, string) (*controlplane.AccountDeletionResult, error) {
-	return &controlplane.AccountDeletionResult{}, nil
-}
-
-func (f *fakeControlPlaneClient) PreviewAccountDeletionWallet(context.Context, string) (*controlplane.AccountDeletionWalletQuote, error) {
-	return nil, nil
-}
-
-func (f *fakeControlPlaneClient) CloneRepoOntoDaemon(context.Context, string, controlplane.CloneRepoRequest) (controlplane.CloneRepoResult, error) {
-	return controlplane.CloneRepoResult{}, nil
+	mints   []mintCall
+	mintErr error
+	revokes []string
 }
 
 type mintCall struct{ JWT, DaemonID, Name string }

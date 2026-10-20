@@ -109,7 +109,7 @@ func WithResolver(resolver DaemonResolver) NATSRouterOption {
 
 // DaemonResumer wakes one suspended managed daemon. Only the control plane can:
 // the machine's Workspace CR is its, and so is the decision to spend compute
-// on it. Declared here, at the consumer; *controlplane.DaemonClient
+// on it. Declared here, at the consumer; controlplane.Service
 // (controlplane.v1.DaemonService/ResumeDaemon) implements it.
 //
 // token is the raw credential the control plane derives the owner from: the

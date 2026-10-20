@@ -222,6 +222,28 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
 
+  // RestartWorkload asks the platform to restart one workload's pods, one at a
+  // time behind their readiness gates (a rolling restart). The release and the
+  // declared spec do NOT change, and nothing here scales: replicas are declared
+  // in code, so changing them is a pull request, never a console action.
+  //
+  // HOSTED ENVIRONMENTS ONLY (console decision D6, hosted first). A
+  // self-managed or local environment is FailedPrecondition: the platform does
+  // not run its pods, and there is no daemon path with an authorization story
+  // yet.
+  //
+  // The request NAMES THE ENVIRONMENT, and the response echoes it, so a client
+  // can show "Restart in prod" and a log line can never be read as having
+  // restarted a different environment's workload. ADMIN, like Scale: restarting
+  // a production workload is a write to it. Recorded in the audit trail as
+  // action workload.restart with the environment and the workload.
+  //
+  // Idempotent within a second: a repeat returns the same request time rather
+  // than rolling the pods twice.
+  rpc RestartWorkload(RestartWorkloadRequest) returns (RestartWorkloadResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
   // GetStatus returns the deployment with BOTH halves — declared and
   // observed — plus the derived drift the UI badges. The 15s poll on the
   // /deploy detail page calls this.
@@ -901,6 +923,29 @@ message PromoteReleaseResponse {
 }
 
 // === Scale and status ===
+
+message RestartWorkloadRequest {
+  // The environment the workload runs in. Required, and echoed in the response:
+  // a restart is always "in <env>".
+  string environment_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The workload's name (the deployment name; the same string the observability
+  // workloads list calls `workload`).
+  string workload = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
+}
+
+message RestartWorkloadResponse {
+  string environment_id = 1;
+  string environment_name = 2;
+  string workload = 3;
+  string deployment_id = 4;
+  // When the restart was requested. The rolling restart follows within the tier
+  // controller's reconcile (seconds); watch the workload's pods and rollout for
+  // progress.
+  google.protobuf.Timestamp requested_at = 5;
+}
 
 message ScaleDeploymentRequest {
   string deployment_id = 1;

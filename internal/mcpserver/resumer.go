@@ -33,7 +33,13 @@ const resumeTimeout = 15 * time.Second
 
 // ControlPlaneResumer wakes managed workspaces via the control plane.
 type ControlPlaneResumer struct {
-	client *controlplane.DaemonClient
+	client daemonWaker
+}
+
+// daemonWaker is the slice of controlplane.Service a resume uses: wake one
+// daemon as the holder of token.
+type daemonWaker interface {
+	ResumeDaemon(ctx context.Context, token, daemonID string) error
 }
 
 // NewControlPlaneResumer builds a resumer against baseURL. It returns nil when
@@ -45,7 +51,7 @@ func NewControlPlaneResumer(baseURL string) *ControlPlaneResumer {
 	if trimmed == "" {
 		return nil
 	}
-	return &ControlPlaneResumer{client: controlplane.NewDaemonClient(trimmed)}
+	return &ControlPlaneResumer{client: controlplane.New(controlplane.Deps{BaseURL: trimmed})}
 }
 
 // ResumeDaemon asks the control plane to wake daemonID on the user's behalf.

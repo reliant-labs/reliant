@@ -26,7 +26,7 @@ func TestClient_MintLLMKey_RequestsAPerDeviceRotatingLLMToken(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	key, err := NewClient(server.URL).MintLLMKey(context.Background(), " jwt-token ", "laptop")
+	key, err := New(Deps{BaseURL: server.URL}).MintLLMKey(context.Background(), " jwt-token ", "laptop")
 	if err != nil {
 		t.Fatalf("MintLLMKey: %v", err)
 	}
@@ -50,12 +50,12 @@ func TestAttachAuthorization_LeavesHeaderUnsetWhenBlank(t *testing.T) {
 	}
 }
 
-// A client given no base URL dials the local default. The deployment's own
+// An adapter given no base URL dials the local default. The deployment's own
 // control plane is configured (ControlPlaneConfig) and passed in; it is never
 // read from the environment here.
-func TestGetBaseURL_IsTheLocalDefault(t *testing.T) {
+func TestNew_NoBaseURLIsTheLocalDefault(t *testing.T) {
 	t.Setenv("RELIANT_CONTROL_PLANE_URL", "http://not-read.example")
-	if got := getBaseURL(); got != defaultBaseURL {
+	if got := New(Deps{}).(*client).baseURL; got != defaultBaseURL {
 		t.Fatalf("base url = %q, want %q", got, defaultBaseURL)
 	}
 }

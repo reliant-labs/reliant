@@ -38,7 +38,7 @@ type Deps struct {
 	ControlPlane ControlPlane
 }
 
-// ControlPlane is the slice of controlplane.Client account deletion uses.
+// ControlPlane is the slice of controlplane.Service account deletion uses.
 // Each call presents the caller's own bearer, so the control plane acts on
 // exactly the account that asked.
 type ControlPlane interface {
