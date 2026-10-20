@@ -77,9 +77,11 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	if err := checkServerPorts(
 		serverPort{"GRPC_PORT (--grpc-port)", api.GetGrpcPort()},
 		serverPort{"HEALTH_PORT (--health-port)", api.GetHealthPort()},
-		serverPort{"PPROF_PORT (--pprof-port)", api.GetPprofPort()},
 		serverPort{"TEMPORAL_PORT (--temporal-port)", api.GetTemporal().GetPort()},
 	); err != nil {
+		return err
+	}
+	if err := checkPprofPort(api.GetPprofPort()); err != nil {
 		return err
 	}
 	drain := drainBudget(api.GetDrain())
@@ -163,9 +165,11 @@ func loadServerWorkerConfig(cmd *cobra.Command, opts *serverworker.Options) erro
 	}
 	if err := checkServerPorts(
 		serverPort{"HEALTH_PORT (--health-port)", worker.GetHealthPort()},
-		serverPort{"PPROF_PORT (--pprof-port)", worker.GetPprofPort()},
 		serverPort{"TEMPORAL_PORT (--temporal-port)", worker.GetTemporal().GetPort()},
 	); err != nil {
+		return err
+	}
+	if err := checkPprofPort(worker.GetPprofPort()); err != nil {
 		return err
 	}
 	drain := drainBudget(worker.GetDrain())
@@ -335,6 +339,16 @@ func checkServerPorts(ports ...serverPort) error {
 		}
 	}
 	return nil
+}
+
+// checkPprofPort is checkServerPorts for PPROF_PORT, where 0 is a setting
+// rather than a mistake: no diagnostics listener (debugserver.Start serves
+// none on port 0), as an empty PPROF_ADDR is for the gateway.
+func checkPprofPort(port int32) error {
+	if port == 0 {
+		return nil
+	}
+	return checkServerPorts(serverPort{"PPROF_PORT (--pprof-port)", port})
 }
 
 func newServerWorkerCmd() *cobra.Command {

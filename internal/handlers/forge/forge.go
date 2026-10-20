@@ -164,7 +164,7 @@ const (
 const forgeRPCHeadroom = 5 * time.Second
 
 // ForgeRPCDeadlines is the request deadline every ForgeService procedure needs,
-// for the api-server's TimeoutInterceptor.
+// for the api-server's Deadline slot (interceptors.ProcedureTimeouts).
 //
 // WITHOUT THIS, EVERY BUDGET ABOVE WAS DEAD CODE. The interceptor's default is
 // 10s and it had no forge entries, so `forge env status <env>` (about 5s cold on

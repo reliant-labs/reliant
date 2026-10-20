@@ -3,7 +3,6 @@ package grpc
 
 import (
 	"net/http"
-	"reflect"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -13,6 +12,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
@@ -70,13 +70,20 @@ func mountOne(path string, handler http.Handler, service string) serverkit.Route
 	})
 }
 
-// forge's Deadline slot is dropped on the daemon chain: its own watchdog and
-// timeout (Extras) bound the daemon's unary RPCs, and a second watchdog would
-// log every slow call twice.
-func TestDaemonChainHasNoForgeDeadline(t *testing.T) {
+// The daemon chain's Deadline slot gives its unary RPCs the 10s they have
+// always had and reports slow ones as reliant does; it names no procedure,
+// so the daemon streams stay unbounded.
+func TestDaemonChainDeadline(t *testing.T) {
 	chain, err := NewDaemonChain(DaemonChainDeps{DaemonTokens: tokenauthority.NewMemory()})
 	require.NoError(t, err)
+	var deadlines []serverkit.Deadline
 	for _, ic := range chain.Interceptors() {
-		require.NotEqual(t, reflect.TypeOf(serverkit.Deadline{}), reflect.TypeOf(ic))
+		if d, ok := ic.(serverkit.Deadline); ok {
+			deadlines = append(deadlines, d)
+		}
 	}
+	require.Len(t, deadlines, 1)
+	require.Equal(t, interceptors.UnaryTimeout, deadlines[0].Unary)
+	require.Empty(t, deadlines[0].Procedures, "a named stream would be cut at its budget")
+	require.NotNil(t, deadlines[0].OnSlow)
 }

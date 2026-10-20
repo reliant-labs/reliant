@@ -64,6 +64,8 @@ type DaemonChainDeps struct {
 //     acting-user id instead, so every daemon call would be audited as
 //     anonymous. The daemon surface has never been audited; auditing it is
 //     its own change.
+//   - The Deadline slot is reliant's, not forge's 30s default: see the
+//     field below.
 //   - No payload cap. A daemon stream carries tool results and file content
 //     of whatever size the tool produced, and nothing on the daemon side caps
 //     what it sends, so the chain's 4 MiB default would end a stream mid-call
@@ -86,13 +88,15 @@ func NewDaemonChain(deps DaemonChainDeps) (*DaemonChain, error) {
 		// NewUserChain): a stream this listener ends because it is
 		// draining is an expected outcome, never an ERROR.
 		LogOptions: []observe.LogOption{observe.WithErrorClassifier(errclass.Library)},
-		// The watchdog and timeout below bound the daemon's unary RPCs, as
-		// they always have; forge's default Deadline slot would add a second
-		// watchdog that logs each slow call again.
-		Deadline: serverkit.NoDeadline,
-		Extras: []connect.Interceptor{
-			interceptors.NewSlowRPCWatchdogInterceptor(),
-			interceptors.NewTimeoutInterceptor().Interceptor(),
+		// The daemon's unary RPCs (WhoAmI, ReportToolResult) keep the 10s
+		// budget and the [SlowRPC] watchdog they have always had, now
+		// outside the daemon credential's introspection rather than after
+		// it. No procedure is named, so the ConnectDaemon and ConnectGateway
+		// streams stay unbounded: a daemon session lives for as long as the
+		// daemon is up.
+		Deadline: serverkit.Deadline{
+			Unary:  interceptors.UnaryTimeout,
+			OnSlow: interceptors.ReportSlowRPC,
 		},
 		ReadMaxBytes: -1,
 		SendMaxBytes: -1,
