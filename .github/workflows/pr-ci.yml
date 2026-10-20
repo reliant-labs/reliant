@@ -1315,7 +1315,11 @@ jobs:
     name: E2E Frontend (Playwright ${{ matrix.shard }}/2)
     needs: changes
     if: needs.changes.outputs.playwright == 'true'
-    runs-on: ubuntu-latest
+    # Not ubuntu-latest: it now resolves to ubuntu 26.04, which Playwright
+    # 1.58 refuses (`Playwright does not support chromium on ubuntu26.04-x64`)
+    # at `playwright install --with-deps`. Move to ubuntu-latest with the
+    # Playwright release that supports it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
       fail-fast: false
