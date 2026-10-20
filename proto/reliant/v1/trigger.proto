@@ -1062,8 +1062,10 @@ message ResolveTriggerSendersResponse {
 }
 
 message ListReplayEventsRequest {
-  string project_id = 1;
-  string workflow = 2;
+  // Narrows the workflow's triggers to one project. Unset: every project.
+  optional string project_id = 1;
+  // The workflow whose triggers' events to list. Required.
+  string workflow = 2 [(buf.validate.field).required = true];
 
   // Limit caps the events returned across all of the workflow's triggers.
   // Default 20, maximum 50.

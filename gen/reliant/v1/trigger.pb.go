@@ -3932,9 +3932,11 @@ func (x *ResolveTriggerSendersResponse) GetSenders() []*ResolvedTriggerSender {
 }
 
 type ListReplayEventsRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Workflow  string                 `protobuf:"bytes,2,opt,name=workflow,proto3" json:"workflow,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Narrows the workflow's triggers to one project. Unset: every project.
+	ProjectId *string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	// The workflow whose triggers' events to list. Required.
+	Workflow string `protobuf:"bytes,2,opt,name=workflow,proto3" json:"workflow,omitempty"`
 	// Limit caps the events returned across all of the workflow's triggers.
 	// Default 20, maximum 50.
 	Limit         int32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
@@ -3973,8 +3975,8 @@ func (*ListReplayEventsRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListReplayEventsRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
+	if x != nil && x.ProjectId != nil {
+		return *x.ProjectId
 	}
 	return ""
 }
@@ -4529,12 +4531,13 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\tsender_id\x18\x02 \x01(\tR\bsenderId\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\"\\\n" +
 	"\x1dResolveTriggerSendersResponse\x12;\n" +
-	"\asenders\x18\x01 \x03(\v2!.reliant.v1.ResolvedTriggerSenderR\asenders\"j\n" +
-	"\x17ListReplayEventsRequest\x12\x1d\n" +
+	"\asenders\x18\x01 \x03(\v2!.reliant.v1.ResolvedTriggerSenderR\asenders\"\x86\x01\n" +
+	"\x17ListReplayEventsRequest\x12\"\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1a\n" +
-	"\bworkflow\x18\x02 \x01(\tR\bworkflow\x12\x14\n" +
-	"\x05limit\x18\x03 \x01(\x05R\x05limit\"d\n" +
+	"project_id\x18\x01 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\"\n" +
+	"\bworkflow\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\bworkflow\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limitB\r\n" +
+	"\v_project_id\"d\n" +
 	"\x0fReplayCandidate\x12.\n" +
 	"\x05event\x18\x01 \x01(\v2\x18.reliant.v1.TriggerEventR\x05event\x12!\n" +
 	"\ftrigger_name\x18\x02 \x01(\tR\vtriggerName\"O\n" +
@@ -4845,6 +4848,7 @@ func file_reliant_v1_trigger_proto_init() {
 	file_reliant_v1_trigger_proto_msgTypes[31].OneofWrappers = []any{}
 	file_reliant_v1_trigger_proto_msgTypes[36].OneofWrappers = []any{}
 	file_reliant_v1_trigger_proto_msgTypes[39].OneofWrappers = []any{}
+	file_reliant_v1_trigger_proto_msgTypes[43].OneofWrappers = []any{}
 	file_reliant_v1_trigger_proto_msgTypes[46].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

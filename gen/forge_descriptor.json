@@ -17033,7 +17033,7 @@
           {
             "Name": "project_id",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           },
           {
             "Name": "workflow",
@@ -17416,11 +17416,15 @@
         "reliant.v1.ListReplayEventsRequest": [
           {
             "name": "project_id",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           },
           {
             "name": "workflow",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           },
           {
             "name": "limit",
@@ -39205,5 +39209,5 @@
       "Line": 20
     }
   ],
-  "source_hash": "528278b922840146724224ea491f611405469ebfac2683eb9277e8a795f5c4e8"
+  "source_hash": "4948c16d1f177dc1487c4009f251ddb32aabfdbb40d88fb955fdd5d75ca60fbc"
 }
