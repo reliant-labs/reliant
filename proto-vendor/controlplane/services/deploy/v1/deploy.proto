@@ -1423,6 +1423,10 @@ message GetDeployBundleRequest {
 
 message GetDeployBundleResponse {
   DeployBundle bundle = 1;
+  // What the bundle declares for each of its workloads: kind, replicas,
+  // resources, ports and environment variable names (never values). Sorted by
+  // name. Empty for a bundle that declares no workloads.
+  repeated DeclaredWorkload workloads = 2;
 }
 
 // === Convergences ===
