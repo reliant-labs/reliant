@@ -192,12 +192,13 @@ func RunReliantKeySweeps(ctx context.Context, h *ReliantKeyHealer, interval time
 }
 
 // InstallReliantKeyHealer wires the healer for a hosted deployment (a
-// control-plane URL and internal-service secret) and, when sweepEvery > 0,
-// starts the background sweep. It is a no-op otherwise: a self-hosted reliant
-// has no control-plane to mint from.
-func InstallReliantKeyHealer(ctx context.Context, repo *db.Repo, baseURL, internalSecret string, sweepEvery time.Duration) {
+// control-plane URL and internal-service secret) and returns it, for a caller
+// that also runs the background sweep (RunReliantKeySweeps). It is a no-op
+// returning nil otherwise: a self-hosted reliant has no control-plane to mint
+// from.
+func InstallReliantKeyHealer(repo *db.Repo, baseURL, internalSecret string) *ReliantKeyHealer {
 	if baseURL == "" || internalSecret == "" {
-		return
+		return nil
 	}
 	minter := accesstokenclient.New(accesstokenclient.Deps{
 		BaseURL: baseURL,
@@ -205,7 +206,5 @@ func InstallReliantKeyHealer(ctx context.Context, repo *db.Repo, baseURL, intern
 	})
 	h := NewReliantKeyHealer(repo, minter)
 	SetReliantKeyHealer(h)
-	if sweepEvery > 0 {
-		go RunReliantKeySweeps(ctx, h, sweepEvery)
-	}
+	return h
 }

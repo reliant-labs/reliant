@@ -3,23 +3,19 @@ package grpc
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
-	"reflect"
 	"slices"
 	"strings"
 
 	"connectrpc.com/connect"
-	"connectrpc.com/otelconnect"
 	"github.com/go-chi/cors"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/oauth2"
-	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"go.temporal.io/sdk/client"
 
@@ -32,7 +28,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
@@ -96,14 +91,26 @@ import (
 	"github.com/reliant-labs/reliant/pkg/middleware"
 )
 
-// Server is the Connect/gRPC server
-type Server struct {
-	server      *http.Server
-	mux         *http.ServeMux
-	tlsCertFile string
-	tlsKeyFile  string
+// API is what the API listener serves: every reliant.v1 service a browser,
+// the CLI or an `rlat_` token calls, and the plain-HTTP routes beside them
+// (the terminal websocket, attachment bytes, the connector MCP endpoint, the
+// OAuth and inbound-trigger callbacks, CLI login discovery, /health). It is
+// the listener's serverkit.Routes: Register mounts each service with the
+// listener's chain. Build it with NewAPI.
+type API struct {
+	// services are the Connect services, in mount order.
+	services []apiService
+	// http mounts the plain-HTTP routes. They are outside the chain: each
+	// authenticates itself (a user token, a connector credential, a
+	// trigger's own token or a provider signature) or is public.
+	http []func(mux *http.ServeMux)
 
-	// ProjectService is exposed so callers can wire it to out-of-band
+	// auth authenticates users. The chain's Auth slot runs it for every
+	// Connect call (NewUserChain), and the attachment-bytes route calls its
+	// AuthenticateHTTP directly.
+	auth *interceptors.AuthInterceptor
+
+	// projectService is exposed so callers can wire it to out-of-band
 	// inputs (e.g. the daemon-events JetStream consumer in serverapi.Run).
 	projectService *project.Service
 
@@ -111,28 +118,28 @@ type Server struct {
 	// to it (queued delivery, the reconciler's wedge continuation).
 	chatService *chat.Service
 
-	router toolexec.DaemonRouter
-
 	// worktreeSweeper settles archived worktrees' directories through their
 	// daemons.
 	worktreeSweeper *worktreesweep.Sweeper
-
-	// streams is the listener's drain registry: every long-lived stream
-	// (streaming RPCs, the terminal websocket, MCP event streams) is bound to
-	// it, and Stop ends them. See Stop.
-	streams *serverkit.Streams
 }
 
-// Config holds gRPC server configuration.
+// apiService is one Connect service the API mounts: its proto service name
+// (which the listener checks against its chain's audience), the service, and
+// this mount's own options over the chain's.
+type apiService struct {
+	name  string
+	svc   mountkit.Registrar
+	mount []mountkit.Option
+}
+
+// Config holds the API's collaborators and settings.
 //
 // Every collaborator validate names is required: serverapi.Run builds each
-// one or fails boot, so NewServer refuses a Config without one rather than
+// one or fails boot, so NewAPI refuses a Config without one rather than
 // serve a surface with routes missing. A missing route answers 404, which the
 // web client reports as version skew (web/src/api/rpcErrorPolicy.ts) — the
 // wrong diagnosis for a composition bug.
 type Config struct {
-	Port        int
-	BindAddress string // Bind address (default: "127.0.0.1", use "0.0.0.0" for containers)
 	// Auth is how callers authenticate: the auth mode, the shared API key or
 	// the JWT key (PEM, else JWKS URL), and the email_verified switch.
 	Auth auth.Settings
@@ -147,8 +154,6 @@ type Config struct {
 	// WorktreeAutoArchive is what the worktree sweep does with finished
 	// worktrees (RELIANT_WORKTREE_AUTO_ARCHIVE); see worktreesweep.
 	WorktreeAutoArchive worktreesweep.AutoArchiveMode
-	CORSAllowedOrigins  []string // Allowed CORS origins; defaults to ["*"] if empty
-	AllowedEmailDomains []string // If non-empty, only these email domains may access the system
 	// DisableForgeAPI is the operator's kill switch for the forge RPC surface
 	// (RELIANT_DISABLE_FORGE_API): ForgeService stays mounted and answers
 	// every rpc with FailedPrecondition. See forgeAPIDisabled.
@@ -185,10 +190,6 @@ type Config struct {
 	DaemonRouter toolexec.DaemonRouter
 
 	NATSChecker func() bool // Optional: returns true if NATS is connected; nil means NATS not in use
-
-	// TLS configuration for HTTP/2 support
-	TLSCertFile string // Path to TLS certificate file
-	TLSKeyFile  string // Path to TLS private key file
 
 	// PublicURL is the externally reachable base URL of this API server, used
 	// to tell users where to point a third-party MCP client (see
@@ -258,19 +259,19 @@ func (cfg *Config) validate() error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("grpc server config: required collaborators not set: %s", strings.Join(missing, ", "))
+		return fmt.Errorf("api config: required collaborators not set: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }
 
-// NewServer creates a new Connect/gRPC server, with every service mounted.
-// Returns an error if a required collaborator is missing (Config.validate) or
-// the auth interceptor fails to initialize.
-func NewServer(cfg *Config) (*Server, error) {
+// NewAPI builds every service and route the API serves; nothing is mounted
+// until a listener registers it (Register). Returns an error if a required
+// collaborator is missing (Config.validate) or a service or route fails to
+// build.
+func NewAPI(cfg *Config) (*API, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
-	mux := http.NewServeMux()
 	database := cfg.Database
 
 	// Create auth interceptor. The procedures it lets through unauthenticated
@@ -291,20 +292,6 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, err
 	}
 	authInterceptor.SetAccessTokenIntrospector(accesstokenclient.NewCachedIntrospector(authority))
-	domainWhitelistInterceptor := interceptors.NewDomainWhitelistInterceptor(cfg.AllowedEmailDomains)
-
-	// Order matters: recovery (outermost) -> timeout -> auth -> domain whitelist (innermost).
-	// A failed RPC reaches Sentry once, as forge's "rpc failed" line through
-	// the slog bridge (internal/logging), grouped per procedure and code.
-	timeouts := interceptors.NewTimeoutInterceptor().WithMethodTimeouts(forge.ForgeRPCDeadlines())
-	opts := newHandlerOptions(timeouts.Interceptor(), authInterceptor, domainWhitelistInterceptor)
-	// Innermost, so logging records the status the client received: every
-	// streaming handler is bound to the listener's drain registry, and a
-	// stream the drain ends finishes OK with the x-forge-drained trailer —
-	// the end of a watch, which StreamUserUpdates and StreamProcessOutput
-	// clients resume from their cursor. Not Unavailable, which the web client
-	// reads as the network under every multiplexed read dying.
-	opts = append(opts, connect.WithInterceptors(serverkit.StreamDrainInterceptor()))
 
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.
 	// The api-server itself never accepts daemon bidi streams — daemons connect to
@@ -514,7 +501,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("package_commands service: %w", err)
 	}
-	packageCommandsPath, packageCommandsHandler := reliantv1connect.NewPackageCommandsServiceHandler(packageCommandsService, opts...)
 
 	streamingService, err := streaminghandler.New(streaminghandler.Deps{
 		Logger:      handlerLogger,
@@ -622,22 +608,6 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, fmt.Errorf("tool_call service: %w", err)
 	}
 
-	// Register services with Connect handlers
-	// Connect generates HTTP handlers that work with standard net/http
-	systemPath, systemHandler := reliantv1connect.NewSystemServiceHandler(systemService, opts...)
-	planPath, planHandler := reliantv1connect.NewPlanServiceHandler(planService, opts...)
-	taskPath, taskHandler := reliantv1connect.NewTaskServiceHandler(taskService, opts...)
-	catalogPath, catalogHandler := reliantv1connect.NewCatalogServiceHandler(catalogService, opts...)
-	projectPath, projectHandler := reliantv1connect.NewProjectServiceHandler(projectService, opts...)
-	// The services whose requests wake an asleep machine (machinewake)
-	// report the wake as Unavailable + DaemonWaking, whatever error they wrap
-	// it in. Cloned so the shared opts slice is never appended into.
-	machineWakeOpts := append(slices.Clone(opts), connect.WithInterceptors(machinewake.NewInterceptor()))
-	worktreePath, worktreeHandler := reliantv1connect.NewWorktreeServiceHandler(worktreeService, machineWakeOpts...)
-	repoPath, repoHandler := reliantv1connect.NewRepoServiceHandler(repoService, opts...)
-	approvalPath, approvalHandler := reliantv1connect.NewApprovalServiceHandler(approvalService, opts...)
-	questionPath, questionHandler := reliantv1connect.NewQuestionServiceHandler(questionService, opts...)
-	chatPath, chatHandler := reliantv1connect.NewChatServiceHandler(chatService, opts...)
 	// RunService is the engine's execution API. It delegates to chatService
 	// rather than reimplementing anything, so mounting it adds surface without
 	// adding behavior.
@@ -650,20 +620,13 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("run service: %w", err)
 	}
-	runPath, runHandler := reliantv1connect.NewRunServiceHandler(runService, opts...)
-	messagePath, messageHandler := reliantv1connect.NewMessageServiceHandler(messageService, opts...)
-	settingsPath, settingsHandler := reliantv1connect.NewSettingsServiceHandler(settingsService, opts...)
-	providerAccountPath, providerAccountHandler := reliantv1connect.NewProviderAccountServiceHandler(providerAccountService, opts...)
-	mcpPath, mcpHandler := reliantv1connect.NewMCPServiceHandler(mcpService, opts...)
-	workflowPath, workflowHandler := reliantv1connect.NewWorkflowServiceHandler(workflowService, opts...)
-	scenarioPath, scenarioHandler := reliantv1connect.NewScenarioServiceHandler(scenarioService, opts...)
-	toolCallPath, toolCallHandler := reliantv1connect.NewToolCallServiceHandler(toolCallService, opts...)
 
 	// ForgeService reads a forge project's release/env/secret state off the
 	// DAEMON's filesystem, through the router.
 	//
 	// It is always mounted. cfg.DisableForgeAPI, the operator's kill switch,
-	// puts forgeAPIDisabled innermost in its chain instead: every rpc then
+	// puts forgeAPIDisabled innermost in its chain instead (this mount's own
+	// handler options run inside the listener's chain): every rpc then
 	// answers FailedPrecondition, after auth, before the handler runs.
 	forgeService, err := forge.New(forge.Deps{
 		Logger: handlerLogger,
@@ -674,18 +637,11 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("forge service: %w", err)
 	}
-	forgeOpts := opts
+	var forgeMount []mountkit.Option
 	if cfg.DisableForgeAPI {
 		logging.Info("forge API disabled in this deployment (RELIANT_DISABLE_FORGE_API): ForgeService answers FailedPrecondition")
-		// Cloned so the shared opts slice is never appended into.
-		forgeOpts = append(slices.Clone(opts), connect.WithInterceptors(forgeAPIDisabled{}))
+		forgeMount = append(forgeMount, mountkit.WithHandlerOptions(connect.WithInterceptors(forgeAPIDisabled{})))
 	}
-	forgePath, forgeHandler := reliantv1connect.NewForgeServiceHandler(forgeService, forgeOpts...)
-
-	streamingPath, streamingHandler := reliantv1connect.NewStreamingServiceHandler(streamingService, opts...)
-
-	attachmentPath, attachmentHandler := reliantv1connect.NewAttachmentServiceHandler(attachmentService, opts...)
-	presetPath, presetHandler := reliantv1connect.NewPresetServiceHandler(presetService, opts...)
 
 	// TriggerService converges Temporal Schedules onto the triggers table
 	// (trigger.TemporalBackend), and writes webhook and integration triggers
@@ -731,8 +687,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("inbox service: %w", err)
 	}
-	inboxPath, inboxHandler := reliantv1connect.NewInboxServiceHandler(inboxService, opts...)
-	triggerPath, triggerHandler := reliantv1connect.NewTriggerServiceHandler(triggerService, opts...)
 
 	// FileSystem, Background, and Terminal services: proxies that forward each
 	// request through the daemon router (NATS) to the connected daemon, which
@@ -746,7 +700,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("file_system service: %w", err)
 	}
-	filesystemPath, filesystemHandler := reliantv1connect.NewFileSystemServiceHandler(fileSystemService, machineWakeOpts...)
 
 	bgProxy, err := background.New(background.Deps{
 		Logger: handlerLogger,
@@ -756,7 +709,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("background service: %w", err)
 	}
-	backgroundPath, backgroundHandler := reliantv1connect.NewBackgroundServiceHandler(bgProxy, opts...)
 
 	termProxy, err := terminal.New(terminal.Deps{
 		Logger: handlerLogger,
@@ -766,7 +718,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("terminal service: %w", err)
 	}
-	terminalPath, terminalHandler := reliantv1connect.NewTerminalServiceHandler(termProxy, opts...)
 
 	// WebSocket terminal handler (browser bidi terminal I/O)
 	var wsValidator auth.TokenValidator
@@ -783,16 +734,10 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 	}
 	// A terminal websocket lives as long as the browser tab: long-lived, so
-	// the drain ends it (with a reconnect close code) when Stop begins.
-	mux.Handle("/api/v2/terminal/ws", serverkit.LongLived(
-		terminal.TerminalWSHandler(router, wsValidator, terminal.WithTerminalCheckouts(database))))
-
-	// DaemonRegistryService: browser-driven list/get/resolve/resume. The
-	// ToolsDaemonService streaming endpoint is hosted by the daemon-gateway,
-	// which validates the daemon's `rlat_` at connect time (see
-	// internal/grpc/daemon_server.go).
-	daemonRegistryPath, daemonRegistryHandler := reliantv1connect.NewDaemonRegistryServiceHandler(daemonRegistryService, opts...)
-	tokenPath, tokenHandler := reliantv1connect.NewTokenServiceHandler(tokenService, opts...)
+	// the listener's drain ends it (with a reconnect close code) when it
+	// begins.
+	terminalWS := serverkit.LongLived(
+		terminal.TerminalWSHandler(router, wsValidator, terminal.WithTerminalCheckouts(database)))
 
 	// AccountService (account deletion) runs on the raw *sql.DB: the purge is
 	// an ordered multi-statement transaction across every user-owned table,
@@ -815,11 +760,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("account service: %w", err)
 	}
-	accountPath, accountHandler := reliantv1connect.NewAccountServiceHandler(accountService, opts...)
-	daemonPath, daemonHandler := reliantv1connect.NewDaemonServiceHandler(daemonProxyService, opts...)
 
 	// ConnectorService manages grants for third-party MCP clients, in the same
-	// store the /mcp endpoint (mountConnectorMCP) redeems them from.
+	// store the /mcp endpoint (connectorMCPRoutes) redeems them from.
 	connectorService, err := connector.New(connector.Deps{
 		Logger:    handlerLogger,
 		Config:    handlerConfig,
@@ -830,47 +773,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connector service: %w", err)
 	}
-	connectorPath, connectorHandler := reliantv1connect.NewConnectorServiceHandler(connectorService, opts...)
-
-	mux.Handle(systemPath, systemHandler)
-	mux.Handle(planPath, planHandler)
-	mux.Handle(taskPath, taskHandler)
-	mux.Handle(catalogPath, catalogHandler)
-	mux.Handle(projectPath, projectHandler)
-	mux.Handle(worktreePath, worktreeHandler)
-	mux.Handle(repoPath, repoHandler)
-	mux.Handle(approvalPath, approvalHandler)
-	mux.Handle(questionPath, questionHandler)
-	mux.Handle(chatPath, chatHandler)
-	mux.Handle(runPath, runHandler)
-	mux.Handle(messagePath, messageHandler)
-	mux.Handle(settingsPath, settingsHandler)
-	mux.Handle(providerAccountPath, providerAccountHandler)
-	mux.Handle(mcpPath, mcpHandler)
-	mux.Handle(workflowPath, workflowHandler)
-	mux.Handle(scenarioPath, scenarioHandler)
-	mux.Handle(filesystemPath, filesystemHandler)
-	mux.Handle(packageCommandsPath, packageCommandsHandler)
-	mux.Handle(toolCallPath, toolCallHandler)
-	mux.Handle(forgePath, forgeHandler)
-
-	mux.Handle(streamingPath, streamingHandler)
-
-	mux.Handle(attachmentPath, attachmentHandler)
-	// Range-capable byte serving for <video>; Connect GetAttachment is whole-blob.
-	mux.Handle(attachment.AttachmentContentPathPrefix, attachment.AttachmentContentHandler(database, authInterceptor.AuthenticateHTTP))
-	mux.Handle(presetPath, presetHandler)
-	mux.Handle(triggerPath, triggerHandler)
-	mux.Handle(inboxPath, inboxHandler)
-
-	mux.Handle(daemonRegistryPath, daemonRegistryHandler)
-	modelEndpointPath, modelEndpointHandler := reliantv1connect.NewModelEndpointServiceHandler(modelEndpointService, opts...)
-	mux.Handle(modelEndpointPath, modelEndpointHandler)
-	mux.Handle(tokenPath, tokenHandler)
-	mux.Handle(daemonPath, daemonHandler)
-
-	mux.Handle(accountPath, accountHandler)
-
 	connectionService, err := connection.New(connection.Deps{
 		Logger:      handlerLogger,
 		Config:      handlerConfig,
@@ -879,75 +781,138 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connection service: %w", err)
 	}
-	connectionPath, connectionHandler := reliantv1connect.NewConnectionServiceHandler(connectionService, opts...)
-	mux.Handle(connectionPath, connectionHandler)
-	cfg.OAuthRoutes.Register(func(pattern string, h http.Handler) { mux.Handle(pattern, h) })
-	// Inbound trigger receivers: plain HTTP routes outside the Connect
-	// interceptor chain, authenticated by the trigger's own token or the
-	// provider's signature rather than a user's JWT.
-	cfg.TriggerInbound.Register(func(pattern string, h http.Handler) { mux.Handle(pattern, h) })
 
-	mux.Handle(connectorPath, connectorHandler)
-	mux.Handle(backgroundPath, backgroundHandler)
-	mux.Handle(terminalPath, terminalHandler)
+	// The services whose requests wake an asleep machine (machinewake)
+	// report the wake as Unavailable + DaemonWaking, whatever error they wrap
+	// it in.
+	machineWake := mountkit.WithHandlerOptions(connect.WithInterceptors(machinewake.NewInterceptor()))
 
-	// The CLI's api-token management and workflow-trigger surfaces are Connect
-	// RPCs now (TokenService above, ChatService.StartChat), not bespoke
-	// /api/v1 JSON handlers — the CLI speaks the same authenticated Connect
-	// path the web app does.
+	services := []apiService{
+		{name: reliantv1connect.SystemServiceName, svc: systemService},
+		{name: reliantv1connect.PlanServiceName, svc: planService},
+		{name: reliantv1connect.TaskServiceName, svc: taskService},
+		{name: reliantv1connect.CatalogServiceName, svc: catalogService},
+		{name: reliantv1connect.ProjectServiceName, svc: projectService},
+		{name: reliantv1connect.WorktreeServiceName, svc: worktreeService, mount: []mountkit.Option{machineWake}},
+		{name: reliantv1connect.RepoServiceName, svc: repoService},
+		{name: reliantv1connect.ApprovalServiceName, svc: approvalService},
+		{name: reliantv1connect.QuestionServiceName, svc: questionService},
+		{name: reliantv1connect.ChatServiceName, svc: chatService},
+		// RunService is the engine's execution API. It delegates to
+		// chatService rather than reimplementing anything, so mounting it
+		// adds surface without adding behavior.
+		{name: reliantv1connect.RunServiceName, svc: runService},
+		{name: reliantv1connect.MessageServiceName, svc: messageService},
+		{name: reliantv1connect.SettingsServiceName, svc: settingsService},
+		{name: reliantv1connect.ProviderAccountServiceName, svc: providerAccountService},
+		{name: reliantv1connect.MCPServiceName, svc: mcpService},
+		{name: reliantv1connect.WorkflowServiceName, svc: workflowService},
+		{name: reliantv1connect.ScenarioServiceName, svc: scenarioService},
+		{name: reliantv1connect.FileSystemServiceName, svc: fileSystemService, mount: []mountkit.Option{machineWake}},
+		{name: reliantv1connect.PackageCommandsServiceName, svc: packageCommandsService},
+		{name: reliantv1connect.ToolCallServiceName, svc: toolCallService},
+		{name: reliantv1connect.ForgeServiceName, svc: forgeService, mount: forgeMount},
+		{name: reliantv1connect.StreamingServiceName, svc: streamingService},
+		{name: reliantv1connect.AttachmentServiceName, svc: attachmentService},
+		{name: reliantv1connect.PresetServiceName, svc: presetService},
+		{name: reliantv1connect.TriggerServiceName, svc: triggerService},
+		{name: reliantv1connect.InboxServiceName, svc: inboxService},
+		// DaemonRegistryService: browser-driven list/get/resolve/resume. The
+		// ToolsDaemonService streaming endpoint is hosted by the
+		// daemon-gateway's DaemonListener, which authenticates the daemon's
+		// `rlat_` (daemon_listener.go).
+		{name: reliantv1connect.DaemonRegistryServiceName, svc: daemonRegistryService},
+		{name: reliantv1connect.ModelEndpointServiceName, svc: modelEndpointService},
+		{name: reliantv1connect.TokenServiceName, svc: tokenService},
+		{name: reliantv1connect.DaemonServiceName, svc: daemonProxyService},
+		{name: reliantv1connect.AccountServiceName, svc: accountService},
+		{name: reliantv1connect.ConnectionServiceName, svc: connectionService},
+		{name: reliantv1connect.ConnectorServiceName, svc: connectorService},
+		{name: reliantv1connect.BackgroundServiceName, svc: bgProxy},
+		{name: reliantv1connect.TerminalServiceName, svc: termProxy},
+	}
+
+	// The plain-HTTP routes. The CLI's api-token management and
+	// workflow-trigger surfaces are Connect RPCs (TokenService,
+	// ChatService.StartChat), not bespoke /api/v1 JSON handlers — the CLI
+	// speaks the same authenticated Connect path the web app does.
+	var routes []func(mux *http.ServeMux)
+	handle := func(pattern string, h http.Handler) {
+		routes = append(routes, func(mux *http.ServeMux) { mux.Handle(pattern, h) })
+	}
+	handle("/api/v2/terminal/ws", terminalWS)
+	// Range-capable byte serving for <video>; Connect GetAttachment is whole-blob.
+	handle(attachment.AttachmentContentPathPrefix, attachment.AttachmentContentHandler(database, authInterceptor.AuthenticateHTTP))
+	cfg.OAuthRoutes.Register(handle)
+	// Inbound trigger receivers: authenticated by the trigger's own token or
+	// the provider's signature rather than a user's JWT.
+	cfg.TriggerInbound.Register(handle)
 
 	// Connector MCP endpoint: third-party MCP clients (ChatGPT, Claude, and
 	// their mobile apps) driving a cloud daemon under a connector grant.
 	//
-	// Authenticated by an `rlat_` connector credential rather than the user JWT the
-	// Connect handlers above use, so it is mounted as a plain HTTP route
-	// outside the interceptor chain. Confinement is enforced daemon-side at
-	// command dispatch (internal/daemonpolicy); this route resolves the grant
-	// and terminates the protocol.
-	if err := mountConnectorMCP(mux, database, cfg.ConnectorGrants, router, cfg.PublicURL, cfg.OAuthIssuers,
-		connectorTokenValidator(cfg), accesstokenclient.NewCachedIntrospector(authority), cfg.ControlPlane.URL); err != nil {
+	// Authenticated by an `rlat_` connector credential rather than the user
+	// JWT the Connect handlers use, so it is a plain HTTP route outside the
+	// chain. Confinement is enforced daemon-side at command dispatch
+	// (internal/daemonpolicy); this route resolves the grant and terminates
+	// the protocol.
+	mountMCP, err := connectorMCPRoutes(database, cfg.ConnectorGrants, router, cfg.PublicURL, cfg.OAuthIssuers,
+		connectorTokenValidator(cfg), accesstokenclient.NewCachedIntrospector(authority), cfg.ControlPlane.URL)
+	if err != nil {
 		return nil, fmt.Errorf("connector MCP endpoint: %w", err)
 	}
+	routes = append(routes, mountMCP)
 
 	// CLI login discovery (RFC 8414): names the control plane that issues this
 	// deployment's rlat_ tokens, so `reliant auth login --server <this>` finds
 	// where to send the browser. Absent on a self-hosted server with no
 	// control plane: it offers no browser login.
 	if h := cliauth.MetadataHandler(cfg.AuthorizationServer); h != nil {
-		mux.Handle(oauth2.AuthorizationServerMetadataPath, h)
+		handle(oauth2.AuthorizationServerMetadataPath, h)
 	}
 
-	// JSON health endpoint on the gRPC mux so the frontend can discover auth_mode
-	// without needing to reach the dedicated health port.
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	// JSON health endpoint on the API listener so the frontend can discover
+	// auth_mode without needing to reach the dedicated health port.
+	authMode := cfg.Auth.ModeName()
+	handle("/health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status":    "ok",
 			"service":   "grpc-server",
-			"auth_mode": cfg.Auth.ModeName(),
+			"auth_mode": authMode,
 		})
-	})
+	}))
 
-	corsHandler := newCORSHandler(cfg.CORSAllowedOrigins)
-
-	// The listener is serverkit's: HTTP/1.1, HTTP/2 over TLS and
-	// prior-knowledge h2c on one port, every request dispatched through the
-	// CORS and security-headers middleware, and the drain registry installed
-	// into every request's context. TLS is chosen at Start.
-	streams := serverkit.NewStreams()
-	srv := serverkit.NewHTTPServer(listenerConfig(cfg.BindAddress, cfg.Port), corsHandler(securityHeaders(mux)), streams)
-
-	return &Server{
-		server:          srv,
-		mux:             mux,
-		tlsCertFile:     cfg.TLSCertFile,
-		tlsKeyFile:      cfg.TLSKeyFile,
+	return &API{
+		services:        services,
+		http:            routes,
+		auth:            authInterceptor,
 		projectService:  projectService,
 		chatService:     chatService,
-		router:          router,
 		worktreeSweeper: worktreeSweeper,
-		streams:         streams,
 	}, nil
+}
+
+// Register mounts every service on mux, each Connect handler built with opts
+// (the listener's chain) followed by its own mount options, then the
+// plain-HTTP routes; it returns the proto service names it mounted. It is
+// serverkit.Routes, and a listener calls it once.
+func (a *API) Register(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
+	names := make([]string, 0, len(a.services))
+	for _, s := range a.services {
+		mountkit.RegisterService(mux, s.svc, opts, s.mount...)
+		names = append(names, s.name)
+	}
+	for _, mount := range a.http {
+		mount(mux)
+	}
+	return names
+}
+
+// Auth is the API's user authenticator, for the chain that serves it
+// (UserChainDeps.Auth).
+func (a *API) Auth() *interceptors.AuthInterceptor {
+	return a.auth
 }
 
 // corsAllowedHeaders are the request headers a cross-origin browser may send.
@@ -1008,129 +973,26 @@ func newCORSHandler(origins []string) func(http.Handler) http.Handler {
 
 // ProjectService returns the project service so callers can wire it to
 // out-of-band inputs (e.g. JetStream consumers in serverapi.Run).
-func (s *Server) ProjectService() *project.Service {
-	return s.projectService
+func (a *API) ProjectService() *project.Service {
+	return a.projectService
 }
 
 // ChatService returns the chat service, for out-of-band callers that start
 // runs on a chat's behalf (serverapi.Run's queued delivery).
-func (s *Server) ChatService() *chat.Service {
-	return s.chatService
+func (a *API) ChatService() *chat.Service {
+	return a.chatService
 }
 
 // WorktreeSweeper returns the sweeper that settles archived worktrees.
-func (s *Server) WorktreeSweeper() *worktreesweep.Sweeper {
-	return s.worktreeSweeper
-}
-
-// DaemonRouter returns the daemon router used by this server.
-func (s *Server) DaemonRouter() toolexec.DaemonRouter {
-	return s.router
-}
-
-// Start binds the server's port and serves on it in the background. A port
-// that cannot be bound, or a TLS key pair that cannot be loaded, fails Start.
-func (s *Server) Start() error {
-	return listenAndServe(s.server, s.tlsCertFile, s.tlsKeyFile, "Connect/gRPC server")
-}
-
-// IsTLS returns whether the server is configured to use TLS
-func (s *Server) IsTLS() bool {
-	return s.tlsCertFile != "" && s.tlsKeyFile != ""
-}
-
-// Stop gracefully stops the gRPC server (serverkit.DrainHTTP): it stops
-// accepting connections, ends every long-lived stream, and waits — bounded by
-// ctx — for the unary requests in flight to finish.
-//
-// Ending the streams is what lets it return. http.Server.Shutdown waits for
-// every active request, and a long-lived stream (StreamUserUpdates holds one
-// per open browser tab) never finishes on its own, so Shutdown used to wait
-// out the whole SHUTDOWN_TIMEOUT and fail with context.DeadlineExceeded on
-// every rollout — then the process exited and cut those streams with no
-// status at all. Now the drain ends them as Shutdown begins: streaming RPCs
-// end with OK, the end of a watch their clients resume from; the terminal
-// websocket closes with 1012 (service restart), which the browser reconnects
-// on; MCP event streams end and their clients re-open them.
-//
-// Callers must have flipped readiness and waited out the pre-stop delay
-// first (serverkit.Drainer.Begin), so those reconnects reach a replica that
-// is still serving rather than this one.
-func (s *Server) Stop(ctx context.Context) error {
-	logging.Info("Stopping Connect/gRPC server", "streams_open", s.streams.Active())
-	// DrainHTTP writes the listener's phase line ("drain: listener drained",
-	// with what the drain did to the long-lived streams).
-	return serverkit.DrainHTTP(ctx, s.server, s.streams)
-}
-
-// Mux returns the HTTP mux for mounting additional handlers
-func (s *Server) Mux() *http.ServeMux {
-	return s.mux
-}
-
-// newHandlerOptions builds the standard Connect handler options with the shared
-// interceptor chain.
-func newHandlerOptions(timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.HandlerOption {
-	all := newInterceptors(timeoutInterceptor, authInterceptors...)
-	opts := make([]connect.HandlerOption, 0, len(all))
-	for _, i := range all {
-		opts = append(opts, connect.WithInterceptors(i))
-	}
-	return opts
-}
-
-// newInterceptors returns the API server's ordered interceptor slice.
-// The canonical chain is provided by forge's observe.DefaultMiddlewares:
-//
-//	Recovery → RequestID → Logging → Tracing → Metrics → Extras
-//
-// Reliant-specific interceptors (slow-RPC watchdog, timeout, auth) are passed as Extras.
-//
-// A caller-supplied traceparent becomes the parent of the server span: the
-// public API trusts it for browser-to-API trace continuity. (The daemon
-// listener does not: see NewDaemonChain.)
-func newInterceptors(timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.Interceptor {
-	extras := []connect.Interceptor{
-		interceptors.NewSlowRPCWatchdogInterceptor(),
-		timeoutInterceptor,
-	}
-	for _, ai := range authInterceptors {
-		if isNilInterceptor(ai) {
-			continue
-		}
-		extras = append(extras, ai)
-	}
-
-	otelInterceptor, err := otelconnect.NewInterceptor(otelconnect.WithTrustRemote())
-	if err != nil {
-		panic(fmt.Sprintf("create Connect OpenTelemetry interceptor: %v", err))
-	}
-	extras = append([]connect.Interceptor{otelInterceptor}, extras...)
-	return observe.DefaultMiddlewares(observe.DefaultMiddlewareDeps{
-		// otelconnect owns the Connect server span and propagation. Supplying a
-		// Forge tracing interceptor here would create a duplicate span per RPC.
-		Extras: extras,
-		// A failed RPC's one record — forge's "rpc failed" — is classified by
-		// the logging interceptor, and the process handler trusts a record
-		// that already carries error_class, so it never applies its own
-		// classifier (internal/logging) to it. Without the same one here, a
-		// failure Temporal carries as Benign — nobody has to act — logged at
-		// ERROR, error_class=server, and counted as a dead-end error.
-		// A stream this server ended because it is shutting down (the
-		// daemon-gateway's "gateway draining") needs no option here: forge's
-		// logging treats svcerr.ErrServerDraining as an expected outcome,
-		// logged like a success and never at ERROR.
-		LogOptions: []observe.LogOption{
-			observe.WithErrorClassifier(errclass.Library),
-		},
-	})
+func (a *API) WorktreeSweeper() *worktreesweep.Sweeper {
+	return a.worktreeSweeper
 }
 
 // bindEventStreams marks MCP's server-to-client event streams long-lived: the
 // streamable-HTTP transport's standalone GET stream and the legacy /sse
 // stream are GETs that stay open for as long as the client is connected, so
-// http.Server.Shutdown would wait on them forever. The drain ends them at
-// Stop, and the client re-opens the stream against a live replica. POSTs
+// http.Server.Shutdown would wait on them forever. The drain ends them when
+// it begins, and the client re-opens the stream against a live replica. POSTs
 // carry one call each and are drained like any other request.
 func bindEventStreams(next http.Handler) http.Handler {
 	bound := serverkit.LongLived(next)
@@ -1143,24 +1005,10 @@ func bindEventStreams(next http.Handler) http.Handler {
 	})
 }
 
-func isNilInterceptor(i connect.Interceptor) bool {
-	if i == nil {
-		return true
-	}
-	v := reflect.ValueOf(i)
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
-}
-
-// mountConnectorMCP mounts the connector MCP endpoint: grants resolves each
-// call's connector grant and OAuth client binding, and router carries the
-// call to the grant's daemon.
-func mountConnectorMCP(
-	mux *http.ServeMux,
+// connectorMCPRoutes builds the connector MCP endpoint and returns what mounts
+// it: grants resolves each call's connector grant and OAuth client binding,
+// and router carries the call to the grant's daemon.
+func connectorMCPRoutes(
 	database db.Repository,
 	grants connectorgrant.Store,
 	router toolexec.DaemonRouter,
@@ -1169,7 +1017,7 @@ func mountConnectorMCP(
 	tokenValidator mcpserver.OAuthTokenValidator,
 	credentials mcpserver.CredentialIntrospector,
 	controlPlaneURL string,
-) error {
+) (func(mux *http.ServeMux), error) {
 	// A connector request is often the first traffic a workspace has seen in
 	// hours, so a suspended workspace is woken rather than reported as broken.
 	// The wake is triggered and the call returns immediately — see
@@ -1214,35 +1062,39 @@ func mountConnectorMCP(
 		ConsentBaseURL: publicURL,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	// Both the bare path and the subtree: MCP clients differ on whether they
-	// append a trailing slash, and a 404 on the handshake is opaque to debug
-	// from a phone.
-	// The handler owns routing for both transports (streamable-HTTP at /mcp,
-	// legacy SSE at /sse), so every path it serves is registered here.
 	handler = bindEventStreams(handler)
-	mux.Handle(mcpserver.MountPath, handler)
-	mux.Handle(mcpserver.MountPath+"/", handler)
-	mux.Handle(mcpserver.SSEMountPath, handler)
-	mux.Handle(mcpserver.SSEMountPath+"/", handler)
 
-	// The origin root, so a connector configured with the bare base URL
-	// handshakes instead of 404ing (see mcpserver.RootMountPath).
-	//
-	// Safe because this mux is the API server's own origin: it is
-	// hostname-routed to reliant-api-server (deploy/kcl/*/ingress.k), serves
-	// Connect RPCs under /reliant.v1.*, and has no root route of its own —
-	// the web app is a separate service. The `{$}` pattern matches only "/",
-	// so no RPC path or unknown-path 404 changes behaviour.
-	mux.Handle(mcpserver.RootMountPath, handler)
-	logging.Info("connector MCP endpoint mounted", "path", mcpserver.MountPath)
+	return func(mux *http.ServeMux) {
+		// Both the bare path and the subtree: MCP clients differ on whether
+		// they append a trailing slash, and a 404 on the handshake is opaque
+		// to debug from a phone.
+		// The handler owns routing for both transports (streamable-HTTP at
+		// /mcp, legacy SSE at /sse), so every path it serves is registered
+		// here.
+		mux.Handle(mcpserver.MountPath, handler)
+		mux.Handle(mcpserver.MountPath+"/", handler)
+		mux.Handle(mcpserver.SSEMountPath, handler)
+		mux.Handle(mcpserver.SSEMountPath+"/", handler)
 
-	// RFC 9728 discovery, so a consumer MCP client can find the authorization
-	// server from a failed request rather than being configured by hand.
-	mcpserver.MountOAuthRoutes(mux, oauthCfg, slog.Default())
-	return nil
+		// The origin root, so a connector configured with the bare base URL
+		// handshakes instead of 404ing (see mcpserver.RootMountPath).
+		//
+		// Safe because this mux is the API server's own origin: it is
+		// hostname-routed to reliant-api-server (deploy/kcl/*/ingress.k),
+		// serves Connect RPCs under /reliant.v1.*, and has no root route of
+		// its own — the web app is a separate service. The `{$}` pattern
+		// matches only "/", so no RPC path or unknown-path 404 changes
+		// behaviour.
+		mux.Handle(mcpserver.RootMountPath, handler)
+		logging.Info("connector MCP endpoint mounted", "path", mcpserver.MountPath)
+
+		// RFC 9728 discovery, so a consumer MCP client can find the
+		// authorization server from a failed request rather than being
+		// configured by hand.
+		mcpserver.MountOAuthRoutes(mux, oauthCfg, slog.Default())
+	}, nil
 }
 
 // connectorTokenValidator adapts reliant's JWT validator to the connector
@@ -1321,36 +1173,6 @@ func listenerConfig(bindAddress string, port int) serverkit.Config {
 		IdleTimeout:               transport.ServerIdleTimeout,
 		HTTP2MaxConcurrentStreams: maxConcurrentStreams,
 	}
-}
-
-// listenAndServe binds srv's address now — so a port in use fails boot rather
-// than being logged from a goroutine — and serves srv on it in the
-// background: over TLS when certFile and keyFile are set (h2 negotiated by
-// ALPN), otherwise cleartext.
-func listenAndServe(srv *http.Server, certFile, keyFile, name string) error {
-	ln, err := net.Listen("tcp", srv.Addr)
-	if err != nil {
-		return fmt.Errorf("failed to bind %s: %w", name, err)
-	}
-	serve := func() error { return srv.Serve(ln) }
-	if certFile != "" && keyFile != "" {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			_ = ln.Close()
-			return fmt.Errorf("failed to load TLS cert: %w", err)
-		}
-		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
-		serve = func() error { return srv.ServeTLS(ln, "", "") }
-		logging.Info("Starting "+name+" with TLS (HTTPS/HTTP2)", "address", ln.Addr().String(), "cert", certFile)
-	} else {
-		logging.Info("Starting "+name+" (h2c)", "address", ln.Addr().String())
-	}
-	go func() {
-		if err := serve(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logging.Error(name+" failed", "error", err)
-		}
-	}()
-	return nil
 }
 
 // securityHeaders adds security-related HTTP headers to responses

@@ -4,8 +4,8 @@ package grpc
 import (
 	"context"
 	"database/sql"
-	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -14,6 +14,8 @@ import (
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
@@ -64,39 +66,54 @@ func testServerConfig(t *testing.T, repo db.Repository) *Config {
 	}
 }
 
-// startTestServer builds the API server from cfg with NewServer, under API-key
-// auth, and serves it on a loopback port, returning the server and its base
-// URL.
-func startTestServer(t *testing.T, cfg *Config) (*Server, string) {
+// startTestServer builds the API from cfg with NewAPI, under API-key auth, and
+// serves it as serverapi.Run does — through a UserChain, on an APIListener —
+// on a loopback port, returning the listener and its base URL. extra mounts
+// routes of the test's own beside the API's.
+func startTestServer(t *testing.T, cfg *Config, extra ...func(mux *http.ServeMux)) (*APIListener, string) {
 	t.Helper()
 	cfg.Auth = auth.Settings{Mode: auth.ModeAPIKey, APIKey: drainTestAPIKey}
 
-	srv, err := NewServer(cfg)
+	api, err := NewAPI(cfg)
 	require.NoError(t, err)
-
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	chain, err := NewUserChain(UserChainDeps{Auth: api.Auth()})
 	require.NoError(t, err)
-	served := make(chan error, 1)
-	go func() { served <- srv.server.Serve(ln) }()
-	t.Cleanup(func() {
-		_ = srv.server.Close()
-		<-served
+	listener, err := NewAPIListener(APIListenerDeps{
+		BindAddress: "127.0.0.1",
+		Chain:       chain,
+		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
+			services := api.Register(mux, opts...)
+			for _, mount := range extra {
+				mount(mux)
+			}
+			return services
+		}),
 	})
-	return srv, "http://" + ln.Addr().String()
+	require.NoError(t, err)
+	require.NoError(t, listener.Listen(context.Background()))
+
+	runCtx, stop := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- listener.Run(runCtx) }()
+	t.Cleanup(func() {
+		stop()
+		require.NoError(t, <-served)
+	})
+	return listener, "http://" + listener.Addr().String()
 }
 
 // A missing collaborator is a composition bug: serverapi.Run builds every one
-// or fails boot. NewServer refuses it at construction, naming it, rather than
+// or fails boot. NewAPI refuses it at construction, naming it, rather than
 // leaving its routes unmounted — an unmounted route answers 404, which the web
 // client files as version skew.
-func TestNewServerNamesEveryMissingCollaborator(t *testing.T) {
+func TestNewAPINamesEveryMissingCollaborator(t *testing.T) {
 	required := []string{
 		"Database", "SQL", "ConnectorGrants", "DaemonRouter", "TemporalClient", "PauseService",
 		"ToolsFactory", "CatalogSearch", "Connections", "OAuthRoutes", "TriggerInbound",
 	}
 
 	t.Run("an empty config names them all", func(t *testing.T) {
-		_, err := NewServer(&Config{})
+		_, err := NewAPI(&Config{})
 		require.Error(t, err)
 		for _, name := range required {
 			require.Contains(t, err.Error(), name)
@@ -121,9 +138,9 @@ func TestNewServerNamesEveryMissingCollaborator(t *testing.T) {
 		t.Run("missing "+name, func(t *testing.T) {
 			cfg := testServerConfig(t, drainTestRepo{})
 			unset[name](cfg)
-			_, err := NewServer(cfg)
+			_, err := NewAPI(cfg)
 			require.Error(t, err)
-			require.Equal(t, "grpc server config: required collaborators not set: "+name, err.Error())
+			require.Equal(t, "api config: required collaborators not set: "+name, err.Error())
 		})
 	}
 }
@@ -132,7 +149,7 @@ func TestNewServerNamesEveryMissingCollaborator(t *testing.T) {
 // reaches the auth interceptor and is refused there, rather than finding no
 // route (a 404, which Connect reports as Unimplemented). These are the
 // services that used to be mounted only when a collaborator was present.
-func TestNewServerMountsEveryService(t *testing.T) {
+func TestNewAPIMountsEveryService(t *testing.T) {
 	_, baseURL := startTestServer(t, testServerConfig(t, drainTestRepo{}))
 
 	for _, procedure := range []string{
@@ -163,5 +180,28 @@ func TestNewServerMountsEveryService(t *testing.T) {
 			_ = resp.Body.Close()
 			require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 		})
+	}
+}
+
+// The name each mount reports is what the listener checks against its
+// chain's audience, so it must be the service that mount really serves: a
+// name copied onto the wrong row would check one service's audience and
+// serve another's.
+func TestAPIServiceNamesAreTheServicesMounted(t *testing.T) {
+	cfg := testServerConfig(t, drainTestRepo{})
+	cfg.Auth = auth.Settings{Mode: auth.ModeAPIKey, APIKey: drainTestAPIKey}
+	api, err := NewAPI(cfg)
+	require.NoError(t, err)
+	require.NotEmpty(t, api.services)
+
+	seen := map[string]bool{}
+	for _, s := range api.services {
+		require.False(t, seen[s.name], "%s is mounted twice", s.name)
+		seen[s.name] = true
+
+		mux := http.NewServeMux()
+		mountkit.RegisterService(mux, s.svc, nil, s.mount...)
+		_, pattern := mux.Handler(httptest.NewRequest(http.MethodPost, "/"+s.name+"/Any", nil))
+		require.Equal(t, "/"+s.name+"/", pattern, "the %s row mounts another service", s.name)
 	}
 }

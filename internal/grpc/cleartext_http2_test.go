@@ -17,7 +17,7 @@ import (
 )
 
 // serveCleartext starts a server on a loopback port with the same listener
-// configuration NewServer uses for its no-TLS path, and
+// configuration the API listener uses for its no-TLS path, and
 // returns its base URL.
 func serveCleartext(t *testing.T, handler http.Handler) string {
 	t.Helper()

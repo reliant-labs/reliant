@@ -11,7 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/pkg/middleware"
 )
 
-// TestUnauthenticatedProceduresArePinned pins the procedures NewServer's auth
+// TestUnauthenticatedProceduresArePinned pins the procedures the API's auth
 // interceptor lets through with no credentials. The set is projected by forge
 // generate from every rpc whose proto declares
 // (forge.v1.method) = {auth_required: false}, so making an rpc public is a

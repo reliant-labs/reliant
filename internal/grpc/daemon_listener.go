@@ -83,7 +83,7 @@ func NewDaemonChain(deps DaemonChainDeps) (*DaemonChain, error) {
 		Trace:  trace,
 		Audit:  serverkit.NoAudit,
 		// A failed RPC is classified as on the API listener (see
-		// newInterceptors): a stream this listener ends because it is
+		// NewUserChain): a stream this listener ends because it is
 		// draining is an expected outcome, never an ERROR.
 		LogOptions: []observe.LogOption{observe.WithErrorClassifier(errclass.Library)},
 		Extras: []connect.Interceptor{

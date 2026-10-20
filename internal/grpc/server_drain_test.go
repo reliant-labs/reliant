@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -23,14 +24,15 @@ import (
 // The defect these pin: every prod rollout logged "Error stopping gRPC
 // server: context deadline exceeded" from both api-server replicas.
 //
-// Stop is http.Server.Shutdown, which waits for every active request to
-// finish. StreamUserUpdates — one per open browser tab — never finishes on
-// its own, so Shutdown waited out the whole SHUTDOWN_TIMEOUT, failed, and the
-// process then exited with the streams still open, cutting them with no
-// status at all.
+// Stopping the listener is http.Server.Shutdown, which waits for every active
+// request to finish. StreamUserUpdates — one per open browser tab — never
+// finishes on its own, so Shutdown waited out the whole SHUTDOWN_TIMEOUT,
+// failed, and the process then exited with the streams still open, cutting
+// them with no status at all.
 //
-// They drive the real server: NewServer's mux and interceptor chain, the real
-// StreamingService handler, over prior-knowledge HTTP/2 as in production.
+// They drive the real server: NewAPI's routes behind the UserChain on an
+// APIListener, the real StreamingService handler, over prior-knowledge HTTP/2
+// as in production, and drain the listener as Supervise does (Drain).
 
 const drainTestAPIKey = "drain-test-api-key"
 
@@ -48,11 +50,11 @@ func (drainTestRepo) GetLatestUserUpdateSequence(context.Context, string) (int64
 // interceptor's own validator.
 type drainTestAuthority struct{ tokenauthority.Authority }
 
-// startDrainTestServer builds the API server with NewServer and serves it on a
-// loopback port, returning the server and its base URL.
-func startDrainTestServer(t *testing.T) (*Server, string) {
+// startDrainTestServer serves the API on a loopback port (startTestServer),
+// with extra's routes beside it, returning the listener and its base URL.
+func startDrainTestServer(t *testing.T, extra ...func(mux *http.ServeMux)) (*APIListener, string) {
 	t.Helper()
-	return startTestServer(t, testServerConfig(t, drainTestRepo{}))
+	return startTestServer(t, testServerConfig(t, drainTestRepo{}), extra...)
 }
 
 // h2cClient speaks prior-knowledge HTTP/2, as the load balancer does to the pod.
@@ -101,48 +103,51 @@ func streamEnd(stream *connect.ServerStreamForClient[reliantv1.UserStreamEvent],
 
 var errStreamStillOpen = errors.New("the stream is still open")
 
-func TestStopEndsOpenStreamsAndReturnsPromptly(t *testing.T) {
+func TestDrainEndsOpenStreamsAndReturnsPromptly(t *testing.T) {
 	srv, baseURL := startDrainTestServer(t)
 	first := openUserStream(t, baseURL)
 	second := openUserStream(t, baseURL)
 
 	// A budget well above what a drain needs and well below the test
-	// timeout: before the fix Stop spent all of it.
+	// timeout: before the fix the stop spent all of it.
 	const budget = 3 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 	start := time.Now()
-	err := srv.Stop(ctx)
+	err := srv.Drain(ctx)
 	elapsed := time.Since(start)
 
-	require.NoError(t, err, "Stop waited out its deadline on the open streams")
-	require.Less(t, elapsed, budget/2, "Stop must not wait on a stream that cannot finish by itself")
+	require.NoError(t, err, "Drain waited out its deadline on the open streams")
+	require.Less(t, elapsed, budget/2, "Drain must not wait on a stream that cannot finish by itself")
 
 	// Ended with OK: the end of a watch, which the web client answers by
 	// reconnecting from its cursor (web/src/api/streaming-grpc.ts, "Stream
 	// ended normally"). Not Unavailable, which it treats as the network
-	// under every read on the connection dying.
-	require.NoError(t, streamEnd(first, time.Second), "the stream must end cleanly, not be cut or left open")
-	require.NoError(t, streamEnd(second, time.Second), "the stream must end cleanly, not be cut or left open")
+	// under every read on the connection dying. The trailer says the server
+	// ended it, not the watch.
+	for _, stream := range []*connect.ServerStreamForClient[reliantv1.UserStreamEvent]{first, second} {
+		require.NoError(t, streamEnd(stream, time.Second), "the stream must end cleanly, not be cut or left open")
+		require.Equal(t, "true", stream.ResponseTrailer().Get(serverkit.DrainedTrailer))
+	}
 }
 
-// A unary request in flight when Stop begins is drained, not cut: only
+// A unary request in flight when the drain begins is drained, not cut: only
 // long-lived streams are ended early.
-func TestStopStillDrainsUnaryRequests(t *testing.T) {
-	srv, baseURL := startDrainTestServer(t)
-
+func TestDrainStillDrainsUnaryRequests(t *testing.T) {
 	slow := make(chan struct{})
 	release := make(chan struct{})
-	srv.Mux().Handle("/slow", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		close(slow)
-		<-release
-		select {
-		case <-r.Context().Done():
-			http.Error(w, "cancelled", http.StatusServiceUnavailable)
-		default:
-			_, _ = w.Write([]byte("done"))
-		}
-	}))
+	srv, baseURL := startDrainTestServer(t, func(mux *http.ServeMux) {
+		mux.Handle("/slow", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			close(slow)
+			<-release
+			select {
+			case <-r.Context().Done():
+				http.Error(w, "cancelled", http.StatusServiceUnavailable)
+			default:
+				_, _ = w.Write([]byte("done"))
+			}
+		}))
+	})
 
 	result := make(chan int, 1)
 	go func() {
@@ -160,12 +165,12 @@ func TestStopStillDrainsUnaryRequests(t *testing.T) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		stopped <- srv.Stop(ctx)
+		stopped <- srv.Drain(ctx)
 	}()
 
 	select {
 	case err := <-stopped:
-		t.Fatalf("Stop returned (%v) while a unary request was still in flight", err)
+		t.Fatalf("Drain returned (%v) while a unary request was still in flight", err)
 	case <-time.After(200 * time.Millisecond):
 	}
 	close(release)

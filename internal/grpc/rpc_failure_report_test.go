@@ -30,8 +30,8 @@ import (
 // One failed RPC is one Sentry issue, grouped by the procedure that failed.
 //
 // These drive a failing handler through the real interceptor chain
-// (newInterceptors: forge's Recovery → RequestID → Logging → … and Reliant's
-// extras) over HTTP, with the process logger installed the way every server
+// (NewUserChain: forge's Trace → Recovery → RequestID → Logging → … and Reliant's
+// layers) over HTTP, with the process logger installed the way every server
 // installs it (logging.Setup: forge's error-class policy, the metrics and
 // Sentry bridges), a live SentryReporter, and a Sentry transport the test
 // reads. So they pin what Sentry receives for a failed RPC, not what one layer
@@ -189,7 +189,7 @@ type failingAPI struct {
 
 func newFailingAPI(t *testing.T, fail map[string]error) failingAPI {
 	t.Helper()
-	opts := connect.WithInterceptors(newInterceptors(&testNamedInterceptor{})...)
+	opts := connect.WithInterceptors(userChainInterceptors(t)...)
 	mux := http.NewServeMux()
 	for procedure, err := range fail {
 		if procedure == watchFilesProcedure {

@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,8 +21,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nats-io/nats.go"
+	"github.com/reliant-labs/forge/pkg/lifecyclekit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
+	"github.com/reliant-labs/reliant/internal/handlers/project"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 
@@ -286,6 +290,15 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 	logging.Info("Database initialized", "driver", opts.DatabaseDriver)
+	// The database, the Temporal client and the daemon router close after
+	// every node has stopped (deferred, in reverse): the listener's handlers
+	// and the loops use them until then.
+	defer func() {
+		logging.Info("Closing database")
+		if err := repo.Close(); err != nil {
+			logging.Error("Error closing database", "error", err)
+		}
+	}()
 
 	// Credential vault: required when hosted, generated when self-hosted.
 	// Fails startup on a missing or malformed key.
@@ -304,17 +317,17 @@ func Run(ctx context.Context, opts Options) error {
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
-	drivers.InstallReliantKeyHealer(ctx, repo, opts.ControlPlane.URL, opts.ControlPlane.InternalServiceSecret, time.Hour)
+	keyHealer := drivers.InstallReliantKeyHealer(repo, opts.ControlPlane.URL, opts.ControlPlane.InternalServiceSecret)
 
 	// Claim-check store for large Temporal payloads. The worker shares the
 	// same table; both processes must use it or neither can read the other's
-	// histories. The api-server owns the schema, so it also owns GC.
+	// histories. The api-server owns the schema, so it also owns GC (the
+	// payload-gc node).
 	payloadStore := claimcheck.NewPostgresStore(repo.DB.SQLDB())
 	gcHorizon := opts.PayloadGCHorizon
 	if gcHorizon <= 0 {
 		gcHorizon = claimcheck.DefaultGCHorizon
 	}
-	go payloadStore.RunGC(ctx, gcHorizon)
 
 	// External Temporal client
 	temporalClient, err := temporal.NewExternalClient(ctx, temporal.ExternalClientConfig{
@@ -326,6 +339,10 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to Temporal: %w", err)
 	}
+	defer func() {
+		logging.Info("Closing Temporal client")
+		temporalClient.Close()
+	}()
 	logging.Info("Connected to external Temporal server", "host", opts.TemporalHost, "port", opts.TemporalPort)
 
 	// Tools factory (catalog metadata only; the api-server executes no tools)
@@ -411,8 +428,6 @@ func Run(ctx context.Context, opts Options) error {
 	reconcilerCfg.Namespace = opts.TemporalNamespace
 	reconciler := reconciliation.NewReconciler(repo, temporalClient, reconcilerCfg)
 	reconciler.SetResetGuard(resetGuard)
-	reconciler.StartBackgroundReconciliation(ctx)
-	logging.Info("Background reconciler started")
 
 	// Analytics
 	logging.Info("[Analytics] Initializing analytics")
@@ -445,6 +460,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Daemon routing: reuses the same NATS connection
 	daemonRouter := toolexec.NewNATSDaemonRouter(nc, daemonRouterOptions(repo, opts.ControlPlane.URL)...)
+	defer func() { _ = daemonRouter.Close() }()
 	natsChecker := nc.IsConnected
 	logging.Info("Using NATS daemon router — daemon services run in separate daemon-gateway process")
 
@@ -454,7 +470,7 @@ func Run(ctx context.Context, opts Options) error {
 	reconciler.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: daemonRouter, repo: repo})
 
 	// -----------------------------------------------------------------
-	// 3. Start servers
+	// 3. The API and its loops
 	// -----------------------------------------------------------------
 
 	// Inbound triggers: the receivers record an event and start its fire on
@@ -481,7 +497,6 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	if ghAccess != nil {
 		triggerInbound.Access = map[string]webhook.AccessRefresher{ghaccess.IntegrationID: gitHubAccess{ghAccess}}
-		go ghAccess.Run(ctx)
 	}
 	// "Only from" stores GitHub user ids and shows logins: this looks people
 	// up, as the caller, in both directions.
@@ -490,9 +505,7 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	grpcSrv, err := grpcserver.NewServer(&grpcserver.Config{
-		Port:           opts.GRPCPort,
-		BindAddress:    opts.BindAddress,
+	api, err := grpcserver.NewAPI(&grpcserver.Config{
 		Auth:           authSettings,
 		Connections:    conns.service,
 		CatalogSearch:  catalogSearch,
@@ -511,8 +524,6 @@ func Run(ctx context.Context, opts Options) error {
 		AuthorizationServer: opts.AuthorizationServer,
 		MaxUploadSize:       opts.MaxUploadSize,
 		WorktreeAutoArchive: opts.WorktreeAutoArchive,
-		CORSAllowedOrigins:  opts.CORSAllowedOrigins,
-		AllowedEmailDomains: opts.AllowedEmailDomains,
 		DisableForgeAPI:     opts.DisableForgeAPI,
 		ControlPlane:        opts.ControlPlane,
 		Database:            repo,
@@ -527,75 +538,60 @@ func Run(ctx context.Context, opts Options) error {
 		SharedTaskQueue:     v2workflow.SharedTaskQueue,
 		DaemonRouter:        daemonRouter,
 		NATSChecker:         natsChecker,
-		TLSCertFile:         tlsCertFile,
-		TLSKeyFile:          tlsKeyFile,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create gRPC server: %w", err)
+		return fmt.Errorf("failed to build the API: %w", err)
 	}
-	if err := grpcSrv.Start(); err != nil {
-		return fmt.Errorf("failed to start gRPC server: %w", err)
+	// The API listener: the address browsers, the CLI and `rlat_` tokens
+	// call, serving the API through a chain that authenticates users (and
+	// only them: every service the API mounts declares the user audience,
+	// and serverkit checks it against the chain's).
+	chain, err := grpcserver.NewUserChain(grpcserver.UserChainDeps{
+		Auth:                api.Auth(),
+		AllowedEmailDomains: opts.AllowedEmailDomains,
+	})
+	if err != nil {
+		return err
 	}
-	// The listener is bound: /ready now answers from its dependency checks.
-	drainer.MarkReady()
-	logging.Info("gRPC/Connect server started", "port", opts.GRPCPort)
-
-	// Subscribe to daemon.v1.events.connected on the DAEMON_EVENTS
-	// JetStream stream so we can heal each user's project directories the
-	// moment their workspace daemon comes online. The api-server's local
-	// ToolsDaemonService never sees daemon connections directly — daemons
-	// connect to the daemon-gateway process, which publishes events here.
-	if projectSvc := grpcSrv.ProjectService(); projectSvc != nil {
-		go func() {
-			if err := projectSvc.StartDaemonEventConsumer(ctx, nc); err != nil {
-				logging.Warn("daemon-events consumer exited with error", "error", err)
-			}
-		}()
+	listener, err := grpcserver.NewAPIListener(grpcserver.APIListenerDeps{
+		Port:               opts.GRPCPort,
+		BindAddress:        opts.BindAddress,
+		TLSCertFile:        tlsCertFile,
+		TLSKeyFile:         tlsKeyFile,
+		CORSAllowedOrigins: opts.CORSAllowedOrigins,
+		Chain:              chain,
+		Routes:             api,
+	})
+	if err != nil {
+		return err
 	}
 
 	// Messages sent while a chat's machine was down: wake the runs waiting
 	// for it when one of the user's machines connects, and deliver the ones
 	// whose run already ended. The reconciler sweeps for connects this misses
 	// and continues the message of a run it ends as wedged.
-	if chatSvc := grpcSrv.ChatService(); chatSvc != nil {
-		queued := queueddelivery.New(queueddelivery.Deps{Store: repo, Machines: daemonRouter, Deliverer: chatSvc, Signaler: temporalClient})
-		reconciler.SetQueuedDelivery(queued)
-		go func() {
-			if err := queued.Run(ctx, nc); err != nil {
-				logging.Warn("queued-delivery consumer exited with error; the reconciler's sweep still delivers", "error", err)
-			}
-		}()
-	}
+	queued := queueddelivery.New(queueddelivery.Deps{Store: repo, Machines: daemonRouter, Deliverer: api.ChatService(), Signaler: temporalClient})
+	reconciler.SetQueuedDelivery(queued)
 
-	// Settle archived worktrees' directories on their daemons: remove what is
-	// provably safe, record what is held, and lock live worktrees as
-	// reliant-owned. Every replica runs it; a daemon's answers are idempotent.
-	go grpcSrv.WorktreeSweeper().Run(ctx, worktreeSweepInterval)
-
-	// Converge every trigger's Temporal Schedule onto its row, and drop
-	// schedules whose row is gone. The DB is the truth, so this repairs drift
-	// left by a write that landed while Temporal was unreachable — and an
-	// orphan schedule keeps firing for a trigger nobody can see or stop.
-	//
-	// In the background with backoff: this races a cold Temporal, and
-	// refusing to serve until schedules converge would turn an ordering
-	// problem into an outage.
 	scheduleSyncer := triggers.NewSyncer(
 		temporalClient.ScheduleClient(), repo, v2workflow.SharedTaskQueue).
 		WithPolledIntegrations(inboundRegistry.IsPolled)
-	go triggers.SyncAllOnStartup(ctx, scheduleSyncer)
 
-	// Keep activations of workflow-declared triggers projected from their
-	// workflows: an edited cron reconverges its schedule, an edited source
-	// re-routes. Fires read the declaration themselves, so this bounds only
-	// routing lag. Here, beside SyncAll, because it converges the same
-	// schedules.
-	go triggers.NewReconciler(repo, triggers.LaunchWorkflows{Repo: repo}, scheduleSyncer).Run(ctx)
-
-	// Restart the fire of any inbound trigger event left pending — the
-	// receiver recorded it and its start was lost. The receivers live here,
-	// so the redrive does too.
-	go triggers.NewRedriver(repo, temporalClient, v2workflow.SharedTaskQueue).Run(ctx)
+	nodes := apiNodes(apiComponents{
+		payloadStore:      payloadStore,
+		payloadGCHorizon:  gcHorizon,
+		keyHealer:         keyHealer,
+		reconciler:        reconciler,
+		gitHubAccess:      ghAccess,
+		projects:          api.ProjectService(),
+		queued:            queued,
+		nc:                nc,
+		worktreeSweeper:   api.WorktreeSweeper(),
+		scheduleSyncer:    scheduleSyncer,
+		triggerReconciler: triggers.NewReconciler(repo, triggers.LaunchWorkflows{Repo: repo}, scheduleSyncer),
+		triggerRedriver:   triggers.NewRedriver(repo, temporalClient, v2workflow.SharedTaskQueue),
+		listener:          listener,
+	})
 
 	// -----------------------------------------------------------------
 	// 4. pprof debug server
@@ -615,7 +611,7 @@ func Run(ctx context.Context, opts Options) error {
 			"auth_mode": authSettings.ModeName(),
 		})
 	})
-	healthMux.HandleFunc("/ready", drainer.ReadinessHandler([]serverkit.ReadyCheck{
+	healthMux.HandleFunc("/ready", drainer.ReadinessHandler(append([]serverkit.ReadyCheck{
 		{Name: "db", Check: repo.Ping},
 		{Name: "nats", Check: func(context.Context) error {
 			if natsChecker != nil && !natsChecker() {
@@ -629,109 +625,237 @@ func Run(ctx context.Context, opts Options) error {
 			}
 			return nil
 		}},
-	}, 0, slog.Default()))
+	}, lifecyclekit.ReadyChecks(nodes...)...), 0, slog.Default()))
 
+	// The probes are the root's, not a node's, as in the gateway and the
+	// worker: served from before the first node starts (503 "not_ready"
+	// until Supervise marks the process ready, which waits for the API
+	// listener to be bound) until after the last one stopped (503
+	// "draining" through the whole drain), so kubelet and the load balancer
+	// always get an answer rather than a refused connection.
 	healthAddr := fmt.Sprintf("%s:%d", opts.BindAddress, opts.HealthPort)
 	healthServer := &http.Server{
 		Addr:              healthAddr,
 		Handler:           healthMux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	healthLn, err := net.Listen("tcp", healthAddr)
+	if err != nil {
+		return fmt.Errorf("failed to bind health endpoint: %w", err)
+	}
 	go func() {
 		logging.Info("Health endpoint started", "address", healthAddr)
-		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := healthServer.Serve(healthLn); err != nil && err != http.ErrServerClosed {
 			logging.Error("Health endpoint failed", "error", err)
 		}
 	}()
 
 	// -----------------------------------------------------------------
-	// Startup complete
+	// 6. Run, then drain
 	// -----------------------------------------------------------------
-	logging.Info("Reliant API server ready",
-		"startup_duration", time.Since(startTime),
+	// Supervise starts the nodes in order and marks the process ready once
+	// the API listener is bound. On SIGTERM (or ctx ending) it flips
+	// readiness and keeps serving for PRE_STOP_DELAY, so EndpointSlices and
+	// the GKE NEG drop this pod BEFORE it stops serving — without the pause
+	// the listener closes while the pod is still a routing target, which is
+	// connection-refused on every rollout. Then it stops the nodes in
+	// reverse inside one SHUTDOWN_TIMEOUT budget — the listener first (see
+	// apiNodes) — logs each phase ("drain: …"), and flushes telemetry last.
+	logging.Info("Starting Reliant API server nodes",
+		"setup_duration", time.Since(startTime),
 		"grpc_port", opts.GRPCPort,
 		"pprof_port", opts.PprofPort,
 		"health_port", opts.HealthPort,
 	)
+	stopCtx, stopSignals := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer stopSignals()
+	runErr := lifecyclekit.Supervise(stopCtx, lifecyclekit.Policy{
+		Drainer: drainer,
+		Logger:  slog.Default(),
+		Flush:   flushTelemetry,
+	}, nodes...)
 
-	_ = slog.LevelInfo // keep slog import alive for logging.Setup fallback
-
-	// -----------------------------------------------------------------
-	// 6. Graceful shutdown
-	// -----------------------------------------------------------------
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case sig := <-sigCh:
-		logging.Info("Received shutdown signal, beginning graceful shutdown", "signal", sig)
-	case <-ctx.Done():
-		logging.Info("Context cancelled, beginning graceful shutdown")
-	}
-
-	// Flip /ready to 503 and hold the listener open for PRE_STOP_DELAY so
-	// EndpointSlices and the GKE NEG drop this pod BEFORE it stops serving.
-	// Without the pause the listener closes while the pod is still a routing
-	// target, which is connection-refused on every rollout. The health
-	// server deliberately stays up through all of this — it is shut down
-	// last, below, so the probe gets a real 503 rather than a refused
-	// connection kubelet only notices at its next period.
-	drainer.Begin() // logs the flip and the pause ("drain: …" phase lines)
-
-	shutdownCtx, cancel := drainer.ShutdownContext()
-	defer cancel()
-
-	// Stop gRPC server
-	logging.Info("Stopping gRPC server")
-	if err := grpcSrv.Stop(shutdownCtx); err != nil {
-		logging.Error("Error stopping gRPC server", "error", err)
-	}
-
-	// Stop reconciler
-	logging.Info("Stopping reconciler")
-	reconciler.Stop()
-
-	// Close Temporal client
-	logging.Info("Closing Temporal client")
-	temporalClient.Close()
-
-	// Close daemon router
-	if daemonRouter != nil {
-		_ = daemonRouter.Close()
-	}
-
-	// Close database
-	logging.Info("Closing database")
-	if err := repo.Close(); err != nil {
-		logging.Error("Error closing database", "error", err)
-	}
-
-	// Health endpoint LAST: it served the 503 "draining" answer for the
-	// whole window above, which is the only thing that tells kubelet and the
-	// LB to stop routing here. Shutting it down first would have replaced
-	// that answer with connection-refused.
-	// Its own short budget: the shutdown context is usually spent by now, and
-	// an expired one would skip the graceful close of a server whose only
-	// clients are probes that take microseconds.
-	logging.Info("Stopping health endpoint")
+	// Health endpoint LAST — it is what answered 503 "draining" for the
+	// whole drain. Its own short budget: the shutdown budget is usually
+	// spent by now, and its only clients are probes that take microseconds.
 	healthCtx, cancelHealth := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelHealth()
 	if err := healthServer.Shutdown(healthCtx); err != nil {
-		logging.Error("Error stopping health endpoint", "error", err)
+		logging.Warn("Health endpoint did not stop cleanly", "error", err)
 	}
-	// The shutdown's total ("drain: complete"), before telemetry is flushed
-	// so the point is exported.
-	drainer.Complete()
 
-	// Flush analytics
-	logging.Info("[Analytics] Shutting down analytics")
-	analytics.Shutdown()
-
-	// Flush telemetry
-	logging.Info("[Telemetry] Flushing pending events")
-	telemetry.Flush(5)
-
+	// Note: the daemon router, NATS, the Temporal client, the database and
+	// OTel are closed via the defers above, after every node has stopped.
+	if runErr != nil {
+		return fmt.Errorf("api-server: %w", runErr)
+	}
 	logging.Info("API server shut down gracefully")
+	return nil
+}
+
+// apiComponents are the parts of the api role that have a lifecycle.
+// keyHealer and gitHubAccess are nil when this deployment has none.
+type apiComponents struct {
+	payloadStore      *claimcheck.PostgresStore
+	payloadGCHorizon  time.Duration
+	keyHealer         *drivers.ReliantKeyHealer
+	reconciler        *reconciliation.Reconciler
+	gitHubAccess      *ghaccess.Refresher
+	projects          *project.Service
+	queued            queueddelivery.Service
+	nc                *nats.Conn
+	worktreeSweeper   *worktreesweep.Sweeper
+	scheduleSyncer    *triggers.Syncer
+	triggerReconciler *triggers.Reconciler
+	triggerRedriver   *triggers.Redriver
+	listener          *grpcserver.APIListener
+}
+
+// apiNodes are the api role's components in START order; lifecyclekit.Supervise
+// stops them in reverse:
+//
+//  1. api-listener: stops taking calls first. Its drain ends every
+//     long-lived stream as it begins (each with the status its client
+//     reconnects on, against a replica that is still serving) and waits for
+//     the unary calls in flight, while everything they use is still running.
+//  2. the loops — trigger redrive, reconcile and startup sync, the worktree
+//     sweep, queued delivery and the daemon-events consumer, the GitHub
+//     access refresh, the workflow reconciler, the Reliant-key sweep and the
+//     payload GC — each ending with its context. None takes traffic, and none
+//     depends on another. A failure in one is logged, not fatal: each is
+//     repaired by its next pass or the next replica.
+//
+// What they all use — the daemon router, NATS, the Temporal client and the
+// database — closes after the last of them (Run's defers).
+func apiNodes(c apiComponents) []lifecyclekit.Node {
+	nodes := []lifecyclekit.Node{
+		{
+			// The claim-check store's GC: the api-server owns the schema, so
+			// it owns the unreferenced-payload sweep too.
+			Name: "payload-gc",
+			Run: func(ctx context.Context) error {
+				c.payloadStore.RunGC(ctx, c.payloadGCHorizon)
+				return nil
+			},
+		},
+	}
+	if c.keyHealer != nil {
+		nodes = append(nodes, lifecyclekit.Node{
+			// Re-mints every user's Reliant key that control-plane no longer
+			// honours, hourly.
+			Name: "reliant-key-sweep",
+			Run: func(ctx context.Context) error {
+				drivers.RunReliantKeySweeps(ctx, c.keyHealer, time.Hour)
+				return nil
+			},
+		})
+	}
+	nodes = append(nodes, lifecyclekit.Node{
+		// Background workflow reconciliation: stuck-task recovery, wedged
+		// runs, queued messages whose connect the consumer missed.
+		Name: "workflow-reconciler",
+		Run: func(ctx context.Context) error {
+			c.reconciler.StartBackgroundReconciliation(ctx)
+			<-ctx.Done()
+			return nil
+		},
+		Close: func(context.Context) error {
+			c.reconciler.Stop()
+			return nil
+		},
+	})
+	if c.gitHubAccess != nil {
+		nodes = append(nodes, lifecyclekit.Node{
+			// GitHub events are access-gated: each owner's repository access
+			// is refreshed while a trigger exists. Every replica runs it;
+			// leases share the work.
+			Name: "github-access",
+			Run: func(ctx context.Context) error {
+				c.gitHubAccess.Run(ctx)
+				return nil
+			},
+		})
+	}
+	return append(nodes,
+		lifecyclekit.Node{
+			// daemon.v1.events.connected on the DAEMON_EVENTS JetStream
+			// stream heals each user's project directories the moment their
+			// workspace daemon comes online. The api-server never sees daemon
+			// connections itself — daemons connect to the daemon-gateway,
+			// which publishes the events.
+			Name: "daemon-events-consumer",
+			Run: func(ctx context.Context) error {
+				if err := c.projects.StartDaemonEventConsumer(ctx, c.nc); err != nil && ctx.Err() == nil {
+					logging.Warn("daemon-events consumer exited with error", "error", err)
+				}
+				return nil
+			},
+		},
+		lifecyclekit.Node{
+			Name: "queued-delivery",
+			Run: func(ctx context.Context) error {
+				if err := c.queued.Run(ctx, c.nc); err != nil && ctx.Err() == nil {
+					logging.Warn("queued-delivery consumer exited with error; the reconciler's sweep still delivers", "error", err)
+				}
+				return nil
+			},
+		},
+		lifecyclekit.Node{
+			// Settles archived worktrees' directories on their daemons:
+			// removes what is provably safe, records what is held, and locks
+			// live worktrees as reliant-owned. Every replica runs it; a
+			// daemon's answers are idempotent.
+			Name: "worktree-sweeper",
+			Run: func(ctx context.Context) error {
+				c.worktreeSweeper.Run(ctx, worktreeSweepInterval)
+				return nil
+			},
+		},
+		lifecyclekit.Node{
+			// Converges every trigger's Temporal Schedule onto its row, and
+			// drops schedules whose row is gone. The DB is the truth, so this
+			// repairs drift left by a write that landed while Temporal was
+			// unreachable — and an orphan schedule keeps firing for a trigger
+			// nobody can see or stop. Once, with backoff, beside the
+			// listener: it races a cold Temporal, and refusing to serve until
+			// schedules converge would turn an ordering problem into an
+			// outage.
+			Name: "trigger-schedule-sync",
+			Run: func(ctx context.Context) error {
+				triggers.SyncAllOnStartup(ctx, c.scheduleSyncer)
+				return nil
+			},
+		},
+		lifecyclekit.Node{
+			// Keeps activations of workflow-declared triggers projected from
+			// their workflows: an edited cron reconverges its schedule, an
+			// edited source re-routes. Fires read the declaration themselves,
+			// so this bounds only routing lag.
+			Name: "trigger-reconciler",
+			Run: func(ctx context.Context) error {
+				c.triggerReconciler.Run(ctx)
+				return nil
+			},
+		},
+		lifecyclekit.Node{
+			// Restarts the fire of any inbound trigger event left pending —
+			// the receiver recorded it and its start was lost. The receivers
+			// live here, so the redrive does too.
+			Name: "trigger-redriver",
+			Run: func(ctx context.Context) error {
+				c.triggerRedriver.Run(ctx)
+				return nil
+			},
+		},
+		lifecyclekit.Component("api-listener", c.listener),
+	)
+}
+
+// flushTelemetry is the root's last step, after every node has stopped:
+// analytics, then any pending Sentry events.
+func flushTelemetry(context.Context) error {
+	analytics.Shutdown()
+	telemetry.Flush(5)
 	return nil
 }
 
