@@ -2,46 +2,30 @@
 
 /**
  * forge's dashboard spec (obsdash, `forge.dashboards/v1`; forge
- * internal/obsdash/spec.go) on the console side: validating a panel someone
- * edited in place, folding the ad-hoc state of a dashboard into a document,
- * and serializing it the way forge does.
+ * pkg/dashspec) on the console side: its vocabulary — kinds, signals,
+ * aggregations, operators, units — for the panel builder, and the rules forge
+ * applies to a panel, in words the builder can show before anything is saved.
  *
- * ── DASHBOARDS ARE CODE ──────────────────────────────────────────────────────
- *
- * There is no server-side dashboard store (owner decision 2). Editing in place
- * changes the URL and nothing else; "Save as code" turns what is on screen
- * into a file for the user to commit at
- * `deploy/observability/dashboards/<name>.json`, which ships with their next
- * release (contract K4). The file is ONE dashboard with a leading `"version":
- * "forge.dashboards/v1"` — exactly the per-dashboard file forge writes into a
- * release bundle (forge internal/obsdash/bundleset.go, `dashboardFile`) and the
- * shape `forge observe dashboards check` validates.
- *
- * ── SERIALIZED LIKE encoding/json ────────────────────────────────────────────
- *
- * Keys are written in the Go struct's field order and `omitempty` fields are
- * omitted when empty, so the file a user saves diffs cleanly against the one
- * forge generates (pinned by tests against forge's own output).
+ * The console never writes a dashboard file of its own: a workspace
+ * dashboard is stored by control-plane (DashboardService), which validates it
+ * with forge's own rules and keeps forge's canonical form, and "Promote to
+ * code" returns the file exactly as forge writes it. These checks are the
+ * early, friendly copy of those rules — the server's answer is the final one.
  */
 
-import type {
-  AttributeFilter,
-  Dashboard,
-  DashboardAnnotation,
-  DashboardFilter,
-  Panel,
-  Predicate,
-  SeriesIntent,
-} from "@/services/controlPlane/observability/types";
+import type { AttributeFilter, Dashboard, Panel, Predicate, SeriesIntent } from "@/services/controlPlane/observability/types";
 
 import { attributeClass, ENV_KEY, SERVICE_KEY } from "./attributes";
 
 export const SPEC_VERSION = "forge.dashboards/v1";
 
-/** Where a saved dashboard lives in the user's repo. */
+/** Where a promoted dashboard lives in the user's repo. */
 export const DASHBOARDS_DIR = "deploy/observability/dashboards";
 
-export const PANEL_KINDS = ["line", "number", "table", "search"] as const;
+export const PANEL_KINDS = ["line", "number", "table", "search", "funnel", "issues", "sessions"] as const;
+/** The kinds read from the tenant's browser tables, not from series over a signal (C7). */
+export const BROWSER_KINDS = ["funnel", "issues", "sessions"] as const;
+
 export const SIGNALS = ["traces", "metrics", "logs"] as const;
 export const AGGS = ["count", "count_distinct", "sum", "avg", "max", "quantile", "last"] as const;
 export const OPS = ["eq", "neq", "in", "not_in", "prefix", "match", "exists", "gte"] as const;
@@ -54,6 +38,9 @@ export const ANNOTATION_SOURCES = ["releases"] as const;
 const MAX_SERIES = 10;
 const MAX_PANELS = 200;
 const MAX_GRID_HEIGHT = 60;
+const MIN_FUNNEL_STEPS = 2;
+const MAX_FUNNEL_STEPS = 10;
+const FUNNEL_WINDOW = /^[1-9][0-9]*[smhd]$/;
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 
 export const AGG_LABELS: Record<(typeof AGGS)[number], string> = {
@@ -83,59 +70,6 @@ export const FIELD_SUGGESTIONS: Record<(typeof SIGNALS)[number], readonly string
   logs: [SERVICE_KEY, ENV_KEY, "log.severity", "log.body", "log.attr.k8s.event.reason", "resource.attr.service.version"],
   metrics: [SERVICE_KEY, ENV_KEY, "resource.attr.service.version", "resource.attr.k8s.container.name"],
 };
-
-// ── The document ─────────────────────────────────────────────────────────────
-
-export interface ObsdashSpec {
-  version: string;
-  project: string;
-  dashboards: Dashboard[];
-  savedSearches: unknown[];
-}
-
-/**
- * In-place edits, keyed `<dashboard id>/<panel id>`. A panel REPLACES the
- * dashboard's; null hides it; a key whose panel id the dashboard does not
- * have is a panel the reader added (appended, in key order).
- */
-export type PanelEdits = Record<string, Panel | null>;
-
-export function editKey(dashboardId: string, panelId: string): string {
-  return `${dashboardId}/${panelId}`;
-}
-
-/** The edits that belong to one dashboard, by panel id. */
-export function editsFor(edits: PanelEdits | undefined, dashboardId: string): Map<string, Panel | null> {
-  const prefix = `${dashboardId}/`;
-  const out = new Map<string, Panel | null>();
-  for (const [key, panel] of Object.entries(edits ?? {})) {
-    if (key.startsWith(prefix)) out.set(key.slice(prefix.length), panel);
-  }
-  return out;
-}
-
-/** The dashboard as the reader sees it: edits applied, hidden panels gone, added ones at the end. */
-export function applyEdits(dashboard: Dashboard, edits: PanelEdits | undefined): Dashboard {
-  const mine = editsFor(edits, dashboard.id);
-  if (mine.size === 0) return dashboard;
-  const known = new Set(dashboard.panels.map((p) => p.id));
-  const panels: Panel[] = [];
-  for (const panel of dashboard.panels) {
-    if (!mine.has(panel.id)) panels.push(panel);
-    else {
-      const edited = mine.get(panel.id);
-      if (edited) panels.push({ ...edited, id: panel.id });
-    }
-  }
-  for (const [id, panel] of mine) if (!known.has(id) && panel) panels.push({ ...panel, id });
-  return { ...dashboard, panels };
-}
-
-/** A panel id not yet used on the dashboard, for "Add panel". */
-export function newPanelId(dashboard: Dashboard): string {
-  const used = new Set(dashboard.panels.map((p) => p.id));
-  for (let i = 1; ; i++) if (!used.has(`custom-${i}`)) return `custom-${i}`;
-}
 
 // ── Filters and group-by → panel predicates ──────────────────────────────────
 
@@ -175,60 +109,6 @@ export function predicateForFilter(filter: AttributeFilter, signal: string): Pre
   }
 }
 
-export interface SaveAsCodeInput {
-  /** The dashboard as on screen — edits already applied. */
-  dashboard: Dashboard;
-  /** File name without `.json`; also the dashboard's id. */
-  name: string;
-  title: string;
-  /** The scope's attribute filters, baked into every panel's `where`. */
-  filters: AttributeFilter[];
-  /** The in-place group-by, which replaced each aggregating panel's own. */
-  groupBy: string[];
-}
-
-/** One dashboard file: the dashboard with the spec version it was written for. */
-export type DashboardFile = Dashboard & { version: string };
-
-/**
- * The dashboard as a file to commit. Environment, service and time range are
- * where the reader is LOOKING and are not baked in — a committed dashboard
- * ships to every environment its release is promoted to, and keeps its own
- * environment and service dropdowns. Its annotations (release markers) are
- * kept; `source` is the server's, never the file's.
- */
-export function buildDashboardFile(input: SaveAsCodeInput): DashboardFile {
-  const panels = input.dashboard.panels.map((panel) => {
-    const where = [...(panel.where ?? []), ...input.filters.map((f) => predicateForFilter(f, panel.signal))];
-    const aggregating = panel.kind !== "search";
-    return {
-      ...panel,
-      where,
-      groupBy: aggregating && input.groupBy.length ? input.groupBy.map((key) => fieldForKey(key, panel.signal)) : panel.groupBy,
-    };
-  });
-  const { source: _source, ...dashboard } = input.dashboard;
-  return { version: SPEC_VERSION, ...dashboard, id: input.name, title: input.title, panels };
-}
-
-/** A file name a repo can hold: lower case, dashes, no `_gen` suffix (that marks forge's own files). */
-export function dashboardFileName(raw: string): string {
-  const slug = raw
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .replace(/(-gen)+$/, "");
-  return slug.slice(0, 80) || "dashboard";
-}
-
-/** The name a generated dashboard's file has, minus `_gen` — saving under it makes the user's copy win (decision 5). */
-export function defaultDashboardName(project: string, dashboardId: string): string {
-  // Two projects in scope with the same id are served as `<project>/<id>`.
-  const [owner, id] = dashboardId.includes("/") ? dashboardId.split("/", 2) : [project, dashboardId];
-  return dashboardFileName(owner ? `${owner}-${id}` : id);
-}
-
 // ── Validation ───────────────────────────────────────────────────────────────
 
 const has = <T extends string>(list: readonly T[], value: unknown): value is T => typeof value === "string" && (list as readonly string[]).includes(value);
@@ -255,13 +135,28 @@ export function panelProblems(panel: Panel): string[] {
   else if (!ID_PATTERN.test(panel.id)) problems.push(`"${panel.id}" is not a valid panel id (letters, digits, '-', '_' and '.').`);
   if (!panel.title?.trim()) problems.push("Give the panel a title.");
   if (!has(PANEL_KINDS, panel.kind)) problems.push(`"${panel.kind}" is not a panel kind.`);
-  if (!has(SIGNALS, panel.signal)) problems.push(`"${panel.signal}" is not a signal.`);
+  const browser = has(BROWSER_KINDS, panel.kind);
+  if (!(browser && !panel.signal) && !has(SIGNALS, panel.signal)) problems.push(`"${panel.signal}" is not a signal.`);
   if (panel.unit !== undefined && !has(UNITS, panel.unit)) problems.push(`"${panel.unit}" is not a unit.`);
   const series = panel.series ?? [];
+  if (browser) {
+    if (series.length > 0) problems.push(`A ${panel.kind} panel takes no series.`);
+    if (panel.ratio || (panel.groupBy ?? []).length || (panel.columns ?? []).length) problems.push(`A ${panel.kind} panel takes no ratio, group-by or columns.`);
+    if (panel.signal && panel.signal !== "traces") problems.push(`A ${panel.kind} panel reads browser telemetry: its signal is traces.`);
+  }
+  if (panel.kind === "funnel") {
+    const steps = panel.funnel?.steps ?? [];
+    if (steps.length < MIN_FUNNEL_STEPS || steps.length > MAX_FUNNEL_STEPS) problems.push(`A funnel has ${MIN_FUNNEL_STEPS} to ${MAX_FUNNEL_STEPS} steps.`);
+    if (steps.some((step) => !step.trim())) problems.push("Name every funnel step.");
+    if (new Set(steps).size !== steps.length) problems.push("Each funnel step is a different event.");
+    if (panel.funnel?.window && !FUNNEL_WINDOW.test(panel.funnel.window)) problems.push('The funnel window is a number and s, m, h or d ("1h", "7d").');
+    if (panel.funnel?.by && panel.funnel.by !== "session" && panel.funnel.by !== "user") problems.push('A funnel counts per "session" or per "user".');
+  } else if (panel.funnel) problems.push("Only a funnel panel takes funnel steps.");
+  if (panel.hasError && panel.kind !== "sessions") problems.push("Only a sessions panel narrows to sessions with errors.");
   if (panel.kind === "search") {
     if (series.length > 0) problems.push("A rows panel shows rows and takes no series: list its columns instead.");
     if (!(panel.columns ?? []).length) problems.push("A rows panel needs at least one column.");
-  } else {
+  } else if (!browser) {
     if ((panel.columns ?? []).length) problems.push("Only a rows panel takes columns.");
     if (series.length === 0) problems.push("Add at least one series.");
     if (series.length > MAX_SERIES) problems.push(`A panel holds at most ${MAX_SERIES} series.`);
@@ -319,128 +214,4 @@ export function dashboardProblems(dashboard: Dashboard): string[] {
     for (const problem of panelProblems(panel)) problems.push(`${panel.title || panel.id}: ${problem}`);
   }
   return problems;
-}
-
-export function dashboardFileProblems(file: DashboardFile): string[] {
-  return [...(file.version !== SPEC_VERSION ? [`The version must be ${SPEC_VERSION}.`] : []), ...dashboardProblems(file)];
-}
-
-export function specProblems(spec: ObsdashSpec): string[] {
-  return [...(spec.version !== SPEC_VERSION ? [`The version must be ${SPEC_VERSION}.`] : []), ...(spec.dashboards ?? []).flatMap(dashboardProblems)];
-}
-
-// ── Serialization (encoding/json order, omitempty) ───────────────────────────
-
-type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
-
-/** Builds an object in the given key order, dropping `omitempty` keys whose value is empty. */
-function ordered(entries: [key: string, value: unknown, omitEmpty: boolean][]): { [key: string]: Json } {
-  const out: { [key: string]: Json } = {};
-  for (const [key, value, omitEmpty] of entries) {
-    const empty = value === undefined || value === null || value === "" || value === 0 || value === false || (Array.isArray(value) && value.length === 0);
-    if (omitEmpty && empty) continue;
-    // A missing required string is Go's zero value, "".
-    out[key] = (value ?? "") as Json;
-  }
-  return out;
-}
-
-function predicateJson(p: Predicate) {
-  return ordered([
-    ["field", p.field, false],
-    ["op", p.op, false],
-    ["value", p.value, true],
-    ["values", p.values, true],
-  ]);
-}
-
-function seriesJson(s: SeriesIntent) {
-  return ordered([
-    ["label", s.label, false],
-    ["agg", s.agg, false],
-    ["quantile", s.quantile, true],
-    ["field", s.field, true],
-    ["metricType", s.metricType, true],
-    ["where", (s.where ?? []).map(predicateJson), true],
-  ]);
-}
-
-function panelJson(p: Panel) {
-  return ordered([
-    ["id", p.id, false],
-    ["title", p.title, false],
-    ["description", p.description, true],
-    ["kind", p.kind, false],
-    ["signal", p.signal, false],
-    // Optional on read: forge omits an empty series list (search panels).
-    ["series", (p.series ?? []).map(seriesJson), true],
-    ["ratio", p.ratio, true],
-    ["where", (p.where ?? []).map(predicateJson), true],
-    ["groupBy", p.groupBy, true],
-    ["columns", p.columns, true],
-    ["unit", p.unit, true],
-    ["width", p.width, true],
-    ["height", p.height, true],
-  ]);
-}
-
-function annotationJson(a: DashboardAnnotation) {
-  return ordered([
-    ["source", a.source, false],
-    ["label", a.label, true],
-  ]);
-}
-
-function filterJson(f: DashboardFilter) {
-  return ordered([
-    ["id", f.id, false],
-    ["label", f.label, false],
-    ["field", f.field, false],
-    ["signal", f.signal, true],
-  ]);
-}
-
-function dashboardEntries(d: Dashboard): [string, unknown, boolean][] {
-  return [
-    ["id", d.id, false],
-    ["title", d.title, false],
-    ["description", d.description, true],
-    ["filters", (d.filters ?? []).map(filterJson), true],
-    ["annotations", (d.annotations ?? []).map(annotationJson), true],
-    ["panels", (d.panels ?? []).map(panelJson), false],
-  ];
-}
-
-function dashboardJson(d: Dashboard) {
-  return ordered(dashboardEntries(d));
-}
-
-/**
- * One dashboard file as forge writes it (`dashboardFile`: the version, then
- * the dashboard's own fields), two-space indented, ending in a newline.
- */
-export function dashboardFileJson(file: DashboardFile): string {
-  return goJson(ordered([["version", file.version, false], ...dashboardEntries(file)]));
-}
-
-function goJson(doc: { [key: string]: Json }): string {
-  const goEscapes: Record<string, string> = { "<": "\\u003c", ">": "\\u003e", "&": "\\u0026" };
-  return `${JSON.stringify(doc, null, 2).replace(/[<>&]/g, (c) => goEscapes[c])}\n`;
-}
-
-/**
- * A whole spec document as forge serializes it (the `forge.dashboards/v1` Spec
- * that obsdash.ReadSpec assembles from deploy/observability/spec/project_gen.json
- * and one spec/service-<svc>_gen.json per service, and that a release bundle
- * carries): json.MarshalIndent with two spaces, then a newline; Go field
- * order; `<` `>` `&` escaped as encoding/json does.
- */
-export function specJson(spec: ObsdashSpec): string {
-  const doc = ordered([
-    ["version", spec.version, false],
-    ["project", spec.project, false],
-    ["dashboards", (spec.dashboards ?? []).map(dashboardJson), false],
-    ["savedSearches", spec.savedSearches, false],
-  ]);
-  return goJson(doc);
 }

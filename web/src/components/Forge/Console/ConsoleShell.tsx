@@ -13,6 +13,7 @@
  *   Overview                      project home, merged with workloads
  *   Releases
  *   Observability ›               Logs · Traces · Metrics · Profiles · Dashboards · Alerts
+ *                                 (up to three starred dashboards nested under Dashboards)
  *   Configure
  *     Environments ›              one entry per long-lived environment, previews as one
  *     Secrets · Domains · Monitoring settings · Project settings
@@ -35,6 +36,7 @@ import { Activity, Gauge, Globe, Home, KeyRound, Layers, Settings, SlidersHorizo
 import SidebarLayout, { type SidebarNavItem, type SidebarUserInfo } from "@/components/forge-ui/sidebar_layout";
 import Link from "@/components/forge-ui/link";
 
+import type { DashboardPageKind } from "../Observability/Dashboards/dashboardModel";
 import { shortVersion } from "../Releases/releaseModel";
 import { EnvScopeControl } from "./EnvScopeControl";
 import type { ScopeOption } from "./envScope";
@@ -62,12 +64,25 @@ export interface ConsoleNavInput {
   envs: ConsoleNavEnv[];
   /** Alerts firing in scope; a danger count on Alerts (and a dot on the rail). */
   alertsFiring?: number;
+  /** The caller's starred dashboards; the first three nest under Dashboards. */
+  starred?: ConsoleNavDashboard[];
+  /** The open dashboard's title, for the breadcrumb (its key until the index answers). */
+  dashboardTitle?: string;
 }
+
+export interface ConsoleNavDashboard {
+  title: string;
+  dashKind: DashboardPageKind;
+  key: string;
+}
+
+/** How many starred dashboards nest under Dashboards in the nav. */
+export const NAV_STARRED_MAX = 3;
 
 const icon = (Icon: typeof Home) => <Icon className="h-4 w-4" aria-hidden="true" />;
 
 /** The nav rows for `page` — pure, so the IA is testable without rendering. */
-export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0 }: ConsoleNavInput): {
+export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [] }: ConsoleNavInput): {
   items: SidebarNavItem[];
   footer: SidebarNavItem[];
 } {
@@ -90,15 +105,31 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0 }: 
       row("Overview", { kind: "overview" }, icon(Home)),
       row("Releases", { kind: "releases" }, icon(TagIcon), { active: is("releases") || is("release") }),
       row("Observability", { kind: "observability" }, icon(Gauge), {
-        children: OBS_NAV_VIEWS.map((view) => ({
-          label: OBS_NAV_LABELS[view],
-          href: href({ kind: "obs-view", view }),
-          active: page.kind === "obs-view" && page.view === view,
-          badge:
-            view === "alerts" && alertsFiring > 0
-              ? { type: "count" as const, value: alertsFiring, tone: "danger" as const, label: "firing" }
+        children: OBS_NAV_VIEWS.map((view) => {
+          const nested = view === "dashboards" ? starred.slice(0, NAV_STARRED_MAX) : [];
+          const openStar = (candidate: ConsoleNavDashboard) =>
+            page.kind === "dashboard" && page.dashKind === candidate.dashKind && page.key === candidate.key;
+          return {
+            label: OBS_NAV_LABELS[view],
+            href: href({ kind: "obs-view", view }),
+            // A dashboard that is not one of the nested stars lights Dashboards itself.
+            active: (page.kind === "obs-view" && page.view === view) || (view === "dashboards" && page.kind === "dashboard" && !nested.some(openStar)),
+            badge:
+              view === "alerts" && alertsFiring > 0
+                ? { type: "count" as const, value: alertsFiring, tone: "danger" as const, label: "firing" }
+                : undefined,
+            children: nested.length
+              ? [
+                  ...nested.map((candidate) => ({
+                    label: candidate.title,
+                    href: href({ kind: "dashboard", dashKind: candidate.dashKind, key: candidate.key }),
+                    active: openStar(candidate),
+                  })),
+                  { label: "All dashboards", href: href({ kind: "obs-view", view }), active: false },
+                ]
               : undefined,
-        })),
+          };
+        }),
       }),
       row("Environments", { kind: "environments" }, icon(Layers), {
         section: "Configure",
@@ -131,7 +162,7 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0 }: 
 }
 
 /** The breadcrumb trail for `page`, after the project. The last crumb is the page itself. */
-export function consoleCrumbs(project: string, page: ConsolePage, env: string): { label: string; href?: string }[] {
+export function consoleCrumbs(project: string, page: ConsolePage, env: string, dashboardTitle?: string): { label: string; href?: string }[] {
   const href = (target: ConsolePage) => withSearch(consolePath(project, target), { env });
   switch (page.kind) {
     case "overview":
@@ -144,6 +175,12 @@ export function consoleCrumbs(project: string, page: ConsolePage, env: string): 
       return [{ label: "Observability" }];
     case "obs-view":
       return [{ label: "Observability", href: href({ kind: "observability" }) }, { label: OBS_NAV_LABELS[page.view] }];
+    case "dashboard":
+      return [
+        { label: "Observability", href: href({ kind: "observability" }) },
+        { label: "Dashboards", href: href({ kind: "obs-view", view: "dashboards" }) },
+        { label: dashboardTitle || page.key },
+      ];
     case "environments":
       return [{ label: "Environments" }];
     case "environment":
@@ -192,7 +229,7 @@ export function ConsoleShell({
   ...nav
 }: ConsoleShellProps) {
   const { items, footer } = buildConsoleNav(nav);
-  const crumbs = consoleCrumbs(nav.project, nav.page, nav.env);
+  const crumbs = consoleCrumbs(nav.project, nav.page, nav.env, nav.dashboardTitle);
 
   return (
     /*

@@ -45,6 +45,7 @@ import { ObservabilityApiProvider } from "@/services/controlPlane/observability/
 import { useProjectStore, type Project } from "@/store/projectStore";
 
 import { ConsoleLayout } from "../Console/ConsoleLayout";
+import { DashboardPage, DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
 import {
   ActivityPage,
   MonitoringSettingsPage,
@@ -432,6 +433,8 @@ function buildRouter(path: string) {
     release: ReleasePage,
     observability: ObservabilityOverviewPage,
     observabilityView: ObservabilityViewPage,
+    dashboards: DashboardsPage,
+    dashboard: DashboardPage,
     environments: EnvironmentsPage,
     environment: ForgeEnvPage,
     secrets: SecretsPage,

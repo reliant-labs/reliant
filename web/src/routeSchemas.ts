@@ -15,6 +15,7 @@ import { z } from "zod";
 import { ONBOARDING_STEP_IDS } from "./components/Onboarding/constants";
 import type { LaunchPlan } from "./components/OnboardingFlow/types";
 import { COMPARE_WINDOWS } from "./components/Forge/Observability/deliveryScope";
+import { COMPARE_MODES, REFRESH_INTERVALS } from "./components/Forge/Observability/Dashboards/dashboardModel";
 import { RELEASE_TABS, STATUS_FILTERS } from "./components/Forge/Releases/releaseModel";
 import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
 import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
@@ -489,58 +490,19 @@ export const forgeConsoleSecretsSearchSchema = z.object({
 
 // ── Observability URL state ────────────────────────────────────────────────
 
-/** A predicate in a panel's own vocabulary (forge obsdash Predicate). */
-const panelPredicateSchema = z.object({
-  field: z.string(),
-  op: z.string(),
-  value: z.string().optional(),
-  values: z.array(z.string()).optional(),
-});
-
-/**
- * A dashboard panel as an in-place edit carries it in the URL — forge obsdash
- * `Panel` (forge.dashboards/v1). Validated for SHAPE only: whether the server
- * can compile it is the server's answer (InvalidArgument, shown on the panel).
- */
-const obsPanelSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  description: z.string().optional(),
-  kind: z.string(),
-  signal: z.string(),
-  series: z.array(
-    z.object({
-      label: z.string(),
-      agg: z.string(),
-      quantile: z.number().optional(),
-      field: z.string().optional(),
-      metricType: z.string().optional(),
-      where: z.array(panelPredicateSchema).optional(),
-    })
-  ),
-  ratio: z.boolean().optional(),
-  where: z.array(panelPredicateSchema).optional(),
-  groupBy: z.array(z.string()).optional(),
-  columns: z.array(z.string()).optional(),
-  unit: z.enum(["", "count", "ms", "bytes", "percent", "s"]).optional(),
-  width: z.number().optional(),
-  height: z.number().optional(),
-});
-
 /**
  * The Observability area's URL state (components/Forge/Observability/obsSearch.ts),
  * shared by the env page's tab and the project-level area so one link shape
  * opens either. In the URL because "look at these errors in prod" is a link:
  * which view, which window, the query, the trace someone opened, and every
- * ad-hoc choice — filters, group-by, panel edits — so a dashboard changed in
- * place can be sent to a colleague as it is.
+ * ad-hoc choice — filters and group-by — so a narrowed view can be sent to a
+ * colleague as it is.
  *
  * `range` is a PRESET, never timestamps, so a link to the last hour means the
  * last hour when it is opened. `severity` is a comma list (`warn,error`). `q`
  * is the Logs query string, or in Traces the root operation to match.
  * `trace`/`span` name the trace in focus. `f` is attribute filter tokens
- * (`service.version:v1.8`), `groupBy` up to three keys, `edit` the in-place
- * panel edits by panel id.
+ * (`service.version:v1.8`), `groupBy` up to three keys.
  *
  * Every key drops itself (`.catch`) rather than failing the route: a link
  * from a newer build, or a hand-edited one, must open a slightly wider view,
@@ -554,7 +516,6 @@ export const obsSearchShape = {
   q: z.string().optional().catch(undefined),
   trace: z.string().optional().catch(undefined),
   span: z.string().optional().catch(undefined),
-  dashboard: z.string().optional().catch(undefined),
   profileType: z.string().optional().catch(undefined),
   live: z.boolean().optional().catch(undefined),
   errors: z.boolean().optional().catch(undefined),
@@ -564,7 +525,6 @@ export const obsSearchShape = {
   groupBy: z.array(z.string()).optional().catch(undefined),
   workload: z.string().optional().catch(undefined),
   container: z.string().optional().catch(undefined),
-  edit: z.record(z.string(), obsPanelSchema.nullable()).optional().catch(undefined),
   alerts: z.enum(ALERTS_TABS).optional().catch(undefined),
   rule: z.string().optional().catch(undefined),
   compare: z.string().optional().catch(undefined),
@@ -587,6 +547,35 @@ const { view: _view, envs: _envs, ...obsConsoleShape } = obsSearchShape;
 export const forgeConsoleObsSearchSchema = z.object({
   env: envScopeParam,
   ...obsConsoleShape,
+});
+
+/**
+ * Observability › Dashboards: the index's search box and its two filters
+ * (source: release or workspace; owner: forge, repo or a person). The scope
+ * (`env`) narrows the index server-side; these narrow it in place.
+ */
+export const forgeConsoleDashboardsSearchSchema = z.object({
+  env: envScopeParam,
+  q: z.string().optional().catch(undefined),
+  source: z.enum(["release", "workspace"]).optional().catch(undefined),
+  owner: z.string().optional().catch(undefined),
+});
+
+/**
+ * One dashboard: everything Share puts in the link — the time window, the
+ * service variable, the comparison, the auto-refresh, full screen — plus an
+ * older version (workspace) or the release it shipped in (release). The
+ * environment is the console scope (`env`).
+ */
+export const forgeConsoleDashboardSearchSchema = z.object({
+  env: envScopeParam,
+  range: z.enum(RANGE_PRESETS).optional().catch(undefined),
+  service: z.string().optional().catch(undefined),
+  compare: z.enum(COMPARE_MODES).optional().catch(undefined),
+  refresh: z.enum(REFRESH_INTERVALS).optional().catch(undefined),
+  tv: z.boolean().optional().catch(undefined),
+  version: z.number().int().positive().optional().catch(undefined),
+  release: z.string().optional().catch(undefined),
 });
 
 /**

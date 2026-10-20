@@ -88,6 +88,8 @@ const ObservabilityPreview = lazyRoute(
 // The console v3 forge-ui primitives, composed on fabricated data.
 const ConsolePrimitivesPreview = lazyRoute(
   () => import('./components/Forge/__preview__/ConsolePrimitivesPreview'), 'default')
+const DashboardsPreview = lazyRoute(
+  () => import('./components/Forge/Observability/Dashboards/__preview__/DashboardsPreview'), 'default')
 const ReleasesPreview = lazyRoute(
   () => import('./components/Forge/Releases/__preview__/ReleasesPreview'), 'default')
 const SettingsPage = lazyRoute(
@@ -156,6 +158,10 @@ const ForgeConsoleObservabilityPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'ObservabilityOverviewPage')
 const ForgeConsoleObservabilityViewPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'ObservabilityViewPage')
+const ForgeConsoleDashboardsPage = lazyRoute(
+  () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardsPage')
+const ForgeConsoleDashboardPage = lazyRoute(
+  () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardPage')
 const ForgeConsoleSecretsPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'SecretsPage')
 const ForgeConsoleMonitoringPage = lazyRoute(
@@ -526,6 +532,15 @@ const forgeReleasesPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><ReleasesPreview /></DevOnlyRoute>,
 })
 
+// The Observability home, Dashboards and a dashboard, inside the real console
+// chrome, against the fixture app and an in-memory DashboardService — every
+// state in every scheme, no backend.
+const forgeDashboardsPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-dashboards-preview',
+  component: () => <DevOnlyRoute><DashboardsPreview /></DevOnlyRoute>,
+})
+
 // (`/checkout/embed` removed with the embedded-checkout path. It existed to
 // host Stripe's hosted checkout page in a bare Electron BrowserWindow, because
 // payment-method domains are registered by HOSTNAME and app://bundle cannot be
@@ -645,6 +660,8 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   release: gated(ForgeConsoleReleasePage),
   observability: gated(ForgeConsoleObservabilityPage),
   observabilityView: gated(ForgeConsoleObservabilityViewPage),
+  dashboards: gated(ForgeConsoleDashboardsPage),
+  dashboard: gated(ForgeConsoleDashboardPage),
   environments: gated(ForgeEnvironmentsPage),
   environment: gated(ForgeEnvPage),
   secrets: gated(ForgeConsoleSecretsPage),
@@ -808,6 +825,7 @@ const routeTree = rootRoute.addChildren([
   forgeObservabilityPreviewRoute,
   consolePrimitivesPreviewRoute,
   forgeReleasesPreviewRoute,
+  forgeDashboardsPreviewRoute,
   projectPickerRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([

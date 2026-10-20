@@ -16,13 +16,13 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import forgeSpecRaw from "./forge-dashboard-spec.json?raw";
 import { createAlertingFixture, type AlertingFixtureOptions } from "./fixtureAlerting";
+import { createDashboardFixture, type DashboardFixtureOptions } from "./fixtureDashboards";
 import { createDeliveryFixture, versionAt, type DeliveryFixtureOptions } from "./fixtureDelivery";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type {
   AttributeValueCount,
   Dashboard,
-  DashboardSpec,
   ObsScope,
   ResourceUsage,
   Workload,
@@ -281,7 +281,8 @@ function rpcPanels(rpc: string): Panel[] {
   ];
 }
 
-export function fixtureDashboards(): DashboardSpec {
+/** forge's per-rpc RED dashboards for the fixture app: an overview and the api service's own. */
+export function fixtureDashboards(): Dashboard[] {
   const rpcServer = [
     { field: "span.kind", op: "eq", value: "server" },
     { field: "span.name", op: "match", value: "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$" },
@@ -338,33 +339,46 @@ export function fixtureDashboards(): DashboardSpec {
       ...RPCS.slice(0, 2).flatMap(rpcPanels),
     ],
   };
-  return { version: "forge.dashboards/v1", project: "shop", source: "synthesized", dashboards: [overview, service] };
+  return [overview, service];
 }
 
 /**
- * What GetDashboards serves once a release bundle was recorded (contract K4):
- * forge's own generated set (its golden testdata, so the new workloads and
- * releases dashboards render exactly as forge writes them) with release
- * markers declared, plus one dashboard the project owns.
+ * The dashboards a release bundle carries: forge's own generated set (its
+ * golden testdata, so the workloads and releases dashboards render exactly as
+ * forge writes them) and two the project declares in its repo — a checkout
+ * dashboard, and a frontend one with the browser kinds (funnel, issues,
+ * sessions).
  */
-export function fixtureReleaseDashboards(): DashboardSpec {
+export function fixtureReleaseDashboards(): { generated: Dashboard[]; repo: Dashboard[] } {
   const forge = JSON.parse(forgeSpecRaw) as { dashboards: (Dashboard & { annotations?: { source: string; label?: string }[] })[] };
   const generated: Dashboard[] = forge.dashboards
     .filter((d) => ["overview", "workloads", "releases", "service-orders"].includes(d.id))
-    .map((d) => ({ ...d, filters: d.filters ?? [], annotations: d.annotations ?? [], source: "gen" as const }));
+    .map((d) => ({ ...d, filters: d.filters ?? [], annotations: d.annotations ?? [] }));
   const checkout: Dashboard = {
     id: "checkout",
     title: "Checkout funnel",
     description: "The project's own dashboard: deploy/observability/dashboards/checkout.json.",
     filters: [{ id: "service", label: "service.name", field: "service.name" }],
     annotations: [{ source: "releases", label: "Releases" }],
-    source: "user",
     panels: [
       { id: "orders", title: "Orders created", kind: "line", signal: "traces", where: [{ field: "span.name", op: "eq", value: PROCEDURE("CreateOrder") }], series: [{ label: "orders", agg: "count" }], unit: "count", width: 12, height: 7 },
       { id: "checkout-p95", title: "Checkout p95", kind: "number", signal: "traces", where: [{ field: "span.name", op: "eq", value: PROCEDURE("CreateOrder") }], series: [{ label: "p95", agg: "quantile", quantile: 0.95, field: "span.duration" }], unit: "ms", width: 12, height: 4 },
     ],
   };
-  return { version: "forge.dashboards/v1", project: "shop", source: "release", dashboards: [...generated, checkout] };
+  const frontend: Dashboard = {
+    id: "frontend-web",
+    title: "Frontend · web",
+    description: "The storefront as its visitors see it: errors grouped by cause, sessions, and the checkout funnel.",
+    filters: [{ id: "service", label: "service.name", field: "service.name" }],
+    annotations: [{ source: "releases", label: "Releases" }],
+    panels: [
+      { id: "funnel-checkout", title: "Checkout funnel", description: "Product events in order, within 1h, counted per session.", kind: "funnel", signal: "traces", series: [], funnel: { steps: ["view_product", "add_to_cart", "begin_checkout", "purchase"], window: "1h", by: "session" }, width: 12, height: 8 },
+      { id: "js-errors", title: "JS errors by release", kind: "line", signal: "traces", where: [{ field: "span.status", op: "eq", value: "error" }], series: [{ label: "errors", agg: "count" }], groupBy: ["resource.attr.service.version"], unit: "count", width: 12, height: 8 },
+      { id: "issues", title: "Issues", description: "Errors grouped by cause: new and regressed first, then the most frequent.", kind: "issues", signal: "traces", series: [], width: 24, height: 9 },
+      { id: "sessions-with-errors", title: "Sessions with errors", description: "Sessions that hit an error, newest first.", kind: "sessions", signal: "traces", series: [], hasError: true, width: 24, height: 8 },
+    ],
+  };
+  return { generated, repo: [checkout, frontend] };
 }
 
 /** A small speedscope "sampled" profile: an rpc handler, JSON encoding and a database call. */
@@ -401,7 +415,7 @@ export function fixtureComparePanel(panel: Panel, window: TimeWindow, envIds: st
   const running = versionAt(ledger, envId, side === "after" ? window.startMs + 1 : window.endMs - 1) ?? "v1.8.2";
   const replaced = versionAt(ledger, envId, window.startMs - 1);
   const regress = side === "after" && running === "v1.8.3";
-  const base = { kind: "table", unit: panel.unit ?? "", stepSeconds: 0, truncated: false, series: [] as PanelResult["series"] };
+  const base = { kind: "table", unit: panel.unit ?? "", stepSeconds: 0, truncated: false, series: [] as PanelResult["series"], ...NO_BROWSER_ROWS };
   const columns = panel.series.map((s) => s.label);
   const service = (name: string, rate: number, errorShare: number, p95: number) => {
     const requests = Math.round(rate * seconds);
@@ -435,6 +449,82 @@ export function fixtureComparePanel(panel: Panel, window: TimeWindow, envIds: st
   };
 }
 
+const NO_BROWSER_ROWS: Pick<PanelResult, "funnelSteps" | "issues" | "sessions"> = { funnelSteps: [], issues: [], sessions: [] };
+
+/**
+ * The browser kinds (C7) over the fixture app's `web` frontend: a checkout
+ * funnel that leaks most between cart and payment, issues from the cart and
+ * checkout pages (one regressed in the newest build), and sessions — some
+ * with errors, some with a replay.
+ */
+export function fixtureBrowserPanel(panel: Panel, window: TimeWindow, services: string[]): Pick<PanelResult, "funnelSteps" | "issues" | "sessions"> {
+  if (services.length && !services.includes("web")) return NO_BROWSER_ROWS;
+  const span = window.endMs - window.startMs;
+  const scale = Math.max(1, Math.round(span / 3_600_000));
+  if (panel.kind === "funnel") {
+    const steps = panel.funnel?.steps?.length ? panel.funnel.steps : ["view_product", "add_to_cart", "begin_checkout", "purchase"];
+    const keep = [1, 0.46, 0.31, 0.72, 0.8, 0.9, 0.95, 0.97, 0.98, 0.99];
+    let count = 1840 * scale;
+    const first = count;
+    let previous = count;
+    return {
+      ...NO_BROWSER_ROWS,
+      funnelSteps: steps.map((event, index) => {
+        count = Math.round(count * (index === 0 ? 1 : keep[index] ?? 0.9));
+        const step = { event, count, rateFromFirst: first ? count / first : 0, rateFromPrevious: index === 0 ? 1 : previous ? count / previous : 0 };
+        previous = count;
+        return step;
+      }),
+    };
+  }
+  if (panel.kind === "issues") {
+    const issue = (n: number, type: string, message: string, url: string, version: string, events: number, sessions: number, firstAgo: number) => ({
+      serviceName: "web",
+      stackHash: String(1_844_674_407_370_955_161n + BigInt(n)),
+      exceptionType: type,
+      message,
+      urlPath: url,
+      serviceVersion: version,
+      events: events * scale,
+      sessions: sessions * scale,
+      firstSeenMs: window.endMs - firstAgo,
+      lastSeenMs: window.endMs - 60_000 * n,
+      sampleTraceId: n === 1 ? FIXTURE_TRACE_ID : `${n}bf92f3577b34da6a3ce929d0e0e47${n}0`,
+      sampleSessionId: `sess-${n}a8c2f`,
+    });
+    return {
+      ...NO_BROWSER_ROWS,
+      issues: [
+        issue(1, "TypeError", "Cannot read properties of undefined (reading '<str>')", "/checkout/payment", VERSIONS[1], 212, 61, 40 * 60_000),
+        issue(2, "ChunkLoadError", "Loading chunk <n> failed", "/cart", VERSIONS[1], 74, 52, 3 * 3_600_000),
+        issue(3, "Error", "Request failed with status code <n>", "/orders", VERSIONS[0], 31, 9, 26 * 3_600_000),
+      ],
+    };
+  }
+  const session = (n: number, user: string, path: string, minutes: number, pages: number, errors: number, replay: boolean) => ({
+    sessionId: `sess-${n}a8c2f${n}d91e`,
+    serviceName: "web",
+    serviceVersion: VERSIONS[n % 2],
+    envId: "env-prod",
+    userId: user,
+    entryPath: path,
+    startMs: window.endMs - n * 7 * 60_000,
+    endMs: window.endMs - n * 7 * 60_000 + minutes * 60_000,
+    pageViews: pages,
+    interactions: pages * 6,
+    errors,
+    hasReplay: replay,
+  });
+  const all = [
+    session(1, "u_8812", "/checkout/payment", 6, 5, 2, true),
+    session(2, "", "/", 3, 3, 0, false),
+    session(3, "u_1093", "/cart", 11, 9, 1, true),
+    session(4, "u_5530", "/products/espresso-grinder", 2, 2, 0, false),
+    session(5, "", "/orders", 4, 4, 1, false),
+  ];
+  return { ...NO_BROWSER_ROWS, sessions: panel.hasError ? all.filter((s) => s.errors > 0) : all };
+}
+
 /**
  * What QueryPanel would answer for a panel over the fixture app: one value per
  * series intent, shaped by the panel's kind and group-by.
@@ -462,7 +552,11 @@ export function fixturePanel(
         : fixtureGroups(groupBy.map((key) => key.replace(/^(resource|metric|log|span)\.attr\./, "")), scope).map((group, i) =>
             Object.fromEntries(Object.entries(group).map(([k, v], j) => [groupBy[j] ?? k, v ?? String(i)]))
           );
-  const base = { kind: panel.kind, unit: panel.unit ?? "", stepSeconds: 120, truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"] };
+  const base = { kind: panel.kind, unit: panel.unit ?? "", stepSeconds: 120, truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"], ...NO_BROWSER_ROWS };
+
+  if (panel.kind === "funnel" || panel.kind === "issues" || panel.kind === "sessions") {
+    return { ...base, series: [], ...fixtureBrowserPanel(panel, window, services) };
+  }
 
   if (panel.kind === "table") {
     return {
@@ -473,7 +567,11 @@ export function fixturePanel(
     };
   }
   if (panel.kind === "number") {
-    const value = (intent: SeriesIntent, scale: number) => (panel.ratio ? 0.012 * scale : sample(intent, 40 * scale));
+    // A window that ended a while ago (a comparison's previous period) reads a
+    // little lower, so a change against it has something to say.
+    const earlier = Date.now() - window.endMs > 60_000 ? 0.88 : 1;
+    const value = (intent: SeriesIntent, scale: number) =>
+      panel.ratio ? 0.012 * scale : sample(intent, (intent.agg === "quantile" ? 1 : 40) * scale * earlier);
     const intents = panel.ratio ? [{ label: "ratio", agg: "count" }] : panel.series;
     return {
       ...base,
@@ -484,6 +582,7 @@ export function fixturePanel(
   }
   // Line: one series per (series × group); a ratio, one per group labelled "ratio".
   const intents: SeriesIntent[] = panel.ratio ? [{ label: "ratio", agg: "count" }] : panel.series;
+  const before = Date.now() - window.endMs > 60_000 ? 0.85 : 1;
   return {
     ...base,
     series: groups.flatMap((group, groupIndex) =>
@@ -492,7 +591,7 @@ export function fixturePanel(
         group,
         timestamps,
         values: timestamps.map((_, i) =>
-          panel.ratio ? Math.max(0, 0.01 + (i > 18 && i < 23 ? 0.04 : 0) * random()) : sample(intent, (1 + Math.sin(i / 4) * 0.3) / (groupIndex + 1))
+          panel.ratio ? Math.max(0, 0.01 + (i > 18 && i < 23 ? 0.04 : 0) * random()) : sample(intent, ((1 + Math.sin(i / 4) * 0.3) * before) / (groupIndex + 1))
         ),
         value: null,
       }))
@@ -695,14 +794,7 @@ export function fixtureWorkloadDetail(scope: Pick<ObsScope, "envIds">, workload:
   return { series, events, imageChanges, versionChanges, stepSeconds: Math.round((window.endMs - window.startMs) / 1000 / 40), truncated: false };
 }
 
-export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureOptions {
-  /**
-   * Where GetDashboards says its set came from. "release" serves forge's
-   * generated set (with the K4 workloads and releases dashboards) and one the
-   * project owns; the default "synthesized" is what an env with no recorded
-   * release bundle gets.
-   */
-  dashboards?: "release" | "synthesized";
+export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureOptions, DashboardFixtureOptions {
   /** Overrides on the usage fixture, to put the page in a given state. */
   usage?: Partial<ObservabilityUsage>;
   /** Every call fails with this (FailedPrecondition is the "not set up" org). */
@@ -800,11 +892,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         truncated: false,
       })),
     getObservabilityUsage: (orgId) => call("GetObservabilityUsage", { orgId }, () => fixtureUsage(Date.now(), options.usage)),
-    getDashboards: (req) =>
-      call("GetDashboards", req, () => {
-        const spec = options.dashboards === "release" ? fixtureReleaseDashboards() : fixtureDashboards();
-        return options.empty ? { ...spec, dashboards: [] } : spec;
-      }),
+    ...createDashboardFixture(options, call),
     ...createAlertingFixture(options, call),
     listReleases: delivery.listReleases,
     getDoraMetrics: delivery.getDoraMetrics,

@@ -30,6 +30,7 @@ import { Outlet, useLocation, useNavigate, useParams, useSearch } from "@tanstac
 
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useForgeRoster } from "@/hooks/forge-queries";
+import { useDashboardIndex } from "@/hooks/dashboard-queries";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
@@ -65,13 +66,16 @@ export function switchTarget(project: Project, page: ConsolePage): string {
   const name = (project.forge_project_name ?? "").trim();
   if (!name) return withSearch("/forge", { project: project.id });
   // An environment's page is about an environment the other project may not
-  // have, and a release's about a release it cannot have: land on the list.
+  // have, and a release's (or a dashboard's) about one it cannot have: land
+  // on the list.
   const same =
     page.kind === "environment"
       ? { kind: "environments" as const }
       : page.kind === "release"
         ? { kind: "releases" as const }
-        : page;
+        : page.kind === "dashboard"
+          ? { kind: "obs-view" as const, view: "dashboards" as const }
+          : page;
   return consolePath(name, same);
 }
 
@@ -160,6 +164,22 @@ export function ConsoleLayout() {
     return (alerts.data ?? []).filter((alert) => alert.state === "firing" && ids.has(alert.envId)).length;
   }, [alerts.data, roster.envs, env]);
 
+  // The caller's starred dashboards, nested under Dashboards — the same index
+  // (and cache entry) the Dashboards page reads for this scope.
+  const scopedEnvId = env === ENV_ALL ? undefined : roster.envs.find((candidate) => candidate.name === env)?.live?.id;
+  const dashboards = useDashboardIndex(org.orgId, forgeProject, scopedEnvId);
+  const starred = useMemo(
+    () =>
+      (dashboards.data?.dashboards ?? []).flatMap((d) =>
+        d.starred && d.ref.kind !== "template" ? [{ title: d.title, dashKind: d.ref.kind, key: d.ref.key }] : []
+      ),
+    [dashboards.data]
+  );
+  const dashboardTitle =
+    page.kind === "dashboard"
+      ? dashboards.data?.dashboards.find((d) => d.ref.kind === page.dashKind && d.ref.key === page.key)?.title
+      : undefined;
+
   const [collapsed, setCollapsed] = useState(() => readRail());
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -201,6 +221,8 @@ export function ConsoleLayout() {
       env={env}
       envs={navEnvs}
       alertsFiring={alertsFiring}
+      starred={starred}
+      dashboardTitle={dashboardTitle}
       scope={scope}
       onEnvChange={setEnv}
       user={user}

@@ -9,6 +9,9 @@
  *   /forge/p/:project/releases/:version       one release (its DORA strip is on Releases, D9)
  *   /forge/p/:project/observability           Observability overview
  *   /forge/p/:project/observability/:view     logs · traces · metrics · profiles · dashboards · alerts
+ *   /forge/p/:project/observability/dashboards/:kind/:key
+ *                                             one dashboard: a release one (`release/<id>`)
+ *                                             or a workspace one (`workspace/<slug>`)
  *   /forge/p/:project/environments            Environments (Configure)
  *   /forge/p/:project/environments/:env       one environment, as a configured object
  *   /forge/p/:project/secrets                 Secrets
@@ -35,6 +38,7 @@
 
 import { defaultStringifySearch } from "@tanstack/react-router";
 
+import { isDashboardPageKind, type DashboardPageKind } from "../Observability/Dashboards/dashboardModel";
 import { OBS_SEARCH_KEYS, type ObsSearch, type ObsView } from "../Observability/obsSearch";
 
 export const FORGE_ROOT = "/forge";
@@ -63,6 +67,8 @@ export type ConsolePage =
   | { kind: "release"; version: string }
   | { kind: "observability" }
   | { kind: "obs-view"; view: ObsNavView }
+  /** One dashboard. Its kind is in the path: a release dashboard and a workspace one may share a key. */
+  | { kind: "dashboard"; dashKind: DashboardPageKind; key: string }
   | { kind: "environments" }
   | { kind: "environment"; env: string }
   | { kind: "secrets" }
@@ -89,6 +95,8 @@ export function consolePath(project: string, page: ConsolePage): string {
       return `${base}/observability`;
     case "obs-view":
       return `${base}/observability/${page.view}`;
+    case "dashboard":
+      return `${base}/observability/dashboards/${page.dashKind}/${encodeURIComponent(page.key)}`;
     case "environments":
       return `${base}/environments`;
     case "environment":
@@ -123,7 +131,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
   const parts = pathname.split("/").filter(Boolean);
   if (parts[0] !== "forge" || parts[1] !== "p" || !parts[2]) return null;
   const project = safeDecode(parts[2]);
-  const [section, sub] = parts.slice(3);
+  const [section, sub, dashKind, dashKey, ...rest] = parts.slice(3);
   const page = ((): ConsolePage | null => {
     switch (section) {
       case undefined:
@@ -132,7 +140,10 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
         return sub ? { kind: "release", version: safeDecode(sub) } : { kind: "releases" };
       case "observability":
         if (!sub) return { kind: "observability" };
-        return isObsNavView(sub) ? { kind: "obs-view", view: sub } : null;
+        if (sub === "dashboards" && dashKind) {
+          return isDashboardPageKind(dashKind) && dashKey && rest.length === 0 ? { kind: "dashboard", dashKind, key: safeDecode(dashKey) } : null;
+        }
+        return isObsNavView(sub) && !dashKind ? { kind: "obs-view", view: sub } : null;
       case "environments":
         return sub ? { kind: "environment", env: safeDecode(sub) } : { kind: "environments" };
       case "secrets":
@@ -199,8 +210,9 @@ export function obsViewOfPage(page: ConsolePage): ObsView | null {
     case "settings":
       return "usage";
     case "obs-view":
-      // Metrics has no panel view yet: the page is a placeholder.
-      return page.view === "metrics" ? null : page.view;
+      // Metrics has no panel view yet (the page is a placeholder), and
+      // Dashboards are pages of their own (decision DB).
+      return page.view === "metrics" || page.view === "dashboards" ? null : page.view;
     default:
       return null;
   }

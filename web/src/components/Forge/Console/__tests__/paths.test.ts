@@ -31,6 +31,9 @@ const PAGES: ConsolePage[] = [
   { kind: "obs-view", view: "logs" },
   { kind: "obs-view", view: "metrics" },
   { kind: "obs-view", view: "alerts" },
+  { kind: "obs-view", view: "dashboards" },
+  { kind: "dashboard", dashKind: "release", key: "service-api" },
+  { kind: "dashboard", dashKind: "workspace", key: "checkout latency/2" },
   { kind: "environments" },
   { kind: "environment", env: "prod" },
   { kind: "environment", env: "pr 12/x" },
@@ -58,6 +61,15 @@ describe("console paths", () => {
     expect(consolePageOf("/forge/env/prod")).toBeNull();
     expect(consolePageOf("/forge/p/x/observability/workloads")).toBeNull();
     expect(consolePageOf("/forge/p/x/nope")).toBeNull();
+    // A dashboard is addressed by its kind: a template is no page, and nothing nests below a dashboard.
+    expect(consolePageOf("/forge/p/x/observability/dashboards/template/service-red")).toBeNull();
+    expect(consolePageOf("/forge/p/x/observability/dashboards/workspace")).toBeNull();
+    expect(consolePageOf("/forge/p/x/observability/dashboards/workspace/a/b")).toBeNull();
+    expect(consolePageOf("/forge/p/x/observability/logs/workspace/a")).toBeNull();
+  });
+
+  it("puts a dashboard under Observability › Dashboards, by kind and key", () => {
+    expect(consolePath("shop", { kind: "dashboard", dashKind: "workspace", key: "checkout-latency" })).toBe("/forge/p/shop/observability/dashboards/workspace/checkout-latency");
   });
 
   it("builds a query string the router parses back to the same search", () => {
@@ -76,9 +88,11 @@ describe("Observability views as pages (D9)", () => {
     expect(pageOfObsView("usage")).toEqual({ kind: "settings" });
   });
 
-  it("knows which view each page hosts, and that Metrics hosts none yet", () => {
+  it("knows which view each page hosts, and that Metrics and Dashboards host none", () => {
     expect(obsViewOfPage({ kind: "overview" })).toBe("workloads");
     expect(obsViewOfPage({ kind: "obs-view", view: "metrics" })).toBeNull();
+    expect(obsViewOfPage({ kind: "obs-view", view: "dashboards" })).toBeNull();
+    expect(obsViewOfPage({ kind: "dashboard", dashKind: "release", key: "x" })).toBeNull();
     expect(obsViewOfPage({ kind: "secrets" })).toBeNull();
   });
 

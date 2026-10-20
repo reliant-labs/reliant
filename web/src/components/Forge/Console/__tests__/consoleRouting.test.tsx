@@ -138,6 +138,19 @@ vi.mock("@/hooks/observability-queries", () => ({
   }),
 }));
 
+// The index the nav reads its starred dashboards from (the Dashboards page shares it).
+vi.mock("@/hooks/dashboard-queries", () => ({
+  useDashboardIndex: () => ({
+    data: {
+      canWrite: true,
+      dashboards: [
+        { ref: { kind: "workspace", projectId: "shop", key: "checkout-latency" }, title: "Checkout latency", starred: true },
+        { ref: { kind: "release", projectId: "shop", key: "workloads" }, title: "Workloads", starred: false },
+      ],
+    },
+  }),
+}));
+
 import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
 
 import { ConsoleLayout } from "../ConsoleLayout";
@@ -174,6 +187,8 @@ function renderAt(initialEntry: string) {
     release: probe("release"),
     observability: probe("observability"),
     observabilityView: probe("observability-view"),
+    dashboards: probe("dashboards"),
+    dashboard: probe("dashboard"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),
@@ -340,6 +355,17 @@ describe("the nav", () => {
     await user.click(screen.getByRole("link", { name: "e2e" }));
     await landsOn(router, "/forge/p/alpha/environments/e2e");
     expect(screen.getByTestId("page")).toHaveAttribute("data-page", "environment");
+  });
+
+  it("nests the starred dashboards under Dashboards, and names the open one in the breadcrumb", async () => {
+    renderAt("/forge/p/alpha/observability/dashboards/workspace/checkout-latency?env=prod");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "dashboard");
+    const starred = screen.getByRole("link", { name: "Checkout latency" });
+    expect(starred).toHaveAttribute("href", "/forge/p/alpha/observability/dashboards/workspace/checkout-latency?env=prod");
+    expect(starred).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "All dashboards" })).toHaveAttribute("href", "/forge/p/alpha/observability/dashboards?env=prod");
+    expect(screen.queryByRole("link", { name: "Workloads" })).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Checkout latency");
   });
 
   it("counts the alerts firing in scope on Alerts", async () => {

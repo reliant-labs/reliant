@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Observability area: Overview · Logs · Traces · Dashboards · Workloads ·
- * Profiles over one time window for one SCOPE, Alerts (what fires, the rules
+ * The Observability area: Overview · Logs · Traces · Workloads · Profiles
+ * over one time window for one SCOPE, Alerts (what fires, the rules
  * each environment declares, silences and receivers), Delivery (releases and
  * DORA, from the release ledger) and Usage (the org's allowance).
  *
@@ -50,7 +50,6 @@ import { cn } from "@/lib/utils";
 import { AlertNotifications } from "./AlertNotifications";
 import { AlertsView } from "./AlertsView";
 import { ObsChartMarkersProvider } from "./charts/UPlotChart";
-import { DashboardsView } from "./DashboardsView";
 import { compareParam, compareWindowOf, parseCompareParam } from "./deliveryScope";
 import { LogsView } from "./LogsView";
 import { filterParam, filterTokensOf, groupByOf, groupByParam, scopeFiltersOf } from "./obsFilters";
@@ -80,7 +79,7 @@ import { WorkloadsView } from "./WorkloadsView";
 export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 
 /** The views with time-series charts, where release markers are drawn and listed. */
-const MARKED_VIEWS: readonly ObsView[] = ["overview", "dashboards", "workloads"];
+const MARKED_VIEWS: readonly ObsView[] = ["overview", "workloads"];
 
 export interface ObservabilityPanelProps {
   place: ObsPlace;
@@ -139,7 +138,6 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
       severity: undefined,
       trace: undefined,
       span: undefined,
-      dashboard: undefined,
       live: undefined,
       errors: undefined,
       minDuration: undefined,
@@ -251,10 +249,9 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
 
       {marked && (
         <ReleaseStrip
-          key={search.dashboard ?? view}
+          key={view}
           releases={releases}
           rangeLabel={RANGE_LABELS[range].toLowerCase()}
-          defaultOpen={view === "dashboards" && /(^|\/)releases$/.test(search.dashboard ?? "")}
           onCompare={openCompare}
         />
       )}
@@ -327,18 +324,6 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
             spanId={search.span}
             groupBy={groupBy}
             filters={filterTokens}
-            navigate={navigate}
-          />
-        ) : view === "dashboards" ? (
-          <DashboardsView
-            scope={scope}
-            subject={subject}
-            range={range}
-            dashboardId={search.dashboard}
-            service={search.service}
-            groupBy={groupBy}
-            filterTokens={filterTokens}
-            edits={search.edit}
             navigate={navigate}
           />
         ) : view === "workloads" ? (

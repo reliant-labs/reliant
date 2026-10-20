@@ -37,8 +37,6 @@ import {
   type WorkloadEvent as WireWorkloadEvent,
   type PanelSchema,
   type LogRecord as WireLogRecord,
-  type Panel as WirePanel,
-  type PanelPredicate as WirePredicate,
   type Span as WireSpan,
   type TimePoint,
   type TraceRedSummary as WireRed,
@@ -49,7 +47,6 @@ import { getControlPlaneClient } from "../client";
 import type {
   AttributeFilter,
   AttributeOp,
-  DashboardSpec,
   GetWorkloadRequest,
   ListAttributeValuesRequest,
   ListAttributeValuesResult,
@@ -82,7 +79,6 @@ import type {
   Trace,
   TraceRed,
   TraceSummary,
-  Unit,
 } from "./types";
 
 function client() {
@@ -318,6 +314,8 @@ function panelInit(p: Panel): MessageInitShape<typeof PanelSchema> {
     where: (p.where ?? []).map(predicateInit),
     groupBy: p.groupBy ?? [],
     columns: p.columns ?? [],
+    funnel: p.funnel ? { steps: p.funnel.steps, window: p.funnel.window ?? "", by: p.funnel.by ?? "" } : undefined,
+    hasError: !!p.hasError,
     unit: p.unit ?? "",
     width: p.width ?? 0,
     height: p.height ?? 0,
@@ -328,7 +326,11 @@ function predicateInit(p: Predicate) {
   return { field: p.field, op: p.op, value: p.value ?? "", values: p.values ?? [] };
 }
 
-/** Runs one dashboard panel server-side (any line, number or table panel; search panels are not run here). */
+/**
+ * Runs one dashboard panel server-side: line, number and table panels over a
+ * signal, and the browser kinds (funnel, issues, sessions) over the tenant's
+ * browser tables. Search panels are not run here.
+ */
 export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
   const res = await client().queryPanel({
     scope: scope(req, req.window, req.services),
@@ -348,6 +350,40 @@ export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
       group: { ...s.group },
       ...pointsOf(s.points),
       value: Number.isFinite(s.value) ? s.value : null,
+    })),
+    funnelSteps: res.funnelSteps.map((step) => ({
+      event: step.event,
+      count: Number(step.count),
+      rateFromFirst: step.rateFromFirst,
+      rateFromPrevious: step.rateFromPrevious,
+    })),
+    issues: res.issues.map((issue) => ({
+      serviceName: issue.serviceName,
+      stackHash: issue.stackHash,
+      exceptionType: issue.exceptionType,
+      message: issue.message,
+      urlPath: issue.urlPath,
+      serviceVersion: issue.serviceVersion,
+      events: Number(issue.events),
+      sessions: Number(issue.sessions),
+      firstSeenMs: msOf(issue.firstSeen),
+      lastSeenMs: msOf(issue.lastSeen),
+      sampleTraceId: issue.sampleTraceId,
+      sampleSessionId: issue.sampleSessionId,
+    })),
+    sessions: res.sessions.map((session) => ({
+      sessionId: session.sessionId,
+      serviceName: session.serviceName,
+      serviceVersion: session.serviceVersion,
+      envId: session.envId,
+      userId: session.userId,
+      entryPath: session.entryPath,
+      startMs: msOf(session.start),
+      endMs: msOf(session.end),
+      pageViews: Number(session.pageViews),
+      interactions: Number(session.interactions),
+      errors: Number(session.errors),
+      hasReplay: session.hasReplay,
     })),
   };
 }
@@ -402,58 +438,6 @@ export async function getFlamegraph(req: GetFlamegraphRequest): Promise<Flamegra
     stackCount: res.stackCount,
     availableProfileTypes: [...res.availableProfileTypes],
     truncated: res.truncated,
-  };
-}
-
-// ── Dashboards ───────────────────────────────────────────────────────────────
-
-function mapPredicate(p: WirePredicate): Predicate {
-  return { field: p.field, op: p.op, value: p.value || undefined, values: p.values.length ? [...p.values] : undefined };
-}
-
-const UNITS: readonly Unit[] = ["", "count", "ms", "bytes", "percent", "s"];
-
-function mapPanel(p: WirePanel): Panel {
-  return {
-    id: p.id,
-    title: p.title,
-    description: p.description || undefined,
-    kind: p.kind,
-    signal: p.signal,
-    series: p.series.map((s) => ({
-      label: s.label,
-      agg: s.agg,
-      quantile: s.quantile || undefined,
-      field: s.field || undefined,
-      metricType: s.metricType || undefined,
-      where: s.where.map(mapPredicate),
-    })),
-    ratio: p.ratio,
-    where: p.where.map(mapPredicate),
-    groupBy: [...p.groupBy],
-    columns: [...p.columns],
-    unit: (UNITS as readonly string[]).includes(p.unit) ? (p.unit as Unit) : "",
-    width: p.width,
-    height: p.height,
-  };
-}
-
-export async function getDashboards(req: ObsScope & { window: TimeWindow }): Promise<DashboardSpec> {
-  const res = await client().getDashboards({ scope: scope(req, req.window) });
-  const spec = res.spec;
-  return {
-    version: spec?.version ?? "",
-    project: spec?.project ?? "",
-    source: res.source,
-    dashboards: (spec?.dashboards ?? []).map((d) => ({
-      id: d.id,
-      title: d.title,
-      description: d.description || undefined,
-      filters: d.filters.map((f) => ({ id: f.id, label: f.label, field: f.field, signal: f.signal || undefined })),
-      annotations: d.annotations.map((a) => ({ source: a.source, label: a.label || undefined })),
-      panels: d.panels.map(mapPanel),
-      source: d.source === "gen" || d.source === "user" ? d.source : undefined,
-    })),
   };
 }
 

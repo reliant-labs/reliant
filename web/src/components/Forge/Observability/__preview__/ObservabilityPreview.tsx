@@ -63,8 +63,6 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "alerting-not-configured", label: "alerting: not configured", options: { alerting: "not-configured" } },
   { id: "alerting-viewer", label: "alerting: member, not admin", options: { alerting: "viewer" } },
   { id: "alerting-quiet", label: "alerting: nothing firing", options: { alerting: "quiet" } },
-  // Dashboards (view=dashboards): a recorded release bundle, with and without the release ledger.
-  { id: "dashboards-release", label: "dashboards: from the release", options: { dashboards: "release" } },
   // Release markers: the ledger's answers. (DORA lives on the Releases page: /forge-releases-preview.)
   { id: "delivery-empty", label: "releases: nothing promoted", options: { delivery: "empty" } },
   { id: "delivery-not-member", label: "releases: not a member", options: { delivery: "not-member" } },

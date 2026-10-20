@@ -16,6 +16,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import { getWalletOverview } from "../reliantAI";
 import * as alerting from "./alertingApi";
 import * as rpc from "./api";
+import * as dashboards from "./dashboardsApi";
 import * as delivery from "./deliveryApi";
 
 export interface ObservabilityApi {
@@ -27,7 +28,6 @@ export interface ObservabilityApi {
   queryPanel: typeof rpc.queryPanel;
   getServiceOverview: typeof rpc.getServiceOverview;
   getFlamegraph: typeof rpc.getFlamegraph;
-  getDashboards: typeof rpc.getDashboards;
   getObservabilityUsage: typeof rpc.getObservabilityUsage;
   listAttributeValues: typeof rpc.listAttributeValues;
   listWorkloads: typeof rpc.listWorkloads;
@@ -48,6 +48,19 @@ export interface ObservabilityApi {
   // Delivery (DeliveryInsightsService, contract K5): the release ledger and DORA.
   listReleases: typeof delivery.listReleases;
   getDoraMetrics: typeof delivery.getDoraMetrics;
+  // Native dashboards (DashboardService, decision DB): reads need membership,
+  // authoring the admin role.
+  listDashboards: typeof dashboards.listDashboards;
+  listDashboardTemplates: typeof dashboards.listDashboardTemplates;
+  getDashboard: typeof dashboards.getDashboard;
+  saveDashboard: typeof dashboards.saveDashboard;
+  saveDashboardAsCopy: typeof dashboards.saveDashboardAsCopy;
+  listDashboardVersions: typeof dashboards.listDashboardVersions;
+  restoreDashboardVersion: typeof dashboards.restoreDashboardVersion;
+  archiveDashboard: typeof dashboards.archiveDashboard;
+  starDashboard: typeof dashboards.starDashboard;
+  recordDashboardView: typeof dashboards.recordDashboardView;
+  promoteDashboardToCode: typeof dashboards.promoteDashboardToCode;
 }
 
 export const controlPlaneObservabilityApi: ObservabilityApi = {
@@ -59,7 +72,6 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   queryPanel: rpc.queryPanel,
   getServiceOverview: rpc.getServiceOverview,
   getFlamegraph: rpc.getFlamegraph,
-  getDashboards: rpc.getDashboards,
   getObservabilityUsage: rpc.getObservabilityUsage,
   listAttributeValues: rpc.listAttributeValues,
   listWorkloads: rpc.listWorkloads,
@@ -78,6 +90,17 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   markNotificationsRead: alerting.markNotificationsRead,
   listReleases: delivery.listReleases,
   getDoraMetrics: delivery.getDoraMetrics,
+  listDashboards: dashboards.listDashboards,
+  listDashboardTemplates: dashboards.listDashboardTemplates,
+  getDashboard: dashboards.getDashboard,
+  saveDashboard: dashboards.saveDashboard,
+  saveDashboardAsCopy: dashboards.saveDashboardAsCopy,
+  listDashboardVersions: dashboards.listDashboardVersions,
+  restoreDashboardVersion: dashboards.restoreDashboardVersion,
+  archiveDashboard: dashboards.archiveDashboard,
+  starDashboard: dashboards.starDashboard,
+  recordDashboardView: dashboards.recordDashboardView,
+  promoteDashboardToCode: dashboards.promoteDashboardToCode,
 };
 
 const ObservabilityApiContext = createContext<ObservabilityApi>(controlPlaneObservabilityApi);

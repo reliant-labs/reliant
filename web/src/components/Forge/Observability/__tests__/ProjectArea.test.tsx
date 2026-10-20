@@ -2,8 +2,8 @@
 
 /**
  * The project-level Observability area (owner decisions 1 and 2): environment
- * as a multi-select filter and a group-by dimension, attribute filters with
- * autocomplete, in-place dashboard edits kept in the URL, and Save as code.
+ * as a multi-select filter and a group-by dimension, and attribute filters
+ * with autocomplete.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -122,117 +122,5 @@ describe("attribute filters", () => {
     await user.type(screen.getByTestId("obs-filter-value-input"), "failed");
     await user.click(screen.getByTestId("obs-filter-apply"));
     expect(harness.current().f).toEqual(["orders.status!:failed"]);
-  });
-});
-
-describe("dashboards, semi-dynamic", () => {
-  it("re-runs every panel with the group-by and filters, and edits a panel in place into the URL", async () => {
-    const user = userEvent.setup();
-    const onCall = vi.fn();
-    const harness = renderPanel(
-      createFixtureApi({ onCall }),
-      { view: "dashboards", groupBy: ["deployment.environment.name"], f: ["service.version:v1.8.3"] },
-      PROJECT_PLACE
-    );
-    const rate = await screen.findByTestId("obs-panel-request-rate");
-    await waitFor(() => expect(rate.querySelector("figcaption")).toHaveTextContent(/dev: latest .*staging: latest .*prod: latest/));
-    const req = callsOf(onCall, "QueryPanel").find((r) => r.panel.id === "request-rate");
-    expect(req).toMatchObject({ groupBy: ["deployment.environment.name"], filters: [{ key: "service.version", op: "eq", value: "v1.8.3" }] });
-    expect(screen.getByTestId("obs-dashboard-changed")).toHaveTextContent("1 filter · grouped by Environment");
-
-    await user.click(screen.getByTestId("obs-panel-edit-request-rate"));
-    const editor = await screen.findByTestId("obs-panel-editor");
-    await user.clear(within(editor).getByTestId("obs-editor-title"));
-    await user.type(within(editor).getByTestId("obs-editor-title"), "Requests by environment");
-    await user.selectOptions(within(editor).getByTestId("obs-editor-kind"), "table");
-    await user.click(within(editor).getByTestId("obs-editor-apply"));
-    expect(harness.current().edit?.["overview/request-rate"]).toMatchObject({ title: "Requests by environment", kind: "table" });
-    const edited = await screen.findByTestId("obs-panel-request-rate");
-    expect(edited).toHaveAttribute("data-edited", "true");
-    expect(edited).toHaveAttribute("data-kind", "table");
-    expect(screen.getByTestId("obs-dashboard-changed")).toHaveTextContent("1 panel edited");
-
-    // Reset puts the dashboard's own panel back; hide removes one.
-    await user.click(screen.getByTestId("obs-panel-reset-request-rate"));
-    expect(harness.current().edit).toBeUndefined();
-    await user.click(screen.getByTestId("obs-panel-hide-p99"));
-    expect(harness.current().edit).toEqual({ "overview/p99": null });
-    await waitFor(() => expect(screen.queryByTestId("obs-panel-p99")).not.toBeInTheDocument());
-    await user.click(screen.getByTestId("obs-discard-edits"));
-    expect(harness.current().edit).toBeUndefined();
-  });
-
-  it("refuses an edit that is not a panel, and says why", async () => {
-    const user = userEvent.setup();
-    const harness = renderPanel(createFixtureApi(), { view: "dashboards" }, PROJECT_PLACE);
-    await user.click(await screen.findByTestId("obs-panel-edit-p95"));
-    const editor = await screen.findByTestId("obs-panel-editor");
-    await user.selectOptions(within(editor).getByTestId("obs-editor-agg"), "sum");
-    await user.clear(within(editor).getByTestId("obs-editor-field"));
-    await user.click(within(editor).getByTestId("obs-editor-apply"));
-    expect(within(editor).getByTestId("obs-editor-problems")).toHaveTextContent("sum needs a field");
-    expect(harness.current().edit).toBeUndefined();
-  });
-
-  it("adds a panel, and edits one as JSON", async () => {
-    const user = userEvent.setup();
-    const harness = renderPanel(createFixtureApi(), { view: "dashboards" }, PROJECT_PLACE);
-    await user.click(await screen.findByTestId("obs-add-panel"));
-    let editor = await screen.findByTestId("obs-panel-editor");
-    await user.click(within(editor).getByTestId("obs-editor-apply"));
-    expect(harness.current().edit?.["overview/custom-1"]).toMatchObject({ kind: "line", series: [{ agg: "count" }] });
-    expect(await screen.findByTestId("obs-panel-custom-1")).toHaveTextContent("Added");
-
-    await user.click(screen.getByTestId("obs-panel-edit-requests"));
-    editor = await screen.findByTestId("obs-panel-editor");
-    await user.click(within(editor).getByTestId("obs-editor-mode-json"));
-    const json = within(editor).getByTestId("obs-editor-json") as HTMLTextAreaElement;
-    const panel = JSON.parse(json.value);
-    await user.clear(json);
-    await user.click(json);
-    await user.paste(JSON.stringify({ ...panel, title: "All requests", id: "renamed" }));
-    await user.click(within(editor).getByTestId("obs-editor-apply"));
-    // The id is the panel's own: JSON cannot move an edit to another panel.
-    expect(harness.current().edit?.["overview/requests"]).toMatchObject({ title: "All requests", id: "requests" });
-  });
-
-  it("saves the dashboard as code: the obsdash file, its path, and what is and is not baked in", async () => {
-    const user = userEvent.setup();
-    renderPanel(
-      createFixtureApi(),
-      {
-        view: "dashboards",
-        envs: ["prod"],
-        groupBy: ["service.version"],
-        f: ["status:error"],
-        edit: { "overview/requests": { id: "requests", title: "All requests", kind: "number", signal: "traces", series: [{ label: "requests", agg: "count" }] } },
-      },
-      PROJECT_PLACE
-    );
-    await user.click(await screen.findByTestId("obs-save-as-code-open"));
-    const dialog = await screen.findByTestId("obs-save-as-code");
-    expect(within(dialog).getByTestId("obs-save-path")).toHaveTextContent("deploy/observability/dashboards/shop-overview.json");
-    expect(dialog).toHaveTextContent("replaces the dashboard forge generates");
-    expect(dialog).toHaveTextContent("Not saved: the environments, service and time range");
-    const doc = JSON.parse(within(dialog).getByTestId("obs-save-json").textContent ?? "");
-    // One dashboard file, forge's dashboardFile: the version, then the dashboard's own fields.
-    expect(Object.keys(doc)[0]).toBe("version");
-    expect(doc).toMatchObject({ version: "forge.dashboards/v1", id: "shop-overview" });
-    expect(doc).not.toHaveProperty("dashboards");
-    expect(doc).not.toHaveProperty("source");
-    const dashboard = doc;
-    expect(dashboard.panels.find((p: { id: string }) => p.id === "requests")).toMatchObject({
-      title: "All requests",
-      where: [{ field: "span.status", op: "eq", value: "error" }],
-      groupBy: ["resource.attr.service.version"],
-    });
-    // The environment selection is a viewing choice, never a predicate.
-    expect(JSON.stringify(doc)).not.toContain("env-prod");
-
-    await user.clear(within(dialog).getByTestId("obs-save-name"));
-    await user.type(within(dialog).getByTestId("obs-save-name"), "Errors by Version");
-    expect(within(dialog).getByTestId("obs-save-path")).toHaveTextContent("deploy/observability/dashboards/errors-by-version.json");
-    expect(dialog).not.toHaveTextContent("replaces the dashboard forge generates");
-    expect(within(dialog).getByTestId("obs-save-download")).toBeEnabled();
   });
 });

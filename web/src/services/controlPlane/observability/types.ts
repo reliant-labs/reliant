@@ -231,8 +231,59 @@ export interface PanelResult {
   columns: string[];
   rows: { group: Record<string, string>; values: (number | null)[] }[];
   stepSeconds: number;
-  /** A cap cut the result (50 series, 200 rows). */
+  /** A cap cut the result (50 series, 200 rows, 50 issues or sessions). */
   truncated: boolean;
+  /** funnel panels: one entry per step, in the funnel's order. */
+  funnelSteps: FunnelStepResult[];
+  /** issues panels: errors grouped by distinct stack, most events first. */
+  issues: PanelIssue[];
+  /** sessions panels: browser sessions that started in the window, newest first. */
+  sessions: PanelSession[];
+}
+
+/** One step of a funnel panel: how many journeys reached it (and every step before it). */
+export interface FunnelStepResult {
+  event: string;
+  count: number;
+  /** count / the first step's count; 0 when the first step is 0. */
+  rateFromFirst: number;
+  /** count / the previous step's count (the first step: 1 when it has any entrant). */
+  rateFromPrevious: number;
+}
+
+/** One error issue of an issues panel: one distinct stack of one service. */
+export interface PanelIssue {
+  serviceName: string;
+  /** A UInt64 as decimal text, so it is never rounded. */
+  stackHash: string;
+  exceptionType: string;
+  /** The most recent event's message, volatile parts masked. */
+  message: string;
+  urlPath: string;
+  serviceVersion: string;
+  events: number;
+  sessions: number;
+  firstSeenMs: number;
+  lastSeenMs: number;
+  sampleTraceId: string;
+  sampleSessionId: string;
+}
+
+/** One browser session of a sessions panel. */
+export interface PanelSession {
+  sessionId: string;
+  serviceName: string;
+  serviceVersion: string;
+  envId: string;
+  /** Empty when anonymous. */
+  userId: string;
+  entryPath: string;
+  startMs: number;
+  endMs: number;
+  pageViews: number;
+  interactions: number;
+  errors: number;
+  hasReplay: boolean;
 }
 
 // ── Service overview ─────────────────────────────────────────────────────────
@@ -286,12 +337,26 @@ export interface SeriesIntent {
   field?: string;
   metricType?: string;
   where?: Predicate[];
+  /** Grades the series' values good / needs improvement / poor (web vitals). */
+  thresholds?: { good: number; poor: number };
 }
 
 /** traces | metrics | logs */
 export type Signal = string;
-/** number | line | table | search */
+/** number | line | table | search | funnel | issues | sessions */
 export type PanelKind = string;
+
+/**
+ * What a funnel panel draws (forge.Funnel): product event names in order,
+ * within a window, counted per session or per user.
+ */
+export interface PanelFunnel {
+  steps: string[];
+  /** "1h", "7d"… Empty is 1h. */
+  window?: string;
+  /** "session" (default) or "user". */
+  by?: string;
+}
 export type Unit = "" | "count" | "ms" | "bytes" | "percent" | "s";
 
 export interface Panel {
@@ -305,6 +370,10 @@ export interface Panel {
   where?: Predicate[];
   groupBy?: string[];
   columns?: string[];
+  /** funnel panels only. */
+  funnel?: PanelFunnel;
+  /** sessions panels only: keep the sessions that hit an error. */
+  hasError?: boolean;
   unit?: Unit;
   /** Grid columns out of 24. */
   width?: number;
@@ -337,23 +406,6 @@ export interface Dashboard {
   /** Declared marker series; empty when the dashboard declares none. */
   annotations?: DashboardAnnotation[];
   panels: Panel[];
-  /**
-   * Who authored it, for a dashboard served from a release: `gen` (forge
-   * generated it) or `user` (the project's own file). Absent when synthesized.
-   */
-  source?: "gen" | "user";
-}
-
-export interface DashboardSpec {
-  version: string;
-  project: string;
-  dashboards: Dashboard[];
-  /**
-   * "release": the dashboards the environments in scope are running, carried by
-   * their current release (contract K4). "synthesized": built from the services
-   * seen in the data, because no environment in scope has a recorded set.
-   */
-  source: string;
 }
 
 // ── Profiles ─────────────────────────────────────────────────────────────────

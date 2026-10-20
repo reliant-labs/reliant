@@ -42,6 +42,23 @@ export interface ChartSeries {
   label: string;
   values: (number | null)[];
   tone?: ChartTone;
+  /**
+   * Drawn dashed and unfilled: a comparison (the previous period, or the
+   * window before the current release), laid over the series it compares.
+   */
+  dashed?: boolean;
+}
+
+/**
+ * A stretch of the time axis to shade: an alert firing. Drawn as a tinted
+ * band behind the series with its label at the top, and named in the caption.
+ */
+export interface ChartBand {
+  /** Epoch seconds. */
+  startSec: number;
+  endSec: number;
+  label: string;
+  tone?: ChartTone;
 }
 
 /** The categorical order a multi-series chart cycles through. */
@@ -90,18 +107,26 @@ export interface UPlotChartProps {
   /** A sparkline: no axes, legend or cursor. */
   compact?: boolean;
   className?: string;
-  /** Moments to mark. Absent: the area's (ObsChartMarkersProvider). Sparklines draw none. */
+  /**
+   * Moments to mark. Absent: the area's (ObsChartMarkersProvider). A sparkline
+   * draws only markers handed to it here, without labels.
+   */
   markers?: readonly ChartMarker[];
+  /** Stretches to shade (alerts firing). Sparklines draw them too, without labels. */
+  bands?: readonly ChartBand[];
 }
 
-export function UPlotChart({ timestamps, series, unit, height, label, compact = false, className, markers: own }: UPlotChartProps) {
+const NO_BANDS: readonly ChartBand[] = [];
+
+export function UPlotChart({ timestamps, series, unit, height, label, compact = false, className, markers: own, bands = NO_BANDS }: UPlotChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const themeVersion = useThemeVersion();
   const inherited = useContext(ObsChartMarkersContext);
   const markers = useMemo(
-    () => (compact ? [] : visibleMarkers(own ?? inherited, timestamps)),
+    () => (compact ? (own ? visibleMarkers(own, timestamps) : []) : visibleMarkers(own ?? inherited, timestamps)),
     [compact, own, inherited, timestamps]
   );
+  const shown = useMemo(() => visibleBands(bands, timestamps), [bands, timestamps]);
 
   // uPlot wants columns: x, then one array per series.
   const data = useMemo<uPlot.AlignedData>(
@@ -134,7 +159,15 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
           ],
         },
       },
-      hooks: markers.length ? { draw: [(u: uPlot) => drawMarkers(u, markers, palette)] } : undefined,
+      hooks:
+        markers.length || shown.length
+          ? {
+              // Bands go under the series (drawAxes runs before the series
+              // paint); markers over them.
+              drawAxes: shown.length ? [(u: uPlot) => drawBands(u, shown, palette, compact)] : [],
+              draw: markers.length ? [(u: uPlot) => drawMarkers(u, markers, palette, compact)] : [],
+            }
+          : undefined,
       axes: compact
         ? [{ show: false }, { show: false }]
         : [
@@ -151,11 +184,13 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
         {},
         ...series.map((s, index) => {
           const stroke = palette.tones[tones[index]];
+          const solid = series.filter((candidate) => !candidate.dashed).length;
           return {
             label: s.label,
-            stroke,
+            stroke: s.dashed ? withAlpha(stroke, 0.7) : stroke,
             width: compact ? 1.25 : 1.5,
-            fill: compact || series.length === 1 ? withAlpha(stroke, 0.12) : undefined,
+            dash: s.dashed ? [4, 3] : undefined,
+            fill: !s.dashed && (compact || solid === 1) ? withAlpha(stroke, 0.12) : undefined,
             points: { show: false },
             spanGaps: false,
             value: (_u: uPlot, value: number | null) => formatValue(value, unit),
@@ -184,9 +219,9 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
       observer?.disconnect();
       chart?.destroy();
     };
-  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers]);
+  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown]);
 
-  const caption = [describeSeries(series, unit), describeMarkers(markers)].filter(Boolean).join(" ");
+  const caption = [describeSeries(series, unit), describeMarkers(markers), describeBands(shown)].filter(Boolean).join(" ");
 
   return (
     <figure className={className} aria-label={label} role="group">
@@ -230,7 +265,49 @@ export function describeMarkers(markers: readonly ChartMarker[]): string {
   return `Marked: ${markers.map((m) => `${m.description ?? m.label} at ${at(m.timeSec)}`).join("; ")}.`;
 }
 
-function drawMarkers(u: uPlot, markers: readonly ChartMarker[], palette: Palette) {
+/** The bands overlapping the chart's span, clipped to it, oldest first. */
+export function visibleBands(bands: readonly ChartBand[], timestamps: number[]): ChartBand[] {
+  if (timestamps.length === 0 || bands.length === 0) return [];
+  const first = timestamps[0];
+  const step = timestamps.length > 1 ? timestamps[1] - timestamps[0] : 0;
+  const last = timestamps[timestamps.length - 1] + step;
+  return bands
+    .filter((band) => band.endSec >= first && band.startSec <= last)
+    .map((band) => ({ ...band, startSec: Math.max(band.startSec, first), endSec: Math.min(band.endSec, last) }))
+    .sort((a, b) => a.startSec - b.startSec);
+}
+
+/** "Shaded: HighErrorRate firing from 14:05 to 14:16." */
+export function describeBands(bands: readonly ChartBand[]): string {
+  if (bands.length === 0) return "";
+  const at = (sec: number) => new Date(sec * 1000).toLocaleString(undefined, { hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" });
+  return `Shaded: ${bands.map((b) => `${b.label} from ${at(b.startSec)} to ${at(b.endSec)}`).join("; ")}.`;
+}
+
+function drawBands(u: uPlot, bands: readonly ChartBand[], palette: Palette, compact: boolean) {
+  const { ctx } = u;
+  const { top, height } = u.bbox;
+  const ratio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+  ctx.save();
+  ctx.font = `${11 * ratio}px ui-sans-serif, system-ui, sans-serif`;
+  ctx.textBaseline = "bottom";
+  for (const band of bands) {
+    const x0 = u.valToPos(band.startSec, "x", true);
+    const x1 = Math.max(u.valToPos(band.endSec, "x", true), x0 + 2 * ratio);
+    const color = palette.tones[band.tone ?? "destructive"];
+    ctx.fillStyle = withAlpha(color, 0.1);
+    ctx.fillRect(x0, top, x1 - x0, height);
+    ctx.fillStyle = withAlpha(color, 0.55);
+    ctx.fillRect(x0, top, x1 - x0, 2 * ratio);
+    if (!compact) {
+      ctx.fillStyle = color;
+      ctx.fillText(band.label, x0 + 3 * ratio, top + height - 2 * ratio);
+    }
+  }
+  ctx.restore();
+}
+
+function drawMarkers(u: uPlot, markers: readonly ChartMarker[], palette: Palette, compact = false) {
   const { ctx } = u;
   const { top, height } = u.bbox;
   const ratio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
@@ -248,7 +325,7 @@ function drawMarkers(u: uPlot, markers: readonly ChartMarker[], palette: Palette
     ctx.moveTo(x, top);
     ctx.lineTo(x, top + height);
     ctx.stroke();
-    ctx.fillText(marker.label, x + 3 * ratio, top + 2 * ratio);
+    if (!compact) ctx.fillText(marker.label, x + 3 * ratio, top + 2 * ratio);
   }
   ctx.restore();
 }

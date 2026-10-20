@@ -7,7 +7,7 @@
  *
  * Clicking a service opens it in place: the same trends drawn full size, its
  * latency percentiles and error-log count, and the ways out to its logs,
- * traces and dashboard. It needs no second request; the overview already
+ * traces. It needs no second request; the overview already
  * carries each service's trends.
  *
  * With a group-by, every service has one row per group — `api` in prod and
@@ -15,7 +15,7 @@
  * the groups against each other: one line each, on the same axes.
  */
 
-import { ArrowLeft, FileText, GitBranch, LayoutDashboard } from "lucide-react";
+import { ArrowLeft, FileText, GitBranch } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import { Button } from "@/components/ui/Button";
@@ -266,14 +266,6 @@ function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; gro
             leftIcon={<GitBranch className="h-3.5 w-3.5" />}
           >
             Traces
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate({ view: "dashboards", service: health.name })}
-            leftIcon={<LayoutDashboard className="h-3.5 w-3.5" />}
-          >
-            Dashboard
           </Button>
         </div>
       </div>

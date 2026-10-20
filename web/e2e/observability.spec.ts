@@ -80,23 +80,34 @@ test.describe('observability console', () => {
     expect(errors).toEqual([]);
   });
 
-  test('dashboards draw forge per-rpc RED panels', async ({ page }) => {
-    await openHarness(page, '?view=dashboards');
-    await expect(page.getByTestId('obs-panel-requests').getByTestId('obs-panel-number')).toBeVisible();
-    await expect(page.getByTestId('obs-panel-sessions').getByTestId('obs-panel-unsupported')).toContainText('count_distinct');
-    await expect(page.getByTestId('obs-panel-red-by-service').getByRole('table')).toContainText('worker');
+  test('native dashboards: the home, the index, a dashboard with compare and drill-down', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+
+    await page.goto('/forge-dashboards-preview');
+    const home = page.getByTestId('observability-home');
+    const present = await home.waitFor({ timeout: 20_000 }).then(() => true, () => false);
+    test.skip(!present, 'the fixture harness is a dev-build-only route');
+    await expect(page.getByTestId('observability-strip')).toContainText('Requests');
+    await expect(page.getByTestId('observability-services')).toContainText('Crash-looping');
+    await shot(page, 'observability-home');
+
+    await page.getByRole('link', { name: 'Your dashboards' }).click();
+    await expect(page.getByTestId('dashboards-starred')).toContainText('Checkout latency');
     await shot(page, 'dashboards');
 
-    await page.getByTestId('obs-dashboard-picker').selectOption('service-api');
-    await expect(page.getByTestId('obs-panel-red-by-rpc').getByRole('table')).toContainText('orders.v1.OrdersService/CreateOrder');
-    // Per-rpc latency over time is a real line now (QueryPanel), drawn on a canvas.
-    const latency = page.getByTestId('obs-panel-rpc-CreateOrder-latency');
-    await expect(latency.locator('canvas').first()).toBeVisible();
-    await expect(latency.locator('figcaption')).toContainText('p95: latest');
-    await shot(page, 'dashboards-service');
+    await page.getByTestId('dashboards-starred').getByRole('link', { name: 'Checkout latency' }).click();
+    await expect(page.getByTestId('dashboard-header')).toContainText('v4');
+    await page.getByTestId('dashboard-compare').getByRole('button', { name: 'Previous period' }).click();
+    await expect(page.getByTestId('obs-panel-change').first()).toContainText('vs previous period');
+    await page.getByTestId('dashboard-panel-latency-by-route').getByTestId('obs-panel-legend').getByRole('button').first().click();
+    await expect(page.getByTestId('dashboard-drill')).toContainText('View traces');
+    await shot(page, 'dashboard');
+
+    expect(errors).toEqual([]);
   });
 
-  test('the project area compares environments, edits a dashboard in place and saves it as code', async ({ page }) => {
+  test('the project area compares environments and filters by attribute', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
 
@@ -115,19 +126,6 @@ test.describe('observability console', () => {
     await page.getByTestId('obs-key-service.version').click();
     await page.getByTestId('obs-value-v1.8.3').click();
     await expect(page.getByTestId('obs-filter-chip')).toContainText('v1.8.3');
-
-    // Dashboards: grouped series, an in-place edit, then Save as code.
-    await page.getByTestId('obs-view-dashboards').click();
-    await page.getByTestId('obs-panel-edit-request-rate').click();
-    await page.getByTestId('obs-editor-title').fill('Requests by environment');
-    await page.getByTestId('obs-editor-apply').click();
-    await expect(page.getByTestId('obs-panel-request-rate')).toHaveAttribute('data-edited', 'true');
-    await expect(page.getByTestId('obs-dashboard-changed')).toContainText('1 panel edited');
-    await page.getByTestId('obs-save-as-code-open').click();
-    await expect(page.getByTestId('obs-save-path')).toHaveText('deploy/observability/dashboards/shop-overview.json');
-    await expect(page.getByTestId('obs-save-json')).toContainText('"version": "forge.dashboards/v1"');
-    await expect(page.getByTestId('obs-save-json')).toContainText('Requests by environment');
-    await page.keyboard.press('Escape');
 
     // Workloads: customer metadata, and one workload across environments.
     await page.getByTestId('obs-view-workloads').click();

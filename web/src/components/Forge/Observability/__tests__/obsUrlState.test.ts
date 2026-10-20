@@ -11,8 +11,12 @@
 import { describe, expect, it } from "vitest";
 import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-router";
 
-import { forgeConsoleEnvSearchSchema, forgeObservabilitySearchSchema } from "@/routeSchemas";
-import type { Panel } from "@/services/controlPlane/observability/types";
+import {
+  forgeConsoleDashboardSearchSchema,
+  forgeConsoleDashboardsSearchSchema,
+  forgeConsoleEnvSearchSchema,
+  forgeObservabilitySearchSchema,
+} from "@/routeSchemas";
 
 import { MAX_FILTERS, MAX_GROUP_BY, MAX_IN_VALUES } from "../attributes";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../__fixtures__/fixtureApi";
@@ -36,19 +40,6 @@ function throughTheUrl(search: Record<string, unknown>, schema = forgeObservabil
   const url = defaultStringifySearch(search);
   return { url, parsed: schema.parse(defaultParseSearch(url)) };
 }
-
-const PANEL: Panel = {
-  id: "request-rate",
-  title: "Requests by environment",
-  kind: "line",
-  signal: "traces",
-  series: [{ label: "requests", agg: "count", where: [{ field: "span.status", op: "eq", value: "error" }] }],
-  where: [{ field: "span.name", op: "match", value: "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$" }],
-  groupBy: ["service.name"],
-  unit: "count",
-  width: 12,
-  height: 7,
-};
 
 describe("filter tokens", () => {
   it.each<[string, FilterToken]>([
@@ -132,15 +123,13 @@ describe("environment is a filter", () => {
 });
 
 describe("the URL round trip", () => {
-  it("brings every ad-hoc choice back as it was written: envs, filters, group-by, panel edits", () => {
+  it("brings every ad-hoc choice back as it was written: envs, filters, group-by", () => {
     const search: ObsSearch = {
-      view: "dashboards",
+      view: "traces",
       range: "6h",
-      dashboard: "overview",
       envs: ["prod", "staging"],
       f: ["service.version:v1.8.3", "http.route~orders", "k8s.container.name:*", "server.address:db:5432"],
       groupBy: ["deployment.environment.name", "service.version"],
-      edit: { "overview/request-rate": PANEL, "overview/errors": null },
     };
     const { parsed } = throughTheUrl({ project: "p-1", ...search });
     expect(parsed).toEqual({ project: "p-1", ...search });
@@ -157,7 +146,6 @@ describe("the URL round trip", () => {
       view: "heatmaps",
       range: "90d",
       groupBy: "not-a-list",
-      edit: { "overview/x": { title: "missing everything else" } },
       envs: ["prod"],
     });
     expect(parsed).toEqual({ envs: ["prod"] });
@@ -171,7 +159,7 @@ describe("the URL round trip", () => {
   it("lists every key the area owns, so leaving the tab clears them all", () => {
     expect([...OBS_SEARCH_KEYS].sort()).toEqual(
       [
-        "alerts", "cmpWindow", "compare", "container", "dashboard", "edit", "envs", "errors", "f", "groupBy",
+        "alerts", "cmpWindow", "compare", "container", "envs", "errors", "f", "groupBy",
         "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view", "workload",
       ].sort()
     );
@@ -181,13 +169,38 @@ describe("the URL round trip", () => {
     const { parsed } = throughTheUrl({ view: "overview", compare: "env-prod~1760000000000~promo-031", cmpWindow: "1h" });
     expect(parsed).toMatchObject({ view: "overview", compare: "env-prod~1760000000000~promo-031", cmpWindow: "1h" });
     expect(throughTheUrl({ cmpWindow: "2y" }).parsed.cmpWindow).toBeUndefined();
-    // Delivery is no view any more (its figures are the Releases page's): an old link opens the overview.
+    // Delivery is no view any more (its figures are the Releases page's), and
+    // neither are Dashboards (console pages of their own): an old link opens the overview.
     expect(throughTheUrl({ view: "delivery" }).parsed.view).toBeUndefined();
+    expect(throughTheUrl({ view: "dashboards" }).parsed.view).toBeUndefined();
   });
 
   it("carries the alerts tab and an open rule, and drops a tab it does not know", () => {
     const { parsed } = throughTheUrl({ view: "alerts", alerts: "rules", rule: "prod/CheckoutP95High" });
     expect(parsed).toMatchObject({ view: "alerts", alerts: "rules", rule: "prod/CheckoutP95High" });
     expect(throughTheUrl({ view: "alerts", alerts: "nonsense" }).parsed.alerts).toBeUndefined();
+  });
+});
+
+describe("a dashboard's link (Share)", () => {
+  it("carries the window, the service, the comparison, the refresh and full screen as they were written", () => {
+    const search = { env: "prod", range: "6h", service: "api", compare: "release", refresh: "30s", tv: true };
+    expect(throughTheUrl(search, forgeConsoleDashboardSearchSchema as never).parsed).toEqual(search);
+  });
+
+  it("opens an older version or the release it shipped in", () => {
+    expect(throughTheUrl({ version: 3 }, forgeConsoleDashboardSearchSchema as never).parsed).toEqual({ version: 3 });
+    expect(throughTheUrl({ release: "v1.8.2" }, forgeConsoleDashboardSearchSchema as never).parsed).toEqual({ release: "v1.8.2" });
+  });
+
+  it("drops what it does not know instead of failing the route", () => {
+    const parsed = forgeConsoleDashboardSearchSchema.parse({ range: "90d", compare: "yesterday", refresh: "1s", version: -2, tv: "yes" });
+    expect(parsed).toEqual({});
+  });
+
+  it("keeps the index's search and filters", () => {
+    const search = { env: "all", q: "checkout", source: "workspace", owner: "sean" };
+    expect(throughTheUrl(search, forgeConsoleDashboardsSearchSchema as never).parsed).toEqual(search);
+    expect(forgeConsoleDashboardsSearchSchema.parse({ source: "template" })).toEqual({});
   });
 });

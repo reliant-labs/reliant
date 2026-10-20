@@ -70,6 +70,35 @@ describe("buildConsoleNav", () => {
   });
 });
 
+describe("starred dashboards in the nav (decision DB)", () => {
+  const starred = [
+    { title: "Checkout latency", dashKind: "workspace" as const, key: "checkout-latency" },
+    { title: "Service · api", dashKind: "release" as const, key: "service-api" },
+    { title: "Workloads", dashKind: "release" as const, key: "workloads" },
+    { title: "Daemon fleet", dashKind: "workspace" as const, key: "daemon-fleet" },
+  ];
+  const dashboardsOf = (nav: ReturnType<typeof buildConsoleNav>) =>
+    nav.items.find((item) => item.label === "Observability")!.children!.find((child) => child.label === "Dashboards")!;
+
+  it("nests the first three under Dashboards, then All dashboards", () => {
+    const dashboards = dashboardsOf(buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS, starred }));
+    expect(dashboards.children?.map((child) => child.label)).toEqual(["Checkout latency", "Service · api", "Workloads", "All dashboards"]);
+    expect(dashboards.children?.[1]?.href).toBe("/forge/p/shop/observability/dashboards/release/service-api?env=prod");
+  });
+
+  it("lights the open starred dashboard, or Dashboards itself for any other", () => {
+    const onStar = dashboardsOf(buildConsoleNav({ project: "shop", page: { kind: "dashboard", dashKind: "release", key: "workloads" }, env: "prod", envs: ENVS, starred }));
+    expect(onStar.active).toBe(false);
+    expect(onStar.children?.find((child) => child.label === "Workloads")?.active).toBe(true);
+    const other = dashboardsOf(buildConsoleNav({ project: "shop", page: { kind: "dashboard", dashKind: "workspace", key: "daemon-fleet" }, env: "prod", envs: ENVS, starred }));
+    expect(other.active).toBe(true);
+  });
+
+  it("nests nothing without stars", () => {
+    expect(dashboardsOf(buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS })).children).toBeUndefined();
+  });
+});
+
 describe("consoleCrumbs", () => {
   it("names the page, with its parent as a link", () => {
     expect(consoleCrumbs("shop", { kind: "obs-view", view: "traces" }, "prod")).toEqual([
@@ -79,6 +108,11 @@ describe("consoleCrumbs", () => {
     expect(consoleCrumbs("shop", { kind: "environment", env: "dev" }, "prod")).toEqual([
       { label: "Environments", href: "/forge/p/shop/environments?env=prod" },
       { label: "dev" },
+    ]);
+    expect(consoleCrumbs("shop", { kind: "dashboard", dashKind: "workspace", key: "checkout-latency" }, "prod", "Checkout latency")).toEqual([
+      { label: "Observability", href: "/forge/p/shop/observability?env=prod" },
+      { label: "Dashboards", href: "/forge/p/shop/observability/dashboards?env=prod" },
+      { label: "Checkout latency" },
     ]);
   });
 });

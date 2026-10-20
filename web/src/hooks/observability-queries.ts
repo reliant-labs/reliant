@@ -43,9 +43,8 @@ export const obsKeys = {
   logs: (scope: ObsScope | null, filters: LogFilters) => [...obsKeys.all(scope), "logs", filters] as const,
   traces: (scope: ObsScope | null, filters: TraceFilters) => [...obsKeys.all(scope), "traces", filters] as const,
   trace: (scope: ObsScope | null, traceId: string) => [...obsKeys.all(scope), "trace", traceId] as const,
-  panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[]) =>
-    [...obsKeys.all(scope), "panel", range, panel, services, groupBy] as const,
-  dashboards: (scope: ObsScope | null) => [...obsKeys.all(scope), "dashboards"] as const,
+  panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset = "") =>
+    [...obsKeys.all(scope), "panel", range, panel, services, groupBy, offset] as const,
   flamegraph: (scope: ObsScope | null, filters: FlamegraphFilters) => [...obsKeys.all(scope), "flamegraph", filters] as const,
   attributeValues: (scope: ObsScope | null, range: RangePreset, key: string, prefix: string, signal: string) =>
     [...obsKeys.all(scope), "attribute-values", range, key, prefix, signal] as const,
@@ -197,33 +196,45 @@ export function useTrace(scope: ObsScope | null, traceId: string | null) {
 // ── Metrics and dashboards ───────────────────────────────────────────────────
 
 /**
- * One dashboard panel, computed server-side (QueryPanel). The dashboard's
- * service filter rides as `services`; search panels are never run here.
+ * How a panel query is run beyond its scope and window.
+ *
+ * `offset` shifts the window back in time — the comparison of a dashboard's
+ * "previous period" (the preset's own length) or "previous release" (the time
+ * since the scoped environment's current release was promoted). It is a
+ * function so it is resolved at fetch time, like the window, and keyed by
+ * `offsetKey` so a preset stays one cache entry rather than one per
+ * millisecond.
  */
-export function usePanelQuery(scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[] = []) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.panel(scope, range, panel, services, groupBy),
-    queryFn: () =>
-      api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range), panel, services, stepSeconds: 0, groupBy }),
-    enabled: !!scope && panel.kind !== "search",
-    staleTime: 30_000,
-    retry: obsRetry,
-  });
+export interface PanelQueryOptions {
+  offsetKey?: string;
+  offsetMs?: () => number;
+  /** Auto-refresh: re-read the panel this often (ms). */
+  refetchInterval?: number | false;
+  enabled?: boolean;
 }
 
 /**
- * The dashboards for the scope. Synthesized from the last week's services
- * until a release ships its own spec; a release's spec (contract K4) arrives
- * through this same call, so nothing here changes when it does.
+ * One dashboard panel, computed server-side (QueryPanel). The dashboard's
+ * service filter rides as `services`; search panels are never run here.
  */
-export function useDashboards(scope: ObsScope | null) {
+export function usePanelQuery(
+  scope: ObsScope | null,
+  range: RangePreset,
+  panel: Panel,
+  services: string[],
+  groupBy: string[] = [],
+  options: PanelQueryOptions = {}
+) {
   const api = useObservabilityApi();
   return useQuery({
-    queryKey: obsKeys.dashboards(scope),
-    queryFn: () => api.getDashboards({ ...(scope as ObsScope), window: resolveWindow("7d") }),
-    enabled: !!scope,
-    staleTime: 5 * 60_000,
+    queryKey: obsKeys.panel(scope, range, panel, services, groupBy, options.offsetKey ?? ""),
+    queryFn: () => {
+      const offset = options.offsetMs?.() ?? 0;
+      return api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel, services, stepSeconds: 0, groupBy });
+    },
+    enabled: !!scope && panel.kind !== "search" && (options.enabled ?? true),
+    staleTime: 30_000,
+    refetchInterval: options.refetchInterval ?? false,
     retry: obsRetry,
   });
 }

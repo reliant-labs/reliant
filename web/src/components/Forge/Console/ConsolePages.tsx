@@ -36,6 +36,7 @@ import { EnvironmentTable } from "../Overview/EnvironmentTable";
 import { useEnvironmentRows } from "../Overview/EnvironmentsPage";
 import { useForgeConsole } from "./consoleContext";
 import { ENV_ALL, envsInScope } from "./envScope";
+import { DashboardsPage, ObservabilityHomePage } from "../Observability/Dashboards/DashboardsPages";
 import { ObservabilityHost } from "./ObservabilityHost";
 import { OBS_NAV_LABELS } from "./paths";
 
@@ -182,19 +183,17 @@ function NothingDeployed({ what }: { what: string }) {
 
 // ── Observability ───────────────────────────────────────────────────────────
 
-export function ObservabilityOverviewPage() {
-  return (
-    <Page testId="console-observability">
-      <Header title="Observability" />
-      <ObservabilityHost view="overview" />
-    </Page>
-  );
-}
+/** The Observability home (PROPOSAL §4.6), adapted in ../Observability/Dashboards/DashboardsPages. */
+export const ObservabilityOverviewPage = ObservabilityHomePage;
 
-/** Logs, Traces, Profiles, Dashboards, Alerts — and Metrics, which has no view yet. */
+/**
+ * Logs, Traces, Profiles, Alerts — and Metrics, which has no view yet.
+ * Dashboards has a route of its own (observability/dashboards), which wins.
+ */
 export function ObservabilityViewPage() {
   const { page, href } = useForgeConsole();
   if (page.kind !== "obs-view") return null;
+  if (page.view === "dashboards") return <DashboardsPage />;
   if (page.view === "metrics") {
     return (
       <Placeholder

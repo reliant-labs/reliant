@@ -13,6 +13,7 @@
  *       /                                   Overview
  *       /releases, /releases/$version
  *       /observability, /observability/$view
+ *       /observability/dashboards, /observability/dashboards/$kind/$key
  *       /environments, /environments/$env
  *       /secrets, /domains, /monitoring, /settings, /activity
  *
@@ -25,6 +26,8 @@ import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tans
 import { isObsNavView } from './components/Forge/Console/paths'
 import {
   forgeConsoleActivitySearchSchema,
+  forgeConsoleDashboardSearchSchema,
+  forgeConsoleDashboardsSearchSchema,
   forgeConsoleEnvSearchSchema,
   forgeConsoleObsSearchSchema,
   forgeConsoleReleaseSearchSchema,
@@ -47,6 +50,9 @@ export interface ForgeConsoleComponents {
   release: RouteComponent
   observability: RouteComponent
   observabilityView: RouteComponent
+  /** Observability › Dashboards, and one dashboard (decision DB). */
+  dashboards: RouteComponent
+  dashboard: RouteComponent
   environments: RouteComponent
   environment: RouteComponent
   secrets: RouteComponent
@@ -149,6 +155,24 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     },
     component: components.observabilityView,
   })
+  // Static, so it wins over observability/$view: the index has search state of its own.
+  const dashboardsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'observability/dashboards',
+    validateSearch: forgeConsoleDashboardsSearchSchema,
+    component: components.dashboards,
+  })
+  // A kind that is neither release nor workspace (a hand-edited URL) lands on the index.
+  const dashboardRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'observability/dashboards/$kind/$key',
+    validateSearch: forgeConsoleDashboardSearchSchema,
+    beforeLoad: ({ params, location }) => {
+      if (params.kind === 'release' || params.kind === 'workspace') return
+      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
+    },
+    component: components.dashboard,
+  })
   const environmentsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'environments',
@@ -207,6 +231,8 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       releaseRoute,
       observabilityRoute,
       observabilityViewRoute,
+      dashboardsRoute,
+      dashboardRoute,
       environmentsRoute,
       environmentRoute,
       secretsRoute,
