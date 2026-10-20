@@ -606,7 +606,8 @@ The daemon connects to the Reliant cloud platform and provides local tool
 execution capabilities.
 
 Credential resolution order:
-  1. --token: a daemon token read from stdin (mint one in the app).
+  1. --token: an access token read from stdin (create one under Settings →
+     Access Tokens in the app).
   2. The stored daemon credential in ~/.reliant/daemon.json (written by an
      earlier 'daemon start' or 'reliant daemon register').
   3. Otherwise a browser login of its own that mints a daemon credential.
