@@ -219,12 +219,16 @@ jobs:
           backend=true generated=true web=true playwright=true electron=true
           if [ "${full}" = false ]; then
             # Backend (lint, e2e stories): anything but the frontends, docs and
-            # CI plumbing. Top-level *.md only: nested ones may be embedded.
+            # CI plumbing. Top-level *.md only: nested ones may be embedded. A
+            # .go file counts wherever it lives: research/ holds module
+            # packages too, and golangci-lint lints every one of them.
             backend=false generated=false web=false playwright=false electron=false
-            if grep -qvE '^(web/|electron/|docs/|research/|dev-docs/|contributing/|\.github/|\.reliant/|LICENSE|\.license-allowlist|[^/]+\.md$)' <<< "${changed}"; then backend=true; fi
+            if grep -qE '\.go$' <<< "${changed}" \
+              || grep -qvE '^(web/|electron/|docs/|research/|dev-docs/|contributing/|\.github/|\.reliant/|LICENSE|\.license-allowlist|[^/]+\.md$)' <<< "${changed}"; then backend=true; fi
             # Codegen drift: generators read Go, proto, SQL, config and docs
             # and write into gen/, docs/, generated/ and two web/src paths.
-            if grep -vE '^(web/|electron/|research/|dev-docs/|\.github/)' <<< "${changed}" | grep -q . \
+            if grep -qE '\.go$' <<< "${changed}" \
+              || grep -vE '^(web/|electron/|research/|dev-docs/|\.github/)' <<< "${changed}" | grep -q . \
               || grep -qE '^web/src/(gen/|store/shortcutsData\.generated\.ts$)' <<< "${changed}"; then generated=true; fi
             # The web build (lint, typecheck, vite build, verify-bundle).
             if grep -qE '^(web/|package(-lock)?\.json$|electron/release\.config\.json$|\.github/scripts/verify-bundle\.mjs$)' <<< "${changed}"; then web=true; fi
