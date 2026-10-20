@@ -7,7 +7,8 @@
  *   header       title, star, source tag; one meta line (where it came from,
  *                version and editor, panels, the environments it is about);
  *                actions — release: History, Save as copy; workspace:
- *                History, Promote to code, More (archive).
+ *                History, Promote to code, Edit layout, Add panel, More
+ *                (save a copy, archive).
  *   variables    env (the console's own scope: changing it here changes it
  *                everywhere), service, time; Compare (previous period or
  *                previous release); auto-refresh; Share (a link carrying all
@@ -17,6 +18,12 @@
  *                declares the `releases` annotation) and alert-firing bands;
  *                a series or a row opens the drill-down into Logs, Traces and
  *                the workload.
+ *   editing      a workspace dashboard's layout is edited in place — drag a
+ *                panel by its handle (or move it with the buttons), set its
+ *                width in quarters, remove it — and saved as one new version;
+ *                a panel is added or edited in the drawer (PanelDrawer).
+ *                Every save is optimistic against the version on screen: a
+ *                stale one is refused and says so.
  *
  * Opening a dashboard records the view (Recently viewed, per caller). An
  * older version (`?version=`) or a release dashboard as an earlier release
@@ -30,7 +37,7 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { History, LayoutDashboard, Maximize2, MoreHorizontal, RefreshCw, Share2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, GripVertical, History, LayoutDashboard, LayoutGrid, Maximize2, MoreHorizontal, Plus, RefreshCw, Share2, Trash2, X } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
@@ -49,7 +56,7 @@ import { useAlertHistory, useObservabilityOrg, usePanelQuery, useReleases, useSe
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
-import type { ObsScope, Panel } from "@/services/controlPlane/observability/types";
+import type { Dashboard, ObsScope, Panel } from "@/services/controlPlane/observability/types";
 import { DEFAULT_RANGE, RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +71,10 @@ import { DashboardHeader } from "./DashboardHeader";
 import {
   alertBands,
   COMPARE_LABELS,
+  GRID_SPANS,
+  movePanel,
+  removePanel,
+  resizePanel,
   COMPARE_MODES,
   compareTarget,
   marksReleases,
@@ -78,7 +89,9 @@ import {
 } from "./dashboardModel";
 import { PromoteDialog, SaveCopyDialog, envScopeOf, writeErrorMessage } from "./dialogs";
 import { drillSearches, type ExploreHrefs } from "./drill";
+import { duplicatePanel, starterPanel, upsertPanel } from "./panelBuilder";
 import { PanelBody, type DrillTarget } from "./PanelBody";
+import { PanelDrawer, type DrawerMode } from "./PanelDrawer";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
 
 export interface DashboardHrefs extends ExploreHrefs {
@@ -174,6 +187,15 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const promote = useDashboardMutation(orgId, (a, org, version: number | undefined) => a.promoteDashboardToCode(org, dashRef, version));
   const archive = useDashboardMutation(orgId, (a, org) => a.archiveDashboard(org, dashRef));
   const restore = useDashboardMutation(orgId, (a, org, input: { version: number; base: number }) => a.restoreDashboardVersion(org, dashRef, input.version, input.base));
+  const save = useDashboardMutation(orgId, (a, org, input: { spec: Dashboard; base: number; message: string }) =>
+    a.saveDashboard({ orgId: org, projectId: project, slug: dashRef.key, spec: input.spec, baseVersion: input.base, message: input.message })
+  );
+
+  // ── Editing ──
+  const [layout, setLayout] = useState<Dashboard | null>(null);
+  const [drawer, setDrawer] = useState<{ mode: DrawerMode; panel: Panel } | null>(null);
+  const [removing, setRemoving] = useState<Panel | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
 
   // ── Full screen ──
   const tv = !!search.tv;
@@ -206,6 +228,13 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
 
   const currentVersion = summary.workspace?.version ?? 0;
   const viewingOld = !!search.version && search.version !== currentVersion;
+  const editable = !summary.readOnly && !!doc.data?.canWrite && !search.version && !search.release;
+  const writeVersion = (next: Dashboard, message: string, done?: () => void) =>
+    save.mutate({ spec: next, base: currentVersion, message }, { onSuccess: () => done?.() });
+  const shown = layout ?? spec;
+  const workspaceScope = summary.workspace?.envIds.length
+    ? summary.workspace.envIds.map((id) => environments.find((candidate) => candidate.id === id)?.name ?? id).join(", ")
+    : "all environments";
   const services = search.service ? [search.service] : [];
   const refreshEvery = refreshMs(refresh);
   const links = {
@@ -218,11 +247,42 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
 
   const grid = (
     <ObsChartMarkersProvider markers={marks ? releases.markers : NO_MARKERS}>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="dashboard-grid">
-        {spec.panels.map((panel) => (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="dashboard-grid" data-editing={layout ? "true" : undefined}>
+        {shown.panels.map((panel, index) => (
           <DashboardPanelCard
             key={panel.id}
             panel={panel}
+            layout={
+              layout
+                ? {
+                    index,
+                    count: layout.panels.length,
+                    dragging: dragging === panel.id,
+                    onMove: (to) => setLayout(movePanel(layout, panel.id, to)),
+                    onResize: (span) => setLayout(resizePanel(layout, panel.id, span)),
+                    onRemove: () => setLayout(removePanel(layout, panel.id)),
+                    onDragStart: () => setDragging(panel.id),
+                    onDragEnd: () => setDragging(null),
+                    onDropOn: () => {
+                      if (dragging && dragging !== panel.id) setLayout(movePanel(layout, dragging, index));
+                      setDragging(null);
+                    },
+                  }
+                : undefined
+            }
+            menu={[
+              ...(editable && !layout
+                ? [
+                    { label: "Edit panel", onSelect: () => setDrawer({ mode: "edit" as const, panel }), testId: `dashboard-panel-edit-${panel.id}` },
+                    { label: "Duplicate", onSelect: () => writeVersion(duplicatePanel(spec, panel.id), `Duplicated ${panel.title}`), testId: `dashboard-panel-duplicate-${panel.id}` },
+                  ]
+                : []),
+              ...(!editable ? [{ label: "View spec", onSelect: () => setDrawer({ mode: "view" as const, panel }), testId: `dashboard-panel-view-${panel.id}` }] : []),
+              { label: panel.signal === "logs" ? "Explore in Logs" : "Explore in Traces", detail: "with this panel's service", href: links.searchHref(panel) },
+              ...(editable && !layout
+                ? [{ label: "Remove panel", onSelect: () => setRemoving(panel), separated: true, testId: `dashboard-panel-remove-${panel.id}` }]
+                : []),
+            ]}
             scope={scope}
             range={range}
             services={services}
@@ -230,7 +290,6 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
             target={target}
             bands={bands}
             links={{ ...links, onDrill: (drillTarget, at) => setDrill({ target: drillTarget, panel, at }) }}
-            exploreHref={() => links.searchHref(panel)}
           />
         ))}
       </div>
@@ -331,6 +390,24 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
                 >
                   Promote to code
                 </button>
+                {editable && (
+                  <>
+                    <button type="button" className={BUTTON_SECONDARY} onClick={() => setLayout(spec)} disabled={!!layout} data-testid="dashboard-edit-layout">
+                      <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+                      Edit layout
+                    </button>
+                    <button
+                      type="button"
+                      className={BUTTON_PRIMARY}
+                      onClick={() => setDrawer({ mode: "add", panel: starterPanel(spec) })}
+                      disabled={!!layout}
+                      data-testid="dashboard-add-panel"
+                    >
+                      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                      Add panel
+                    </button>
+                  </>
+                )}
                 <Menu
                   label="More actions"
                   trigger={<MoreHorizontal className="h-4 w-4" aria-hidden="true" />}
@@ -414,6 +491,41 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
 
       {variables}
 
+      {layout && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm" role="status" data-testid="dashboard-layout-bar">
+          <LayoutGrid className="h-4 w-4 text-ink-muted" aria-hidden="true" />
+          <span className="flex-1 text-ink-muted">
+            Editing the layout for {workspaceScope}: drag a panel by its handle (or use its arrows) to move it, and set its width from one to four columns.
+          </span>
+          {!!save.error && <span className="w-full text-xs text-danger-ink">{writeErrorMessage(save.error)}</span>}
+          <button
+            type="button"
+            className={BUTTON_SECONDARY}
+            onClick={() => {
+              save.reset();
+              setLayout(null);
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={BUTTON_PRIMARY}
+            disabled={save.isPending || layout.panels.length === 0}
+            title={layout.panels.length === 0 ? "A dashboard keeps at least one panel." : undefined}
+            onClick={() => writeVersion(layout, "Layout", () => setLayout(null))}
+            data-testid="dashboard-layout-save"
+          >
+            {save.isPending ? "Saving…" : `Save layout v${currentVersion} → v${currentVersion + 1}`}
+          </button>
+        </div>
+      )}
+      {!layout && !drawer && !!save.error && (
+        <p role="alert" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-danger-ink" data-testid="dashboard-save-error">
+          {writeErrorMessage(save.error)}
+        </p>
+      )}
+
       {unrecorded ? (
         <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-5 text-sm text-ink-muted" data-testid="dashboard-unrecorded-env">
           Reliant has no record of <span className="font-medium text-ink">{env}</span>, so no telemetry is filed under it. Pick another environment.
@@ -425,6 +537,44 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
       {drill && (
         <DrillMenu drill={drill} range={range} service={search.service} hrefs={hrefs} env={env} onClose={closeDrill} />
       )}
+
+      {drawer && (
+        <PanelDrawer
+          mode={drawer.mode}
+          panel={drawer.panel}
+          dashboardTitle={summary.title}
+          scope={scope}
+          range={range}
+          services={services}
+          scopeLabel={`${env === ENV_ALL ? "all environments" : env}${search.service ? ` · ${search.service}` : ""}`}
+          version={currentVersion}
+          envScope={workspaceScope}
+          saving={save.isPending}
+          error={
+            save.error ? (
+              <p role="alert" className="text-xs text-danger-ink" data-testid="panel-drawer-error">
+                {writeErrorMessage(save.error)}
+              </p>
+            ) : null
+          }
+          onCancel={() => {
+            save.reset();
+            setDrawer(null);
+          }}
+          onSave={(panel) =>
+            writeVersion(upsertPanel(spec, panel), `${drawer.mode === "add" ? "Added" : "Edited"} ${panel.title}`, () => setDrawer(null))
+          }
+        />
+      )}
+      <ConfirmationDialog
+        open={!!removing}
+        title={`Remove ${removing?.title ?? "this panel"}?`}
+        description={`Saves v${currentVersion + 1} without it. v${currentVersion} keeps it, and History can restore it.`}
+        confirmLabel="Remove panel"
+        loading={save.isPending}
+        onCancel={() => setRemoving(null)}
+        onConfirm={() => removing && writeVersion(removePanel(spec, removing.id), `Removed ${removing.title}`, () => setRemoving(null))}
+      />
 
       {dialog === "copy" && (
         <SaveCopyDialog
@@ -730,6 +880,18 @@ function formatSpan(ms: number): string {
 
 // ── Panels ──────────────────────────────────────────────────────────────────
 
+interface PanelLayoutControls {
+  index: number;
+  count: number;
+  dragging: boolean;
+  onMove: (to: number) => void;
+  onResize: (span: number) => void;
+  onRemove: () => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDropOn: () => void;
+}
+
 function DashboardPanelCard({
   panel,
   scope,
@@ -739,7 +901,8 @@ function DashboardPanelCard({
   target,
   bands,
   links,
-  exploreHref,
+  menu,
+  layout,
 }: {
   panel: Panel;
   scope: ObsScope | null;
@@ -749,7 +912,9 @@ function DashboardPanelCard({
   target: CompareTarget;
   bands: readonly ChartBand[];
   links: ComponentProps<typeof PanelBody>["links"];
-  exploreHref: () => string;
+  menu: MenuEntry[];
+  /** Set while the layout is edited: the panel's handle, arrows, width and remove. */
+  layout?: PanelLayoutControls;
 }) {
   const query = usePanelQuery(scope, range, panel, services, [], { refetchInterval: refreshEvery });
   const comparable = (panel.kind === "line" || panel.kind === "number") && (target.mode === "period" || target.mode === "release");
@@ -766,29 +931,70 @@ function DashboardPanelCard({
   return (
     <Card
       padding="none"
-      className="min-w-0 md:[grid-column:span_var(--span-md)/span_var(--span-md)] xl:[grid-column:span_var(--span)/span_var(--span)]"
+      className={cn(
+        "relative min-w-0 md:[grid-column:span_var(--span-md)/span_var(--span-md)] xl:[grid-column:span_var(--span)/span_var(--span)]",
+        layout && "border-dashed",
+        layout?.dragging && "opacity-50"
+      )}
       style={{ ["--span" as string]: String(span), ["--span-md" as string]: String(Math.min(span, 2)) }}
       data-testid={`dashboard-panel-${panel.id}`}
       data-kind={panel.kind}
+      draggable={!!layout}
+      onDragStart={layout ? (event) => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", panel.id);
+        layout.onDragStart();
+      } : undefined}
+      onDragEnd={layout?.onDragEnd}
+      onDragOver={layout ? (event) => event.preventDefault() : undefined}
+      onDrop={layout ? (event) => {
+        event.preventDefault();
+        layout.onDropOn();
+      } : undefined}
     >
       <div className="flex items-start justify-between gap-2 px-4 pt-3">
-        <div className="min-w-0">
-          <h2 className="truncate text-sm font-medium text-ink">{panel.title || panel.id}</h2>
-          {panel.description && <p className="truncate text-xs text-ink-muted" title={panel.description}>{panel.description}</p>}
+        <div className="flex min-w-0 items-start gap-1.5">
+          {layout && (
+            <span className="mt-0.5 cursor-grab text-ink-muted active:cursor-grabbing" title="Drag to move" aria-hidden="true">
+              <GripVertical className="h-4 w-4" />
+            </span>
+          )}
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-medium text-ink">{panel.title || panel.id}</h2>
+            {panel.description && <p className="truncate text-xs text-ink-muted" title={panel.description}>{panel.description}</p>}
+          </div>
         </div>
-        <Menu
-          label={`Panel actions for ${panel.title || panel.id}`}
-          trigger={<MoreHorizontal className="h-4 w-4" aria-hidden="true" />}
-          triggerClassName={ICON_BUTTON}
-          entries={[
-            {
-              label: panel.signal === "logs" ? "Explore in Logs" : "Explore in Traces",
-              detail: "with this panel's service",
-              href: exploreHref(),
-            },
-          ]}
-          testId={`dashboard-panel-menu-${panel.id}`}
-        />
+        {layout ? (
+          <div className="flex shrink-0 items-center gap-0.5" data-testid={`dashboard-panel-layout-${panel.id}`}>
+            <button type="button" className={ICON_BUTTON} aria-label={`Move ${panel.title} earlier`} disabled={layout.index === 0} onClick={() => layout.onMove(layout.index - 1)}>
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button type="button" className={ICON_BUTTON} aria-label={`Move ${panel.title} later`} disabled={layout.index === layout.count - 1} onClick={() => layout.onMove(layout.index + 1)}>
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={cn(BUTTON_SMALL, "h-7 px-2 tabular-nums")}
+              aria-label={`Width of ${panel.title}: ${span} of ${GRID_SPANS} columns. Change it.`}
+              title="Width: one to four columns"
+              onClick={() => layout.onResize((span % GRID_SPANS) + 1)}
+              data-testid={`dashboard-panel-resize-${panel.id}`}
+            >
+              {span}/{GRID_SPANS}
+            </button>
+            <button type="button" className={ICON_BUTTON} aria-label={`Remove ${panel.title}`} onClick={layout.onRemove} data-testid={`dashboard-panel-layout-remove-${panel.id}`}>
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        ) : (
+          <Menu
+            label={`Panel actions for ${panel.title || panel.id}`}
+            trigger={<MoreHorizontal className="h-4 w-4" aria-hidden="true" />}
+            triggerClassName={ICON_BUTTON}
+            entries={menu}
+            testId={`dashboard-panel-menu-${panel.id}`}
+          />
+        )}
       </div>
       <div className="px-4 pb-4 pt-2">
         <PanelBody
